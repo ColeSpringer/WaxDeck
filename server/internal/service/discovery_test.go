@@ -85,6 +85,7 @@ func newCatalogFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 }
 
 func TestImportStreamingPlaylistTextDescriptive(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
 	payload := "# exported list\n" +
@@ -154,6 +155,7 @@ func TestImportStreamingPlaylistTextDescriptive(t *testing.T) {
 }
 
 func TestSimilarTracksForMetadataFallback(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
 	// Find the seed by title through the import resolver itself.
@@ -194,6 +196,7 @@ func TestSimilarTracksForMetadataFallback(t *testing.T) {
 }
 
 func TestImportRetriesMissesWithTrimmedArtist(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
 	// An export whose artist cells join every credit: the full cell
@@ -219,6 +222,7 @@ func TestImportRetriesMissesWithTrimmedArtist(t *testing.T) {
 }
 
 func TestArtistMixHonorsExcludePids(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
 	res, err := svc.Search(ctx, uc, "Test Ensemble", 10)

@@ -1944,6 +1944,10 @@ TranscodingLimits transcodingLimitsFromGen(gen.TranscodingLimits limits) {
   );
 }
 
+TranscodingActivity transcodingActivityFromGen(gen.TranscodingActivity a) {
+  return TranscodingActivity(activeSessions: a.activeSessions);
+}
+
 gen.TranscodingLimits transcodingLimitsToGen(TranscodingLimits limits) {
   return gen.TranscodingLimits(
     (b) => b
@@ -2301,6 +2305,7 @@ Share shareFromGen(gen.Share share, {String baseUrl = ''}) {
     createdAt: share.createdAt.toUtc(),
     expiresAt: share.expiresAt?.toUtc(),
     plays: share.plays,
+    owner: share.owner,
   );
 }
 

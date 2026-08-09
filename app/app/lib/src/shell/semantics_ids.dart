@@ -20,9 +20,14 @@ abstract final class SemanticsIds {
   static const String adminSchedules = 'admin-schedules';
   static String adminSection(Object name) => 'admin-section-$name';
   static const String adminSettingsSection = 'admin-settings-section';
+  static const String adminShares = 'admin-shares';
+  static const String adminSharesEmpty = 'admin-shares-empty';
   static String adminTile(Object name) => 'admin-tile-$name';
   static const String adminTrash = 'admin-trash';
   static const String adminUsers = 'admin-users';
+  static const String adminWizard = 'admin-wizard';
+  static const String adminWizardSkip = 'admin-wizard-skip';
+  static String adminWizardStep(Object name) => 'admin-wizard-step-$name';
   static const String auditFilter = 'audit-filter';
   static const String auditFilterClear = 'audit-filter-clear';
   static String auditRow(Object id) => 'audit-row-$id';
@@ -87,6 +92,9 @@ abstract final class SemanticsIds {
   static String tagRuleAdd(Object list) => '$list-add';
   static String tagRuleKey(Object list) => '$list-key';
   static String tagRuleValue(Object list) => '$list-value';
+  static const String transcodingActivity = 'transcoding-activity';
+  static const String transcodingActivityRefresh =
+      'transcoding-activity-refresh';
   static const String transcodingDefaultKbps = 'transcoding-default-kbps';
   static const String transcodingMaxConcurrent = 'transcoding-max-concurrent';
   static const String transcodingMaxPerUser = 'transcoding-max-per-user';
@@ -284,6 +292,7 @@ abstract final class SemanticsIds {
   static String notificationRow(Object index) => 'notification-row-$index';
   static const String notificationsBell = 'notifications-bell';
   static const String notificationsClear = 'notifications-clear';
+  static String pinSheetTarget(Object pid) => 'pin-sheet-target-$pid';
   static String shelf(Object shelf) => 'shelf-$shelf';
   static String shelfAll(Object shelf) => 'shelf-$shelf-all';
   static String shelfCard(Object shelf, Object pid) => 'shelf-$shelf-$pid';
@@ -338,12 +347,14 @@ abstract final class SemanticsIds {
   static const String entityPlay = 'entity-play';
   static const String entityShuffle = 'entity-shuffle';
   static String indexBucket(Object index) => 'index-bucket-$index';
+  static String indexBucketMore(Object index) => 'index-bucket-more-$index';
   static const String indexCount = 'index-count';
   static String indexItem(Object index) => 'index-item-$index';
   static const String indexRail = 'index-rail';
   static String indexRailLetter(Object letter) => 'index-rail-$letter';
   static const String indexRailStart = 'index-rail-start';
   static const String indexSort = 'index-sort';
+  static String listingRowMore(Object pid) => 'listing-row-more-$pid';
   static const String listingShuffle = 'listing-shuffle';
   static String musicTile(Object name) => 'music-tile-$name';
 
@@ -570,8 +581,13 @@ abstract final class SemanticsIds {
   static const String radioNameField = 'radio-name-field';
   static const String radioNowPlaying = 'radio-now-playing';
   static const String radioSaved = 'radio-saved';
+  static const String radioSavedAcquire = 'radio-saved-acquire';
   static String radioSavedEntry(Object pid) => 'radio-saved-entry-$pid';
   static String radioSavedFind(Object pid) => 'radio-saved-find-$pid';
+  static const String radioSavedIdentify = 'radio-saved-identify';
+  static String radioSavedIdentifyEntry(Object id) =>
+      'radio-saved-identify-entry-$id';
+  static String radioSavedMore(Object pid) => 'radio-saved-more-$pid';
   static const String radioSavedOpen = 'radio-saved-open';
   static String radioSavedRemove(Object pid) => 'radio-saved-remove-$pid';
   static String radioSearchAdd(Object index) => 'radio-search-add-$index';
@@ -619,6 +635,8 @@ abstract final class SemanticsIds {
   static String searchFilter(Object name) => 'search-filter-$name';
   static String searchHit(Object kind, Object index) =>
       'search-hit-$kind-$index';
+  static String searchHitMore(Object kind, Object index) =>
+      'search-hit-more-$kind-$index';
   static String searchRecent(Object index) => 'search-recent-$index';
   static String searchRecentRemove(Object index) =>
       'search-recent-remove-$index';

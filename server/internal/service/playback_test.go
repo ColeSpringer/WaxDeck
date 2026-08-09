@@ -3,6 +3,7 @@ package service
 import "testing"
 
 func TestCrossedPlayedThreshold(t *testing.T) {
+	t.Parallel()
 	const minute = int64(60_000)
 	cases := []struct {
 		name       string
@@ -32,6 +33,7 @@ func TestCrossedPlayedThreshold(t *testing.T) {
 }
 
 func TestInvalidSession(t *testing.T) {
+	t.Parallel()
 	valid := ListenSession{SessionID: "s-1", PID: "tr-01JZX5N8QW3F4V9T2B7KD3M9R6"}
 	cases := []struct {
 		name   string

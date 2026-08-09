@@ -139,6 +139,7 @@ func (h *harness) applyDelta(t *testing.T, items map[string]ItemSummary, since s
 }
 
 func TestSyncCatalogMirror(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// Snapshot with a page size smaller than the library so paging is
@@ -268,6 +269,7 @@ func TestSyncCatalogMirror(t *testing.T) {
 }
 
 func TestSyncCatalogResetPaths(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	_, since := h.mirror(t, 100)
 
@@ -304,6 +306,7 @@ func TestSyncCatalogResetPaths(t *testing.T) {
 }
 
 func TestSyncCatalogGrantEpoch(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// A restricted user with access to the only library.
@@ -355,6 +358,7 @@ func TestSyncCatalogGrantEpoch(t *testing.T) {
 // read and repeated verbatim on every later page, so a moving feed
 // tail can never swallow a mid-snapshot edit.
 func TestSyncSnapshotFrozenCursor(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	page1, status := h.syncCatalog(t, "?limit=3")
@@ -408,6 +412,7 @@ func TestSyncSnapshotFrozenCursor(t *testing.T) {
 // file moves under a root the caller was never granted, which changes
 // the item without touching their grants (so no epoch bump covers it).
 func TestSyncDeltaInvisibleTombstone(t *testing.T) {
+	t.Parallel()
 	lib2 := t.TempDir()
 	h := newHarness(t, service.Root{Name: "lib2", Path: lib2})
 
@@ -476,6 +481,7 @@ func TestSyncDeltaInvisibleTombstone(t *testing.T) {
 }
 
 func TestSyncServerFlow(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pid := items.Items[0].Pid
@@ -540,6 +546,7 @@ func TestSyncServerFlow(t *testing.T) {
 }
 
 func TestOfflineReplayGuards(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pid := items.Items[0].Pid
@@ -613,6 +620,7 @@ func TestOfflineReplayGuards(t *testing.T) {
 }
 
 func TestBatchPlayStates(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	if len(items.Items) < 2 {
@@ -633,6 +641,7 @@ func TestBatchPlayStates(t *testing.T) {
 }
 
 func TestDownloadOriginal(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	var alpha ItemSummary
@@ -727,6 +736,7 @@ func TestDownloadOriginal(t *testing.T) {
 }
 
 func TestAppPasswordLifecycle(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	resp := h.postJSON(t, "/api/v1/users/me/app-passwords", map[string]any{"label": "Symfonium on Pixel"})
@@ -769,6 +779,7 @@ func TestAppPasswordLifecycle(t *testing.T) {
 }
 
 func TestWebSocketInvalidations(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pid := items.Items[0].Pid
@@ -871,6 +882,7 @@ func (h *harness) deleteReq(t *testing.T, path string) *http.Response {
 // other. Nothing in this repo would fail if the catalog stopped
 // appending it; this would.
 func TestSyncCatalogPurgeFlipsTheTombstoneToRemoved(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	items, since := h.mirror(t, 50)
@@ -935,6 +947,7 @@ func TestSyncCatalogPurgeFlipsTheTombstoneToRemoved(t *testing.T) {
 // caller took the visibility branch, every tombstone they saw said
 // hidden, and the reclaim worked for administrators only.
 func TestSyncCatalogTombstoneReasonsForARestrictedCaller(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	libs := decode[Libraries](t, get(t, h.ts, "/api/v1/libraries", h.token))

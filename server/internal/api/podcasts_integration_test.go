@@ -267,6 +267,7 @@ func drainFetches(t *testing.T, h *harness) {
 }
 
 func TestPodcastLifecycle(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 2)
 
@@ -586,6 +587,7 @@ func TestPodcastLifecycle(t *testing.T) {
 // extras (funding, medium, person credits, and soundbites) parse from the feed
 // and surface on the show and episode detail reads.
 func TestPodcastTwoPointOhExtras(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 2)
 
@@ -638,6 +640,7 @@ func TestPodcastTwoPointOhExtras(t *testing.T) {
 }
 
 func TestPodcastRetentionUnion(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 4)
 	ctx := context.Background()
@@ -753,6 +756,7 @@ func TestPodcastRetentionUnion(t *testing.T) {
 }
 
 func TestPodcastPrivacy(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 1)
 
@@ -794,6 +798,7 @@ func TestPodcastPrivacy(t *testing.T) {
 }
 
 func TestEpisodeVisibilityFollowsSubscription(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 2)
 
@@ -892,6 +897,7 @@ func TestEpisodeVisibilityFollowsSubscription(t *testing.T) {
 }
 
 func TestUnsubscribeRemovesDownloads(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 2)
 
@@ -976,6 +982,7 @@ func TestUnsubscribeRemovesDownloads(t *testing.T) {
 }
 
 func TestUnsubscribeCleanupSkipsInUse(t *testing.T) {
+	t.Parallel()
 	podcastDir := t.TempDir()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.PodcastDir = podcastDir
@@ -1011,6 +1018,7 @@ func TestUnsubscribeCleanupSkipsInUse(t *testing.T) {
 }
 
 func TestRemoveDownloadGuards(t *testing.T) {
+	t.Parallel()
 	podcastDir := t.TempDir()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.PodcastDir = podcastDir
@@ -1068,6 +1076,7 @@ func TestRemoveDownloadGuards(t *testing.T) {
 // of the identical file would never get a skip map. Both shapes of gone:
 // an item cataloged without bytes, and an item that is not there at all.
 func TestAnalysisWithNoAudioIsDroppedNotFailed(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 1)
 	ctx := context.Background()
@@ -1107,6 +1116,7 @@ func TestAnalysisWithNoAudioIsDroppedNotFailed(t *testing.T) {
 // are dropped; an absent root is storage that has not arrived, and its
 // backlog has to survive it, which is the pair this covers.
 func TestAnalysisWithMissingFileIsDropped(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		wipe    func(t *testing.T, podcastDir string)
@@ -1193,6 +1203,7 @@ func removeEpisodeAudio(t *testing.T, podcastDir string) {
 // reports downloaded while everything resolving its path answers
 // not-found.
 func TestRefetchedEpisodePlaysAtOnce(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 1)
 	ctx := context.Background()
@@ -1242,6 +1253,7 @@ func TestRefetchedEpisodePlaysAtOnce(t *testing.T) {
 // caller, ranges pass both ways, and the podcast host's own headers stay
 // on the host's side of the relay.
 func TestEnclosurePassthrough(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServerWithHeaders(t, 1, http.Header{
 		"Set-Cookie":     []string{"host_session=leaked; Path=/"},
@@ -1335,6 +1347,7 @@ func TestEnclosurePassthrough(t *testing.T) {
 // gateway. The cap still exists; past ten hops is refused as the loop
 // guard it is.
 func TestEnclosurePassthroughFollowsTrackerChains(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 1)
 	feed.enclosurePrefix = "/hop/7"
@@ -1381,6 +1394,7 @@ func TestEnclosurePassthroughFollowsTrackerChains(t *testing.T) {
 // one population passthrough cannot serve: an episode whose feed named
 // no audio at all.
 func TestEnclosurePassthroughNeedsAnEnclosure(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 1)
 	feed.writeEnclosureless(t)
@@ -1410,6 +1424,7 @@ func TestEnclosurePassthroughNeedsAnEnclosure(t *testing.T) {
 // subscriber and per episode, and the union takes an episode either one
 // wants, because the downloaded file is shared.
 func TestAutoDownloadFilterUnion(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 5)
 	feed.writeFeed(t, 2) // the show starts with two episodes published
@@ -1478,6 +1493,7 @@ func TestAutoDownloadFilterUnion(t *testing.T) {
 // WaxBin's download passes the same pair, and so does the transcript
 // fetch.
 func TestEnclosurePassthroughCarriesFeedCredentials(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newPrivateFeedServer(t, 1, "member", "s3cret")
 
@@ -1529,6 +1545,7 @@ func TestEnclosurePassthroughCarriesFeedCredentials(t *testing.T) {
 // subscription. The credentials are the show's and every subscriber
 // shares them, but a non-subscriber is not one of them.
 func TestEnclosurePassthroughWithheldFromNonSubscribers(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newPrivateFeedServer(t, 1, "member", "s3cret")
 
@@ -1586,6 +1603,7 @@ func TestEnclosurePassthroughWithheldFromNonSubscribers(t *testing.T) {
 // sides as plain arrays and neither as nullable, so that answer is off
 // contract for anything that validates it.
 func TestOneSidedFilterHasNoNullsOnTheWire(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 1)
 
@@ -1647,6 +1665,7 @@ func TestOneSidedFilterHasNoNullsOnTheWire(t *testing.T) {
 // a HEAD probe, a host that ignores ranges, and the header allowlist on
 // a ranged answer rather than only on a whole-file one.
 func TestEnclosureRelayProbesAndDegrades(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 
 	// A host that answers every request whole, ignoring Range, and adds
@@ -1715,6 +1734,7 @@ func TestEnclosureRelayProbesAndDegrades(t *testing.T) {
 // on what the podcast host was made to serve. Without a HEAD branch the
 // relay reads the whole episode and throws it away.
 func TestEnclosureHeadDoesNotPullTheEpisode(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 
 	// The enclosure is large enough that pulling it is unmistakable
@@ -1794,6 +1814,7 @@ func TestEnclosureHeadDoesNotPullTheEpisode(t *testing.T) {
 // rows, and an unplayed backlog is an aggregate a client holding one
 // page of episodes cannot compute without claiming a window is the whole.
 func TestSubscribedEpisodesAndUnplayedCount(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 3)
 
@@ -1932,6 +1953,7 @@ func TestSubscribedEpisodesAndUnplayedCount(t *testing.T) {
 // trivially true: rows from different shows interleave by publication
 // date and page across a show boundary without a duplicate or a gap.
 func TestSubscribedEpisodesInterleaveAcrossShows(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	// Two feeds a day out of step with each other, so the merged order
 	// alternates between them and every page of two straddles a show
@@ -1995,6 +2017,7 @@ func TestSubscribedEpisodesInterleaveAcrossShows(t *testing.T) {
 // without one cannot appear in it. Its own show still lists it: the
 // exclusion is the cross-show order's, not a disappearance.
 func TestSubscribedEpisodesExcludeUndated(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newCountsFeed(t, []countsEpisode{
 		{title: "Dated"},
@@ -2041,6 +2064,7 @@ func TestSubscribedEpisodesExcludeUndated(t *testing.T) {
 // The gate rides in the query now, so it holds on the cross-show listing
 // exactly as it holds on a show's own.
 func TestSubscribedEpisodesHideExplicitFromRestricted(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	flagged := newCountsFeed(t, []countsEpisode{
 		{title: "Clean"},
@@ -2085,6 +2109,7 @@ func TestSubscribedEpisodesHideExplicitFromRestricted(t *testing.T) {
 // restricted listener who cannot see an episode in any list can still
 // mint a stream URL for it by pid.
 func TestPlayInfoRefusesExplicitEpisodesForRestricted(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	flagged := newCountsFeed(t, []countsEpisode{
 		{title: "Clean"},
@@ -2145,6 +2170,7 @@ func TestPlayInfoRefusesExplicitEpisodesForRestricted(t *testing.T) {
 // the worker finds nothing and marks the item missing, second GET reads
 // the state. That is what pending has always promised.
 func TestSkipMapReportsAudioDeletedBehindTheServersBack(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 1)
 
@@ -2215,6 +2241,7 @@ func TestSkipMapReportsAudioDeletedBehindTheServersBack(t *testing.T) {
 // compiles to 1=0 - the opposite mistake (an empty set read as "no
 // filter") would hand every listener every episode on the server.
 func TestSubscribedEpisodesEmptyForAFollowerOfNothing(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newCountsFeed(t, []countsEpisode{{title: "First"}, {title: "Second"}})
 
@@ -2249,6 +2276,7 @@ func TestSubscribedEpisodesEmptyForAFollowerOfNothing(t *testing.T) {
 // than a ranking in Go, and this pins that the order did not move with
 // the mechanism.
 func TestSubscribedEpisodesInProgressRecency(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newCountsFeed(t, []countsEpisode{
 		{title: "First"}, {title: "Second"}, {title: "Third"},

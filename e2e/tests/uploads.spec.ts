@@ -150,14 +150,18 @@ test('an upload that declines identification goes straight in', async ({ app }) 
   // Counted as a delta: the stack is shared and outlives the run.
   const soloRows = async () =>
     ((await app.api.get('/uploads', { query: { limit: 100 } })).uploads ?? []).filter(
-      (r) => r.fileName === 'lantern-two.mp3' && !r.batchId,
+      (r) => r.fileName === 'sodium-sky.mp3' && !r.batchId,
     );
   const before = new Set((await soloRows()).map((r) => r.id));
 
   await app.nav.enter('home');
-  // lantern-two, which nothing here imports: a second copy of an
-  // imported track collides on destination by design.
-  await app.uploads.pickFiles([uploadSrc('lantern-two.mp3')]);
+  // The single is this test's own file. Declining imports on arrival,
+  // so uploading a lantern would race the album journey for the
+  // destination - and a shared fileName would let soloRows alias the
+  // drag-and-drop journey's session. The import is once per stack: a
+  // rerun against a stack that kept it is flagged as a duplicate and
+  // deliberately waits for review instead of importing.
+  await app.uploads.pickFiles([uploadSrc('sodium-sky.mp3')]);
   await app.uploads.confirmWithoutIdentifying();
 
   let entryId = '';

@@ -13,6 +13,7 @@ import (
 // are monotonic by construction. So a mis-tap put a book in the Finished
 // shelf permanently and the hub's unfinished filter hid it forever.
 func TestUnmarkFinishedClearsTheFlags(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	if len(items.Items) == 0 {
@@ -48,6 +49,7 @@ func TestUnmarkFinishedClearsTheFlags(t *testing.T) {
 // invalid-request rather than as internal errors, since each of them is
 // a client sending something it should not.
 func TestSetPlayedRefusesIncoherentStates(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	if len(items.Items) == 0 {

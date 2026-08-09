@@ -3,6 +3,7 @@
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Ctx } from '../context';
+import { typeInto } from '../gestures';
 
 export class Admin {
   constructor(private readonly ctx: Ctx) {}
@@ -38,5 +39,15 @@ export class Admin {
   /// A control on an admin section that carries its own identifier.
   control(id: string): Locator {
     return this.ctx.page.locator(sem(id));
+  }
+
+  /// Fills the libraries screen's add form and submits it. The caller
+  /// is already standing on that screen; creation starts a scan of its
+  /// own, which is the server's behaviour rather than this method's.
+  async addLibrary(who: { name: string; path: string }): Promise<void> {
+    const page = this.ctx.page;
+    await typeInto(page, page.locator(sem(SemanticsIds.libraryName)), who.name);
+    await typeInto(page, page.locator(sem(SemanticsIds.libraryPath)), who.path);
+    await page.locator(sem(SemanticsIds.librarySubmit)).click();
   }
 }

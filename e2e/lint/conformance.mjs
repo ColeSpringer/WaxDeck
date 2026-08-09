@@ -35,6 +35,7 @@ const write = process.argv.includes('--write-baseline');
 // table. Admin is server-global authority: an account that holds it can
 // flip switches every other worker shares.
 const ADMIN_SHAPES = [
+  'admin-console',
   'admin-ops',
   'driver-smoke',
   'notifications',
@@ -104,7 +105,12 @@ const isWaived = (file, rule) => {
 const isSpec = (file) => file.endsWith('.spec.ts');
 const isAccounts = (file) => file === 'tests/accounts.ts';
 const isFixtures = (file) => file === 'tests/fixtures.ts';
-const isFirstRun = (file) => file === 'tests/first-run.spec.ts';
+// The two specs whose subject is the bootstrap administrator itself:
+// first-run creates it on the shared stack, and admin-wizard creates
+// its own on the rootless wizard stack, where no minting authority
+// exists until the spec makes one.
+const isBootstrapSpec = (file) =>
+  file === 'tests/first-run.spec.ts' || file === 'tests/admin-wizard.spec.ts';
 const everywhere = () => true;
 
 // A rule says what it forbids, where it applies, and how to fix it.
@@ -162,7 +168,7 @@ const RULES = [
     // fixtures.ts is where that authority is wired in - the `adminToken`
     // worker fixture is the one caller of `ensureAdmin` - so it is no
     // more an offender than accounts.ts is.
-    applies: (file) => !isFirstRun(file) && !isAccounts(file) && !isFixtures(file),
+    applies: (file) => !isBootstrapSpec(file) && !isAccounts(file) && !isFixtures(file),
     fix: 'take the `account` fixture, which mints one account for this test',
   },
 ];

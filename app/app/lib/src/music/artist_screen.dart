@@ -10,6 +10,7 @@ import '../home/pin_action.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
+import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../shell/routes.dart';
@@ -353,17 +354,20 @@ class _Body extends ConsumerWidget {
             padding: EdgeInsets.symmetric(
               horizontal: sizeClass.gutter.horizontal / 2,
             ),
-            child: MediaListRow(
-              data: MediaTileData(
-                title: top[i].title,
-                subtitle: top[i].album,
-                artwork: store.source(top[i].artUrl),
-                trailingText: formatTimecode(
-                  Duration(milliseconds: top[i].durationMs),
+            child: QueueDraggable(
+              drop: QueueDrop.item(top[i]),
+              child: MediaListRow(
+                data: MediaTileData(
+                  title: top[i].title,
+                  subtitle: top[i].album,
+                  artwork: store.source(top[i].artUrl),
+                  trailingText: formatTimecode(
+                    Duration(milliseconds: top[i].durationMs),
+                  ),
+                  semanticsId: SemanticsIds.indexItem(i),
                 ),
-                semanticsId: SemanticsIds.indexItem(i),
+                onTap: () => unawaited(_play(context, ref, i)),
               ),
-              onTap: () => unawaited(_play(context, ref, i)),
             ),
           ),
         const SizedBox(height: WaxSpace.s32),

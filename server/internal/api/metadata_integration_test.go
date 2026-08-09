@@ -99,6 +99,7 @@ func wantStatus(t *testing.T, resp *http.Response, want int, what string) {
 }
 
 func TestMetadataFieldsVocabulary(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	resp := get(t, h.ts, "/api/v1/metadata/fields", h.token)
 	if resp.StatusCode != 200 {
@@ -171,6 +172,7 @@ func TestMetadataFieldsVocabulary(t *testing.T) {
 }
 
 func TestMetadataEditorLifecycle(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	page := h.items(t, "")
 	if len(page.Items) != 4 {
@@ -593,6 +595,7 @@ func TestMetadataEditorLifecycle(t *testing.T) {
 // The handle is legitimately absent, and absent means "this track's
 // album has no release group" rather than "the server did not look".
 func TestMetadataReleaseGroupAbsentForAnAlbumlessTrack(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	// No ALBUM and no MusicBrainz ids: the release-group key is derived
 	// from an mbid when there is one, whatever the album title says, so
@@ -628,6 +631,7 @@ func TestMetadataReleaseGroupAbsentForAnAlbumlessTrack(t *testing.T) {
 // the catalog", and its whole lifecycle is the drift appearing when a
 // write-back cannot land and clearing when one does.
 func TestMetadataWriteBackIssues(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores file permissions, so the unwritable-file setup cannot fail")
 	}
@@ -769,6 +773,7 @@ func TestMetadataWriteBackIssues(t *testing.T) {
 }
 
 func TestMetadataBookChapters(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	if _, err := fixtures.GenerateChapteredBook(h.library); err != nil {
 		t.Fatal(err)

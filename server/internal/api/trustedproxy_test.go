@@ -27,6 +27,7 @@ func requestFrom(remote string, forwarded ...string) *http.Request {
 // configured hop gets no say in what its address is, which is what keeps
 // the limiter from being disabled by a header anyone can send.
 func TestClientIPWalk(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name      string
 		trust     string
@@ -132,6 +133,7 @@ func TestClientIPWalk(t *testing.T) {
 // boot rather than defaulted: a typo that silently trusted nothing would
 // look exactly like a working configuration.
 func TestParseTrustedProxiesRefusesGarbage(t *testing.T) {
+	t.Parallel()
 	for _, list := range []string{"not-an-address", "10.0.0.0/99", "10.0.0.1, oops"} {
 		if _, err := ParseTrustedProxies(list); err == nil {
 			t.Errorf("ParseTrustedProxies(%q) accepted it", list)

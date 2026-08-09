@@ -25,6 +25,7 @@ func facetPage(t *testing.T, h *harness, query string) FacetPage {
 // listItems to exactly the items they counted. The demo library is one
 // artist, so a second root supplies the several buckets paging needs.
 func TestFacetedBrowseOverHTTP(t *testing.T) {
+	t.Parallel()
 	extra := t.TempDir()
 	guest := func(name, title, artist string, d time.Duration) fixtures.Spec {
 		return fixtures.Spec{
@@ -152,6 +153,7 @@ func TestFacetedBrowseOverHTTP(t *testing.T) {
 // that if the pid on the row is the pid the bucket carries: display text
 // collides, and an album title is not a location.
 func TestItemEntityHandlesOverHTTP(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	byArtist := map[string]string{}
@@ -205,6 +207,7 @@ func TestItemEntityHandlesOverHTTP(t *testing.T) {
 // shipped default, refusing a tree that could not resolve one way,
 // storing one, and clearing back to the default.
 func TestGenreTreeAdminOverHTTP(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	resp := get(t, h.ts, "/api/v1/admin/genre-tree", h.token)

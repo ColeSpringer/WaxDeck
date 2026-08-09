@@ -227,6 +227,7 @@ func boolField(f map[string]any, k string) bool {
 // controller starts playback on another signed-in client, then relays
 // seek and volume to it over the command bus.
 func TestConnectPlayOnClientEndpointAndRelay(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pidA := items.Items[0].Pid
@@ -330,6 +331,7 @@ func TestConnectPlayOnClientEndpointAndRelay(t *testing.T) {
 // whoever sent the command, over both seams: REST for the session
 // verbs, and the socket for the control verbs the app actually uses.
 func TestConnectRefusalKeepsItsCode(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pidA := items.Items[0].Pid
@@ -424,6 +426,7 @@ func TestConnectRefusalKeepsItsCode(t *testing.T) {
 // An ended session keeps its queue where a restore surface can read
 // it, and leaves the live list alone.
 func TestPlaybackSessionHistory(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pidA := items.Items[0].Pid
@@ -539,6 +542,7 @@ func TestPlaybackSessionHistory(t *testing.T) {
 
 // TestConnectClockSync pins the ping/pong shape.
 func TestConnectClockSync(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	c := dialWS(t, h, h.token)
 	c.send(map[string]any{"type": "ping", "t": 12345})
@@ -555,6 +559,7 @@ func TestConnectClockSync(t *testing.T) {
 // playing client reports, the session lists, and lifecycle rides the
 // player topic.
 func TestConnectMirrorAndPlayerTopic(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pid := items.Items[0].Pid
@@ -619,6 +624,7 @@ func TestConnectMirrorAndPlayerTopic(t *testing.T) {
 // TestConnectTransferBetweenClients moves live playback between two
 // player clients and keeps the position.
 func TestConnectTransferBetweenClients(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pid := items.Items[0].Pid
@@ -673,6 +679,7 @@ func TestConnectTransferBetweenClients(t *testing.T) {
 // TestQueueTimelineEndpoint mints a gapless timeline over the REST
 // surface and plays the playlist chain through the proxied HLS tree.
 func TestQueueTimelineEndpoint(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pidA := items.Items[0].Pid
@@ -716,6 +723,7 @@ func TestQueueTimelineEndpoint(t *testing.T) {
 
 // TestCastPreflight answers candidates with plain-language notes.
 func TestCastPreflight(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	var out struct {
 		Bases []struct {
@@ -786,6 +794,7 @@ func pGet(t *testing.T, h *harness, path, token string, out any) {
 // this is what makes rewording it a build failure rather than a silently
 // restored dead end. See app/app/lib/src/connect/device_picker.dart.
 func TestMultiPartRefusalWording(t *testing.T) {
+	t.Parallel()
 	refusal := multiPartRefusal("bk-01HZZZZZZZZZZZZZZZZZZZZZZZ")
 	if refusal.Code != "feature-unavailable" {
 		t.Errorf("code = %q, want feature-unavailable", refusal.Code)

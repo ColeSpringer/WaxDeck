@@ -67,6 +67,7 @@ func waitForRadioArt(t *testing.T, svc *Library, artist, title string) radioArtE
 // device, so a title that has been asked about is never asked about
 // again while its answer stands.
 func TestRadioArtIsAskedOncePerTitle(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	resolver := &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
 	svc.radioArtResolver = resolver
@@ -114,6 +115,7 @@ func TestRadioArtIsAskedOncePerTitle(t *testing.T) {
 // that could not be reached stands for minutes, because caching one bad
 // minute upstream for a day turns it into a day of blank faces.
 func TestRadioArtCachesItsTwoFailuresDifferently(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	enableRadioExternalArt(t, ctx, svc)
 
@@ -142,6 +144,7 @@ func TestRadioArtCachesItsTwoFailuresDifferently(t *testing.T) {
 // property the whole rung ships behind: with it off nothing about a
 // station's announced title leaves this server.
 func TestRadioArtMakesNoRequestWhileOff(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	resolver := &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
 	svc.radioArtResolver = resolver
@@ -182,6 +185,7 @@ func (b *blockingRadioArt) FrontCover(ctx context.Context, artist, title string)
 // a paced third party ran to completion. procCtx is what outlives a
 // request and still ends with the process.
 func TestRadioArtLookupEndsWithTheProcess(t *testing.T) {
+	t.Parallel()
 	procCtx, shutdown := context.WithCancel(context.Background())
 	group := supervise.NewGroup(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	resolver := &blockingRadioArt{
@@ -255,6 +259,7 @@ func enableRadioExternalArt(t *testing.T, ctx context.Context, svc *Library) {
 // the noisy spelling is the one MusicBrainz misses, so it could cache a
 // day-long miss against a key the clean spelling would have resolved.
 func TestRadioArtQueriesWhatItKeysOn(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	resolver := &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
 	svc.radioArtResolver = resolver
@@ -285,6 +290,7 @@ func TestRadioArtQueriesWhatItKeysOn(t *testing.T) {
 // the station-logo cache next door counts bytes; this one has to as
 // well.
 func TestRadioArtCacheIsBoundedByBytes(t *testing.T) {
+	t.Parallel()
 	l := &Library{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	big := make([]byte, radioArtCacheBytes/4)
 	for i := range 12 {
@@ -308,6 +314,7 @@ func TestRadioArtCacheIsBoundedByBytes(t *testing.T) {
 // nothing, so eviction-on-insert never runs and every image body stays
 // resident for the life of the process.
 func TestRadioArtDropsStaleOnRead(t *testing.T) {
+	t.Parallel()
 	l := &Library{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	key := radioArtKey("artist", "title")
 	l.storeRadioArt(key, radioArtEntry{
@@ -329,6 +336,7 @@ func TestRadioArtDropsStaleOnRead(t *testing.T) {
 // serving third-party covers from their own origin, not keep serving
 // what is already cached for the week the entry stays fresh.
 func TestRadioArtIsNotServedWhileOff(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	resolver := &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
 	svc.radioArtResolver = resolver

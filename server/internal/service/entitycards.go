@@ -55,7 +55,7 @@ var entityCardKind = map[string]string{
 }
 
 // EntityCards resolves a mixed list of entity pids to the facts a card
-// draws, in request order.
+// draws, in request order, and names the pids that are gone for good.
 //
 // Anything that cannot be answered for is dropped rather than erroring:
 // unknown, deleted, merged away, unsubscribed, or outside the caller's
@@ -63,9 +63,18 @@ var entityCardKind = map[string]string{
 // the radio dial does with a departed station, and it is what lets
 // Prefs.pinned hold a pid nothing resolves without a preference write
 // failing over it.
-func (l *Library) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string) ([]EntityCard, error) {
+//
+// The second return is the departed subset of the misses: pids that no
+// longer name anything on this server, for anyone. A pid that exists
+// and is merely out of the caller's sight - a grant that could be
+// widened, a show they could resubscribe to, a book in the trash - is
+// omitted from the cards and NOT listed departed, because what is
+// gone-for-you-today may be back tomorrow and a client that pruned it
+// would have turned a temporary state into a permanent loss. Departed
+// is the signal a pinned list prunes on (ADR-0054's consequence).
+func (l *Library) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string) ([]EntityCard, []string, error) {
 	if len(apiPIDs) > maxEntityCards {
-		return nil, errInvalid(fmt.Sprintf("at most %d pids", maxEntityCards))
+		return nil, nil, errInvalid(fmt.Sprintf("at most %d pids", maxEntityCards))
 	}
 	// Grouped by prefix so each kind is read in one batch, then rebuilt
 	// positionally. A duplicate pid answers once per occurrence, which is
@@ -83,7 +92,7 @@ func (l *Library) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string
 	for _, api := range apiPIDs {
 		prefix, pid, ok := parseAPIPID(api)
 		if !ok || entityCardKind[prefix] == "" {
-			return nil, errInvalid("not a pinnable entity pid: " + api)
+			return nil, nil, errInvalid("not a pinnable entity pid: " + api)
 		}
 		pid = model.PID(strings.ToUpper(string(pid)))
 		canonical = append(canonical, apiPID(prefix, pid))
@@ -91,50 +100,75 @@ func (l *Library) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string
 	}
 
 	cards := map[string]EntityCard{}
+	gone := map[string]bool{}
 	for prefix, pids := range byPrefix {
 		var (
 			got map[string]EntityCard
+			dep map[string]bool
 			err error
 		)
 		switch prefix {
 		case PrefixAlbum, PrefixArtist, PrefixReleaseGroup:
-			got, err = l.entityKindCards(ctx, uc, prefix, pids)
+			got, dep, err = l.entityKindCards(ctx, uc, prefix, pids)
 		case PrefixPlaylist:
-			got, err = l.playlistCards(ctx, uc, pids)
+			got, dep, err = l.playlistCards(ctx, uc, pids)
 		case PrefixPodcast:
-			got, err = l.showCards(ctx, uc, pids)
+			got, dep, err = l.showCards(ctx, uc, pids)
 		case PrefixBook:
-			got, err = l.bookCards(ctx, uc, pids)
+			got, dep, err = l.bookCards(ctx, uc, pids)
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for pid, card := range got {
 			cards[pid] = card
 		}
+		for pid := range dep {
+			gone[pid] = true
+		}
 	}
 
 	out := make([]EntityCard, 0, len(canonical))
+	// Departed pids ride in request order, a repeated pid once: it is a
+	// set of handles to prune, not a positional answer.
+	departed := make([]string, 0, len(gone))
+	listed := map[string]bool{}
 	for _, api := range canonical {
 		if card, ok := cards[api]; ok {
 			out = append(out, card)
 		}
+		if gone[api] && !listed[api] {
+			listed[api] = true
+			departed = append(departed, api)
+		}
 	}
-	return out, nil
+	return out, departed, nil
 }
 
 // entityKindCards resolves the three catalog-entity kinds through
 // EntityByPIDs, which is also the visibility gate for a restricted
 // caller: an entity whose every member sits outside the grant is dropped
 // rather than handed out as a pid the tap cannot follow.
-func (l *Library) entityKindCards(ctx context.Context, uc *UserCtx, prefix string, pids []model.PID) (map[string]EntityCard, error) {
+//
+// Departed here is a pid the batch read did not answer at all: deleted,
+// merged away, or never real, which the catalog collapses into absence
+// (EntityByPIDs omits unknown pids rather than erroring). An entity the
+// read DID answer but the grant hides is out of the cards and out of
+// departed both - it exists, and a widened grant brings it back.
+func (l *Library) entityKindCards(ctx context.Context, uc *UserCtx, prefix string, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	kind, ok := entityKindForPrefix(prefix)
 	if !ok {
-		return nil, errInvalid("no entity kind for prefix " + prefix)
+		return nil, nil, errInvalid("no entity kind for prefix " + prefix)
 	}
 	infos, err := l.lib.EntityByPIDs(ctx, kind, pids)
 	if err != nil {
-		return nil, classify(err)
+		return nil, nil, classify(err)
+	}
+	departed := map[string]bool{}
+	for _, pid := range pids {
+		if info, ok := infos[pid]; !ok || info == nil {
+			departed[apiPID(prefix, pid)] = true
+		}
 	}
 	out := make(map[string]EntityCard, len(infos))
 	// Album and release-group cards want an artist line the entity does
@@ -166,7 +200,7 @@ func (l *Library) entityKindCards(ctx context.Context, uc *UserCtx, prefix strin
 		}
 		out[card.PID] = card
 	}
-	return out, nil
+	return out, departed, nil
 }
 
 // entityArtistNames resolves the artist line for album and release-group
@@ -239,16 +273,28 @@ func (l *Library) entityArtistNames(ctx context.Context, prefix string, infos ma
 // playlistCards resolves playlists one at a time - the catalog has no
 // batch read for them and the list is capped at 64 - through the same
 // visibility rule the listing uses: yours, or shared.
-func (l *Library) playlistCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, error) {
+//
+// The catalog read and the visibility rule are applied separately here
+// rather than through resolvePlaylist, because they answer differently:
+// a playlist the catalog has no row for is departed, while one that
+// exists and is somebody else's private list is only invisible - the
+// owner sharing it again brings the card back, and pruning the pin
+// meanwhile would make that a loss.
+func (l *Library) playlistCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	out := make(map[string]EntityCard, len(pids))
+	departed := map[string]bool{}
 	for _, pid := range pids {
 		api := apiPID(PrefixPlaylist, pid)
-		pl, err := l.resolvePlaylist(ctx, uc, api)
+		pl, err := l.lib.Playlists().Get(ctx, pid)
 		if err != nil {
-			if KindOf(err) == KindNotFound {
+			if KindOf(classify(err)) == KindNotFound {
+				departed[api] = true
 				continue
 			}
-			return nil, err
+			return nil, nil, classify(err)
+		}
+		if string(pl.OwnerPID) != uc.CatalogPID && pl.Visibility != model.VisibilityShared {
+			continue
 		}
 		// The listing row's count, not the opened playlist's: cached for a
 		// static list and deliberately absent for a smart one, which is the
@@ -262,18 +308,25 @@ func (l *Library) playlistCards(ctx context.Context, uc *UserCtx, pids []model.P
 			ItemCount: dto.ItemCount,
 		}
 	}
-	return out, nil
+	return out, departed, nil
 }
 
 // showCards resolves podcast shows, scoped to the caller's subscriptions
 // the way every other show surface is: an unsubscribed show is not on
 // this listener's shelf, and unsubscribing is how a pinned show leaves.
-func (l *Library) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, error) {
+//
+// An unsubscribed show is invisible, never departed: the show still
+// exists, resubscribing brings the card back, and the show's own screen
+// keeps its unpin row for exactly this state. Departed is a subscribed
+// show the server no longer has - the one absence resubscribing cannot
+// mend.
+func (l *Library) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	subs, err := l.subscribedShowSet(ctx, uc)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	out := make(map[string]EntityCard, len(pids))
+	departed := map[string]bool{}
 	for _, pid := range pids {
 		if !subs[string(pid)] {
 			continue
@@ -282,9 +335,10 @@ func (l *Library) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 		pod, err := l.getShow(ctx, api)
 		if err != nil {
 			if KindOf(err) == KindNotFound {
+				departed[api] = true
 				continue
 			}
-			return nil, err
+			return nil, nil, err
 		}
 		out[api] = EntityCard{
 			PID:    api,
@@ -293,22 +347,32 @@ func (l *Library) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 			Artist: pod.Author,
 		}
 	}
-	return out, nil
+	return out, departed, nil
 }
 
 // bookCards resolves books, which are items rather than entities: the
 // same per-item visibility and content rules every other item read
 // applies, and a book that fails either is dropped.
-func (l *Library) bookCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, error) {
+//
+// Departed is a book the catalog itself cannot find. One that exists
+// and is out of the caller's sight - a grant, a content rule, the
+// trash a restore could empty - is dropped without being departed,
+// because each of those states can end with the book back.
+func (l *Library) bookCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	out := make(map[string]EntityCard, len(pids))
+	departed := map[string]bool{}
 	for _, pid := range pids {
 		api := apiPID(PrefixBook, pid)
-		it, err := l.getVisibleItem(ctx, uc, api)
+		it, err := l.getItem(ctx, api)
 		if err != nil {
 			if KindOf(err) == KindNotFound {
+				departed[api] = true
 				continue
 			}
-			return nil, err
+			return nil, nil, err
+		}
+		if !l.itemVisible(ctx, uc, it.PID) || !l.allowedByContent(ctx, uc, it) {
+			continue
 		}
 		out[api] = EntityCard{
 			PID:    api,
@@ -318,5 +382,5 @@ func (l *Library) bookCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 			Year:   it.Year,
 		}
 	}
-	return out, nil
+	return out, departed, nil
 }

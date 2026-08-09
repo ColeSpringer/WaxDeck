@@ -185,7 +185,7 @@ abstract interface class WaxDeckRepository {
   /// unsubscribed, outside the caller's libraries) are silently dropped,
   /// so a short answer is normal and the caller must not index into it
   /// by request position.
-  Future<List<EntityCard>> resolveEntities(List<String> pids);
+  Future<EntityResolution> resolveEntities(List<String> pids);
 
   /// `GET /albums/{pid}`: one album entity's identity - barcode, label,
   /// catalog number, media, country - which no track row carries.
@@ -449,7 +449,11 @@ abstract interface class WaxDeckRepository {
   /// `GET /items/{pid}/waveform`: the item's amplitude envelope, or the
   /// state saying there is not one to draw. A pure read of what the
   /// analyze pass stored; nothing is computed or queued by asking.
-  Future<Waveform> getWaveform(String pid);
+  ///
+  /// [wholeItem] asks for one envelope across a multi-file audiobook's
+  /// whole timeline instead of a single part's, which is what a book
+  /// scrubber draws; it changes nothing for anything with one file.
+  Future<Waveform> getWaveform(String pid, {bool wholeItem});
 
   /// `GET /items/{pid}/lyrics`: the item's words, or null when it has
   /// none.
@@ -559,8 +563,10 @@ abstract interface class WaxDeckRepository {
   /// for re-importing on another WaxDeck server.
   Future<PortablePlaylist> exportPlaylistPortable(String pid);
 
-  /// `GET /shares`: the caller's share links, newest first.
-  Future<SharePage> listShares({String? cursor, int? limit});
+  /// `GET /shares`: the caller's share links, newest first. [all] lists
+  /// every account's links instead, which the server allows only to an
+  /// administrator and which is the only listing that names owners.
+  Future<SharePage> listShares({String? cursor, int? limit, bool all});
 
   /// `POST /shares`: mints a public share link for a track, playlist,
   /// book, or episode [pid]. [expiresInHours] bounds its lifetime
@@ -1359,6 +1365,10 @@ abstract interface class WaxDeckRepository {
   /// (administrators).
   Future<TranscodingLimits> putTranscodingLimits(TranscodingLimits limits);
 
+  /// `GET /admin/transcoding/activity`: the engine-backed streams in
+  /// flight, for reading beside the limits (administrators).
+  Future<TranscodingActivity> getTranscodingActivity();
+
   /// `GET /admin/scrobbling`: whether the server holds Last.fm API
   /// credentials and where they came from; the shared secret is never
   /// read back (administrators).
@@ -1816,20 +1826,22 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<List<EntityCard>> resolveEntities(List<String> pids) =>
+  Future<EntityResolution> resolveEntities(List<String> pids) =>
       _guard(() async {
         // Nothing pinned is nothing to ask: the endpoint would answer an
         // empty list, and a shelf that draws nothing should not spend a round
         // trip finding that out.
-        if (pids.isEmpty) return const <EntityCard>[];
+        if (pids.isEmpty) return const EntityResolution(cards: []);
         final response = await _gen.getLibraryApi().resolveEntities(
           entityCardQuery: gen.EntityCardQuery(
             (b) => b..pids = ListBuilder<String>(pids),
           ),
         );
-        return _require(
-          response.data,
-        ).entities.map(entityCardFromGen).nonNulls.toList();
+        final list = _require(response.data);
+        return EntityResolution(
+          cards: list.entities.map(entityCardFromGen).nonNulls.toList(),
+          departed: list.departed?.toList() ?? const <String>[],
+        );
       });
 
   @override
@@ -2345,10 +2357,14 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<Waveform> getWaveform(String pid) => _guard(() async {
-    final response = await _gen.getPlaybackApi().getWaveform(pid: pid);
-    return waveformFromGen(_require(response.data));
-  });
+  Future<Waveform> getWaveform(String pid, {bool wholeItem = false}) =>
+      _guard(() async {
+        final response = await _gen.getPlaybackApi().getWaveform(
+          pid: pid,
+          span: wholeItem ? 'item' : null,
+        );
+        return waveformFromGen(_require(response.data));
+      });
 
   @override
   Future<Lyrics?> getItemLyrics(String pid) => _guard(() async {
@@ -2563,14 +2579,18 @@ class WaxDeckClient implements WaxDeckRepository {
       });
 
   @override
-  Future<SharePage> listShares({String? cursor, int? limit}) =>
-      _guard(() async {
-        final response = await _gen.getSharesApi().listShares(
-          cursor: cursor,
-          limit: limit,
-        );
-        return sharePageFromGen(_require(response.data), baseUrl: _baseUrl);
-      });
+  Future<SharePage> listShares({
+    String? cursor,
+    int? limit,
+    bool all = false,
+  }) => _guard(() async {
+    final response = await _gen.getSharesApi().listShares(
+      all: all ? true : null,
+      cursor: cursor,
+      limit: limit,
+    );
+    return sharePageFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
 
   @override
   Future<Share> createShare({
@@ -4116,6 +4136,12 @@ class WaxDeckClient implements WaxDeckRepository {
         );
         return transcodingLimitsFromGen(_require(response.data));
       });
+
+  @override
+  Future<TranscodingActivity> getTranscodingActivity() => _guard(() async {
+    final response = await _gen.getAdminApi().getTranscodingActivity();
+    return transcodingActivityFromGen(_require(response.data));
+  });
 
   @override
   Future<ScrobblingAdminConfig> getScrobblingConfig() => _guard(() async {

@@ -115,4 +115,35 @@ void main() {
       expect(await container.read(waveformProvider(_pid).future), isNull);
     });
   });
+
+  // The chapter view is a window on the book's envelope, not a second
+  // request: a part is a file boundary and a chapter is not.
+  group('slicing a book\'s envelope', () {
+    final book = <double>[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+
+    test('takes the span the chapter covers', () {
+      expect(slicePeaks(book, 0.2, 0.5), <double>[0.3, 0.4, 0.5]);
+      expect(slicePeaks(book, 0, 0.1), <double>[0.1]);
+      // The tail rounds outward rather than dropping the last bucket.
+      expect(slicePeaks(book, 0.9, 1), <double>[1.0]);
+    });
+
+    test('keeps the book\'s own scale', () {
+      // A quiet chapter stays quiet. Renormalising the slice would make
+      // the same audio look different depending on which view was
+      // last tapped, and would tell a listener a whispered chapter is
+      // as loud as the loudest thing in the book.
+      final quiet = slicePeaks(book, 0, 0.3)!;
+      expect(quiet.reduce((a, b) => a > b ? a : b), lessThan(0.5));
+    });
+
+    test('answers null where there is nothing to slice', () {
+      expect(slicePeaks(null, 0, 1), isNull);
+      expect(slicePeaks(const <double>[], 0, 1), isNull);
+      // A zero-length or inverted span is a chapter list disagreeing
+      // with a duration, which is a plain bar rather than a crash.
+      expect(slicePeaks(book, 0.5, 0.5), isNull);
+      expect(slicePeaks(book, 0.8, 0.2), isNull);
+    });
+  });
 }

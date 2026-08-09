@@ -13,6 +13,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/side_panel.dart';
 import 'queue_controller.dart';
+import 'queue_drag.dart';
 import 'queue_item.dart';
 import 'queue_state.dart';
 import 'session_history.dart';
@@ -348,10 +349,20 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
       ),
     ),
     SliverToBoxAdapter(
-      child: QueueRow(
-        entry: queue.currentEntry!,
-        playing: true,
-        onTap: () => context.push(WaxRoute.nowPlaying),
+      // The playing row answers a drop too, and it is the likeliest row
+      // to aim at: without a marker here a drop on the highlighted row
+      // finds nothing under the pointer and falls back to the end of
+      // the queue, which is the furthest possible place from where it
+      // was aimed. It does not split - nothing can be queued before
+      // what is already playing - so anywhere on it means next.
+      child: MetaData(
+        metaData: QueueRowTarget(queue.currentEntry!.queueId, splits: false),
+        behavior: HitTestBehavior.opaque,
+        child: QueueRow(
+          entry: queue.currentEntry!,
+          playing: true,
+          onTap: () => context.push(WaxRoute.nowPlaying),
+        ),
       ),
     ),
     _label(context, upNext.isEmpty ? 'NOTHING UP NEXT' : 'UP NEXT'),
@@ -433,62 +444,76 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
         itemBuilder: (context, index) {
           final entry = upNext[index];
           final at = queue.currentIndex + 1 + index;
-          return _Dismissable(
+          return MetaData(
+            // The reorderable list wants the key on the row it is
+            // handed, so it rides out here with the marker rather than
+            // on the dismissable inside.
             key: ValueKey<String>(entry.queueId),
-            entry: entry,
-            // A swipe is a shortcut for removing one row, and while a
-            // set is picked the row-shaped verbs belong to the bar.
-            onRemove: selecting ? null : () => notifier.removeAt(at),
-            // A drag is a gesture, and a gesture is not a path for
-            // everyone. `SliverReorderableList` carries none of the
-            // move actions `ReorderableListView` adds for itself, so
-            // the row declares them: a screen reader and a switch can
-            // move an entry without dragging anything.
-            child: Semantics(
-              customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
-                if (index > 0)
-                  const CustomSemanticsAction(label: 'Move up'): () =>
-                      notifier.reorder(at, at - 1),
-                if (index < upNext.length - 1)
-                  const CustomSemanticsAction(label: 'Move down'): () =>
-                      notifier.reorder(at, at + 1),
-              },
-              child: QueueRow(
-                entry: entry,
-                // While a set is picked a tap picks rather than jumps:
-                // the surface is in a mode, and a tap that started
-                // playback halfway through choosing would be the worst
-                // possible answer.
-                onTap: selecting
-                    ? () => _pick(selection, entry.queueId, upNextIds)
-                    : () => _pick(
-                        selection,
-                        entry.queueId,
-                        upNextIds,
-                        orJump: () => notifier.jumpTo(at),
-                      ),
-                onRemove: selecting ? null : () => notifier.removeAt(at),
-                // Only while a set is picked: the checkbox takes the
-                // artwork's slot, so wiring it always would put a column
-                // of empty boxes down a queue nobody is selecting in.
-                // The long press below is the way in.
-                onSelect: selecting
-                    ? (_) => selection.toggle(entry.queueId)
-                    : null,
-                selected: selected.contains(entry.queueId),
-                selectSemanticsId: SemanticsIds.queueEntrySelect(entry.queueId),
-                onLongPress: () => selection.toggle(entry.queueId),
-                handle: ReorderableDragStartListener(
-                  index: index,
-                  child: Semantics(
-                    identifier: SemanticsIds.queueEntryDrag(entry.queueId),
-                    label: 'Drag to reorder',
-                    child: Padding(
-                      padding: const EdgeInsets.all(WaxSpace.s8),
-                      child: WaxIcon(
-                        WaxIcons.sort,
-                        size: 16,
-                        color: colors.textTertiary,
+            // What a drop from a listing hit-tests against, so a row
+            // dragged onto the panel lands where it was released rather
+            // than always at the end. Opaque so the gaps between rows
+            // answer too: a drop between two of them is a drop, and a
+            // pointer that fell in a one-pixel seam is not a mistake.
+            metaData: QueueRowTarget(entry.queueId),
+            behavior: HitTestBehavior.opaque,
+            child: _Dismissable(
+              entry: entry,
+              // A swipe is a shortcut for removing one row, and while a
+              // set is picked the row-shaped verbs belong to the bar.
+              onRemove: selecting ? null : () => notifier.removeAt(at),
+              // A drag is a gesture, and a gesture is not a path for
+              // everyone. `SliverReorderableList` carries none of the
+              // move actions `ReorderableListView` adds for itself, so
+              // the row declares them: a screen reader and a switch can
+              // move an entry without dragging anything.
+              child: Semantics(
+                customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
+                  if (index > 0)
+                    const CustomSemanticsAction(label: 'Move up'): () =>
+                        notifier.reorder(at, at - 1),
+                  if (index < upNext.length - 1)
+                    const CustomSemanticsAction(label: 'Move down'): () =>
+                        notifier.reorder(at, at + 1),
+                },
+                child: QueueRow(
+                  entry: entry,
+                  // While a set is picked a tap picks rather than jumps:
+                  // the surface is in a mode, and a tap that started
+                  // playback halfway through choosing would be the worst
+                  // possible answer.
+                  onTap: selecting
+                      ? () => _pick(selection, entry.queueId, upNextIds)
+                      : () => _pick(
+                          selection,
+                          entry.queueId,
+                          upNextIds,
+                          orJump: () => notifier.jumpTo(at),
+                        ),
+                  onRemove: selecting ? null : () => notifier.removeAt(at),
+                  // Only while a set is picked: the checkbox takes the
+                  // artwork's slot, so wiring it always would put a column
+                  // of empty boxes down a queue nobody is selecting in.
+                  // The long press below is the way in.
+                  onSelect: selecting
+                      ? (_) => selection.toggle(entry.queueId)
+                      : null,
+                  selected: selected.contains(entry.queueId),
+                  selectSemanticsId: SemanticsIds.queueEntrySelect(
+                    entry.queueId,
+                  ),
+                  onLongPress: () => selection.toggle(entry.queueId),
+                  handle: ReorderableDragStartListener(
+                    index: index,
+                    child: Semantics(
+                      identifier: SemanticsIds.queueEntryDrag(entry.queueId),
+                      label: 'Drag to reorder',
+                      child: Padding(
+                        padding: const EdgeInsets.all(WaxSpace.s8),
+                        child: WaxIcon(
+                          WaxIcons.sort,
+                          size: 16,
+                          color: colors.textTertiary,
+                        ),
                       ),
                     ),
                   ),
@@ -709,7 +734,6 @@ class _Dismissable extends StatelessWidget {
     required this.entry,
     required this.onRemove,
     required this.child,
-    super.key,
   });
 
   final QueueEntry entry;

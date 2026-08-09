@@ -479,6 +479,23 @@ class EntityCard {
   final int? itemCount;
 }
 
+/// What a batch entity resolve answered: the cards that drew, and the
+/// pids that are gone for everyone.
+class EntityResolution {
+  const EntityResolution({required this.cards, this.departed = const []});
+
+  /// Cards in request order, minus every pid the server could not
+  /// answer for this caller.
+  final List<EntityCard> cards;
+
+  /// The requested pids that no longer name anything on the server, for
+  /// anyone: deleted, merged away, or never real. A miss that is merely
+  /// out of this caller's sight today - a grant, a lapsed subscription,
+  /// the trash - is not here, because it can come back. This is the set
+  /// a pinned list prunes.
+  final List<String> departed;
+}
+
 /// One album entity's identity: the release facts the catalog keeps on
 /// the entity rather than on any of its tracks.
 ///
@@ -3707,6 +3724,15 @@ class TranscodingLimits {
   final int defaultMaxBitrateKbps;
 }
 
+/// What the transcoder is doing right now, read beside the limits that
+/// bound it.
+class TranscodingActivity {
+  const TranscodingActivity({required this.activeSessions});
+
+  /// Engine-backed streams in flight: what the concurrent caps count.
+  final int activeSessions;
+}
+
 /// The server-level Last.fm API credential state (administrators).
 class ScrobblingAdminConfig {
   const ScrobblingAdminConfig({
@@ -4328,6 +4354,7 @@ class Share {
     required this.createdAt,
     this.expiresAt,
     required this.plays,
+    this.owner,
   });
 
   /// Share PID.
@@ -4362,6 +4389,11 @@ class Share {
 
   /// Anonymous plays through the link so far.
   final int plays;
+
+  /// Who minted the link: display name, or username where none is set.
+  /// Only the administrative all-shares listing fills it; on a caller's
+  /// own listing every row would name the caller, so it is null there.
+  final String? owner;
 }
 
 /// One page of share links, newest first.

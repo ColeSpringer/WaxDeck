@@ -162,6 +162,11 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 		Group:    group,
 		Bases:    connect.Bases{LAN: "http://192.0.2.10:4420"},
 		Backups:  h.backups,
+		// A real server always mints share tokens from its secret
+		// (main.go), and the share endpoints reach for them without a
+		// guard: leaving this unset made the harness the only place a
+		// share link could not be minted.
+		Shares: auth.NewShareTokens(secret),
 	})
 	apiHandler := HandlerWithOptions(
 		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
@@ -378,6 +383,7 @@ func (h *harness) postJSON(t *testing.T, path string, body any) *http.Response {
 }
 
 func TestCatalogBrowse(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	page := h.items(t, "")
@@ -472,6 +478,7 @@ func TestCatalogBrowse(t *testing.T) {
 }
 
 func TestStreamRoundTrip(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	page := h.items(t, "?limit=1")
 	pid := page.Items[0].Pid
@@ -547,6 +554,7 @@ func TestStreamRoundTrip(t *testing.T) {
 }
 
 func TestResumeAndListens(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	page := h.items(t, "?limit=2")
 	pid := page.Items[0].Pid
@@ -620,6 +628,7 @@ func putJSON(t *testing.T, ts *httptest.Server, path, token string, body any) *h
 // level: two accounts share the catalog but never each other's
 // playback state, stars, or ratings.
 func TestTwoUsersIsolatedState(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// A second, non-admin account.

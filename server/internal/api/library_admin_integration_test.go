@@ -9,6 +9,7 @@ import (
 // configured name and media; a duplicate name is a clean conflict; a
 // missing path is rejected up front; and a non-admin cannot create one.
 func TestCreateLibraryRuntime(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	newRoot := t.TempDir()
 

@@ -16,6 +16,7 @@ import (
 // the client asked for one track and a different one was deleted.
 // Unrecoverable through that client, which cannot see what it lost.
 func TestSubsonicRemoveTakesTheTrackTheClientSaw(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	items := h.items(t, "")

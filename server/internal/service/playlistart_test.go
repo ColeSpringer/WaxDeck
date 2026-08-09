@@ -95,6 +95,7 @@ func playlistArt(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, p
 // on the playlist so it serves through the same art path, thumbnail
 // cache, and ETag as every other cover.
 func TestPlaylistMosaicFromDistinctCovers(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	giveCovers(t, ctx, svc, uc, pids,
@@ -125,6 +126,7 @@ func TestPlaylistMosaicFromDistinctCovers(t *testing.T) {
 // member, and tiling it four times would look like a bug rather than a
 // mosaic. It shows the cover once instead.
 func TestPlaylistCoverDoesNotTileOneAlbum(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	shared := coverPNG(t, 120)
@@ -143,6 +145,7 @@ func TestPlaylistCoverDoesNotTileOneAlbum(t *testing.T) {
 // is over the member list, so adding a member with different art
 // rebuilds the cover, and a read that changes nothing does not.
 func TestPlaylistCoverFollowsMembership(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)
 	giveCovers(t, ctx, svc, uc, pids[:4],
@@ -182,6 +185,7 @@ func TestPlaylistCoverFollowsMembership(t *testing.T) {
 // recorded origin a membership change would silently overwrite the
 // owner's cover, and clearing it would leave the playlist bare.
 func TestPlaylistCustomCoverWinsAndClearsBack(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	giveCovers(t, ctx, svc, uc, pids,
@@ -233,6 +237,7 @@ func TestPlaylistCustomCoverWinsAndClearsBack(t *testing.T) {
 // own listings, so a private playlist's cover has to read as absent to
 // everyone else.
 func TestPlaylistArtHonorsVisibility(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	giveCovers(t, ctx, svc, uc, pids,
@@ -274,6 +279,7 @@ func TestPlaylistArtHonorsVisibility(t *testing.T) {
 // surface on whatever later inherited the id. The catalog drops the art
 // with the playlist; this drops the provenance row beside it.
 func TestPlaylistDeleteDropsCover(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	giveCovers(t, ctx, svc, uc, pids,
@@ -303,6 +309,7 @@ func TestPlaylistDeleteDropsCover(t *testing.T) {
 // list, so a later read must not read the empty slot as a missing
 // cover and re-resolve every member again.
 func TestPlaylistWithoutCoveredMembers(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:2]
 	plPID := playlistWith(t, ctx, svc, uc, "Bare", pids)
@@ -343,6 +350,7 @@ func TestPlaylistWithoutCoveredMembers(t *testing.T) {
 // built from the old art would survive until the membership next
 // changed.
 func TestPlaylistCoverFollowsMemberArtwork(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	giveCovers(t, ctx, svc, uc, pids,
@@ -386,6 +394,7 @@ func TestPlaylistCoverFollowsMemberArtwork(t *testing.T) {
 // reaching an owner's upload: it is not built from the members, so
 // nothing about them should displace it.
 func TestPlaylistCustomCoverIgnoresMemberArtwork(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	giveCovers(t, ctx, svc, uc, pids,
@@ -412,6 +421,7 @@ func TestPlaylistCustomCoverIgnoresMemberArtwork(t *testing.T) {
 // playlist grid, which loads no members and so would otherwise show the
 // cover the old rule produced.
 func TestSmartPlaylistRuleChangeRefreshesCover(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	giveCovers(t, ctx, svc, uc, pids,
@@ -468,6 +478,7 @@ func exoticCover() []byte {
 // single-cover shape rather than failing to compose -- and the result is
 // recorded, so the next read does not resolve every member again.
 func TestPlaylistCoverSkipsUnusableMemberArt(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	good := coverPNG(t, 40)

@@ -18,6 +18,7 @@ import (
 // checks the summary, the per-rule issue listing with its keyset
 // cursor, and the bulk-fix queue.
 func TestHealthSweepAndIssues(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	ctx := context.Background()
 
@@ -155,6 +156,7 @@ func TestHealthSweepAndIssues(t *testing.T) {
 // surfaces are admin-only while the dashboard reads stay open to every
 // authenticated user.
 func TestHealthAdminGates(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword})
 	if resp.StatusCode != 201 {
@@ -204,6 +206,7 @@ func TestHealthAdminGates(t *testing.T) {
 // collation-key check groups ("Dupe Artist" vs "The Dupe Artist"),
 // merges them through the API, and checks the group resolves.
 func TestDuplicatesListAndMerge(t *testing.T) {
+	t.Parallel()
 	dupes := t.TempDir()
 	specs := []fixtures.Spec{
 		{Name: "echo", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second, Tags: map[string]string{
@@ -270,6 +273,7 @@ func TestDuplicatesListAndMerge(t *testing.T) {
 // is a separate catalog pass no server path triggers here), so the
 // listing is legitimately empty; grouping itself is upstream-tested.
 func TestUpgradesEndpoints(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	resp := get(t, h.ts, "/api/v1/library/upgrades", h.token)
@@ -315,6 +319,7 @@ func TestUpgradesEndpoints(t *testing.T) {
 // TestEnrichmentStatusAndItemEnrich covers the status shape on a server
 // with no injected providers and the per-item fetch's skip reporting.
 func TestEnrichmentStatusAndItemEnrich(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	resp := get(t, h.ts, "/api/v1/library/enrichment", h.token)

@@ -168,6 +168,7 @@ func noRedirect() *http.Client {
 }
 
 func TestOidcWebFlow(t *testing.T) {
+	t.Parallel()
 	idp := newFakeIdP(t)
 	idp.claims["preferred_username"] = "gandalf"
 	idp.claims["name"] = "Gandalf the Grey"
@@ -289,6 +290,7 @@ func TestOidcWebFlow(t *testing.T) {
 }
 
 func TestOidcLoginBeforeBootstrapKeepsSetupOpen(t *testing.T) {
+	t.Parallel()
 	idp := newFakeIdP(t)
 	idp.claims["preferred_username"] = "pippin"
 	ts := newOidcTestServer(t, idp)
@@ -329,6 +331,7 @@ func TestOidcLoginBeforeBootstrapKeepsSetupOpen(t *testing.T) {
 }
 
 func TestOidcCodeFlowWithChallenge(t *testing.T) {
+	t.Parallel()
 	idp := newFakeIdP(t)
 	idp.claims["preferred_username"] = "samwise"
 	ts := newOidcTestServer(t, idp)

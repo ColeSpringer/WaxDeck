@@ -34,6 +34,7 @@ func firstArtistBucket(t *testing.T, h *harness) FacetBucket {
 // The filter used to run over the page the catalog answered, so a shelf
 // asking for N of one medium got however many of N rows matched.
 func TestBrowseMediaTypeIsPushedDown(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	if _, err := fixtures.GenerateBook(h.library); err != nil {
 		t.Fatal(err)
@@ -60,6 +61,7 @@ func TestBrowseMediaTypeIsPushedDown(t *testing.T) {
 // The same filter the bucket's listing uses, so a count, the list it
 // opens, and a shuffle over it cannot disagree.
 func TestBrowseScopesToAFacetBucket(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	bucket := firstArtistBucket(t, h)
 
@@ -82,6 +84,7 @@ func TestBrowseScopesToAFacetBucket(t *testing.T) {
 // A browse cursor names a position in a seeded permutation, so under
 // another seed it named a silently wrong window.
 func TestBrowseCursorCarriesItsScope(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	bucket := firstArtistBucket(t, h)
 
@@ -120,6 +123,7 @@ func TestBrowseCursorCarriesItsScope(t *testing.T) {
 // Inverted risk from browse's: a reused cursor here only loses the new
 // filter's head. Refused anyway; ADR-0040 says why.
 func TestItemsCursorCarriesItsScope(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	bucket := firstArtistBucket(t, h)
 
@@ -152,6 +156,7 @@ func TestItemsCursorCarriesItsScope(t *testing.T) {
 // saying what the library holds, an empty page reads as "you have none";
 // the refusal says which question was wrong.
 func TestBrowseKindScopedListRefusesForeignScope(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	if _, err := fixtures.GenerateBook(h.library); err != nil {
 		t.Fatal(err)

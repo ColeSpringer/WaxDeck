@@ -290,7 +290,14 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
       if (!mounted) return;
       ref
         ..invalidate(librariesProvider)
-        ..invalidate(libraryCountsProvider);
+        ..invalidate(libraryCountsProvider)
+        // The create starts a scan of the new root server-side, so the
+        // job list is stale the moment it returns - the same three the
+        // rescan button invalidates, for the same reason. Left out, the
+        // first-run wizard reads an empty job list, offers a scan that
+        // is already running, and takes the server's refusal as the
+        // answer with nothing left to refresh it.
+        ..invalidate(adminJobsProvider);
       _name.clear();
       _path.clear();
       setState(() {

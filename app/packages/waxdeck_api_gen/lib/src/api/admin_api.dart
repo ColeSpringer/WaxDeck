@@ -33,6 +33,7 @@ import 'package:waxdeck_api_gen/src/model/schedule_put.dart';
 import 'package:waxdeck_api_gen/src/model/scrobbling_admin_config.dart';
 import 'package:waxdeck_api_gen/src/model/scrobbling_admin_config_put.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task.dart';
+import 'package:waxdeck_api_gen/src/model/transcoding_activity.dart';
 import 'package:waxdeck_api_gen/src/model/transcoding_limits.dart';
 import 'package:waxdeck_api_gen/src/model/trash_empty_result.dart';
 import 'package:waxdeck_api_gen/src/model/trash_list.dart';
@@ -1397,6 +1398,90 @@ class AdminApi {
     }
 
     return Response<RestorePlan>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Read what the transcoder is doing right now
+  /// The engine-backed streams in flight, for reading beside the limits that bound them. A separate read from &#x60;getTranscodingLimits&#x60; because configuration and telemetry have different lifetimes: the limits are a form somebody is editing, this is a number that moves under them, and &#x60;PUT&#x60; echoes the limits schema. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [TranscodingActivity] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<TranscodingActivity>> getTranscodingActivity({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/transcoding/activity';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    TranscodingActivity? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(TranscodingActivity),
+      ) as TranscodingActivity;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<TranscodingActivity>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

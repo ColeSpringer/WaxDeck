@@ -6,6 +6,7 @@ import (
 )
 
 func TestParseDelimitedExportExportify(t *testing.T) {
+	t.Parallel()
 	payload := strings.Join([]string{
 		`"Track URI","Track Name","Artist URI(s)","Artist Name(s)","Album URI","Album Name","Disc Number","Track Number","Track Duration (ms)","Explicit","Popularity","ISRC","Added At"`,
 		`"spotify:track:1","Amber Waves","spotify:artist:1","Test Ensemble","spotify:album:1","Signal Garden","1","1","215000","false","41","USABC2400001","2024-01-01"`,
@@ -38,6 +39,7 @@ func TestParseDelimitedExportExportify(t *testing.T) {
 }
 
 func TestParseDelimitedExportGoogleTakeout(t *testing.T) {
+	t.Parallel()
 	payload := strings.Join([]string{
 		`Song Title,Album Title,Artist Name,Duration (ms),Rank,Removed`,
 		`Cobalt Sky,Signal Garden,Test Ensemble,187000,1,`,
@@ -60,6 +62,7 @@ func TestParseDelimitedExportGoogleTakeout(t *testing.T) {
 }
 
 func TestParseDelimitedExportDurationPrecedence(t *testing.T) {
+	t.Parallel()
 	// A spreadsheet merge can carry both a clock-format Time column
 	// and an exact Duration (ms) column; the milliseconds column must
 	// win deterministically in either column order, and the clock
@@ -93,6 +96,7 @@ func TestParseDelimitedExportDurationPrecedence(t *testing.T) {
 }
 
 func TestParseDelimitedExportAppleMusicTSV(t *testing.T) {
+	t.Parallel()
 	payload := strings.Join([]string{
 		"Name\tArtist\tAlbum\tTime",
 		"Amber Waves\tTest Ensemble\tSignal Garden\t3:45",
@@ -114,6 +118,7 @@ func TestParseDelimitedExportAppleMusicTSV(t *testing.T) {
 }
 
 func TestParseDelimitedExportGenericWithBOM(t *testing.T) {
+	t.Parallel()
 	payload := "\ufeffTitle,Artist,Album\n" +
 		"Amber Waves,Test Ensemble,Signal Garden\n"
 	refs, _, err := parseDelimitedExport(payload, ',')
@@ -126,6 +131,7 @@ func TestParseDelimitedExportGenericWithBOM(t *testing.T) {
 }
 
 func TestParseDelimitedExportSkipsMalformedRow(t *testing.T) {
+	t.Parallel()
 	// The stray short line mid-file (a spreadsheet round-trip artifact)
 	// carries no title column and is skipped; rows after it still parse.
 	payload := strings.Join([]string{
@@ -144,6 +150,7 @@ func TestParseDelimitedExportSkipsMalformedRow(t *testing.T) {
 }
 
 func TestParseDelimitedExportPlaylistNameColumn(t *testing.T) {
+	t.Parallel()
 	payload := strings.Join([]string{
 		`Playlist Name,Track Name,Artist Name`,
 		`Road Tape,Amber Waves,Test Ensemble`,
@@ -162,6 +169,7 @@ func TestParseDelimitedExportPlaylistNameColumn(t *testing.T) {
 }
 
 func TestParseDelimitedExportRejectsBadShapes(t *testing.T) {
+	t.Parallel()
 	if _, _, err := parseDelimitedExport("", ','); err == nil {
 		t.Fatal("empty payload parsed, want error")
 	}
@@ -175,6 +183,7 @@ func TestParseDelimitedExportRejectsBadShapes(t *testing.T) {
 }
 
 func TestParseTextExport(t *testing.T) {
+	t.Parallel()
 	payload := strings.Join([]string{
 		"# exported from a notes app",
 		"Test Ensemble - Amber Waves",
@@ -209,6 +218,7 @@ func TestParseTextExport(t *testing.T) {
 }
 
 func TestParseClockDuration(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in   string
 		want int64
@@ -232,6 +242,7 @@ func TestParseClockDuration(t *testing.T) {
 }
 
 func TestFirstArtist(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in, want string
 	}{

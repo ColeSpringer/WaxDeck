@@ -17,6 +17,7 @@ func newMirrorLibrary(bases ...string) *Library {
 }
 
 func TestRadioDirectoryMirrorSelection(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// A configured base is an operator pointing at one instance on
@@ -45,6 +46,7 @@ func TestRadioDirectoryMirrorSelection(t *testing.T) {
 }
 
 func TestRadioDirectoryMirrorCooldown(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	l := newMirrorLibrary("https://sick.example", "https://well.example")
 
@@ -77,6 +79,7 @@ func TestRadioDirectoryMirrorCooldown(t *testing.T) {
 }
 
 func TestRadioMirrorBases(t *testing.T) {
+	t.Parallel()
 	got := radioMirrorBases([]*net.SRV{
 		{Target: "de1.api.radio-browser.info."},
 		{Target: "at1.api.radio-browser.info"},
@@ -95,6 +98,7 @@ func TestRadioMirrorBases(t *testing.T) {
 }
 
 func TestDecodeRadioDirectory(t *testing.T) {
+	t.Parallel()
 	// A sick mirror answering 200 must not be mistaken for an answer.
 	// `null` is the dangerous one: it unmarshals without error into no
 	// rows, so it would read as "no stations match that name" while
@@ -120,6 +124,7 @@ func TestDecodeRadioDirectory(t *testing.T) {
 // request happened to be talking to, and cooling it would put a healthy
 // host at the back of the queue for five minutes per letter typed.
 func TestCancelledSearchDoesNotCoolMirrors(t *testing.T) {
+	t.Parallel()
 	reached := make(chan struct{}, 1)
 	hold := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -156,6 +161,7 @@ func TestCancelledSearchDoesNotCoolMirrors(t *testing.T) {
 // A resolver that cannot answer is remembered, or every search pays the
 // full lookup timeout before falling back to the round-robin name.
 func TestFailedMirrorDiscoveryIsRemembered(t *testing.T) {
+	t.Parallel()
 	l := &Library{}
 	l.radioMirrorsMu.Lock()
 	l.radioMirrors, l.radioMirrorsAt = nil, time.Now()
@@ -176,6 +182,7 @@ func TestFailedMirrorDiscoveryIsRemembered(t *testing.T) {
 // the round-robin name for five minutes, which is the failure the whole
 // path exists to end.
 func TestCancelledDiscoveryKeepsTheMirrorList(t *testing.T) {
+	t.Parallel()
 	l := &Library{}
 	l.radioMirrorsMu.Lock()
 	l.radioMirrors = []string{"https://de1.example", "https://at1.example"}
@@ -200,6 +207,7 @@ func TestCancelledDiscoveryKeepsTheMirrorList(t *testing.T) {
 // A mirror answering 200 with something that is not a list is not a
 // status worth printing at a listener.
 func TestUndecodableMirrorsDoNotReportStatus200(t *testing.T) {
+	t.Parallel()
 	var mirrors []string
 	for range 3 {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

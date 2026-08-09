@@ -87,6 +87,13 @@ enum AdminSection {
     WaxRoute.users,
     AdminGroup.people,
   ),
+  shares(
+    'Share links',
+    'Every public link on this server, and who minted it',
+    WaxIcons.share,
+    WaxRoute.adminShares,
+    AdminGroup.people,
+  ),
   settings(
     'Server settings',
     'Signups, read-only mode, transcoding, retention',

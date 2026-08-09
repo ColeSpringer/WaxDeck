@@ -929,6 +929,30 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /admin/transcoding/activity:
+    get:
+      operationId: getTranscodingActivity
+      summary: Read what the transcoder is doing right now
+      description: >
+        The engine-backed streams in flight, for reading beside the
+        limits that bound them. A separate read from
+        `getTranscodingLimits` because configuration and telemetry have
+        different lifetimes: the limits are a form somebody is editing,
+        this is a number that moves under them, and `PUT` echoes the
+        limits schema. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: What is running.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscodingActivity"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /admin/scrobbling:
     get:
       operationId: getScrobblingConfig
@@ -3031,6 +3055,15 @@ paths:
         shorter, which is what `Prefs.pinned` describes for a departed
         entity. A response shorter than the request is normal, and an
         empty request is an empty response.
+
+
+        Of the omissions, `departed` names the subset that is gone for
+        everyone - deleted, merged away, or never real - as opposed to
+        merely out of this caller's sight today (a grant, a lapsed
+        subscription, the trash), which stays an unnamed omission. A
+        client holding a pinned list may prune exactly the departed
+        pids; pruning an unnamed omission would turn a state that can
+        end into a loss that cannot.
       tags: [library]
       requestBody:
         required: true
@@ -5183,6 +5216,25 @@ paths:
         omitted `partIndex` is part zero, so a client that does not know
         about parts gets the first one rather than nothing.
 
+        `span=item` answers one envelope over the whole item instead:
+        the parts stitched in reading order into the same `Waveform`
+        shape, with the buckets spread evenly across the total duration
+        and each part given bucket-space in proportion to how long it
+        is. That is what a book scrubber draws, because a book's
+        timeline is the book rather than the file the reader happens to
+        be in; `partIndex` is ignored under it, and a single-file item
+        answers exactly what `span=part` would. `resolution` is not
+        fixed under `span=item` - a long book gets more buckets than a
+        short one, so a chapter is still a shape rather than three bars
+        - so read it rather than assuming it.
+
+        A stitched answer is `ready` only when every part has an
+        envelope. A book with one unanalyzed part is `pending`, and one
+        with a part that can never be measured is `unavailable`: half a
+        book's envelope drawn across a whole book's timeline would be
+        silence somebody could seek into, which is a convincing wrong
+        answer rather than a partial one.
+
         `state` is `ready`, `pending` (this item is analyzable and has
         not been analyzed yet; poll again after an analyze pass), or
         `unavailable` (there will never be a waveform for this item).
@@ -5208,11 +5260,20 @@ paths:
           in: query
           description: >
             Zero-based part of a multi-file audiobook to describe.
-            Ignored for single-file items. Out of range is `not-found`,
-            matching the skip map.
+            Ignored for single-file items and under `span=item`. Out of
+            range is `not-found`, matching the skip map.
           schema:
             type: integer
             minimum: 0
+        - name: span
+          in: query
+          description: >
+            What the envelope covers: one part (the default), or the
+            whole item stitched across its parts.
+          schema:
+            type: string
+            enum: ["part", "item"]
+            default: "part"
         - name: If-None-Match
           in: header
           description: Previously returned `ETag`; a match answers 304 with no body.
@@ -10572,6 +10633,24 @@ components:
             Default transcode bitrate ceiling in kbit/s for accounts
             without their own `maxTranscodeKbps`; 0 is unlimited.
 
+    TranscodingActivity:
+      type: object
+      description: >
+        What the transcoder is doing right now, for context beside the
+        limits.
+      required: [activeSessions]
+      properties:
+        activeSessions:
+          type: integer
+          description: >
+            Engine-backed streams in flight: what the concurrent caps
+            are counting. Both a floor and a ceiling on what is
+            "really" being transcoded - a client that forced the
+            source's own format is routed through the engine and
+            counted here though nothing is re-encoded, and HLS timeline
+            segments are admitted by the streaming engine's own control
+            and are not counted at all.
+
     ScheduleKind:
       type: string
       enum: [scan, backup, prune, analyze]
@@ -12741,6 +12820,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/EntityCard"
+        departed:
+          type: array
+          description: >
+            The requested PIDs that no longer name anything on this
+            server, for anyone: deleted, merged away, or never real. In
+            request order, a repeated PID once, and absent rather than
+            empty when every miss was merely out of the caller's sight
+            (a grant, a lapsed subscription, the trash) - those stay
+            unnamed, because they can come back. This is the set a
+            client holding `Prefs.pinned` prunes.
+          items:
+            type: string
+            pattern: "^(al|ar|rg|pl|pc|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 64
 
     AlbumDetail:
       type: object
@@ -14561,6 +14654,16 @@ components:
             Content hash of the analyzed audio essence, matching the
             download surface's `essenceHash`. A stored waveform whose
             hash no longer matches the stored audio is stale.
+
+
+            For `span=item` on a multi-part book there is no single
+            essence to name, so this is a fixed-length digest over
+            everything the stitched envelope is built from - every
+            part's essence in reading order, every part's duration, and
+            the bucket count. It is a cache validator there rather than
+            a content hash, and does not match any file's
+            `essenceHash`: compare it only against another answer from
+            this endpoint.
 
     PlayerEndpoint:
       type: object
@@ -17192,6 +17295,15 @@ components:
         plays:
           type: integer
           description: Anonymous plays through the link so far.
+        owner:
+          type: string
+          description: >
+            Who minted the link: display name, or username where no
+            display name is set. Populated only on the `all=true`
+            listing, where the rows come from every account; on a
+            caller's own listing every row would name the caller, so
+            the field is absent there.
+          example: rowan
 
     SharePage:
       type: object
@@ -18742,7 +18854,10 @@ components:
             resolve, because failing a whole preference write over one
             departed release would be worse than a shelf one card
             shorter. Resolve them with `POST /library/entities`, which
-            silently drops what it cannot answer for.
+            silently drops what it cannot answer for and names, in its
+            `departed` list, the pids that are gone for everyone - the
+            subset a client may prune from here, so a deleted album does
+            not hold one of the 64 slots forever.
 
 
             Albums (`al-`), artists (`ar-`), release groups (`rg-`),

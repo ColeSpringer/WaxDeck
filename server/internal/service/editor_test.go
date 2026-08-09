@@ -9,6 +9,7 @@ import (
 )
 
 func TestIdentifierValidators(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		field, value string
 		ok           bool
@@ -59,6 +60,7 @@ func TestIdentifierValidators(t *testing.T) {
 }
 
 func TestValidateFieldEditsPerKind(t *testing.T) {
+	t.Parallel()
 	track := &model.ItemView{Kind: model.KindTrack}
 	book := &model.ItemView{Kind: model.KindBook}
 	episode := &model.ItemView{Kind: model.KindEpisode}
@@ -85,6 +87,7 @@ func TestValidateFieldEditsPerKind(t *testing.T) {
 }
 
 func TestValidateChapterList(t *testing.T) {
+	t.Parallel()
 	ok := []ChapterMark{
 		{Index: 0, StartMS: 0, EndMS: 2000, Title: "One"},
 		{Index: 1, StartMS: 2000, EndMS: 4000, Title: "Two"},
@@ -112,6 +115,7 @@ func TestValidateChapterList(t *testing.T) {
 }
 
 func TestWriteFileCrashSafe(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "song.lrc")
 	if err := writeFileCrashSafe(path, []byte("[00:01.000]Hello\n")); err != nil {
@@ -141,6 +145,7 @@ func TestWriteFileCrashSafe(t *testing.T) {
 }
 
 func TestGroupCredits(t *testing.T) {
+	t.Parallel()
 	rows := []model.Contributor{
 		{Role: model.RoleProducer, Name: "Pat", Position: 0},
 		{Role: model.RoleComposer, Name: "Clara", Position: 0},
@@ -159,6 +164,7 @@ func TestGroupCredits(t *testing.T) {
 }
 
 func TestEditorScalarFieldsOverlay(t *testing.T) {
+	t.Parallel()
 	it := &model.ItemView{
 		Kind: model.KindTrack, Title: "T", Artist: "A", Album: "L",
 		Year: 2001, TrackNo: 3, Compilation: true,

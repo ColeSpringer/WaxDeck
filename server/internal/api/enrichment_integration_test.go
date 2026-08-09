@@ -27,6 +27,7 @@ func (f fakeBookProvider) Enrich(context.Context, enrich.Request) (*enrich.Candi
 // provider, which here supplies a valid publisher. Regression guard for the
 // skip-refactor that briefly returned early on an all-malformed candidate.
 func TestEnrichBookFallsThroughMalformedProvider(t *testing.T) {
+	t.Parallel()
 	bad := fakeBookProvider{name: "bad", cand: &enrich.Candidate{ISBN: "9780306406158"}}     // valid shape, bad checksum
 	good := fakeBookProvider{name: "good", cand: &enrich.Candidate{Publisher: "Beta House"}} // valid, fills the gap
 	h := newHarnessWith(t, func(c *service.Config) {

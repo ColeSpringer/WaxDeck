@@ -83,6 +83,7 @@ func entryOf(t *testing.T, h *harness, token string, up Upload) ReviewEntryDetai
 }
 
 func TestUploadDecliningIdentificationImportsWithNoStop(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
 		for i := range cfg.Roots {
@@ -137,6 +138,7 @@ func TestUploadDecliningIdentificationImportsWithNoStop(t *testing.T) {
 // proceed leaves the entry pending for a person, which is what keeps
 // this from being a way into the library that skips one.
 func TestDeclinedImportThatCannotProceedWaitsForAPerson(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
 		for i := range cfg.Roots {
@@ -168,6 +170,7 @@ func TestDeclinedImportThatCannotProceedWaitsForAPerson(t *testing.T) {
 }
 
 func TestIdentifiedEntryDoesNotClaimDeclined(t *testing.T) {
+	t.Parallel()
 	// The searched-and-found-nothing case: an entry that ran through
 	// the engine and came back empty must not read as declined.
 	h := newHarnessWith(t, func(cfg *service.Config) {
@@ -193,6 +196,7 @@ func TestIdentifiedEntryDoesNotClaimDeclined(t *testing.T) {
 }
 
 func TestIdentifyDefaultsToTheAccountPreference(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
 		for i := range cfg.Roots {
@@ -240,6 +244,7 @@ func TestIdentifyDefaultsToTheAccountPreference(t *testing.T) {
 }
 
 func TestBatchDecidesIdentificationForItsMembers(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
 		for i := range cfg.Roots {
@@ -290,6 +295,7 @@ func TestBatchDecidesIdentificationForItsMembers(t *testing.T) {
 }
 
 func TestAcquisitionCarriesTheIdentifyChoice(t *testing.T) {
+	t.Parallel()
 	media := t.TempDir()
 	src := &fakeAcquireSource{
 		playlistURL: "https://tube.example/playlist?list=PLquiet",
@@ -343,6 +349,7 @@ func TestAcquisitionCarriesTheIdentifyChoice(t *testing.T) {
 // A declined submission must not merely be un-enqueued; nothing may be
 // left waiting in the match queue for a later sweep to pick up.
 func TestDecliningLeavesNothingInTheMatchQueue(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
 		for i := range cfg.Roots {

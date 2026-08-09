@@ -226,8 +226,18 @@ func TestSilencePaddingCapped(t *testing.T) {
 func TestSilenceZeroBytesIdentical(t *testing.T) {
 	// A spec with explicit zero silence must produce byte-identical
 	// output to one that never mentions the fields.
-	plain := fixtures.Spec{Name: "same", Codec: fixtures.CodecFLAC, Duration: time.Second}
+	//
+	// The two names are what make this an assertion rather than a
+	// tautology. Explicit zero and absent are the same value in Go, so
+	// the specs are otherwise identical - and Generate memoizes an
+	// encode per spec, which would hand the second call the first
+	// call's bytes and compare a slice against itself. Different names
+	// are different cache entries, so both are really encoded, and
+	// what this then pins is the property the memo rests on: the same
+	// audio always renders the same bytes.
+	plain := fixtures.Spec{Name: "plain", Codec: fixtures.CodecFLAC, Duration: time.Second}
 	padded := plain
+	padded.Name = "padded"
 	padded.LeadSilence, padded.TrailSilence = 0, 0
 	dirA, dirB := t.TempDir(), t.TempDir()
 	pa, err := fixtures.Generate(dirA, plain)

@@ -80,6 +80,7 @@ func createAndRun(t *testing.T, b *Backups) wdb.Backup {
 }
 
 func TestBackupCreateClaimsConflict(t *testing.T) {
+	t.Parallel()
 	b, _, _ := newTestBackups(t)
 	ctx := context.Background()
 
@@ -107,6 +108,7 @@ func TestBackupCreateClaimsConflict(t *testing.T) {
 }
 
 func TestBackupRunProducesArchive(t *testing.T) {
+	t.Parallel()
 	b, _, dataDir := newTestBackups(t)
 	row := createAndRun(t, b)
 	if row.State != "done" || row.SizeBytes <= 0 || row.FinishedAtNS == 0 {
@@ -164,6 +166,7 @@ func TestBackupRunProducesArchive(t *testing.T) {
 }
 
 func TestBackupRunFailureMarksFailed(t *testing.T) {
+	t.Parallel()
 	b, _, _ := newTestBackups(t)
 	b.catalog = testCatalog{fail: true}
 	ctx := context.Background()
@@ -191,6 +194,7 @@ func TestBackupRunFailureMarksFailed(t *testing.T) {
 }
 
 func TestRetentionKeepCount(t *testing.T) {
+	t.Parallel()
 	b, d, _ := newTestBackups(t)
 	ctx := context.Background()
 	if err := d.SettingSet(ctx, settingBackupKeep, "2", 1); err != nil {
@@ -229,6 +233,7 @@ func TestRetentionKeepCount(t *testing.T) {
 }
 
 func TestRetentionKeepBytes(t *testing.T) {
+	t.Parallel()
 	b, d, _ := newTestBackups(t)
 	ctx := context.Background()
 	// One byte forces the sweep after every run; the newest backup must
@@ -282,6 +287,7 @@ func validArchiveBytes(t *testing.T) []byte {
 }
 
 func TestImportValidation(t *testing.T) {
+	t.Parallel()
 	b, _, _ := newTestBackups(t)
 	ctx := context.Background()
 
@@ -323,6 +329,7 @@ func TestImportValidation(t *testing.T) {
 }
 
 func TestImportAcceptsValidArchive(t *testing.T) {
+	t.Parallel()
 	b, _, _ := newTestBackups(t)
 	ctx := context.Background()
 	raw := validArchiveBytes(t)
@@ -342,6 +349,7 @@ func TestImportAcceptsValidArchive(t *testing.T) {
 }
 
 func TestStageCancelMarkerRoundTrip(t *testing.T) {
+	t.Parallel()
 	b, _, dataDir := newTestBackups(t)
 	ctx := context.Background()
 	b.prober = func(ctx context.Context, path string) (bool, bool, []SealedCasualty) {
@@ -415,6 +423,7 @@ func TestStageCancelMarkerRoundTrip(t *testing.T) {
 }
 
 func TestStageRefusesUnfinishedAndWarnsWithoutProber(t *testing.T) {
+	t.Parallel()
 	b, _, _ := newTestBackups(t)
 	ctx := context.Background()
 

@@ -42,6 +42,7 @@ func artHost(t *testing.T, hits *atomic.Int64, mime string, body []byte) *httpte
 // building to make it happen -- which is why the external toggle, off
 // here as it is by default, has no say in it.
 func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	svc.allowPrivateRadioHosts = true
 	var hits atomic.Int64
@@ -98,6 +99,7 @@ func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
 // failure is remembered so the fetch is not repeated, and it yields the
 // rung below immediately rather than holding it.
 func TestAnnouncedArtFailureYieldsToTheExternalRung(t *testing.T) {
+	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 	svc.allowPrivateRadioHosts = true
 	var hits atomic.Int64
@@ -132,6 +134,7 @@ func TestAnnouncedArtFailureYieldsToTheExternalRung(t *testing.T) {
 // Junk in the key costs nothing: no request, no cached failure, and the
 // rung below is not held for it.
 func TestAnnouncedArtIgnoresWhatIsNotAURL(t *testing.T) {
+	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 	for _, announced := range []string{
 		"", "-", "no", "ftp://example.invalid/cover.png", "javascript:alert(1)", "http://",
@@ -150,6 +153,7 @@ func TestAnnouncedArtIgnoresWhatIsNotAURL(t *testing.T) {
 // announced with a cover followed by one announced without leaves no
 // cover behind: a bumper must not wear the last song's sleeve.
 func TestAnnouncedArtDoesNotStickToTheNextSong(t *testing.T) {
+	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 
 	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
@@ -169,6 +173,7 @@ func TestAnnouncedArtDoesNotStickToTheNextSong(t *testing.T) {
 // the discovery walk, and a hint that does not answer costs the station
 // nothing: the walk still runs.
 func TestRadioLogoHintIsTriedBeforeDiscovery(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	svc.allowPrivateRadioHosts = true
 	var hits atomic.Int64
@@ -196,6 +201,7 @@ func TestRadioLogoHintIsTriedBeforeDiscovery(t *testing.T) {
 // remembered for an hour. The hint has to clear that, or it sits unread
 // for the whole hour it exists to save.
 func TestRadioLogoHintClearsACachedMiss(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	svc.allowPrivateRadioHosts = true
 	var hits atomic.Int64
@@ -237,6 +243,7 @@ func TestRadioLogoHintClearsACachedMiss(t *testing.T) {
 // them. A station that cache-busts its cover mints a fresh key every
 // poll, and without a count bound that is a map with no ceiling at all.
 func TestRadioArtCacheBoundsEntryCount(t *testing.T) {
+	t.Parallel()
 	l := &Library{}
 	for i := range radioArtCacheEntries + 500 {
 		l.storeRadioArt(fmt.Sprintf("key-%d", i), radioArtEntry{
@@ -261,6 +268,7 @@ func TestRadioArtCacheBoundsEntryCount(t *testing.T) {
 // forever and outrank the lookup that finds the actual sleeve, so it is
 // demoted to the rung that wanted it all along.
 func TestRepeatedAnnouncedPictureBecomesTheStationLogo(t *testing.T) {
+	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 	const logo = "https://somafm.example/logos/groovesalad.jpg"
 
@@ -291,6 +299,7 @@ func TestRepeatedAnnouncedPictureBecomesTheStationLogo(t *testing.T) {
 // token has to move with the song or the client draws one cover for the
 // life of its cache.
 func TestAnnouncedArtKeyMovesWithTheTitle(t *testing.T) {
+	t.Parallel()
 	const url = "https://station.example/nowplaying.jpg"
 	first := announcedArtKey(url, "Artist - One")
 	second := announcedArtKey(url, "Artist - Two")

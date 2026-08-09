@@ -24,6 +24,7 @@ import (
 type ShareInfo struct {
 	ID            string // sh-... API pid; the bare id keys the token
 	OwnerID       string
+	OwnerName     string // display name; only the all-shares listing fills it
 	TargetPID     string // API pid
 	TargetKind    string // track | playlist | book | episode | album
 	TargetTitle   string
@@ -184,12 +185,19 @@ func (l *Library) Shares(ctx context.Context, uc *UserCtx, all bool, cursor stri
 		rows = rows[:limit]
 	}
 	out := SharePageResult{Shares: make([]ShareInfo, 0, len(rows))}
+	// Owners are named only on the oversight listing: on a caller's own
+	// page every row is theirs, so the name would be noise. Memoized per
+	// page because one account usually mints several links in a row.
+	owners := map[string]string{}
 	for _, r := range rows {
 		info := shareInfo(r)
 		// Titles resolve at read time so renames show through; a target
 		// gone from the catalog reads as an empty title.
 		if title, err := l.shareTitleLoose(ctx, r); err == nil {
 			info.TargetTitle = title
+		}
+		if all {
+			info.OwnerName = l.shareOwnerName(ctx, r.UserID, owners)
 		}
 		out.Shares = append(out.Shares, info)
 	}
@@ -198,6 +206,25 @@ func (l *Library) Shares(ctx context.Context, uc *UserCtx, all bool, cursor stri
 		out.Next = encodeShareCursor(last.CreatedAt.UnixNano(), last.ID)
 	}
 	return out, nil
+}
+
+// shareOwnerName resolves who minted a link, memoized across the page.
+// An account that no longer exists answers empty rather than an error -
+// the link is still revocable, which is what the listing is for - and
+// the miss is memoized too, so a departed owner costs one read.
+func (l *Library) shareOwnerName(ctx context.Context, userID string, memo map[string]string) string {
+	if name, ok := memo[userID]; ok {
+		return name
+	}
+	name := ""
+	if u, err := l.db.UserByID(ctx, userID); err == nil && u != nil {
+		name = u.DisplayName
+		if name == "" {
+			name = u.Username
+		}
+	}
+	memo[userID] = name
+	return name
 }
 
 // shareTitleLoose resolves a target title without a caller (listing

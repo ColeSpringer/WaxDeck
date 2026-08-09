@@ -74,6 +74,7 @@ func jlist(v any) []any {
 }
 
 func TestSubsonicClientDSub(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	const c = "DSub"
@@ -157,6 +158,7 @@ func TestSubsonicClientDSub(t *testing.T) {
 }
 
 func TestSubsonicClientFeishin(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	const c = "Feishin"
@@ -229,6 +231,7 @@ func TestSubsonicClientFeishin(t *testing.T) {
 }
 
 func TestSubsonicClientSymfonium(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	const c = "Symfonium"
@@ -305,6 +308,7 @@ func TestSubsonicClientSymfonium(t *testing.T) {
 // client's. A regression here would surface as a client that plays
 // everywhere except when it asks for the best quality.
 func TestSubsonicStreamIgnoresClientBitrateHints(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	const c = "test"
@@ -364,6 +368,7 @@ func streamAndAssertBytes(t *testing.T, h *harness, path string) {
 // from the previous minted scheme still resolves, so the cutover does
 // not strand the stored favorites and playlists already in the wild.
 func TestSubsonicEntityIDCutover(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	const c = "test"
@@ -425,6 +430,7 @@ func TestSubsonicEntityIDCutover(t *testing.T) {
 }
 
 func TestSubsonicRandomSongFilters(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	const c = "test"

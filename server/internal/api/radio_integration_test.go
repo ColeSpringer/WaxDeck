@@ -43,6 +43,7 @@ func subsonicJSON(t *testing.T, h *harness, view, secret, extra string, out any)
 }
 
 func TestRadioStationCrud(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	resp := h.postJSON(t, "/api/v1/radio/stations", map[string]any{
@@ -132,6 +133,7 @@ func TestRadioStationCrud(t *testing.T) {
 }
 
 func TestRadioPlayInfoAndProxy(t *testing.T) {
+	t.Parallel()
 	// The proxy's guarded client refuses loopback by default, so the
 	// loopback test station needs the LAN-stations escape hatch.
 	h := newHarnessWith(t, func(cfg *service.Config) {
@@ -203,6 +205,7 @@ func TestRadioPlayInfoAndProxy(t *testing.T) {
 // WaxDeck's own origin, which is the same exposure the logo endpoint has
 // and the same answer.
 func TestRadioProxyRefusesExecutableContentTypes(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.AllowPrivateRadioHosts = true
 	})
@@ -240,6 +243,7 @@ func TestRadioProxyRefusesExecutableContentTypes(t *testing.T) {
 }
 
 func TestRadioStreamContentType(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ declared, want string }{
 		{"audio/mpeg", "audio/mpeg"},
 		{"audio/aacp", "audio/aacp"},
@@ -274,6 +278,7 @@ var pngPixel = []byte{
 }
 
 func TestRadioStationLogoProxy(t *testing.T) {
+	t.Parallel()
 	var fetches, misses int
 	logoHost := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -499,6 +504,7 @@ func TestRadioStationLogoProxy(t *testing.T) {
 // stream URL is: the row is attacker-supplied, and the proxy would
 // otherwise read internal services on the caller's behalf.
 func TestRadioStationLogoRefusesPrivateHosts(t *testing.T) {
+	t.Parallel()
 	logoHost := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		w.Write(pngPixel)
@@ -528,6 +534,7 @@ func TestRadioStationLogoRefusesPrivateHosts(t *testing.T) {
 }
 
 func TestRadioDirectorySearch(t *testing.T) {
+	t.Parallel()
 	directory := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/json/stations/search" {
 			http.NotFound(w, r)
@@ -610,6 +617,7 @@ func sickRadioMirror(t *testing.T, hits *atomic.Int64) string {
 // moves on, and the healthy mirror answers whichever position the
 // shuffle put it in.
 func TestRadioDirectoryMirrorRotation(t *testing.T) {
+	t.Parallel()
 	var hits atomic.Int64
 	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
@@ -641,6 +649,7 @@ func TestRadioDirectoryMirrorRotation(t *testing.T) {
 // directory being broken, and the listener is told the difference. The
 // hop count is the rotation bound: four mirrors, three attempts.
 func TestRadioDirectoryAllMirrorsBusy(t *testing.T) {
+	t.Parallel()
 	var hits atomic.Int64
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.AllowPrivateRadioHosts = true
@@ -669,6 +678,7 @@ func TestRadioDirectoryAllMirrorsBusy(t *testing.T) {
 }
 
 func TestSubsonicRadioParity(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 

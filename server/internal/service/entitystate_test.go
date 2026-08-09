@@ -51,6 +51,7 @@ func entityFixture(t *testing.T) (context.Context, *Library, *UserCtx, string, *
 }
 
 func TestEntityStateRestrictedVisibility(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _, albumPID, granted, elsewhere := entityFixture(t)
 
 	// A caller granted the holding library reads and writes it.
@@ -92,6 +93,7 @@ func TestEntityStateRestrictedVisibility(t *testing.T) {
 // A malformed or non-entity pid is a plain not-found, never a panic or a
 // pid handed to the catalog under the wrong kind.
 func TestEntityStateRejectsNonEntityPIDs(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin, _, _, _ := entityFixture(t)
 
 	for _, pid := range []string{

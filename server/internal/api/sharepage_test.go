@@ -3,6 +3,7 @@ package api
 import "testing"
 
 func TestCountableShareFetch(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		rangeHeader string
 		want        bool

@@ -540,6 +540,30 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /admin/transcoding/activity:
+    get:
+      operationId: getTranscodingActivity
+      summary: Read what the transcoder is doing right now
+      description: >
+        The engine-backed streams in flight, for reading beside the
+        limits that bound them. A separate read from
+        `getTranscodingLimits` because configuration and telemetry have
+        different lifetimes: the limits are a form somebody is editing,
+        this is a number that moves under them, and `PUT` echoes the
+        limits schema. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: What is running.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscodingActivity"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /admin/scrobbling:
     get:
       operationId: getScrobblingConfig
@@ -1419,6 +1443,24 @@ components:
           description: >
             Default transcode bitrate ceiling in kbit/s for accounts
             without their own `maxTranscodeKbps`; 0 is unlimited.
+
+    TranscodingActivity:
+      type: object
+      description: >
+        What the transcoder is doing right now, for context beside the
+        limits.
+      required: [activeSessions]
+      properties:
+        activeSessions:
+          type: integer
+          description: >
+            Engine-backed streams in flight: what the concurrent caps
+            are counting. Both a floor and a ceiling on what is
+            "really" being transcoded - a client that forced the
+            source's own format is routed through the engine and
+            counted here though nothing is re-encoded, and HLS timeline
+            segments are admitted by the streaming engine's own control
+            and are not counted at all.
 
     ScheduleKind:
       type: string

@@ -93,9 +93,10 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
             positionMs: _startAtPosition ? widget.positionMs : null,
           );
       await Clipboard.setData(ClipboardData(text: shareAbsoluteUrl(share.url)));
-      // The list this link just joined, so a shares screen left open
-      // behind the dialog is not a list missing its newest row.
-      container.invalidate(sharesProvider);
+      // The lists this link just joined, so a shares screen left open
+      // behind the dialog is not a list missing its newest row - and
+      // the console's oversight listing, which holds this row too.
+      invalidateShareListings(container);
       // Dismissed while the link was being minted: the link exists and
       // is on the clipboard, but popping again would take the screen
       // underneath with it.

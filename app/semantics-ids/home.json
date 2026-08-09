@@ -7,6 +7,7 @@
     "notificationRow": "notification-row-{index}",
     "notificationsBell": "notifications-bell",
     "notificationsClear": "notifications-clear",
+    "pinSheetTarget": "pin-sheet-target-{pid}",
     "shelf": "shelf-{shelf}",
     "shelfAll": "shelf-{shelf}-all",
     "shelfCard": "shelf-{shelf}-{pid}"

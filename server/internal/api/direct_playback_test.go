@@ -29,6 +29,7 @@ func directGet(t *testing.T, h *harness, path string) *http.Response {
 }
 
 func TestDirectPlayback(t *testing.T) {
+	t.Parallel()
 	h := newHarnessDirect(t)
 
 	music := h.items(t, "?mediaType=music")

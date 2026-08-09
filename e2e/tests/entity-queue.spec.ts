@@ -70,6 +70,37 @@ test('the queue is a place, and it reorders and clears', async ({ app }) => {
   await expect(app.queue.text('Nothing queued')).toBeVisible();
 });
 
+// The other half of ADR-0029's open pair: picking a row up on a
+// listing and dropping it on the panel. Pointer only by decision, so
+// this is a coordinate drag with no semantics node to click instead -
+// quarantine-eligible if a synthetic drag turns out to flake, and
+// covered by widget tests either way.
+test('a listing row can be dragged into the queue panel', async ({ app }) => {
+  // Something playing, so the panel has a queue in it and the drop is
+  // an append rather than the start of a session.
+  await app.nav.enter('albums');
+  await app.music.openBucket(0);
+  await app.music.playEntry(0);
+
+  // Down from the player and across in-app, never by URL: a cold load
+  // restarts the web app, which reduces live playback to the deck
+  // bar's resume offer - and an offer has no queue control to open the
+  // panel with. Collapsing restores the chrome the pushed player was
+  // covering.
+  await app.player.collapse(app.queue.deckBar());
+  await app.nav.to('tracks');
+  await app.queue.openPanel();
+
+  const before = await app.queue.dragHandles().count();
+  await app.queue.dragOntoPanel(app.music.anyItem());
+
+  // One more row after the current entry, and the panel says what it
+  // took. The queue is client-local, so this is this browser's own
+  // count and needs no serialization against the shared server.
+  await expect(app.queue.text(/Added .* to the queue/)).toBeVisible();
+  await expect(app.queue.dragHandles()).toHaveCount(before + 1);
+});
+
 test('a set of up-next rows can be picked, moved, and dropped', async ({
   app,
 }) => {

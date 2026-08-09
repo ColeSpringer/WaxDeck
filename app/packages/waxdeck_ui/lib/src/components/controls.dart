@@ -1451,6 +1451,7 @@ class WaxSeekBar extends StatefulWidget {
     required this.onSeek,
     this.buffered,
     this.peaks,
+    this.marks,
     this.step = const Duration(seconds: 5),
     this.semanticsId,
     super.key,
@@ -1465,6 +1466,15 @@ class WaxSeekBar extends StatefulWidget {
   /// a waveform; when absent it is a styled bar. Nothing here invents
   /// data: no peaks, no waveform.
   final List<double>? peaks;
+
+  /// Positions to tick, for a bar that spans something with divisions in
+  /// it: a book's chapters across a whole-book envelope.
+  ///
+  /// Decoration, and deliberately not semantics. The slider already
+  /// announces one position and one span; a screen reader hearing
+  /// forty tick marks would be told about the shape of a picture it
+  /// cannot see, and the chapter list is where a chapter is chosen.
+  final List<Duration>? marks;
 
   final Duration step;
   final String? semanticsId;
@@ -1533,6 +1543,24 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
   Duration _at(double fraction) => Duration(
     milliseconds: (widget.duration.inMilliseconds * fraction).round(),
   );
+
+  /// The ticks as fractions of the span.
+  ///
+  /// Held like the heights are, for the same reason: the playhead moves
+  /// several times a second and the divisions do not, and the painter
+  /// compares this list by identity.
+  List<double>? _markFractions;
+  List<Duration>? _marksFrom;
+  Duration? _marksSpan;
+
+  List<double>? _resolvedMarks() {
+    if (!identical(_marksFrom, widget.marks) || _marksSpan != widget.duration) {
+      _marksFrom = widget.marks;
+      _marksSpan = widget.duration;
+      _markFractions = markFractions(widget.marks, widget.duration);
+    }
+    return _markFractions;
+  }
 
   Duration _offsetBy(Duration delta) {
     final target = widget.position + delta;
@@ -1634,10 +1662,12 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
                     // property of this layout, and it outlives every
                     // frame the playhead moves through.
                     heights: _resolvedHeights(constraints.maxWidth),
+                    marks: _resolvedMarks(),
                     track: colors.hairline,
                     bufferTint: colors.textTertiary.withValues(alpha: 0.4),
                     fill: colors.accent,
                     knob: enabled ? colors.accent : colors.textDisabled,
+                    mark: colors.textTertiary.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -1647,6 +1677,24 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
       ),
     );
   }
+}
+
+/// [marks] as fractions of [span], with anything outside it dropped.
+///
+/// Dropped rather than clamped, and both edges excluded. These come out
+/// of file metadata through a third-party reader, so a chapter list and
+/// a duration disagreeing is ordinary rather than exceptional - and a
+/// tick pinned to the end would sit on the knob's rail claiming a
+/// division starts where the bar stops. Null where there is nothing to
+/// draw, which is what the painter takes to mean "no ticks".
+List<double>? markFractions(List<Duration>? marks, Duration span) {
+  final total = span.inMilliseconds;
+  if (marks == null || marks.isEmpty || total <= 0) return null;
+  final out = <double>[
+    for (final at in marks)
+      if (at > Duration.zero && at < span) at.inMilliseconds / total,
+  ];
+  return out.isEmpty ? null : out;
 }
 
 /// [peaks] reduced to [bars] values, each the loudest of the range it
@@ -1676,10 +1724,12 @@ class _SeekPainter extends CustomPainter {
     required this.fraction,
     required this.buffered,
     required this.heights,
+    required this.marks,
     required this.track,
     required this.bufferTint,
     required this.fill,
     required this.knob,
+    required this.mark,
   });
 
   final double fraction;
@@ -1689,10 +1739,14 @@ class _SeekPainter extends CustomPainter {
   /// state that owns it. Null draws the plain track.
   final List<double>? heights;
 
+  /// Fractions of the span to tick, already bounded by the state.
+  final List<double>? marks;
+
   final Color track;
   final Color bufferTint;
   final Color fill;
   final Color knob;
+  final Color mark;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1720,6 +1774,7 @@ class _SeekPainter extends CustomPainter {
                 : (centre <= buffered ? bufferTint : track),
         );
       }
+      _paintMarks(canvas, size, size.height * 0.92);
       return;
     }
 
@@ -1749,11 +1804,29 @@ class _SeekPainter extends CustomPainter {
       ),
       Paint()..color = fill,
     );
+    // Between the fill and the knob: a tick under the playhead would be
+    // a division the knob is hiding, and one over it would look like
+    // part of the control.
+    _paintMarks(canvas, size, height * 2.5);
     canvas.drawCircle(
       Offset(size.width * fraction, size.height / 2),
       6,
       Paint()..color = knob,
     );
+  }
+
+  /// The division ticks, centred on the bar and one logical pixel wide.
+  void _paintMarks(Canvas canvas, Size size, double height) {
+    final marks = this.marks;
+    if (marks == null || marks.isEmpty) return;
+    final mid = size.height / 2;
+    final paint = Paint()..color = mark;
+    for (final at in marks) {
+      canvas.drawRect(
+        Rect.fromLTWH(size.width * at, mid - height / 2, 1, height),
+        paint,
+      );
+    }
   }
 
   @override
@@ -1764,11 +1837,13 @@ class _SeekPainter extends CustomPainter {
       // peaks or the width change; comparing a few hundred doubles
       // every frame is the cost this reduction exists to avoid.
       !identical(old.heights, heights) ||
+      !identical(old.marks, marks) ||
       old.fill != fill ||
       // The rest of the palette moves on a theme flip, which changes no
       // other field here: without them the bar keeps the dark set's
       // track and knob on a light canvas.
       old.track != track ||
       old.bufferTint != bufferTint ||
+      old.mark != mark ||
       old.knob != knob;
 }

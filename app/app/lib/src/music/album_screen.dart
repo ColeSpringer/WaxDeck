@@ -11,6 +11,7 @@ import '../home/pin_action.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
+import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../settings/client_prefs.dart';
@@ -369,20 +370,23 @@ class _TrackList extends ConsumerWidget {
           padding: EdgeInsets.symmetric(
             horizontal: sizeClass.gutter.horizontal / 2,
           ),
-          child: MediaListRow(
-            data: MediaTileData(
-              title: track.title,
-              // The album's own artist is in the header; a row names its
-              // own only where it differs, which is what makes a
-              // compilation readable and an ordinary release quiet.
-              subtitle: track.artist == albumArtist ? null : track.artist,
-              trailingText: formatTimecode(
-                Duration(milliseconds: track.durationMs),
+          child: QueueDraggable(
+            drop: QueueDrop.item(track),
+            child: MediaListRow(
+              data: MediaTileData(
+                title: track.title,
+                // The album's own artist is in the header; a row names its
+                // own only where it differs, which is what makes a
+                // compilation readable and an ordinary release quiet.
+                subtitle: track.artist == albumArtist ? null : track.artist,
+                trailingText: formatTimecode(
+                  Duration(milliseconds: track.durationMs),
+                ),
+                semanticsId: SemanticsIds.indexItem(index),
               ),
-              semanticsId: SemanticsIds.indexItem(index),
+              leadingIndex: track.trackNumber ?? index + 1,
+              onTap: () => _play(context, ref, index),
             ),
-            leadingIndex: track.trackNumber ?? index + 1,
-            onTap: () => _play(context, ref, index),
           ),
         );
         if (!startsDisc) return row;

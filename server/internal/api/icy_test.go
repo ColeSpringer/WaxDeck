@@ -29,6 +29,7 @@ func icyWire(metaint int, audio []byte, blocks map[int]string) []byte {
 }
 
 func TestICYRelayStripsMetadataAndReportsTitles(t *testing.T) {
+	t.Parallel()
 	audio := []byte(strings.Repeat("abcdefgh", 100))
 	wire := icyWire(64, audio, map[int]string{
 		0: "StreamTitle='First Song';StreamUrl='';",
@@ -60,6 +61,7 @@ func TestICYRelayStripsMetadataAndReportsTitles(t *testing.T) {
 }
 
 func TestICYStreamTitle(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		block string
@@ -97,6 +99,7 @@ func TestICYStreamTitle(t *testing.T) {
 }
 
 func TestICYMeta(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		block string
@@ -158,6 +161,7 @@ func TestICYMeta(t *testing.T) {
 // goes and fetches, whether a song counts as an advertisement, and what
 // the title says are all decided here.
 func TestICYValueMatchesWholeFieldsOnly(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		block string
@@ -216,6 +220,7 @@ func TestICYValueMatchesWholeFieldsOnly(t *testing.T) {
 // songs would lose its titles, its announced artwork, and every scrobble
 // for as long as it kept sending it.
 func TestICYAdMarkersAreReadNotCounted(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		block string
@@ -241,6 +246,7 @@ func TestICYAdMarkersAreReadNotCounted(t *testing.T) {
 // Stations wrap their blocks. A key after a line break is still a key,
 // and missing that drops the announced cover and lets ad blocks through.
 func TestICYValueAcceptsWrappedBlocks(t *testing.T) {
+	t.Parallel()
 	block := "StreamTitle='Real Song';\r\nStreamUrl='https://art.example/c.jpg';\r\ninsertionType='midroll';"
 	got := icyMetaOf([]byte(block))
 	want := icyMeta{

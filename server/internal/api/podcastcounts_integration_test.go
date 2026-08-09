@@ -157,6 +157,7 @@ func subscriptionRow(t *testing.T, h *harness, token, show string) Subscription 
 // may see explicit content and one that may not. Nothing is flagged, so
 // the two must agree on all three numbers.
 func TestShowCountsAgreeWhenNothingIsFlagged(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	eps := make([]countsEpisode, 0, 12)
 	for i := range 12 {
@@ -221,6 +222,7 @@ func TestShowCountsAgreeWhenNothingIsFlagged(t *testing.T) {
 // numbers describe the episodes that caller can actually open, and the
 // show detail header agrees with the listing drawn beneath it.
 func TestRestrictedShowCountsHideExplicitEpisodes(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newCountsFeed(t, []countsEpisode{
 		{title: "Clean One"},
@@ -299,6 +301,7 @@ func TestRestrictedShowCountsHideExplicitEpisodes(t *testing.T) {
 // the episodes that carry no flag of their own: the counts agree with
 // the 404 the same caller gets on the show and on any of its episodes.
 func TestRestrictedShowCountsZeroExplicitShow(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newCountsFeedAs(t, countsChannel{explicit: true}, []countsEpisode{
 		{title: "Unflagged One"},
@@ -361,6 +364,7 @@ func TestRestrictedShowCountsZeroExplicitShow(t *testing.T) {
 
 // The two cases the counts answer by matching nothing.
 func TestShowCountsZeroCases(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 
 	empty := newCountsFeed(t, nil)

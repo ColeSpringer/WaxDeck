@@ -12,6 +12,7 @@ import (
 // marks places in a book, reads them back in timeline order, and
 // removes one. The marks belong to the account, not to the book.
 func TestBookmarksEndToEnd(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	if _, err := fixtures.GenerateChapteredBook(h.library); err != nil {
 		t.Fatal(err)

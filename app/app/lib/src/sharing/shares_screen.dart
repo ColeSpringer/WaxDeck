@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'share_dialog.dart';
+import 'share_rows.dart';
 import 'shares_controller.dart';
 
 /// The caller's share links: what each one opens, how often it has been
@@ -91,7 +92,7 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
               semanticsId: SemanticsIds.sharesEmpty,
             ),
           ),
-          AsyncData() => _ShareList(
+          AsyncData() => ShareRows(
             rows: rows,
             onCopy: _copy,
             onRevoke: _revoke,
@@ -119,92 +120,6 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
           ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
-    );
-  }
-}
-
-class _ShareList extends StatelessWidget {
-  const _ShareList({
-    required this.rows,
-    required this.onCopy,
-    required this.onRevoke,
-  });
-
-  final List<Share> rows;
-  final Future<void> Function(Share share) onCopy;
-  final Future<void> Function(Share share) onRevoke;
-
-  /// A share's target reads as its own medium, so the row's glyph says
-  /// what the link opens rather than that it is a link. A playlist has
-  /// no domain of its own and takes the music glyph, which is what it is
-  /// made of.
-  static WaxGlyph _glyph(String kind) => switch (kind) {
-    'episode' => WaxIcons.podcasts,
-    'book' => WaxIcons.audiobooks,
-    'playlist' => WaxIcons.playlists,
-    _ => WaxIcons.music,
-  };
-
-  static String _date(DateTime at) {
-    final local = at.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
-  }
-
-  /// What a row says under its title: what it opens, how much it has been
-  /// used, and when it dies. Three facts, in that order, because that is
-  /// the order somebody auditing their own links reads them in.
-  static String _caption(Share share) {
-    final expiresAt = share.expiresAt;
-    final expired = expiresAt != null && expiresAt.isBefore(DateTime.now());
-    return <String>[
-      share.targetKind,
-      share.plays == 1 ? '1 play' : '${share.plays} plays',
-      if (expiresAt == null)
-        'never expires'
-      else if (expired)
-        'expired ${_date(expiresAt)}'
-      else
-        'expires ${_date(expiresAt)}',
-      if (share.allowDownload) 'download allowed',
-    ].join(' · ');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final sizeClass = WaxSizeClass.of(context);
-    return SliverPadding(
-      padding: sizeClass.gutter,
-      sliver: SliverList.builder(
-        itemCount: rows.length,
-        itemBuilder: (context, index) {
-          final share = rows[index];
-          return WaxOptionRow(
-            glyph: _glyph(share.targetKind),
-            title: share.targetTitle,
-            subtitle: _caption(share),
-            semanticsId: SemanticsIds.shareRow(share.pid),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                WaxIconButton(
-                  glyph: WaxIcons.share,
-                  label: 'Copy link',
-                  semanticsId: SemanticsIds.shareCopy(share.pid),
-                  onPressed: () => onCopy(share),
-                ),
-                WaxIconButton(
-                  glyph: WaxIcons.close,
-                  label: 'Revoke link',
-                  semanticsId: SemanticsIds.shareRevoke(share.pid),
-                  onPressed: () => onRevoke(share),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
     );
   }
 }

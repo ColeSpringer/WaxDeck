@@ -256,6 +256,7 @@ export const DEST = {
   // list rather than the nav rail, so it goes through /admin first -
   // which is also what a person does.
   adminUsers: adminSection('users', '/admin/users', SemanticsIds.adminUsers),
+  adminShares: adminSection('shares', '/admin/shares', SemanticsIds.adminShares),
   adminLibraries: adminSection('libraries', '/admin/libraries', SemanticsIds.adminLibraries),
   adminReview: adminSection('review', '/admin/review', SemanticsIds.adminReview),
   adminSettings: adminSection('settings', '/admin/settings', SemanticsIds.adminSettingsSection),

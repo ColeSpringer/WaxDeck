@@ -389,6 +389,15 @@ paths:
         shorter, which is what `Prefs.pinned` describes for a departed
         entity. A response shorter than the request is normal, and an
         empty request is an empty response.
+
+
+        Of the omissions, `departed` names the subset that is gone for
+        everyone - deleted, merged away, or never real - as opposed to
+        merely out of this caller's sight today (a grant, a lapsed
+        subscription, the trash), which stays an unnamed omission. A
+        client holding a pinned list may prune exactly the departed
+        pids; pruning an unnamed omission would turn a state that can
+        end into a loss that cannot.
       tags: [library]
       requestBody:
         required: true
@@ -937,6 +946,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/EntityCard"
+        departed:
+          type: array
+          description: >
+            The requested PIDs that no longer name anything on this
+            server, for anyone: deleted, merged away, or never real. In
+            request order, a repeated PID once, and absent rather than
+            empty when every miss was merely out of the caller's sight
+            (a grant, a lapsed subscription, the trash) - those stay
+            unnamed, because they can come back. This is the set a
+            client holding `Prefs.pinned` prunes.
+          items:
+            type: string
+            pattern: "^(al|ar|rg|pl|pc|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 64
 
     AlbumDetail:
       type: object

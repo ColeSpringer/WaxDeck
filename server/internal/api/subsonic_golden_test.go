@@ -78,6 +78,7 @@ func subsonicGoldenBody(t *testing.T, h *harness, view, secret, extra, format st
 }
 
 func TestSubsonicGolden(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// A multi-part audiobook joins the demo album so the bookmark

@@ -24,6 +24,7 @@ func equalNames(got []RadioDirectoryEntry, want []string) bool {
 }
 
 func TestRankRadioByRegion(t *testing.T) {
+	t.Parallel()
 	// The directory answers in vote order. Ranking may reorder across
 	// the two halves and must not reorder inside either, or it would be
 	// overruling the directory's own judgement rather than adding to it.
@@ -84,6 +85,7 @@ func TestRankRadioByRegion(t *testing.T) {
 }
 
 func TestListenerRegionRefusesAnInferredOne(t *testing.T) {
+	t.Parallel()
 	// The guard that matters: x/text resolves `en` to `US` at low
 	// confidence, and acting on that would put American stations first
 	// for everyone who picked English. Only a region the listener wrote

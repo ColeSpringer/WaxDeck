@@ -238,6 +238,7 @@ func (h *harness) toolTask(t *testing.T, id string) ToolTask {
 }
 
 func TestBookMergeEndToEnd(t *testing.T) {
+	t.Parallel()
 	h := newToolHarness(t)
 	if _, err := fixtures.GenerateBook(h.library); err != nil {
 		t.Fatal(err)
@@ -353,6 +354,7 @@ func TestBookMergeEndToEnd(t *testing.T) {
 }
 
 func TestBookSplitEndToEnd(t *testing.T) {
+	t.Parallel()
 	h := newToolHarness(t)
 	if _, err := fixtures.GenerateChapteredBook(h.library); err != nil {
 		t.Fatal(err)
@@ -453,6 +455,7 @@ func TestBookSplitEndToEnd(t *testing.T) {
 }
 
 func TestCueSplitEndToEnd(t *testing.T) {
+	t.Parallel()
 	h := newToolHarness(t)
 	ripDir := filepath.Join(h.library, "Cue Artist", "Cue Album")
 	if _, err := fixtures.Generate(ripDir, fixtures.Spec{
@@ -592,6 +595,7 @@ func TestCueSplitEndToEnd(t *testing.T) {
 }
 
 func TestToolTaskDeleteAndClear(t *testing.T) {
+	t.Parallel()
 	h := newHarnessDirect(t)
 	ctx := context.Background()
 
@@ -699,6 +703,7 @@ func TestToolTaskDeleteAndClear(t *testing.T) {
 }
 
 func TestToolsUnavailableWithoutEngine(t *testing.T) {
+	t.Parallel()
 	h := newHarnessDirect(t)
 	if _, err := fixtures.GenerateBook(h.library); err != nil {
 		t.Fatal(err)

@@ -144,6 +144,7 @@ func get(t *testing.T, ts *httptest.Server, path, token string) *http.Response {
 }
 
 func TestHealth(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	resp := get(t, ts, "/api/v1/health", "")
 	if resp.StatusCode != 200 {
@@ -156,6 +157,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestBootstrapFlow(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 
 	// A fresh server wants an administrator.
@@ -199,6 +201,7 @@ func TestBootstrapFlow(t *testing.T) {
 }
 
 func TestAuthFlow(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 
 	// Unauthenticated access to a protected endpoint is a structured 401.
@@ -254,6 +257,7 @@ func TestAuthFlow(t *testing.T) {
 }
 
 func TestCSRFEnforcedForCookieMutations(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	lr := bootstrap(t, ts)
 
@@ -311,6 +315,7 @@ func TestCSRFEnforcedForCookieMutations(t *testing.T) {
 }
 
 func TestSessionRevocationKillsDevice(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	admin := bootstrap(t, ts)
 
@@ -369,6 +374,7 @@ func TestSessionRevocationKillsDevice(t *testing.T) {
 // name a person recognizes. Everything here is about one caller's own
 // sessions: another account's is indistinguishable from a missing one.
 func TestRenameSession(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	admin := bootstrap(t, ts)
 
@@ -478,6 +484,7 @@ func TestRenameSession(t *testing.T) {
 // A login is never refused over its label: an over-long name is stored
 // cut to the cap, and a whitespace-only one leaves a web session.
 func TestLoginDeviceNameIsTrimmedAndCapped(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	admin := bootstrap(t, ts)
 
@@ -547,6 +554,7 @@ func decodeSessionID(t *testing.T, ts *httptest.Server, token, deviceName string
 }
 
 func TestTokenRefreshRotates(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	bootstrap(t, ts)
 	lr := decode[LoginResponse](t, postJSON(t, ts.URL+"/api/v1/auth/login", "",
@@ -584,6 +592,7 @@ func TestTokenRefreshRotates(t *testing.T) {
 }
 
 func TestLoginRateLimiting(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	bootstrap(t, ts)
 
@@ -603,6 +612,7 @@ func TestLoginRateLimiting(t *testing.T) {
 }
 
 func TestUserAdminLifecycle(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	admin := bootstrap(t, ts)
 
@@ -680,6 +690,7 @@ func TestUserAdminLifecycle(t *testing.T) {
 }
 
 func TestPasswordChangeRevokesOtherSessions(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	admin := bootstrap(t, ts)
 	other := loginAs(t, ts, "admin", testPassword)
@@ -724,6 +735,7 @@ func TestPasswordChangeRevokesOtherSessions(t *testing.T) {
 }
 
 func TestPrefsRoundTrip(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	lr := bootstrap(t, ts)
 
@@ -770,6 +782,7 @@ func TestPrefsRoundTrip(t *testing.T) {
 // for: the station library is shared by the household, so which of its
 // stations are yours is the one piece of per-user station state there is.
 func TestPrefsRadioFavorites(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	lr := bootstrap(t, ts)
 
@@ -847,6 +860,7 @@ func TestPrefsRadioFavorites(t *testing.T) {
 }
 
 func TestBearerSchemeCaseInsensitive(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	token := login(t, ts)
 
@@ -867,6 +881,7 @@ func TestBearerSchemeCaseInsensitive(t *testing.T) {
 }
 
 func TestBearerDoesNotShadowCookie(t *testing.T) {
+	t.Parallel()
 	ts := newAuthTestServer(t)
 	token := login(t, ts)
 

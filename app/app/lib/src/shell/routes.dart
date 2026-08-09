@@ -209,6 +209,11 @@ abstract final class WaxRoute {
   static const userEdit = '$users/edit';
   static const audit = '$admin/audit';
 
+  /// Every account's share links, distinct from [shares], which is the
+  /// caller's own: one is oversight, the other is a listener auditing
+  /// what they published.
+  static const adminShares = '$admin/shares';
+
   /// The server's own switches. Distinct from [settings], which is the
   /// listener's: one is what this instance does, the other is what this
   /// account prefers, and only administrators see the first.

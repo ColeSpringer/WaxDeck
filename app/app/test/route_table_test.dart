@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/admin/admin_shares_screen.dart';
 import 'package:waxdeck/src/admin/audit_screen.dart';
 import 'package:waxdeck/src/admin/dashboard_screen.dart';
 import 'package:waxdeck/src/admin/genres_screen.dart';
@@ -156,6 +157,7 @@ final _locations = <String, Type>{
   WaxRoute.diagnostics: DiagnosticsScreen,
   WaxRoute.organize: OrganizeScreen,
   WaxRoute.users: UsersScreen,
+  WaxRoute.adminShares: AdminSharesScreen,
   WaxRoute.adminSettings: ServerSettingsScreen,
   WaxRoute.adminNotifications: AdminNotificationsScreen,
   WaxRoute.schedules: SchedulesScreen,

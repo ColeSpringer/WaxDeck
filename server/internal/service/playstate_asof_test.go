@@ -47,6 +47,7 @@ func fixtureTrackPID(t *testing.T, ctx context.Context, svc *Library, uc *UserCt
 // so without the mirror of the display fallback these rows would carry
 // no album-artist identity and drop out of the artist index.
 func TestTrackFactsCarryEntityPIDs(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	rows, err := svc.TrackFacts(ctx, uc)
 	if err != nil {
@@ -77,6 +78,7 @@ func TestTrackFactsCarryEntityPIDs(t *testing.T) {
 }
 
 func TestReplayedStarLosesToLaterOutOfBandChange(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pid, catalogPID := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 
@@ -110,6 +112,7 @@ func TestReplayedStarLosesToLaterOutOfBandChange(t *testing.T) {
 }
 
 func TestReplayedRatingLosesToLaterOutOfBandChange(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pid, catalogPID := fixtureTrackPID(t, ctx, svc, uc, "Basalt Steps")
 
@@ -139,6 +142,7 @@ func TestReplayedRatingLosesToLaterOutOfBandChange(t *testing.T) {
 // star carrying a recorded time is stored at that time, so a starred-list
 // ordered by star time reflects when the user actually starred it.
 func TestStarLandsInRecordedTime(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pid, catalogPID := fixtureTrackPID(t, ctx, svc, uc, "Cobalt Sky")
 
@@ -162,6 +166,7 @@ func TestStarLandsInRecordedTime(t *testing.T) {
 // the catalog trusts the as-of it is handed, so a client clock running
 // ahead must be pulled back here or its write becomes unbeatable.
 func TestFutureRecordedStarClamps(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pid, catalogPID := fixtureTrackPID(t, ctx, svc, uc, "Delta Groove")
 

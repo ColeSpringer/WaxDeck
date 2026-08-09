@@ -83,8 +83,14 @@ jobs:
       # rule was in that state.
       - name: Item-query lint
         run: cd server && go run ./cmd/querylint ./...
+      # internal/api builds a full harness (fresh migrated DB, demo
+      # library, service stack) per test and once outgrew go test's
+      # default 10m per-package cap under -race. The harnesses are cheap
+      # now - test-weakened argon2, memoized fixture encodes, parallel
+      # tests - and the explicit cap stays as headroom rather than a
+      # requirement.
       - name: Test (race)
-        run: cd server && go test -race ./...
+        run: cd server && go test -race -timeout 20m ./...
 
   fixtures:
     runs-on: ubuntu-latest

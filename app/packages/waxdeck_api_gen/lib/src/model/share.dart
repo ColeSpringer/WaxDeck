@@ -21,6 +21,7 @@ part 'share.g.dart';
 /// * [createdAt] - When the share was created.
 /// * [expiresAt] - When the link stops resolving. Absent for links without expiry. 
 /// * [plays] - Anonymous plays through the link so far.
+/// * [owner] - Who minted the link: display name, or username where no display name is set. Populated only on the `all=true` listing, where the rows come from every account; on a caller's own listing every row would name the caller, so the field is absent there. 
 @BuiltValue()
 abstract class Share implements Built<Share, ShareBuilder> {
   /// Share PID.
@@ -62,6 +63,10 @@ abstract class Share implements Built<Share, ShareBuilder> {
   /// Anonymous plays through the link so far.
   @BuiltValueField(wireName: r'plays')
   int get plays;
+
+  /// Who minted the link: display name, or username where no display name is set. Populated only on the `all=true` listing, where the rows come from every account; on a caller's own listing every row would name the caller, so the field is absent there. 
+  @BuiltValueField(wireName: r'owner')
+  String? get owner;
 
   Share._();
 
@@ -140,6 +145,13 @@ class _$ShareSerializer implements PrimitiveSerializer<Share> {
       object.plays,
       specifiedType: const FullType(int),
     );
+    if (object.owner != null) {
+      yield r'owner';
+      yield serializers.serialize(
+        object.owner,
+        specifiedType: const FullType(String),
+      );
+    }
   }
 
   @override
@@ -232,6 +244,13 @@ class _$ShareSerializer implements PrimitiveSerializer<Share> {
             specifiedType: const FullType(int),
           ) as int;
           result.plays = valueDes;
+          break;
+        case r'owner':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.owner = valueDes;
           break;
         default:
           unhandled.add(key);

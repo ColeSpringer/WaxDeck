@@ -47,6 +47,7 @@ func libraryCreateDetail(t *testing.T, ctx context.Context, svc *Library) string
 // on: the streaming side is told the new root by name and path, and a
 // library that synced cleanly carries no warning.
 func TestAddLibrarySyncsFlowRoot(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	flow := &fakeFlowRoots{names: []string{"lib"}}
 	svc.SetFlowRoots(flow)
@@ -73,6 +74,7 @@ func TestAddLibrarySyncsFlowRoot(t *testing.T) {
 // but streaming depended on the sidecar) while telling the administrator
 // who made the change what has to happen for streaming to follow.
 func TestAddLibraryDegradesOnReloadFailure(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	flow := &fakeFlowRoots{
 		names:   []string{"lib"},
@@ -106,6 +108,7 @@ func TestAddLibraryDegradesOnReloadFailure(t *testing.T) {
 // sidecar: the library is still created, and the recorded warning names
 // the restart streaming waits on.
 func TestAddLibraryWithoutReloadSupport(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	flow := &fakeFlowRoots{
 		names:   []string{"lib"},
@@ -128,6 +131,7 @@ func TestAddLibraryWithoutReloadSupport(t *testing.T) {
 // stream-ref resolution ambiguous -- the exact thing the check exists
 // for.
 func TestAddLibraryRefusesBridgeRootName(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	svc.SetFlowRoots(&fakeFlowRoots{names: []string{"lib", "podcasts"}})
 
@@ -141,6 +145,7 @@ func TestAddLibraryRefusesBridgeRootName(t *testing.T) {
 // with no sidecar configured: one wired up later mounts the podcast
 // root under that name regardless.
 func TestAddLibraryRefusesPodcastRootWithoutBridge(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	svc.podcastRootName = "podcasts"
 

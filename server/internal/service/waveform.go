@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 
 	"github.com/colespringer/waxbin/model"
 )
@@ -133,6 +136,252 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 		return WaveformResult{State: waveformStateUnavailable, EssenceHash: f.EssenceHash, PartIndex: partOut}, nil
 	}
 	return WaveformResult{State: waveformStatePending, EssenceHash: f.EssenceHash, PartIndex: partOut}, nil
+}
+
+// WaveformForItem answers one envelope over a whole item: a book's
+// parts stitched in reading order into the shape a single file answers
+// with.
+//
+// Server-side rather than client-side because the stitch is
+// duration-weighted arithmetic over every part, and doing it in the
+// client would mean N requests, N cache entries, N validators, and the
+// same weighting written again in Dart. `PeaksForItem` reads every
+// part's envelope in one call, which is what makes this cheap here and
+// expensive anywhere else.
+func (l *Library) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID string) (WaveformResult, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return WaveformResult{}, err
+	}
+	// The two populations with no envelope of their own answer the same
+	// under either span: a window of a shared file, and audio the pass
+	// deliberately never reads.
+	if it.Virtual || it.Kind == model.KindEpisode {
+		return WaveformResult{State: waveformStateUnavailable}, nil
+	}
+	parts, err := l.itemParts(ctx, it)
+	if err != nil {
+		return WaveformResult{}, err
+	}
+	// One file is one envelope: the whole item IS the part, so this is
+	// the answer the default span already gives.
+	if len(parts) < 2 {
+		return l.WaveformFor(ctx, uc, apiItemPID, 0)
+	}
+
+	stored, err := l.lib.PeaksForItem(ctx, it.PID)
+	if err != nil && kindFromWaxErr(err) != KindNotFound {
+		return WaveformResult{}, classify(err)
+	}
+	byFile := make(map[string]model.PeaksData, len(stored))
+	for _, p := range stored {
+		if p.Peaks.Buckets > 0 && len(p.Peaks.Data) >= p.Peaks.Buckets*2 {
+			byFile[string(p.FilePID)] = p.Peaks
+		}
+	}
+
+	// All parts or nothing. A book missing one part's envelope has no
+	// honest whole-book answer: stitching around the gap would draw
+	// silence over minutes of audio, and a listener would seek into it.
+	// Which non-ready state it is comes from the missing parts' own
+	// analysis stamps, exactly as the per-part path decides it.
+	var (
+		version     int
+		essence     []string
+		totalMS     int64
+		unavailable bool
+		pending     bool
+	)
+	for _, part := range parts {
+		totalMS += part.DurationMS
+		pk, ok := byFile[string(part.FilePID)]
+		if ok && pk.Version > version {
+			version = pk.Version
+		}
+		f, ferr := l.fileByPID(ctx, part.FilePID)
+		if ferr != nil {
+			return WaveformResult{}, ferr
+		}
+		essence = append(essence, f.EssenceHash)
+		// A part with no duration has no span on a timeline whose
+		// parts are placed by duration, so its audio cannot be drawn at
+		// all - and the whole-book envelope would come out as if that
+		// part were not in the book, which is the same silent lie a
+		// missing envelope would be. So it answers the same way rather
+		// than being skipped. The duration column is nullable and read
+		// as zero, so this is a state to refuse rather than one to
+		// assume away.
+		if part.DurationMS <= 0 {
+			unavailable = true
+			continue
+		}
+		if ok {
+			continue
+		}
+		// Same reading as the per-part path: an unreadable essence or a
+		// file the pass has already stamped will never gain peaks, and
+		// calling that pending is a promise nothing keeps.
+		if f.EssenceHash == "" || f.AnalyzedEssence == f.EssenceHash {
+			unavailable = true
+		} else {
+			pending = true
+		}
+	}
+	switch {
+	case unavailable:
+		return WaveformResult{State: waveformStateUnavailable}, nil
+	case pending:
+		return WaveformResult{State: waveformStatePending}, nil
+	case totalMS <= 0:
+		// Durations are what the parts are weighted by; without them
+		// there is no timeline to spread buckets across.
+		return WaveformResult{State: waveformStateUnavailable}, nil
+	}
+
+	buckets := wholeItemBuckets(totalMS)
+	stitched := stitchPeaks(parts, byFile, totalMS, buckets)
+	return WaveformResult{
+		State:       waveformStateReady,
+		EssenceHash: wholeItemValidator(parts, essence, buckets),
+		Version:     version,
+		Resolution:  buckets,
+		Peaks:       stitched,
+	}, nil
+}
+
+// wholeItemValidator digests everything the stitched bytes are built
+// from: each part's essence in reading order, each part's duration, and
+// the bucket count the total resolves to.
+//
+// The durations are not decoration. They are what each part's span on
+// the timeline is computed from, and what the resolution is chosen
+// from, so a rescan that corrects a lying VBR header rewrites every
+// bucket while leaving essence and analysis version untouched - a
+// client holding the old bytes under a day of freshness and a week of
+// stale-while-revalidate would draw an envelope that no longer lines up
+// with the seek positions under it.
+//
+// Digested rather than joined, because the join is unusable at the
+// length that matters: a shipping audiobook runs to a hundred parts and
+// an essence digest is some seventy characters, so the validator would
+// be kilobytes - past the header buffers reverse proxies ship with by
+// default, in both directions, which turns every conditional request
+// into an error instead of the 304 it exists to earn.
+func wholeItemValidator(parts []model.BookPart, essence []string, buckets int) string {
+	sum := sha256.New()
+	for i, part := range parts {
+		fmt.Fprintf(sum, "%d\x00%s\x00%d\n", i, essence[i], part.DurationMS)
+	}
+	fmt.Fprintf(sum, "buckets\x00%d", buckets)
+	// Half a SHA-256 is 128 bits of collision resistance against an
+	// accident, which is all a cache validator is defending against.
+	return hex.EncodeToString(sum.Sum(nil)[:16])
+}
+
+// itemParts lists a book's backing files in reading order. Anything
+// else has no parts, which is what makes the whole-item span the same
+// answer as the default one for it.
+func (l *Library) itemParts(ctx context.Context, it *model.ItemView) ([]model.BookPart, error) {
+	if it.Kind != model.KindBook {
+		return nil, nil
+	}
+	bd, err := l.lib.Book(ctx, it.PID)
+	if err != nil {
+		return nil, classify(err)
+	}
+	return bd.Files, nil
+}
+
+// wholeItemBuckets picks the resolution a whole-item envelope is drawn
+// at: roughly one bucket per ten seconds, clamped.
+//
+// Fixed at 1000 like a track's, a twenty-hour book would give a
+// three-minute chapter three bars, which is a line rather than a shape.
+// The ceiling is what keeps the response a few kilobytes. Both ends are
+// free to move: `resolution` is read rather than assumed on both sides
+// of the wire, so this is a rendering choice and not a contract.
+func wholeItemBuckets(totalMS int64) int {
+	const (
+		floor  = 1000
+		cap    = 4000
+		perSec = 10
+	)
+	want := int(totalMS / 1000 / perSec)
+	if want < floor {
+		return floor
+	}
+	if want > cap {
+		return cap
+	}
+	return want
+}
+
+// stitchPeaks lays every part's envelope onto one timeline.
+//
+// Each bucket covers an equal slice of the whole duration, so a part
+// occupies bucket-space in proportion to its length, and each output
+// bucket takes the loudest input bucket overlapping it. Loudest-wins is
+// truthful here because the stored values are absolute full-scale
+// amplitude with no per-file normalisation anywhere in the pipeline: a
+// quiet part stays honestly quiet beside a loud one, which is the whole
+// reason a whole-book envelope is worth drawing.
+//
+// Done in the stored 16-bit domain and narrowed once at the end, so the
+// maximum is taken at full precision rather than after the wire's
+// rounding.
+func stitchPeaks(parts []model.BookPart, byFile map[string]model.PeaksData, totalMS int64, buckets int) []byte {
+	out := make([]uint16, buckets)
+	var elapsedMS int64
+	for _, part := range parts {
+		pk := byFile[string(part.FilePID)]
+		start := elapsedMS
+		elapsedMS += part.DurationMS
+		if part.DurationMS <= 0 || pk.Buckets == 0 {
+			continue
+		}
+		// The output range this part owns, right-open so a boundary
+		// bucket belongs to the part that starts in it and no sample is
+		// counted twice.
+		from := int(start * int64(buckets) / totalMS)
+		to := int(elapsedMS * int64(buckets) / totalMS)
+		if to > buckets {
+			to = buckets
+		}
+		if to <= from {
+			// A part shorter than one bucket still gets the bucket it
+			// falls in: dropping it would silence real audio.
+			to = from + 1
+			if to > buckets {
+				continue
+			}
+		}
+		span := to - from
+		for i := from; i < to; i++ {
+			// The input buckets this output bucket covers.
+			lo := (i - from) * pk.Buckets / span
+			hi := (i - from + 1) * pk.Buckets / span
+			if hi <= lo {
+				hi = lo + 1
+			}
+			if hi > pk.Buckets {
+				hi = pk.Buckets
+			}
+			var peak uint16
+			for b := lo; b < hi; b++ {
+				if v := binary.LittleEndian.Uint16(pk.Data[b*2:]); v > peak {
+					peak = v
+				}
+			}
+			if peak > out[i] {
+				out[i] = peak
+			}
+		}
+	}
+	wire := make([]byte, buckets)
+	for i, v := range out {
+		wire[i] = byte(v >> 8)
+	}
+	return wire
 }
 
 // narrowPeaks converts the stored little-endian uint16 buckets to the

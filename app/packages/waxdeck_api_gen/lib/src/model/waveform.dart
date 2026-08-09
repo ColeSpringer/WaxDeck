@@ -16,7 +16,7 @@ part 'waveform.g.dart';
 /// * [partIndex] - The described part of a multi-file audiobook. Present only for multi-file books. 
 /// * [peaks] - One amplitude per bucket in playback order, `0` silence and `255` full scale (`ready` only). Downsample to the pixel width being drawn. 
 /// * [resolution] - How many buckets `peaks` carries (`ready` only). Fixed by the catalog at 1000 today; read it rather than assuming, because an analysis version bump may change it. 
-/// * [essenceHash] - Content hash of the analyzed audio essence, matching the download surface's `essenceHash`. A stored waveform whose hash no longer matches the stored audio is stale. 
+/// * [essenceHash] - Content hash of the analyzed audio essence, matching the download surface's `essenceHash`. A stored waveform whose hash no longer matches the stored audio is stale.  For `span=item` on a multi-part book there is no single essence to name, so this is a fixed-length digest over everything the stitched envelope is built from - every part's essence in reading order, every part's duration, and the bucket count. It is a cache validator there rather than a content hash, and does not match any file's `essenceHash`: compare it only against another answer from this endpoint. 
 @BuiltValue()
 abstract class Waveform implements Built<Waveform, WaveformBuilder> {
   /// `ready` (peaks present), `pending` (analyzable, not yet analyzed), or `unavailable` (there will never be a waveform for this item). Open set; treat unknown values as `unavailable`. 
@@ -35,7 +35,7 @@ abstract class Waveform implements Built<Waveform, WaveformBuilder> {
   @BuiltValueField(wireName: r'resolution')
   int? get resolution;
 
-  /// Content hash of the analyzed audio essence, matching the download surface's `essenceHash`. A stored waveform whose hash no longer matches the stored audio is stale. 
+  /// Content hash of the analyzed audio essence, matching the download surface's `essenceHash`. A stored waveform whose hash no longer matches the stored audio is stale.  For `span=item` on a multi-part book there is no single essence to name, so this is a fixed-length digest over everything the stitched envelope is built from - every part's essence in reading order, every part's duration, and the bucket count. It is a cache validator there rather than a content hash, and does not match any file's `essenceHash`: compare it only against another answer from this endpoint. 
   @BuiltValueField(wireName: r'essenceHash')
   String? get essenceHash;
 

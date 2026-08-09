@@ -20,6 +20,9 @@ func (s *Server) shareJSON(info service.ShareInfo) Share {
 		CreatedAt:     info.CreatedAt,
 		Plays:         info.Plays,
 	}
+	if info.OwnerName != "" {
+		out.Owner = ptr(info.OwnerName)
+	}
 	if info.PositionMs > 0 {
 		out.PositionMs = ptr(info.PositionMs)
 	}

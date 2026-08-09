@@ -788,6 +788,64 @@ void main() {
         reason: 'the playhead is back where the data says it is',
       );
     });
+
+    // Divisions along a bar that spans something with divisions in it:
+    // a book's chapters under a whole-book envelope.
+    testWidgets('marks are decoration, not a second slider', (tester) async {
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 400,
+          child: WaxSeekBar(
+            position: const Duration(minutes: 10),
+            duration: const Duration(hours: 1),
+            marks: const <Duration>[
+              Duration(minutes: 15),
+              Duration(minutes: 40),
+            ],
+            onSeek: (_) {},
+            semanticsId: 'seek',
+          ),
+        ),
+        size: const Size(400, 200),
+      );
+
+      // The slider still announces one position and one span. Forty
+      // ticks announced would be the shape of a picture a screen reader
+      // cannot see, and the chapter list is where a chapter is chosen.
+      final node = tester.getSemantics(find.bySemanticsIdentifier('seek'));
+      expect(node.getSemanticsData().value, contains('of'));
+      expect(node.childrenCount, 0);
+    });
+
+    test('a mark outside the span is dropped, not clamped', () {
+      const hour = Duration(hours: 1);
+      expect(
+        markFractions(const <Duration>[Duration(minutes: 30)], hour),
+        <double>[0.5],
+      );
+      // Past the end, and exactly on either edge: none of the three is
+      // a division inside the span, and clamping them would draw ticks
+      // on the rail claiming a chapter starts where the bar stops.
+      expect(
+        markFractions(const <Duration>[
+          Duration(minutes: 15),
+          Duration(hours: 2),
+          Duration.zero,
+          hour,
+        ], hour),
+        <double>[0.25],
+      );
+      // Nothing to draw reads the same as no marks at all.
+      expect(markFractions(const <Duration>[hour], hour), isNull);
+      expect(markFractions(null, hour), isNull);
+      expect(markFractions(const <Duration>[], hour), isNull);
+      // No span is no timeline to place anything on.
+      expect(
+        markFractions(const <Duration>[Duration(minutes: 5)], Duration.zero),
+        isNull,
+      );
+    });
   });
 }
 

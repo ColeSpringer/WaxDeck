@@ -21,6 +21,7 @@ import (
 // disagree is the failure TestFacetDimensionsDrillToTheirCount exists
 // for, and archiving is a new way to reach it.
 func TestTrashedItemsLeaveTheListings(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	page := h.items(t, "?mediaType=music")
@@ -120,6 +121,7 @@ func facetCountFor(t *testing.T, h *harness, dimension, label string) int {
 // age filter (recent entries survive) and refuses to empty everything when
 // disabled, and a single entry purges through the new endpoint.
 func TestTrashRetentionAndPurge(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	ctx := context.Background()
 
@@ -216,6 +218,7 @@ func TestTrashRetentionAndPurge(t *testing.T) {
 // best, so its archived rows would otherwise take the top of the ranking
 // and empty a group outright. One pass has to fill the page.
 func TestSearchFillsItsGroupsAroundTrashedHits(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// Eight tracks sharing a term, five of them then trashed. The

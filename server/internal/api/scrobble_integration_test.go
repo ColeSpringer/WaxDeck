@@ -137,6 +137,7 @@ func scrobbleOutboxCount(t *testing.T, h *harness) int {
 }
 
 func TestListenBrainzScrobbleFlow(t *testing.T) {
+	t.Parallel()
 	// The fake service lives on the loopback, which the scrobble SSRF
 	// guard refuses unless the server opts LAN hosts in.
 	h := newHarnessWith(t, func(cfg *service.Config) { cfg.AllowPrivateScrobbleHosts = true })
@@ -299,6 +300,7 @@ func TestListenBrainzScrobbleFlow(t *testing.T) {
 }
 
 func TestLastfmConnectSurface(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.LastfmAPIKey = "key123"
 		cfg.LastfmSecret = "sec456"
@@ -360,6 +362,7 @@ func TestLastfmConnectSurface(t *testing.T) {
 }
 
 func TestSubsonicScrobbleParity(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) { cfg.AllowPrivateScrobbleHosts = true })
 	lb := newFakeListenBrainz(t, map[string]string{"tok-good": "listener"})
 	resp := h.putJSON(t, "/api/v1/users/me/scrobblers/listenbrainz", map[string]any{
@@ -407,6 +410,7 @@ func TestSubsonicScrobbleParity(t *testing.T) {
 }
 
 func TestListenBrainzPrivateHostRefused(t *testing.T) {
+	t.Parallel()
 	// Without the opt-in flag, a caller-supplied API base on a private
 	// address is refused at connect: the delivery client is the same
 	// dial-guarded shape every user-pointed fetch rides.

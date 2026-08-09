@@ -133,6 +133,11 @@ class FakeRepository implements WaxDeckRepository {
   /// with no use for peaks does not ask.
   final List<String> waveformCalls = [];
 
+  /// The subset asked for across a whole item rather than one part: a
+  /// book's bar spans the book, and asking for a part would draw one
+  /// file's shape under a timeline that is not it.
+  final List<String> wholeItemWaveformCalls = [];
+
   /// Thrown by [getWaveform] when set.
   WaxDeckApiException? waveformError;
 
@@ -578,15 +583,26 @@ class FakeRepository implements WaxDeckRepository {
   /// cannot resolve.
   final Map<String, EntityCard> entityCards = {};
 
+  /// The pids [resolveEntities] names departed - gone for everyone -
+  /// when asked for them. A dropped pid not listed here is a plain
+  /// omission, the server's shape for merely-invisible.
+  final Set<String> departedEntityPids = {};
+
   /// Every pid list [resolveEntities] was asked for, in call order.
   final List<List<String>> resolvedEntityPids = [];
 
   @override
-  Future<List<EntityCard>> resolveEntities(List<String> pids) async {
+  Future<EntityResolution> resolveEntities(List<String> pids) async {
     resolvedEntityPids.add(List<String>.of(pids));
     final error = listError;
     if (error != null) throw error;
-    return <EntityCard>[for (final pid in pids) ?entityCards[pid]];
+    return EntityResolution(
+      cards: <EntityCard>[for (final pid in pids) ?entityCards[pid]],
+      departed: <String>[
+        for (final pid in pids)
+          if (departedEntityPids.contains(pid)) pid,
+      ],
+    );
   }
 
   /// Albums [getAlbum] answers, keyed by pid.
@@ -1404,11 +1420,15 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<Waveform> getWaveform(String pid) async {
+  Future<Waveform> getWaveform(String pid, {bool wholeItem = false}) async {
     waveformCalls.add(pid);
+    if (wholeItem) wholeItemWaveformCalls.add(pid);
     final error = waveformError;
     if (error != null) throw error;
-    return waveforms[pid] ?? const Waveform(state: 'pending');
+    // Keyed like the skip map's parts: a test that seeds the whole-item
+    // answer separately can prove which span a face asked for.
+    final keyed = wholeItem ? waveforms['$pid#item'] : null;
+    return keyed ?? waveforms[pid] ?? const Waveform(state: 'pending');
   }
 
   @override
@@ -2670,9 +2690,16 @@ class FakeRepository implements WaxDeckRepository {
   /// Scans this fake has been asked to start.
   int rescans = 0;
 
+  /// Thrown by [rescanLibrary] instead of starting one. The real server
+  /// refuses while a catalog job is running, which is the answer a
+  /// client that thinks nothing is running has to handle.
+  WaxDeckApiException? rescanError;
+
   @override
   Future<Job> rescanLibrary() async {
     rescans++;
+    final error = rescanError;
+    if (error != null) throw error;
     return Job(pid: 'jb-scan-$rescans', kind: 'scan', state: 'running');
   }
 
@@ -4088,6 +4115,20 @@ class FakeRepository implements WaxDeckRepository {
     return limits;
   }
 
+  /// Engine-backed streams the server reports in flight, and how many
+  /// times it has been asked (the screen reads once and again on
+  /// demand, never on a timer).
+  int activeTranscodeSessions = 0;
+  int transcodingActivityReads = 0;
+
+  @override
+  Future<TranscodingActivity> getTranscodingActivity() async {
+    transcodingActivityReads++;
+    final error = adminError;
+    if (error != null) throw error;
+    return TranscodingActivity(activeSessions: activeTranscodeSessions);
+  }
+
   /// Maintenance schedules by kind.
   final Map<String, Schedule> schedules = {
     for (final kind in const ['scan', 'backup', 'prune', 'analyze'])
@@ -4364,8 +4405,15 @@ class FakeRepository implements WaxDeckRepository {
   /// Background jobs served by [listJobs].
   List<Job> jobs = [];
 
+  /// How many times the job list has been read, for the cases about
+  /// whether a client noticed its copy had gone stale.
+  int jobReads = 0;
+
   @override
-  Future<List<Job>> listJobs() async => List.of(jobs);
+  Future<List<Job>> listJobs() async {
+    jobReads++;
+    return List.of(jobs);
+  }
 
   /// Per-library read-only flags; absent means false.
   final Map<String, bool> libraryReadOnlyByPid = {};
@@ -4621,11 +4669,24 @@ class FakeRepository implements WaxDeckRepository {
   createShareCalls = [];
   final List<String> revokeShareCalls = [];
 
+  /// Share links every account holds, answered to an `all: true` listing.
+  /// Separate from [shares] so a test can prove which listing a screen
+  /// asked for.
+  final List<Share> allShares = [];
+
+  /// Whether each `listShares` call passed `all`.
+  final List<bool> listSharesCalls = [];
+
   @override
-  Future<SharePage> listShares({String? cursor, int? limit}) async {
+  Future<SharePage> listShares({
+    String? cursor,
+    int? limit,
+    bool all = false,
+  }) async {
+    listSharesCalls.add(all);
     final error = shareError;
     if (error != null) throw error;
-    return SharePage(shares: List.of(shares));
+    return SharePage(shares: List.of(all ? allShares : shares));
   }
 
   @override
@@ -5076,8 +5137,20 @@ class FakeArtworkStore extends ArtworkStore {
     return null;
   }
 
+  /// Bytes this store hands back per URL. Empty by default, which is
+  /// the offline case every surface has to render anyway.
+  final Map<String, Uint8List> bytes = <String, Uint8List>{};
+
+  /// Every (url, px) a caller asked for the actual bytes of, which is
+  /// the palette, a cast copy, and a share card rather than anything
+  /// that paints.
+  final List<({String url, int px})> byteRequests = <({String url, int px})>[];
+
   @override
-  Future<Uint8List?> bytesFor(String artUrl, int px) async => null;
+  Future<Uint8List?> bytesFor(String artUrl, int px) async {
+    byteRequests.add((url: artUrl, px: px));
+    return bytes[artUrl];
+  }
 
   @override
   Future<void> warm(String artUrl, int px) async {}

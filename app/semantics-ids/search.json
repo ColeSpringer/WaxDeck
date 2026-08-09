@@ -6,6 +6,7 @@
     "searchField": "search-field",
     "searchFilter": "search-filter-{name}",
     "searchHit": "search-hit-{kind}-{index}",
+    "searchHitMore": "search-hit-more-{kind}-{index}",
     "searchRecent": "search-recent-{index}",
     "searchRecentRemove": "search-recent-remove-{index}",
     "searchShowAll": "search-show-all-{kind}",

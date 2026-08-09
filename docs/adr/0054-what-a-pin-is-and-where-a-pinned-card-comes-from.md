@@ -95,10 +95,35 @@ clean fix is a resolver response that distinguishes *departed* from
 deferred entry for the listing-surface rollout rather than being guessed
 at here.
 
+That fix has since landed. `POST /library/entities` answers a `departed`
+list beside the cards: the requested pids that no longer name anything
+for anyone. The boundary is what can still come back - an entity outside
+the caller's grant, a show they unsubscribed from, a book in the trash,
+a neighbour's playlist gone private all stay unnamed omissions, because
+each of those states can end with the card returning, and a pruned pin
+would turn it into a loss. What the catalog itself has no row for
+(deleted, merged away, never real) is named, and `PinnedEntities.prune`
+drops exactly that set from the document after the shelf's resolve
+settles. The radio dial keeps its own display-drop untouched: stations
+ride a different endpoint and the dial's list has the same 64-slot
+headroom pressure only in theory.
+
 The pin affordance is on the five detail screens and the pinned shelf's
 own cards, and not on listing rows, index buckets, or search hits.
 Recorded as deferred work: it is a wider rollout of the same menu item,
 not a different feature.
+
+The rollout has since landed, and "the same menu item" held only
+loosely. The three surfaces draw `MediaListRow`s with no menu of their
+own, so each row gained the component's `onMore` overflow opening a pin
+sheet (`showPinSheet`) rather than a `WaxMenuButton`. An index bucket
+pins the entity behind it and offers nothing on genre, year, or unknown
+buckets, which have no entity. A search hit pins where its kind does
+(artist, album, book); a track or episode hit offers nothing, carrying
+no handle to its container. A listing row is the case that bent the
+premise: the row itself is a track, which cannot be pinned, so its
+overflow offers the album and the artist it belongs to - two targets,
+each named for what it is.
 
 `Prefs.copyWith` cannot null a field, so `clearTimezone` rebuilds the
 document by hand and every new field has to be added to that literal. A

@@ -11,6 +11,7 @@ import (
 // announces no transcript is a clean 404; and re-capturing an indexed
 // episode is a no-op success.
 func TestCaptureEpisodeTranscript(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 2)
 

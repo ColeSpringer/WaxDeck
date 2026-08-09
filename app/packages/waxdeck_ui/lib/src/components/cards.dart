@@ -431,6 +431,7 @@ class MediaListRow extends StatelessWidget {
     required this.data,
     this.onTap,
     this.onMore,
+    this.moreSemanticsId,
     this.onLongPress,
     this.onSelect,
     this.selectSemanticsId,
@@ -449,6 +450,11 @@ class MediaListRow extends StatelessWidget {
   /// The row's overflow: draws a button, and is what a long press and a
   /// right click open.
   final VoidCallback? onMore;
+
+  /// The overflow button's own identifier, for rows whose overflow a
+  /// test drives. The button is a control of its own beside the row's,
+  /// so it does not inherit the row's identifier.
+  final String? moreSemanticsId;
 
   /// A long press with no menu behind it. Starting a multi-select is
   /// the one so far. Kept apart from [onMore] because that one draws a
@@ -674,6 +680,7 @@ class MediaListRow extends StatelessWidget {
             glyph: WaxIcons.more,
             label: 'More for ${data.title}',
             size: 18,
+            semanticsId: moreSemanticsId,
             onPressed: onMore,
           ),
       ],

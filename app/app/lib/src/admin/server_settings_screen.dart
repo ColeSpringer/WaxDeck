@@ -62,10 +62,13 @@ class _Switches extends ConsumerWidget {
   final AdminSettings settings;
 
   Future<void> _save(WidgetRef ref, AdminSettings next) async {
+    // Taken before the write: a refusal has to be sayable even when the
+    // section has been left, and `ref` past its widget throws.
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(adminSettingsProvider.notifier).save(next);
     } on WaxDeckApiException catch (error) {
-      ref.read(shellMessengerProvider.notifier).show(error.message);
+      messenger.show(error.message);
     }
   }
 
@@ -212,6 +215,8 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
           'not become a slow one.',
           style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
         ),
+        const SizedBox(height: WaxSpace.s12),
+        const _TranscodingActivityLine(),
         const SizedBox(height: WaxSpace.s16),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -247,6 +252,73 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What the caps are bounding right now, above the caps themselves.
+///
+/// The copy is careful because the number is: it both under- and
+/// over-counts what a person means by "transcoding". A client that pins
+/// the source's own format is routed through the engine and charged a
+/// session though nothing is re-encoded, and HLS timeline segments are
+/// admitted by the streaming engine's own control and never counted
+/// here. Saying so is cheaper than an operator drawing the wrong
+/// conclusion from a number that looks exact.
+class _TranscodingActivityLine extends ConsumerWidget {
+  const _TranscodingActivityLine();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = WaxColors.of(context);
+    final activity = ref.watch(transcodingActivityProvider);
+    final count = activity.value?.activeSessions;
+    final headline = switch (activity) {
+      AsyncError() => 'The server did not say what is running.',
+      _ when count == null => 'Reading what is running...',
+      _ when count == 1 => '1 engine-backed stream right now.',
+      _ => '$count engine-backed streams right now.',
+    };
+    const caveat =
+        'Counts streams the engine is transcoding or remuxing, '
+        'including a client that forced the source\'s own format; HLS '
+        'timelines are admitted separately and are not counted here.';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        // The identifier and an explicit label ride the text region
+        // alone, MediaListRow's own placement rule: the label is built
+        // with excludeSemantics, and wrapping the refresh button too
+        // would take it out of reach of a screen reader and the suite
+        // both.
+        Expanded(
+          child: Semantics(
+            identifier: SemanticsIds.transcodingActivity,
+            container: true,
+            label: count != null ? '$headline $caveat' : headline,
+            excludeSemantics: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(headline, style: WaxType.titleItem),
+                if (count != null)
+                  Text(
+                    caveat,
+                    style: WaxType.bodySmall.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        WaxIconButton(
+          glyph: WaxIcons.refresh,
+          label: 'Refresh what is running',
+          semanticsId: SemanticsIds.transcodingActivityRefresh,
+          onPressed: () => ref.invalidate(transcodingActivityProvider),
         ),
       ],
     );

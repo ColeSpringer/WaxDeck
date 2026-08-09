@@ -332,6 +332,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**getLibraryReadOnly**](doc/AdminApi.md#getlibraryreadonly) | **GET** /libraries/{pid}/read-only | Read a library&#39;s read-only mode
 [*AdminApi*](doc/AdminApi.md) | [**getScrobblingConfig**](doc/AdminApi.md#getscrobblingconfig) | **GET** /admin/scrobbling | Read the server&#39;s scrobbling credentials state
 [*AdminApi*](doc/AdminApi.md) | [**getStagedRestore**](doc/AdminApi.md#getstagedrestore) | **GET** /admin/backups/restore | Inspect the staged restore
+[*AdminApi*](doc/AdminApi.md) | [**getTranscodingActivity**](doc/AdminApi.md#gettranscodingactivity) | **GET** /admin/transcoding/activity | Read what the transcoder is doing right now
 [*AdminApi*](doc/AdminApi.md) | [**getTranscodingLimits**](doc/AdminApi.md#gettranscodinglimits) | **GET** /admin/transcoding | Read the transcoding limits
 [*AdminApi*](doc/AdminApi.md) | [**importBackup**](doc/AdminApi.md#importbackup) | **POST** /admin/backups/import | Upload a backup archive
 [*AdminApi*](doc/AdminApi.md) | [**listAuditEvents**](doc/AdminApi.md#listauditevents) | **GET** /admin/audit | List admin-action audit events
@@ -869,6 +870,7 @@ Class | Method | HTTP request | Description
  - [ToolTasksCleared](doc/ToolTasksCleared.md)
  - [TopEntry](doc/TopEntry.md)
  - [TopList](doc/TopList.md)
+ - [TranscodingActivity](doc/TranscodingActivity.md)
  - [TranscodingLimits](doc/TranscodingLimits.md)
  - [Transcript](doc/Transcript.md)
  - [TranscriptCue](doc/TranscriptCue.md)

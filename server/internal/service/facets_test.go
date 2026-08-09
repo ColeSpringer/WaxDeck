@@ -55,6 +55,7 @@ func facetsOf(t *testing.T, f genreFixture, dimension string) []FacetBucket {
 // with an empty key and the one most likely to be filtered differently
 // by the drill than by the aggregation.
 func TestFacetDimensionsDrillToTheirCount(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -90,6 +91,7 @@ func TestFacetDimensionsDrillToTheirCount(t *testing.T) {
 // track lands in the unknown year bucket, which must open its items
 // rather than 400 on an empty key.
 func TestFacetUnknownBucketIsDrillable(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 
 	buckets := facetsOf(t, f, "year")
@@ -114,6 +116,7 @@ func TestFacetUnknownBucketIsDrillable(t *testing.T) {
 // none, and a minted "ar-" with no ULID after it would parse back as
 // malformed.
 func TestFacetEntityPidsOnEntityDimensions(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 
 	for _, tc := range []struct{ dimension, prefix string }{
@@ -148,6 +151,7 @@ func TestFacetEntityPidsOnEntityDimensions(t *testing.T) {
 // later pages are served from it, so a paging bug or an unstable sort
 // would show up here as a duplicate or a dropped bucket.
 func TestFacetPagingIsStableAcrossTheCache(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -190,6 +194,7 @@ func TestFacetPagingIsStableAcrossTheCache(t *testing.T) {
 // them from that cache would hand them counts over a library they were
 // never granted.
 func TestRestrictedFacetsAreComputedLive(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 
 	// Warm the cache with the full-visibility answer first: that is the
@@ -253,6 +258,7 @@ func servesFromCache(l *Library, dimension string) bool {
 // never moves -- and the browse tab would serve the previous spellings
 // until some unrelated item change happened to bump it.
 func TestVocabularyEditInvalidatesTheEnumerationCache(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 	tail := settleCatalogFeed(t, f.svc)
@@ -315,6 +321,7 @@ func TestVocabularyEditInvalidatesTheEnumerationCache(t *testing.T) {
 // generation again. A vocabulary edit moves nothing else, so "until
 // something moved it" can be a long time.
 func TestStaleEnumerationCannotEvictACurrentOne(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 	settleCatalogFeed(t, f.svc)
@@ -355,6 +362,7 @@ func TestStaleEnumerationCannotEvictACurrentOne(t *testing.T) {
 // library changes, so an offset into a re-sorted list skips or repeats
 // buckets. Resuming after a remembered position cannot.
 func TestFacetPagingSurvivesACountChange(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -404,6 +412,7 @@ func TestFacetPagingSurvivesACountChange(t *testing.T) {
 // a real-but-empty one, and must say so rather than answering an empty
 // page that reads like a legitimate result.
 func TestFacetDimensionsWithoutAnUnknownBucket(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Canonical")
 	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, false, false); err != nil {
@@ -429,6 +438,7 @@ func TestFacetDimensionsWithoutAnUnknownBucket(t *testing.T) {
 // client mint an unbounded number of cache entries holding identical
 // enumerations while the catalog sat idle.
 func TestTagDimensionsCanonicalize(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Canonical")
 	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, false, false); err != nil {
@@ -475,6 +485,7 @@ func TestTagDimensionsCanonicalize(t *testing.T) {
 // dimension is, so a filter can never reach the query grammar with a
 // field name the enumeration would have refused.
 func TestFacetRejectsUnknownDimensions(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 
 	for _, dimension := range []string{"", "artists", "tag.", "tag.BAD=KEY", "genre_pid"} {
@@ -497,6 +508,7 @@ func TestFacetRejectsUnknownDimensions(t *testing.T) {
 // a custom tag key facets and drills like a fixed dimension, and has no
 // unknown bucket, since only items carrying the key contribute.
 func TestTagFacetDimension(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Canonical")
 	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, false, false); err != nil {
@@ -523,6 +535,7 @@ func TestTagFacetDimension(t *testing.T) {
 // the media-type filter narrow together rather than one replacing the
 // other.
 func TestFacetComposesWithMediaType(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 
 	buckets := facetsOf(t, f, "kind")
@@ -546,6 +559,7 @@ func TestFacetComposesWithMediaType(t *testing.T) {
 // bracket; and equal labels stay in a fixed order, so a keyset cursor
 // can resume on one.
 func TestFacetLabelOrderIsAnAlphabet(t *testing.T) {
+	t.Parallel()
 	buckets := []FacetBucket{
 		facetFolded(FacetBucket{Key: "u", Label: "[No Genre]", Count: 9, Unknown: true}),
 		facetFolded(FacetBucket{Key: "z", Label: "Zebra", Count: 1}),
@@ -578,6 +592,7 @@ func TestFacetLabelOrderIsAnAlphabet(t *testing.T) {
 // prove is that paging it visits every bucket exactly once and hands
 // back the same set the other order does.
 func TestFacetLabelOrderPagesTheWholeDimension(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -626,6 +641,7 @@ func TestFacetLabelOrderPagesTheWholeDimension(t *testing.T) {
 // differently, so a cursor carried across a sort toggle would silently
 // skip or repeat buckets. It is refused instead.
 func TestFacetCursorBelongsToItsOrder(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -663,6 +679,7 @@ func TestFacetCursorBelongsToItsOrder(t *testing.T) {
 // The fold-alignment assertion, which "startsAt lands where paging
 // would have" cannot catch: a shared wrong fold fails both the same.
 func TestFacetFoldTrimsLeadingWhitespace(t *testing.T) {
+	t.Parallel()
 	buckets := []FacetBucket{
 		facetFolded(FacetBucket{Key: "a", Label: "Abba", Count: 3}),
 		facetFolded(FacetBucket{Key: "w", Label: " Weeknd", Count: 2}),
@@ -681,6 +698,7 @@ func TestFacetFoldTrimsLeadingWhitespace(t *testing.T) {
 // Each rule the parameter's description states; every one is a real
 // case a rail tap produces.
 func TestFacetStartsAtSemantics(t *testing.T) {
+	t.Parallel()
 	buckets := []FacetBucket{
 		facetFolded(FacetBucket{Key: "u", Label: "[No Genre]", Count: 9, Unknown: true}),
 		facetFolded(FacetBucket{Key: "a", Label: "Ambient", Count: 4}),
@@ -713,6 +731,7 @@ func TestFacetStartsAtSemantics(t *testing.T) {
 
 // Through the endpoint, where the refusals live.
 func TestFacetStartsAtOverTheCatalog(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -768,6 +787,7 @@ func TestFacetStartsAtOverTheCatalog(t *testing.T) {
 // tag.mood and tag.MOOD are one dimension, so a scope keyed on the raw
 // spelling would refuse a cursor the caller could reuse.
 func TestBrowseCursorScopeUsesTheCanonicalDimension(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	for _, title := range []string{"Canonical", "Synonym", "Lowercase"} {
 		it := f.itemNamed(t, title)
@@ -803,6 +823,7 @@ func TestBrowseCursorScopeUsesTheCanonicalDimension(t *testing.T) {
 // A cursor carries its dimension: replayed on another it used to seek
 // among the wrong buckets and answer an empty page with no error.
 func TestFacetCursorBelongsToItsDimension(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -833,6 +854,7 @@ func TestFacetCursorBelongsToItsDimension(t *testing.T) {
 // replaces was itself pinned: whichever way this goes it should be a
 // decision, not a side effect of what the query happened to carry.
 func TestBrowseRejectsAStaleUserOnEveryList(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	stale := &UserCtx{ID: f.uc.ID, CatalogPID: "us-01JZXNOTAUSERATALL0000000", AllLibraries: true}
 

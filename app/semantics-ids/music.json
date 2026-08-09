@@ -8,12 +8,14 @@
     "entityPlay": "entity-play",
     "entityShuffle": "entity-shuffle",
     "indexBucket": "index-bucket-{index}",
+    "indexBucketMore": "index-bucket-more-{index}",
     "indexCount": "index-count",
     "indexItem": "index-item-{index}",
     "indexRail": "index-rail",
     "indexRailLetter": "index-rail-{letter}",
     "indexRailStart": "index-rail-start",
     "indexSort": "index-sort",
+    "listingRowMore": "listing-row-more-{pid}",
     "listingShuffle": "listing-shuffle",
     "musicTile": "music-tile-{name}"
   }

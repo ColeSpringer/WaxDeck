@@ -12,6 +12,7 @@ import (
 // on write and rejects the whole edit for one bad value, so bookEnrichEdits
 // drops the ISBN and keeps every other fill-when-empty field.
 func TestBookEnrichEditsSkipsMalformedISBN(t *testing.T) {
+	t.Parallel()
 	it := &model.ItemView{Kind: model.KindBook}
 	detail := &model.BookDetail{} // nothing filled yet, so every field is a candidate
 	cand := &enrich.Candidate{
@@ -38,6 +39,7 @@ func TestBookEnrichEditsSkipsMalformedISBN(t *testing.T) {
 
 // A valid ISBN rides through, and nothing is reported as skipped.
 func TestBookEnrichEditsAppliesValidISBN(t *testing.T) {
+	t.Parallel()
 	it := &model.ItemView{Kind: model.KindBook}
 	detail := &model.BookDetail{}
 	cand := &enrich.Candidate{ISBN: "9780306406157"} // valid ISBN-13
@@ -56,6 +58,7 @@ func TestBookEnrichEditsAppliesValidISBN(t *testing.T) {
 // anything else, so a provider year that is not one (a full date, say) is
 // dropped like a bad ISBN while the provider's other fields still land.
 func TestBookEnrichEditsYearMustBeNumeric(t *testing.T) {
+	t.Parallel()
 	it := &model.ItemView{Kind: model.KindBook} // Year 0, so year is a candidate
 	detail := &model.BookDetail{}
 
@@ -87,6 +90,7 @@ func TestBookEnrichEditsYearMustBeNumeric(t *testing.T) {
 // A locked field is never overwritten, and a field the item already carries is
 // left alone - bookEnrichEdits only fills genuine gaps.
 func TestBookEnrichEditsRespectsLocksAndExisting(t *testing.T) {
+	t.Parallel()
 	it := &model.ItemView{Kind: model.KindBook, Narrator: "Existing Reader"}
 	detail := &model.BookDetail{Publisher: "Existing Publisher"}
 	cand := &enrich.Candidate{

@@ -8,6 +8,7 @@ import (
 // A list row used to report zero for both, because it has no members to
 // add up. It computes them now, so the two surfaces have to agree.
 func TestSubsonicPlaylistTotalsAgreeAcrossSurfaces(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	items := h.items(t, "")

@@ -117,6 +117,7 @@ func subsonicPlaylists(t *testing.T, h *harness, secret string) []struct {
 // first-party art endpoint and the compatibility surface serve the same
 // bytes under the same validator, with no per-surface injection.
 func TestPlaylistCoverAcrossSurfaces(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	items := h.items(t, "")

@@ -165,6 +165,16 @@ func (s *Server) GetTranscodingLimits(ctx context.Context, _ GetTranscodingLimit
 	return GetTranscodingLimits200JSONResponse(transcodingLimitsJSON(lim)), nil
 }
 
+func (s *Server) GetTranscodingActivity(ctx context.Context, _ GetTranscodingActivityRequestObject) (GetTranscodingActivityResponseObject, error) {
+	p, ok := principalFromContext(ctx)
+	if !ok || !p.IsAdmin() {
+		return GetTranscodingActivity403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	return GetTranscodingActivity200JSONResponse(TranscodingActivity{
+		ActiveSessions: s.svc.ActiveTranscodeSessions(),
+	}), nil
+}
+
 func (s *Server) PutTranscodingLimits(ctx context.Context, req PutTranscodingLimitsRequestObject) (PutTranscodingLimitsResponseObject, error) {
 	uc, p, err := s.requireUserCtx(ctx)
 	if err != nil {

@@ -47,6 +47,7 @@ func reportListen(t *testing.T, h *harness, sessionID, pid string, durationMS in
 // a shared instance gets wrong: one listener's untouched album is
 // another's most played.
 func TestCollectionBrowseListsOverHTTP(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	all := h.items(t, "?mediaType=music")
@@ -132,6 +133,7 @@ func TestCollectionBrowseListsOverHTTP(t *testing.T) {
 // comes back is of the asked-for type and that the cursor still walks
 // the whole list; both are asserted here rather than a page length.
 func TestBrowseMediaTypeFilterOverHTTP(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	if _, err := fixtures.GenerateBook(h.library); err != nil {
 		t.Fatal(err)

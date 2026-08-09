@@ -160,7 +160,12 @@ like a missing feature.
 
 The config's `webServer` starts `server/waxdeck` and waits on
 `/api/v1/health`; set `WAXDECK_BASE_URL` to target an already-running
-instance instead, in which case `make e2e` rebuilds nothing.
+instance instead, in which case `make e2e` rebuilds nothing. A second,
+rootless server (`run-wizard-stack.sh`, port 4430, no sidecar) backs
+the `wizard` project alone: the first-run wizard's entry condition - an
+administrator whose server has no libraries - can never hold on the
+main stack, whose fixture root is configured at boot. External runs
+skip the wizard project, since one URL names one server.
 
 Specs run against the full Chromium in its new headless mode
 (`channel: 'chromium'`), not the `chrome-headless-shell` Playwright

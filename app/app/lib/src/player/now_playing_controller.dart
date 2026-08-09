@@ -267,6 +267,19 @@ class NowPlayingController extends Notifier<NowPlaying> {
     ]);
   }
 
+  /// The same verb, landing at a chosen slot: what a row dropped onto
+  /// the queue panel does. The summaries are seeded the same way, so
+  /// the rows have titles before anything plays them.
+  void enqueueAt(List<ItemSummary> items, int at) {
+    if (items.isEmpty) return;
+    for (final item in items) {
+      _known[item.pid] = item;
+    }
+    ref.read(queueControllerProvider.notifier).insertAt([
+      for (final item in items) item.pid,
+    ], at);
+  }
+
   /// The same verb for a queue named by pid alone, which is what
   /// arrives from outside the widget tree: a queue handed to this
   /// endpoint by another device, or a browse leaf tapped on a head

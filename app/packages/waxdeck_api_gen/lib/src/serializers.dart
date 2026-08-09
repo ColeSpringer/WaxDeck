@@ -309,6 +309,7 @@ import 'package:waxdeck_api_gen/src/model/tool_task_page.dart';
 import 'package:waxdeck_api_gen/src/model/tool_tasks_cleared.dart';
 import 'package:waxdeck_api_gen/src/model/top_entry.dart';
 import 'package:waxdeck_api_gen/src/model/top_list.dart';
+import 'package:waxdeck_api_gen/src/model/transcoding_activity.dart';
 import 'package:waxdeck_api_gen/src/model/transcoding_limits.dart';
 import 'package:waxdeck_api_gen/src/model/transcript.dart';
 import 'package:waxdeck_api_gen/src/model/transcript_cue.dart';
@@ -649,6 +650,7 @@ part 'serializers.g.dart';
   ToolTasksCleared,
   TopEntry,
   TopList,
+  TranscodingActivity,
   TranscodingLimits,
   Transcript,
   TranscriptCue,

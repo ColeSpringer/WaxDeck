@@ -13,6 +13,7 @@ import (
 // The directory is a public internet service, so every case here runs
 // against a fake exactly as the radio directory's tests do.
 func TestPodcastDirectorySearch(t *testing.T) {
+	t.Parallel()
 	const body = `{"resultCount":3,"results":[
 	  {"collectionName":"Song Exploder","artistName":"Hrishikesh Hirway",
 	   "feedUrl":"https://feeds.example/song-exploder",
@@ -88,6 +89,7 @@ func TestPodcastDirectorySearch(t *testing.T) {
 // busy directory rather than a broken WaxDeck. Untranslated it would
 // reach the client as a 500.
 func TestPodcastDirectoryThrottleIsDirectoryUnavailable(t *testing.T) {
+	t.Parallel()
 	directory := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
@@ -109,6 +111,7 @@ func TestPodcastDirectoryThrottleIsDirectoryUnavailable(t *testing.T) {
 }
 
 func TestPodcastDirectoryUnreachableIsTyped(t *testing.T) {
+	t.Parallel()
 	directory := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.PodcastDirectoryBase = directory.URL

@@ -109,6 +109,7 @@ func openCatalog(t *testing.T, dataDir, libDir string, reset bool) (*Library, fu
 // refusal names a recovery a WaxDeck operator can actually perform. The catalog
 // message names `waxbin db reset`, a CLI they do not have.
 func TestStaleBaselineCatalogIsRefusedWithAWaxDeckRecovery(t *testing.T) {
+	t.Parallel()
 	dataDir, libDir := newStaleCatalog(t)
 
 	svc, stop, err := openCatalog(t, dataDir, libDir, false)
@@ -136,6 +137,7 @@ func TestStaleBaselineCatalogIsRefusedWithAWaxDeckRecovery(t *testing.T) {
 // With the flag set, startup moves the stale catalog aside and comes up on a
 // fresh one. The previous catalog is renamed, not deleted.
 func TestResetCatalogMovesTheStaleCatalogAsideAndStarts(t *testing.T) {
+	t.Parallel()
 	dataDir, libDir := newStaleCatalog(t)
 
 	svc, stop, err := openCatalog(t, dataDir, libDir, true)
@@ -176,6 +178,7 @@ func TestResetCatalogMovesTheStaleCatalogAsideAndStarts(t *testing.T) {
 // opened, never moved aside -- otherwise leaving the flag set in a compose file
 // would discard the catalog on every restart.
 func TestResetCatalogLeavesAHealthyCatalogAlone(t *testing.T) {
+	t.Parallel()
 	dataDir, libDir := newStaleCatalog(t)
 
 	// Reset once to get a healthy catalog, then restart with the flag still on.
@@ -211,6 +214,7 @@ func TestResetCatalogLeavesAHealthyCatalogAlone(t *testing.T) {
 // the cure, so it has to answer false for everything that is not a baseline
 // mismatch -- a missing file and a file that is not a catalog included.
 func TestStaleBaselineOnlyAnswersForABaselineMismatch(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 
@@ -237,6 +241,7 @@ func TestStaleBaselineOnlyAnswersForABaselineMismatch(t *testing.T) {
 // be left behind, or the backup that makes a mis-fire recoverable is missing
 // the newest writes.
 func TestMoveCatalogAsideMovesTheSidecarsWithIt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	db := filepath.Join(dir, "waxbin.db")
 	for _, suffix := range []string{"", "-wal", "-shm"} {
@@ -272,6 +277,7 @@ func TestMoveCatalogAsideMovesTheSidecarsWithIt(t *testing.T) {
 // A second reset inside the same second must not overwrite the backup the first
 // one just made: the timestamp is second-granular and os.Rename is silent.
 func TestMoveCatalogAsideTakesTheFirstFreeName(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	db := filepath.Join(dir, "waxbin.db")
 
@@ -302,6 +308,7 @@ func TestMoveCatalogAsideTakesTheFirstFreeName(t *testing.T) {
 }
 
 func TestRootsNotConfiguredNamesOnlyTheRootsStartupWillNotRestore(t *testing.T) {
+	t.Parallel()
 	got := rootsNotConfigured(
 		[]string{"/music", "/added-at-runtime", "/podcasts"},
 		[]Root{{Name: "music", Path: "/music"}, {Name: "pod", Path: "/podcasts"}},

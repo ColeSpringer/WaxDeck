@@ -11,6 +11,7 @@ import (
 // slots, possibly empty) for a recognized entity, so it distinguishes a
 // recognized show from the old unrecognized-prefix 404.
 func TestPodcastShowArtRoles(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 1)
 	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
@@ -29,6 +30,7 @@ func TestPodcastShowArtRoles(t *testing.T) {
 // slot reads back its own image; clearing the front drops own-art while the
 // back slot survives; and a bad role is rejected.
 func TestArtworkRolesAndLevelScope(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	page := h.items(t, "")
 	if len(page.Items) == 0 {
@@ -106,6 +108,7 @@ func TestArtworkRolesAndLevelScope(t *testing.T) {
 // revalidates again on the next paint, which is the round trip this is
 // here to remove.
 func TestArtCacheHeaders(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	page := h.items(t, "")
 	if len(page.Items) == 0 {

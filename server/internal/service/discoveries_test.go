@@ -130,6 +130,7 @@ func (f discoveryFixture) pendingEntries(t *testing.T) []wdb.ReviewEntry {
 // into the review queue: the first pass anchors at the tail, so an
 // upgrade does not drop an existing library into somebody's inbox.
 func TestDiscoveryFirstPassSkipsTheExistingCatalog(t *testing.T) {
+	t.Parallel()
 	f := newDiscoveryFixture(t)
 
 	f.sweepToQuiet(t)
@@ -141,6 +142,7 @@ func TestDiscoveryFirstPassSkipsTheExistingCatalog(t *testing.T) {
 // What a later scan discovers does become an entry, and an album's files
 // make one entry between them rather than one each.
 func TestDiscoveryOpensOneEntryPerAlbum(t *testing.T) {
+	t.Parallel()
 	f := newDiscoveryFixture(t)
 	f.sweepToQuiet(t)
 
@@ -184,6 +186,7 @@ func TestDiscoveryOpensOneEntryPerAlbum(t *testing.T) {
 // albums it did not reach without re-reading the change rows or
 // rebuilding the units it already opened.
 func TestDiscoveryCappedPassAdvancesToWhereItStopped(t *testing.T) {
+	t.Parallel()
 	f := newDiscoveryFixture(t)
 	f.sweepToQuiet(t)
 
@@ -251,6 +254,7 @@ func TestDiscoveryCappedPassAdvancesToWhereItStopped(t *testing.T) {
 // "ÉTÉ" as "ÉtÉ" against Go's "été", so the album would miss its entry
 // and open a fresh one on every tick, forever.
 func TestDiscoveryGuardFoldsNonAsciiTitles(t *testing.T) {
+	t.Parallel()
 	f := newDiscoveryFixture(t)
 	f.sweepToQuiet(t)
 
@@ -299,6 +303,7 @@ func TestDiscoveryGuardFoldsNonAsciiTitles(t *testing.T) {
 // "this collection is already curated", and filling the queue with
 // entries nobody will decide is the touching it forbids.
 func TestDiscoveryRespectsMatchingOff(t *testing.T) {
+	t.Parallel()
 	f := newDiscoveryFixture(t)
 	f.sweepToQuiet(t)
 

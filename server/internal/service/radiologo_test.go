@@ -26,6 +26,7 @@ func cachedLogo(l *Library, apiStationPID string) (RadioLogo, bool) {
 // The logo cache's own behaviour, exercised directly: these methods touch
 // nothing but the cache fields, so they need no database behind them.
 func TestRadioLogoCache(t *testing.T) {
+	t.Parallel()
 	l := newLogoCacheLibrary()
 	hit := RadioLogo{Bytes: []byte("bytes"), MimeType: "image/png", ETag: `"x"`}
 
@@ -74,6 +75,7 @@ func TestRadioLogoCache(t *testing.T) {
 // logo fetched a moment ago would be evicted ahead of one cached hours
 // earlier, which is the opposite of what the order is for.
 func TestRadioLogoCacheReorder(t *testing.T) {
+	t.Parallel()
 	l := newLogoCacheLibrary()
 	for _, pid := range []string{"rs-1", "rs-2", "rs-3"} {
 		l.storeRadioLogo(pid, RadioLogo{Bytes: []byte("x")})
@@ -99,6 +101,7 @@ func TestRadioLogoCacheReorder(t *testing.T) {
 // first's channel rather than a claim of its own, and gets nothing until
 // the first releases it.
 func TestRadioLogoSingleFlight(t *testing.T) {
+	t.Parallel()
 	l := newLogoCacheLibrary()
 
 	if _, hit, wait := l.claimRadioLogo("rs-1"); hit || wait != nil {
@@ -136,6 +139,7 @@ func TestRadioLogoSingleFlight(t *testing.T) {
 // on one station can both reach the store, and of two answers about the
 // same station the one with a picture in it is the one to keep.
 func TestRadioLogoMissDoesNotClobberHit(t *testing.T) {
+	t.Parallel()
 	l := newLogoCacheLibrary()
 	l.storeRadioLogo("rs-1", RadioLogo{Bytes: []byte("bytes"), MimeType: "image/png"})
 	l.storeRadioLogo("rs-1", RadioLogo{})
@@ -163,6 +167,7 @@ func TestRadioLogoMissDoesNotClobberHit(t *testing.T) {
 // Nothing in the cache path races: the store and the claim take the same
 // lock, so the detector has to agree under -race.
 func TestRadioLogoCacheConcurrent(t *testing.T) {
+	t.Parallel()
 	l := newLogoCacheLibrary()
 	var wg sync.WaitGroup
 	for i := range 8 {
@@ -185,6 +190,7 @@ func TestRadioLogoCacheConcurrent(t *testing.T) {
 // The byte budget evicts oldest-first, and never empties itself: the
 // entry just stored is the one the caller is about to serve.
 func TestRadioLogoCacheEvicts(t *testing.T) {
+	t.Parallel()
 	l := newLogoCacheLibrary()
 	big := make([]byte, radioLogoCacheBytes/2+1)
 	l.storeRadioLogo("rs-old", RadioLogo{Bytes: big})

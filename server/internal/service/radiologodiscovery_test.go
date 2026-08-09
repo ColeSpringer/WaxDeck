@@ -25,6 +25,7 @@ func mustURL(t *testing.T, raw string) *url.URL {
 }
 
 func TestIconLinksIn(t *testing.T) {
+	t.Parallel()
 	base := mustURL(t, "https://station.example/index.html")
 
 	t.Run("apple-touch-icon leads, og:image trails", func(t *testing.T) {
@@ -103,6 +104,7 @@ func TestIconLinksIn(t *testing.T) {
 }
 
 func TestRadioLogoCandidates(t *testing.T) {
+	t.Parallel()
 	l := &Library{}
 
 	// With no homepage the stream host is the only lead there is, which
@@ -134,6 +136,7 @@ func TestRadioLogoCandidates(t *testing.T) {
 // page listing several sharing cards must not spend every slot on them
 // and leave the conventional favicon unproposed.
 func TestRadioLogoCandidateOrderSurvivesTheBudget(t *testing.T) {
+	t.Parallel()
 	declared := iconLinks{
 		icons: []string{"https://station.example/icon.png"},
 		og: []string{

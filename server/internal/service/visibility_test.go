@@ -11,6 +11,7 @@ import (
 // spellings of one question, and the count moved from a path prefix to the
 // catalog's library dimension. Pin that they still agree.
 func TestLibraryItemCountAgreesWithALibraryScopedQuery(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 
 	libs, err := svc.LibrariesWithCounts(ctx)
@@ -49,6 +50,7 @@ func TestLibraryItemCountAgreesWithALibraryScopedQuery(t *testing.T) {
 }
 
 func TestMatchDir(t *testing.T) {
+	t.Parallel()
 	sep := string(filepath.Separator)
 	dirs := []libraryDir{
 		// Longest first, as attribution sorts them; the sibling with the
@@ -82,6 +84,7 @@ func TestMatchDir(t *testing.T) {
 }
 
 func TestTruncateUTF8(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in   string
 		max  int

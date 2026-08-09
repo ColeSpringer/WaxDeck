@@ -5,24 +5,57 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"flag"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"golang.org/x/crypto/argon2"
 )
 
-// Argon2id parameters. RFC 9106's second recommended option (64 MiB,
-// t=3, p=1 is the first; this trades one lane and more passes for a
-// memory footprint a Raspberry-Pi-class host can absorb under a burst
-// of concurrent logins, with the login rate limiter bounding the
-// worst case).
 const (
-	argonTime    = 3
-	argonMemory  = 64 * 1024 // KiB
-	argonThreads = 1
 	argonKeyLen  = 32
 	argonSaltLen = 16
 )
+
+// productionParams is what a shipped server derives new hashes with:
+// RFC 9106's second recommended option (64 MiB, t=3, p=1 is the first;
+// this trades one lane and more passes for a memory footprint a
+// Raspberry-Pi-class host can absorb under a burst of concurrent
+// logins, with the login rate limiter bounding the worst case).
+var productionParams = argonParams{memory: 64 * 1024, time: 3, threads: 1}
+
+// hashParams is the override WeakenKDFForTesting installs, nil until
+// it does. Atomic rather than a plain var: the tests that weaken it run
+// in parallel, so a write racing the reads in every concurrent
+// HashPassword would be a data race whatever the ordering happened to
+// be. Verification honors whatever parameters a stored hash carries, so
+// nothing here can strand a hash.
+var hashParams atomic.Pointer[argonParams]
+
+func currentParams() argonParams {
+	if p := hashParams.Load(); p != nil {
+		return *p
+	}
+	return productionParams
+}
+
+// WeakenKDFForTesting drops new hashes to argon2id's cheapest
+// parameters, for test suites that mint accounts by the hundred and
+// would otherwise spend seconds of memory-hard hashing per signup
+// under the race detector. Call it from TestMain.
+//
+// The guard reads the test flag set rather than testing.Testing():
+// importing testing here would link the test framework and the runtime
+// tracer into the shipped server binary, which is the one host these
+// parameters were chosen for. `flag` is already linked - the command
+// parses its own - so this costs the binary nothing.
+func WeakenKDFForTesting() {
+	if flag.Lookup("test.v") == nil {
+		panic("auth: WeakenKDFForTesting called outside a test binary")
+	}
+	hashParams.Store(&argonParams{memory: 8, time: 1, threads: 1})
+}
 
 // HashPassword derives an argon2id hash in PHC string format.
 func HashPassword(password string) (string, error) {
@@ -30,9 +63,10 @@ func HashPassword(password string) (string, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("auth: reading salt: %w", err)
 	}
-	key := argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
+	p := currentParams()
+	key := argon2.IDKey([]byte(password), salt, p.time, p.memory, p.threads, argonKeyLen)
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
-		argon2.Version, argonMemory, argonTime, argonThreads,
+		argon2.Version, p.memory, p.time, p.threads,
 		base64.RawStdEncoding.EncodeToString(salt),
 		base64.RawStdEncoding.EncodeToString(key)), nil
 }

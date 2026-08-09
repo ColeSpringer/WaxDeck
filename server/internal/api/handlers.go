@@ -428,7 +428,7 @@ func (s *Server) ResolveEntities(ctx context.Context, req ResolveEntitiesRequest
 	if req.Body == nil {
 		return ResolveEntities400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
-	cards, err := s.svc.EntityCards(ctx, uc, req.Body.Pids)
+	cards, departed, err := s.svc.EntityCards(ctx, uc, req.Body.Pids)
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
 			return ResolveEntities400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -436,6 +436,9 @@ func (s *Server) ResolveEntities(ctx context.Context, req ResolveEntitiesRequest
 		return nil, err
 	}
 	out := EntityCardList{Entities: make([]EntityCard, 0, len(cards))}
+	if len(departed) > 0 {
+		out.Departed = &departed
+	}
 	for _, c := range cards {
 		card := EntityCard{
 			Pid:   c.PID,

@@ -58,6 +58,7 @@ func newAdminFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 }
 
 func TestSignupPendingFlow(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	// Closed by default: no invite, no open signup.
@@ -106,6 +107,7 @@ func TestSignupPendingFlow(t *testing.T) {
 }
 
 func TestSignupRejectFreesUsername(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
 		t.Fatal(err)
@@ -123,6 +125,7 @@ func TestSignupRejectFreesUsername(t *testing.T) {
 }
 
 func TestInviteLifecycle(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	iv, err := svc.CreateInvite(ctx, admin, InviteCreate{Note: "for grandma", MaxUses: 1})
@@ -177,6 +180,7 @@ func TestInviteLifecycle(t *testing.T) {
 }
 
 func TestAuditRecordsAndFilters(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
 		t.Fatal(err)
@@ -200,6 +204,7 @@ func TestAuditRecordsAndFilters(t *testing.T) {
 }
 
 func TestSchedulesAndReadOnlyToggles(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	rows := svc.Schedules(ctx)
@@ -242,6 +247,7 @@ func TestSchedulesAndReadOnlyToggles(t *testing.T) {
 }
 
 func TestLastfmRuntimeCredentials(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	// Unconfigured: the slot is unavailable and the state says none.

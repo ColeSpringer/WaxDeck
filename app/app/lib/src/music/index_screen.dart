@@ -4,7 +4,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../home/pin_action.dart';
 import '../providers.dart';
+import '../queue/queue_drag.dart';
 import '../search/search_chrome.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -430,15 +432,44 @@ class _BucketRow extends ConsumerWidget {
               .source(ref.watch(repositoryProvider).artUrlFor(entityPid))
         : null;
 
-    return MediaListRow(
-      data: MediaTileData(
-        title: bucket.label,
-        subtitle: bucket.count == 1 ? '1 track' : '${bucket.count} tracks',
-        artwork: artwork,
-        shape: dimension.shape,
-        semanticsId: SemanticsIds.indexBucket(index),
+    return QueueDraggable(
+      // A bucket is a name and a count with no items in hand, so what
+      // it hands over is the query rather than the rows: the tracks
+      // arrive when the drop lands.
+      drop: QueueDrop.bucket(
+        label: bucket.label,
+        repository: ref.watch(repositoryProvider),
+        facet: dimension.wireName,
+        facetKey: bucket.key,
       ),
-      onTap: onTap,
+      child: MediaListRow(
+        data: MediaTileData(
+          title: bucket.label,
+          subtitle: bucket.count == 1 ? '1 track' : '${bucket.count} tracks',
+          artwork: artwork,
+          shape: dimension.shape,
+          semanticsId: SemanticsIds.indexBucket(index),
+        ),
+        onTap: onTap,
+        // Pinning without opening first (ADR-0054's deferred rollout).
+        // Only where the bucket stands for an entity: a genre or a year
+        // is a filter, not a thing, and the unknown bucket has nothing
+        // behind it.
+        onMore: entityPid != null
+            ? () => showPinSheet(
+                context,
+                ref,
+                targets: <PinTarget>[
+                  (
+                    pid: entityPid,
+                    what: dimension.wireName == 'album' ? 'album' : 'artist',
+                    name: bucket.label,
+                  ),
+                ],
+              )
+            : null,
+        moreSemanticsId: SemanticsIds.indexBucketMore(index),
+      ),
     );
   }
 }

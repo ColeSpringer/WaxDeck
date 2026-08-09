@@ -10,6 +10,7 @@ import (
 // folding, exclude beating include, and the two ways a filter can be
 // nothing at all.
 func TestEpisodeFilterAdmits(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		filter EpisodeFilter
@@ -50,6 +51,7 @@ func TestEpisodeFilterAdmits(t *testing.T) {
 // episode is one file for every subscriber, so one subscriber wanting
 // it is enough, and another's exclude cannot veto that.
 func TestEpisodeFilterUnion(t *testing.T) {
+	t.Parallel()
 	strict := EpisodeFilter{Include: []string{"mailbag"}}
 	broad := EpisodeFilter{Exclude: []string{"bonus"}}
 	filters := []EpisodeFilter{strict, broad}
@@ -73,6 +75,7 @@ func TestEpisodeFilterUnion(t *testing.T) {
 // trimmed and capped, and an all-blank list stored as nothing rather
 // than as an empty filter.
 func TestNormalizeTerms(t *testing.T) {
+	t.Parallel()
 	if got := normalizeTerms(nil); got != nil {
 		t.Errorf("normalizeTerms(nil) = %v, want nil", got)
 	}

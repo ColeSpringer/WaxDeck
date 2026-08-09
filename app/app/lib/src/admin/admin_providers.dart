@@ -45,6 +45,17 @@ final transcodingLimitsProvider =
       TranscodingLimitsController.new,
     );
 
+/// What the transcoder is doing right now, read once when the settings
+/// screen opens and again when somebody asks.
+///
+/// Deliberately not polled: this is a form being edited, not a monitor,
+/// and a number that moved while nobody was looking is a distraction
+/// under three fields somebody is typing in. The refresh affordance is
+/// the whole of the freshness story.
+final transcodingActivityProvider = FutureProvider<TranscodingActivity>(
+  (ref) => ref.watch(repositoryProvider).getTranscodingActivity(),
+);
+
 /// The three maintenance schedules, refetched after every save so last
 /// and next run times stay honest.
 class SchedulesController extends AsyncNotifier<List<Schedule>> {

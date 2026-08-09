@@ -13,6 +13,7 @@ import (
 // has to win over the generated router's /api/v1/ prefix, or the strict
 // stub answers instead and nothing is ranged.
 func TestBackupArchiveServesRanges(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	ctx := context.Background()
 

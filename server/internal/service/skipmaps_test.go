@@ -32,6 +32,7 @@ func (stubFlowJobs) JobStatus(context.Context, string) (string, float64, int, st
 func (stubFlowJobs) DownloadJobResult(context.Context, string, int, string) error { return nil }
 
 func TestSilenceMapStale(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		flow  FlowJobs

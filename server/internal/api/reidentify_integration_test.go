@@ -111,6 +111,7 @@ func reidentifyHarness(t *testing.T, src *recordingSource) *harness {
 }
 
 func TestReidentifySearchesTheTypedValues(t *testing.T) {
+	t.Parallel()
 	src := &recordingSource{}
 	h := reidentifyHarness(t, src)
 
@@ -167,6 +168,7 @@ func TestReidentifySearchesTheTypedValues(t *testing.T) {
 // after the run, so an in-place one would replace the stored source
 // tags with whatever was last searched for.
 func TestReidentifyLeavesStoredTagsByteIdentical(t *testing.T) {
+	t.Parallel()
 	src := &recordingSource{}
 	h := reidentifyHarness(t, src)
 
@@ -212,6 +214,7 @@ func storedTags(t *testing.T, h *harness, entryID string) map[string]string {
 }
 
 func TestReidentifyClearsTheOverrideWithAnEmptyBody(t *testing.T) {
+	t.Parallel()
 	src := &recordingSource{}
 	h := reidentifyHarness(t, src)
 
@@ -251,6 +254,7 @@ func TestReidentifyClearsTheOverrideWithAnEmptyBody(t *testing.T) {
 }
 
 func TestReidentifyRefusesADecidedEntry(t *testing.T) {
+	t.Parallel()
 	src := &recordingSource{}
 	h := reidentifyHarness(t, src)
 
@@ -272,6 +276,7 @@ func TestReidentifyRefusesADecidedEntry(t *testing.T) {
 }
 
 func TestReidentifyIsInvisibleToOtherAccounts(t *testing.T) {
+	t.Parallel()
 	src := &recordingSource{}
 	h := reidentifyHarness(t, src)
 
@@ -302,6 +307,7 @@ func TestReidentifyIsInvisibleToOtherAccounts(t *testing.T) {
 // Reachable only on a declined submission still pending, which is one
 // whose automatic import refused - here, a second copy.
 func TestReidentifyClearsTheDeclinedMark(t *testing.T) {
+	t.Parallel()
 	src := &recordingSource{answer: obviousRelease()}
 	h := reidentifyHarness(t, src)
 
@@ -337,6 +343,7 @@ func TestReidentifyClearsTheDeclinedMark(t *testing.T) {
 // A loose acquisition is the shape the parse is built for, so what it
 // read is offered rather than making somebody retype what they see.
 func TestAcquisitionSuggestsTheParsedQuery(t *testing.T) {
+	t.Parallel()
 	media := t.TempDir()
 	src := &fakeAcquireSource{
 		playlistURL: "https://tube.example/watch?v=lone",
@@ -403,6 +410,7 @@ func TestAcquisitionSuggestsTheParsedQuery(t *testing.T) {
 // Uploads carry whatever tags the person curating them wrote, so there
 // is nothing to guess and nothing is offered.
 func TestUploadsCarryNoSuggestion(t *testing.T) {
+	t.Parallel()
 	h := reidentifyHarness(t, &recordingSource{})
 	up := uploadDeclaring(t, h, h.token, looseTrack(t, "no-guess"), nil)
 	drainMatches(t, h)
@@ -414,6 +422,7 @@ func TestUploadsCarryNoSuggestion(t *testing.T) {
 // Searched as typed: every part of the derivation that helps a
 // machine-written title hurts a hand-written one.
 func TestReidentifySearchesTypedValuesVerbatim(t *testing.T) {
+	t.Parallel()
 	src := &recordingSource{}
 	h := reidentifyHarness(t, src)
 
@@ -464,6 +473,7 @@ func (b *blockingSource) SearchRecordings(ctx context.Context, artist, title str
 // A re-identify landing while the engine works must not be swallowed:
 // the worker's full-row write would put its pre-typing payload back.
 func TestReidentifyDuringAnInFlightRunIsNotLost(t *testing.T) {
+	t.Parallel()
 	src := &blockingSource{
 		entered: make(chan struct{}),
 		release: make(chan struct{}),
@@ -532,6 +542,7 @@ func TestReidentifyDuringAnInFlightRunIsNotLost(t *testing.T) {
 // A title names one track: on a unit of several the server ignores it,
 // because scoring pairs files to release tracks by title.
 func TestReidentifyIgnoresATrackTitleOnAMultiFileUnit(t *testing.T) {
+	t.Parallel()
 	src := &recordingSource{}
 	h := reidentifyHarness(t, src)
 

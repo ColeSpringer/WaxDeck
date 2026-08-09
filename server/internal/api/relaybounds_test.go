@@ -17,6 +17,7 @@ import (
 // its own: a station that keeps its connection open forever. Enough of
 // those and one account has pinned the server.
 func TestRadioRelayCapsConcurrentStreamsPerUser(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.AllowPrivateRadioHosts = true
 	})
@@ -117,6 +118,7 @@ func TestRadioRelayCapsConcurrentStreamsPerUser(t *testing.T) {
 }
 
 func TestRelayGuardBounds(t *testing.T) {
+	t.Parallel()
 	// A transfer inside every bound is left alone.
 	t.Run("within bounds", func(t *testing.T) {
 		g := newRelayGuard(relayLimits{

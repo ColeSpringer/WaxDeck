@@ -6,6 +6,26 @@ import (
 	"time"
 )
 
+// TestProductionKDFCost pins what a shipped server hashes with. The
+// weakening knob exists so test binaries do not spend seconds per
+// account on memory-hard work; nothing else may move these numbers, and
+// a hash records them, so a leak would be silent and permanent - every
+// account created under weak parameters keeps them until its password
+// changes.
+func TestProductionKDFCost(t *testing.T) {
+	if got := currentParams(); got != (argonParams{memory: 64 * 1024, time: 3, threads: 1}) {
+		t.Fatalf("production params = %+v, want m=65536,t=3,p=1", got)
+	}
+	hash, err := HashPassword("correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The encoded cost, which is the half that outlives the process.
+	if !strings.Contains(hash, "$m=65536,t=3,p=1$") {
+		t.Fatalf("hash = %q, want the production cost encoded in it", hash)
+	}
+}
+
 func TestPasswordHashRoundTrip(t *testing.T) {
 	hash, err := HashPassword("correct horse battery staple")
 	if err != nil {

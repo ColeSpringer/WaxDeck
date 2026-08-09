@@ -6,6 +6,7 @@ import (
 )
 
 func TestParseRadioTitle(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		raw, station  string
 		artist, title string
@@ -33,6 +34,7 @@ func TestParseRadioTitle(t *testing.T) {
 }
 
 func TestScrobbleRadioPlayEnqueues(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	st, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",

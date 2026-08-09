@@ -161,6 +161,7 @@ class SeekCluster extends StatelessWidget {
     required this.now,
     this.onSeek,
     this.peaks,
+    this.marks,
     this.remainingLabel,
     this.semanticsId,
     super.key,
@@ -172,6 +173,10 @@ class SeekCluster extends StatelessWidget {
   /// Normalised peaks; when absent the bar renders as a styled slider
   /// rather than inventing a waveform.
   final List<double>? peaks;
+
+  /// Divisions to tick along the bar: a book's chapters under a
+  /// whole-book envelope.
+  final List<Duration>? marks;
 
   /// Books add "42 percent, 6 hr 12 min left" under the bar.
   final String? remainingLabel;
@@ -211,6 +216,7 @@ class SeekCluster extends StatelessWidget {
           duration: now.duration,
           buffered: now.buffered,
           peaks: peaks,
+          marks: marks,
           onSeek: onSeek,
           semanticsId: semanticsId,
         ),

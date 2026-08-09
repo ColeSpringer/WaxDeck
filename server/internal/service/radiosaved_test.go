@@ -10,6 +10,7 @@ import (
 // The snapshot ladder answers only with a picture that will be stored,
 // and only from a rung the operator has left switched on.
 func TestRadioSavedSnapshotSkipsOversizeAndTheSwitchedOffRung(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	const line = "Charlie Parker - Ornithology"
 	const station = "rs-01JZX5N8QW3F4V9T2B7KDEXAMPLE"
@@ -57,6 +58,7 @@ func TestRadioSavedSnapshotSkipsOversizeAndTheSwitchedOffRung(t *testing.T) {
 // rows exist, so the properties it has to hold are pinned here rather
 // than left to the endpoint tests.
 func TestRadioSavedIdentity(t *testing.T) {
+	t.Parallel()
 	orn := radioSavedIdentity("Charlie Parker", "Ornithology", "Charlie Parker - Ornithology")
 
 	// The same song announced with different case and different noise

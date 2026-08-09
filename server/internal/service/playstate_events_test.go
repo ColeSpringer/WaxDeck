@@ -36,6 +36,7 @@ func eventTail(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) int
 }
 
 func TestStarEmitsOnlyOnChange(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pid, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 
@@ -75,6 +76,7 @@ func TestStarEmitsOnlyOnChange(t *testing.T) {
 }
 
 func TestRatingEmitsOnlyOnChange(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pid, _ := fixtureTrackPID(t, ctx, svc, uc, "Basalt Steps")
 
@@ -101,6 +103,7 @@ func TestRatingEmitsOnlyOnChange(t *testing.T) {
 // replay, so no device is told anything, and the replaying client learns
 // the truth from the response body.
 func TestStaleReplayEmitsNothingButReportsTruth(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pid, catalogPID := fixtureTrackPID(t, ctx, svc, uc, "Cobalt Sky")
 
@@ -127,6 +130,7 @@ func TestStaleReplayEmitsNothingButReportsTruth(t *testing.T) {
 }
 
 func TestEntityStarEmitsOnlyOnChange(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc, albumPID, _, _ := entityFixture(t)
 
 	tail := eventTail(t, ctx, svc, uc)
@@ -163,6 +167,7 @@ func TestEntityStarEmitsOnlyOnChange(t *testing.T) {
 // The switch in the delta builder is the whole mechanism: a kind missing
 // from it is silently dropped, and nothing else would notice.
 func TestAnnouncementMarkersReachTheDelta(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
 	since, err := svc.MintServerCursor(ctx)

@@ -15,6 +15,7 @@ import (
 // code filter narrows the result; a non-admin is refused; and a bad cursor
 // and unknown library are rejected.
 func TestFileDiagnosticsDashboard(t *testing.T) {
+	t.Parallel()
 	broken := t.TempDir()
 	if _, err := fixtures.Generate(broken,
 		fixtures.Spec{

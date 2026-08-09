@@ -27,6 +27,8 @@ class _$Share extends Share {
   final DateTime? expiresAt;
   @override
   final int plays;
+  @override
+  final String? owner;
 
   factory _$Share([void Function(ShareBuilder)? updates]) =>
       (ShareBuilder()..update(updates))._build();
@@ -42,6 +44,7 @@ class _$Share extends Share {
     required this.createdAt,
     this.expiresAt,
     required this.plays,
+    this.owner,
   }) : super._();
   @override
   Share rebuild(void Function(ShareBuilder) updates) =>
@@ -63,7 +66,8 @@ class _$Share extends Share {
         positionMs == other.positionMs &&
         createdAt == other.createdAt &&
         expiresAt == other.expiresAt &&
-        plays == other.plays;
+        plays == other.plays &&
+        owner == other.owner;
   }
 
   @override
@@ -79,6 +83,7 @@ class _$Share extends Share {
     _$hash = $jc(_$hash, createdAt.hashCode);
     _$hash = $jc(_$hash, expiresAt.hashCode);
     _$hash = $jc(_$hash, plays.hashCode);
+    _$hash = $jc(_$hash, owner.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -95,7 +100,8 @@ class _$Share extends Share {
           ..add('positionMs', positionMs)
           ..add('createdAt', createdAt)
           ..add('expiresAt', expiresAt)
-          ..add('plays', plays))
+          ..add('plays', plays)
+          ..add('owner', owner))
         .toString();
   }
 }
@@ -144,6 +150,10 @@ class ShareBuilder implements Builder<Share, ShareBuilder> {
   int? get plays => _$this._plays;
   set plays(int? plays) => _$this._plays = plays;
 
+  String? _owner;
+  String? get owner => _$this._owner;
+  set owner(String? owner) => _$this._owner = owner;
+
   ShareBuilder() {
     Share._defaults(this);
   }
@@ -161,6 +171,7 @@ class ShareBuilder implements Builder<Share, ShareBuilder> {
       _createdAt = $v.createdAt;
       _expiresAt = $v.expiresAt;
       _plays = $v.plays;
+      _owner = $v.owner;
       _$v = null;
     }
     return this;
@@ -217,6 +228,7 @@ class ShareBuilder implements Builder<Share, ShareBuilder> {
             r'Share',
             'plays',
           ),
+          owner: owner,
         );
     replace(_$result);
     return _$result;

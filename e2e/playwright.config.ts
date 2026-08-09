@@ -5,6 +5,14 @@ import { defineConfig, devices } from '@playwright/test';
 const baseURL = process.env.WAXDECK_BASE_URL ?? 'http://localhost:4420';
 const external = !!process.env.WAXDECK_BASE_URL;
 
+// The rootless second server the first-run wizard journey drives
+// (run-wizard-stack.sh). The main stack boots with the fixture library
+// configured, so the wizard's entry condition - an administrator whose
+// server has no libraries - can never hold there. Local only: an
+// external target is one server at one URL, so the wizard project does
+// not exist on external runs.
+const wizardBaseURL = 'http://localhost:4430';
+
 // Retries hide flakes, so the two runs that are supposed to find them get
 // none: E2E_RETRIES=0 is what the soak workflow and a local repeat-each
 // run set. CI keeps one, not the two it used to: a test that needs three
@@ -135,6 +143,7 @@ export default defineConfig({
       name: 'wave',
       testIgnore: [
         /first-run\.spec\.ts/,
+        /admin-wizard\.spec\.ts/,
         /uploads\.spec\.ts/,
         /admin-ops\.spec\.ts/,
         /editing-prototype\.spec\.ts/,
@@ -143,6 +152,20 @@ export default defineConfig({
       dependencies: ['setup'],
       ...motion('reduce'),
     },
+    // The wizard journey runs against its own rootless server, so it
+    // depends on nothing here and nothing here depends on it: the two
+    // stacks share no state, and the only account it touches is the
+    // administrator it creates on its own installation.
+    ...(external
+      ? []
+      : [
+          {
+            name: 'wizard',
+            testMatch: /admin-wizard\.spec\.ts/,
+            metadata: { motion: 'reduce' as const },
+            use: { ...motion('reduce').use, baseURL: wizardBaseURL },
+          },
+        ]),
     // The catalog mutators, which per-test accounts cannot divide: the
     // files on disk, the mutation lease, the trash, the library table
     // and the admin settings row are one installation's, however many
@@ -230,10 +253,26 @@ export default defineConfig({
   // if the port is already taken, so tests never silently run against a
   // foreign process. Locally, reuse a dev-run stack (or a WAXDECK_BASE_URL
   // target) if one is present.
-  webServer: external ? undefined : {
-    command: './run-stack.sh',
-    url: `${baseURL}/api/v1/health`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: external ? undefined : [
+    {
+      command: './run-stack.sh',
+      url: `${baseURL}/api/v1/health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    // The wizard's rootless server: the same binary over an empty data
+    // dir, no sidecar, no roots (see run-wizard-stack.sh).
+    //
+    // Never reused, unlike the main stack. This one is single-use by
+    // construction: its spec walks a door that closes behind it, so a
+    // server somebody already bootstrapped makes the one test the
+    // stack exists for skip itself. Failing on a busy port is the
+    // louder and more useful answer.
+    {
+      command: './run-wizard-stack.sh',
+      url: `${wizardBaseURL}/api/v1/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+  ],
 });

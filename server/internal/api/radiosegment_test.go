@@ -25,6 +25,7 @@ func newTestSegment(clock *time.Time) (*radioSegment, *[]reported) {
 }
 
 func TestRadioSegmentReportsOnlyWhatPlayedLongEnough(t *testing.T) {
+	t.Parallel()
 	clock := time.Unix(0, 0)
 	seg, out := newTestSegment(&clock)
 
@@ -49,6 +50,7 @@ func TestRadioSegmentReportsOnlyWhatPlayedLongEnough(t *testing.T) {
 // the break's minutes are charged to the song before it, and a track
 // somebody heard ten seconds of scrobbles as if it had played through.
 func TestRadioSegmentDoesNotChargeAnAdToThePreviousSong(t *testing.T) {
+	t.Parallel()
 	clock := time.Unix(0, 0)
 	seg, out := newTestSegment(&clock)
 

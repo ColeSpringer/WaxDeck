@@ -15,6 +15,7 @@ import (
 // visibility and subscription filters, this one bites full-visibility
 // callers, and Subsonic's resume surface reads the same list.
 func TestResumeShelfFillsPastTrashedItems(t *testing.T) {
+	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	older := f.itemPID(t, ctx, model.KindBook, "The Fixture Book")
 	newer := f.itemPID(t, ctx, model.KindBook, "The Chaptered Fixture")

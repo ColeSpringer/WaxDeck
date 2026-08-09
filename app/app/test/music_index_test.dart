@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
+import 'package:waxdeck/src/home/pinned_controller.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/index_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
@@ -950,6 +951,116 @@ void main() {
     expect(
       WaxRoute.musicBucket(MusicDimension.artists, segment),
       '/music/artists/ar-01JZXABC',
+    );
+  });
+
+  testWidgets('an entity bucket pins from its overflow without opening', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..facets['album'] = <FacetBucket>[_album('Gullwing')];
+    final container = await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.albums),
+      repository,
+      prefs: const Prefs(),
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.indexBucketMore(0)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pin album to Home'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(
+        SemanticsIds.pinSheetTarget('al-01JZXGullwing'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(pinnedEntitiesProvider),
+      contains('al-01JZXGullwing'),
+    );
+    expect(repository.prefs.pinned, contains('al-01JZXGullwing'));
+  });
+
+  testWidgets('a genre bucket offers no overflow', (tester) async {
+    // A genre is a filter, not a thing: there is no entity behind the
+    // row, so there is nothing a pin could hold.
+    final repository = FakeRepository()
+      ..facets['genre'] = <FacetBucket>[
+        const FacetBucket(key: 'rock', label: 'Rock', count: 4),
+      ];
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.genres),
+      repository,
+    );
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.indexBucketMore(0)),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a listing row pins the album or artist it belongs to', (
+    tester,
+  ) async {
+    // The track itself cannot be pinned - a kept set of tracks is a
+    // playlist - so the overflow offers the row's handles instead.
+    final repository = FakeRepository()
+      ..facetItems['genre ge-1'] = <ItemSummary>[
+        ItemSummary(
+          pid: 'tr-1',
+          mediaType: MediaType.music,
+          title: 'Wide Angle',
+          artist: 'Field Notes',
+          album: 'Long Exposure',
+          albumPid: 'al-01JZXLONG',
+          artistPid: 'ar-01JZXFIELD',
+          durationMs: 245000,
+        ),
+        ItemSummary(
+          pid: 'tr-2',
+          mediaType: MediaType.music,
+          title: 'Orphan Line',
+          durationMs: 200000,
+        ),
+      ];
+    final container = await _pump(
+      tester,
+      const MusicListingScreen(
+        dimension: MusicDimension.genres,
+        segment: 'ge-1',
+      ),
+      repository,
+      prefs: const Prefs(),
+    );
+
+    // A row that carries no handles offers nothing.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.listingRowMore('tr-2')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.listingRowMore('tr-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pin album to Home'), findsOneWidget);
+    expect(find.text('Pin artist to Home'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.pinSheetTarget('ar-01JZXFIELD')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(container.read(pinnedEntitiesProvider), contains('ar-01JZXFIELD'));
+    expect(
+      container.read(pinnedEntitiesProvider),
+      isNot(contains('al-01JZXLONG')),
     );
   });
 }

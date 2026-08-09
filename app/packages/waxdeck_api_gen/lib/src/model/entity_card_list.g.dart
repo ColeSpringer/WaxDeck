@@ -9,11 +9,13 @@ part of 'entity_card_list.dart';
 class _$EntityCardList extends EntityCardList {
   @override
   final BuiltList<EntityCard> entities;
+  @override
+  final BuiltList<String>? departed;
 
   factory _$EntityCardList([void Function(EntityCardListBuilder)? updates]) =>
       (EntityCardListBuilder()..update(updates))._build();
 
-  _$EntityCardList._({required this.entities}) : super._();
+  _$EntityCardList._({required this.entities, this.departed}) : super._();
   @override
   EntityCardList rebuild(void Function(EntityCardListBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -24,22 +26,26 @@ class _$EntityCardList extends EntityCardList {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is EntityCardList && entities == other.entities;
+    return other is EntityCardList &&
+        entities == other.entities &&
+        departed == other.departed;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, entities.hashCode);
+    _$hash = $jc(_$hash, departed.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'EntityCardList',
-    )..add('entities', entities)).toString();
+    return (newBuiltValueToStringHelper(r'EntityCardList')
+          ..add('entities', entities)
+          ..add('departed', departed))
+        .toString();
   }
 }
 
@@ -53,6 +59,11 @@ class EntityCardListBuilder
   set entities(ListBuilder<EntityCard>? entities) =>
       _$this._entities = entities;
 
+  ListBuilder<String>? _departed;
+  ListBuilder<String> get departed =>
+      _$this._departed ??= ListBuilder<String>();
+  set departed(ListBuilder<String>? departed) => _$this._departed = departed;
+
   EntityCardListBuilder() {
     EntityCardList._defaults(this);
   }
@@ -61,6 +72,7 @@ class EntityCardListBuilder
     final $v = _$v;
     if ($v != null) {
       _entities = $v.entities.toBuilder();
+      _departed = $v.departed?.toBuilder();
       _$v = null;
     }
     return this;
@@ -82,12 +94,19 @@ class EntityCardListBuilder
   _$EntityCardList _build() {
     _$EntityCardList _$result;
     try {
-      _$result = _$v ?? _$EntityCardList._(entities: entities.build());
+      _$result =
+          _$v ??
+          _$EntityCardList._(
+            entities: entities.build(),
+            departed: _departed?.build(),
+          );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'entities';
         entities.build();
+        _$failedField = 'departed';
+        _departed?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'EntityCardList',

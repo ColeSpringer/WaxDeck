@@ -3,6 +3,7 @@ package service
 import "testing"
 
 func TestHealthCursorRoundTrip(t *testing.T) {
+	t.Parallel()
 	const pid = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	cur := encodeHealthCursor(3, "Weird.Title / With Stuff", pid)
 	n, title, gotPID, ok := decodeHealthCursor(cur)
@@ -15,6 +16,7 @@ func TestHealthCursorRoundTrip(t *testing.T) {
 }
 
 func TestHealthCursorStrictParsing(t *testing.T) {
+	t.Parallel()
 	const pid = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	for _, bad := range []string{
 		"",
@@ -34,6 +36,7 @@ func TestHealthCursorStrictParsing(t *testing.T) {
 }
 
 func TestDuplicateNamesFromMessage(t *testing.T) {
+	t.Parallel()
 	msg := "duplicate artist (same collation key): Beatles / The Beatles; merge with `waxbin merge`"
 	names := duplicateNamesFromMessage(msg, 2)
 	if len(names) != 2 || names[0] != "Beatles" || names[1] != "The Beatles" {
@@ -55,6 +58,7 @@ func TestDuplicateNamesFromMessage(t *testing.T) {
 }
 
 func TestHealthFixableRulesAreImplemented(t *testing.T) {
+	t.Parallel()
 	implemented := map[string]bool{}
 	for _, r := range healthRules {
 		implemented[r] = true

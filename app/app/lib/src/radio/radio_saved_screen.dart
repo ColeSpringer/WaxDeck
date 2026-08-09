@@ -9,6 +9,7 @@ import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'radio_saved_controller.dart';
+import 'radio_saved_menu.dart';
 
 /// Songs caught on the air and meant to be hunted down.
 ///
@@ -172,6 +173,12 @@ class _SavedList extends ConsumerWidget {
                 label: 'Find "$title" in the library',
                 semanticsId: SemanticsIds.radioSavedFind(song.pid),
                 onPressed: () => context.go(WaxRoute.searchFor(query)),
+              ),
+              WaxIconButton(
+                glyph: WaxIcons.more,
+                label: 'Ways to get "$title"',
+                semanticsId: SemanticsIds.radioSavedMore(song.pid),
+                onPressed: () => showRadioSavedMenu(context, ref, song),
               ),
               WaxIconButton(
                 glyph: WaxIcons.close,

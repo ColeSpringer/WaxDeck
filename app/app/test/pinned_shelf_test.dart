@@ -111,10 +111,27 @@ void main() {
 
     expect(_byId(SemanticsIds.shelfCard('pinned', _album)), findsOneWidget);
     expect(_byId(SemanticsIds.shelfCard('pinned', _departed)), findsNothing);
-    // Still asked for: the stale pid stays in the document rather than
-    // being pruned by a client that might be reading a half-loaded
-    // library.
+    // An unnamed omission stays in the document: the server withholds
+    // the departed name for anything that might come back (a grant, a
+    // lapsed subscription, a half-loaded library), and only the named
+    // set is ever pruned.
     expect(repo.resolvedEntityPids.single, contains(_departed));
+    expect(repo.prefs.pinned, contains(_departed));
+  });
+
+  testWidgets('a pid the server names departed is pruned from the '
+      'document', (tester) async {
+    final repo = _repo(pinned: <String>[_departed, _album]);
+    repo.departedEntityPids.add(_departed);
+    await _pump(tester, repo);
+
+    // The card still draws for what resolved, and the dead slot is
+    // reclaimed: 64 is a cap worth pruning for.
+    expect(_byId(SemanticsIds.shelfCard('pinned', _album)), findsOneWidget);
+    expect(repo.prefs.pinned, <String>[_album]);
+    // The prune rewrites the list this provider watches, so one more
+    // resolve goes out without the departed pid and the loop closes.
+    expect(repo.resolvedEntityPids.last, <String>[_album]);
   });
 
   testWidgets('every pin having departed goes quiet rather than empty', (

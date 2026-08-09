@@ -15,6 +15,7 @@ import (
 // cast over REST, verbs over the command bus, and the mid-track
 // handoff phone to speaker to phone that keeps the position.
 func TestConnectCastSession(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	pidA := items.Items[0].Pid

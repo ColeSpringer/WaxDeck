@@ -17,6 +17,7 @@ func artistBucketKey(apiArtistPID string) string {
 // answered *items*, so the shelf downloaded track rows and collapsed
 // them client-side.
 func TestScopedFacetCountsTheScopeOnly(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	artist := bucketPID(t, ctx, svc, uc, "artist", "Field Notes")
@@ -59,6 +60,7 @@ func TestScopedFacetCountsTheScopeOnly(t *testing.T) {
 // scoped read served *from* it would hand an artist page the whole
 // library. Neither direction is allowed.
 func TestScopedFacetBypassesTheCacheBothWays(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 	settleCatalogFeed(t, svc)
 
@@ -109,6 +111,7 @@ func TestScopedFacetBypassesTheCacheBothWays(t *testing.T) {
 // cannot scope itself (it would answer the one bucket it was handed),
 // and the scope obeys the drill's own empty-key rules.
 func TestScopedFacetRefusals(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	for _, bad := range []struct {
@@ -147,6 +150,7 @@ func TestScopedFacetRefusals(t *testing.T) {
 // under either names no position in the other. Refused rather than
 // answered, for the reason every other cursor mismatch here is.
 func TestScopedFacetCursorCarriesItsScope(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	// One bucket per page over the two-album library, so both directions
@@ -194,6 +198,7 @@ func TestScopedFacetCursorCarriesItsScope(t *testing.T) {
 // TestScopedFacetHonoursTheGrant: the scope narrows what is counted; it
 // does not widen who may count it.
 func TestScopedFacetHonoursTheGrant(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	artist := bucketPID(t, ctx, svc, uc, "artist", "Field Notes")

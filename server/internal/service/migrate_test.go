@@ -262,6 +262,7 @@ func newFakeNavidrome(t *testing.T, username, password string) *httptest.Server 
 }
 
 func TestMigrateSubsonicImport(t *testing.T) {
+	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	ts := newFakeNavidrome(t, "demo", "demo-pass")
 
@@ -455,6 +456,7 @@ func newFakeNavidromeLateMatch(t *testing.T, username, password string) *httptes
 }
 
 func TestMigrateSubsonicEntityStarsSearchPastFirstCandidate(t *testing.T) {
+	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	ts := newFakeNavidromeLateMatch(t, "demo", "demo-pass")
 
@@ -482,6 +484,7 @@ func TestMigrateSubsonicEntityStarsSearchPastFirstCandidate(t *testing.T) {
 // sample, not a silent skip: exhausting the search must not turn a real
 // miss into a success.
 func TestMigrateSubsonicEntityStarsUnmatchedGroup(t *testing.T) {
+	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/rest/"), ".view") {
@@ -559,6 +562,7 @@ func newFakeABS(t *testing.T, token string) *httptest.Server {
 }
 
 func TestMigrateAudiobookshelfImport(t *testing.T) {
+	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	ts := newFakeABS(t, "abs-token")
 
@@ -621,6 +625,7 @@ func TestMigrateAudiobookshelfImport(t *testing.T) {
 // source row replays in its own time instead of masquerading as a
 // just-now checkpoint and taking the listener's place.
 func TestMigrateABSBackdatedProgressLosesToLocal(t *testing.T) {
+	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	ts := newFakeABS(t, "abs-token")
 	book := f.itemPID(t, ctx, model.KindBook, "The Fixture Book")
@@ -651,6 +656,7 @@ func TestMigrateABSBackdatedProgressLosesToLocal(t *testing.T) {
 }
 
 func TestMigrateSessionID(t *testing.T) {
+	t.Parallel()
 	a := migrateSessionID("navidrome", "song-1", 0)
 	if a != "import:navidrome:song-1:0" {
 		t.Fatalf("session id = %q", a)
@@ -672,6 +678,7 @@ func TestMigrateSessionID(t *testing.T) {
 }
 
 func TestParseSubsonicTime(t *testing.T) {
+	t.Parallel()
 	if ts := parseSubsonicTime("2026-01-02T03:04:05.000Z"); ts.IsZero() || ts.UTC() != time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC) {
 		t.Fatalf("rfc3339 parse = %v", ts)
 	}

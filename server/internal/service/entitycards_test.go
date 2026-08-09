@@ -118,6 +118,7 @@ func bucketPID(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, dim
 // rests on: the caller's order is the response's order, across kinds, so
 // a shelf never reshuffles under a thumb.
 func TestEntityCardsAnswerInRequestOrder(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	album := bucketPID(t, ctx, svc, uc, "album", "Long Exposure")
@@ -130,7 +131,7 @@ func TestEntityCardsAnswerInRequestOrder(t *testing.T) {
 	}
 
 	want := []string{other, pl.PID, album, artist}
-	cards, err := svc.EntityCards(ctx, uc, want)
+	cards, _, err := svc.EntityCards(ctx, uc, want)
 	if err != nil {
 		t.Fatalf("resolving cards: %v", err)
 	}
@@ -171,6 +172,7 @@ func TestEntityCardsAnswerInRequestOrder(t *testing.T) {
 // shorter rather than failing the read, so nothing has to prune a
 // preference document to keep home working.
 func TestEntityCardsDropWhatCannotBeResolved(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	album := bucketPID(t, ctx, svc, uc, "album", "Long Exposure")
@@ -179,32 +181,39 @@ func TestEntityCardsDropWhatCannotBeResolved(t *testing.T) {
 	// prefix is pinnable.
 	show := "pc-01JZX5N8QW3F4V9T2B7KD3M9R7"
 
-	cards, err := svc.EntityCards(ctx, uc, []string{departed, album, show})
+	cards, gone, err := svc.EntityCards(ctx, uc, []string{departed, album, show})
 	if err != nil {
 		t.Fatalf("resolving cards: %v", err)
 	}
 	if len(cards) != 1 || cards[0].PID != album {
 		t.Fatalf("got %+v, want only the album", cards)
 	}
+	// The album pid the catalog has no row for is named departed; the
+	// unsubscribed show is not, because unsubscribed is a state the
+	// listener can end and the resolver never learns whether the show
+	// exists behind it. Pruning it would turn a lapse into a loss.
+	if len(gone) != 1 || gone[0] != departed {
+		t.Fatalf("departed = %v, want only %s", gone, departed)
+	}
 
-	if _, err := svc.EntityCards(ctx, uc, []string{"tr-01JZX5N8QW3F4V9T2B7KD3M9R6"}); KindOf(err) != KindInvalid {
+	if _, _, err := svc.EntityCards(ctx, uc, []string{"tr-01JZX5N8QW3F4V9T2B7KD3M9R6"}); KindOf(err) != KindInvalid {
 		t.Fatalf("a track pid should be a request error, got %v", err)
 	}
 	over := make([]string, maxEntityCards+1)
 	for i := range over {
 		over[i] = album
 	}
-	if _, err := svc.EntityCards(ctx, uc, over); KindOf(err) != KindInvalid {
+	if _, _, err := svc.EntityCards(ctx, uc, over); KindOf(err) != KindInvalid {
 		t.Fatalf("over the cap should be a request error, got %v", err)
 	}
-	if cards, err := svc.EntityCards(ctx, uc, nil); err != nil || len(cards) != 0 {
+	if cards, _, err := svc.EntityCards(ctx, uc, nil); err != nil || len(cards) != 0 {
 		t.Fatalf("an empty request should answer empty, got %+v %v", cards, err)
 	}
 
 	// Crockford base32 parses either case, and the catalog keys its batch
 	// answer by the stored pid, so a lower-case ULID that resolved and
 	// then failed to match would be a card silently missing from a shelf.
-	lower, err := svc.EntityCards(ctx, uc, []string{strings.ToLower(album)})
+	lower, _, err := svc.EntityCards(ctx, uc, []string{strings.ToLower(album)})
 	if err != nil {
 		t.Fatalf("resolving a lower-case pid: %v", err)
 	}
@@ -216,6 +225,7 @@ func TestEntityCardsDropWhatCannotBeResolved(t *testing.T) {
 // TestEntityCardsDropOutsideTheGrant keeps the resolver from handing a
 // restricted caller a pid it could not have reached through a listing.
 func TestEntityCardsDropOutsideTheGrant(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	album := bucketPID(t, ctx, svc, uc, "album", "Long Exposure")
@@ -224,12 +234,60 @@ func TestEntityCardsDropOutsideTheGrant(t *testing.T) {
 		CatalogPID: uc.CatalogPID,
 		Libraries:  map[string]bool{"lb-nothing": true},
 	}
-	cards, err := svc.EntityCards(ctx, restricted, []string{album})
+	cards, gone, err := svc.EntityCards(ctx, restricted, []string{album})
 	if err != nil {
 		t.Fatalf("resolving cards: %v", err)
 	}
 	if len(cards) != 0 {
 		t.Fatalf("a caller granted no holding library should see no card, got %+v", cards)
+	}
+	// Out of the grant is invisible, never departed: the album exists,
+	// and a widened grant brings the card back. A client pruning on
+	// this answer would lose the pin over an access decision.
+	if len(gone) != 0 {
+		t.Fatalf("an out-of-grant album was named departed: %v", gone)
+	}
+}
+
+// TestEntityCardsNameTheDeparted pins the boundary the pruning signal
+// runs on: departed is what the server no longer has for anyone, and a
+// miss the caller could still get back stays unnamed.
+func TestEntityCardsNameTheDeparted(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newShelfFixture(t)
+
+	pl, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Doomed", Kind: "static"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeletePlaylist(ctx, uc, pl.PID); err != nil {
+		t.Fatal(err)
+	}
+
+	other, err := svc.CreateAccount(ctx, AccountCreate{Username: "neighbour", Password: "pw-neighbour-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherCtx, err := svc.UserCtx(ctx, other.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	private, err := svc.CreatePlaylist(ctx, otherCtx, PlaylistCreate{Name: "Theirs", Kind: "static"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cards, gone, err := svc.EntityCards(ctx, uc, []string{pl.PID, private.PID})
+	if err != nil {
+		t.Fatalf("resolving cards: %v", err)
+	}
+	if len(cards) != 0 {
+		t.Fatalf("neither playlist should draw a card, got %+v", cards)
+	}
+	// The deleted playlist is gone for everyone; the neighbour's private
+	// one exists and could be shared tomorrow.
+	if len(gone) != 1 || gone[0] != pl.PID {
+		t.Fatalf("departed = %v, want only %s", gone, pl.PID)
 	}
 }
 
@@ -238,6 +296,7 @@ func TestEntityCardsDropOutsideTheGrant(t *testing.T) {
 // advertise tracks their own listing will not show. They are answered to
 // a caller who can see everything and left absent otherwise.
 func TestCountsAreOnlyAnsweredWhereTheyAreTrue(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	album := bucketPID(t, ctx, svc, uc, "album", "Long Exposure")
@@ -275,7 +334,7 @@ func TestCountsAreOnlyAnsweredWhereTheyAreTrue(t *testing.T) {
 		t.Fatalf("the identity changed with the caller: %+v", scoped)
 	}
 
-	cards, err := svc.EntityCards(ctx, granted, []string{album})
+	cards, _, err := svc.EntityCards(ctx, granted, []string{album})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +344,7 @@ func TestCountsAreOnlyAnsweredWhereTheyAreTrue(t *testing.T) {
 	if cards[0].ItemCount != nil {
 		t.Fatalf("a restricted caller's card carries a count: %v", *cards[0].ItemCount)
 	}
-	if own, err := svc.EntityCards(ctx, uc, []string{album}); err != nil {
+	if own, _, err := svc.EntityCards(ctx, uc, []string{album}); err != nil {
 		t.Fatal(err)
 	} else if own[0].ItemCount == nil || *own[0].ItemCount != 2 {
 		t.Fatalf("a full-visibility card lost its count: %+v", own[0])
@@ -295,6 +354,7 @@ func TestCountsAreOnlyAnsweredWhereTheyAreTrue(t *testing.T) {
 // TestAlbumIdentity is the read half of the entity edit surface: the
 // five edition columns a track row cannot carry.
 func TestAlbumIdentity(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	album := bucketPID(t, ctx, svc, uc, "album", "Long Exposure")
@@ -340,6 +400,7 @@ func TestAlbumIdentity(t *testing.T) {
 // TestAlbumRejectsTheWrongPrefix keeps a track pid presented as an album
 // a plain not-found rather than a wrong-shaped answer.
 func TestAlbumRejectsTheWrongPrefix(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 1)
@@ -363,6 +424,7 @@ func TestAlbumRejectsTheWrongPrefix(t *testing.T) {
 // TestAlbumHiddenOutsideTheGrant keeps the identity read on the same
 // visibility rule every other entity read applies.
 func TestAlbumHiddenOutsideTheGrant(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
 	album := bucketPID(t, ctx, svc, uc, "album", "Long Exposure")

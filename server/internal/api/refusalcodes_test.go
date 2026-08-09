@@ -22,6 +22,7 @@ import (
 // somewhere in the spec, so a whole-file substring search would pass
 // for a code nobody had defined.
 func TestRefusalCodesAreDocumented(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join("..", "..", "..", "api", "spec", "_root.yaml")
 	spec, err := os.ReadFile(path)
 	if err != nil {
@@ -47,6 +48,7 @@ func TestRefusalCodesAreDocumented(t *testing.T) {
 }
 
 func TestRefusalStatusWhitelistsCodes(t *testing.T) {
+	t.Parallel()
 	for code, want := range refusalCodes {
 		status, got := refusalStatus(code)
 		if got != code || status != want {
@@ -66,6 +68,7 @@ func TestRefusalStatusWhitelistsCodes(t *testing.T) {
 // Both transports read one table, so a coded refusal says the same
 // thing whether the controller asked over REST or over the socket.
 func TestBothSeamsCarryRefusalCodes(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		err        error

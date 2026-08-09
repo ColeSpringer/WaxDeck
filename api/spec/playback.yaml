@@ -593,6 +593,25 @@ paths:
         omitted `partIndex` is part zero, so a client that does not know
         about parts gets the first one rather than nothing.
 
+        `span=item` answers one envelope over the whole item instead:
+        the parts stitched in reading order into the same `Waveform`
+        shape, with the buckets spread evenly across the total duration
+        and each part given bucket-space in proportion to how long it
+        is. That is what a book scrubber draws, because a book's
+        timeline is the book rather than the file the reader happens to
+        be in; `partIndex` is ignored under it, and a single-file item
+        answers exactly what `span=part` would. `resolution` is not
+        fixed under `span=item` - a long book gets more buckets than a
+        short one, so a chapter is still a shape rather than three bars
+        - so read it rather than assuming it.
+
+        A stitched answer is `ready` only when every part has an
+        envelope. A book with one unanalyzed part is `pending`, and one
+        with a part that can never be measured is `unavailable`: half a
+        book's envelope drawn across a whole book's timeline would be
+        silence somebody could seek into, which is a convincing wrong
+        answer rather than a partial one.
+
         `state` is `ready`, `pending` (this item is analyzable and has
         not been analyzed yet; poll again after an analyze pass), or
         `unavailable` (there will never be a waveform for this item).
@@ -618,11 +637,20 @@ paths:
           in: query
           description: >
             Zero-based part of a multi-file audiobook to describe.
-            Ignored for single-file items. Out of range is `not-found`,
-            matching the skip map.
+            Ignored for single-file items and under `span=item`. Out of
+            range is `not-found`, matching the skip map.
           schema:
             type: integer
             minimum: 0
+        - name: span
+          in: query
+          description: >
+            What the envelope covers: one part (the default), or the
+            whole item stitched across its parts.
+          schema:
+            type: string
+            enum: ["part", "item"]
+            default: "part"
         - name: If-None-Match
           in: header
           description: Previously returned `ETag`; a match answers 304 with no body.
@@ -1367,3 +1395,13 @@ components:
             Content hash of the analyzed audio essence, matching the
             download surface's `essenceHash`. A stored waveform whose
             hash no longer matches the stored audio is stale.
+
+
+            For `span=item` on a multi-part book there is no single
+            essence to name, so this is a fixed-length digest over
+            everything the stitched envelope is built from - every
+            part's essence in reading order, every part's duration, and
+            the bucket count. It is a cache validator there rather than
+            a content hash, and does not match any file's
+            `essenceHash`: compare it only against another answer from
+            this endpoint.

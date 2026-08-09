@@ -857,7 +857,10 @@ components:
             resolve, because failing a whole preference write over one
             departed release would be worse than a shelf one card
             shorter. Resolve them with `POST /library/entities`, which
-            silently drops what it cannot answer for.
+            silently drops what it cannot answer for and names, in its
+            `departed` list, the pids that are gone for everyone - the
+            subset a client may prune from here, so a deleted album does
+            not hold one of the 64 slots forever.
 
 
             Albums (`al-`), artists (`ar-`), release groups (`rg-`),

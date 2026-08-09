@@ -3,6 +3,7 @@ package service
 import "testing"
 
 func TestNormalizeRadioField(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ in, want string }{
 		{"Charlie Parker", "charlie parker"},
 		{"  Charlie   Parker  ", "charlie parker"},
@@ -28,6 +29,7 @@ func TestNormalizeRadioField(t *testing.T) {
 // noise words survives. Stripping "explicit" anywhere would turn the
 // track "Explicit" into the empty string and match everything.
 func TestNormalizeRadioFieldKeepsASongNamedLikeNoise(t *testing.T) {
+	t.Parallel()
 	if got := normalizeRadioField("Explicit"); got != "" {
 		// TrimSuffix on the whole string does reduce it; what must not
 		// happen is a match against an unrelated track, which the
@@ -40,6 +42,7 @@ func TestNormalizeRadioFieldKeepsASongNamedLikeNoise(t *testing.T) {
 }
 
 func TestRadioFieldsMatch(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		a, b string
 		want bool
@@ -68,6 +71,7 @@ func TestRadioFieldsMatch(t *testing.T) {
 // short artist name there is, which are the names a station is likeliest
 // to announce bare.
 func TestContainsTokenRun(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		subtitle, artist string
 		want             bool
@@ -95,6 +99,7 @@ func TestContainsTokenRun(t *testing.T) {
 }
 
 func TestStripBracketed(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ in, want string }{
 		{"Ornithology (Take 1)", "Ornithology"},
 		{"Ornithology [Live]", "Ornithology"},
@@ -114,6 +119,7 @@ func TestStripBracketed(t *testing.T) {
 // rewrite listening history for everyone, which is the whole reason the
 // normalization above lives in its own path.
 func TestParseRadioTitleStaysStrict(t *testing.T) {
+	t.Parallel()
 	if _, _, ok := parseRadioTitle("Just A Slogan", "Jazz FM"); ok {
 		t.Error("a title with no separator was accepted for scrobbling")
 	}
@@ -131,6 +137,7 @@ func TestParseRadioTitleStaysStrict(t *testing.T) {
 // find nothing; the search form keeps the mark while the matching form
 // still folds it away, and both spellings of the mark take one path.
 func TestRadioSearchFieldKeepsApostrophes(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ raw, search, match string }{
 		{"That's What Tequila Does", "that's what tequila does", "that s what tequila does"},
 		// The typographic mark folds to the straight one first, so the

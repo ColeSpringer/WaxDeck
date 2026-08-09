@@ -67,6 +67,7 @@ type fuzzMutation struct {
 }
 
 func TestSyncModelFuzz(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("model fuzz is not a -short test")
 	}
@@ -350,6 +351,7 @@ func runSyncModelFuzz(t *testing.T, seed uint64) {
 // behind-only clocks never exercise: a future-dated replay behaves as
 // if recorded now, so it wins over any older stamp.
 func TestClampFutureRecordedAt(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	pid := h.items(t, "").Items[0].Pid
 

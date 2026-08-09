@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -100,6 +102,34 @@ class PinnedEntities extends Notifier<List<String>> {
       return e is WaxDeckApiException ? e.message : 'That pin was not saved.';
     }
   }
+
+  /// Drops exactly [departed] from the document: the pids the resolver
+  /// named gone-for-everyone, which are the only slots safe to reclaim
+  /// unasked. A merely-unresolved pid is never passed here - the server
+  /// leaves it unnamed precisely because it may come back - so a shelf
+  /// read against a half-loaded library still prunes nothing.
+  ///
+  /// A failed write puts the list back, the way [toggle] does. Nothing
+  /// else would: the preference controller only advances its own state
+  /// on success, so a shortened list that stayed would disagree with
+  /// the stored document for the rest of the session - and the next
+  /// pin, which writes the whole list from here, would commit the drop
+  /// that failed.
+  Future<void> prune(List<String> departed) async {
+    final gone = departed.toSet();
+    final before = state;
+    final next = <String>[
+      for (final pid in before)
+        if (!gone.contains(pid)) pid,
+    ];
+    if (next.length == before.length) return;
+    state = next;
+    try {
+      await ref.read(prefsControllerProvider.notifier).setPinned(next);
+    } on Object {
+      if (ref.mounted) state = before;
+    }
+  }
 }
 
 final pinnedEntitiesProvider = NotifierProvider<PinnedEntities, List<String>>(
@@ -109,16 +139,36 @@ final pinnedEntitiesProvider = NotifierProvider<PinnedEntities, List<String>>(
 /// The pinned entities that still resolve, as cards, in shelf order.
 ///
 /// The pids are handles, not snapshots, so drawing them means asking the
-/// server what they are now. The endpoint drops what it cannot answer for
-/// - deleted, merged away, unsubscribed, outside the caller's libraries -
-/// which is the same display-drop the radio dial does with a departed
-/// station: the stale pid stays in the document rather than being pruned
-/// here, because a list read while the library is still loading must not
-/// prune itself against an empty answer.
+/// server what they are now. The endpoint drops what it cannot answer
+/// for - deleted, merged away, unsubscribed, outside the caller's
+/// libraries - and separately names the subset that is gone for
+/// everyone. Only that named subset is pruned from the document: a pid
+/// that merely failed to resolve stays, because a list read while the
+/// library is still loading must not prune itself against an empty
+/// answer, and the server withholds the name in exactly those states.
 final pinnedCardsProvider = FutureProvider.autoDispose<List<EntityCard>>((
   ref,
 ) async {
   final pinned = ref.watch(pinnedEntitiesProvider);
   if (pinned.isEmpty) return const <EntityCard>[];
-  return ref.watch(repositoryProvider).resolveEntities(pinned);
+  final resolution = await ref
+      .watch(repositoryProvider)
+      .resolveEntities(pinned);
+  if (resolution.departed.isNotEmpty) {
+    // After this build settles, not during it: the prune rewrites the
+    // pinned list, which this provider watches, and a rebuild kicked
+    // off mid-build is a provider-lifecycle error. The re-resolve it
+    // triggers asks without the pruned pids and answers no departed,
+    // so the loop closes in one extra read. Mounted-guarded, because
+    // this provider auto-disposes and a ref past its life throws.
+    unawaited(
+      Future<void>.microtask(() async {
+        if (!ref.mounted) return;
+        await ref
+            .read(pinnedEntitiesProvider.notifier)
+            .prune(resolution.departed);
+      }),
+    );
+  }
+  return resolution.cards;
 });

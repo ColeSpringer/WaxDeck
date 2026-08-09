@@ -597,4 +597,38 @@ void main() {
     recents.forget('  nightjar ');
     expect(container.read(recentSearchesProvider), isEmpty);
   });
+
+  testWidgets('a pinnable hit offers the pin from its overflow, a track '
+      'offers none', (tester) async {
+    // Artists, albums, and books pin; a track cannot (a kept set of
+    // tracks is a playlist), and its hit carries no handle to a
+    // container the way a listing row does.
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        artists: <SearchHit>[
+          _hit('artist', 'Nightjar', pid: 'ar-01JZXNIGHTJAR'),
+        ],
+        tracks: <SearchHit>[_hit('track', 'Night Drive')],
+      );
+    await _pump(tester, repository, initialQuery: 'night');
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.searchHitMore('tracks', 0)),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchHitMore('artists', 0)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pin artist to Home'), findsOneWidget);
+    expect(find.text('Nightjar'), findsWidgets);
+    expect(
+      find.bySemanticsIdentifier(
+        SemanticsIds.pinSheetTarget('ar-01JZXNIGHTJAR'),
+      ),
+      findsOneWidget,
+    );
+  });
 }

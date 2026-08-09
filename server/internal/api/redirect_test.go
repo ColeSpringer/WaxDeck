@@ -3,6 +3,7 @@ package api
 import "testing"
 
 func TestSafeRedirectPath(t *testing.T) {
+	t.Parallel()
 	good := []string{
 		"/",
 		"/library",

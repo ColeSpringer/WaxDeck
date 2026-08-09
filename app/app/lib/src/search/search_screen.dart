@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../home/pin_action.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../radio/add_station.dart';
 import '../radio/radio_screen.dart';
@@ -535,22 +536,42 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       slivers.add(
         SliverList.builder(
           itemCount: shown.length,
-          itemBuilder: (context, index) => MediaListRow(
-            data: MediaTileData(
-              title: shown[index].title,
-              subtitle: shown[index].subtitle,
-              shape: kind == SearchHitKind.artists
-                  ? ArtworkShape.circle
-                  : ArtworkShape.square,
-              domain: switch (kind) {
-                SearchHitKind.episodes => WaxDomain.podcasts,
-                SearchHitKind.books => WaxDomain.audiobooks,
-                _ => WaxDomain.music,
-              },
-              semanticsId: SemanticsIds.searchHit(kind.name, index),
-            ),
-            onTap: () => _open(shown[index]),
-          ),
+          itemBuilder: (context, index) {
+            final hit = shown[index];
+            // A hit that names a pinnable thing can be pinned from here
+            // (ADR-0054's deferred rollout); a track or an episode
+            // cannot, and the hit carries no handle to its container.
+            final pinnable = switch (hit.kind) {
+              'artist' || 'album' || 'book' => true,
+              _ => false,
+            };
+            return MediaListRow(
+              data: MediaTileData(
+                title: hit.title,
+                subtitle: hit.subtitle,
+                shape: kind == SearchHitKind.artists
+                    ? ArtworkShape.circle
+                    : ArtworkShape.square,
+                domain: switch (kind) {
+                  SearchHitKind.episodes => WaxDomain.podcasts,
+                  SearchHitKind.books => WaxDomain.audiobooks,
+                  _ => WaxDomain.music,
+                },
+                semanticsId: SemanticsIds.searchHit(kind.name, index),
+              ),
+              onTap: () => _open(hit),
+              onMore: pinnable
+                  ? () => showPinSheet(
+                      context,
+                      ref,
+                      targets: <PinTarget>[
+                        (pid: hit.pid, what: hit.kind, name: hit.title),
+                      ],
+                    )
+                  : null,
+              moreSemanticsId: SemanticsIds.searchHitMore(kind.name, index),
+            );
+          },
         ),
       );
     }

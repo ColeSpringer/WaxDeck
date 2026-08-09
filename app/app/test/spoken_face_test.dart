@@ -301,6 +301,46 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    // A book's bar spans the book, so the envelope under it has to as
+    // well: asking for a part would draw one file's shape under a
+    // timeline that is not that file's.
+    testWidgets('asks for one envelope across the whole book', (tester) async {
+      final repo = FakeRepository()
+        ..books[_bookPid] = testBook(
+          _bookPid,
+          durationMs: 3600000,
+          chapters: const [
+            ChapterMark(index: 0, title: 'An Unexpected Party', startMs: 0),
+            ChapterMark(index: 1, title: 'Roast Mutton', startMs: 1800000),
+          ],
+        )
+        ..waveforms['$_bookPid#item'] = Waveform(
+          state: 'ready',
+          resolution: 8,
+          peaks: List<int>.generate(8, (i) => 32 * (i + 1)),
+        );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: _book(),
+      );
+
+      expect(repo.wholeItemWaveformCalls, <String>[_bookPid]);
+      // Once, not once per view: the chapter bar is a slice of the same
+      // answer rather than a request of its own.
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playerTimeline('book')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playerTimeline('chapter')),
+      );
+      await tester.pumpAndSettle();
+      expect(repo.waveformCalls, <String>[_bookPid]);
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('reads zero, not a wrapped clock, before chapter one', (
       tester,
     ) async {

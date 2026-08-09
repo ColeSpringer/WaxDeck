@@ -14,10 +14,15 @@ part 'entity_card_list.g.dart';
 ///
 /// Properties:
 /// * [entities] 
+/// * [departed] - The requested PIDs that no longer name anything on this server, for anyone: deleted, merged away, or never real. In request order, a repeated PID once, and absent rather than empty when every miss was merely out of the caller's sight (a grant, a lapsed subscription, the trash) - those stay unnamed, because they can come back. This is the set a client holding `Prefs.pinned` prunes. 
 @BuiltValue()
 abstract class EntityCardList implements Built<EntityCardList, EntityCardListBuilder> {
   @BuiltValueField(wireName: r'entities')
   BuiltList<EntityCard> get entities;
+
+  /// The requested PIDs that no longer name anything on this server, for anyone: deleted, merged away, or never real. In request order, a repeated PID once, and absent rather than empty when every miss was merely out of the caller's sight (a grant, a lapsed subscription, the trash) - those stay unnamed, because they can come back. This is the set a client holding `Prefs.pinned` prunes. 
+  @BuiltValueField(wireName: r'departed')
+  BuiltList<String>? get departed;
 
   EntityCardList._();
 
@@ -47,6 +52,13 @@ class _$EntityCardListSerializer implements PrimitiveSerializer<EntityCardList> 
       object.entities,
       specifiedType: const FullType(BuiltList, [FullType(EntityCard)]),
     );
+    if (object.departed != null) {
+      yield r'departed';
+      yield serializers.serialize(
+        object.departed,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
   }
 
   @override
@@ -76,6 +88,13 @@ class _$EntityCardListSerializer implements PrimitiveSerializer<EntityCardList> 
             specifiedType: const FullType(BuiltList, [FullType(EntityCard)]),
           ) as BuiltList<EntityCard>;
           result.entities.replace(valueDes);
+          break;
+        case r'departed':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>;
+          result.departed.replace(valueDes);
           break;
         default:
           unhandled.add(key);

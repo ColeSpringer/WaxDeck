@@ -178,6 +178,15 @@ components:
         plays:
           type: integer
           description: Anonymous plays through the link so far.
+        owner:
+          type: string
+          description: >
+            Who minted the link: display name, or username where no
+            display name is set. Populated only on the `all=true`
+            listing, where the rows come from every account; on a
+            caller's own listing every row would name the caller, so
+            the field is absent there.
+          example: rowan
 
     SharePage:
       type: object

@@ -29,6 +29,7 @@ func savedSongStation(t *testing.T, h *harness, name string) RadioStation {
 }
 
 func TestRadioSavedSongsKeepBothIdentities(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	st := savedSongStation(t, h, "Deck FM")
 
@@ -81,6 +82,7 @@ func TestRadioSavedSongsKeepBothIdentities(t *testing.T) {
 }
 
 func TestRadioSavedSongMarksWhatTheLibraryNowHolds(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	st := savedSongStation(t, h, "Deck FM")
 
@@ -108,6 +110,7 @@ func TestRadioSavedSongMarksWhatTheLibraryNowHolds(t *testing.T) {
 }
 
 func TestRadioSavedSongFlipsThePlayInfoHeart(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	st := savedSongStation(t, h, "Deck FM")
 	h.svc.NoteRadioTitle(st.Pid, "Charlie Parker - Ornithology")
@@ -154,6 +157,7 @@ func TestRadioSavedSongFlipsThePlayInfoHeart(t *testing.T) {
 }
 
 func TestRadioSavedSongSnapshotsTheAnnouncedCover(t *testing.T) {
+	t.Parallel()
 	png := pngPixel
 	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
@@ -230,6 +234,7 @@ func TestRadioSavedSongSnapshotsTheAnnouncedCover(t *testing.T) {
 }
 
 func TestRadioSavedSongsAreOnePerAccount(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	st := savedSongStation(t, h, "Deck FM")
 	mine := decode[RadioSavedSong](t, mustSave(t, h, st.Pid, "Charlie Parker - Ornithology"))
@@ -280,6 +285,7 @@ func TestRadioSavedSongsAreOnePerAccount(t *testing.T) {
 }
 
 func TestRadioSavedSongsPageAndRefuseBadInput(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	st := savedSongStation(t, h, "Deck FM")
 	for _, line := range []string{"A - One", "B - Two", "C - Three"} {

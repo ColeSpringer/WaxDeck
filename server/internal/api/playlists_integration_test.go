@@ -57,6 +57,7 @@ func samePids(a, b []string) bool {
 }
 
 func TestPlaylistStaticLifecycle(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	if len(items.Items) != 4 {
@@ -194,6 +195,7 @@ func TestPlaylistStaticLifecycle(t *testing.T) {
 }
 
 func TestPlaylistSmartPerUserEvaluation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	first, second := items.Items[0].Pid, items.Items[1].Pid
@@ -316,6 +318,7 @@ func TestPlaylistSmartPerUserEvaluation(t *testing.T) {
 }
 
 func TestPlaylistRuleValidation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	deepNot := map[string]any{"type": "condition", "field": "title", "op": "is", "value": "x"}
@@ -350,6 +353,7 @@ func TestPlaylistRuleValidation(t *testing.T) {
 }
 
 func TestPlaylistRuleUpdateInPlace(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
@@ -416,6 +420,7 @@ func TestPlaylistRuleUpdateInPlace(t *testing.T) {
 // each round-trips through create and detail read, and the guarded
 // combinations answer invalid-request.
 func TestPlaylistRelativeAndLimitModes(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// A relative-date rule with a random draw round-trips: the day
@@ -498,6 +503,7 @@ func TestPlaylistRelativeAndLimitModes(t *testing.T) {
 }
 
 func TestPlaylistPreviewAndRuleFields(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// Preview honors the rule's own limit on items while the total
@@ -573,6 +579,7 @@ func TestPlaylistPreviewAndRuleFields(t *testing.T) {
 }
 
 func TestPlaylistM3uRoundTrip(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "")
 	var pids []string
@@ -615,6 +622,7 @@ func TestPlaylistM3uRoundTrip(t *testing.T) {
 }
 
 func TestPlaylistReplaceBasePrecisionTolerance(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "?mediaType=music")
 	a, b := items.Items[0].Pid, items.Items[1].Pid
@@ -645,6 +653,7 @@ func TestPlaylistReplaceBasePrecisionTolerance(t *testing.T) {
 }
 
 func TestPlaylistReplaceRefusesUnsubscribedMembers(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 2)
 	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
@@ -697,6 +706,7 @@ func TestPlaylistReplaceRefusesUnsubscribedMembers(t *testing.T) {
 // predicate every other listing gets would quietly make `state is
 // archived` answer nothing.
 func TestSmartPlaylistStateRuleSeesArchivedItems(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	items := h.items(t, "?mediaType=music")
 	if len(items.Items) < 2 {

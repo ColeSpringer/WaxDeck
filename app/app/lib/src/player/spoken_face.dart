@@ -16,6 +16,7 @@ import '../shell/semantics_ids.dart';
 import 'bookmarks.dart';
 import 'playback_session.dart';
 import 'speed_sheet.dart';
+import 'waveform.dart';
 
 /// Rebuilds only when the live position crosses into a new [T].
 ///
@@ -200,7 +201,13 @@ class BookSubtitle extends StatelessWidget {
 /// moves a pixel a minute; the toggle is there because "how far through
 /// the book am I" is a real question the chapter view cannot answer, and
 /// the caption answers it either way.
-class BookSeek extends StatefulWidget {
+///
+/// Both views draw the same envelope. A book's waveform is the book's,
+/// stitched server-side across its parts, because a part is a file
+/// boundary and neither view is one: the chapter view is a slice of the
+/// whole rather than a request of its own, so toggling costs nothing
+/// and never rescales the shape under the listener.
+class BookSeek extends ConsumerStatefulWidget {
   const BookSeek({
     required this.session,
     required this.position,
@@ -213,10 +220,10 @@ class BookSeek extends StatefulWidget {
   final List<ChapterMark> chapters;
 
   @override
-  State<BookSeek> createState() => _BookSeekState();
+  ConsumerState<BookSeek> createState() => _BookSeekState();
 }
 
-class _BookSeekState extends State<BookSeek> {
+class _BookSeekState extends ConsumerState<BookSeek> {
   static const _chapterView = 'chapter';
   static const _bookView = 'book';
 
@@ -225,6 +232,10 @@ class _BookSeekState extends State<BookSeek> {
   @override
   Widget build(BuildContext context) {
     final total = widget.session.mediaDuration;
+    // The whole book's envelope, whichever view is drawn. A book that
+    // has not been analyzed, or one part of which cannot be, answers
+    // null and the bar is the plain one it has always been.
+    final book = ref.watch(bookWaveformProvider(widget.session.item.pid)).value;
     return ValueListenableBuilder<Duration>(
       valueListenable: widget.position,
       builder: (context, at, _) {
@@ -284,6 +295,15 @@ class _BookSeekState extends State<BookSeek> {
                 duration: span,
                 playing: true,
               ),
+              // The chapter view is a window on the same envelope, kept
+              // on the book's own scale: a quiet chapter has to stay
+              // quiet, or the toggle would change how the audio looks.
+              peaks: chapter == null
+                  ? book
+                  : _chapterPeaks(book, start, span, total),
+              // Chapter starts, on the whole-book bar only: inside one
+              // chapter the only division is the edge of the bar.
+              marks: chapter == null ? _chapterStarts() : null,
               // Always the whole book, whichever bar is drawn: it is the
               // answer the chapter view cannot give, and the reason the
               // toggle is not needed most of the time.
@@ -295,6 +315,59 @@ class _BookSeekState extends State<BookSeek> {
         );
       },
     );
+  }
+
+  /// Where [at] falls in [total], as a fraction.
+  static double _fractionOf(Duration at, Duration total) {
+    final ms = total.inMilliseconds;
+    if (ms <= 0) return 0;
+    return (at.inMilliseconds / ms).clamp(0.0, 1.0);
+  }
+
+  /// The window of the book's envelope this chapter covers, held for
+  /// the reason the starts below are: this is rebuilt on every position
+  /// tick, and the slice depends on the chapter rather than on the
+  /// position. A fresh list each tick would also defeat the seek bar's
+  /// own identity guards, which exist so a thousand buckets - four
+  /// thousand on a long book - are not reduced again every frame.
+  List<double>? _slice;
+  ({List<double>? book, Duration start, Duration span, Duration total})?
+  _sliceOf;
+
+  List<double>? _chapterPeaks(
+    List<double>? book,
+    Duration start,
+    Duration span,
+    Duration total,
+  ) {
+    final key = (book: book, start: start, span: span, total: total);
+    if (_sliceOf != key) {
+      _sliceOf = key;
+      _slice = slicePeaks(
+        book,
+        _fractionOf(start, total),
+        _fractionOf(start + span, total),
+      );
+    }
+    return _slice;
+  }
+
+  /// The chapter starts, held so the seek bar can compare them by
+  /// identity: the position moves several times a second and the
+  /// chapters do not.
+  List<Duration>? _starts;
+  List<ChapterMark>? _startsFrom;
+
+  List<Duration>? _chapterStarts() {
+    final chapters = widget.chapters;
+    if (chapters.isEmpty) return null;
+    if (!identical(_startsFrom, chapters)) {
+      _startsFrom = chapters;
+      _starts = <Duration>[
+        for (final chapter in chapters) Duration(milliseconds: chapter.startMs),
+      ];
+    }
+    return _starts;
   }
 
   /// A position held inside the span the bar is drawing.

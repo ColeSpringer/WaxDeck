@@ -7,6 +7,7 @@ import (
 )
 
 func TestClipHealthMessageKeepsRuneBoundaries(t *testing.T) {
+	t.Parallel()
 	// A short message passes through untouched.
 	if got := clipHealthMessage("boom"); got != "boom" {
 		t.Fatalf("short clip = %q", got)

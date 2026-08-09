@@ -20,6 +20,7 @@ import (
 // re-analysis of a file that never moved. The question the sweep is
 // actually asking is whether the audio is still there.
 func TestTrashingATrackKeepsItsEmbedding(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	enableSonicAnalysis(t, ctx, svc, uc)
 

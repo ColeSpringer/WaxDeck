@@ -43,6 +43,7 @@ func castEntries(t *testing.T, h *harness, titles ...string) []connect.QueueEntr
 }
 
 func TestStreamItemsNegotiatesRendererFormat(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	r := castResolver(h)
 	entries := castEntries(t, h, "Alpha Song")
@@ -147,6 +148,7 @@ func TestStreamItemsNegotiatesRendererFormat(t *testing.T) {
 // renderer advertising flac must not make the server inflate an mp3
 // into it.
 func TestStreamItemsNeverInflatesALossySource(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	r := castResolver(h)
 	entries := castEntries(t, h, "Bravo Song") // mp3 in the demo library
@@ -169,6 +171,7 @@ func TestStreamItemsNeverInflatesALossySource(t *testing.T) {
 }
 
 func TestStreamItemsMintsFetchableArt(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	r := castResolver(h)
 	entries := castEntries(t, h, "Alpha Song")

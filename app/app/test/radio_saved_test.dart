@@ -6,6 +6,7 @@ import 'package:waxdeck/src/radio/radio_saved_controller.dart';
 import 'package:waxdeck/src/radio/radio_saved_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -33,6 +34,11 @@ Future<ProviderContainer> _pump(
   WidgetTester tester,
   FakeRepository repo,
 ) async {
+  // Desktop-sized: the identify handoff pushes the review entry, which
+  // sits inside the admin console's sidebar shell and wants the width.
+  tester.view.physicalSize = const Size(1600, 1000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   final container = ProviderContainer(
     overrides: [
       repositoryProvider.overrideWithValue(repo),
@@ -153,4 +159,164 @@ void main() {
     expect(find.text('Nothing saved yet'), findsOneWidget);
     expect(find.textContaining('Tap the heart'), findsOneWidget);
   });
+
+  testWidgets('the row menu hands the song to Add-from-URL', (tester) async {
+    final repo = FakeRepository()
+      ..seedSavedSong(
+        _song(
+          pid: 'rw-1',
+          line: 'Salt Harbour - The Bree Trio',
+          artist: 'Salt Harbour',
+          title: 'The Bree Trio',
+        ),
+      );
+    await _pump(tester, repo);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedMore('rw-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedAcquire),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add from URL'), findsOneWidget);
+  });
+
+  testWidgets('the identify handoff lists pending singles and hands the '
+      'parse to the one picked', (tester) async {
+    final repo = FakeRepository()
+      ..seedSavedSong(
+        _song(
+          pid: 'rw-1',
+          line: 'Salt Harbour - The Bree Trio',
+          artist: 'Salt Harbour',
+          title: 'The Bree Trio',
+        ),
+      );
+    repo.reviewEntries = <ReviewEntry>[
+      _reviewEntry('rv-1'),
+      // An album-sized unit cannot honestly be one radio song, and a
+      // decided entry has nothing left to search.
+      _reviewEntry('rv-2', trackCount: 9),
+      _reviewEntry('rv-3', status: 'applied'),
+    ];
+    repo.reviewEntryDetails['rv-1'] = _reviewEntry('rv-1');
+    await _pump(tester, repo);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedMore('rw-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentify),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentifyEntry('rv-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentifyEntry('rv-2')),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentifyEntry('rv-3')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentifyEntry('rv-1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.reidentifyCalls.single, (
+      entryId: 'rv-1',
+      artist: 'Salt Harbour',
+      album: null,
+      title: 'The Bree Trio',
+    ));
+    // Onto the entry, where the candidates the search finds land: the
+    // route mounts the review surface with this entry open, and the
+    // identify group is the part of it the handoff exists to reach.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewIdentifyGroup),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('an unparsed announcement hands the whole line', (tester) async {
+    final repo = FakeRepository()
+      ..seedSavedSong(_song(pid: 'rw-1', line: 'Coastal FM overnight'));
+    repo.reviewEntries = <ReviewEntry>[_reviewEntry('rv-1')];
+    repo.reviewEntryDetails['rv-1'] = _reviewEntry('rv-1');
+    await _pump(tester, repo);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedMore('rw-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentify),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentifyEntry('rv-1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.reidentifyCalls.single, (
+      entryId: 'rv-1',
+      artist: null,
+      album: null,
+      title: 'Coastal FM overnight',
+    ));
+  });
+
+  testWidgets('no pending singles says where they come from', (tester) async {
+    final repo = FakeRepository()
+      ..seedSavedSong(
+        _song(
+          pid: 'rw-1',
+          line: 'Salt Harbour - The Bree Trio',
+          artist: 'Salt Harbour',
+          title: 'The Bree Trio',
+        ),
+      );
+    await _pump(tester, repo);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedMore('rw-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentify),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No pending single tracks'), findsOneWidget);
+    expect(repo.reidentifyCalls, isEmpty);
+  });
 }
+
+/// A review entry in the fake's queue; the defaults are the shape the
+/// identify sheet offers, and a test departs from them one field at a
+/// time.
+ReviewEntryDetail _reviewEntry(
+  String id, {
+  int trackCount = 1,
+  String status = 'pending',
+}) => ReviewEntryDetail(
+  id: id,
+  kind: 'import',
+  status: status,
+  mediaType: MediaType.music,
+  origin: 'acquisition',
+  title: 'brree trio official audio',
+  artist: 'Topic Channel',
+  trackCount: trackCount,
+  createdAt: DateTime.utc(2026, 8, 1),
+  candidates: const [],
+);

@@ -6,6 +6,7 @@ import (
 )
 
 func TestSummarizeClient(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name, ua, want string
 	}{
@@ -96,6 +97,7 @@ func TestSummarizeClient(t *testing.T) {
 // too, which is what makes sessions stored before this existed read the
 // same as ones stored after.
 func TestSummarizeClientIsIdempotent(t *testing.T) {
+	t.Parallel()
 	for _, ua := range []string{
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36",
 		"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1",
@@ -113,6 +115,7 @@ func TestSummarizeClientIsIdempotent(t *testing.T) {
 // nothing recognizes is stored, so it has to be bounded and valid UTF-8
 // whatever arrives in the header.
 func TestSummarizeClientBoundsAnUnknownAgent(t *testing.T) {
+	t.Parallel()
 	long := ""
 	for len(long) < 400 {
 		long += "sömething-"
@@ -134,6 +137,7 @@ func TestSummarizeClientBoundsAnUnknownAgent(t *testing.T) {
 // verbatim - in a TEXT column, and back out of the devices endpoint for
 // as long as the session lives.
 func TestSummarizeClientCleansAShortInvalidAgent(t *testing.T) {
+	t.Parallel()
 	got := summarizeClient("\xffBot")
 	if !utf8.ValidString(got) {
 		t.Fatalf("invalid UTF-8 survived: %q", got)

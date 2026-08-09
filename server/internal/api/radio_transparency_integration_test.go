@@ -122,6 +122,7 @@ func radioTestStation(t *testing.T, h *harness, name, streamURL string) (string,
 // per-account cap, the idle watchdog) end a stream; none of them alter
 // one.
 func TestRadioRelayIsBitTransparent(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.AllowPrivateRadioHosts = true
 	})
@@ -197,6 +198,7 @@ func TestRadioRelayIsBitTransparent(t *testing.T) {
 // A station that announces nothing is relayed just as exactly; the
 // pass-through path has no metadata state machine in it at all.
 func TestRadioRelayIsBitTransparentWithoutMetadata(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.AllowPrivateRadioHosts = true
 	})
@@ -236,6 +238,7 @@ func TestRadioRelayIsBitTransparentWithoutMetadata(t *testing.T) {
 // arrived down the stream the listener is already receiving, on the
 // same footing the station's logo has always been fetched on.
 func TestRadioAnnouncedArtIsServedWithoutTheExternalRung(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.AllowPrivateRadioHosts = true
 	})
@@ -305,6 +308,7 @@ func TestRadioAnnouncedArtIsServedWithoutTheExternalRung(t *testing.T) {
 // spot's own title and banner never reach a now-playing face and the
 // song the station was playing stands.
 func TestRadioAdBlocksLeaveTheTitleAlone(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.AllowPrivateRadioHosts = true
 	})
@@ -336,6 +340,7 @@ func TestRadioAdBlocksLeaveTheTitleAlone(t *testing.T) {
 // A station that names its logo in its connect headers gets that logo,
 // which beats going looking for one.
 func TestRadioLogoHintFromConnectHeaders(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.AllowPrivateRadioHosts = true
 	})

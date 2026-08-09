@@ -10,6 +10,7 @@ import (
 // Three answers to tell apart: unset, an explicit zero, and a number.
 // Trash retention needs only two, which is why they share no reader.
 func TestTaskRetentionDaysTellsUnsetFromZero(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	if got := svc.TaskRetentionDays(ctx); got != defaultTaskRetentionDays {
@@ -48,6 +49,7 @@ func TestTaskRetentionDaysTellsUnsetFromZero(t *testing.T) {
 
 // The prune honours the knob, re-read every pass.
 func TestRunPruneHonoursTaskRetention(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	old := time.Now().Add(-10 * 24 * time.Hour).UnixNano()

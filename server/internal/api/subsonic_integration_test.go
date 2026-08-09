@@ -97,6 +97,7 @@ func newSubsonicSecret(t *testing.T, h *harness) string {
 }
 
 func TestSubsonicBrowseAndStream(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 
@@ -214,6 +215,7 @@ func TestSubsonicBrowseAndStream(t *testing.T) {
 }
 
 func TestSubsonicAuthAndStubs(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 
@@ -257,6 +259,7 @@ func TestSubsonicAuthAndStubs(t *testing.T) {
 }
 
 func TestSubsonicRemoveDuplicateIndexes(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 
@@ -298,6 +301,7 @@ func TestSubsonicRemoveDuplicateIndexes(t *testing.T) {
 }
 
 func TestSubsonicVisibility(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// A user with no library grants sees an empty catalog, not an error.

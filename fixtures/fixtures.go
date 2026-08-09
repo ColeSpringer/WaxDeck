@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/colespringer/waxflow"
@@ -337,10 +338,14 @@ func DemoLibrary() []Spec {
 }
 
 // UploadSources is the manual-upload journey's source material: a
-// two-track album whose artist, album, and titles appear in no other
-// preset, so an end-to-end import can assert them uniquely against
-// the scanned library. Durations are distinct from every other preset
-// for the same fingerprint-dedup reason as DemoLibrary.
+// two-track album plus a standalone single, whose artists, albums, and
+// titles appear in no other preset, so an end-to-end import can assert
+// them uniquely against the scanned library. The single is the
+// declined-identify journey's own file - declining imports on arrival,
+// so a file another upload test imports would race it for the
+// destination and flag it as a duplicate. Durations are distinct from
+// every other preset for the same fingerprint-dedup reason as
+// DemoLibrary.
 func UploadSources() []Spec {
 	track := func(name, title, trackNo string, d time.Duration) Spec {
 		return Spec{
@@ -358,6 +363,17 @@ func UploadSources() []Spec {
 	return []Spec{
 		track("lantern-one", "Paper Lanterns", "1", 4200*time.Millisecond),
 		track("lantern-two", "River Static", "2", 4700*time.Millisecond),
+		{
+			Name:     "sodium-sky",
+			Codec:    CodecMP3,
+			Duration: 5300 * time.Millisecond,
+			Tags: map[string]string{
+				"TITLE":       "Sodium Sky",
+				"ARTIST":      "Night Transit",
+				"ALBUM":       "Sodium Sky",
+				"TRACKNUMBER": "1",
+			},
+		},
 	}
 }
 
@@ -407,9 +423,8 @@ func generateOne(dir string, spec Spec) (string, error) {
 	if s.Corrupt == CorruptGarbage {
 		data = garbageBytes()
 	} else {
-		r, _ := s.route() // validate already resolved it
 		var err error
-		data, err = s.render(r)
+		data, err = s.renderCached()
 		if err != nil {
 			return "", err
 		}
@@ -422,6 +437,41 @@ func generateOne(dir string, spec Spec) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// renderCache memoizes rendered bytes per normalized spec for the life
+// of the process. Encoding is the expensive half of a fixture (an
+// integration suite synthesizes the same handful of files for hundreds
+// of harnesses) and the package's own contract makes reuse sound: the
+// same Spec always yields the same bytes. Bounded by MaxDuration times
+// however many distinct specs a test binary uses. Values are shared,
+// never mutated: corruption slices or replaces, and writing only reads.
+var renderCache sync.Map // renderKey -> *renderOnce
+
+type renderOnce struct {
+	once sync.Once
+	data []byte
+	err  error
+}
+
+// renderCached returns the spec's rendered bytes, encoding them on the
+// spec's first use in this process. The caller must treat the result
+// as read-only.
+func (s Spec) renderCached() ([]byte, error) {
+	// Corruption is applied per call downstream, so flavors of one
+	// spec share the clean encode.
+	k := s
+	k.Corrupt = CorruptNone
+	// fmt prints map keys sorted, so the key is stable across runs and
+	// covers every field render reads without naming them one by one.
+	key := fmt.Sprintf("%#v", k)
+	v, _ := renderCache.LoadOrStore(key, &renderOnce{})
+	ro := v.(*renderOnce)
+	ro.once.Do(func() {
+		r, _ := s.route() // validate already resolved it
+		ro.data, ro.err = s.render(r)
+	})
+	return ro.data, ro.err
 }
 
 // render encodes the spec's synthesized tone into its target format

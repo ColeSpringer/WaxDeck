@@ -12,6 +12,7 @@ import (
 // per show. Three properties ride on that and none of them is visible
 // from the call site, so pin them here.
 func TestSubscribedEpisodeScope(t *testing.T) {
+	t.Parallel()
 	unrestricted := &UserCtx{Explicit: true}
 
 	t.Run("one in predicate, whatever the arity", func(t *testing.T) {

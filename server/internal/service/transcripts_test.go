@@ -3,6 +3,7 @@ package service
 import "testing"
 
 func TestParseTranscriptVTT(t *testing.T) {
+	t.Parallel()
 	body := "WEBVTT\n\nNOTE styling ahead\n\n00:00.000 --> 00:01.500\n<v Ada>Hello <b>there</b></v>\n\n00:01.500 --> 00:03.000 align:start\n<c.highlight>General &amp; specific</c> <i>fixture</i>\n"
 	tx, err := parseTranscript([]byte(body), "text/vtt", "", "")
 	if err != nil {
@@ -23,6 +24,7 @@ func TestParseTranscriptVTT(t *testing.T) {
 }
 
 func TestParseTranscriptSRT(t *testing.T) {
+	t.Parallel()
 	body := "1\n00:00:01,000 --> 00:00:02,500\n<i>Quiet</i> start\n\n2\n01:00:03,000 --> 01:00:04,000\nHost: welcome back\n"
 	tx, err := parseTranscript([]byte(body), "", "application/srt", "")
 	if err != nil {
@@ -43,6 +45,7 @@ func TestParseTranscriptSRT(t *testing.T) {
 }
 
 func TestParseTranscriptJSONAndSniffing(t *testing.T) {
+	t.Parallel()
 	body := `{"segments":[{"startTime":1.5,"endTime":3,"speaker":"Ada","body":"Hello"},{"startTime":3,"body":"  "}]}`
 	tx, err := parseTranscript([]byte(body), "", "", "https://example.com/t")
 	if err != nil {
@@ -65,6 +68,7 @@ func TestParseTranscriptJSONAndSniffing(t *testing.T) {
 }
 
 func TestStripCueMarkup(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"plain words":                         "plain words",
 		"<b>bold</b> and <c.red>class</c>":    "bold and class",

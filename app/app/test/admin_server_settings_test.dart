@@ -89,6 +89,52 @@ void main() {
     );
   });
 
+  // The limits are set blind without it: three ceilings and nothing
+  // saying what they are actually bounding.
+  testWidgets('the limits say what the engine is running right now', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..activeTranscodeSessions = 3;
+    await _pump(tester, _host(_container(repo)));
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.transcodingActivity),
+      findsOneWidget,
+    );
+    expect(find.text('3 engine-backed streams right now.'), findsOneWidget);
+    // The copy says what the number is not, because it both under- and
+    // over-counts what somebody means by "transcoding".
+    expect(find.textContaining('HLS timelines are admitted'), findsOneWidget);
+    // Read once when the screen opened. A settings form is not a
+    // monitor, and nothing here polls.
+    expect(repo.transcodingActivityReads, 1);
+  });
+
+  testWidgets('the running count refreshes when asked, and only then', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..activeTranscodeSessions = 1;
+    await _pump(tester, _host(_container(repo)));
+    expect(find.text('1 engine-backed stream right now.'), findsOneWidget);
+
+    repo.activeTranscodeSessions = 5;
+    await tester.pump(const Duration(seconds: 30));
+    // Still one: nothing arrives on a timer.
+    expect(repo.transcodingActivityReads, 1);
+
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier(SemanticsIds.transcodingActivityRefresh),
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.transcodingActivityRefresh),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.transcodingActivityReads, 2);
+    expect(find.text('5 engine-backed streams right now.'), findsOneWidget);
+  });
+
   // Refused outright rather than silently stored as the old value while
   // reporting success.
   testWidgets('a retention that is not a whole number is refused', (

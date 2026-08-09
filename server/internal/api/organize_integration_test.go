@@ -8,6 +8,7 @@ import "testing"
 // has no managed library to lay out; upstream reports that as an
 // invalid request, which is the honest answer here too.
 func TestOrganizeProfilesAndPreview(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	resp := get(t, h.ts, "/api/v1/organize/profiles", h.token)
@@ -60,6 +61,7 @@ func TestOrganizeProfilesAndPreview(t *testing.T) {
 
 // TestOrganizeAdminGates checks every organize surface is admin-only.
 func TestOrganizeAdminGates(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword})
 	if resp.StatusCode != 201 {

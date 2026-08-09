@@ -19,6 +19,7 @@ import (
 // still an episode of the feed and still streams by enclosure
 // passthrough, which podcasts.spec.ts pins.
 func TestUnfetchKeepsTheEpisodeInTheShow(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 3)
 

@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/side_panel.dart';
 import 'queue_controller.dart';
+import 'queue_drag.dart';
 import 'queue_view.dart';
 
 /// The queue, in the shell's right panel.
@@ -36,7 +37,11 @@ class QueuePanel extends ConsumerWidget {
               semanticsId: SemanticsIds.queueClear,
             ),
         ],
-        child: CustomScrollView(slivers: queueSlivers(context, ref)),
+        // The whole scroll view is the target, not each row: a drop
+        // appends, so where inside the panel it lands means nothing.
+        child: QueueDropTarget(
+          child: CustomScrollView(slivers: queueSlivers(context, ref)),
+        ),
       ),
     );
   }

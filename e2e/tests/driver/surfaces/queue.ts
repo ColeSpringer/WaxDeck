@@ -10,7 +10,7 @@ import {
 } from '../../semantics-ids';
 import { Ctx } from '../context';
 import { T } from '../budgets';
-import { clickInView, longPressOn } from '../gestures';
+import { clickInView, clickThrough, dragOnto, longPressOn } from '../gestures';
 
 export class Queue {
   constructor(private readonly ctx: Ctx) {}
@@ -109,5 +109,46 @@ export class Queue {
   /// identifier, so the driver finds it and the spec judges the words.
   text(what: string | RegExp): Locator {
     return this.ctx.page.getByText(what).first();
+  }
+
+  /// The queue in the shell's right panel, which exists only where
+  /// there is room for one beside what is being browsed.
+  panel(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.panel));
+  }
+
+  /// The deck bar the panel opens from: the settle target for a
+  /// gesture that must land back on the shell's chrome, like
+  /// collapsing the player before [openPanel].
+  deckBar(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.deckBar));
+  }
+
+  /// Open that panel from the deck bar, which is what toggles it at
+  /// sidebar width.
+  ///
+  /// Not `clickThrough`, and the difference is that the control is a
+  /// toggle: clickThrough re-clicks whenever the destination is not
+  /// showing yet, and against a toggle the re-click closes the panel
+  /// the first click opened - an oscillation that never settles on a
+  /// loaded machine. So each attempt clicks only while the panel is
+  /// absent, then gives it one step to appear.
+  async openPanel(): Promise<void> {
+    const panel = this.panel();
+    await expect(async () => {
+      if ((await panel.count()) === 0) {
+        await this.ctx.page.locator(sem(SemanticsIds.deckQueue)).click();
+      }
+      await panel.waitFor({ timeout: T.step });
+    }).toPass({ timeout: T.nav });
+  }
+
+  /// Drag a row onto the panel, which appends it to the queue.
+  ///
+  /// Pointer only by design, so this is the whole of the gesture's
+  /// coverage over the real stack: there is no semantics node to click
+  /// instead, because a drag publishes none.
+  async dragOntoPanel(row: Locator): Promise<void> {
+    await dragOnto(this.ctx.page, row, this.panel());
   }
 }

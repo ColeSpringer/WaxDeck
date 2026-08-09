@@ -57,6 +57,25 @@ abstract final class ClientSettingKeys {
   /// server's history is the same list for both.
   static const resumeDeclinedThrough = 'waxdeck.queue.resumeDeclinedThrough';
 
+  /// How far the first-run tour got on this device, by stage name.
+  ///
+  /// The tour's entry condition - an administrator whose server has no
+  /// libraries - stops being true at step one, so everything after it
+  /// is progress rather than a state anything can re-derive. Held
+  /// across launches because the console's own surface is the web,
+  /// where a reload is one keystroke: without it, adding a library and
+  /// refreshing ends the tour two steps early and for good, and
+  /// skipping it on a server that still has no libraries un-skips it.
+  ///
+  /// Per device rather than per account, like the resume decision
+  /// above: a tour is something a person walked through at a keyboard,
+  /// not a property of the account. On the web that also scopes it to
+  /// the server for free, storage being per origin; a native client
+  /// re-pointed at a second, brand-new server would carry this one's
+  /// answer over, which is a trade taken knowingly for a guided flow
+  /// that is skippable in one tap.
+  static const firstRunProgress = 'waxdeck.admin.firstRunProgress';
+
   /// How far the spoken-word transports jump, in seconds. Two keys and
   /// not one pair: the two are set independently and a listener who
   /// changes only the forward jump should not have the other rewritten

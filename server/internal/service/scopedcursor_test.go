@@ -10,6 +10,7 @@ import "testing"
 //
 // Not parallel: the subtests stub the package-level retired-version set.
 func TestScopedCursorVersions(t *testing.T) {
+	t.Parallel()
 	const scope = "abcd1234"
 	mint := func(version, atScope, token string) string {
 		return encodeOpaqueCursor(version + "|" + atScope + "|" + token)

@@ -222,3 +222,29 @@ top-artists card is a list of names rather than a mosaic (the route to
 covers wants the store's `bytesFor` threaded through a render that
 currently takes one frame and no network), and the Android share path
 is hardware-gated as above.
+
+**Amended: the card draws covers now, and the one-frame rule is what
+shaped how.** `TopEntry.artUrl` was already on the wire and was being
+dropped; the card's data carries it, and the sheet fetches through
+`ArtworkStore.bytesFor` when it opens rather than when a button is
+pressed - the preview *is* the export, so a cover that arrived on
+export would be a picture the person never saw. The prefetch is not
+finished until `precacheImage` has each cover decoded into the image
+cache, because `_renderPng` captures one frame and an undecoded
+provider paints nothing in it. Each square is a raw `Image` with
+`gaplessPlayback`, not `ArtworkImage`, whose load fade would be caught
+half-done by a single-frame capture. A cover that is missing, refused,
+or still in flight draws a monogram, and the export waits two seconds
+for the fetch before going ahead with whatever it has: a card exported
+on a plane is a card of monograms, not a card of holes, and no card
+ever waits on the network to exist.
+
+Adding the squares surfaced a defect older than them: the square shape
+overflowed its own canvas by 22 pixels once a listener had three top
+artists, which the suite had never drawn because its fixture recap
+listed one. The block rhythm is now tighter on the square - it is as
+tall as it is wide and owes the same wordmark, headline, three facts
+that wrap onto two runs, and three names that the story shape has 840
+more pixels for - and both shapes are exercised at full artist count.
+The deferred entry shrinks to clip cards for episode shares, which are
+the same shape of work and are still not built.

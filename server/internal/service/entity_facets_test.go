@@ -12,6 +12,7 @@ import (
 // search for restricted callers: an entity is visible when one of the
 // libraries holding its members is granted, and hidden otherwise.
 func TestEntityInLibraries(t *testing.T) {
+	t.Parallel()
 	l := &Library{}
 	info := &read.EntityInfo{LibraryPIDs: []model.PID{"libA", "libB"}}
 
@@ -32,6 +33,7 @@ func TestEntityInLibraries(t *testing.T) {
 // members; the lookup is batched per kind now, and a batch that keyed
 // or filtered wrongly would either leak entities or empty the results.
 func TestRestrictedEntitySearchAttribution(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
 	libs, err := svc.Libraries(ctx)
@@ -78,6 +80,7 @@ func TestRestrictedEntitySearchAttribution(t *testing.T) {
 // and share surfaces can seed and target.
 
 func TestAlbumMixSeed(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
 	res, err := svc.Search(ctx, uc, "Signal Garden", 10)
@@ -104,6 +107,7 @@ func TestAlbumMixSeed(t *testing.T) {
 }
 
 func TestAlbumShareResolvesMembers(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
 	res, err := svc.Search(ctx, uc, "Signal Garden", 10)

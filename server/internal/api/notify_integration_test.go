@@ -73,6 +73,7 @@ func createTarget(t *testing.T, h *harness, path, token string, body map[string]
 }
 
 func TestNotificationEventCatalog(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// Any signed-in user reads the catalog, not just admins.
@@ -120,6 +121,7 @@ func TestNotificationEventCatalog(t *testing.T) {
 }
 
 func TestNotificationTargetCRUDAndIsolation(t *testing.T) {
+	t.Parallel()
 	h := notifyHarness(t)
 
 	// The admin surface is admin-only.
@@ -267,6 +269,7 @@ func TestNotificationTargetCRUDAndIsolation(t *testing.T) {
 }
 
 func TestNotificationScopeRules(t *testing.T) {
+	t.Parallel()
 	h := notifyHarness(t)
 	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword})
 	resp.Body.Close()
@@ -305,6 +308,7 @@ func TestNotificationScopeRules(t *testing.T) {
 }
 
 func TestNotificationDeliveryRouting(t *testing.T) {
+	t.Parallel()
 	h := notifyHarness(t)
 	ctx := context.Background()
 
@@ -366,6 +370,7 @@ func TestNotificationDeliveryRouting(t *testing.T) {
 }
 
 func TestNotificationUnifiedPushGatingRegression(t *testing.T) {
+	t.Parallel()
 	// Push delivery used to ignore the enabled-event selection
 	// entirely; gating is structural now. A registration narrowed in
 	// the targets surface must receive nothing for a deselected event,
@@ -434,6 +439,7 @@ func TestNotificationUnifiedPushGatingRegression(t *testing.T) {
 }
 
 func TestNotificationTargetTestAndHealth(t *testing.T) {
+	t.Parallel()
 	h := notifyHarness(t)
 
 	okSink := newNotifySink(t, 200)
@@ -497,6 +503,7 @@ func TestNotificationTargetTestAndHealth(t *testing.T) {
 }
 
 func TestNotifyPrivateHostRefusedAtWrite(t *testing.T) {
+	t.Parallel()
 	// The default harness keeps the guard on: user-pointed kinds refuse
 	// private hosts at write time with the friendly message, while the
 	// deliberately exempt kinds accept them.
@@ -548,6 +555,7 @@ func TestNotifyPrivateHostRefusedAtWrite(t *testing.T) {
 }
 
 func TestPushRegistrationCompat(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// The endpoint must be https.

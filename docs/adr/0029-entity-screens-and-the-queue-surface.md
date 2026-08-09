@@ -123,8 +123,41 @@ checkbox picks; shift+click extends a range from the last row touched;
 the set removes, moves to top, moves to bottom, and travels together
 when any of its rows is dragged. Escape ends the mode through a scoped
 command, so it prints in the palette and the shortcut sheet and yields
-to whatever route is on top. Dragging a listing row into the panel is
-still open and is what the deferred entry now names.
+to whatever route is on top.
+
+Dragging a listing row into the panel has since landed too, closing the
+pair. Pointer only, as predicted, and the gate is hover rather than a
+pointer-kind filter on the recogniser: a row is draggable only while a
+mouse is over it, which touch can never be. It is a gate rather than a
+swap of the widget - `maxSimultaneousDrags` moves and the child stays
+put - because the first thing a drag does is take the cursor off the
+row it started on, and a tree that rebuilt there would cancel the drag
+it had just begun.
+
+What a drag carries is a query, not the rows: an index bucket is a name
+and a count with no items in hand, so the payload knows how to fetch
+what it stands for and the fetch happens when the drop lands, bounded
+by the queue's own cap. That is also the one drop that can fail on its
+way in, and it says so.
+
+A drop lands where it was released. The rows are laid out lazily inside
+a sliver, so the slot is resolved by hit testing what is under the
+pointer - each up-next row carries a `MetaData` marker naming its slot,
+and the half of the row the pointer is in decides above or below - with
+a line drawn at the boundary while the drag is over the panel. A drop
+that is over the panel but not over a running-order row (the header,
+the history, the space under a short queue) means the end. The pointer
+is what is hit-tested rather than the feedback's corner, which needed
+`pointerDragAnchorStrategy`: `DragTargetDetails.offset` is the
+feedback's top-left, and with the default anchor the panel would judge
+a point half a row away from the one somebody aimed with.
+
+Touch still cannot drag a row, and that is the one deliberate cut:
+`LongPressDraggable` collides with the long press that starts a
+selection, and touch already reaches the same outcome through the row's
+own menu, so it would be a second gesture for a job that has one. The
+hover gate makes that exact rather than approximate - a finger never
+hovers.
 
 An album's track order is now the client's to compute, because
 `QueryPage` orders by the catalog's own sort key and ignores the query's

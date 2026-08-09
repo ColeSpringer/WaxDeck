@@ -71,6 +71,7 @@ func waveformPart(t *testing.T, h *harness, pid string, part int) Waveform {
 }
 
 func TestAnalyzeThenWaveform(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// A cue-carved album beside the whole-file demo tracks: one backing
@@ -162,6 +163,7 @@ func TestAnalyzeThenWaveform(t *testing.T) {
 }
 
 func TestWaveformCaching(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.rescanAndWait(t)
 	items := h.items(t, "?mediaType=music").Items
@@ -217,6 +219,7 @@ func TestWaveformCaching(t *testing.T) {
 }
 
 func TestWaveformEpisodeIsPermanentlyUnavailable(t *testing.T) {
+	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 1)
 	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
@@ -255,6 +258,7 @@ func TestWaveformEpisodeIsPermanentlyUnavailable(t *testing.T) {
 // Every part has had its own peaks row all along; only the read was
 // pinned to the primary file, which is not part one.
 func TestWaveformPerPart(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	if _, err := fixtures.GenerateBook(h.library); err != nil {
 		t.Fatal(err)
@@ -336,13 +340,18 @@ func TestWaveformPerPart(t *testing.T) {
 	}
 }
 
-// The stamp is the requested part's file now, so a book can read both
-// states across its parts.
-func TestWaveformPartlyAnalyzedBookReadsPending(t *testing.T) {
-	h := newHarness(t)
-
-	// Staged and moved in two steps, so the pass genuinely runs over a
-	// subset and the last part arrives undecoded.
+// stageBookWithOnePartLate scans and analyzes a book missing its last
+// part, then adds that part and rescans, so the pass genuinely ran over
+// a subset and one part is analyzable and unanalyzed. Answers the
+// book's pid.
+//
+// Staged in two steps rather than faked, because the whole point is the
+// analysis stamp: a part the pass has never seen and a part it stamped
+// and could not measure are the same missing peaks row, and every
+// pending-or-unavailable decision downstream turns on telling them
+// apart.
+func stageBookWithOnePartLate(t *testing.T, h *harness) string {
+	t.Helper()
 	staged := t.TempDir()
 	stagedDir, err := fixtures.GenerateBook(staged)
 	if err != nil {
@@ -387,17 +396,170 @@ func TestWaveformPartlyAnalyzedBookReadsPending(t *testing.T) {
 	if len(books) != 1 {
 		t.Fatalf("audiobooks = %d, want 1", len(books))
 	}
-	book := books[0]
-	if got := waveformPart(t, h, book.Pid, 0); got.State != "ready" {
+	return books[0].Pid
+}
+
+// The stamp is the requested part's file now, so a book can read both
+// states across its parts.
+func TestWaveformPartlyAnalyzedBookReadsPending(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	book := stageBookWithOnePartLate(t, h)
+
+	if got := waveformPart(t, h, book, 0); got.State != "ready" {
 		t.Errorf("part 0 = %q, want the analyzed part to stay ready", got.State)
 	}
 	// Unavailable here would draw a plain bar forever.
-	if got := waveformPart(t, h, book.Pid, 2); got.State != "pending" {
+	if got := waveformPart(t, h, book, 2); got.State != "pending" {
 		t.Errorf("the late part = %q, want pending rather than unavailable", got.State)
 	}
 }
 
+// waveformWhole reads one envelope across an item's whole timeline.
+func waveformWhole(t *testing.T, h *harness, pid string) Waveform {
+	t.Helper()
+	resp := get(t, h.ts, "/api/v1/items/"+pid+"/waveform?span=item", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("whole-item waveform status = %d, want 200", resp.StatusCode)
+	}
+	return decode[Waveform](t, resp)
+}
+
+// What a book scrubber draws: the book's own timeline rather than
+// whichever file the reader happens to be inside.
+func TestWaveformWholeBook(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook").Items
+	if len(books) != 1 {
+		t.Fatalf("audiobooks = %d, want the one fixture book", len(books))
+	}
+	book := books[0]
+
+	// Analyzable and unanalyzed reads the same under either span.
+	if got := waveformWhole(t, h, book.Pid); got.State != "pending" {
+		t.Fatalf("before analyze, whole book = %q, want pending", got.State)
+	}
+
+	analyzeAndWait(t, h)
+
+	whole := waveformWhole(t, h, book.Pid)
+	if whole.State != "ready" {
+		t.Fatalf("whole book = %q, want ready", whole.State)
+	}
+	if whole.Peaks == nil || whole.Resolution == nil {
+		t.Fatal("a ready whole-book envelope must carry peaks and a resolution")
+	}
+	if len(*whole.Peaks) != *whole.Resolution {
+		t.Fatalf("%d peaks for resolution %d", len(*whole.Peaks), *whole.Resolution)
+	}
+	// One envelope, not one part's: it is not the answer any single
+	// part gives, because it is derived from all of them.
+	zero := waveformPart(t, h, book.Pid, 0)
+	if zero.EssenceHash == nil || whole.EssenceHash == nil {
+		t.Fatal("both answers must name what they were measured from")
+	}
+	if *whole.EssenceHash == *zero.EssenceHash {
+		t.Fatal("the whole-book validator is part zero's; re-analysing another part would not invalidate it")
+	}
+	// A digest of the parts rather than a list of them: the per-part
+	// dependency is unit-tested against wholeItemValidator, and what
+	// matters over the wire is that it stays short enough to ride an
+	// If-None-Match through a reverse proxy however long the book is.
+	// A hundred-part book joined raw runs to kilobytes.
+	if len(*whole.EssenceHash) > 64 {
+		t.Errorf("whole-book validator is %d chars; it has to fit a header buffer", len(*whole.EssenceHash))
+	}
+	// A part index means nothing across the whole book, so it is not
+	// echoed and not obeyed.
+	if whole.PartIndex != nil {
+		t.Errorf("whole-book answer echoed partIndex %d", *whole.PartIndex)
+	}
+	resp := get(t, h.ts, "/api/v1/items/"+book.Pid+"/waveform?span=item&partIndex=2", h.token)
+	got := decode[Waveform](t, resp)
+	if got.EssenceHash == nil || *got.EssenceHash != *whole.EssenceHash {
+		t.Errorf("partIndex changed the whole-book answer")
+	}
+	// Synthesized parts are tones: an all-zero stitch would mean the
+	// weighting dropped the signal.
+	loud := false
+	for _, v := range *whole.Peaks {
+		if v > 0 {
+			loud = true
+			break
+		}
+	}
+	if !loud {
+		t.Fatal("every stitched peak is zero")
+	}
+
+	// Cacheable like any ready answer, and revalidating is a 304.
+	first := get(t, h.ts, "/api/v1/items/"+book.Pid+"/waveform?span=item", h.token)
+	first.Body.Close()
+	etag := first.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("a ready whole-book envelope must carry an ETag")
+	}
+	req, _ := http.NewRequest("GET", h.ts.URL+"/api/v1/items/"+book.Pid+"/waveform?span=item", nil)
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	req.Header.Set("If-None-Match", etag)
+	again, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again.Body.Close()
+	if again.StatusCode != 304 {
+		t.Fatalf("revalidated whole-book waveform = %d, want 304", again.StatusCode)
+	}
+
+	// A single-file item has no parts to stitch, so the whole-item span
+	// is the answer the default already gives.
+	music := h.items(t, "?mediaType=music").Items
+	if len(music) == 0 {
+		t.Fatal("no music scanned")
+	}
+	track := music[0].Pid
+	one, byPart := waveformWhole(t, h, track), waveform(t, h, track)
+	if one.State != byPart.State {
+		t.Fatalf("single file: span=item = %q, default = %q", one.State, byPart.State)
+	}
+	if one.Peaks == nil || byPart.Peaks == nil || len(*one.Peaks) != len(*byPart.Peaks) {
+		t.Fatal("single file: the two spans answered different envelopes")
+	}
+	for i := range *one.Peaks {
+		if (*one.Peaks)[i] != (*byPart.Peaks)[i] {
+			t.Fatalf("single file: the two spans differ at bucket %d", i)
+		}
+	}
+}
+
+// All parts or nothing: half an envelope drawn across a whole timeline
+// would be silence somebody could seek into.
+func TestWaveformWholeBookWaitsForEveryPart(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	book := stageBookWithOnePartLate(t, h)
+
+	if got := waveformPart(t, h, book, 0); got.State != "ready" {
+		t.Fatalf("part 0 = %q, want ready", got.State)
+	}
+	if got := waveformWhole(t, h, book); got.State != "pending" {
+		t.Fatalf("whole book with one part unanalyzed = %q, want pending", got.State)
+	}
+
+	// And once the straggler lands, the whole book has an envelope.
+	analyzeAndWait(t, h)
+	if got := waveformWhole(t, h, book); got.State != "ready" {
+		t.Fatalf("after the second pass, whole book = %q, want ready", got.State)
+	}
+}
+
 func TestAnalyzeRequiresAdmin(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	resp := h.postJSON(t, "/api/v1/users", map[string]any{
 		"username": "listener", "password": "long-enough-pw",
@@ -409,6 +571,7 @@ func TestAnalyzeRequiresAdmin(t *testing.T) {
 }
 
 func TestAnalyzeScheduleIsListedAndOffByDefault(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	resp := get(t, h.ts, "/api/v1/admin/schedules", h.token)
 	schedules := decode[ScheduleList](t, resp).Schedules
@@ -449,6 +612,7 @@ func TestAnalyzeScheduleIsListedAndOffByDefault(t *testing.T) {
 // named-part resolve, every GET re-enqueues doomed work and re-answers
 // pending forever.
 func TestSkipMapUnavailableForADeletedBookPart(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	if _, err := fixtures.GenerateBook(h.library); err != nil {
 		t.Fatal(err)

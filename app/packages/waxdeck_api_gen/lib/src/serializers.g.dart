@@ -326,6 +326,7 @@ Serializers _$serializers =
           ..add(TopList.serializer)
           ..add(TopListKindEnum.serializer)
           ..add(TopListRangeEnum.serializer)
+          ..add(TranscodingActivity.serializer)
           ..add(TranscodingLimits.serializer)
           ..add(Transcript.serializer)
           ..add(TranscriptCue.serializer)
@@ -473,6 +474,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EntityCard)]),
             () => ListBuilder<EntityCard>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [

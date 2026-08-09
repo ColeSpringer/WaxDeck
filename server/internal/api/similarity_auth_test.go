@@ -64,6 +64,7 @@ func newWorkerTestServer(t *testing.T) *httptest.Server {
 }
 
 func TestWorkerTokenOpensWorkerPaths(t *testing.T) {
+	t.Parallel()
 	ts := newWorkerTestServer(t)
 
 	resp := get(t, ts, "/api/v1/similarity/work", testWorkerToken)
@@ -86,6 +87,7 @@ func TestWorkerTokenOpensWorkerPaths(t *testing.T) {
 }
 
 func TestWorkerPathsRefuseWrongCredentials(t *testing.T) {
+	t.Parallel()
 	ts := newWorkerTestServer(t)
 
 	// A wrong token never opens the worker path.
@@ -125,6 +127,7 @@ func TestWorkerPathsRefuseWrongCredentials(t *testing.T) {
 }
 
 func TestWorkerTokenOpensNothingElse(t *testing.T) {
+	t.Parallel()
 	ts := newWorkerTestServer(t)
 
 	// The worker token is not a session: outside the worker paths it
@@ -139,6 +142,7 @@ func TestWorkerTokenOpensNothingElse(t *testing.T) {
 }
 
 func TestWorkerAuthorizedComparesTokens(t *testing.T) {
+	t.Parallel()
 	srv := &Server{workerTokens: []string{"tok-a", "tok-b"}}
 	mk := func(header string) *http.Request {
 		r := httptest.NewRequest("GET", "/api/v1/similarity/work", nil)

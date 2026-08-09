@@ -20,6 +20,7 @@ func isZeroPrefs(p Prefs) bool {
 // the duplicate check work at all: Crockford base32 parses either case,
 // so two spellings of one album must not become two shelf cards.
 func TestPutPrefsCanonicalizesPins(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	const album = "al-01JZX5N8QW3F4V9T2B7KD3M9R6"
@@ -75,6 +76,7 @@ func TestPutPrefsCanonicalizesPins(t *testing.T) {
 // round trip is a queue that sounds wrong rather than a field that reads
 // blank.
 func TestPrefsRoundTripsTheServerAppliedFields(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	stored, err := svc.PutPrefs(ctx, admin, Prefs{
@@ -120,6 +122,7 @@ func TestPrefsRoundTripsTheServerAppliedFields(t *testing.T) {
 }
 
 func TestPutPrefsBoundsTheCrossfade(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	for _, seconds := range []float64{-1, 12.1, 3600} {
 		if _, err := svc.PutPrefs(ctx, admin, Prefs{CrossfadeSeconds: seconds}); err == nil {
@@ -141,6 +144,7 @@ func TestPutPrefsBoundsTheCrossfade(t *testing.T) {
 // as defaults rather than propagate an error, and the next write has to
 // replace it.
 func TestPrefsSurviveACorruptDocument(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	if err := svc.db.PutPrefsJSON(ctx, admin.ID, "{not json at all"); err != nil {
 		t.Fatal(err)
@@ -168,6 +172,7 @@ func TestPrefsSurviveACorruptDocument(t *testing.T) {
 // Validated against the same two tables the browse endpoint parses with,
 // so a stored default can never name something it would refuse.
 func TestPutPrefsValidatesBrowseSorts(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	stored, err := svc.PutPrefs(ctx, admin, Prefs{
@@ -214,6 +219,7 @@ func TestPutPrefsValidatesBrowseSorts(t *testing.T) {
 // Absent is the default and false is a choice, so both have to survive a
 // round trip as themselves.
 func TestPrefsKeepFalseApartFromAbsent(t *testing.T) {
+	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
 	off := false

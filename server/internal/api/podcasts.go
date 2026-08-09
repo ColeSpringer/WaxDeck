@@ -686,7 +686,15 @@ func (s *Server) GetWaveform(ctx context.Context, req GetWaveformRequestObject) 
 	if req.Params.PartIndex != nil {
 		partIndex = *req.Params.PartIndex
 	}
-	wf, err := s.svc.WaveformFor(ctx, uc, req.Pid, partIndex)
+	// The whole-item span ignores partIndex by contract: a book's
+	// timeline is the book, and naming a part inside it names nothing.
+	wholeItem := req.Params.Span != nil && *req.Params.Span == GetWaveformParamsSpanItem
+	var wf service.WaveformResult
+	if wholeItem {
+		wf, err = s.svc.WaveformForItem(ctx, uc, req.Pid)
+	} else {
+		wf, err = s.svc.WaveformFor(ctx, uc, req.Pid, partIndex)
+	}
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindNotFound:

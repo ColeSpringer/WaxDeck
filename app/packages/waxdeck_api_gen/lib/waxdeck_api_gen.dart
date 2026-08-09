@@ -331,6 +331,7 @@ export 'package:waxdeck_api_gen/src/model/tool_task_page.dart';
 export 'package:waxdeck_api_gen/src/model/tool_tasks_cleared.dart';
 export 'package:waxdeck_api_gen/src/model/top_entry.dart';
 export 'package:waxdeck_api_gen/src/model/top_list.dart';
+export 'package:waxdeck_api_gen/src/model/transcoding_activity.dart';
 export 'package:waxdeck_api_gen/src/model/transcoding_limits.dart';
 export 'package:waxdeck_api_gen/src/model/transcript.dart';
 export 'package:waxdeck_api_gen/src/model/transcript_cue.dart';

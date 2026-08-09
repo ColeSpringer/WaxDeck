@@ -254,6 +254,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/transcoding/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read what the transcoder is doing right now
+         * @description The engine-backed streams in flight, for reading beside the limits that bound them. A separate read from `getTranscodingLimits` because configuration and telemetry have different lifetimes: the limits are a form somebody is editing, this is a number that moves under them, and `PUT` echoes the limits schema. Administrators only.
+         */
+        get: operations["getTranscodingActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/scrobbling": {
         parameters: {
             query?: never;
@@ -1315,6 +1335,8 @@ export interface paths {
          *     Answers are in request order, and that is the contract rather than an implementation detail: the caller's list is already ordered (a pinned shelf), so preserving it here is what keeps the shelf from reshuffling under a thumb.
          *
          *     PIDs the caller cannot be answered for are silently omitted rather than erroring: unknown, deleted, merged away, or in a library outside the caller's grant all leave the list one card shorter, which is what `Prefs.pinned` describes for a departed entity. A response shorter than the request is normal, and an empty request is an empty response.
+         *
+         *     Of the omissions, `departed` names the subset that is gone for everyone - deleted, merged away, or never real - as opposed to merely out of this caller's sight today (a grant, a lapsed subscription, the trash), which stays an unnamed omission. A client holding a pinned list may prune exactly the departed pids; pruning an unnamed omission would turn a state that can end into a loss that cannot.
          */
         post: operations["resolveEntities"];
         delete?: never;
@@ -2362,6 +2384,8 @@ export interface paths {
          * @description The item's amplitude envelope, for painting a waveform behind a seek bar. A pure read: the values come from the catalog's analyze pass and this endpoint computes nothing and queues nothing, so a server whose analyze pass has never run answers `pending` everywhere. `POST /library/analyze` and the `analyze` schedule are what produce them.
          *     `peaks` is one value per bucket, `0` silence and `255` full scale, at the fixed `resolution` the catalog stores (1000 buckets per track today, about a kilobyte). There is no `points` parameter: a resizable seek bar has to downsample to its own pixel width anyway, and a server-side width would add a query dimension to the cache key for work the renderer does for free. The stored values are 16-bit and narrowed to a byte here, so the low bits are dropped rather than rounded; that is invisible at any width a seek bar is drawn at.
          *     Waveforms are per audio file: for a multi-file audiobook, pass `partIndex` to get the envelope of one part, in that part's own timeline, and the answer echoes the `partIndex` it describes. An omitted `partIndex` is part zero, so a client that does not know about parts gets the first one rather than nothing.
+         *     `span=item` answers one envelope over the whole item instead: the parts stitched in reading order into the same `Waveform` shape, with the buckets spread evenly across the total duration and each part given bucket-space in proportion to how long it is. That is what a book scrubber draws, because a book's timeline is the book rather than the file the reader happens to be in; `partIndex` is ignored under it, and a single-file item answers exactly what `span=part` would. `resolution` is not fixed under `span=item` - a long book gets more buckets than a short one, so a chapter is still a shape rather than three bars - so read it rather than assuming it.
+         *     A stitched answer is `ready` only when every part has an envelope. A book with one unanalyzed part is `pending`, and one with a part that can never be measured is `unavailable`: half a book's envelope drawn across a whole book's timeline would be silence somebody could seek into, which is a convincing wrong answer rather than a partial one.
          *     `state` is `ready`, `pending` (this item is analyzable and has not been analyzed yet; poll again after an analyze pass), or `unavailable` (there will never be a waveform for this item). Read `unavailable` as final. Three populations answer it: podcast episodes, which are deliberately never analyzed; a track carved out of a shared file by a cue sheet, which has no envelope of its own to report; and a file the pass analyzed but could not measure, which is not retried until its audio changes. A client should draw its plain seek bar for `unavailable` rather than spinning. A book part whose file has simply not been analyzed yet is `pending`, not `unavailable`, so a partly analyzed book can report the two states across its parts.
          *     A `ready` answer is content-addressed by the audio essence of the file being described (so a multi-file book's parts carry different validators) and cacheable for a day; revalidate with `If-None-Match`. `pending` and `unavailable` are `no-store`, since both are expected to change.
          */
@@ -4659,6 +4683,11 @@ export interface components {
             /** @description Default transcode bitrate ceiling in kbit/s for accounts without their own `maxTranscodeKbps`; 0 is unlimited. */
             defaultMaxBitrateKbps: number;
         };
+        /** @description What the transcoder is doing right now, for context beside the limits. */
+        TranscodingActivity: {
+            /** @description Engine-backed streams in flight: what the concurrent caps are counting. Both a floor and a ceiling on what is "really" being transcoded - a client that forced the source's own format is routed through the engine and counted here though nothing is re-encoded, and HLS timeline segments are admitted by the streaming engine's own control and are not counted at all. */
+            activeSessions: number;
+        };
         /**
          * @description A schedulable job kind. A shared named schema on purpose (the path parameter and the schedule object both use it): identical inline enums make the Dart generator emit one enum class into two files, which does not compile.
          *     `analyze` is off by default and costs a full audio decode per file; see `POST /library/analyze` for what it produces and what it costs. A firing that collides with an analyze pass already running is skipped rather than recorded as run, so it retries on the next tick instead of waiting for the next scheduled window.
@@ -5932,6 +5961,8 @@ export interface components {
         /** @description Cards for the requested PIDs, in request order, minus the ones that could not be resolved. */
         EntityCardList: {
             entities: components["schemas"]["EntityCard"][];
+            /** @description The requested PIDs that no longer name anything on this server, for anyone: deleted, merged away, or never real. In request order, a repeated PID once, and absent rather than empty when every miss was merely out of the caller's sight (a grant, a lapsed subscription, the trash) - those stay unnamed, because they can come back. This is the set a client holding `Prefs.pinned` prunes. */
+            departed?: string[];
         };
         /** @description One album entity's identity and counts. */
         AlbumDetail: {
@@ -6983,7 +7014,11 @@ export interface components {
              * @example 1000
              */
             resolution?: number;
-            /** @description Content hash of the analyzed audio essence, matching the download surface's `essenceHash`. A stored waveform whose hash no longer matches the stored audio is stale. */
+            /**
+             * @description Content hash of the analyzed audio essence, matching the download surface's `essenceHash`. A stored waveform whose hash no longer matches the stored audio is stale.
+             *
+             *     For `span=item` on a multi-part book there is no single essence to name, so this is a fixed-length digest over everything the stitched envelope is built from - every part's essence in reading order, every part's duration, and the bucket count. It is a cache validator there rather than a content hash, and does not match any file's `essenceHash`: compare it only against another answer from this endpoint.
+             */
             essenceHash?: string;
         };
         /** @description One controllable playback output: a registered first-party client (`client`), a cast device (`cast`), a DLNA renderer (`dlna`), or the server's own audio output (`jukebox`). `kind` is an open string; clients must render unknown kinds as generic endpoints. */
@@ -8425,6 +8460,11 @@ export interface components {
             expiresAt?: string;
             /** @description Anonymous plays through the link so far. */
             plays: number;
+            /**
+             * @description Who minted the link: display name, or username where no display name is set. Populated only on the `all=true` listing, where the rows come from every account; on a caller's own listing every row would name the caller, so the field is absent there.
+             * @example rowan
+             */
+            owner?: string;
         };
         /** @description One page of share links, newest first. */
         SharePage: {
@@ -9311,7 +9351,7 @@ export interface components {
             /**
              * @description What this user has pinned to home, in the order the shelf presents them. The same shape and the same rules as `radioFavorites`, for the same reason: a pin is about the listener rather than the machine they made it on, so it follows the account.
              *
-             *     Ordered, and the order is the client's to set - new pins go on the end. Entries are entity PIDs and are not resolved on write: an album another household member deleted leaves its pid here, and a client draws only the pids it can still resolve, because failing a whole preference write over one departed release would be worse than a shelf one card shorter. Resolve them with `POST /library/entities`, which silently drops what it cannot answer for.
+             *     Ordered, and the order is the client's to set - new pins go on the end. Entries are entity PIDs and are not resolved on write: an album another household member deleted leaves its pid here, and a client draws only the pids it can still resolve, because failing a whole preference write over one departed release would be worse than a shelf one card shorter. Resolve them with `POST /library/entities`, which silently drops what it cannot answer for and names, in its `departed` list, the pids that are gone for everyone - the subset a client may prune from here, so a deleted album does not hold one of the 64 slots forever.
              *
              *     Albums (`al-`), artists (`ar-`), release groups (`rg-`), playlists (`pl-`), podcast shows (`pc-`), and books (`bk-`) may be pinned. Radio stations may not: the dial is already radio's pin surface, and two pin gestures for one station would be two places to unpin it from. Tracks and episodes may not either: a card opens a surface, and a kept set of tracks is a playlist - which pins.
              *
@@ -10115,6 +10155,28 @@ export interface operations {
                 };
             };
             400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getTranscodingActivity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What is running. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscodingActivity"];
+                };
+            };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
         };
@@ -13442,8 +13504,10 @@ export interface operations {
     getWaveform: {
         parameters: {
             query?: {
-                /** @description Zero-based part of a multi-file audiobook to describe. Ignored for single-file items. Out of range is `not-found`, matching the skip map. */
+                /** @description Zero-based part of a multi-file audiobook to describe. Ignored for single-file items and under `span=item`. Out of range is `not-found`, matching the skip map. */
                 partIndex?: number;
+                /** @description What the envelope covers: one part (the default), or the whole item stitched across its parts. */
+                span?: "part" | "item";
             };
             header?: {
                 /** @description Previously returned `ETag`; a match answers 304 with no body. */

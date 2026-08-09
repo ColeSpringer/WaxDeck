@@ -38,6 +38,7 @@ func fixtureEntityPIDs(t *testing.T, h *harness, secret string) (artistPID, albu
 }
 
 func TestEntityStarAndRatingRoundTrip(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	artistPID, albumPID := fixtureEntityPIDs(t, h, secret)
@@ -115,6 +116,7 @@ func TestEntityStarAndRatingRoundTrip(t *testing.T) {
 // bad id in the batch must leave the request whole, not half-applied
 // with a failure reported on top.
 func TestSubsonicStarMixedRequestIsAllOrNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	const c = "test"
@@ -138,6 +140,7 @@ func TestSubsonicStarMixedRequestIsAllOrNothing(t *testing.T) {
 // TestEntityStarIsNotAnItemStar pins the independence rule: the two live
 // in separate tables upstream, and a client that wants both writes both.
 func TestEntityStarIsNotAnItemStar(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	_, albumPID := fixtureEntityPIDs(t, h, secret)
@@ -159,6 +162,7 @@ func TestEntityStarIsNotAnItemStar(t *testing.T) {
 // catalog entity behind it refuses with a reason rather than claiming
 // the server cannot do entity stars at all.
 func TestSubsonicEntityStars(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	secret := newSubsonicSecret(t, h)
 	const c = "test"

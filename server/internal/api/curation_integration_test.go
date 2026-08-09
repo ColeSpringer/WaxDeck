@@ -121,6 +121,7 @@ func messyNightfallSpecs() []fixtures.Spec {
 // applies, and the applied fields survive a rescan because the apply
 // locks them.
 func TestLooseAlbumMatchesAndAutoApplies(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.MatchSource = &cannedSource{releases: []*match.Release{nightfallRelease()}}
 	})
@@ -291,6 +292,7 @@ func itoaTest(n int) string {
 // three media types: chunked upload, identify, review decision, and
 // the file entering the library.
 func TestUploadIdentifyReviewImport(t *testing.T) {
+	t.Parallel()
 	podcasts := t.TempDir()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.MatchSource = &cannedSource{releases: []*match.Release{{
@@ -440,6 +442,7 @@ func TestUploadIdentifyReviewImport(t *testing.T) {
 // file" while the entry was marked decided, the session marked
 // imported, and the staged bytes deleted.
 func TestDecideImportFailureKeepsEntryAndBytes(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores directory permissions, so the unwritable-library setup cannot fail")
 	}
@@ -517,6 +520,7 @@ func TestDecideImportFailureKeepsEntryAndBytes(t *testing.T) {
 // bytes, and discarding the pending entry must be refused while the
 // imported item still exists - discard would otherwise orphan it.
 func TestDiscardRefusedAfterPartialImport(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		for i := range cfg.Roots {
 			cfg.Roots[i].Managed = true
@@ -625,6 +629,7 @@ func TestDiscardRefusedAfterPartialImport(t *testing.T) {
 
 // TestUploadPermissionsAndQuota covers the grant and the quota gates.
 func TestUploadPermissionsAndQuota(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	resp := h.postJSON(t, "/api/v1/users", map[string]any{
@@ -697,6 +702,7 @@ func TestUploadPermissionsAndQuota(t *testing.T) {
 // TestReviewDecisionsAndVisibility covers skip, unofficial, bulk, the
 // matching mode surface, and non-admin visibility.
 func TestReviewDecisionsAndVisibility(t *testing.T) {
+	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.MatchSource = &cannedSource{releases: []*match.Release{nightfallRelease()}}
 	})
@@ -839,6 +845,7 @@ func drainTools(t *testing.T, h *harness) {
 // acquiring user's item-scoped editing rights afterward; then a
 // single-video URL through the non-playlist fallback.
 func TestAcquireFromURL(t *testing.T) {
+	t.Parallel()
 	media := t.TempDir()
 	src := &fakeAcquireSource{
 		playlistURL: "https://tube.example/playlist?list=PLtest",

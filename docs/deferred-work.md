@@ -32,20 +32,6 @@ here waits on upstream.
   and settings surface shipped; the client still needs the
   distributor plugin wrapped behind a WaxDeck-owned interface and a
   real device to verify against. Blocked on hardware access.
-- `[in-repo]` **A row cannot be dragged from a listing into the queue
-  panel.** Multi-select landed (long press or a checkbox picks up-next
-  rows; the set removes, moves to top, moves to bottom, and travels
-  together under a drag), so what remains of ADR-0029's open half is the
-  other gesture: picking a row up on an album, artist, listing, or index
-  screen and dropping it on the panel. Pointer only when it lands -
-  `LongPressDraggable` collides with the long press that starts a
-  selection, and touch already has a path (pick the rows, or "Add to
-  queue" from the row's own menu), so a touch drag would be a second
-  gesture for a job that has one. Where a drop lands is the other
-  decision: appending is the cheap answer and inserting at the row under
-  the pointer wants a sliver-relative hit test, which is real work.
-  Panel only either way, since the `/queue` screen covers what would be
-  dragged from. See ADR-0029.
 - `[in-repo]` **An artist screen has no biography.** "Appears on" landed
   on the `credit-artist` browse dimension. The biography still needs an
   enrichment field nothing writes yet - the same provider gap that keeps
@@ -60,31 +46,6 @@ here waits on upstream.
   generator flag that emits it, which is one decision across the whole
   contract rather than a per-endpoint patch. `entityCardKindFromGen`
   already has the drop-shaped guard for the day it lands.
-- `[in-repo]` **A pin can only be made where a thing has its own
-  screen.** Home's curated shelf landed (ADR-0054), and the affordance
-  is an overflow row on the five entity screens plus the pinned cards
-  themselves. A listing row, an index bucket, and a search hit still
-  offer nothing, so pinning an album found by scrolling means opening it
-  first. It is the same `WaxMenuItem` in more places rather than a
-  different feature, and it wants one decision it does not have: those
-  surfaces draw rows and tiles with no overflow at all today, so each
-  one is a new affordance rather than a new entry in an existing menu.
-  The resolver's departed-versus-invisible distinction rides here too -
-  a pinned entity that is deleted is display-dropped and its pid keeps a
-  slot of the cap with no card to unpin it from, and pruning exactly
-  those needs the response to say which is which.
-- `[in-repo]` **The book player draws no waveform.** The server half
-  landed: `GET /items/{pid}/waveform` takes a `partIndex` and answers
-  the requested part's own envelope, so a multi-file audiobook is
-  `ready` per part rather than `unavailable` whole (ADR-0040). The
-  client still asks for one only when `mediaType == MediaType.music`
-  (`player_screen.dart`), because a book's seek bar is a chapter's
-  timeline rather than a file's, and deciding what a book scrubber
-  draws is a player-face question rather than a contract one. A
-  whole-book scrubber would not want the per-part endpoint at all: the
-  catalog exposes `PeaksForItem(itemPID) []model.ItemPeaks`, every
-  part's envelope in one read, which is the shape a book-timeline
-  waveform is built from.
 - `[in-repo]` **A place cannot be marked offline.** Audiobook bookmarks
   are a live read against the server (ADR-0041): the sheet fetches on
   open and marking one needs a round trip. Everything else a listener
@@ -249,13 +210,6 @@ here waits on upstream.
   page). Left unwired rather than guessed at because "when a scroll stops"
   and "how far ahead" are numbers worth setting against the perf run's
   measurements rather than before them - so take it with the entry above.
-
-- `[in-repo]` **The saved-radio list has no way in from a row.** Songs
-  kept off the air list, mark themselves once the library holds them,
-  search, and remove. What a row cannot do is hand itself to
-  Add-from-URL or to the review queue's identify search - both are
-  surfaces that already exist, and neither has a caller from here. A
-  nicety over shipped machinery rather than new machinery.
 
 ## Connect and casting
 
@@ -687,14 +641,15 @@ here waits on upstream.
   and the sync channel is down stays a monogram until the channel
   reconnects and invalidates. That is the same window every other cached
   view has, and it closes the same way.
-- `[in-repo]` **Share cards carry no artwork.** The year-in-review
-  cards render and export (docs/adr/0047), and everything on them is
-  text and tokens: a top-artists card is a list of names rather than a
-  mosaic of covers. The card is deliberately one frame with no network
-  in it, so drawing covers wants the store's `bytesFor` threaded into
-  the render as a pre-fetch step before the boundary is captured, plus
-  a decision about what a card does when a cover is missing. Clip cards
-  for episode shares are the same shape and are not built either.
+- `[in-repo]` **Clip cards for episode shares are not built.** The
+  year-in-review cards render, export, and now draw their top artists'
+  covers (docs/adr/0047, amended). A clip card is the same shape of
+  work for a different subject - a quotable span of an episode, cut to
+  the same two canvases - and none of it exists: no span picker, no
+  card, no export entry. The artwork half is solved and reusable
+  (pre-fetch and decode before the one frame is captured, monogram
+  where a cover is missing), which is what makes this a card to draw
+  rather than a pipeline to design.
 - `[hardware]` **The Android share path for a card is unverified.**
   Exporting a card on Android writes it into a FileProvider-scoped
   cache directory and opens `ACTION_SEND` over the `waxdeck/share`
@@ -708,24 +663,6 @@ here waits on upstream.
 
 ## Admin and ops
 
-- `[in-repo]` **Two admin console sections are declared and unbuilt.**
-  The layout blueprint's 6.15 names three; notification targets landed
-  (ADR-0052 - a re-parent, since the editor and its endpoints already
-  existed under the listener's Integrations screen). Share links are
-  still listed only for their owner and the `all=true` oversight listing
-  has no screen; and the transcoding limits are set without the
-  current-session context that would say what they are actually
-  bounding. Each is a section registration and one screen against
-  endpoints that already answer.
-- `[in-repo]` **The first-run guided flow is the console, not a wizard.**
-  6.14 describes a three-step card flow after the create-admin form (add
-  a library, start a scan, "while it warms up"). What shipped is the
-  console's own libraries screen, its Scan library action, and a
-  warming-up card on the dashboard, which is where a new administrator
-  lands and which now says something true - scan discoveries identify
-  themselves. A wizard that walks somebody through those three screens
-  in order is still worth building; it is a presentation of surfaces
-  that all exist rather than new capability.
 - `[in-repo]` **Importers beyond Navidrome/Subsonic and
   Audiobookshelf.** The migration framework (portable-ref matching,
   backdated idempotent listen ingest, dry runs, task reports) is

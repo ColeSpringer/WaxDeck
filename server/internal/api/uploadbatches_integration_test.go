@@ -154,6 +154,7 @@ func batchTrackSpec(name, title, album, artist string, trackNo string, sec int) 
 // ownership, closed batches, media-type and library mismatches, and
 // batchPath sanitizing.
 func TestUploadBatchValidation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	staging := t.TempDir()
 	paths, err := fixtures.Generate(staging,
@@ -252,6 +253,7 @@ func TestUploadBatchValidation(t *testing.T) {
 // TestUploadBatchGroupings drives all three grouping intents through
 // upload, finalize, and the review entries they open.
 func TestUploadBatchGroupings(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	staging := t.TempDir()
 
@@ -366,6 +368,7 @@ func TestUploadBatchGroupings(t *testing.T) {
 // flip opens its own per-file entry, exactly one entry either way. A
 // repeated finalize answers the same batch.
 func TestUploadBatchStragglerAndIdempotency(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	staging := t.TempDir()
 	paths, err := fixtures.Generate(staging,
@@ -418,6 +421,7 @@ func TestUploadBatchStragglerAndIdempotency(t *testing.T) {
 // client finalize), an empty overdue batch expires without entries,
 // and members of a still-open batch are exempt from session expiry.
 func TestUploadBatchExpiry(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	ctx := context.Background()
 	staging := t.TempDir()
@@ -487,6 +491,7 @@ func TestUploadBatchExpiry(t *testing.T) {
 // member whose link was lost after its entry opened (the retry
 // re-links into the recorded entry instead of double-opening).
 func TestUploadBatchRepairPaths(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	ctx := context.Background()
 	staging := t.TempDir()
@@ -544,6 +549,7 @@ func TestUploadBatchRepairPaths(t *testing.T) {
 // TestUploadBatchConcurrentFinalize races two finalizes of one batch:
 // exactly one set of entries may open, whichever call flips.
 func TestUploadBatchConcurrentFinalize(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	staging := t.TempDir()
 	paths, err := fixtures.Generate(staging,
@@ -612,6 +618,7 @@ func TestUploadBatchConcurrentFinalize(t *testing.T) {
 // TestUploadQuotaAndEffectiveRights covers the listing's quota
 // snapshot and the self view's effective uploadEnabled.
 func TestUploadQuotaAndEffectiveRights(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	// The admin's own self view says uploads are enabled even though

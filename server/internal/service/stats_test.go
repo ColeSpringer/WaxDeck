@@ -7,6 +7,7 @@ import (
 )
 
 func TestDayNumberConsecutiveAcrossDST(t *testing.T) {
+	t.Parallel()
 	denver, err := time.LoadLocation("America/Denver")
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +41,7 @@ func TestDayNumberConsecutiveAcrossDST(t *testing.T) {
 }
 
 func TestDayNumberYearBoundaryAndAnchor(t *testing.T) {
+	t.Parallel()
 	dec31 := dayNumber(time.Date(2025, time.December, 31, 23, 59, 0, 0, time.UTC))
 	jan1 := dayNumber(time.Date(2026, time.January, 1, 0, 1, 0, 0, time.UTC))
 	if jan1 != dec31+1 {
@@ -61,6 +63,7 @@ func TestDayNumberYearBoundaryAndAnchor(t *testing.T) {
 }
 
 func TestBucketStart(t *testing.T) {
+	t.Parallel()
 	loc, err := time.LoadLocation("America/Denver")
 	if err != nil {
 		t.Fatal(err)
@@ -92,6 +95,7 @@ func TestBucketStart(t *testing.T) {
 }
 
 func TestLongestRun(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		days []int
@@ -115,6 +119,7 @@ func TestLongestRun(t *testing.T) {
 }
 
 func TestLogCursorRoundTrip(t *testing.T) {
+	t.Parallel()
 	wantNS, wantID := int64(1753000000000000000), int64(42)
 	ns, id, err := decodeLogCursor(encodeLogCursor(wantNS, wantID))
 	if err != nil || ns != wantNS || id != wantID {
@@ -127,6 +132,7 @@ func TestLogCursorRoundTrip(t *testing.T) {
 }
 
 func TestLogCursorMalformed(t *testing.T) {
+	t.Parallel()
 	enc := func(raw string) string {
 		return base64.RawURLEncoding.EncodeToString([]byte(raw))
 	}

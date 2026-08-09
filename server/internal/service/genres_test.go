@@ -151,6 +151,7 @@ func (f genreFixture) itemNamed(t *testing.T, title string) *model.ItemView {
 // TestSweeperFoldsSynonymsOntoOneBucket is the alias case no match key
 // can reach: three different tags, one canonical genre, one bucket.
 func TestSweeperFoldsSynonymsOntoOneBucket(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -189,6 +190,7 @@ func TestSweeperFoldsSynonymsOntoOneBucket(t *testing.T) {
 // first and cannot be renamed, so the canonical label has to come from
 // the vocabulary at read time. Rewriting the items alone does not do it.
 func TestCanonicalLabelBeatsScanOrder(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -222,6 +224,7 @@ func TestCanonicalLabelBeatsScanOrder(t *testing.T) {
 // TestSweeperSkipsLockedGenres: a user's locked genre is theirs, and
 // normalization is housekeeping.
 func TestSweeperSkipsLockedGenres(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Synonym")
 	if _, err := f.svc.SetItemLocks(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), []string{"genre"}, true); err != nil {
@@ -254,6 +257,7 @@ func TestSweeperSkipsLockedGenres(t *testing.T) {
 // TestUnmappedGenrePassesThrough: the vocabulary reports a miss rather
 // than guessing, and the health rule is what surfaces it.
 func TestUnmappedGenrePassesThrough(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -285,6 +289,7 @@ func TestUnmappedGenrePassesThrough(t *testing.T) {
 // the catalog's own scanner and never pass through WaxDeck, so a library
 // scanned after the fact must still normalize with no manual task run.
 func TestSweeperNormalizesFreshlyScannedFiles(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
@@ -308,6 +313,7 @@ func TestSweeperNormalizesFreshlyScannedFiles(t *testing.T) {
 // TestGenreNormalizeTaskDryRunThenApply drives the full-catalog pass on
 // the tool-task framework in the shape the importer established.
 func TestGenreNormalizeTaskDryRunThenApply(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 
 	dry, err := f.svc.StartGenreNormalize(f.ctx, f.uc, true)
@@ -363,6 +369,7 @@ func (f genreFixture) taskSummary(t *testing.T, taskID string) map[string]any {
 // counted those as rewrites -- and reported none as locked -- would
 // misreport exactly the items the apply is going to leave alone.
 func TestDryRunAccountsForLockedGenres(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Synonym")
 	if _, err := f.svc.SetItemLocks(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), []string{"genre"}, true); err != nil {
@@ -402,6 +409,7 @@ func TestDryRunAccountsForLockedGenres(t *testing.T) {
 // that could not resolve one way is refused rather than stored, a stored
 // one takes over, and an empty list is the way back to the default.
 func TestGenreTreeReplaceAndReset(t *testing.T) {
+	t.Parallel()
 	f := newGenreFixture(t)
 
 	tree, err := f.svc.GenreTreeFor(f.ctx, f.uc)

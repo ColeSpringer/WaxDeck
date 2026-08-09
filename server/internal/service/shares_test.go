@@ -3,6 +3,7 @@ package service
 import "testing"
 
 func TestShareCursorRoundTrip(t *testing.T) {
+	t.Parallel()
 	wantNS := int64(1753000000000000000)
 	wantID := "01JZX5N8QW3F4V9T2B7KDEXAMPLE"
 	ns, id, err := decodeShareCursor(encodeShareCursor(wantNS, wantID))
@@ -16,6 +17,7 @@ func TestShareCursorRoundTrip(t *testing.T) {
 }
 
 func TestShareCursorMalformed(t *testing.T) {
+	t.Parallel()
 	for _, bad := range []string{
 		"nodot",             // no separator at all
 		"%%%.someid",        // prefix is not base64url

@@ -59,6 +59,7 @@ func memberPIDs(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, pl
 // went to the trash. The editor, which evaluates the predicate inside
 // the query, showed three the whole time.
 func TestSmartPlaylistLimitSurvivesTheArchivedFilter(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)
 	if len(pids) < 4 {
@@ -115,6 +116,7 @@ func TestSmartPlaylistLimitSurvivesTheArchivedFilter(t *testing.T) {
 // ordering owns the page", so a descending rule would have come back
 // ascending and a budget rule would have returned everything.
 func TestSmartPlaylistKeepsItsRuleSemantics(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
 	// An explicit descending sort is honoured rather than replaced by
@@ -188,6 +190,7 @@ func samePIDs(a, b []string) bool {
 // owner's evaluation, or two accounts see two different playlists under
 // one name. Invisible in any single-account test.
 func TestSharedSmartPlaylistEvaluatesAsItsOwner(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)
 
@@ -234,6 +237,7 @@ func TestSharedSmartPlaylistEvaluatesAsItsOwner(t *testing.T) {
 // stored member count, so a ten-member list with one member trashed
 // answered 10 from the playlist and 9 from its items, indefinitely.
 func TestStaticPlaylistCountMatchesItsListing(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	plPID := playlistWith(t, ctx, svc, uc, "Road Trip", pids)
@@ -297,6 +301,7 @@ func listedCount(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, p
 // playlist does not, because its count sits beside the member listing it
 // has to agree with.
 func TestListingCountIsCachedButTheOpenedPlaylistIsNot(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	plPID := playlistWith(t, ctx, svc, uc, "Road Trip", pids)
@@ -335,6 +340,7 @@ func TestListingCountIsCachedButTheOpenedPlaylistIsNot(t *testing.T) {
 // restore would never re-add it - which contradicts PlaylistItems' own
 // promise that positions are kept "so a restore lands where it was".
 func TestReplaceRefusesWhenAMemberIsTrashed(t *testing.T) {
+	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:3]
 	plPID := playlistWith(t, ctx, svc, uc, "Three", pids)

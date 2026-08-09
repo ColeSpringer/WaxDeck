@@ -13,6 +13,7 @@ import '../settings/listening_sections.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
 import 'admin_providers.dart';
+import 'first_run_wizard.dart';
 
 /// The console's front page: what needs attention, what is running, and
 /// the two things an administrator starts by hand.
@@ -26,6 +27,11 @@ class AdminDashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
+    // The guided first run takes the page rather than sitting on it: a
+    // server with nothing in it has no status worth reading, and a card
+    // competing with six empty tiles is what made the console feel like
+    // a dashboard for somebody else's server.
+    final wizard = ref.watch(firstRunWizardProvider);
     return WaxScaffold(
       title: 'Admin',
       semanticsId: SemanticsIds.adminDashboard,
@@ -33,20 +39,28 @@ class AdminDashboardScreen extends ConsumerWidget {
         padding: sizeClass.gutter.add(
           const EdgeInsets.only(bottom: WaxSpace.s32),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const _ReadOnlyBanner(),
-            const _WarmingUp(),
-            const _StatusTiles(),
-            const SizedBox(height: WaxSpace.s24),
-            const _QuickActions(),
-            if (!sizeClass.hasSidebar) ...<Widget>[
-              const SizedBox(height: WaxSpace.s32),
-              const _SectionCards(),
-            ],
-          ],
-        ),
+        child: wizard != null
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const _ReadOnlyBanner(),
+                  FirstRunCard(step: wizard),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const _ReadOnlyBanner(),
+                  const _WarmingUp(),
+                  const _StatusTiles(),
+                  const SizedBox(height: WaxSpace.s24),
+                  const _QuickActions(),
+                  if (!sizeClass.hasSidebar) ...<Widget>[
+                    const SizedBox(height: WaxSpace.s32),
+                    const _SectionCards(),
+                  ],
+                ],
+              ),
       ),
     );
   }
@@ -324,12 +338,19 @@ class _QuickActions extends ConsumerWidget {
   }
 
   Future<void> _backup(WidgetRef ref) async {
+    // The container rather than `ref`, the reason the delete flow holds
+    // one: the console can be left while the request is out, and a
+    // `ref` past its widget throws rather than doing nothing. The
+    // backup is started either way, so the list that shows it has to be
+    // told either way.
+    final container = ProviderScope.containerOf(ref.context, listen: false);
+    final messenger = container.read(shellMessengerProvider.notifier);
     try {
-      await ref.read(repositoryProvider).createBackup();
-      ref.invalidate(backupsProvider);
-      ref.read(shellMessengerProvider.notifier).show('Backup started');
+      await container.read(repositoryProvider).createBackup();
+      container.invalidate(backupsProvider);
+      messenger.show('Backup started');
     } on WaxDeckApiException catch (error) {
-      ref.read(shellMessengerProvider.notifier).show(error.message);
+      messenger.show(error.message);
     }
   }
 }
@@ -340,14 +361,25 @@ class _QuickActions extends ConsumerWidget {
 /// runs the same verb from the same place, and two callers computing
 /// their own "did it start" copy is two answers to one question.
 Future<void> startLibraryScan(WidgetRef ref) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  // Through the container, because the caller may not outlive the
+  // request: the wizard's own step-two card is replaced the moment a
+  // running scan lands, and the palette runs this from wherever it was
+  // opened. The scan starts regardless, so the job list is refreshed
+  // regardless.
+  final container = ProviderScope.containerOf(ref.context, listen: false);
+  final messenger = container.read(shellMessengerProvider.notifier);
   try {
-    await ref.read(repositoryProvider).rescanLibrary();
-    ref.invalidate(adminJobsProvider);
+    await container.read(repositoryProvider).rescanLibrary();
+    container.invalidate(adminJobsProvider);
     messenger.show('Scan started');
   } on WaxDeckApiException catch (error) {
     // A scan already running is the common answer, and the server's own
-    // message says so better than a guess would.
+    // message says so better than a guess would. It is also proof the
+    // job list this client holds is stale - it shows nothing running -
+    // so the refusal refreshes it too, which is what lets a caller
+    // watching that list (the first-run wizard) move on instead of
+    // offering the same scan again.
+    container.invalidate(adminJobsProvider);
     messenger.show(error.message);
   }
 }

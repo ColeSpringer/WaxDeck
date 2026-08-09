@@ -99,6 +99,7 @@ export const accountShapes: Record<string, AccountShape> = {
   // The admin console, the review queue, uploads and the notification
   // targets are administrator surfaces: the screens under test do not
   // exist for anybody else.
+  'admin-console': { role: 'admin' },
   'admin-ops': { role: 'admin' },
   notifications: { role: 'admin' },
   'review-queue': { role: 'admin' },

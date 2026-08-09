@@ -6,8 +6,10 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../home/pin_action.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
+import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../shell/routes.dart';
@@ -326,24 +328,43 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
           );
         }
         final item = state.items[index];
-        return MediaListRow(
-          data: MediaTileData(
-            title: item.title,
-            subtitle: item.artist,
-            artwork: ref.watch(artworkStoreProvider).source(item.artUrl),
-            trailingText: formatTimecode(
-              Duration(milliseconds: item.durationMs),
+        return QueueDraggable(
+          drop: QueueDrop.item(item),
+          child: MediaListRow(
+            data: MediaTileData(
+              title: item.title,
+              subtitle: item.artist,
+              artwork: ref.watch(artworkStoreProvider).source(item.artUrl),
+              trailingText: formatTimecode(
+                Duration(milliseconds: item.durationMs),
+              ),
+              // Addressed by pid rather than by position, unlike the
+              // album and artist screens: this is the complete
+              // enumeration a caller reaches for one known item in,
+              // which is what the deleted library grid was for. Those
+              // two are running orders, where the position is the point.
+              semanticsId: SemanticsIds.item(item.pid),
             ),
-            // Addressed by pid rather than by position, unlike the
-            // album and artist screens: this is the complete
-            // enumeration a caller reaches for one known item in, which
-            // is what the deleted library grid was for. Those two are
-            // running orders, where the position is the point.
-            semanticsId: SemanticsIds.item(item.pid),
+            onTap: () => _play(state, index),
+            // A track cannot be pinned - a kept set of tracks is a
+            // playlist (ADR-0054) - so the row's overflow offers what
+            // it belongs to. Both handles are optional on the wire, and
+            // a row with neither offers nothing.
+            onMore: item.albumPid != null || item.artistPid != null
+                ? () => showPinSheet(context, ref, targets: _pinTargets(item))
+                : null,
+            moreSemanticsId: SemanticsIds.listingRowMore(item.pid),
           ),
-          onTap: () => _play(state, index),
         );
       },
     );
   }
+
+  /// The pinnable handles a track row carries: its album, its artist.
+  static List<PinTarget> _pinTargets(ItemSummary item) => <PinTarget>[
+    if (item.albumPid != null)
+      (pid: item.albumPid!, what: 'album', name: item.album ?? item.title),
+    if (item.artistPid != null)
+      (pid: item.artistPid!, what: 'artist', name: item.artist ?? ''),
+  ];
 }

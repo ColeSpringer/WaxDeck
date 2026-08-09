@@ -240,6 +240,12 @@ class QueueController extends Notifier<QueueState> {
   /// Appends [pids] to the end of the queue.
   void addToEnd(List<String> pids) => _insert(pids, state.length);
 
+  /// Inserts [pids] at [at], which is where a drop that named a row
+  /// lands. Clamped rather than refused: the caller resolves [at] from
+  /// a hit test against rows that may have moved since.
+  void insertAt(List<String> pids, int at) =>
+      _insert(pids, at.clamp(0, state.length));
+
   void _insert(List<String> pids, int at) {
     if (pids.isEmpty) return;
     var nextId = state.nextQueueId;
