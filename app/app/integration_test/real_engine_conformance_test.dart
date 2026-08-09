@@ -1,8 +1,10 @@
-// Runs the shared engine conformance suite against the real desktop
-// engine: mpv via media_kit behind just_audio, with real decoding and
-// wall-clock waits. The suite lives in waxdeck_player_testing; this file
-// only supplies the real-engine harness. run-desktop.sh synthesizes the
-// tone fixture and passes its path in WAXDECK_CONFORMANCE_MEDIA.
+// Runs the shared engine conformance suite against whatever real player
+// just_audio resolves to here - mpv via media_kit on the desktops,
+// ExoPlayer on Android - with real decoding and wall-clock waits. The
+// suite lives in waxdeck_player_testing; this file only supplies the
+// real-engine harness. The caller synthesizes the tone fixture and names
+// it in WAXDECK_CONFORMANCE_MEDIA: run-desktop.sh as a path in the
+// environment, the emulator workflow as a loopback URL in a define.
 import 'dart:io';
 
 import 'package:integration_test/integration_test.dart';
@@ -23,13 +25,20 @@ class RealEngineHarness extends AudioEngineHarness {
 
   @override
   Future<AudioEnginePort> createEngine() async {
-    ensureAudioEngineInitialized();
-    final engine = JustAudioEngine();
+    final engine = await createUnsilencedEngine();
     // Silent: this suite plays several minutes of a test tone through
-    // the machine's real audio output, and nothing here asserts on
-    // volume. Whoever is at the keyboard should not have to hear it.
+    // the machine's real audio output, and whoever is at the keyboard
+    // should not have to hear it. The one case that does assert on the
+    // engine's own initial volume asks for an unsilenced engine instead,
+    // and never plays through it.
     await engine.setVolume(0);
     return engine;
+  }
+
+  @override
+  Future<AudioEnginePort> createUnsilencedEngine() async {
+    ensureAudioEngineInitialized();
+    return JustAudioEngine();
   }
 
   @override
@@ -56,21 +65,45 @@ class RealEngineHarness extends AudioEngineHarness {
   }
 }
 
+/// The tone's location, compiled in.
+///
+/// `flutter test -d <device>` runs the test inside the app process on
+/// the device, which cannot see the shell that launched it, so a define
+/// is the only channel that reaches an emulator or a phone. Empty when
+/// the caller uses the environment instead - which is what
+/// run-desktop.sh does, because it runs the suite on this machine and a
+/// define would mean recompiling per invocation.
+const _mediaDefine = String.fromEnvironment('WAXDECK_CONFORMANCE_MEDIA');
+
+/// A local path becomes a file URI; a URL is passed through.
+///
+/// An app on a device has no host path to open, so the emulator run
+/// serves the tone over loopback HTTP instead - which is also the shape
+/// a real library stream takes, and the only shape that gets past the
+/// macOS sandbox.
+String _mediaUrl(String value) =>
+    value.startsWith('http://') || value.startsWith('https://')
+    ? value
+    : Uri.file(value).toString();
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  final mediaPath = Platform.environment['WAXDECK_CONFORMANCE_MEDIA'];
-  if (mediaPath == null || mediaPath.isEmpty) {
+  final media = _mediaDefine.isNotEmpty
+      ? _mediaDefine
+      : Platform.environment['WAXDECK_CONFORMANCE_MEDIA'] ?? '';
+  if (media.isEmpty) {
     // Without media there is nothing honest to test; fail loudly rather
     // than skip silently.
     throw StateError(
-      'WAXDECK_CONFORMANCE_MEDIA must point at the synthesized tone; '
-      'run this through e2e/run-desktop.sh',
+      'WAXDECK_CONFORMANCE_MEDIA must name the synthesized tone, as a '
+      '--dart-define or in the environment; run this through '
+      'e2e/run-desktop.sh or the android-conformance workflow',
     );
   }
 
   runAudioEngineConformance(
-    'JustAudioEngine on desktop mpv',
-    RealEngineHarness(Uri.file(mediaPath).toString()),
+    'JustAudioEngine on ${Platform.operatingSystem}',
+    RealEngineHarness(_mediaUrl(media)),
   );
 }

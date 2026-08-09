@@ -1,0 +1,112 @@
+# The real-engine conformance suite against just_audio's Android
+# backend, on an emulator. Scheduled and on demand, never a merge gate:
+# the suite waits on real playback timing throughout, and an emulator
+# booting on a shared-CPU runner is exactly the shape that turns those
+# waits into flakes. Promoting it to a gate is a decision to make after
+# a few dozen runs have said whether it is stable, not before.
+#
+# Why it exists at all: the port contract says a play after completion
+# restarts the item; the FakeEngine implemented that and just_audio did
+# not, and because nothing held the real engine to the shared suite,
+# every play button on every surface was dead at the end of a track
+# until someone ran the app on a phone. This is the run that would have
+# caught it.
+#
+# It also exercises the cleartext network-security config for real: the
+# tone is served over plain HTTP, which targetSdk 36 blocks outright
+# without ADR-0057's posture.
+name: Android engine conformance
+
+on:
+  schedule:
+    - cron: "43 5 * * 2" # Tuesdays, 05:43 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.44.6"
+  GO_VERSION: "1.26.x"
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      # The runner image ships /dev/kvm without the permissions to open
+      # it, and an emulator without KVM is too slow to finish a suite
+      # that plays audio in real time.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - uses: gradle/actions/setup-gradle@v5
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: fixtures/go.sum
+      - name: Pub get (workspace root)
+        run: cd app && flutter pub get
+      # Synthesized, never committed: no binary media in git.
+      - name: Synthesize the conformance tone
+        run: |
+          set -euo pipefail
+          cd fixtures
+          go run ./cmd/fixturegen -out "$RUNNER_TEMP/wax-conf" -preset conformance
+          ls -l "$RUNNER_TEMP/wax-conf"
+      # Served rather than pushed onto the device: an app on an emulator
+      # has no host path it can open, and a URL is the shape a real
+      # library stream takes anyway. 10.0.2.2 is the emulator's alias for
+      # the host's loopback.
+      - name: Serve the tone over loopback
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/wax-conf"
+          nohup python3 -m http.server 8000 > "$RUNNER_TEMP/tone-server.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl -sfo /dev/null http://127.0.0.1:8000/conformance-tone.flac; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the tone server never answered"
+          cat "$RUNNER_TEMP/tone-server.log"
+          exit 1
+      # google_apis rather than the smaller AOSP or ATD images: nothing
+      # here wants Play services, but google_apis is the one variant
+      # published at every API level, and a weekly job that dies in
+      # sdkmanager is worse than one that boots two minutes slower.
+      - name: Conformance suite on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          # The action's own default set, minus `-noaudio`, and pinned
+          # here rather than inherited so it cannot change underneath
+          # this. Every position assertion in the suite waits in wall
+          # time on ExoPlayer's clock, and that clock is an AudioTrack
+          # draining: with the guest audio device gone the suite fails on
+          # timing for a reason that has nothing to do with the port. The
+          # runner has no host audio either, so this asks the emulator
+          # for a device that discards what it is given, which is exactly
+          # what a silenced conformance run wants.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+          script: >-
+            cd app/app &&
+            flutter test integration_test/real_engine_conformance_test.dart
+            -d emulator-5554
+            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac

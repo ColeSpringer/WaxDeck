@@ -11,7 +11,20 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 /// Adapts one engine implementation to the shared suite.
 abstract class AudioEngineHarness {
   /// A fresh engine per test.
+  ///
+  /// A real-engine harness is expected to silence what it returns here:
+  /// the suite plays minutes of a test tone through the machine's real
+  /// output, and whoever is at the keyboard should not have to hear it.
   Future<AudioEnginePort> createEngine();
+
+  /// The engine exactly as its constructor leaves it, for the few cases
+  /// whose subject is that initial state - a harness that silences in
+  /// [createEngine] has already destroyed what they assert on.
+  ///
+  /// Only a test that never plays may use this, which is what keeps the
+  /// suite quiet: loading and reading make no sound. Fakes silence
+  /// nothing, so for them the two are the same engine.
+  Future<AudioEnginePort> createUnsilencedEngine() => createEngine();
 
   /// A URL the engine can load.
   String get mediaUrl;
@@ -275,11 +288,21 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
     // it started with were the endpoint controller's session report and
     // its routed `set-volume`, neither of which reads the level back, so
     // nothing here was ever verified against a real engine.
+    //
+    // The only case that builds its own engine, because a real harness
+    // silences the shared one - so the default asserted below would be
+    // the harness's 0 rather than the engine's. Nothing here plays; it
+    // loads and reads, which is what makes an unsilenced engine safe.
     test('volume defaults to 1.0 and setVolume reads back', () async {
-      await engine.load(harness.mediaUrl);
-      expect(engine.volume, closeTo(1.0, 0.001));
-      await engine.setVolume(0.4);
-      expect(engine.volume, closeTo(0.4, 0.001));
+      final fresh = await harness.createUnsilencedEngine();
+      try {
+        await fresh.load(harness.mediaUrl);
+        expect(fresh.volume, closeTo(1.0, 0.001));
+        await fresh.setVolume(0.4);
+        expect(fresh.volume, closeTo(0.4, 0.001));
+      } finally {
+        await harness.disposeEngine(fresh);
+      }
     });
 
     test('volumeStream emits the new volume', () async {

@@ -25,6 +25,12 @@ The release workflow (`.github/workflows/release.yaml`) does the rest:
   with the tag's version and its artifacts are attached to the same
   release: macOS dmg, Linux tar.gz, Windows zip, MSIX, the Velopack
   `Setup.exe`, and the full Velopack output as a zip.
+- **Android APKs.** From the same matrix: one per ABI
+  (`armeabi-v7a`, `arm64-v8a`, `x86_64`) for anyone who cares about
+  download size, plus a universal one for anyone who does not know
+  which they need. The release call passes `secrets: inherit`, so these
+  are the signed builds; see Android signing below for what happens
+  without the secrets.
 
 ## How the version is stamped
 
@@ -37,9 +43,34 @@ The tag, minus its `v` prefix, becomes the version everywhere:
   keep the in-source `0.1.0-dev` default.
 - The desktop matrix receives it as the `pack_version` input, which
   sets the Velopack package version and the artifact names.
-- The MSIX version is the exception: `msix_version` lives in
-  `app/app/pubspec.yaml` (a four-part number), so bump it there as
-  part of preparing a release.
+- The Android APKs take it as `--build-name`, which is the version
+  name a user sees.
+
+Two version numbers are not stamped from the tag, and both live in
+`app/app/pubspec.yaml`, so both are part of preparing a release:
+
+- `msix_version`, a four-part number, for the Windows MSIX.
+- The pubspec build number (the `+N` in `version: 0.1.0+1`), which
+  becomes the Android `versionCode`. Android decides what counts as an
+  upgrade by that integer alone, so it has to rise with every published
+  APK. It is deliberately not derived from the run number: F-Droid
+  builds from source and needs a `versionCode` the source tree can
+  produce on its own.
+
+  The release build checks both halves and refuses to build without
+  them: the version name has to equal the tag, and `N` has to rise
+  above whatever the previous `v*` tag's pubspec carried. It is checked
+  rather than trusted because the failure is otherwise invisible. Two
+  releases sharing a `versionCode` still install by hand, since Android
+  only refuses a downgrade — what they do not do is *update*. F-Droid
+  and every other updater decide whether a new version exists by
+  comparing that integer, so an unbumped release reaches nobody
+  automatically, and re-tagging cannot fix it once the APK is
+  published.
+
+  The comparison is skipped for the first release, and warns rather
+  than fails if the previous tag's pubspec has no build number to read.
+  It is the only reason the Android job clones full history.
 
 ## What the web bundle weighs
 
@@ -144,20 +175,51 @@ the keystore and writes `key.properties` before building; absent them
 it produces debug-signed APKs, which are installable for testing and
 not publishable.
 
+The job runs on every push to main, but it only signs when the release
+workflow called it. Repository secrets reach a push build too, and
+using them there would put the upload key on four publicly
+downloadable artifacts per merge - which Android cannot tell apart
+from a release, and which would then block the real one, since a
+device refuses a same-signature APK whose `versionCode` did not rise.
+Push builds are debug-signed instead. To check the secrets without
+cutting a tag, run the workflow by hand with `sign_android` on.
+
+One catch worth knowing: a called workflow receives no secrets unless
+the caller says so, which is why `release.yaml` invokes the matrix
+with `secrets: inherit`. Drop that line and the release quietly ships
+debug-signed APKs. Note that `github.event_name` cannot be used to
+detect the call - inside a called workflow it reports the *caller's*
+event, which for a release is `push`. The signal is a non-empty
+`inputs.pack_version`, which is also what the version stamping uses.
+
+The same builds by hand, from `app/app`:
+
+```sh
+flutter build apk --release --split-per-abi   # per-ABI
+flutter build apk --release                   # universal
+```
+
+Both land in `build/app/outputs/flutter-apk/`. Add
+`--build-name=<version>` to stamp a version name the way CI does;
+without it the pubspec version is used.
+
 ## After the workflow finishes
 
 Package-channel manifests are updated by hand per release; the
 templates and per-channel notes live in `deploy/packaging/`. Fill in
 the new version and artifact checksums for winget, Homebrew, the AUR,
-and Flathub as each channel opens.
+and Flathub as each channel opens. Android has no channel there yet:
+the APKs reach people through the GitHub Release only, and F-Droid is
+its own slice (deferred-work.md).
 
-Nothing is signed yet. The Windows and macOS artifacts are unsigned
-and unnotarized, which blocks the winget submission outright and makes
-Gatekeeper quarantine the dmg; the release notes should say so until
-signing lands. Android is the exception in kind rather than degree: an
-APK must be signed to install at all, so an unsigned build is not a
-thing that exists - what CI produces is debug-signed, which installs
-for testing and cannot be published.
+The desktop artifacts are not signed. The Windows and macOS ones are
+unsigned and unnotarized, which blocks the winget submission outright
+and makes Gatekeeper quarantine the dmg; the release notes should say
+so until signing lands. Android is the exception in kind rather than
+degree: an APK must be signed to install at all, so an unsigned build
+is not a thing that exists. With the four secrets set it carries the
+upload key and is publishable; without them it is debug-signed, which
+installs for testing and cannot be published.
 
 That posture constrains macOS entitlements. Restricted entitlements -
 `keychain-access-groups` is the one that came up - make

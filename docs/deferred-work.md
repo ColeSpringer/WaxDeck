@@ -301,24 +301,33 @@ here waits on upstream.
 
 ## Infrastructure
 
-- `[in-repo]` **The real-engine conformance suite runs on one platform,
-  by hand.** `e2e/run-desktop.sh` hardcodes `-d linux`, so the only
-  place `JustAudioEngine` is exercised against a real player is a Linux
-  desktop someone runs deliberately; no CI job runs it on any platform.
-  It will not run on macOS as written: `real_engine_conformance_test.dart`
-  reads `WAXDECK_CONFORMANCE_MEDIA` and wraps it in `Uri.file`, and the
-  app sandbox refuses the tone with "you don't have permission to view
-  it" before any test starts. Serving the tone over loopback HTTP is the
-  way out and is already half-planned - the prerequisite tweak is to
-  prefer `String.fromEnvironment` and pass `http(s)` URLs through
-  instead of `Uri.file`, which is what an Android emulator job would
-  need too, and the sandbox now has `network.client` (ADR-0057). The
-  cost of the gap is not hypothetical: the port contract says a play
-  after completion restarts the item, the FakeEngine implemented it and
-  asserted it, and just_audio did not - the case lived in the fake's own
-  specifics group rather than the shared suite, so nothing ever held the
-  real engine to it, and every play button on every surface was dead at
-  the end of a track until an emulator run found it.
+- `[in-repo]` **No CI job runs the conformance suite on a desktop.**
+  `e2e/run-desktop.sh` hardcodes `-d linux`, so the only place mpv
+  behind just_audio is exercised against a real player is a Linux
+  desktop someone runs deliberately. Android is covered on a schedule
+  now (`android-conformance.yaml`), and the media plumbing that took -
+  a `--dart-define` for a test running on a device, and `http(s)` URLs
+  passed through instead of `Uri.file` - is exactly what unblocked
+  macOS too, where the sandbox used to refuse the tone with "you don't
+  have permission to view it" before any test started. What is left is
+  a linux job with a display and an audio sink, and a macOS job that
+  serves the tone over loopback the way the emulator one does.
+- `[in-repo]` **Promote the Android conformance run to a merge gate.**
+  It is scheduled and dispatch-only on purpose: the suite waits on real
+  playback timing throughout, and an emulator booting on a shared-CPU
+  runner is the shape that turns those waits into flakes. Deciding
+  wants a few dozen runs behind it, not an opinion. The cost of leaving
+  it non-blocking is that a real regression can land on main and sit
+  there until Tuesday - which is still the better failure than the one
+  it replaced, where nobody found out at all.
+- `[in-repo]` **F-Droid.** Android is the one platform whose artifacts
+  reach people through the GitHub Release and nothing else;
+  `deploy/packaging/` is desktop-only. F-Droid is the intended channel
+  and it is a slice of its own - either a metadata recipe in
+  fdroiddata, which means their build server has to reproduce the APK
+  from source, or a self-hosted repo, which means owning the index and
+  its signing key. Neither is a per-release chore like the winget or
+  Homebrew templates, which is why it is not sitting beside them.
 - `[in-repo]` **The macOS keychain entitlement, and whether a login
   actually persists.** ADR-0057 gave the sandboxed app
   `network.client` + `network.server`, which is what let it reach a

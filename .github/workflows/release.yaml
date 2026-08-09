@@ -3,9 +3,9 @@
 #     tagged with the git tag and latest;
 #   - cross-compiles the server binary for linux/darwin/windows x amd64/arm64
 #     (web UI embedded) and attaches the archives to a GitHub Release;
-#   - runs the desktop packaging matrix (package.yaml via workflow_call) and
-#     attaches the installers to the same release.
-# Nothing here signs or notarizes; see docs/releasing.md.
+#   - runs the packaging matrix (package.yaml via workflow_call) and attaches
+#     the desktop installers and the Android APKs to the same release.
+# Nothing here notarizes, and only Android is signed; see docs/releasing.md.
 name: Release
 
 on:
@@ -152,16 +152,20 @@ jobs:
           files: dist/*
           generate_release_notes: true
 
-  # The desktop packaging matrix, versioned with the tag. Artifact names
-  # inside the run stay stable; desktop-assets renames on attach.
+  # The packaging matrix, versioned with the tag. Artifact names inside
+  # the run stay stable; desktop-assets renames on attach. A called
+  # workflow gets no secrets unless they are passed, and without them the
+  # Android job would quietly emit debug-signed APKs - which install and
+  # cannot be published.
   desktop:
     needs: [version]
     uses: ./.github/workflows/package.yaml
+    secrets: inherit
     with:
       pack_version: ${{ needs.version.outputs.version }}
 
-  # Attach the desktop installers to the release created above. Runs after
-  # server-binaries so the release exists before files are appended.
+  # Attach the installers and the APKs to the release created above. Runs
+  # after server-binaries so the release exists before files are appended.
   desktop-assets:
     runs-on: ubuntu-latest
     needs: [version, server-binaries, desktop]
@@ -195,8 +199,12 @@ jobs:
           fi
           (cd artifacts/waxdeck-windows-velopack && \
             zip -qr "${GITHUB_WORKSPACE}/assets/waxdeck-windows-velopack-${VERSION}.zip" .)
+          for abi in armeabi-v7a arm64-v8a x86_64 universal; do
+            cp "artifacts/waxdeck-android-apks/waxdeck-$abi.apk" \
+              "assets/waxdeck-android-$abi-${VERSION}.apk"
+          done
           ls -l assets
-      - name: Attach desktop installers to the release
+      - name: Attach the installers and APKs to the release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: assets/*

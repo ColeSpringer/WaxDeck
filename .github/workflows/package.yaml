@@ -1,15 +1,28 @@
-# Desktop packaging matrix (unsigned artifacts). Built now so packaging
-# never becomes a late surprise; signing/notarization land later.
+# Packaging matrix: the three desktops (unsigned artifacts) and Android
+# APKs. Built now so packaging never becomes a late surprise;
+# notarization and the desktop signing land later.
 #
 # Also callable as a reusable workflow: the release workflow invokes it
 # with the tag's version so the same matrix produces the release
 # installers (artifact names stay stable; the caller renames on attach).
+# That call passes `secrets: inherit`, which is what lets the release
+# APKs carry a real signature. A push build is deliberately debug-signed
+# instead: an artifact anyone can download that Android cannot tell apart
+# from a release is not a thing to publish on every merge. The manual
+# `sign_android` input is the way to prove the secrets still work without
+# cutting a tag for it.
 name: Package
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      sign_android:
+        description: "Sign the APKs with the release keystore. Off by default; a tag release always signs. This is how you check the secrets without cutting a tag."
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       pack_version:
@@ -144,4 +157,168 @@ jobs:
         with:
           name: waxdeck-flatpak-manifest
           path: deploy/flatpak/com.colespringer.WaxDeck.yml
+          if-no-files-found: error
+
+  # Four APKs: one per ABI for anyone who cares about download size (and
+  # for F-Droid, which publishes them that way), plus a universal one,
+  # which is what a sideloader wants when it does not know its own ABI.
+  # CI's android job proves the release manifest; this one produces the
+  # thing people install.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history, for the tags alone: the release check below reads
+      # the previous tag's pubspec, and the default shallow clone has no
+      # tags to read it from.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - uses: gradle/actions/setup-gradle@v5
+      # Resolved before anything is built, so a runner image without the
+      # tool fails in seconds rather than after a ten-minute build.
+      # build-tools is versioned on the image and the image drifts, so
+      # the newest installed one is found rather than pinned - the same
+      # resolution ci.yaml's android job does.
+      - name: Locate Android build tools
+        run: |
+          set -euo pipefail
+          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          test -x "$tools/zipalign" || { echo "::error::zipalign missing from $tools"; exit 1; }
+          echo "BUILD_TOOLS=$tools" >> "$GITHUB_ENV"
+      - name: Pub get (workspace root)
+        run: cd app && flutter pub get
+      # A release ships whatever versionCode the pubspec carries, and
+      # every updater decides whether a new version exists by comparing
+      # that integer - so a tag cut without touching the pubspec ships a
+      # release nobody is ever offered, and publishing it is what makes
+      # that permanent. It is the one thing the release path can get
+      # wrong that is invisible in the artifact, unfixable by re-tagging,
+      # and only reported by the people who never got the update. So it
+      # is checked against the last release rather than trusted.
+      #
+      # awk over sed|head throughout: `head` closing the pipe early can
+      # SIGPIPE the producer, and under pipefail that fails the step for
+      # a file it read perfectly well.
+      - name: Assert the pubspec was prepared for this release
+        if: inputs.pack_version != ''
+        run: |
+          set -euo pipefail
+          read_version() { awk '/^version:/ { sub(/^version:[[:space:]]*/, ""); print; exit }'; }
+          pubspec="$(read_version < app/app/pubspec.yaml)"
+          echo "pubspec version $pubspec, releasing $PACK_VERSION"
+          if [ "${pubspec%%+*}" != "$PACK_VERSION" ]; then
+            echo "::error::app/app/pubspec.yaml says '$pubspec' but this is $PACK_VERSION; set version: ${PACK_VERSION}+<n>, with n above the last release's build number"
+            exit 1
+          fi
+          code=""
+          case "$pubspec" in *+*) code="${pubspec##*+}" ;; esac
+          case "$code" in
+            '' | *[!0-9]*)
+              echo "::error::app/app/pubspec.yaml has no numeric build number; versionCode would fall back to 1"
+              exit 1
+              ;;
+          esac
+          # The newest v* tag that is not this one. Version sort, so
+          # v0.10.0 ranks above v0.9.0.
+          prev="$(git tag --list 'v*' --sort=-v:refname |
+            awk -v cur="v${PACK_VERSION}" '$0 != cur { print; exit }')"
+          if [ -z "$prev" ]; then
+            echo "::notice::no earlier v* tag; nothing to compare versionCode $code against"
+            exit 0
+          fi
+          prev_version="$(git show "$prev:app/app/pubspec.yaml" 2>/dev/null | read_version || true)"
+          prev_code=""
+          case "$prev_version" in *+*) prev_code="${prev_version##*+}" ;; esac
+          case "$prev_code" in
+            '' | *[!0-9]*)
+              echo "::warning::$prev has no usable build number ('$prev_version'); cannot compare versionCode"
+              exit 0
+              ;;
+          esac
+          echo "previous release $prev shipped versionCode $prev_code"
+          if [ "$code" -le "$prev_code" ]; then
+            echo "::error::versionCode $code does not rise above $prev_code from $prev; updaters compare that integer, so this release would reach nobody. Raise the +n in app/app/pubspec.yaml."
+            exit 1
+          fi
+      # Only when the release workflow called this one, or when somebody
+      # asked for it by hand. Repository secrets reach a push build too,
+      # and signing there would put the upload key on four public
+      # artifacts per merge - indistinguishable, to Android, from a
+      # release. Without this step the gradle release config falls back
+      # to the debug keystore, which still installs for testing;
+      # `apksigner verify --print-certs` says which you have
+      # (docs/releasing.md).
+      - name: Write the signing config
+        if: inputs.pack_version != '' || inputs.sign_android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "::warning::no ANDROID_KEYSTORE_BASE64; these APKs will be debug-signed and cannot be published"
+            exit 0
+          fi
+          keystore="${RUNNER_TEMP}/waxdeck-upload.jks"
+          printf '%s' "${KEYSTORE_BASE64}" | base64 -d > "$keystore"
+          # A java.util.Properties file, not a shell one: `\` is an escape
+          # there, so a backslash anywhere in a password would be eaten
+          # and the build would fail with "keystore password was
+          # incorrect" and nothing pointing at the real cause. storeFile
+          # is resolved relative to app/app/android/, so it goes in
+          # absolute and gets the same treatment.
+          {
+            printf 'storeFile=%s\n' "${keystore//\\/\\\\}"
+            printf 'storePassword=%s\n' "${STORE_PASSWORD//\\/\\\\}"
+            printf 'keyAlias=%s\n' "${KEY_ALIAS//\\/\\\\}"
+            printf 'keyPassword=%s\n' "${KEY_PASSWORD//\\/\\\\}"
+          } > app/app/android/key.properties
+      # Only the version name is stamped from the tag; versionCode is the
+      # pubspec build number, asserted above. It is deliberately not the
+      # run number: F-Droid builds from source and needs a versionCode
+      # the source tree can produce.
+      - name: Build per-ABI APKs
+        run: cd app/app && flutter build apk --release --split-per-abi --build-name="$PACK_VERSION"
+      # Staged as they are produced. The universal build below rewrites
+      # only app-release.apk and leaves these alone, but copying first
+      # keeps that an observation rather than something to depend on.
+      - name: Stage per-ABI APKs
+        run: |
+          set -euo pipefail
+          mkdir -p dist-android
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            cp "app/app/build/app/outputs/flutter-apk/app-$abi-release.apk" \
+              "dist-android/waxdeck-$abi.apk"
+          done
+      - name: Build universal APK
+        run: cd app/app && flutter build apk --release --build-name="$PACK_VERSION"
+      - name: Stage universal APK
+        run: cp app/app/build/app/outputs/flutter-apk/app-release.apk dist-android/waxdeck-universal.apk
+      # The same 16 KB page-size check CI runs, on the artifacts that
+      # actually ship rather than on a build made to be inspected. Both
+      # 64-bit carriers: the universal APK comes from its own build with
+      # its own target-platform set, and it is the one most people
+      # install. armeabi-v7a is skipped because 16 KB pages are a 64-bit
+      # device concern and a 32-bit-only APK is under no such rule.
+      - name: Assert 16 KB alignment
+        run: |
+          set -euo pipefail
+          for apk in arm64-v8a universal; do
+            "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "dist-android/waxdeck-$apk.apk" > /dev/null
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: waxdeck-android-apks
+          path: dist-android
           if-no-files-found: error
