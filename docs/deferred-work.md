@@ -16,7 +16,9 @@ Every entry carries a gate tag saying what actually blocks it:
 - `[upstream]` needs sibling-repo work first; the ask itself lives in
   upstream-requests.md and the entry names it.
 - `[hardware]` needs a device or environment the dev box lacks
-  (a phone, a head unit, Docker, real cast hardware).
+  (a phone, a head unit, real cast hardware). Docker used to be on that
+  list and is not: it is available here, and `make up`, `make dist`, and
+  `make goldens-linux` all depend on it.
 - `[roadmap]` deliberately rides a named later slice; listed here
   only because the cut happened mid-slice and would otherwise read
   as forgotten.
@@ -283,10 +285,19 @@ here waits on upstream.
 ## Compatibility
 
 - `[in-repo]` **NSP import and export.**
-- `[hardware]` **Driving a real client binary in CI.** No Docker in the dev
-  distro, and the web-based Subsonic clients need CORS headers
-  WaxDeck does not expose; the client trace suites (Subsonic and
-  gpodder) are the automated stand-in and fail on missing endpoints.
+- `[in-repo]` **Driving a real client binary in CI.** Regated from
+  `[hardware]`: the blocker recorded here was "no Docker in the dev
+  distro", and Docker is available now, so what is left is ours to build.
+  Two halves. A browser-based Subsonic client cannot reach an instance
+  cross-origin, because nothing in `server/` sets any
+  `Access-Control-Allow-*` header, so that half is a deliberate decision
+  about exposing CORS rather than a harness. A native client in a
+  container is only a harness, and now a buildable one: a compose service
+  beside the stack `make up` already brings up, driven and asserted on
+  the way the e2e suite drives the web build. The client trace suites
+  (Subsonic and gpodder) are the automated stand-in meanwhile and fail on
+  missing endpoints. Worth taking with the compose-stack-in-CI entry
+  below, which builds the same stack for the same reason.
 
 ## Infrastructure
 
@@ -451,26 +462,11 @@ here waits on upstream.
   no such scope exists, and whoever introduces one takes the fan-out's
   enumeration with it. The reasoning lives in the ADR's consequences
   section.
-- `[in-repo]` **The components that landed after the design system have CI
-  goldens and no readable ones.** The golden suite runs twice: CI goldens
-  block out text and are compared with a tolerance, so they gate layout,
-  spacing, and colour on any host; the readable platform goldens render
-  real type and are the only thing that catches a wrong weight or a lost
-  variable axis, and they are baselined on Linux and skipped everywhere
-  else. `components_late_golden_test.dart` - the transport, settings
-  rows, the console table, the entity header, the palette and its
-  shortcut sheet, the station dial, the mini player, and the later
-  controls - was written on a macOS host, which cannot produce a Linux
-  baseline, so it declares itself CI-only rather than shipping a suite
-  that goes red on CI. The gap is narrower than it sounds: the readable
-  pass is a statement about `WaxType`, and the P0 set plus the composites
-  already render the whole type ramp readably. To close it, run
-  `flutter test test/components_late_golden_test.dart --update-goldens`
-  on Linux and drop the `ciOnly` config from that file's `main`.
-
-- `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
+- `[in-repo]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
-  compose harness exists.
+  compose harness exists. Regated from `[hardware]` with the entry above
+  and for the same reason: the harness is a compose service, Docker is
+  here, and nothing about it needs a device this box lacks.
 - `[in-repo]` **Wire the docker compose stack into CI.** Docker is now
   available in the dev environment and `make up` brings the full stack
   (waxdeck + the flavored waxflow sidecar) up locally, so the old

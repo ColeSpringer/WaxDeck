@@ -21,6 +21,13 @@ import 'support/tolerant_goldens.dart';
 ///   rasterisation makes on its own, so no tolerance can tell them
 ///   apart: these stay baselined on Linux (the CI platform) and skipped
 ///   elsewhere rather than failing there.
+///
+/// Skipped elsewhere is not the same as unavailable elsewhere: rendering
+/// a Linux baseline takes a Linux renderer, not a Linux workstation, so
+/// `make goldens-linux` rebaselines them in a container from any host.
+/// Run it whenever a change moves what these draw - CI runs this suite,
+/// and a baseline nobody could regenerate would be a wall rather than a
+/// gate.
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   await loadWaxFonts();
   useTolerantGoldenComparator();

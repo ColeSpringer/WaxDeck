@@ -127,6 +127,23 @@ jobs:
         run: cd app/packages/waxdeck_ui && flutter test
       - name: Test (design system catalogue)
         run: cd app/packages/waxdeck_ui/example && flutter test
+      # A failed golden writes a masked/isolated/diff triptych beside the
+      # suite; without this the log carries a percentage and nothing to
+      # look at. The readable goldens are exactly the ones a percentage
+      # cannot explain - "1.95% of pixels" is a wrong font weight and a
+      # moved needle alike, and telling those apart is the whole job.
+      # Placed after both golden suites so either one's failure is
+      # collected; if-no-files-found stays quiet for the failures that
+      # are not golden ones.
+      - name: Golden failure images
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: golden-failures
+          path: |
+            app/packages/waxdeck_ui/test/failures/
+            app/packages/waxdeck_ui/example/test/failures/
+          if-no-files-found: ignore
       - name: Test (mirror, sync, downloads)
         run: cd app/packages/waxdeck_data && flutter test
       - name: Test (player engine, via its testing package)

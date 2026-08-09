@@ -84,7 +84,7 @@ gen-notices:
 # Assets that are generated but rarely regenerated: the bundled type,
 # the icon subsets, and the brand kit. Not part of `generate` (they hit
 # the network and take minutes); run them when the design changes.
-.PHONY: fonts icons brand
+.PHONY: fonts icons brand goldens-linux
 fonts:
 	tools/fetch-fonts.sh
 
@@ -93,6 +93,37 @@ icons:
 
 brand:
 	python3 tools/generate-brand.py
+
+# The readable goldens (`goldens/linux/`), rebaselined in a container.
+#
+# That suite renders real type, which is the only way a wrong weight or a
+# lost variable axis is visible, and font rasterisation is host-specific -
+# so it is baselined on one platform and skipped on the others. Rendering
+# it in a container is what keeps that from meaning "you must develop on
+# Linux": this repo is a cross-platform app and the OS somebody works on
+# should not decide which gates they can run. CI runs the suite on every
+# PR, so a baseline nobody could regenerate is a wall, not a gate.
+#
+# Run it after any change that moves the design system, alongside the
+# plain `flutter test --update-goldens` that updates the host-portable CI
+# goldens; this target deliberately writes back only `goldens/linux/`.
+# Docker is the only prerequisite. The first run builds the image (a few
+# minutes, mostly the SDK download); later runs reuse the layer cache and
+# the named pub-cache volume, so neither the SDK nor the workspace's
+# packages are fetched twice.
+#
+# The Flutter version is read from the CI workflow rather than pinned a
+# second time here, so the baselines are always rendered by the toolchain
+# that will check them.
+FLUTTER_VERSION := $(shell sed -n 's/^[[:space:]]*FLUTTER_VERSION:[[:space:]]*"\([0-9][0-9.]*\)".*/\1/p' .github/workflows/ci.yaml | head -1)
+goldens-linux:
+	@test -n "$(FLUTTER_VERSION)" || { echo "make goldens-linux: no FLUTTER_VERSION found in .github/workflows/ci.yaml" >&2; exit 1; }
+	docker build --platform linux/amd64 --build-arg FLUTTER_VERSION=$(FLUTTER_VERSION) \
+		-f tools/goldens.Dockerfile -t waxdeck-goldens:$(FLUTTER_VERSION) tools
+	docker run --rm --platform linux/amd64 --user $$(id -u):$$(id -g) -e HOME=/tmp \
+		-v "$(CURDIR)":/repo -v waxdeck-pub-cache:/pub-cache \
+		waxdeck-goldens:$(FLUTTER_VERSION)
+	@echo "goldens/linux rebaselined; review the diff before committing"
 
 ## --- quality gates -----------------------------------------------------------
 
