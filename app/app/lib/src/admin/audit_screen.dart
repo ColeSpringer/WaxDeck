@@ -143,8 +143,12 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
             padding: sizeClass.gutter.add(
               const EdgeInsets.only(bottom: WaxSpace.s12),
             ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
+            // `ReadingColumn` rather than a `ConstrainedBox`: a sliver
+            // hands down a tight width and padding keeps it tight, so
+            // the cap here was resolving straight back to the window
+            // and the filter box ran the width of the page.
+            child: ReadingColumn(
+              maxWidth: 480,
               child: SearchField(
                 label: 'Filter by action',
                 hint: 'user. or backup.create',

@@ -51,13 +51,12 @@ class SettingsSectionScreen extends ConsumerWidget {
           padding:
               sizeClass.gutter + const EdgeInsets.only(bottom: WaxSpace.s32),
           sliver: SliverToBoxAdapter(
-            child: ConstrainedBox(
-              // Settings rows are a title, a sentence, and a control: past
-              // the reading width the sentence and its control drift so far
-              // apart that the pair stops reading as one row.
-              constraints: const BoxConstraints(
-                maxWidth: WaxSpace.readingWidth,
-              ),
+            // Settings rows are a title, a sentence, and a control: past
+            // the reading width the sentence and its control drift so far
+            // apart that the pair stops reading as one row. `ReadingColumn`
+            // rather than a bare `ConstrainedBox`, which a sliver's tight
+            // cross-axis width resolves straight back to the full window.
+            child: ReadingColumn(
               child: switch (section) {
                 SettingsSection.account => const AccountSectionBody(),
                 SettingsSection.playback => const _PlaybackBody(),
@@ -99,8 +98,11 @@ class _Group extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: <Widget>[
+      // Top only: the header owns the space under itself, and a screen
+      // adding its own on top of that is what makes one section sit
+      // differently from the next.
       Padding(
-        padding: const EdgeInsets.only(top: WaxSpace.s24, bottom: WaxSpace.s4),
+        padding: EdgeInsets.only(top: WaxLayout.of(context).sectionGap),
         child: SectionHeader(title: title),
       ),
       ...children,

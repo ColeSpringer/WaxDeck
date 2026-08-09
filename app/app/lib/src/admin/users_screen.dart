@@ -164,7 +164,9 @@ class _UsersTab extends ConsumerWidget {
           return false;
         },
         child: ListView(
-          padding: const EdgeInsets.all(WaxSpace.s16),
+          padding: WaxSizeClass.of(
+            context,
+          ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
           children: <Widget>[
             WaxTable<UserAccount>(
               rows: value.users,
@@ -325,6 +327,9 @@ class _RequestsTab extends ConsumerWidget {
           child: Text('No pending requests'),
         ),
         AsyncData(:final value) => ListView(
+          padding: WaxSizeClass.of(
+            context,
+          ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
           children: [
             for (final user in value)
               WaxOptionRow(
@@ -486,6 +491,9 @@ class _InvitesTab extends ConsumerWidget {
           child: Text('No invites yet'),
         ),
         AsyncData(:final value) => ListView(
+          padding: WaxSizeClass.of(
+            context,
+          ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
           children: [
             for (final invite in value)
               _InviteRow(

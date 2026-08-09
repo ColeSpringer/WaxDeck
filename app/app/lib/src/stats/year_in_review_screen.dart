@@ -49,60 +49,73 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
       slivers: <Widget>[
         SliverPadding(
           padding: sizeClass.gutter,
+          // The recap reads top to bottom as one story - figures, a
+          // chart, four ranked lists - so it takes the reading column
+          // rather than stretching its rank rows across a desktop
+          // window with the time they name a screen's width away.
+          // Column-per-child rather than one column in an adapter: the
+          // recap is long, and a single box child would lay the whole
+          // of it out on every year step and every chip press.
           sliver: SliverList.list(
             children: <Widget>[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  WaxIconButton(
-                    glyph: WaxIcons.back,
-                    label: 'Previous year',
-                    semanticsId: SemanticsIds.yirPrevYear,
-                    onPressed: () => setState(() => _year--),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: WaxSpace.s16,
+              ReadingColumn(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    WaxIconButton(
+                      glyph: WaxIcons.back,
+                      label: 'Previous year',
+                      semanticsId: SemanticsIds.yirPrevYear,
+                      onPressed: () => setState(() => _year--),
                     ),
-                    child: Text(
-                      '$_year',
-                      key: const Key('yir-year-label'),
-                      style: WaxType.display.copyWith(
-                        color: colors.textPrimary,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: WaxSpace.s16,
+                      ),
+                      child: Text(
+                        '$_year',
+                        key: const Key('yir-year-label'),
+                        style: WaxType.display.copyWith(
+                          color: colors.textPrimary,
+                        ),
                       ),
                     ),
-                  ),
-                  WaxIconButton(
-                    glyph: WaxIcons.forward,
-                    label: 'Next year',
-                    semanticsId: SemanticsIds.yirNextYear,
-                    onPressed: () => setState(() => _year++),
-                  ),
-                ],
+                    WaxIconButton(
+                      glyph: WaxIcons.forward,
+                      label: 'Next year',
+                      semanticsId: SemanticsIds.yirNextYear,
+                      onPressed: () => setState(() => _year++),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: WaxSpace.s8),
-              FilterChipRow(
-                padding: EdgeInsets.zero,
-                selected: _server ? 'server' : 'personal',
-                chips: const <WaxFilterChip>[
-                  WaxFilterChip(
-                    name: 'personal',
-                    label: 'My year',
-                    semanticsId: SemanticsIds.yirPersonal,
-                  ),
-                  WaxFilterChip(
-                    name: 'server',
-                    label: 'Whole server',
-                    semanticsId: SemanticsIds.yirServer,
-                  ),
-                ],
-                onSelect: (name) => setState(() => _server = name == 'server'),
+              ReadingColumn(
+                child: FilterChipRow(
+                  padding: EdgeInsets.zero,
+                  selected: _server ? 'server' : 'personal',
+                  chips: const <WaxFilterChip>[
+                    WaxFilterChip(
+                      name: 'personal',
+                      label: 'My year',
+                      semanticsId: SemanticsIds.yirPersonal,
+                    ),
+                    WaxFilterChip(
+                      name: 'server',
+                      label: 'Whole server',
+                      semanticsId: SemanticsIds.yirServer,
+                    ),
+                  ],
+                  onSelect: (name) =>
+                      setState(() => _server = name == 'server'),
+                ),
               ),
               const SizedBox(height: WaxSpace.s24),
-              if (_server)
-                _ServerRecap(year: _year)
-              else
-                _PersonalRecap(year: _year, monthLabels: _monthLabels),
+              ReadingColumn(
+                child: _server
+                    ? _ServerRecap(year: _year)
+                    : _PersonalRecap(year: _year, monthLabels: _monthLabels),
+              ),
               const SizedBox(height: WaxSpace.s32),
             ],
           ),
@@ -178,7 +191,7 @@ class _PersonalRecap extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: WaxSpace.s24),
+                  SizedBox(height: WaxLayout.of(context).sectionGap),
                   const SectionHeader(title: 'Month by month'),
                   ListeningBarChart(
                     key: const Key('yir-month-chart'),
@@ -186,7 +199,6 @@ class _PersonalRecap extends ConsumerWidget {
                     labels: monthLabels,
                     summary: _monthSummary(value.byMonth),
                   ),
-                  const SizedBox(height: WaxSpace.s16),
                   _TopFive(
                     title: 'Top artists',
                     kind: 'artists',
@@ -260,7 +272,6 @@ class _ServerRecap extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: WaxSpace.s16),
                   _TopFive(
                     title: 'Top artists',
                     kind: 'artists',
@@ -313,7 +324,7 @@ class _TopFive extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: WaxSpace.s8),
+        SizedBox(height: WaxLayout.of(context).sectionGap),
         SectionHeader(title: title),
         for (var i = 0; i < top.length; i++)
           TopEntryRow(index: i, entry: top[i], kind: kind),

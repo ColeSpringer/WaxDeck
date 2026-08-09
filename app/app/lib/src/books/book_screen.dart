@@ -297,8 +297,7 @@ class _Description extends ConsumerWidget {
         sizeClass.gutter.horizontal / 2,
         0,
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: WaxSpace.readingWidth),
+      child: ReadingColumn(
         child: ShowNotesView(
           html: html,
           onOpenLink: ref.read(urlOpenerProvider).open,
@@ -329,7 +328,7 @@ class _Chapters extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const SizedBox(height: WaxSpace.s24),
+          SizedBox(height: WaxLayout.of(context).sectionGap),
           SectionHeader(
             title: 'Chapters',
             overline: '${book.chapters.length} in this book',

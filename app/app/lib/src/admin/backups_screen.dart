@@ -80,6 +80,7 @@ class BackupsScreen extends ConsumerWidget {
     final staged = ref.watch(stagedRestoreProvider).value;
     final anyRunning = backups.value?.any((b) => b.state == 'running') ?? false;
     final picker = ref.watch(filePickerProvider);
+    final sizeClass = WaxSizeClass.of(context);
     return WaxScaffold(
       title: 'Backups',
       largeTitle: false,
@@ -99,66 +100,85 @@ class BackupsScreen extends ConsumerWidget {
                 await _importArchive(context, ref, file);
               }
             },
+            // The cap goes INSIDE the list, not around it. This page's
+            // only scrollable is the ListView - the sliver above takes
+            // exactly the viewport remainder, so the outer view has
+            // nothing to scroll - and a 720-wide list left-aligned in a
+            // wide window would leave a wheel over the right half of an
+            // admin screen doing nothing at all. Full-width list, full
+            // hit area, capped content; the gutter rides the list's own
+            // padding, as it does on Users next door.
             child: ListView(
-              padding: const EdgeInsets.all(WaxSpace.s16),
+              padding: sizeClass.gutter.add(
+                const EdgeInsets.symmetric(vertical: WaxSpace.s16),
+              ),
               children: [
-                if (staged != null)
-                  _RestoreBanner(
-                    plan: staged,
-                    onCancel: () => _cancelRestore(context, ref),
-                  ),
-                Row(
-                  children: [
-                    Semantics(
-                      identifier: SemanticsIds.backupCreate,
-                      child: FilledButton.icon(
-                        key: const Key(SemanticsIds.backupCreate),
-                        onPressed: anyRunning
-                            ? null
-                            : () => _createBackup(context, ref),
-                        icon: const WaxIcon(WaxIcons.archive),
-                        label: Text(
-                          anyRunning ? 'Backing up...' : 'Back up now',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: WaxSpace.s8),
-                    if (picker != null)
-                      Semantics(
-                        identifier: SemanticsIds.backupImport,
-                        child: OutlinedButton.icon(
-                          key: const Key(SemanticsIds.backupImport),
-                          onPressed: () => _pickAndImport(context, ref),
-                          icon: const WaxIcon(WaxIcons.upload),
-                          label: const Text('Import archive'),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: WaxSpace.s8),
-                switch (backups) {
-                  AsyncData(:final value) when value.isEmpty => const Padding(
-                    padding: EdgeInsets.all(WaxSpace.s16),
-                    child: Text('No backups yet'),
-                  ),
-                  AsyncData(:final value) => Column(
+                ReadingColumn(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final backup in value) _BackupRow(backup: backup),
+                      if (staged != null)
+                        _RestoreBanner(
+                          plan: staged,
+                          onCancel: () => _cancelRestore(context, ref),
+                        ),
+                      Row(
+                        children: [
+                          Semantics(
+                            identifier: SemanticsIds.backupCreate,
+                            child: FilledButton.icon(
+                              key: const Key(SemanticsIds.backupCreate),
+                              onPressed: anyRunning
+                                  ? null
+                                  : () => _createBackup(context, ref),
+                              icon: const WaxIcon(WaxIcons.archive),
+                              label: Text(
+                                anyRunning ? 'Backing up...' : 'Back up now',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: WaxSpace.s8),
+                          if (picker != null)
+                            Semantics(
+                              identifier: SemanticsIds.backupImport,
+                              child: OutlinedButton.icon(
+                                key: const Key(SemanticsIds.backupImport),
+                                onPressed: () => _pickAndImport(context, ref),
+                                icon: const WaxIcon(WaxIcons.upload),
+                                label: const Text('Import archive'),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: WaxSpace.s8),
+                      switch (backups) {
+                        AsyncData(:final value) when value.isEmpty =>
+                          const Padding(
+                            padding: EdgeInsets.all(WaxSpace.s16),
+                            child: Text('No backups yet'),
+                          ),
+                        AsyncData(:final value) => Column(
+                          children: [
+                            for (final backup in value)
+                              _BackupRow(backup: backup),
+                          ],
+                        ),
+                        AsyncError(:final error) => Padding(
+                          padding: const EdgeInsets.all(WaxSpace.s16),
+                          child: Text(
+                            error is WaxDeckApiException
+                                ? error.message
+                                : 'Could not load backups',
+                          ),
+                        ),
+                        _ => const Center(child: CircularProgressIndicator()),
+                      },
+                      SizedBox(height: WaxLayout.of(context).sectionGap),
+                      const SectionHeader(title: 'Retention'),
+                      const _RetentionFields(),
                     ],
                   ),
-                  AsyncError(:final error) => Padding(
-                    padding: const EdgeInsets.all(WaxSpace.s16),
-                    child: Text(
-                      error is WaxDeckApiException
-                          ? error.message
-                          : 'Could not load backups',
-                    ),
-                  ),
-                  _ => const Center(child: CircularProgressIndicator()),
-                },
-                const SizedBox(height: WaxSpace.s24),
-                const SectionHeader(title: 'Retention'),
-                const _RetentionFields(),
+                ),
               ],
             ),
           ),

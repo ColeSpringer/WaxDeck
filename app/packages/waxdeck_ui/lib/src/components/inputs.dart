@@ -30,6 +30,7 @@ class WaxTextField extends StatefulWidget {
     this.errorText,
     this.semanticsId,
     this.clearSemanticsId,
+    this.showLabel = false,
     super.key,
   }) : assert(maxLines >= 1, 'a field has at least one line');
 
@@ -37,6 +38,19 @@ class WaxTextField extends StatefulWidget {
   /// string; fields whose meaning is carried by their placement (a search
   /// box in a sidebar header) pass what a screen reader should hear.
   final String label;
+
+  /// Draws [label] above the box.
+  ///
+  /// Off by default, which is not an opinion that fields should be
+  /// unlabelled - it is that turning it on for the whole app at once
+  /// changes the height of 38 existing fields, and that is a look to
+  /// decide rather than a side effect of fixing one screen. Reach for it
+  /// on any field that arrives already carrying a value: [hint] is the
+  /// only thing this component paints otherwise, and Material takes a
+  /// hint away as soon as there is text, so a pre-filled field with
+  /// neither is a box with a number in it and nothing saying which
+  /// number.
+  final bool showLabel;
 
   final TextEditingController? controller;
   final FocusNode? focusNode;
@@ -224,19 +238,39 @@ class _WaxTextFieldState extends State<WaxTextField> {
         ),
       ),
     );
-    if (error == null) return field;
+    if (error == null && !widget.showLabel) return field;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        field,
-        Padding(
-          padding: const EdgeInsets.only(top: WaxSpace.s4, left: WaxSpace.s12),
-          child: Text(
-            error,
-            style: WaxType.bodySmall.copyWith(color: colors.error),
+        if (widget.showLabel)
+          Padding(
+            padding: const EdgeInsets.only(
+              bottom: WaxSpace.s4,
+              left: WaxSpace.s12,
+            ),
+            // Excluded rather than drawn as a `Semantics` label: the
+            // field already carries this exact string as its accessible
+            // name, and a second node saying it again is heard twice.
+            child: ExcludeSemantics(
+              child: Text(
+                widget.label,
+                style: WaxType.label.copyWith(color: colors.textSecondary),
+              ),
+            ),
           ),
-        ),
+        field,
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(
+              top: WaxSpace.s4,
+              left: WaxSpace.s12,
+            ),
+            child: Text(
+              error,
+              style: WaxType.bodySmall.copyWith(color: colors.error),
+            ),
+          ),
       ],
     );
   }

@@ -8,6 +8,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import '../tools/tasks_screen.dart';
+import 'admin_console.dart';
 
 /// The importable sources. Podcast feeds move by OPML, which has no
 /// affordance in the podcasts UI yet, so it is not offered here.
@@ -102,136 +103,159 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
   @override
   Widget build(BuildContext context) {
     final url = _serverUrl.text.trim();
-    return Semantics(
-      identifier: SemanticsIds.adminMigrate,
-      container: true,
-      child: Scaffold(
-        appBar: AppBar(title: const Text('Import from another server')),
-        body: ListView(
-          padding: const EdgeInsets.all(WaxSpace.s16),
-          children: [
-            Semantics(
-              identifier: SemanticsIds.migrateSource,
-              child: DropdownButton<_MigrationSource>(
-                key: const Key(SemanticsIds.migrateSource),
-                value: _source,
-                isExpanded: true,
-                onChanged: (selected) {
-                  if (selected != null) setState(() => _source = selected);
-                },
-                items: [
-                  for (final source in _MigrationSource.values)
-                    DropdownMenuItem(value: source, child: Text(source.label)),
+    final sizeClass = WaxSizeClass.of(context);
+    return WaxScaffold(
+      title: 'Import from another server',
+      largeTitle: false,
+      semanticsId: SemanticsIds.adminMigrate,
+      onBack: adminBack(context),
+      slivers: <Widget>[
+        SliverPadding(
+          padding: sizeClass.gutter.add(
+            const EdgeInsets.symmetric(vertical: WaxSpace.s16),
+          ),
+          sliver: SliverToBoxAdapter(
+            child: ReadingColumn(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Semantics(
+                    identifier: SemanticsIds.migrateSource,
+                    child: DropdownButton<_MigrationSource>(
+                      key: const Key(SemanticsIds.migrateSource),
+                      value: _source,
+                      isExpanded: true,
+                      onChanged: (selected) {
+                        if (selected != null) {
+                          setState(() => _source = selected);
+                        }
+                      },
+                      items: [
+                        for (final source in _MigrationSource.values)
+                          DropdownMenuItem(
+                            value: source,
+                            child: Text(source.label),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: WaxSpace.s8),
+                  Semantics(
+                    identifier: SemanticsIds.migrateServerUrl,
+                    child: TextField(
+                      key: const Key(SemanticsIds.migrateServerUrl),
+                      controller: _serverUrl,
+                      keyboardType: TextInputType.url,
+                      decoration: const InputDecoration(
+                        labelText: 'Server URL',
+                        hintText: 'https://music.example',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: WaxSpace.s8),
+                  if (_source.usesToken)
+                    Semantics(
+                      identifier: SemanticsIds.migrateToken,
+                      child: TextField(
+                        key: const Key(SemanticsIds.migrateToken),
+                        controller: _token,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'API token',
+                        ),
+                      ),
+                    )
+                  else ...[
+                    Semantics(
+                      identifier: SemanticsIds.migrateUsername,
+                      child: TextField(
+                        key: const Key(SemanticsIds.migrateUsername),
+                        controller: _username,
+                        decoration: const InputDecoration(
+                          labelText: 'Username',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: WaxSpace.s8),
+                    Semantics(
+                      identifier: SemanticsIds.migratePassword,
+                      child: TextField(
+                        key: const Key(SemanticsIds.migratePassword),
+                        controller: _password,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: WaxSpace.s8),
+                  WaxSettingRow(
+                    key: const Key('migrate-stars'),
+                    title: 'Stars',
+                    help:
+                        'Which tracks and albums the other server had starred',
+                    control: WaxSwitch(
+                      value: _stars,
+                      label: 'Stars',
+                      onChanged: (value) => setState(() => _stars = value),
+                    ),
+                  ),
+                  WaxSettingRow(
+                    key: const Key('migrate-ratings'),
+                    title: 'Ratings',
+                    help: 'The star ratings given there',
+                    control: WaxSwitch(
+                      value: _ratings,
+                      label: 'Ratings',
+                      onChanged: (value) => setState(() => _ratings = value),
+                    ),
+                  ),
+                  WaxSettingRow(
+                    key: const Key('migrate-history'),
+                    title: 'Listen history',
+                    help: 'What was played there, and when',
+                    control: WaxSwitch(
+                      value: _history,
+                      label: 'Listen history',
+                      onChanged: (value) => setState(() => _history = value),
+                    ),
+                  ),
+                  WaxSettingRow(
+                    key: const Key('migrate-progress'),
+                    title: 'Playback progress',
+                    help: 'How far into each episode and book the listener was',
+                    control: WaxSwitch(
+                      value: _progress,
+                      label: 'Playback progress',
+                      onChanged: (value) => setState(() => _progress = value),
+                    ),
+                  ),
+                  WaxSettingRow(
+                    key: const Key('migrate-dry-run'),
+                    title: 'Dry run',
+                    help: 'Report what would match; change nothing',
+                    control: WaxSwitch(
+                      value: _dryRun,
+                      label: 'Dry run',
+                      onChanged: (value) => setState(() => _dryRun = value),
+                    ),
+                  ),
+                  const SizedBox(height: WaxSpace.s16),
+                  Semantics(
+                    identifier: SemanticsIds.migrateSubmit,
+                    child: FilledButton(
+                      key: const Key(SemanticsIds.migrateSubmit),
+                      onPressed: _busy || url.isEmpty ? null : _submit,
+                      child: const Text('Start import'),
+                    ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: WaxSpace.s8),
-            Semantics(
-              identifier: SemanticsIds.migrateServerUrl,
-              child: TextField(
-                key: const Key(SemanticsIds.migrateServerUrl),
-                controller: _serverUrl,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  labelText: 'Server URL',
-                  hintText: 'https://music.example',
-                ),
-              ),
-            ),
-            const SizedBox(height: WaxSpace.s8),
-            if (_source.usesToken)
-              Semantics(
-                identifier: SemanticsIds.migrateToken,
-                child: TextField(
-                  key: const Key(SemanticsIds.migrateToken),
-                  controller: _token,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'API token'),
-                ),
-              )
-            else ...[
-              Semantics(
-                identifier: SemanticsIds.migrateUsername,
-                child: TextField(
-                  key: const Key(SemanticsIds.migrateUsername),
-                  controller: _username,
-                  decoration: const InputDecoration(labelText: 'Username'),
-                ),
-              ),
-              const SizedBox(height: WaxSpace.s8),
-              Semantics(
-                identifier: SemanticsIds.migratePassword,
-                child: TextField(
-                  key: const Key(SemanticsIds.migratePassword),
-                  controller: _password,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Password'),
-                ),
-              ),
-            ],
-            const SizedBox(height: WaxSpace.s8),
-            WaxSettingRow(
-              key: const Key('migrate-stars'),
-              title: 'Stars',
-              help: 'Which tracks and albums the other server had starred',
-              control: WaxSwitch(
-                value: _stars,
-                label: 'Stars',
-                onChanged: (value) => setState(() => _stars = value),
-              ),
-            ),
-            WaxSettingRow(
-              key: const Key('migrate-ratings'),
-              title: 'Ratings',
-              help: 'The star ratings given there',
-              control: WaxSwitch(
-                value: _ratings,
-                label: 'Ratings',
-                onChanged: (value) => setState(() => _ratings = value),
-              ),
-            ),
-            WaxSettingRow(
-              key: const Key('migrate-history'),
-              title: 'Listen history',
-              help: 'What was played there, and when',
-              control: WaxSwitch(
-                value: _history,
-                label: 'Listen history',
-                onChanged: (value) => setState(() => _history = value),
-              ),
-            ),
-            WaxSettingRow(
-              key: const Key('migrate-progress'),
-              title: 'Playback progress',
-              help: 'How far into each episode and book the listener was',
-              control: WaxSwitch(
-                value: _progress,
-                label: 'Playback progress',
-                onChanged: (value) => setState(() => _progress = value),
-              ),
-            ),
-            WaxSettingRow(
-              key: const Key('migrate-dry-run'),
-              title: 'Dry run',
-              help: 'Report what would match; change nothing',
-              control: WaxSwitch(
-                value: _dryRun,
-                label: 'Dry run',
-                onChanged: (value) => setState(() => _dryRun = value),
-              ),
-            ),
-            const SizedBox(height: WaxSpace.s16),
-            Semantics(
-              identifier: SemanticsIds.migrateSubmit,
-              child: FilledButton(
-                key: const Key(SemanticsIds.migrateSubmit),
-                onPressed: _busy || url.isEmpty ? null : _submit,
-                child: const Text('Start import'),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

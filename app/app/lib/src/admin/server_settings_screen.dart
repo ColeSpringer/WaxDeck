@@ -31,26 +31,32 @@ class ServerSettingsScreen extends ConsumerWidget {
         padding: sizeClass.gutter.add(
           const EdgeInsets.only(bottom: WaxSpace.s32),
         ),
-        child: switch (settings) {
-          AsyncError(:final error) => ErrorState(
-            title: 'Could not load the server settings',
-            message: error is WaxDeckApiException
-                ? error.message
-                : 'Something went wrong reading them.',
-            onRetry: () => ref.invalidate(adminSettingsProvider),
-          ),
-          AsyncData(:final value) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              _Switches(settings: value),
-              const SizedBox(height: WaxSpace.s24),
-              const _TranscodingGroup(),
-              const SizedBox(height: WaxSpace.s24),
-              _RetentionGroup(settings: value),
-            ],
-          ),
-          _ => const SkeletonShapes(shape: SkeletonShape.list),
-        },
+        child: ReadingColumn(
+          // The same cap the listener-facing settings take, for the same
+          // reason: these are `WaxSettingRow`s, and past the reading
+          // width the help sentence and the switch it belongs to drift
+          // so far apart that the pair stops reading as one row.
+          child: switch (settings) {
+            AsyncError(:final error) => ErrorState(
+              title: 'Could not load the server settings',
+              message: error is WaxDeckApiException
+                  ? error.message
+                  : 'Something went wrong reading them.',
+              onRetry: () => ref.invalidate(adminSettingsProvider),
+            ),
+            AsyncData(:final value) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _Switches(settings: value),
+                SizedBox(height: WaxLayout.of(context).sectionGap),
+                const _TranscodingGroup(),
+                SizedBox(height: WaxLayout.of(context).sectionGap),
+                _RetentionGroup(settings: value),
+              ],
+            ),
+            _ => const SkeletonShapes(shape: SkeletonShape.list),
+          },
+        ),
       ),
     );
   }
@@ -74,6 +80,7 @@ class _Switches extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final sectionGap = WaxLayout.of(context).sectionGap;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -102,7 +109,7 @@ class _Switches extends ConsumerWidget {
                 _save(ref, settings.copyWith(readOnly: value)),
           ),
         ),
-        const SizedBox(height: WaxSpace.s16),
+        SizedBox(height: sectionGap),
         const SectionHeader(title: 'Analysis'),
         WaxSettingRow(
           title: 'Sonic analysis',
@@ -117,7 +124,7 @@ class _Switches extends ConsumerWidget {
                 _save(ref, settings.copyWith(sonicAnalysis: value)),
           ),
         ),
-        const SizedBox(height: WaxSpace.s16),
+        SizedBox(height: sectionGap),
         const SectionHeader(title: 'Radio'),
         WaxSettingRow(
           title: 'Look up cover art online',
@@ -222,20 +229,28 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
           constraints: const BoxConstraints(maxWidth: 420),
           child: Column(
             children: <Widget>[
+              // Labelled rather than hinted: all three are seeded from
+              // the server, so a hint would never be on screen, and
+              // three identical boxes reading "0" is a good way to
+              // throttle everybody by putting the per-listener number
+              // in the server-wide field.
               WaxTextField(
                 label: 'Transcodes at once, server-wide',
+                showLabel: true,
                 controller: _maxConcurrent,
                 semanticsId: SemanticsIds.transcodingMaxConcurrent,
               ),
               const SizedBox(height: WaxSpace.s12),
               WaxTextField(
                 label: 'Transcodes at once, per listener',
+                showLabel: true,
                 controller: _maxPerUser,
                 semanticsId: SemanticsIds.transcodingMaxPerUser,
               ),
               const SizedBox(height: WaxSpace.s12),
               WaxTextField(
                 label: 'Default bitrate ceiling (kbps)',
+                showLabel: true,
                 hint: '0 means no ceiling',
                 controller: _defaultKbps,
                 semanticsId: SemanticsIds.transcodingDefaultKbps,
@@ -407,8 +422,14 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              // Seeded from the settings on the first frame, like the
+              // transcoding three above, so the same rule applies: a
+              // hint on a field that is never empty is never drawn, and
+              // two boxes reading 30 and 7 under one header is how the
+              // task window gets typed into the trash purge.
               WaxTextField(
                 label: 'Purge trashed files after (days)',
+                showLabel: true,
                 hint: '0 keeps them until the trash is emptied by hand',
                 controller: _days,
                 semanticsId: SemanticsIds.trashRetentionDays,
@@ -419,6 +440,7 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
               // its use.
               WaxTextField(
                 label: 'Clear finished tasks after (days)',
+                showLabel: true,
                 hint: '0 keeps every finished task',
                 controller: _taskDays,
                 semanticsId: SemanticsIds.taskRetentionDays,

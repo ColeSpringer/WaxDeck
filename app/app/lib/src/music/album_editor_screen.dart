@@ -170,8 +170,7 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
       identifier: SemanticsIds.albumEditor,
       child: Padding(
         padding: WaxSizeClass.of(context).gutter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: WaxSpace.readingWidth),
+        child: ReadingColumn(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[

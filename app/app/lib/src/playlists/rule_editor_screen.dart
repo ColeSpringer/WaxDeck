@@ -383,14 +383,20 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             AsyncData(:final value) when twoPane => SliverFillRemaining(
               hasScrollBody: true,
               child: _TwoPane(
-                tree: _tree(value),
+                tree: _tree(value, twoPane: true),
                 preview: _PreviewPane(preview: _preview),
               ),
             ),
             AsyncData(:final value) => SliverList.list(
               children: <Widget>[
-                _tree(value),
-                _PreviewPane(preview: _preview, showCount: false),
+                _tree(value, twoPane: false),
+                _PreviewPane(
+                  preview: _preview,
+                  showCount: false,
+                  padding: sizeClass.gutter.add(
+                    const EdgeInsets.symmetric(vertical: WaxSpace.s12),
+                  ),
+                ),
                 const SizedBox(height: WaxSpace.s24),
               ],
             ),
@@ -413,10 +419,22 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     );
   }
 
-  Widget _tree(RuleFields vocabulary) {
+  Widget _tree(RuleFields vocabulary, {required bool twoPane}) {
     final handles = _Handles();
+    final gutter = WaxSizeClass.of(context).gutter.horizontal / 2;
     return Padding(
-      padding: const EdgeInsets.all(WaxSpace.s12),
+      // Directional rather than symmetric, because only the leading edge
+      // is the page's. In two panes the trailing edge is the divider,
+      // and the preview on the other side of it keeps a panel's own
+      // inset - so a symmetric gutter here would sit the tree 32 off a
+      // line the preview sits 12 off, which reads as a mistake because
+      // it is one.
+      padding: EdgeInsetsDirectional.only(
+        start: gutter,
+        end: twoPane ? WaxSpace.s12 : gutter,
+        top: WaxSpace.s12,
+        bottom: WaxSpace.s12,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -979,19 +997,30 @@ class _TwoPane extends StatelessWidget {
 
 /// What the rule matches right now: the count, then the first page of it.
 class _PreviewPane extends StatelessWidget {
-  const _PreviewPane({required this.preview, this.showCount = true});
+  const _PreviewPane({
+    required this.preview,
+    this.showCount = true,
+    this.padding = const EdgeInsets.all(WaxSpace.s12),
+  });
 
   final PlaylistPreview? preview;
 
   /// False where the count is in the sticky bar instead.
   final bool showCount;
 
+  /// The default is a side panel's own inset, which is where this pane
+  /// spends most of its life. Below the tree in one pane it is page
+  /// content instead, and the caller hands it the gutter so its rows
+  /// line up with the cards above them rather than sitting four pixels
+  /// inside them.
+  final EdgeInsetsGeometry padding;
+
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final items = preview?.items ?? const <ItemSummary>[];
     return Padding(
-      padding: const EdgeInsets.all(WaxSpace.s12),
+      padding: padding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[

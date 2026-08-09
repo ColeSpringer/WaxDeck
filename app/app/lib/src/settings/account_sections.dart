@@ -42,10 +42,18 @@ class AccountSectionBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authControllerProvider).value?.user;
+    // The same gap the sibling sections get from `_Group`. Account is
+    // the one body built out of whole widgets rather than that helper,
+    // which is how it came to space its sections closer than the section
+    // beside it in the same list.
+    final sectionGap = WaxLayout.of(context).sectionGap;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SizedBox(height: WaxSpace.s16),
+        // The leading gap too: `_Group` opens its sibling bodies at the
+        // section gap, so a hand-written 16 here is the same body-to-body
+        // jump under one app bar that the rest of this fixed.
+        SizedBox(height: sectionGap),
         WaxOptionRow(
           title: user?.label ?? 'Signed in',
           subtitle: user?.username,
@@ -67,9 +75,9 @@ class AccountSectionBody extends ConsumerWidget {
                   ),
           ),
         ),
-        const SizedBox(height: WaxSpace.s16),
+        SizedBox(height: sectionGap),
         const ListeningSection(),
-        const SizedBox(height: WaxSpace.s16),
+        SizedBox(height: sectionGap),
         // Wrapped so the group carries the handle the registry names for
         // it. These two are lists rather than single controls, and a
         // registry entry has to point at something that is there whether
@@ -78,15 +86,15 @@ class AccountSectionBody extends ConsumerWidget {
           identifier: SemanticsIds.setting('devices'),
           child: const _DeviceSessions(),
         ),
-        const SizedBox(height: WaxSpace.s16),
+        SizedBox(height: sectionGap),
         Semantics(
           identifier: SemanticsIds.setting('app-passwords'),
           child: const AppPasswordsSection(),
         ),
-        const SizedBox(height: WaxSpace.s24),
+        SizedBox(height: sectionGap),
         SectionHeader(title: 'About'),
         const AboutRow(semanticsId: SemanticsIds.aboutRow),
-        const SizedBox(height: WaxSpace.s24),
+        SizedBox(height: sectionGap),
         WaxButton(
           label: 'Sign out',
           kind: WaxButtonKind.destructive,

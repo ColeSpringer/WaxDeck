@@ -13,6 +13,93 @@ Widget _host(Widget child, {double height = 400}) => MaterialApp(
 
 void main() {
   group('WaxTextField', () {
+    testWidgets('draws no label by default, whatever it is holding', (
+      tester,
+    ) async {
+      // The default is what 35 of the 38 call sites render today, so it
+      // is pinned: turning it on for everybody is a look to decide, not
+      // something to arrive by accident through a refactor here.
+      final controller = TextEditingController(text: '12');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _host(
+          WaxTextField(label: 'Transcodes at once', controller: controller),
+          height: 80,
+        ),
+      );
+      expect(find.text('Transcodes at once'), findsNothing);
+    });
+
+    testWidgets('showLabel draws the label over a field already filled', (
+      tester,
+    ) async {
+      // The case a hint cannot cover. The hint is still in the tree - it
+      // is faded to nothing rather than removed, which is why looking
+      // for the widget is not the test - so the assertion is on what is
+      // actually on screen.
+      final controller = TextEditingController(text: '12');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _host(
+          WaxTextField(
+            label: 'Transcodes at once',
+            showLabel: true,
+            hint: 'never seen',
+            controller: controller,
+          ),
+          height: 80,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Transcodes at once'), findsOneWidget);
+      expect(
+        tester
+            .widgetList<AnimatedOpacity>(
+              find.ancestor(
+                of: find.text('never seen'),
+                matching: find.byType(AnimatedOpacity),
+              ),
+            )
+            .single
+            .opacity,
+        0,
+        reason: 'a hint on a pre-filled field is painted at nothing',
+      );
+    });
+
+    testWidgets('the drawn label is not announced a second time', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(
+          const WaxTextField(label: 'Server URL', showLabel: true),
+          height: 80,
+        ),
+      );
+      expect(
+        find.bySemanticsLabel('Server URL'),
+        findsOneWidget,
+        reason: 'the field owns the name; the drawn text is decoration',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a labelled field still reports its error', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const WaxTextField(
+            label: 'Server URL',
+            showLabel: true,
+            errorText: 'That is not a URL',
+          ),
+          height: 120,
+        ),
+      );
+      expect(find.text('Server URL'), findsOneWidget);
+      expect(find.text('That is not a URL'), findsOneWidget);
+    });
+
     testWidgets('clears its own text and hands the empty value back', (
       tester,
     ) async {

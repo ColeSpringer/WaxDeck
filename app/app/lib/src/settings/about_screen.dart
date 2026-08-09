@@ -61,6 +61,9 @@ class AboutScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final health = ref.watch(serverHealthProvider);
+    // About is one tap from Account, which spaces at the section gap, so
+    // it takes the same rhythm rather than a hand-written neighbour of it.
+    final sectionGap = WaxLayout.of(context).sectionGap;
     return WaxScaffold(
       title: 'About',
       largeTitle: false,
@@ -70,14 +73,11 @@ class AboutScreen extends ConsumerWidget {
         SliverPadding(
           padding: sizeClass.gutter,
           sliver: SliverToBoxAdapter(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: WaxSpace.readingWidth,
-              ),
+            child: ReadingColumn(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const SizedBox(height: WaxSpace.s24),
+                  SizedBox(height: sectionGap),
                   const WaxWordmark(),
                   const SizedBox(height: WaxSpace.s8),
                   Text(
@@ -87,7 +87,7 @@ class AboutScreen extends ConsumerWidget {
                       color: WaxColors.of(context).textSecondary,
                     ),
                   ),
-                  const SizedBox(height: WaxSpace.s24),
+                  SizedBox(height: sectionGap),
                   SectionHeader(title: 'Versions'),
                   MonoDetailRow(label: 'App', value: appVersionLabel),
                   switch (health) {
@@ -109,7 +109,7 @@ class AboutScreen extends ConsumerWidget {
                     ),
                     _ => const MonoDetailRow(label: 'Server', value: '...'),
                   },
-                  const SizedBox(height: WaxSpace.s24),
+                  SizedBox(height: sectionGap),
                   SectionHeader(title: 'Licensing'),
                   WaxOptionRow(
                     title: 'Open-source licenses',
