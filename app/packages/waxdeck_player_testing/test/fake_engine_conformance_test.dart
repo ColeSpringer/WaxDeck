@@ -44,18 +44,10 @@ void main() {
       await engine.dispose();
     });
 
-    test('play after completion restarts from the top', () async {
-      final engine = FakeEngine(mediaDuration: const Duration(seconds: 10));
-      await engine.load('/stream');
-      await engine.play();
-      engine.advance(const Duration(seconds: 11));
-      expect(engine.processingState, EngineProcessingState.completed);
-      await engine.play();
-      expect(engine.position, Duration.zero);
-      expect(engine.playing, isTrue);
-      expect(engine.processingState, EngineProcessingState.ready);
-      await engine.dispose();
-    });
+    // Replay after completion is not a FakeEngine specific: it is the
+    // port's contract, and it lives in the shared suite so the real
+    // engines are held to it too. It was here, and only here, which is
+    // how just_audio came to diverge from it unnoticed.
 
     test('advance scales media time by the playback speed', () async {
       final engine = FakeEngine(mediaDuration: const Duration(minutes: 10));

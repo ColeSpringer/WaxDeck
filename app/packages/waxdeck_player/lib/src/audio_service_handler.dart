@@ -1,3 +1,5 @@
+import 'dart:ui' show Color;
+
 import 'package:audio_service/audio_service.dart';
 
 import 'audio_engine_port.dart';
@@ -12,6 +14,7 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     required this.engine,
     required this.onPlayFromMediaId,
     this.browse,
+    this.onPlay,
     this.onSkipNext,
     this.onSkipPrevious,
     this.onSkipToQueueItem,
@@ -37,6 +40,21 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   /// pid). The app decides how: online play-info or the downloaded
   /// original.
   final Future<void> Function(String pid) onPlayFromMediaId;
+
+  /// How the app starts playback, for the play raised on a lock screen,
+  /// a headset button, a head unit, or a Bluetooth remote.
+  ///
+  /// The one transport verb that is not the engine's to answer alone. A
+  /// play arriving after the item ended is a replay, and what has to be
+  /// reset for a replay - the finished flag, the skip cursor, which part
+  /// of a book to go back to - lives in the app's playback session, not
+  /// here. Absent, this falls through to the engine, which is the right
+  /// answer for a build with no session layer at all.
+  ///
+  /// Pause is deliberately not paired with this: the session reads a
+  /// pause off the engine's own transition, so that one from the lock
+  /// screen and one from an interruption count alike.
+  final Future<void> Function()? onPlay;
 
   /// Queue steps, when the app runs a queue (a Connect load, a
   /// browse-tree folder played through). Absent callbacks hide the
@@ -170,7 +188,7 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   }
 
   @override
-  Future<void> play() => engine.play();
+  Future<void> play() => onPlay?.call() ?? engine.play();
 
   @override
   Future<void> pause() => engine.pause();
@@ -243,29 +261,44 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
 /// Linux, the transport controls on Windows, and the now-playing panel
 /// on macOS. The browse tree is what makes the app appear in a head
 /// unit's media drawer, where the platform renders one.
+/// [notificationColor] tints the Android notification. It is a parameter
+/// rather than a constant because the value is a design token this
+/// package cannot see: waxdeck_ui is the app's dependency, not the
+/// player's (ADR-0016), so the app passes its accent down instead of
+/// this file keeping a second copy of the amber that would drift.
 Future<WaxDeckAudioHandler> initWaxDeckAudioService({
   required AudioEnginePort engine,
   required Future<void> Function(String pid) onPlayFromMediaId,
   BrowseSourcePort? browse,
+  Future<void> Function()? onPlay,
   Future<void> Function()? onSkipNext,
   Future<void> Function()? onSkipPrevious,
   Future<void> Function(int index)? onSkipToQueueItem,
+  Color? notificationColor,
 }) {
   return AudioService.init(
     builder: () => WaxDeckAudioHandler(
       engine: engine,
       browse: browse,
       onPlayFromMediaId: onPlayFromMediaId,
+      onPlay: onPlay,
       onSkipNext: onSkipNext,
       onSkipPrevious: onSkipPrevious,
       onSkipToQueueItem: onSkipToQueueItem,
     ),
-    config: const AudioServiceConfig(
+    config: AudioServiceConfig(
       androidNotificationChannelId: 'com.colespringer.waxdeck.playback',
       androidNotificationChannelName: 'WaxDeck playback',
       // Keep the foreground service alive while paused so the OS does
       // not reap mid-listen state (the documented hardening posture).
       androidStopForegroundOnPause: false,
+      // The mark as a silhouette. Without it Android falls back to the
+      // launcher icon, which the status bar flattens to a white blob;
+      // and audio_service only draws the notification's seek bar when
+      // the icon is a real status-bar drawable and the colour is
+      // opaque, so these two travel together.
+      androidNotificationIcon: 'drawable/ic_stat_waxdeck',
+      notificationColor: notificationColor,
     ),
   );
 }

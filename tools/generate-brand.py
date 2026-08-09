@@ -413,6 +413,26 @@ def android(res: Path) -> None:
             padding=0.28,
         )
 
+    # The status-bar icon for the playback and download notifications.
+    # Android keeps only the alpha channel here and tints the rest, so
+    # this is the mark as a silhouette; the tint is passed from Dart.
+    # Held against the resource shrinker by res/raw/keep.xml, since the
+    # only thing naming it is a Dart string.
+    for folder, size in (
+        ("drawable-mdpi", 24),
+        ("drawable-hdpi", 36),
+        ("drawable-xhdpi", 48),
+        ("drawable-xxhdpi", 72),
+        ("drawable-xxxhdpi", 96),
+    ):
+        write_icon(
+            res / folder / "ic_stat_waxdeck.png",
+            size,
+            tile=False,
+            monochrome=True,
+            padding=0.08,
+        )
+
     (res / "values").mkdir(parents=True, exist_ok=True)
     write(
         res / "values/colors.xml",

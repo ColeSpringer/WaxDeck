@@ -623,12 +623,37 @@ class PlaybackSession {
     return port.localFor(item.pid);
   }
 
+  /// Starts playback, whoever asked.
+  ///
+  /// Every play that reaches this session goes through here rather than
+  /// at the engine, because a play after the item ended is a replay and
+  /// [replay] is the only place the per-play bookkeeping resets. Left to
+  /// `engine.play`, the item would restart while `_finished` still said
+  /// the last play finished it, so the next report would call this play
+  /// finished too, and `_lastJumpedSpan` would still be at the end of
+  /// the list, suppressing the intro skip the replay should make again.
+  /// It also rewinds a book to its first part rather than to the top of
+  /// the part it ended on, which the engine alone cannot do.
+  ///
+  /// The pause half needs no such routing: it is already stamped from
+  /// the engine's own transition, in [_onPlayingChanged], exactly so
+  /// that a pause from the lock screen or an interruption counts the
+  /// same as one from a button here.
+  Future<void> play() async {
+    if (engine.playing) return;
+    if (engine.processingState == EngineProcessingState.completed) {
+      await replay();
+      return;
+    }
+    await engine.play();
+  }
+
   Future<void> toggle() async {
     if (engine.playing) {
       await engine.pause();
-    } else {
-      await engine.play();
+      return;
     }
+    await play();
   }
 
   /// Steps back a little when the play that just started followed a

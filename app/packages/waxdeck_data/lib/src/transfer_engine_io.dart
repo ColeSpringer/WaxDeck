@@ -12,6 +12,26 @@ import 'transfer_engine.dart';
 class BackgroundTransferEngine implements TransferEnginePort {
   BackgroundTransferEngine() {
     _updates = FileDownloader().updates.listen(_onUpdate);
+    // A background download with no notification is a download the
+    // listener cannot see, stop, or explain - on Android it is also the
+    // only thing keeping the work visible to the OS. Configured once
+    // for every task; a no-op on the desktops, which have no such
+    // notification to post.
+    FileDownloader().configureNotification(
+      running: const TaskNotification(
+        '{displayName}',
+        'Downloading {progress}',
+      ),
+      complete: const TaskNotification('{displayName}', 'Downloaded'),
+      error: const TaskNotification('{displayName}', 'Download failed'),
+      progressBar: true,
+      // Deliberately per task rather than grouped. A group notification
+      // collapses a multi-part book into one row, which is the better
+      // answer for a book - but it also replaces the file name with a
+      // count, and one file is what most downloads are. Getting both
+      // means a notification group per item, which needs a group on the
+      // request; deferred rather than traded away here.
+    );
   }
 
   /// Where downloaded originals go. An engine decision, not the
@@ -27,14 +47,19 @@ class BackgroundTransferEngine implements TransferEnginePort {
 
   late final StreamSubscription<TaskUpdate> _updates;
 
+  /// Whether the notification permission has been asked for this run.
+  bool _askedForNotifications = false;
+
   @override
   Stream<TransferEvent> get events => _events.stream;
 
   @override
   Future<String> start(TransferRequest request) async {
+    await _ensureNotificationPermission();
     final task = DownloadTask(
       url: request.url,
       filename: request.fileName,
+      displayName: request.displayName,
       directory: _directory,
       baseDirectory: BaseDirectory.applicationSupport,
       updates: Updates.statusAndProgress,
@@ -45,6 +70,29 @@ class BackgroundTransferEngine implements TransferEnginePort {
     _tasks[task.taskId] = task;
     await FileDownloader().enqueue(task);
     return task.taskId;
+  }
+
+  /// Asks for the notification permission at the first download rather
+  /// than at launch, where it would be a dialog about a feature the
+  /// listener has not reached yet. Once per process: [PermissionStatus]
+  /// is the platform's answer and asking again does not change it.
+  ///
+  /// A refusal is not an error. The download runs either way - the
+  /// permission buys the progress notification, not the transfer - so
+  /// this neither blocks nor reports.
+  Future<void> _ensureNotificationPermission() async {
+    if (_askedForNotifications) return;
+    _askedForNotifications = true;
+    try {
+      final permissions = FileDownloader().permissions;
+      if (await permissions.status(PermissionType.notifications) ==
+          PermissionStatus.undetermined) {
+        await permissions.request(PermissionType.notifications);
+      }
+    } on Object {
+      // Platforms with no such permission answer by throwing; the
+      // download is unaffected either way.
+    }
   }
 
   @override

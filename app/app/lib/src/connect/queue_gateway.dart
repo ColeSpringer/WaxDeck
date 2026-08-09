@@ -4,8 +4,10 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../player/autoplay_gate.dart';
 import '../player/now_playing_controller.dart';
 import '../player/playback_session.dart';
+import '../providers.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_state.dart';
+import '../radio/radio_controller.dart';
 
 /// The queue as the mirror contract reports it: the ordered pids, where
 /// the listener stands in them, and the toggles a controller renders.
@@ -70,6 +72,16 @@ abstract class QueueGateway {
   /// Plays one item by itself, for a browse-tree leaf tapped on a head
   /// unit. Throws when it cannot start.
   Future<void> playItem(String pid);
+
+  /// Starts what is already loaded, for a play raised outside the app:
+  /// the lock screen, a headset button, a head unit, a routed command.
+  ///
+  /// Exists because the play verb is the one that cannot go straight at
+  /// the engine. A play arriving after the item ended is a replay, and
+  /// only the session resets the per-play bookkeeping and rewinds a
+  /// book to its first part. Pause has no such problem and is read off
+  /// the engine's own transition.
+  Future<void> play();
 
   /// Steps to the next entry. False when the queue has nowhere to go.
   Future<bool> next();
@@ -181,6 +193,34 @@ class LocalQueueGateway implements QueueGateway {
       offerUndo: false,
     );
     _throwOnFailedStart(began);
+  }
+
+  /// The same three answers `NowPlayingController.togglePlayback` gives
+  /// a play, so the button on a lock screen means what the one on the
+  /// deck means. They used to disagree: this went straight at the
+  /// engine, which starts a station and restarts a finished item but has
+  /// nothing to start when a restored queue was never begun.
+  @override
+  Future<void> play() async {
+    // A station is playing, or paused with its stream still loaded.
+    // Radio keeps no session of ours, and the engine is what holds it.
+    if (_ref.read(radioPlaybackProvider).station != null) {
+      await _ref.read(audioEngineProvider).play();
+      return;
+    }
+    final session = _playback.liveSession;
+    if (session != null) {
+      await session.play();
+      return;
+    }
+    // No station and no session, but a queue still standing: a start
+    // that failed, waiting to be asked again. (A queue restored at
+    // launch does not land here - the queue listener starts it as soon
+    // as it is put back.) Asking again is what the deck's own play does
+    // in this state, and the only reading of a play from a car or a
+    // headset that is not a button doing nothing. `resume` bails by
+    // itself when there is no entry, so an empty queue stays empty.
+    _playback.resume();
   }
 
   @override

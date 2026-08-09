@@ -83,6 +83,67 @@ gzip column on every cold load.
 Re-measure when the engine version moves, when a font joins the eager
 chain, or when the single-threaded skwasm force is lifted.
 
+## Android signing
+
+The release build type signs with a keystore loaded from
+`app/app/android/key.properties`, and falls back to the debug keystore
+when that file is absent - so a fresh clone and CI both keep building.
+The file and `*.jks` are gitignored; nothing about the key is in the
+repo.
+
+The fallback answers "no keystore configured", not "keystore configured
+badly". A `key.properties` that exists but names a file that does not
+fails the build outright:
+
+```
+Execution failed for task ':app:validateSigningRelease'.
+> Keystore file '/home/you/waxdeck-upload.jks' not found for signing config 'release'.
+```
+
+That is deliberate. Writing the file is how you declare an intent to
+sign, and quietly downgrading a typo'd path to debug keys would hand
+back an APK that looks publishable and is not.
+
+Make the keystore once and keep it somewhere durable. Losing it means
+no existing installation can ever be upgraded, because Android
+identifies an app by its signature:
+
+```sh
+keytool -genkey -v -keystore ~/waxdeck-upload.jks -alias waxdeck \
+  -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Then `app/app/android/key.properties`, with `storeFile` relative to
+`app/app/android/` (or absolute):
+
+```properties
+storeFile=/Users/you/waxdeck-upload.jks
+storePassword=...
+keyAlias=waxdeck
+keyPassword=...
+```
+
+`flutter build apk --release` picks it up with no flag. Confirm which
+key an APK actually carries before publishing it - the fallback is
+silent by design:
+
+```sh
+"$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs app-release.apk
+```
+
+A debug-signed APK answers `CN=Android Debug`, which is the one thing
+this check exists to catch. Not `keytool -printcert -jarfile`: that
+reads v1 JAR signatures, `minSdk 24` means AGP signs v2/v3 only, and it
+answers `Not a signed jar file` for a perfectly well-signed APK.
+
+For CI signing, four secrets carry the same four values, with the
+keystore base64-encoded (`base64 -i ~/waxdeck-upload.jks`) since a
+secret is text: `ANDROID_KEYSTORE_BASE64`, `ANDROID_STORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. The packaging job decodes
+the keystore and writes `key.properties` before building; absent them
+it produces debug-signed APKs, which are installable for testing and
+not publishable.
+
 ## After the workflow finishes
 
 Package-channel manifests are updated by hand per release; the
@@ -93,7 +154,16 @@ and Flathub as each channel opens.
 Nothing is signed yet. The Windows and macOS artifacts are unsigned
 and unnotarized, which blocks the winget submission outright and makes
 Gatekeeper quarantine the dmg; the release notes should say so until
-signing lands.
+signing lands. Android is the exception in kind rather than degree: an
+APK must be signed to install at all, so an unsigned build is not a
+thing that exists - what CI produces is debug-signed, which installs
+for testing and cannot be published.
+
+That posture constrains macOS entitlements. Restricted entitlements -
+`keychain-access-groups` is the one that came up - make
+`flutter build macos --release` demand a development certificate, so
+they cannot be added while the build is unsigned. ADR-0057 has the
+detail; the entitlement goes in with the signing work.
 
 The desktop app has no self-updater, so releases propagate through
 package managers and direct downloads only; there is no update channel

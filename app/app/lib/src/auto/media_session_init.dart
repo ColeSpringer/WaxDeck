@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../connect/queue_gateway.dart';
 import '../providers.dart';
@@ -38,10 +39,17 @@ Future<void> initMediaSession(ProviderContainer container) async {
       // makes the tree work offline. The web build has neither a mirror
       // nor a drawer to appear in.
       browse: db == null ? null : MirrorBrowseSource(db),
+      onPlay: queue.play,
       onSkipNext: queue.next,
       onSkipPrevious: queue.previous,
       onPlayFromMediaId: queue.playItem,
       onSkipToQueueItem: queue.jumpTo,
+      // Passed from here because this is the side of the boundary that
+      // can see the design system: waxdeck_player has no waxdeck_ui to
+      // read the token from (ADR-0016). The dark palette's accent is
+      // the one to send - a notification tint is read against the
+      // system's own surface, not against the app's current theme.
+      notificationColor: WaxColors.dark.accent,
     ).timeout(_registrationLimit);
     // The sleep timer's extension button, the now-playing metadata, and
     // the queue a head unit renders all reach the session through this.

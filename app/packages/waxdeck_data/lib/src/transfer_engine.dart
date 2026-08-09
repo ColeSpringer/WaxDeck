@@ -48,6 +48,7 @@ class TransferRequest {
   const TransferRequest({
     required this.url,
     required this.fileName,
+    this.displayName = '',
     this.wifiOnly = false,
   });
 
@@ -57,6 +58,13 @@ class TransferRequest {
   /// so the same audio is never fetched twice under two names; where they
   /// go is the engine's decision.
   final String fileName;
+
+  /// What to call this transfer where a person will read it - the OS
+  /// download notification. [fileName] is a hash and says nothing to
+  /// anyone, so the caller passes the name the file arrived under.
+  /// Empty means the platform has nothing to show, which is the right
+  /// answer off mobile.
+  final String displayName;
 
   /// Whether the platform should hold this transfer until the device is
   /// on an unmetered connection. A constraint the OS enforces rather

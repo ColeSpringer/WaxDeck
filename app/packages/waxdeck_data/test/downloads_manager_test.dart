@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
@@ -176,6 +177,63 @@ void main() {
       expect(rows.every((r) => r.state == 'pending'), isTrue);
       expect(rows.map((r) => r.durationMs), everyElement(60000));
     });
+
+    // The server's essence hash is a structured identifier, not bare hex:
+    // `sha256/mp3-frames-v1:<hex>`. Used verbatim it puts a path separator
+    // in the file name, which the transfer engine rejects outright - so
+    // every download failed before it started. The fixtures above use
+    // separator-free hashes, which is why nothing here caught it.
+    test('names a file safely from a structured essence hash', () async {
+      repo.infoByPid[_book] = _info(
+        _book,
+        parts: 1,
+        hashPrefix: 'sha256/mp3-frames-v1:beef',
+      );
+      await manager.download(_book);
+
+      expect(engine.started, hasLength(1));
+      final name = engine.started.single.fileName;
+      expect(
+        name,
+        isNot(anyOf(contains('/'), contains(r'\'), contains(':'))),
+        reason: 'a file name may not carry separators or a Windows colon',
+      );
+      expect(p.extension(name), '.m4b');
+      // The hash still has to be in there: a stem that threw the whole
+      // thing away would be portable and useless, since the name is what
+      // stops the same audio being fetched twice.
+      expect(p.basenameWithoutExtension(name), contains('beef'));
+    });
+
+    // The two that would collide under a plain substitution: swap the
+    // separator and the colon and both read `sha256_a_b`. They would then
+    // share one file on disk while `_discard`'s sharing check, which
+    // compares raw hashes, saw no sharer - so removing either item would
+    // unlink bytes the other still plays.
+    test(
+      'two essences that differ only in punctuation keep two names',
+      () async {
+        repo.infoByPid[_book] = _info(
+          _book,
+          parts: 1,
+          hashPrefix: 'sha256/a:b',
+        );
+        await manager.download(_book);
+        repo.infoByPid[_track] = _info(
+          _track,
+          parts: 1,
+          hashPrefix: 'sha256:a/b',
+        );
+        await manager.download(_track);
+
+        final names = engine.started.map((r) => r.fileName).toSet();
+        expect(
+          names,
+          hasLength(2),
+          reason: 'sanitising must not collapse two essences onto one file',
+        );
+      },
+    );
 
     test('keeps bytes it already holds and refreshes the record', () async {
       repo.infoByPid[_book] = _info(_book, parts: 1, durationMs: null);

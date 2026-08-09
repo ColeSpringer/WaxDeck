@@ -28,6 +28,25 @@ here waits on upstream.
 
 ## Playback and apps
 
+- `[in-repo]` **Download-notification polish.** ADR-0057 wired the
+  minimum: a running/complete/error notification named by the original
+  file, a progress bar, and a once-per-process permission request at the
+  first download. Three things the plugin offers were left out. A denied
+  permission is taken at face value, where `shouldShowRationale` is what
+  would let the app explain itself before asking a second time. And
+  `trackTasks()` plus `rescheduleKilledTasks()` are what make a download
+  survive the OS killing the app - without them a transfer interrupted
+  that way is neither resumed nor reported, and the manager finds out
+  only when the record it is holding never completes. That last pair is
+  the substantial one; it wants a decision about who owns the plugin's
+  own task database next to WaxDeck's `downloadRecords`, which is why it
+  is not a follow-up line in the same file. The third is grouping: the
+  notification is per file, so a twenty-part book posts twenty of them.
+  `groupNotificationId` collapses a batch into one row, but it also
+  replaces the file name with a count, and one file is what most
+  downloads are - so the answer is a group per item rather than a global
+  one, which means carrying a group on `TransferRequest` and configuring
+  the notification per group as items start.
 - `[hardware]` **Android UnifiedPush distributor integration.** The server, API,
   and settings surface shipped; the client still needs the
   distributor plugin wrapped behind a WaxDeck-owned interface and a
@@ -271,6 +290,40 @@ here waits on upstream.
 
 ## Infrastructure
 
+- `[in-repo]` **The real-engine conformance suite runs on one platform,
+  by hand.** `e2e/run-desktop.sh` hardcodes `-d linux`, so the only
+  place `JustAudioEngine` is exercised against a real player is a Linux
+  desktop someone runs deliberately; no CI job runs it on any platform.
+  It will not run on macOS as written: `real_engine_conformance_test.dart`
+  reads `WAXDECK_CONFORMANCE_MEDIA` and wraps it in `Uri.file`, and the
+  app sandbox refuses the tone with "you don't have permission to view
+  it" before any test starts. Serving the tone over loopback HTTP is the
+  way out and is already half-planned - the prerequisite tweak is to
+  prefer `String.fromEnvironment` and pass `http(s)` URLs through
+  instead of `Uri.file`, which is what an Android emulator job would
+  need too, and the sandbox now has `network.client` (ADR-0057). The
+  cost of the gap is not hypothetical: the port contract says a play
+  after completion restarts the item, the FakeEngine implemented it and
+  asserted it, and just_audio did not - the case lived in the fake's own
+  specifics group rather than the shared suite, so nothing ever held the
+  real engine to it, and every play button on every surface was dead at
+  the end of a track until an emulator run found it.
+- `[in-repo]` **The macOS keychain entitlement, and whether a login
+  actually persists.** ADR-0057 gave the sandboxed app
+  `network.client` + `network.server`, which is what let it reach a
+  server at all; `keychain-access-groups` was left out because it is a
+  restricted entitlement that makes the release build demand a
+  development certificate, and the artifacts are deliberately unsigned.
+  What is unverified is the thing it was meant to fix: whether a login
+  survives a relaunch of the packaged app. It could not be tested
+  before, because an app that cannot open a connection can never sign
+  in to begin with, so the original diagnosis was inference rather than
+  observation. The plugin passes no `groupId`, so the default access
+  group applies and this may simply work. If it does not, the fix is
+  the entitlement, and the entitlement needs signing - so both land
+  together, with the check being: sign in, quit, relaunch, still signed
+  in. `SecureCredentialStore` swallows storage failures by design, so
+  the symptom is silence, not an error.
 - `[in-repo]` **The Windows plugin targets still compile as C++17, with
   one target lifted out of it.** `apply_standard_settings` is Flutter's
   stock template function and pins `cxx_std_17`; eleven third-party

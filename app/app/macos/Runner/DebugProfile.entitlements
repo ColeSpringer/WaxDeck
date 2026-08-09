@@ -6,7 +6,16 @@
 	<true/>
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
+	<!-- Reaching the server. The template grants only network.server
+	     (the Dart VM service the tooling attaches to), which is why a
+	     debug build could be observed and still not call out. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<!-- Kept identical to Release, including the absent
+	     keychain-access-groups: a debug build that reaches the keychain
+	     differently from the shipped one is how that failure gets
+	     discovered late. -->
 </dict>
 </plist>

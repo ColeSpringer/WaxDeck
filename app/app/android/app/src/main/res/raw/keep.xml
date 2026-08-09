@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification drawables are named by Dart strings, so no Java or XML
+     reference points at them and the resource shrinker takes them for
+     dead weight. Neither loss is a crash, which is what makes them worth
+     pinning here rather than finding in a release:
+
+     ic_stat_waxdeck is the status-bar icon. Without it the media
+     notification falls back to the launcher icon, which the status bar
+     renders as a white blob.
+
+     The audio_service_* glyphs are the notification's own transport
+     buttons, and they ship inside audio_service rather than this app,
+     so the whole set goes the same way. Most of them only draw blank -
+     NotificationCompat.Action takes a zero icon without complaint - but
+     audio_service_fast_forward is the glyph on the sleep-timer extra,
+     and CustomAction.Builder throws without one. That throw happens
+     while the playback state is being built, so no state ever reaches
+     the platform session and the notification, the lock screen, and
+     Android Auto all go silently dead for the whole run. Release-only,
+     because that is where the shrinker runs. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_waxdeck,@drawable/audio_service_*" />

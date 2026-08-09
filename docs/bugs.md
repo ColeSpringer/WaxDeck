@@ -1,6 +1,38 @@
 # Bugs
 
-List of current bugs or correctness issues.
+List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add it not overly clear.
+
+- [8-9-2026] I dont think the android app respects system theme. I believe it defaults to light mode.
+
+- [8-9-2026] Android app has a large forheard.
+
+- [8-8-2026] I cant figure out how to actually get to the matadata editor (web). Need to work on some of the inuitiveness of the UI/UX
+
+- [8-8-2026] The review queue can be crowded (see screenshot) and there is no way to resize. Having resize capabilites might be hard to do given the mobile constraints but I dont think there is any reason to give the pending queue as much room or more as the file you clicked on.
+
+- [8-8-2026] When playing a track, selected from under the tracks section, hitting the "next" button doesnt do anything. 
+
+- [8-8-2026] There is an annoying "Replaced what was playing" notification when you switch music tracks. We dont need a notification when switch audio? That should be obvious considering the audio changes....
+
+- [8-8-2026] Pressing play for a podcast doesn't remove the little indicator in the top right showing you havent played it before.
+
+- [8-8-2026] Uploaded music that selected the "as-is" option still have a review entry notification.
+
+- [8-8-2026] Uploaded music seems to only add to the tracks section? The tracks all have an artist, album, genere, and year in their file but dont show under the sections?
+
+- [8-8-2026] We should also have the addition button in the music section. Currently, its the only section that does not have it. Can be kind of like the home add surface but more music specific?
+
+- [8-8-2026] (Web) We can make the cover art a little bigger. Little small and there is plenty of dead space.
+
+- [8-8-2026] Uploads only accept file selections. Not useful when trying to upload albums or entire music collections. Also need to make sure that the upload surface is up to standard security practices.
+
+- [8-8-2026] There are some alignment issues that you can see under bug_screenshots. 
+
+- [8-8-2026] Under listening stats, when you select the time period to take into account, there is a noticable visual change. It looks like its redrawing the elements. This might not be fixable and I guess it's not really a bug. However, I think it would be worth making it a less jarring transition if we can.
+
+- [8-8-2026] Under curation, the review queue and admin console bring you to the same page (just to their respective section). The admin console is a pretty accurate name we can continue to use. On a related note, does it make sense to have this under curation along with uploads and review queue? The admin console has a lot of reponsbility outside of curation. So we either need to rename curation or bring out the admin console. My thought right now might be to remove the uploads section under curation as there are already ways to upload files in home with the addition button on the top right. Then we can have a dedicated notifcation tab and admin console. (consider also renaming "settings" to "App Settings" or something similar). Then we can have the admin console only be visible to admins.
+
+- [8-8-2026] I believe we implemented the ability to search for podcasts by name to add but it doesnt show in the UI.
 
 - [8-8-2026] A `WaxTextField` still shows no label unless its caller asks for
   one, and 35 of the 38 do not. The component treats `label` as the accessible

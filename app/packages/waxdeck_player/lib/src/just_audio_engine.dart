@@ -274,6 +274,26 @@ class JustAudioEngine implements AudioEnginePort {
 
   @override
   Future<void> play() async {
+    // A play that follows the end of the item starts it again, which is
+    // the port's contract and what every play button on every surface
+    // means once `playing` has gone false.
+    //
+    // Two steps, both load-bearing. just_audio's own `playing` stays
+    // true through completion, so the pause is what clears it - without
+    // that, the play() below returns at its own `if (playing) return`
+    // guard and the request is dropped in silence. The seek is what
+    // leaves the completed state. Relying on the seek alone would work
+    // only where the backend happens to resume from a still-set
+    // play-when-ready: on web it does not, because seeking to the index
+    // already loaded just moves currentTime and never issues a play.
+    //
+    // No `index:` on the seek. It would name the item already playing,
+    // and just_audio_media_kit treats any non-null index as a playlist
+    // jump, reloading the item on the desktops for nothing.
+    if (_player.processingState == ProcessingState.completed) {
+      await _player.pause();
+      await _player.seek(Duration.zero);
+    }
     // just_audio's own `play()` resolves when playback *stops*, which is
     // its documented contract ("completes when the playback completes or
     // is paused or stopped") and not what this port promises. Returning

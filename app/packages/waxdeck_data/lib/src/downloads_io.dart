@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -18,6 +19,49 @@ import 'transfer_engine_io.dart'
 /// Files are named by essence hash, so a retag or a move server-side never
 /// invalidates local bytes.
 class BackgroundDownloadManager implements DownloadManagerPort {
+  /// An essence hash as a file name stem.
+  ///
+  /// The hash is a structured identifier - `sha256/mp3-frames-v1:<hex>` -
+  /// so it carries a path separator and a colon. Spent verbatim it is not
+  /// a name any platform will take: the transfer engine rejects separators
+  /// outright, and a colon is illegal on Windows.
+  ///
+  /// Percent-escaped rather than blanked out with a placeholder, because
+  /// this has to be injective. Two hashes that collapsed onto one name
+  /// would share a file on disk while [_discard]'s sharing check, which
+  /// compares raw hashes, saw no sharer - so removing either item would
+  /// unlink bytes the other still plays, and the one left behind would
+  /// read as downloaded and resolve to nothing. Escaping `%` itself is
+  /// what makes the mapping reversible, and so collision-free.
+  ///
+  /// This is a rename, not an identity: [DownloadRecords.essenceHash]
+  /// keeps the hash as the server wrote it, and that column is what the
+  /// sharing and re-fetch checks compare, so nothing downstream reads the
+  /// name back as a hash. Hashes already in the portable set - the ones
+  /// the tests use - come through unchanged.
+  static String _safeStem(String essenceHash) {
+    final out = StringBuffer();
+    for (final byte in utf8.encode(essenceHash)) {
+      if (_portableNameByte(byte)) {
+        out.writeCharCode(byte);
+      } else {
+        out.write('%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}');
+      }
+    }
+    return out.toString();
+  }
+
+  /// Whether [byte] is an ASCII character every filesystem WaxDeck runs
+  /// on accepts in a name. `%` is deliberately absent: it is the escape
+  /// character above, so it has to escape itself.
+  static bool _portableNameByte(int byte) =>
+      (byte >= 0x30 && byte <= 0x39) || // 0-9
+      (byte >= 0x41 && byte <= 0x5A) || // A-Z
+      (byte >= 0x61 && byte <= 0x7A) || // a-z
+      byte == 0x2E || // .
+      byte == 0x5F || // _
+      byte == 0x2D; // -
+
   BackgroundDownloadManager({
     required this.db,
     required this.repository,
@@ -96,7 +140,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
         }
         continue;
       }
-      final fileName = '${f.essenceHash}${p.extension(f.fileName)}';
+      final fileName = '${_safeStem(f.essenceHash)}${p.extension(f.fileName)}';
       await db
           .into(db.downloadRecords)
           .insertOnConflictUpdate(
@@ -115,7 +159,12 @@ class BackgroundDownloadManager implements DownloadManagerPort {
             ),
           );
       final taskId = await engine.start(
-        TransferRequest(url: f.url, fileName: fileName, wifiOnly: wifiOnly()),
+        TransferRequest(
+          url: f.url,
+          fileName: fileName,
+          displayName: f.fileName,
+          wifiOnly: wifiOnly(),
+        ),
       );
       _taskPids[taskId] = pid;
       _taskFiles[taskId] = fileName;

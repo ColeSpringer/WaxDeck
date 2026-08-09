@@ -213,6 +213,39 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       expect(engine.playing, isFalse);
     });
 
+    // The pair to the assertion above. `playing` going false at the end
+    // is what puts a play button back on every surface that has one -
+    // the deck, the lock screen, a headset button, a head unit - so a
+    // play from there has to be able to start the item again. An engine
+    // whose underlying player treats "completed" as still-playing will
+    // take the request and do nothing, which reads as a dead button.
+    test('play after completion starts the item again', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.play();
+      final done = engine.completed.first;
+      await harness.advance(
+        engine,
+        harness.mediaDuration + const Duration(seconds: 1),
+      );
+      await done.timeout(const Duration(seconds: 5));
+      expect(engine.playing, isFalse, reason: 'precondition: it ended');
+
+      await engine.play();
+      expect(engine.playing, isTrue);
+      expect(
+        engine.processingState,
+        isNot(EngineProcessingState.completed),
+        reason: 'a replay leaves the completed state behind',
+      );
+      expectNear(engine.position, Duration.zero, 'a replay starts at the top');
+      // The assertion with teeth. `playing` and the processing state
+      // both turn on leaving `completed`, so a rewind that never
+      // actually asked the platform to play would satisfy them both.
+      // Only the clock moving says the sound is running again.
+      await harness.advance(engine, quarter);
+      expectNear(engine.position, quarter, 'the replay is really running');
+    });
+
     test('stop clears playing and returns to idle', () async {
       await engine.load(harness.mediaUrl);
       await engine.play();

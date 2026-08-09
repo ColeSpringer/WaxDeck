@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WaxDeck talks to a server its listener runs. On a LAN that server is
+     usually plain HTTP with no certificate to get, so cleartext is the
+     product's default posture rather than a development shortcut, and
+     targetSdk 36 blocks it without this file (ADR-0057).
+
+     User trust anchors are the on-ramp for the next step up: a listener
+     who does put a self-signed certificate in front of the server has
+     installed its CA on the device, and Android ignores user CAs unless
+     they are asked for here. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
