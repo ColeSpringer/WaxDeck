@@ -1,0 +1,177 @@
+# The real-engine conformance suite on both desktops CI can rent, which
+# is two different engines rather than one: bootstrap_io.dart routes
+# just_audio through media_kit (mpv) on linux and windows only, so macOS
+# runs just_audio's own AVFoundation backend. Neither was held to the
+# shared port contract on any machine but a developer's until this job
+# existed, and mpv is where clip windows and gapless crossings are
+# decided.
+#
+# Scheduled and on demand, never a merge gate, for the same reason the
+# Android run is not one: the suite waits on real playback timing
+# throughout, and a shared-CPU runner is exactly the shape that turns
+# those waits into flakes. That posture is recorded here so the
+# promotion question does not reopen as a deferral every time someone
+# reads the trigger list.
+#
+# The linux half also covers the full app journey - it boots the same
+# cold stack the playwright suite uses - so a desktop regression in
+# sign-in or playback surfaces here too.
+name: Desktop engine conformance
+
+on:
+  schedule:
+    - cron: "29 4 * * 4" # Thursdays, 04:29 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.44.9"
+  GO_VERSION: "1.26.x"
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      # mpv is here for its dependency tree, not the binary: media_kit
+      # ships libmpv.so itself, but not the libass-and-friends it links
+      # against, and those are absent from the runner image. Installing
+      # mpv pulls them and spares a guaranteed first-dispatch failure.
+      - name: Linux desktop toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev \
+            libsecret-1-dev libayatana-appindicator3-dev \
+            xvfb pulseaudio mpv
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            server/go.sum
+            fixtures/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+      - name: Pub get (workspace root)
+        run: cd app && flutter pub get
+      # Every position assertion in the suite waits in wall time on the
+      # engine's clock, and that clock is an audio device draining. The
+      # runner has no sound card, so this supplies one that discards what
+      # it is given - which is what a silenced conformance run wants
+      # anyway.
+      - name: Null audio sink
+        run: |
+          set -euo pipefail
+          pulseaudio --start --exit-idle-time=-1
+          for _ in $(seq 1 30); do
+            pactl info >/dev/null 2>&1 && break
+            sleep 1
+          done
+          pactl load-module module-null-sink sink_name=waxnull
+          pactl set-default-sink waxnull
+          echo "PULSE_SINK=waxnull" >> "$GITHUB_ENV"
+      # pipefail, or `tee` reports the status and a failing suite is a
+      # green step.
+      - name: App journey and conformance suite
+        run: |
+          set -o pipefail
+          xvfb-run -a bash e2e/run-desktop.sh linux 2>&1 | tee "$RUNNER_TEMP/desktop-linux.log"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: desktop-linux-log
+          path: ${{ runner.temp }}/desktop-linux.log
+          if-no-files-found: ignore
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: fixtures/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+      - name: Pub get (workspace root)
+        run: cd app && flutter pub get
+      # Synthesized, never committed: no binary media in git.
+      - name: Synthesize the conformance tone
+        run: |
+          set -euo pipefail
+          cd fixtures
+          go run ./cmd/fixturegen -out "$RUNNER_TEMP/wax-conf" -preset conformance
+          ls -l "$RUNNER_TEMP/wax-conf"
+      # Served rather than read from disk: the macOS app is sandboxed
+      # with network.client and nothing that opens an arbitrary temp
+      # directory, so a loopback URL is the one shape it can fetch. 8089
+      # matches run-desktop.sh, which serves it the same way locally.
+      #
+      # feedserv rather than python's http.server, which answers HTTP/1.0
+      # and ignores Range. AVPlayer refuses such a source outright and
+      # every case fails at load with AVErrorServerIncorrectlyConfigured
+      # (-11850) - the fixture host already serves ranges and conditional
+      # GETs, which is what a real stream looks like anyway.
+      - name: Serve the tone over loopback
+        run: |
+          set -euo pipefail
+          (cd fixtures && go build -o "$RUNNER_TEMP/feedserv" ./cmd/feedserv)
+          nohup "$RUNNER_TEMP/feedserv" -addr 127.0.0.1:8089 -dir "$RUNNER_TEMP/wax-conf" \
+            > "$RUNNER_TEMP/tone-server.log" 2>&1 &
+          # `exit 0`, not `break`: the failure branch below is guarded by
+          # nothing, so breaking out on success would fall straight into
+          # it and fail the step exactly when the server came up.
+          for _ in $(seq 1 30); do
+            if curl -sfo /dev/null http://127.0.0.1:8089/conformance-tone.flac; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the tone server never answered"
+          cat "$RUNNER_TEMP/tone-server.log"
+          exit 1
+      # A macOS runner may or may not present an output device, and the
+      # suite's waits are an audio clock draining. BlackHole is a virtual
+      # one. The whole chain degrades to a warning rather than failing
+      # the job: the first dispatched run is the probe that says whether
+      # any of it is needed, and if the suite passes on the runner's own
+      # device this step is scaffolding we can delete.
+      - name: Virtual audio device
+        run: |
+          system_profiler SPAudioDataType || true
+          (brew install --cask blackhole-2ch \
+            && brew install switchaudio-osx \
+            && SwitchAudioSource -t output -s "BlackHole 2ch") \
+            || echo "::warning::no virtual audio device; the suite runs on whatever the runner presents"
+      # Conformance only, and invoked directly rather than through
+      # run-desktop.sh: the journey half needs the whole cold stack, and
+      # what this job is here to hold is the engine contract. The tone
+      # arrives as a define because the app is launched by the tool, not
+      # by this shell.
+      - name: Conformance suite
+        run: |
+          set -o pipefail
+          cd app/app
+          flutter test integration_test/real_engine_conformance_test.dart -d macos \
+            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://127.0.0.1:8089/conformance-tone.flac \
+            2>&1 | tee "$RUNNER_TEMP/desktop-macos.log"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: desktop-macos-log
+          path: ${{ runner.temp }}/desktop-macos.log
+          if-no-files-found: ignore

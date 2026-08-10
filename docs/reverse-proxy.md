@@ -53,7 +53,16 @@ exactly: the socket address, no header believed. A value that does not
 parse refuses to start, rather than quietly trusting nothing.
 
 Do not add CORS headers at the proxy. The API is same-origin by
-design; a permissive CORS layer breaks the CSRF model.
+default, and a permissive CORS layer breaks the CSRF model.
+
+Where a browser client on another origin has to reach the server - a
+self-hosted Subsonic web app, say - name its origin in
+`WAXDECK_CORS_ORIGINS` (comma-separated, exactly as the browser sends
+it: scheme, host, and port, lowercase, no path) and let the server
+answer. It matches exactly, never allows credentials, and anything that
+is not a well-formed origin refuses to start rather than matching
+nothing quietly. Empty, the default, leaves the server byte-for-byte
+same-origin.
 
 The web app is a cross-origin-isolated WebAssembly build and the
 server already sends the required COOP and COEP headers; pass response

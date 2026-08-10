@@ -1,4 +1,4 @@
-.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-mirror lint spec-lint test test-server test-fixtures test-app \
+.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-mirror lint spec-lint test test-server test-fixtures test-app test-app-chrome \
         web build run up down reset logs drift-check oasdiff e2e e2e-desktop dist clean
 
 SPEC        := api/openapi.yaml
@@ -142,6 +142,24 @@ spec-lint:
 	npx --yes @stoplight/spectral-cli lint --fail-severity=warn $(SPEC)
 
 test: test-server test-fixtures test-app
+
+# The suites that only a browser can answer, named by a `_web_test.dart`
+# suffix rather than listed one by one - the whole point is that a second
+# one starts running when it is written, not when somebody remembers this
+# line.
+#
+# They sit in `test/` with `@TestOn('browser')`, which is what keeps them
+# out of the VM sweep: `flutter test` skips them without compiling
+# `package:web`. A separate directory does not work - the browser
+# runner's generated entrypoint cannot import across the package's test
+# root.
+#
+# Deliberately not in `test`: it needs a Chrome on the box, and a gate
+# that fails on a machine without one is not a gate anyone runs. CI is
+# where it ratchets, the same way ci.yaml enumerates the other suites
+# rather than shelling out to `make test`.
+test-app-chrome:
+	cd app/app && flutter test --platform chrome test/*_web_test.dart
 
 test-server:
 	cd server && go test ./...
@@ -326,10 +344,14 @@ endif
 
 # The desktop app journey plus the engine conformance suite against the
 # real mpv backend, which is where clip windows and gapless crossings are
-# verified for real. Needs a display and an audio sink, so CI does not
-# run it; the runner says how to wrap it on a headless box.
+# verified for real. Needs a display and an audio sink; the runner says
+# how to wrap it on a headless box, which is what the scheduled
+# desktop-conformance workflow does.
+#
+# DEVICE names the desktop to run on - `make e2e-desktop DEVICE=macos`,
+# linux when unset.
 e2e-desktop:
-	bash e2e/run-desktop.sh
+	bash e2e/run-desktop.sh $(DEVICE)
 
 dist:
 	docker build -f deploy/Dockerfile -t waxdeck:dev .

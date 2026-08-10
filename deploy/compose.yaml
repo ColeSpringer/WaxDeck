@@ -55,6 +55,11 @@ services:
       # login limiter counts the caller rather than the proxy. Empty keeps
       # the socket address.
       WAXDECK_TRUSTED_PROXIES: ${WAXDECK_TRUSTED_PROXIES:-}
+      # Origins allowed to call this server from a browser page served
+      # somewhere else, for a self-hosted Subsonic client. Empty serves
+      # same-origin only, which is every deployment that just uses the
+      # bundled web app.
+      WAXDECK_CORS_ORIGINS: ${WAXDECK_CORS_ORIGINS:-}
       # Optional OIDC single sign-on; leave the issuer empty to disable.
       # Local accounts always keep working.
       WAXDECK_OIDC_ISSUER: ${WAXDECK_OIDC_ISSUER:-}
@@ -181,6 +186,16 @@ services:
       - waxflow-data:/data
       - waxflow-cache:/cache
     networks: [internal]
+    # Ordering, not readiness: waxdeck has to be the container that first
+    # mounts the shared waxdeck-data volume. Docker seeds a new named
+    # volume from the image directory behind the mount, ownership and
+    # mode included, and waxdeck's image carries /data at 0777 precisely
+    # so an arbitrary WAXDECK_UID can write there. This image is
+    # distroless and has no /catalog at all, so a fresh volume it mounted
+    # first would stay root-owned 0755 and waxdeck could not create
+    # waxbin.db. A dev box hides this - the volume survives the first
+    # good run - but CI builds one from scratch every push.
+    depends_on: [waxdeck]
     # Hardening mirrored from WaxFlow's compose.base.yaml.
     read_only: true
     tmpfs:

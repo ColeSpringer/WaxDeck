@@ -101,20 +101,6 @@ here waits on upstream.
   a second language to pick is the same empty control as one offered
   before extraction. Worth taking when somebody is ready to own the
   translations, not before.
-- `[in-repo]` **The web build's per-device settings binding is not covered
-  by an automated test.** `BrowserClientSettingsStore` - the probe, the
-  fallback to memory, the write-through shadow, the key semantics - is
-  tested on the VM against a fake `BrowserStorage`, including a throwing
-  one. What no test touches is `_LocalStorage`, the ten lines that hand
-  over the real `window.localStorage`. Nothing in this repo runs under a
-  browser: there is no `@TestOn` anywhere, `make test-app` runs
-  `flutter test` on the VM per package, and `waxdeck_data`'s tests import
-  `drift/native`, so `--platform chrome` cannot simply be switched on for
-  the workspace. Adding Chrome to CI is an infrastructure decision that
-  was deliberately kept off the per-device settings change rather than
-  smuggled in with it. Verified by hand in the meantime: collapse the sidebar in the
-  web build, reload, still collapsed. Whoever adds a browser test target
-  should take this with it.
 - `[in-repo]` **The web perf gate's measurement run is still owed.** Parked
   for the larger UI and UX overhaul rather than spot-fixed, and the code
   the run needs has now landed: the corpus writes one directory per album
@@ -269,30 +255,17 @@ here waits on upstream.
 - `[in-repo]` **Driving a real client binary in CI.** Regated from
   `[hardware]`: the blocker recorded here was "no Docker in the dev
   distro", and Docker is available now, so what is left is ours to build.
-  Two halves. A browser-based Subsonic client cannot reach an instance
-  cross-origin, because nothing in `server/` sets any
-  `Access-Control-Allow-*` header, so that half is a deliberate decision
-  about exposing CORS rather than a harness. A native client in a
-  container is only a harness, and now a buildable one: a compose service
-  beside the stack `make up` already brings up, driven and asserted on
+  The CORS half is now decided and built: `WAXDECK_CORS_ORIGINS` names
+  the origins a browser client may call from, default-off so an
+  unconfigured server is unchanged, exact-match, and never with
+  credentials. What is left is the harness - a client in a compose
+  service beside the stack CI already brings up, driven and asserted on
   the way the e2e suite drives the web build. The client trace suites
   (Subsonic and gpodder) are the automated stand-in meanwhile and fail on
-  missing endpoints. Worth taking with the compose-stack-in-CI entry
-  below, which builds the same stack for the same reason.
+  missing endpoints.
 
 ## Infrastructure
 
-- `[in-repo]` **No CI job runs the conformance suite on a desktop.**
-  `e2e/run-desktop.sh` hardcodes `-d linux`, so the only place mpv
-  behind just_audio is exercised against a real player is a Linux
-  desktop someone runs deliberately. Android is covered on a schedule
-  now (`android-conformance.yaml`), and the media plumbing that took -
-  a `--dart-define` for a test running on a device, and `http(s)` URLs
-  passed through instead of `Uri.file` - is exactly what unblocked
-  macOS too, where the sandbox used to refuse the tone with "you don't
-  have permission to view it" before any test started. What is left is
-  a linux job with a display and an audio sink, and a macOS job that
-  serves the tone over loopback the way the emulator one does.
 - `[in-repo]` **Promote the Android conformance run to a merge gate.**
   It is scheduled and dispatch-only on purpose: the suite waits on real
   playback timing throughout, and an emulator booting on a shared-CPU
@@ -468,12 +441,6 @@ here waits on upstream.
   compose harness exists. Regated from `[hardware]` with the entry above
   and for the same reason: the harness is a compose service, Docker is
   here, and nothing about it needs a device this box lacks.
-- `[in-repo]` **Wire the docker compose stack into CI.** Docker is now
-  available in the dev environment and `make up` brings the full stack
-  (waxdeck + the flavored waxflow sidecar) up locally, so the old
-  "never verified" blocker is cleared for manual runs. What remains is
-  running it in CI as an acceptance gate (build both images, up, smoke
-  the origin, down) rather than only by hand.
 
 ## Curation and metadata
 

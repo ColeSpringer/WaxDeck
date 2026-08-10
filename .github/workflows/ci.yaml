@@ -150,6 +150,14 @@ jobs:
         run: cd app/packages/waxdeck_player_testing && flutter test
       - name: Test (app)
         run: cd app/app && flutter test
+      # The web build's per-device settings binding hands over the real
+      # `window.localStorage`, and no VM suite can reach it - the store
+      # above it is tested against a fake, and the handful of lines
+      # underneath were the part nobody could gate. `@TestOn('browser')`
+      # keeps these out of the VM sweep, so this is the run that
+      # executes them.
+      - name: Test (browser)
+        run: cd app/app && flutter test --platform chrome test/*_web_test.dart
       - name: Build web (wasm)
         run: cd app/app && flutter build web --wasm
       - uses: actions/upload-artifact@v7
@@ -227,18 +235,50 @@ jobs:
           "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 \
             app/app/build/app/outputs/flutter-apk/app-release.apk > /dev/null
 
-  # Validates the production images assemble; nothing is pushed.
+  # The compose stack, brought up the way an operator brings it up and
+  # then asked to do something.
+  #
+  # It used to build the two images and stop there, which proved they
+  # assembled and nothing else. So the images are built, tagged as the
+  # names compose.yaml declares, and the stack is started from them:
+  # what that covers is the compose file itself, the internal network,
+  # the seeded config, the shared data volume, the library bind, and a
+  # media fetch end to end.
+  #
+  # What it does not cover, so nobody reads more into a green run than is
+  # there: nothing here transcodes, so the waxflow API key both sides
+  # read is still unproven. A music item resolves to a direct-play URL
+  # that waxdeck serves from the library bind itself, and the one knob
+  # that forces a transcode (voiceBoost) is honored only for podcasts and
+  # audiobooks with measured loudness. waxflow's own HEALTHCHECK is
+  # `waxflow ping` against itself, which a wrong key passes.
+  #
+  # Seeded through the real `make` targets rather than a hand-written
+  # env file, because those targets are themselves part of what a first
+  # run does and a copy here would drift from them.
   docker:
     runs-on: ubuntu-latest
+    env:
+      # The analyzer is behind a profile, and a stack that never starts it
+      # never proves the worker token both halves share.
+      COMPOSE_PROFILES: similarity
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false # fixtures module only; no go.sum guarantee
       - uses: docker/setup-buildx-action@v4
+      # load: true and the exact `image:` names from compose.yaml, so
+      # `up --no-build` finds them locally and cannot quietly rebuild or
+      # pull `latest` from the registry instead of testing this commit.
       - uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/Dockerfile
           push: false
-          tags: waxdeck:ci
+          load: true
+          tags: ghcr.io/colespringer/waxdeck:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - uses: docker/build-push-action@v7
@@ -246,9 +286,119 @@ jobs:
           context: .
           file: deploy/Dockerfile.waxflow
           push: false
-          tags: waxdeck-waxflow:ci
+          load: true
+          tags: ghcr.io/colespringer/waxdeck-waxflow:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile.analyzer
+          push: false
+          load: true
+          tags: ghcr.io/colespringer/waxdeck-analyzer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # Synthesized, never committed: no binary media in git. The full
+      # preset, so the scan has something with structure to find.
+      - name: Synthesize a library
+        run: |
+          set -euo pipefail
+          cd fixtures
+          go run ./cmd/fixturegen -out "$RUNNER_TEMP/library" -preset all >/dev/null
+          ls "$RUNNER_TEMP/library" | head
+      - name: Seed the deployment config
+        run: make deploy/.env deploy/waxflow-config/waxflow.json
+      # --wait blocks on health where an image declares it (waxflow bakes
+      # a HEALTHCHECK), which replaces polling for the sidecar by hand.
+      # waxdeck declares none, so its readiness is the HTTP poll below.
+      - name: Bring the stack up
+        env:
+          WAXDECK_LIBRARY: ${{ runner.temp }}/library
+          # compose defaults this on and .env.example does not set it, so
+          # without this every push would start paced live MusicBrainz and
+          # Cover Art Archive lookups for every scanned fixture - third
+          # party traffic on each run, and throttling inside the smoke's
+          # budget. run-stack.sh silences it for the same reason.
+          WAXDECK_MATCHING: "false"
+        run: |
+          set -euo pipefail
+          WAXDECK_UID=$(id -u) WAXDECK_GID=$(id -g) \
+            docker compose -f deploy/compose.yaml up -d --wait --no-build
+      - name: Wait for the server
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -sfo /dev/null http://localhost:4420/api/v1/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the server never answered /api/v1/health"
+          exit 1
+      # The same readiness idiom run-desktop.sh uses: bootstrap the first
+      # administrator (a no-op 409 afterwards), log in, and search for
+      # something the scan should have found. A stack that comes up and
+      # cannot answer this is up in name only.
+      - name: Smoke the stack
+        run: |
+          set -euo pipefail
+          BASE=http://localhost:4420
+          for _ in $(seq 1 60); do
+            curl -sf -X POST "$BASE/api/v1/auth/bootstrap" \
+              -H 'Content-Type: application/json' \
+              -d '{"username":"admin","password":"wax-ci-pass"}' >/dev/null 2>&1 || true
+            TOKEN=$(curl -sf -X POST "$BASE/api/v1/auth/login" \
+              -H 'Content-Type: application/json' \
+              -d '{"username":"admin","password":"wax-ci-pass"}' |
+              sed -n 's/.*"token":"\([^"]*\)".*/\1/p') || true
+            if [ -n "${TOKEN:-}" ] && curl -sf "$BASE/api/v1/library/search?q=Alpha" \
+              -H "Authorization: Bearer $TOKEN" | grep -q '"tr-'; then
+              echo "stack answered the search"
+              echo "TOKEN=$TOKEN" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the stack never scanned the fixture library"
+          exit 1
+      # A search only proves the catalog. This pulls actual bytes: resolve
+      # a track to its media-token URL and range-request it, so the
+      # library bind, the token, and range serving are covered rather than
+      # assumed.
+      - name: Fetch media from the stack
+        run: |
+          set -euo pipefail
+          BASE=http://localhost:4420
+          # Matched on the pid's own shape rather than on field order: a
+          # sed anchored to "tracks":[{"pid" breaks the day a key moves,
+          # and it would fail as "no track" rather than as what it is.
+          PID=$(curl -sf "$BASE/api/v1/library/search?q=Alpha" \
+            -H "Authorization: Bearer $TOKEN" |
+            grep -o 'tr-[0-9A-Z]\{26\}' | head -1)
+          test -n "$PID" || { echo "::error::no track pid in the search response"; exit 1; }
+          # head -1, not a greedy sed: `.*"url":"` would take the last
+          # url in the document rather than this item's.
+          URL=$(curl -sf "$BASE/api/v1/items/$PID/play-info" \
+            -H "Authorization: Bearer $TOKEN" |
+            grep -o '"url":"[^"]*"' | head -1 | cut -d'"' -f4)
+          test -n "$URL" || { echo "::error::play-info resolved no stream url for $PID"; exit 1; }
+          # The url is origin-relative and carries its own media token, so
+          # it needs no bearer header. A range request answers 206.
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -r 0-1023 "$BASE$URL")
+          case "$CODE" in
+          200 | 206) echo "streamed $PID ($CODE)" ;;
+          *)
+            echo "::error::streaming $PID answered $CODE"
+            exit 1
+            ;;
+          esac
+      - name: Stack logs
+        if: failure()
+        run: docker compose -f deploy/compose.yaml logs --no-color
+      - name: Tear down
+        if: always()
+        run: docker compose -f deploy/compose.yaml down
 
   e2e:
     runs-on: ubuntu-latest

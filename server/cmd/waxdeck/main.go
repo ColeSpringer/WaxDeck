@@ -110,6 +110,7 @@ func run() error {
 		mbBase       = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override (a local mirror, or a stub in tests)")
 		coverArtBase = flag.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override (a mirror, or a stub in tests)")
 		trustedProxy = flag.String("trusted-proxies", envOr("WAXDECK_TRUSTED_PROXIES", ""), "comma-separated CIDRs or addresses of reverse proxies whose X-Forwarded-For may be believed; empty counts the socket address")
+		corsOrigins  = flag.String("cors-origins", envOr("WAXDECK_CORS_ORIGINS", ""), "comma-separated origins allowed to call this server from a browser on another origin (a self-hosted Feishin, say); empty serves same-origin only")
 		acoustidKey  = flag.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")
 		fanartKey    = flag.String("fanarttv-key", envOr("WAXDECK_FANARTTV_KEY", ""), "fanart.tv API key; empty leaves that artwork provider unconfigured")
 
@@ -1138,9 +1139,19 @@ func run() error {
 	// ends the streams so the drain can finish.
 	reqCtx, reqCancel := context.WithCancel(context.Background())
 	defer reqCancel()
+	allowedOrigins, err := normalizeOrigins(splitNonEmpty(*corsOrigins, ","))
+	if err != nil {
+		return fmt.Errorf("cors origins: %w", err)
+	}
+	if len(allowedOrigins) > 0 {
+		// Logged as parsed, not as written: an exact-match list is the
+		// kind of configuration that fails silently on a stray slash, and
+		// this is the line that says what the server actually believes.
+		log.Info("allowing cross-origin browser clients", "origins", allowedOrigins)
+	}
 	httpSrv := &http.Server{
 		Addr:              *addr,
-		Handler:           mux,
+		Handler:           withCORS(allowedOrigins, mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return reqCtx },
 	}
