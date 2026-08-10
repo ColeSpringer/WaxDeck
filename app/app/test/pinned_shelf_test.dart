@@ -238,7 +238,7 @@ void main() {
 // pinned shows through the caller's subscriptions - so an unsubscribed
 // pin draws no card. If the show screen also hid the row, the pid would
 // sit in the document holding a slot of the cap with nowhere left to
-// remove it: the one departure ADR-0054 accepts is an entity that is
+// remove it: the one departure a pin accepts is an entity that is
 // gone, not one a tap can bring back.
 void _showPinGroup() {
   group('a pinned show that was unsubscribed', () {

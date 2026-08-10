@@ -36,7 +36,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
 
   /// The pending-upload limit, in megabytes. What may sit in staging
   /// awaiting review, not what the account has contributed: an import
-  /// releases the room it held (ADR-0046).
+  /// releases the room it held.
   late final TextEditingController _quotaMb = TextEditingController(
     text: _megabytes(widget.user.uploadQuotaBytes),
   );

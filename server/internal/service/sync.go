@@ -48,12 +48,11 @@ const (
 
 // Why a delete arrived.
 //
-// The pair exists because ADR-0048 gave archiving a tombstone of its
-// own: an item deleted to the trash and one deleted outright now both
-// reach a mirror as a delete, and only one of them can be undone. A
-// client reclaiming a download on the wrong one costs somebody the whole
-// transfer again after a restore, which is the reason the ADR left the
-// download in place.
+// The pair exists because archiving has a tombstone of its own: an item
+// deleted to the trash and one deleted outright both reach a mirror as a
+// delete, and only one can be undone. Reclaiming a download on the wrong
+// one costs somebody the whole transfer again after a restore, which is
+// why the download stays in place.
 //
 // The catalog is no help in telling them apart, and that is worth
 // stating because it is the obvious first guess: every delete mode
@@ -75,8 +74,8 @@ const (
 // journal can still put back, which is what makes an archive undoable.
 //
 // Keyed to the page rather than the journal. It used to read the whole
-// journal with no limit and build a map of it, which ADR-0048 made
-// expensive in exactly the case that matters: every trashed item is a
+// journal with no limit and build a map of it, expensive in exactly the
+// case that matters: every trashed item is a
 // delete entry, so a bulk delete-to-trash produces tombstone-bearing
 // pages on every mirrored device at once, and a hundred-thousand-row
 // journal meant a full scan and a hundred-thousand-entry map per page,
@@ -608,7 +607,7 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		if !ok || entry.Op == syncOpDelete {
 			// A fresh mirror has nothing to tombstone, so an archived
 			// item is simply absent here rather than one delete per
-			// trashed item padding the first page (ADR-0048). The query
+			// trashed item padding the first page. The query
 			// above already drops them; this is the belt for the pids the
 			// delta path tombstones.
 			continue
@@ -675,7 +674,7 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 // allowsItem path would fetch it twice per row on the hot sync path.
 //
 // Both the snapshot and the delta build their entries here, which is why
-// the archived tombstone lives here too (ADR-0048). Filtering only the
+// the archived tombstone lives here too. Filtering only the
 // delta would tombstone correctly for a running client and still hand a
 // fresh mirror every trashed item on first sync, shedding them only if
 // some later change happened to touch that pid.

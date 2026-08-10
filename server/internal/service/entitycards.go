@@ -71,7 +71,7 @@ var entityCardKind = map[string]string{
 // omitted from the cards and NOT listed departed, because what is
 // gone-for-you-today may be back tomorrow and a client that pruned it
 // would have turned a temporary state into a permanent loss. Departed
-// is the signal a pinned list prunes on (ADR-0054's consequence).
+// is the signal a pinned list prunes on.
 func (l *Library) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string) ([]EntityCard, []string, error) {
 	if len(apiPIDs) > maxEntityCards {
 		return nil, nil, errInvalid(fmt.Sprintf("at most %d pids", maxEntityCards))

@@ -846,7 +846,7 @@ func TestFacetCursorBelongsToItsDimension(t *testing.T) {
 
 // Every browse resolves the acting user's catalog pid, filtered or not.
 //
-// Before ADR-0048 an unfiltered browse passed the catalog a zero Query
+// An unfiltered browse used to pass the catalog a zero Query
 // and so skipped the lookup, which meant a stale pid was ignored on one
 // list and rejected on the next. The state predicate is always present
 // now, so there is no unfiltered case left to short-circuit and the

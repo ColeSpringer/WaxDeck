@@ -11,7 +11,7 @@
 // The version prefix is written once, below. Response bodies come back
 // typed from the same generated file, so a field the server stopped
 // sending is a compile error too, exactly as the Dart client's generated
-// DTOs already are (ADR-0002).
+// DTOs already are.
 
 import { APIRequestContext, APIResponse, expect } from '@playwright/test';
 import type { paths } from '../api-types';

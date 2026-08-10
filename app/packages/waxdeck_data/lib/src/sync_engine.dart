@@ -358,7 +358,7 @@ class SyncEngine {
               // one of them.
               // Read only for the branch that uses it, and still before
               // the delete. `hidden` is the common tombstone - it is what
-              // trashing sends, which is what ADR-0048 was written for -
+              // trashing sends -
               // and reading a row to discard it costs one round trip per
               // item: two hundred of them for a discography.
               final rows = e.reason == 'removed'

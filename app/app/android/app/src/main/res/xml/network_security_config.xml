@@ -2,7 +2,7 @@
 <!-- WaxDeck talks to a server its listener runs. On a LAN that server is
      usually plain HTTP with no certificate to get, so cleartext is the
      product's default posture rather than a development shortcut, and
-     targetSdk 36 blocks it without this file (ADR-0057).
+     targetSdk 36 blocks it without this file.
 
      User trust anchors are the on-ramp for the next step up: a listener
      who does put a self-signed certificate in front of the server has

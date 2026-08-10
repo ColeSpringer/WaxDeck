@@ -652,7 +652,7 @@ class FakeRepository implements WaxDeckRepository {
     playInfoCalls.add((pid: pid, positionMs: positionMs));
     await playInfoGate?.future;
     final episode = _findEpisode(pid);
-    // Enclosure passthrough (ADR-0030): an unfetched episode still
+    // Enclosure passthrough: an unfetched episode still
     // resolves, relayed from the feed's own host, and the conflict is
     // now for the one episode whose feed named no audio at all.
     if (episode != null && !episode.downloaded && !episode.hasEnclosure) {

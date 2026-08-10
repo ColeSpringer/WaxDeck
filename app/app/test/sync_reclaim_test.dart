@@ -12,7 +12,7 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'fakes.dart';
 import 'offline_home_test.dart' show deadChannelFactory;
 
-/// What a delete tombstone costs an offline client, per ADR-0048.
+/// What a delete tombstone costs an offline client.
 ///
 /// The catalog archives an item on every delete mode, so "the row is
 /// gone" cannot say whether the audio can come back; the server answers

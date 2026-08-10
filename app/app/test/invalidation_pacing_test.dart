@@ -13,7 +13,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 
-// The starvation ADR-0036 closes: a live invalidation used to rebuild
+// The starvation the pacer closes: a live invalidation used to rebuild
 // every controller its topic touched, and a rebuild landing on a
 // provider still doing its *first* build abandons work it cannot
 // cancel, so hints arriving faster than a build completes held the

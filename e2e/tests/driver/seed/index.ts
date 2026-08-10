@@ -173,8 +173,7 @@ export class Seed {
   /// keyed on the test's own title, so a stack that has been reused
   /// hands this test the playlist its last run left behind, and a seeder
   /// that created another would grow one per run under a name the spec
-  /// then has to disambiguate. This is the artifact-hygiene rule
-  /// ADR-0050 states, as a call.
+  /// then has to disambiguate. This is the artifact-hygiene rule as a call.
   async playlistNamed(name: string, pids: readonly string[] = []): Promise<string> {
     const hit = (await this.myPlaylists()).find((p) => p.name === name);
     return hit?.pid ?? this.createPlaylist(name, pids);

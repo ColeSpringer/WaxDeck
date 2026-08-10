@@ -348,8 +348,8 @@ void main() {
     // Persisted cursors outlive a server upgrade, so a rejected one
     // reaches clients. Without the fallback the window blocks and the
     // rolling queue silently ends at its last entry.
-    // ADR-0028's gap: paging the bucket's listing shuffled each page
-    // among itself. Scoped, it is one permutation over the whole.
+    // Paging the bucket's listing shuffled each page among itself.
+    // Scoped, it is one permutation over the whole.
     test('a seeded bucket draws the random list scoped to itself', () async {
       final repository = FakeRepository();
       repository.facetItems['genre ge-1'] = [

@@ -983,7 +983,7 @@ func TestUnsubscribeRemovesDownloads(t *testing.T) {
 	// The discriminating assertion, and the reason the cleanup reclaims
 	// through Unfetch rather than the catalog's delete: an archived
 	// episode drops out of the counted view, so a re-subscriber would
-	// see a backlog smaller than the list beside it (ADR-0052).
+	// see a backlog smaller than the list beside it.
 	resp = h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
 	resp.Body.Close()
 	if got := unplayedFor(t, h, sub.Show.Pid); got != 2 {

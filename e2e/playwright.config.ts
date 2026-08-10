@@ -131,7 +131,7 @@ export default defineConfig({
     // this app.
     //
     // The wave is everything that owns its own state. Every test in it
-    // holds an account minted from its own title (ADR-0050), so nothing
+    // holds an account minted from its own title, so nothing
     // here shares a queue, a star, a position or a preference document
     // with anything else - which is what lets it stay fully parallel
     // with no serial groups inside it. `prefs-radio` used to sit between
@@ -217,7 +217,8 @@ export default defineConfig({
     // quarantine is included on purpose.
     //
     // It still may not run beside `wave`: both match ui.spec.ts, and two
-    // copies of one test at once is the aliasing ADR-0050 removes. The
+    // copies of one test at once is the aliasing the account model
+    // removes. The
     // account key names the project now, so that is belt and braces
     // rather than the only thing holding it.
     {

@@ -1,7 +1,7 @@
 # waxdeck_ui
 
 WaxDeck's design system: the tokens, themes, and components every client
-screen composes. Flutter only, by rule (ADR-0016) - this package never
+screen composes. Flutter only, by rule - this package never
 imports `waxdeck_api`, so components take plain view-data structs and the
 app maps API models at the call site.
 

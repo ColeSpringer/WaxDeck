@@ -70,7 +70,7 @@ test('the queue is a place, and it reorders and clears', async ({ app }) => {
   await expect(app.queue.text('Nothing queued')).toBeVisible();
 });
 
-// The other half of ADR-0029's open pair: picking a row up on a
+// The other half of the open pair: picking a row up on a
 // listing and dropping it on the panel. Pointer only by decision, so
 // this is a coordinate drag with no semantics node to click instead -
 // quarantine-eligible if a synthetic drag turns out to flake, and

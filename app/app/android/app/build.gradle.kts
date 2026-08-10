@@ -6,16 +6,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Release signing, when there is a keystore to sign with. The file is
-// gitignored and absent on CI and on a fresh clone, which is why the
-// release build type falls back to the debug keys rather than failing:
-// `flutter run --release` and the CI release build are both worth more
-// than refusing to produce an unsigned-for-distribution APK. What ships
-// is signed by Cole locally, where key.properties exists.
-// Presence of the file is the whole question, and deliberately so: it is
-// how you declare an intent to sign. Keying off a property inside it
-// instead would mean a misspelled `storefile=` fell back to debug keys
-// and produced a release APK that looked publishable.
+// Release signing, when there is a keystore. key.properties is gitignored
+// and absent on CI and fresh clones, so release falls back to debug keys
+// rather than failing; distribution builds sign locally.
+//
+// Presence of the file is the whole test, deliberately: keying off a
+// property inside it would let a misspelled `storefile=` fall back to
+// debug keys and still look publishable.
 val keystorePropertiesFile = rootProject.file("key.properties")
 val hasReleaseKeystore = keystorePropertiesFile.exists()
 val keystoreProperties = Properties().apply {

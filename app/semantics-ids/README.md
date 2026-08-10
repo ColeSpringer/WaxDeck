@@ -25,6 +25,6 @@ its parameters the placeholders in order of first appearance. Entries
 stay sorted by constant name.
 
 Renaming an id is a contract change: the spec that drives it moves in the
-same commit (CLAUDE.md rule 8). The layout is ADR-0043; the generator
+same commit (CLAUDE.md rule 8). The generator
 rejects duplicate names, duplicate JSON keys, reserved words, and
 malformed placeholders.

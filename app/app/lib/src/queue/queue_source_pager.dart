@@ -178,7 +178,7 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
         final seed = source.seed;
         if (seed != null) {
           // Paging the bucket's own listing shuffled each arriving page
-          // among itself (ADR-0028). Scoped to the bucket, the random
+          // among itself. Scoped to the bucket, the random
           // list is one permutation over the whole of it.
           return (cursor, limit) => _repository
               .browse(

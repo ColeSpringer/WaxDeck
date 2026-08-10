@@ -75,7 +75,7 @@ void main(List<String> args) {
   // ignored here, so its reappearance fails loudly instead of quietly.
   if (File('$root/$_retired').existsSync()) {
     _fail(
-      '$_retired is retired (ADR-0043): fold its entries into '
+      '$_retired is retired: fold its entries into '
       '$_sourceDir/<group>.json and delete it',
     );
   }

@@ -53,7 +53,7 @@ enum _PlayerMenuAction {
 }
 
 /// The e2e handles the player's own controls carry. One place, because
-/// the design system emits no identifier strings of its own (ADR-0016),
+/// the design system emits no identifier strings of its own,
 /// and because the scaffold and the transport each take their own copy:
 /// two literals would be two chances to disagree.
 const _ids = PlayerIds(

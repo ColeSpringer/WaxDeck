@@ -174,7 +174,7 @@ final themeModeProvider = Provider<ThemeMode>((ref) {
 /// visitor who asked for true black gets it wherever the platform (or
 /// [themeModeProvider]) resolves to dark. Density comes from the other
 /// side of the settings line: it describes the screen in front of the
-/// listener, so it is per-device (ADR-0027) where the theme is the
+/// listener, so it is per-device where the theme is the
 /// account's.
 class WaxThemeSpec {
   const WaxThemeSpec({

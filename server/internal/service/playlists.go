@@ -369,11 +369,9 @@ func ruleToQuery(r SmartRule) (query.Query, error) {
 // evaluableRule is the stored rule as a smart playlist evaluates it:
 // archived members excluded, unless the rule names `state` itself.
 //
-// ADR-0048. `state` is a documented rule field reachable through
+// `state` is a documented rule field reachable through
 // /playlists/rule-fields, so a blanket predicate would make `state is
-// archived` answer nothing and quietly kill a contract-visible
-// capability. Excluding archived unless the rule asks is what someone
-// writing that rule means either way.
+// archived` answer nothing and kill a contract-visible capability.
 //
 // The stored rule is never rewritten, only the copy that gets evaluated,
 // so the editor keeps showing what its author typed.
@@ -405,7 +403,7 @@ func withoutArchived(where query.Node) query.Node {
 // The arms here must cover every node type ruleNodeToEngine can emit.
 // They do today, and the two are meant to move together: a node type
 // added there and forgotten here reads as "this rule says nothing about
-// state", so ADR-0048's predicate is conjoined on top of a rule that
+// state", so the archived predicate is conjoined on top of a rule that
 // explicitly asked for archived items and the list comes back empty.
 // The direction is at least safe - archived stays hidden rather than
 // leaking - but the rule is silently not the one that was written.
@@ -779,7 +777,7 @@ func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playli
 // leaves the state predicate to be applied in Go afterwards - so the
 // rule's own Limit and LimitMode were spent on rows that the archived
 // filter then dropped, and a `limit: 25` list holding five trashed rows
-// came back with 20 (ADR-0051). evaluableRule conjoins the predicate
+// came back with 20. evaluableRule conjoins the predicate
 // into the query, so the limit is applied to what survives it.
 //
 // The user pid is the owner's, not the caller's: a shared smart list
@@ -924,8 +922,8 @@ func inSet(field string, values []string) query.Node {
 //
 // A smart list deliberately does not, even though CountItems serves both
 // kinds. WaxDeck evaluates a stored rule through evaluableRule, which
-// conjoins the archived predicate *before* the rule's own limit
-// (ADR-0051); CountItems evaluates the rule as stored. For a limited
+// conjoins the archived predicate *before* the rule's own limit;
+// CountItems evaluates the rule as stored. For a limited
 // rule over a list holding archived members the two disagree, and the
 // half that has to be right is the one the member listing uses.
 func (l *Library) visibleMemberCount(ctx context.Context, uc *UserCtx, pl *model.Playlist, narrow query.Node) (int, error) {
@@ -1315,7 +1313,7 @@ func (l *Library) ReplacePlaylistItems(ctx context.Context, uc *UserCtx, apiPlay
 	// A replace built by an owner who cannot currently see every stored
 	// member would silently drop the hidden ones; refuse instead. The
 	// member list hides on three dimensions - library visibility,
-	// unsubscribed shows' episodes, and trashed members (ADR-0048) - so
+	// unsubscribed shows' episodes, and trashed members - so
 	// the guard covers all three, and the last two apply to
 	// full-visibility users too. This path is static-only (refused
 	// above), so pl.Rule is nil and no state-naming rule exempts the
@@ -1543,9 +1541,9 @@ func (l *Library) emitPlaylistEvent(ctx context.Context, uc *UserCtx, shared boo
 // cursors' one is: bump it in the change that alters what the offset
 // indexes into, and the old spelling stops parsing, so a cursor from
 // before the change answers 400 instead of walking a shifted window.
-// ADR-0052 bumped it to o1 - a smart playlist's offset used to index
-// into the unfiltered member list and now indexes into the rule's own
-// filtered evaluation, so the same number names a different row.
+// It went to o1 when a smart playlist's offset stopped indexing into
+// the unfiltered member list and started indexing into the rule's own
+// filtered evaluation: the same number names a different row.
 //
 // Two surfaces mint these, and only one of them changed: the member
 // listing above and the playlist listing itself. They share the prefix

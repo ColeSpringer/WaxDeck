@@ -80,11 +80,11 @@ final radioStationsProvider =
 /// Per account, in the synced preference document, and that placement is
 /// the decision worth stating. The station library is shared by the whole
 /// household, so 6.10 read the absence of per-user station state as
-/// "favourites are a client pref" - but ADR-0027's test is whether a
+/// "favourites are a client pref" - but the test is whether a
 /// preference describes the *machine* or the *account*, and which six of
 /// the household's stations are yours plainly describes you. A collapsed
 /// sidebar is a fact about a screen and a pointer; a dial is not. So the
-/// prefs document grew an ordered list of station pids (ADR-0034), which
+/// prefs document grew an ordered list of station pids, which
 /// also means a pin made on the desktop is on the phone, and signing out
 /// takes it with the account rather than leaving it on a shared machine.
 ///

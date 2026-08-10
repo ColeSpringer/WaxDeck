@@ -7,7 +7,7 @@
 /// wants it. So the browser gets a real implementation over
 /// `localStorage`, and it lives here rather than in `waxdeck_data`:
 /// a browser-storage backend inside the drift package is the coupling
-/// ADR-0025 avoided for artwork. See ADR-0027.
+/// the artwork pipeline avoided.
 library;
 
 export 'client_settings_native.dart'

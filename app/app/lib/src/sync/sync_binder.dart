@@ -158,8 +158,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // An item whose audio the server cannot give back takes its download
     // and its pinned artwork with it. Only `removed` reaches this stream:
     // trash tombstones the mirror row as well and keeps the bytes,
-    // because a restore would otherwise cost the whole transfer again
-    // (ADR-0048). `remove` is the one call that does both halves.
+    // because a restore would otherwise cost the whole transfer again.
+    // `remove` is the one call that does both halves.
     //
     // Chained rather than fired in parallel, for the reason `removeAll`
     // is sequential: `remove` decides whether to unlink a file by asking

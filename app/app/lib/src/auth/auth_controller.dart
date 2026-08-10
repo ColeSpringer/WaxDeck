@@ -184,7 +184,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     // collapsed sidebar describes the machine rather than the account,
     // and wiping it would make signing out a factory reset of a shared
     // desktop. Which side of that line a preference falls on is a
-    // question each one answers for itself; see ADR-0027.
+    // question each one answers for itself.
     state = const AsyncData(SessionState(authenticated: false));
   }
 }

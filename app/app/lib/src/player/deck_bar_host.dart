@@ -41,7 +41,7 @@ final skipIntervalsProvider = Provider<({Duration back, Duration forward})>(
 );
 
 /// The e2e handles this bar's controls carry. One place, because the
-/// design system emits no identifier strings of its own (ADR-0016).
+/// design system emits no identifier strings of its own.
 const _ids = DeckBarIds(
   bar: SemanticsIds.deckBar,
   expand: SemanticsIds.deckExpand,

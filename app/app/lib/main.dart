@@ -31,8 +31,8 @@ Future<void> main() async {
   ensureDesktopWindowInitialized();
   // The media session and the app share one provider world, so the
   // Android Auto browse tree reads the same mirror the UI does. The
-  // observer is the live fan-out's ledger of in-flight first builds
-  // (ADR-0036); it only works registered here, from the first element.
+  // observer is the live fan-out's ledger of in-flight first builds; it
+  // only works registered here, from the first element.
   final container = ProviderContainer(observers: [FirstBuildObserver()]);
   await initMediaSession(container);
   runApp(

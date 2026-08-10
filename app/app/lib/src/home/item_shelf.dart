@@ -24,7 +24,7 @@ const Duration kShelfSkeletonDelay = Duration(milliseconds: 200);
 
 /// One shelf over a discovery list.
 ///
-/// A shelf that is *empty* hides (ADR-0038): nothing enumerates "never
+/// A shelf that is *empty* hides: nothing enumerates "never
 /// played" but the shelf itself, and an empty row with a heading is a
 /// reproach. Loading and failed used to hide the same way, and a
 /// library without stars or plays degraded the hub to bare navigation

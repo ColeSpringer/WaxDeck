@@ -451,7 +451,7 @@ class _BucketRow extends ConsumerWidget {
           semanticsId: SemanticsIds.indexBucket(index),
         ),
         onTap: onTap,
-        // Pinning without opening first (ADR-0054's deferred rollout).
+        // Pinning without opening first.
         // Only where the bucket stands for an entity: a genre or a year
         // is a filter, not a thing, and the unknown bucket has nothing
         // behind it.

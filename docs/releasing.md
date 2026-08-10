@@ -101,7 +101,7 @@ not in that total:
   and a LAN-only instance cannot reach Google's CDN.
 - **On-demand fonts.** Noto Sans CJK 15.7 MB, Arabic 598 KB, Thai
   89 KB, Hebrew 32 KB - fetched only when metadata in those scripts
-  appears on screen. CJK is unsubset by decision (ADR-0016): a curated
+  appears on screen. CJK is unsubset by decision: a curated
   core still renders tofu for names outside it.
 - **`NOTICES`, 1.49 MB**, fetched only if somebody opens the licence
   page.
@@ -224,8 +224,8 @@ installs for testing and cannot be published.
 That posture constrains macOS entitlements. Restricted entitlements -
 `keychain-access-groups` is the one that came up - make
 `flutter build macos --release` demand a development certificate, so
-they cannot be added while the build is unsigned. ADR-0057 has the
-detail; the entitlement goes in with the signing work.
+they cannot be added while the build is unsigned; the entitlement goes
+in with the signing work.
 
 The desktop app has no self-updater, so releases propagate through
 package managers and direct downloads only; there is no update channel

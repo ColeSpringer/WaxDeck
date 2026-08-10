@@ -468,8 +468,7 @@ func (l *Library) sharedPlaylist(ctx context.Context, pid model.PID) (*model.Pla
 // evaluated as the owner (the share publishes the owner's list),
 // capped so a pathological playlist cannot balloon a public page.
 // Trashed members are dropped before the cap, so a share that would
-// otherwise be the most visible copy of a deleted track does not carry
-// one (ADR-0048).
+// otherwise be the most visible copy of a deleted track does not carry one.
 //
 // The membership comes from the same helper the owner's own listing
 // uses, so a smart list's rule is evaluated with the state predicate

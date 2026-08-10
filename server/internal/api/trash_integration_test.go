@@ -11,8 +11,8 @@ import (
 	"github.com/colespringer/waxdeck/fixtures"
 )
 
-// TestTrashedItemsLeaveTheListings is ADR-0048's regression: deleting to
-// trash archives an item, and a listing never offers an archived one.
+// TestTrashedItemsLeaveTheListings: deleting to trash archives an item,
+// and a listing never offers an archived one.
 //
 // Polled rather than read once, because deleting is a catalog write the
 // listing reads back through the change feed, and the bug this replaces
@@ -211,7 +211,7 @@ func TestTrashRetentionAndPurge(t *testing.T) {
 
 // A trashed item must not cost a search result its place.
 //
-// ADR-0048's state rule rides the query now, as SearchOptions.States, so
+// The state rule rides the query now, as SearchOptions.States, so
 // archived rows never enter the ranking and never consume a slot. This
 // is the case that proves it, and it is the one the deleted widening
 // pass existed for: an album deleted in one go matches its own name

@@ -198,7 +198,7 @@ func TestSyncCatalogMirror(t *testing.T) {
 
 	// Trashing is the state that does leave the mirror. Archiving emits
 	// an update rather than a delete on the catalog stream, so without
-	// ADR-0048's tombstone an offline client keeps a track the online
+	// a tombstone an offline client keeps a track the online
 	// listing has already dropped.
 	var doomed string
 	for pid, it := range items {
@@ -219,7 +219,7 @@ func TestSyncCatalogMirror(t *testing.T) {
 		t.Fatal("trashed item survived in the mirror; archiving must tombstone")
 	}
 	// Hidden, not removed: the row goes and the bytes stay, because a
-	// restore would otherwise cost the whole download again (ADR-0048).
+	// restore would otherwise cost the whole download again.
 	if got := trashed[doomed]; got != "hidden" {
 		t.Fatalf("trash tombstone reason = %q, want hidden", got)
 	}

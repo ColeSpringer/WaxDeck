@@ -4,7 +4,7 @@
 # everything else lives on the private `internal` network. Copy .env.example
 # to .env beside this file before `docker compose up`.
 #
-# Exposure note (mirrors WaxFlow ADR-0007): the containers listen on 0.0.0.0
+# Exposure note: the containers listen on 0.0.0.0
 # *inside* the network namespace. Put TLS in front (reverse proxy) before
 # exposing port 4420 beyond your LAN.
 

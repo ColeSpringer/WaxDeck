@@ -48,7 +48,7 @@ final itemArtRolesProvider = FutureProvider.autoDispose
 
 /// Every artwork role, what is in it, and the verbs that fill or empty
 /// it. Own-versus-inherited is what the grid exists to answer: a front
-/// cover drawn here may belong to the album (ADR-0014).
+/// cover drawn here may belong to the album.
 class ArtworkManager extends ConsumerStatefulWidget {
   const ArtworkManager({
     super.key,

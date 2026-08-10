@@ -121,7 +121,7 @@ func TestBrowseCursorCarriesItsScope(t *testing.T) {
 }
 
 // Inverted risk from browse's: a reused cursor here only loses the new
-// filter's head. Refused anyway; ADR-0040 says why.
+// filter's head. Refused anyway, for the same reason browse's is.
 func TestItemsCursorCarriesItsScope(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

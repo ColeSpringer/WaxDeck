@@ -247,7 +247,7 @@ class _BatchGroup extends StatelessWidget {
 }
 
 /// What is staged now against the cap. A pending-upload limit rather
-/// than a storage cap (ADR-0046), which is what the caption explains.
+/// than a storage cap, which is what the caption explains.
 class _QuotaHeader extends StatelessWidget {
   const _QuotaHeader({required this.quota});
 

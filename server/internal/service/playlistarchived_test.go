@@ -10,8 +10,8 @@ import (
 	"github.com/colespringer/waxbin/query"
 )
 
-// trashItems deletes the named items to the trash, the state ADR-0048
-// gave a deleted-but-restorable item.
+// trashItems deletes the named items to the trash, the state of a
+// deleted-but-restorable item.
 func trashItems(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, pids ...string) {
 	t.Helper()
 	if _, err := svc.DeleteItems(ctx, uc, pids, "trash", false); err != nil {

@@ -158,7 +158,7 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter I
 	if err := browseScopeKindError(dl, list, filter, scope[1], scope[2]); err != nil {
 		return Page{}, err
 	}
-	// Unconditionally, unlike before ADR-0048: the state predicate is
+	// Unconditionally: the state predicate is
 	// always there now, so there is no longer an unfiltered case to
 	// short-circuit. The catalog validates UserPID whenever it compiles a
 	// query, so every list resolves the acting user where only a filtered
@@ -233,10 +233,10 @@ func cursorScope(parts ...string) string {
 // the scope, and the next page a client asks for re-mints at the current
 // version, so stored queues upgrade themselves.
 //
-// s1 retired at ADR-0051 and is deliberately not listed. ADR-0048 moved
-// Items onto visibleItems() and made Browse pass a Query unconditionally,
-// so the result set behind an s1 cursor changed while the scope covers
-// only the list, the seed, and the ItemFilter - not the state predicate.
+// s1 is retired and deliberately not listed. Moving Items onto
+// visibleItems() and making Browse pass a Query unconditionally changed
+// the result set behind an s1 cursor, while the scope covers only the
+// list, the seed, and the ItemFilter - not the state predicate.
 // A retired version's token is handed straight to the catalog, which
 // would accept it and answer a coherent-looking wrong window; refusing
 // s1 outright costs one placement walk per stored queue, once, and is
@@ -248,7 +248,7 @@ var oldCursorVersions = map[string]bool{}
 // encodeScopedCursor wraps the catalog's keyset token in an envelope
 // carrying the scope it was issued under, so a cursor reused under a
 // changed list, seed, or filter is refused rather than answered wrong.
-// ADR-0040 records why items takes it too. An empty token stays empty.
+// An empty token stays empty.
 func encodeScopedCursor(scope, token string) string {
 	if token == "" {
 		return ""
@@ -334,7 +334,7 @@ const searchMaxCandidates = 5000
 // filtered by entity library attribution: an entity survives when one
 // of the libraries holding its members is granted to the caller.
 //
-// ADR-0048's state rule rides the query now, as `SearchOptions.States`,
+// The state rule rides the query now, as `SearchOptions.States`,
 // so archived items never enter the ranking. That deleted the widening
 // pass this used to carry: the archived filter was the only one that bit
 // every caller, so on a single-administrator install - which is most of

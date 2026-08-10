@@ -279,7 +279,7 @@ extension WaxPushOnce on GoRouter {
   ///
   /// The check reads the match stack rather than the reported URL,
   /// because go_router deliberately keeps imperative pushes out of that
-  /// URL (ADR-0022) and `optionURLReflectsImperativeAPIs` is not the way
+  /// URL and `optionURLReflectsImperativeAPIs` is not the way
   /// back. The stack does carry them.
   void pushOnce(String location) {
     final matches = routerDelegate.currentConfiguration.matches;

@@ -11,7 +11,7 @@ import (
 )
 
 // TestTrashingATrackKeepsItsEmbedding is the sweep's premise catching up
-// with ADR-0048.
+// with a restorable trash.
 //
 // The prune built its live set from visibleItems(), which excludes
 // archived, and dropped any vector whose essence was not in it. That was

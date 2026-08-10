@@ -16,8 +16,8 @@
 // household this product is for - and it is where the real defects the
 // suite has caught actually lived. Only same-login aliasing goes.
 //
-// No test-only server surface exists to make this cheap (ADR-0036: the
-// server ships what it ships). So minting is idempotent instead:
+// No test-only server surface exists to make this cheap - the server
+// ships what it ships. So minting is idempotent instead:
 // create-or-409-then-log-in, against a name derived from the test's own
 // title. A reused stack accumulates a bounded set of accounts - one per
 // test, about ninety - and a renamed test strands an inert one.
@@ -83,8 +83,8 @@ export const NO_ACCOUNT: Account = {
 /// time in lint/conformance.mjs, so adding one is a two-file edit that
 /// shows up in review.
 ///
-/// There is deliberately no file-scoped option. ADR-0050 leaves room for
-/// one, for a file whose setup is expensive and cannot be replaced by
+/// There is deliberately no file-scoped option. There is room for one,
+/// for a file whose setup is expensive and cannot be replaced by
 /// seeding; nothing has needed it, and a declared field that silently
 /// changes nothing is worse than its absence - it reads as a lever
 /// somebody has already pulled.

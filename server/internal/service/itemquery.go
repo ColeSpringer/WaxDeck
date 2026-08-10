@@ -7,7 +7,7 @@ import (
 
 // The base queries every catalog listing builds on.
 //
-// ADR-0048: present, remote, and missing items belong in a listing;
+// Present, remote, and missing items belong in a listing;
 // archived ones do not. Archiving is what deleting to trash does, so a
 // query without the predicate keeps answering with items the listener
 // deleted. Two dozen call sites construct one of these queries, so the
@@ -51,7 +51,7 @@ func archived(it *model.ItemView) bool {
 	return it != nil && it.State == model.StateArchived
 }
 
-// listableStates is ADR-0048's rule as an allow-list, for the one
+// listableStates is the same rule as an allow-list, for the one
 // surface that takes states rather than a predicate:
 // read.SearchOptions.States. The fourth encoding named in `unarchived`
 // above, and the one that needs watching, because it inverts the others.

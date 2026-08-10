@@ -328,7 +328,7 @@ WaxNavTarget? activeNavTarget(
 ///
 /// A per-device preference: a rail is a choice about this screen and
 /// this pointer, not something to carry to a listener's phone. Stored
-/// where those go (ADR-0027), so the first frame is drawn expanded and
+/// where those go, so the first frame is drawn expanded and
 /// collapses once the read lands - a launch does not wait on a disk to
 /// lay itself out.
 class SidebarCollapsed extends Notifier<bool> with StoredSetting<bool> {

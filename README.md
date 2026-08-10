@@ -18,7 +18,6 @@ audiobooks**.
 | `fixtures/` | Fixture *generator* that synthesizes tiny media at test-setup (WaxFlow codec packages + optional ffmpeg). No binary media in git. |
 | `e2e/` | Compose harness + Playwright suite. |
 | `tools/` | Codegen configs and scripts (oapi-codegen, openapi-generator, spectral, oasdiff). |
-| `docs/adr/` | Architecture decision records. |
 
 ## Quick start (development)
 

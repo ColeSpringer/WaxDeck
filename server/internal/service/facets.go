@@ -10,8 +10,8 @@ package service
 //
 // Paging is in memory, permanently: upstream declined facet paging, so
 // a page is a window over a sorted slice and the cache below keeps that
-// affordable. EntityPage is not a substitute; ADR-0040 says why, since
-// the next agent looking at a large artist index will find it first.
+// affordable. EntityPage is not a substitute, though it is the first
+// thing anyone looking at a large artist index finds.
 //
 // Caching is narrow on purpose. Only the unfiltered enumeration, only
 // per dimension and order, only for full-visibility callers, keyed on
@@ -693,7 +693,7 @@ func (l *Library) facetScopeBuilder(ctx context.Context, uc *UserCtx) *query.Bui
 	// An allow-list, so `in`: it seeks the index and an empty grant
 	// compiles to `1=0`. Deliberately not `notIn` over the complement -
 	// that is an anti-join scanning the catalog, and it keeps fileless
-	// items, which ADR-0051 attributes to no library.
+	// items, which belong to no library.
 	return b.WhereValues("library", query.OpIn, query.Values(libs)...)
 }
 

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 
-/// Pacing and deferral for the live invalidation fan-out (ADR-0036).
+/// Pacing and deferral for the live invalidation fan-out.
 ///
 /// The server already coalesces change hints into a 250 ms window per
 /// topic, which bounds what arrives but not what it costs: each hint

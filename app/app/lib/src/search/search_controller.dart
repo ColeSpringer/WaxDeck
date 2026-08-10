@@ -262,8 +262,8 @@ final podcastDirectoryResultsProvider =
 
 /// The last few queries, newest first.
 ///
-/// Per-device rather than per-account, and stored where those go
-/// (ADR-0027): what someone typed on this machine is a shortcut back to
+/// Per-device rather than per-account, and stored where those go: what
+/// someone typed on this machine is a shortcut back to
 /// it, not a fact about their library. JSON is the encoding because the
 /// value is a list and a query may hold anything a keyboard emits - a
 /// separator would eventually appear inside one.
@@ -364,7 +364,7 @@ final recentSearchesProvider = NotifierProvider<RecentSearches, List<String>>(
 /// `localStorage`, which is to say in a place the next account to use
 /// this browser reads back. That makes them the departing account's
 /// content, like the queue and the cached artwork, and they go the same
-/// way. See ADR-0027.
+/// way.
 ///
 /// Never throws. A history that will not clear is not a reason to leave
 /// the session standing, and a session left standing is a dead

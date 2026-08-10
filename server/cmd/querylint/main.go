@@ -1,5 +1,5 @@
 // Command querylint forbids bare item and track queries in the service
-// package. ADR-0048 says a listing never offers an archived item, and
+// package. A listing never offers an archived item, and
 // two dozen call sites build one of these queries, so the predicate
 // lives in one helper (service.visibleItems / visibleTracks) rather than
 // at each of them. A query built with query.New(query.EntityItems) or
@@ -25,7 +25,7 @@ import (
 
 var analyzer = &analysis.Analyzer{
 	Name: "querylint",
-	Doc:  "forbids bare item/track queries outside the visibleItems helpers (ADR-0048)",
+	Doc:  "forbids bare item/track queries outside the visibleItems helpers",
 	Run:  run,
 }
 
@@ -44,7 +44,7 @@ const helperFile = "itemquery.go"
 // archived items included, by file and enclosing function. These are
 // audits, sweeps, dedupe units, coverage counts, and organize plans:
 // surfaces about what the catalog holds rather than about what a
-// listener is offered. ADR-0048 carries the same list with the reasons.
+// listener is offered.
 var allowed = map[string]map[string]bool{
 	"health.go": {
 		// The health grade (already narrowed to present items), the
@@ -103,7 +103,7 @@ func run(pass *analysis.Pass) (any, error) {
 			}
 			where := enclosing(file, call.Pos())
 			pass.Reportf(call.Pos(),
-				"bare item/track query in %s: build it with visibleItems or visibleTracks so a trashed item stays out of the listing (ADR-0048), or add %s to querylint's allowlist with a reason",
+				"bare item/track query in %s: build it with visibleItems or visibleTracks so a trashed item stays out of the listing, or add %s to querylint's allowlist with a reason",
 				where, where)
 			return true
 		})

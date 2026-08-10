@@ -239,8 +239,8 @@ void main() {
   testWidgets('shuffling a bucket seeds a permutation over the whole bucket', (
     tester,
   ) async {
-    // ADR-0028's gap: without a seed on the source the refill pages the
-    // bucket's own listing and shuffles each arriving page among itself.
+    // Without a seed on the source the refill pages the bucket's own
+    // listing and shuffles each arriving page among itself.
     final repository = FakeRepository()
       ..facetItems['genre ge-1'] = <ItemSummary>[
         for (var i = 0; i < 900; i++) _track('Track $i'),

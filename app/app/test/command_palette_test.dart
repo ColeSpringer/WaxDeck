@@ -384,7 +384,7 @@ void main() {
     // `/episodes/:pid`, declared beside the podcasts hub rather than
     // beneath it, so going to it would put the visitor in that branch
     // with nothing under the screen - and would throw away whatever the
-    // palette was opened over (ADR-0032).
+    // palette was opened over.
     final shell = await _pumpShell(tester);
     // A real episode behind the hit, so the screen that opens is the one
     // it names rather than an error pane.

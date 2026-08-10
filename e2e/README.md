@@ -6,9 +6,7 @@ Playwright tests against a real server binary with the embedded web UI.
 make e2e         # rebuilds the UI and the binary if stale, then runs
 ```
 
-Design decisions live in **ADR-0049** (the driver layer and the conformance
-ratchet) and **ADR-0050** (the account model and the shared server). This
-file is how to work in the suite.
+This file is how to work in the suite.
 
 ## Writing a spec
 
@@ -97,7 +95,7 @@ test.use({ session: 'virgin' });       // no account, no bootstrap - first-run o
 Anything else created by name - a playlist, a station, a share, an app
 password - gets a deterministic per-spec name with create-or-reuse
 semantics, or a `finally` that cleans up. There is no reset endpoint and
-there will not be one (ADR-0036).
+there will not be one.
 
 ## Motion
 

@@ -79,8 +79,8 @@ jobs:
       # The other half of `make lint`'s Go ratchets. This job enumerates
       # its steps rather than calling `make lint`, so a ratchet added to
       # the Makefile does not arrive here on its own - and one that runs
-      # only on a developer box is not a ratchet. ADR-0048's item-query
-      # rule was in that state.
+      # only on a developer box is not a ratchet. The item-query rule
+      # was in that state.
       - name: Item-query lint
         run: cd server && go run ./cmd/querylint ./...
       # internal/api builds a full harness (fresh migrated DB, demo

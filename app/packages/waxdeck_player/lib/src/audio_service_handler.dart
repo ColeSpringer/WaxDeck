@@ -264,7 +264,7 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
 /// [notificationColor] tints the Android notification. It is a parameter
 /// rather than a constant because the value is a design token this
 /// package cannot see: waxdeck_ui is the app's dependency, not the
-/// player's (ADR-0016), so the app passes its accent down instead of
+/// player's, so the app passes its accent down instead of
 /// this file keeping a second copy of the amber that would drift.
 Future<WaxDeckAudioHandler> initWaxDeckAudioService({
   required AudioEnginePort engine,

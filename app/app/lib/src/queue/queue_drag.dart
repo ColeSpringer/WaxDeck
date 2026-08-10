@@ -12,7 +12,7 @@ import 'queue_controller.dart';
 
 /// Dragging a row onto the queue panel.
 ///
-/// Pointer only, by decision (ADR-0029). `LongPressDraggable` collides
+/// Pointer only, by decision. `LongPressDraggable` collides
 /// with the long press that starts a queue selection, and touch already
 /// has a path to the same outcome - pick the rows, or "Add to queue"
 /// from a row's own menu - so a touch drag would be a second gesture

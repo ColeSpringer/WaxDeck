@@ -46,7 +46,7 @@ Future<void> initMediaSession(ProviderContainer container) async {
       onSkipToQueueItem: queue.jumpTo,
       // Passed from here because this is the side of the boundary that
       // can see the design system: waxdeck_player has no waxdeck_ui to
-      // read the token from (ADR-0016). The dark palette's accent is
+      // read the token from. The dark palette's accent is
       // the one to send - a notification tint is read against the
       // system's own surface, not against the app's current theme.
       notificationColor: WaxColors.dark.accent,

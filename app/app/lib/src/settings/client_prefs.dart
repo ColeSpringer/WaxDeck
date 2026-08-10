@@ -8,7 +8,7 @@ import '../auth/auth_controller.dart';
 import '../player/smart_rewind.dart';
 import 'client_settings_providers.dart';
 
-/// The per-device preferences (ADR-0027), one notifier each.
+/// The per-device preferences, one notifier each.
 ///
 /// Everything here describes the machine in front of the listener - how
 /// far its transports jump, how tightly its rows pack, what its

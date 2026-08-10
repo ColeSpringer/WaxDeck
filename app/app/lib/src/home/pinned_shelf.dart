@@ -26,7 +26,7 @@ import 'pinned_controller.dart';
 /// that failed.
 ///
 /// Silent when there is nothing pinned, like every other shelf that can
-/// be empty (ADR-0038): a heading over an empty row is a reproach, and
+/// be empty: a heading over an empty row is a reproach, and
 /// "nothing pinned" is the state most libraries are in.
 class PinnedShelf extends ConsumerWidget {
   const PinnedShelf({super.key});
@@ -194,7 +194,7 @@ class PinnedShelf extends ConsumerWidget {
 
   /// Where a card opens. All pushed: every one of these is declared
   /// under its own domain, so `go` would rebuild that ancestry and throw
-  /// home away (ADR-0022).
+  /// home away.
   static String _locationOf(EntityCard card) => switch (card.kind) {
     EntityCardKind.album => WaxRoute.musicBucket(
       MusicDimension.albums,

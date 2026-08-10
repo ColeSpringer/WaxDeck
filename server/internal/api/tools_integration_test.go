@@ -564,7 +564,7 @@ func TestCueSplitEndToEnd(t *testing.T) {
 	}
 
 	// The carvings were retired: the shared rip is in the trash, which is
-	// the one surface that does still name them (ADR-0048).
+	// the one surface that does still name them.
 	trash := decode[TrashList](t, get(t, h.ts, "/api/v1/admin/trash", h.token)).Entries
 	retired := false
 	for _, e := range trash {

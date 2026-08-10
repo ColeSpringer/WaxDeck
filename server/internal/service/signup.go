@@ -114,7 +114,7 @@ func (l *Library) Signup(ctx context.Context, username, password, displayName, i
 	// common refusal (a taken name) never touches the use count; the
 	// guarded consume below still owns the admission race. A crash
 	// between consume and create can strand one use - accepted: account
-	// creation spans both databases (ADR-0003 rules out one transaction)
+	// creation spans both databases, so there is no single transaction,
 	// and the recovery is an administrator re-issuing an invite.
 	if _, err := l.db.UserByUsername(ctx, strings.TrimSpace(username)); err == nil {
 		return nil, "", &Error{Kind: KindConflict, Msg: "username is taken"}

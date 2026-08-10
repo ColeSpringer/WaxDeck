@@ -14,7 +14,7 @@
 #
 # It also exercises the cleartext network-security config for real: the
 # tone is served over plain HTTP, which targetSdk 36 blocks outright
-# without ADR-0057's posture.
+# without that posture.
 name: Android engine conformance
 
 on:

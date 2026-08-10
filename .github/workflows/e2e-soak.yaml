@@ -84,7 +84,7 @@ jobs:
       #
       # And repeating a *test* is the wrong stress for this suite anyway.
       # Per-test accounts divide per-user state and deliberately do not
-      # divide the catalog (ADR-0050), so three copies of a spec that
+      # divide the catalog, so three copies of a spec that
       # fetches and unfetches the same show's episodes are three writers
       # on one shared row - a collision the account model says is not a
       # supported shape, manufactured by the workflow meant to find real

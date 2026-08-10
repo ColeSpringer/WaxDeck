@@ -129,7 +129,7 @@ class DownloadsController extends AsyncNotifier<DownloadsState> {
   /// Drops an item's audio and the cover pinned beside it.
   ///
   /// Two calls, not one. The download path pins the item's artwork so a
-  /// downloaded item has a cover with the server unreachable (ADR-0025),
+  /// downloaded item has a cover with the server unreachable,
   /// and that pin is kept by pid in a table the downloads port knows
   /// nothing about - so removing the audio alone leaves image files
   /// nothing short of a sign-out will reclaim. This is the only caller

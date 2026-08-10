@@ -15,8 +15,8 @@ import '../sync/sync_providers.dart';
 ///
 /// The two calls are the point. Downloading an item is a promise that it
 /// plays with the server unreachable, and an offline library of grey
-/// monograms does not keep it - so the cover comes down with the audio
-/// (ADR-0025). Removal is the same pair from the other side, which is
+/// monograms does not keep it - so the cover comes down with the audio.
+/// Removal is the same pair from the other side, which is
 /// the downloads manager's job.
 class DownloadAction extends ConsumerStatefulWidget {
   const DownloadAction({

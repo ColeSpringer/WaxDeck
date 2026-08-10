@@ -7427,7 +7427,7 @@ export interface components {
             visibility: string;
             /**
              * @description The owning user's display name.
-             * @example cole
+             * @example ada
              */
             ownerName: string;
             /** @description True when the caller owns this playlist and may edit it. */

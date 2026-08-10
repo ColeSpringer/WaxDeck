@@ -412,8 +412,7 @@ func (l *Library) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []sim
 			continue
 		}
 		// Neighbours arrive as pids from the similarity index, so the mix's
-		// other half filters by query and this half has to filter here
-		// (ADR-0048).
+		// other half filters by query and this half has to filter here.
 		if archived(v) {
 			continue
 		}

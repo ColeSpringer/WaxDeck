@@ -701,7 +701,7 @@ func TestPlaylistReplaceRefusesUnsubscribedMembers(t *testing.T) {
 }
 
 // A smart playlist drops trashed members, except when its rule asks
-// about state itself (ADR-0048). `state` is a documented rule field the
+// about state itself. `state` is a documented rule field the
 // contract exposes through /playlists/rule-fields, so the blanket
 // predicate every other listing gets would quietly make `state is
 // archived` answer nothing.

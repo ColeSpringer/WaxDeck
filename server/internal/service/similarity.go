@@ -449,8 +449,8 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 	// A trashed item is archived and has lost its file row, exactly like a
 	// permanently deleted one, so absence from the live set cannot tell
 	// the two apart on its own. The trash journal can, and it is the
-	// distinction that matters: ADR-0048 made trashing restorable and
-	// leaves the bytes on disk, so pruning here charged a full
+	// distinction that matters: trashing is restorable and leaves the
+	// bytes on disk, so pruning here charged a full
 	// re-analysis for every trash and restore of a file that never moved.
 	// RestorableTrash is batched and index-served, and absence from its
 	// map is the answer for "nothing restorable".

@@ -178,7 +178,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
     try {
       // A bucket shuffles through the random list scoped to itself, so
       // the window is one permutation over the whole bucket rather than
-      // a shuffle of each arriving page among itself (ADR-0028).
+      // a shuffle of each arriving page among itself.
       page = dimension == null
           ? await repository.browse(
               DiscoveryList.random,
@@ -347,7 +347,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
             ),
             onTap: () => _play(state, index),
             // A track cannot be pinned - a kept set of tracks is a
-            // playlist (ADR-0054) - so the row's overflow offers what
+            // playlist - so the row's overflow offers what
             // it belongs to. Both handles are optional on the wire, and
             // a row with neither offers nothing.
             onMore: item.albumPid != null || item.artistPid != null

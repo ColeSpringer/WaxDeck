@@ -14,7 +14,7 @@ import '../shell/routes.dart';
 ///
 /// Pushed, never gone to: every one of these is declared under something
 /// that is not search, so `go` would rebuild that ancestry and throw away
-/// the surface the visitor is standing in (ADR-0022, ADR-0032). A kind
+/// the surface the visitor is standing in. A kind
 /// this build does not know does nothing rather than being played as a
 /// track.
 void openSearchHit(BuildContext context, WidgetRef ref, SearchHit hit) {

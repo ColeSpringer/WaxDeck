@@ -10,7 +10,7 @@ import '../settings/prefs_controller.dart';
 /// What this listener has pinned to home, in shelf order.
 ///
 /// A pin follows the account rather than the device, for the reason the
-/// radio dial's does (ADR-0034, ADR-0054): pinning a record on the
+/// radio dial's does: pinning a record on the
 /// desktop and not finding it on the phone reads as the pin having
 /// failed. So the list lives in the preference document, and this
 /// notifier is the radio dial's twin over the other field.

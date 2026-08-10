@@ -63,8 +63,8 @@ WaxMenuItem<T> pinMenuItem<T>(
 typedef PinTarget = ({String pid, String what, String name});
 
 /// The pin affordance for rows and tiles with no menu of their own: the
-/// music listings, the index buckets, the search hits (ADR-0054's
-/// deferred rollout). A sheet rather than a `WaxMenuButton`, because a
+/// music listings, the index buckets, the search hits. A sheet rather
+/// than a `WaxMenuButton`, because a
 /// listing row's overflow may hold more than one target - a track row
 /// pins its album or its artist, never itself - and each wants a line
 /// naming what it is.

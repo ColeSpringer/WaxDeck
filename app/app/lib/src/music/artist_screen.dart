@@ -240,7 +240,7 @@ class _AppearsOn extends ConsumerWidget {
             if (at < 0) return;
             // Pushed, not gone to: an album is declared under the albums
             // index, so `go` would rebuild that ancestry and throw this
-            // artist away (ADR-0022).
+            // artist away.
             unawaited(
               context.push(
                 WaxRoute.musicBucket(
@@ -317,7 +317,7 @@ class _Body extends ConsumerWidget {
               // albums index, which is not where this is, so `go` would
               // rebuild that ancestry and throw the artist away - back
               // from a release would land on the index rather than on
-              // the artist whose release it is (ADR-0022).
+              // the artist whose release it is.
               if (target != null) {
                 context.push(
                   WaxRoute.musicBucket(MusicDimension.albums, target),

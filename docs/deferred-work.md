@@ -30,8 +30,8 @@ here waits on upstream.
 
 ## Playback and apps
 
-- `[in-repo]` **Download-notification polish.** ADR-0057 wired the
-  minimum: a running/complete/error notification named by the original
+- `[in-repo]` **Download-notification polish.** The
+  minimum is wired: a running/complete/error notification named by the original
   file, a progress bar, and a once-per-process permission request at the
   first download. Three things the plugin offers were left out. A denied
   permission is taken at face value, where `shouldShowRationale` is what
@@ -68,7 +68,7 @@ here waits on upstream.
   contract rather than a per-endpoint patch. `entityCardKindFromGen`
   already has the drop-shaped guard for the day it lands.
 - `[in-repo]` **A place cannot be marked offline.** Audiobook bookmarks
-  are a live read against the server (ADR-0041): the sheet fetches on
+  are a live read against the server: the sheet fetches on
   open and marking one needs a round trip. Everything else a listener
   does to a book while offline is mirrored - the position checkpoints
   through the outbox, the audio plays from the download - so a plane is
@@ -87,8 +87,7 @@ here waits on upstream.
   broken on the two platforms that matter most for downloads. What it
   wants is a plugin behind a WaxDeck-owned port per the wrapping rule,
   which is a pinned dependency and a decision of its own for one number.
-  Worth taking with the next plugin that lands for another reason. See
-  ADR-0033.
+  Worth taking with the next plugin that lands for another reason.
 - `[in-repo]` **The language picker the layout blueprint specifies and
   Settings does not draw.** Blocked on the app being localized at all,
   which nothing here has started: no `flutter_localizations` in any
@@ -112,8 +111,8 @@ here waits on upstream.
   `flutter test` on the VM per package, and `waxdeck_data`'s tests import
   `drift/native`, so `--platform chrome` cannot simply be switched on for
   the workspace. Adding Chrome to CI is an infrastructure decision that
-  was deliberately kept off ADR-0027's change rather than smuggled in
-  with it. Verified by hand in the meantime: collapse the sidebar in the
+  was deliberately kept off the per-device settings change rather than
+  smuggled in with it. Verified by hand in the meantime: collapse the sidebar in the
   web build, reload, still collapsed. Whoever adds a browser test target
   should take this with it.
 - `[in-repo]` **The web perf gate's measurement run is still owed.** Parked
@@ -135,7 +134,7 @@ here waits on upstream.
   before the run so a red number is a decision rather than an argument,
   and it still stands.
 
-  The scenarios moved with the shelf home (ADR-0038): the landing wait is
+  The scenarios moved with the shelf home: the landing wait is
   login-to-home, which is eight browse reads rather than one grid page,
   and every scroll scenario is over a listing rather than over the
   deleted grid. The `gridMs` budget is unchanged and is now about a
@@ -159,14 +158,14 @@ here waits on upstream.
   is a hardening item and goes on the performance slice. A miss on scroll
   FPS or long-frame share on the *index* scenarios reopens the artwork
   negative cache's approach then and there, since those are the surfaces
-  it just changed. The artwork pipeline (ADR-0025) already took the cheap
+  it just changed. The artwork pipeline already took the cheap
   levers - sized requests, bounded decodes, a day of client-side
   freshness - so a miss on the grid is a signal about the virtualized
   list rather than about artwork, and `-covers=false` is the run that
   tells the two apart.
 
 - `[in-repo]` **Discord presence shows the application's own cover, not
-  the album's.** Presence shipped in P22 (ADR-0045) with the status,
+  the album's.** Presence shipped in P22 with the status,
   the track, the artist, the album, and the timestamps that drive the
   progress bar; the image beside them is the `waxdeck` art
   asset uploaded against the Discord application (the emblem, since
@@ -323,7 +322,7 @@ here waits on upstream.
   its signing key. Neither is a per-release chore like the winget or
   Homebrew templates, which is why it is not sitting beside them.
 - `[in-repo]` **The macOS keychain entitlement, and whether a login
-  actually persists.** ADR-0057 gave the sandboxed app
+  actually persists.** The sandboxed app has
   `network.client` + `network.server`, which is what let it reach a
   server at all; `keychain-access-groups` was left out because it is a
   restricted entitlement that makes the release build demand a
@@ -391,7 +390,7 @@ here waits on upstream.
   deliberately pointed at an unrouted same-origin path, so an instance
   behaves identically with and without internet: Devanagari, Tamil,
   emoji, and anything else unbundled renders as boxes instead of
-  sometimes-working via Google. That trade is recorded in ADR-0016;
+  sometimes-working via Google. That trade is deliberate;
   what remains is growing the set as real libraries need it, which is
   one face per script in `tools/fetch-fonts.sh` plus a `WaxScript`
   entry and detection range in `WaxFonts` (emoji is the awkward one: a
@@ -448,7 +447,7 @@ here waits on upstream.
   carrying it is the specific trigger to re-check, sharper than "when
   the issue closes": the issue can close on the PR alone, which changes
   nothing here until the pinned engine ships it.
-- `[in-repo]` **The live fan-out's accepted edges (ADR-0036).** The
+- `[in-repo]` **The live fan-out's accepted edges.** The
   invalidation fan-out defers around in-flight first builds via a
   `ProviderObserver` ledger; three edges are known, each bounded, none
   observed outside construction. A first build that never lands (a hung
@@ -461,10 +460,9 @@ here waits on upstream.
   pre-deferral behavior, not a new failure. And a nested `ProviderScope`
   overriding a fan-out target would sit outside `allProviders`'
   enumeration (children are excluded), unreachable by sweep and retry
-  alike, as it already was by the plain invalidations before ADR-0036;
+  alike, as it already was by the plain invalidations before the pacer;
   no such scope exists, and whoever introduces one takes the fan-out's
-  enumeration with it. The reasoning lives in the ADR's consequences
-  section.
+  enumeration with it.
 - `[in-repo]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists. Regated from `[hardware]` with the entry above
@@ -495,7 +493,7 @@ here waits on upstream.
   fanning providers out to the auxiliary slots (a fanart.tv artist
   background, disc art) needs the candidate/provider model extended to
   carry per-role art first. The slots are readable and hand-settable
-  meanwhile (docs/adr/0014).
+  meanwhile.
 - `[in-repo]` **Android folder picking is excluded from the upload
   surface.** File picking works on every platform (the endorsed
   `file_selector_android` implementation covers in-app file picks),
@@ -554,7 +552,7 @@ here waits on upstream.
   record to copy, and `ReplacePlaylistItems` is the ordered-membership
   reconcile primitive (optimistic `baseUpdatedAt`). Net-new, all
   WaxDeck-side (a binding table in `waxdeck.db` keyed by playlist pid,
-  per ADR-0003): (1) the binding row (source type, source ref,
+  keyed by playlist pid): (1) the binding row (source type, source ref,
   per-playlist sync mode, refresh interval, enumeration cursor); (2) a
   video-id-to-item map kept current as acquisitions resolve, since the
   provenance tag is never lifted into a queryable column and
@@ -575,7 +573,7 @@ here waits on upstream.
   overwritten, a removed video detaches but its file stays), and
   `mirror+trash` (mirror, and a removed video's file goes to the
   recoverable trash); default `mirror`, keeping files. Intervals are
-  1/3/6/12/24 hours plus a manual sync-now; per ADR-0005 the scheduler
+  1/3/6/12/24 hours plus a manual sync-now; the scheduler
   and its failure accounting are WaxDeck's, so no new worker primitive
   is needed (extend the `feed-refresh` sweep or add a sibling that reads
   a per-binding due time). The binding is source-agnostic by design
@@ -605,7 +603,7 @@ here waits on upstream.
   should prefer its source playlist's own thumbnail (the enumeration
   already surfaces one) over the mosaic built from members, which means
   fetching and storing it on bind and re-checking it on sync. The client
-  slots this needs are in place as of the playlists rebuild (ADR-0035):
+  slots this needs are in place as of the playlists rebuild:
   the detail header already draws a chip row under it, so a sync-status
   chip is a chip rather than a layout, and the overflow is a declared
   action enum with the cover verbs grouped, so the settings sheet
@@ -620,7 +618,7 @@ here waits on upstream.
   it has no local download manager at all, so there is no transfer of
   its own whose completion it could announce. Not a platform-notification
   limitation and not a missing API - what is missing is the download
-  manager, which is ADR-0033's whole subject. Recorded here so the next
+  manager. Recorded here so the next
   reader does not go looking for a notification API to fix it with.
   Server-side enclosure fetches are a different event and do reach every
   platform, through the `episode-downloaded` marker on the user stream.
@@ -695,7 +693,7 @@ here waits on upstream.
   view has, and it closes the same way.
 - `[in-repo]` **Clip cards for episode shares are not built.** The
   year-in-review cards render, export, and now draw their top artists'
-  covers (docs/adr/0047, amended). A clip card is the same shape of
+  covers. A clip card is the same shape of
   work for a different subject - a quotable span of an episode, cut to
   the same two canvases - and none of it exists: no span picker, no
   card, no export entry. The artwork half is solved and reusable
@@ -705,7 +703,7 @@ here waits on upstream.
 - `[hardware]` **The Android share path for a card is unverified.**
   Exporting a card on Android writes it into a FileProvider-scoped
   cache directory and opens `ACTION_SEND` over the `waxdeck/share`
-  channel (docs/adr/0047). There is no device here and no Android build
+  channel. There is no device here and no Android build
   in CI, so the Kotlin handler, the manifest `<provider>`, and the
   `res/xml/file_paths.xml` scope have never run. What to check: the
   chooser opens, the receiving app can read the image (a wrong
@@ -754,7 +752,7 @@ here waits on upstream.
   rides the outbox's global pacing). Each is an isolated extension
   of one provider file when wanted.
 - `[in-repo]` **Radio scrobbling is off per account, not per station.**
-  The account-wide switch ships (`Prefs.radioScrobbleOptOut`, ADR-0037),
+  The account-wide switch ships (`Prefs.radioScrobbleOptOut`),
   which covers the listener who wants none of it. What the original entry
   also floated is a per-station flag, for the household that scrobbles
   its music stations and not its talk ones. That wants a per-user
@@ -767,7 +765,7 @@ here waits on upstream.
   window, outside the DOM, dismissed by an Escape that a sibling stealing
   focus swallows. It passes alone and passes most full runs; across a few
   dozen it has failed twice, which is the bar this suite set for no
-  longer believing a test (ADR-0050). Tagged `@quarantine`, so it is out
+  longer believing a test. Tagged `@quarantine`, so it is out
   of the blocking projects and still runs in the soak. To retire the
   entry: either pin the selection through something that does not depend
   on the native menu closing, or decide the prototype's go/no-go record
@@ -786,7 +784,7 @@ here waits on upstream.
   uploads project, seen from inside the file. What would actually free
   the workers is making the read-only test stop being global: its own
   project after this one, or a per-library read-only flag it can set on
-  a library nothing else in the file touches. Weighed against ADR-0050's
+  a library nothing else in the file touches. Weighed against the
   preference for scheduling facts living in the config, which is why the
   flag is written there.
 
@@ -795,7 +793,7 @@ here waits on upstream.
 Every browse validates the caller's pid, and that is a behaviour
 change WaxDeck accepted rather than work it postponed. waxbin's
 `browseFilter` short-circuits only when a query has neither an entity
-nor a where clause, and since ADR-0048 a built query never is, so
+nor a where clause, and a built query never is, so
 `/music/tracks`, `/music/albums`, `/music/artists` and every
 alphabetical browse now resolve `UserPID`. The cost was overstated when
 this was first written down as a deferral: `userStateJoin` returns
@@ -814,7 +812,7 @@ outcome. A NAT'd household admitting a handful of members stays under
 the threshold; a script farming accounts does not." What made it read as
 a bug was the shared key - behind a reverse proxy every signup counted
 against the proxy's address, so the cap was server-wide - and
-`WAXDECK_TRUSTED_PROXIES` (ADR-0052) is the whole of that fix. With
+`WAXDECK_TRUSTED_PROXIES` is the whole of that fix. With
 correct client addresses the budget is per caller, which is what it was
 always meant to be. Do not add a `Success` call on the success path; it
 would undo the decision, not complete it.

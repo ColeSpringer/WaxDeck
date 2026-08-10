@@ -38,9 +38,3 @@ Docker Compose stack and the fast single-binary path.
   other servers.
 - [Reverse proxy guide](reverse-proxy.md): TLS in front, WebSockets,
   streaming, and the settings that matter.
-
-## Design records
-
-Decisions a future maintainer might re-litigate are written down as
-architecture decision records under `docs/adr/`, from the
-contract-first codegen pipeline to the matching engine.

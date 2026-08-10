@@ -1,6 +1,6 @@
 /// Turning API models into the design system's plain view data.
 ///
-/// `waxdeck_ui` never imports the API package (ADR-0016), so every
+/// `waxdeck_ui` never imports the API package, so every
 /// screen maps at the call site. These are the mappings more than one
 /// screen would otherwise write differently: which domain a media type
 /// belongs to, what shape its artwork takes, and how a URL becomes an

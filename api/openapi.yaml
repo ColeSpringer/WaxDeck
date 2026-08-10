@@ -15363,7 +15363,7 @@ components:
         ownerName:
           type: string
           description: The owning user's display name.
-          example: cole
+          example: ada
         isOwner:
           type: boolean
           description: True when the caller owns this playlist and may edit it.

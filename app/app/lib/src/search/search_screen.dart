@@ -538,9 +538,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           itemCount: shown.length,
           itemBuilder: (context, index) {
             final hit = shown[index];
-            // A hit that names a pinnable thing can be pinned from here
-            // (ADR-0054's deferred rollout); a track or an episode
-            // cannot, and the hit carries no handle to its container.
+            // A hit that names a pinnable thing can be pinned from
+            // here; a track or an episode cannot, and the hit carries
+            // no handle to its container.
             final pinnable = switch (hit.kind) {
               'artist' || 'album' || 'book' => true,
               _ => false,

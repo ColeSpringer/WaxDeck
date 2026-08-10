@@ -10,7 +10,7 @@ import 'client_settings/client_settings.dart';
 /// Where per-device preferences persist: the local mirror on native, the
 /// browser's own storage on web. The sibling of [prefsControllerProvider]
 /// (`prefs_controller.dart`), which holds the account's synced document;
-/// what belongs in which is ADR-0027's subject.
+/// what belongs in which is the per-device versus per-account line.
 final clientSettingsStoreProvider = Provider<ClientSettingsStore>(
   (ref) => createClientSettingsStore(ref.watch(mirrorDatabaseProvider)),
 );
