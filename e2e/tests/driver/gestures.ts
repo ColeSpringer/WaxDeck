@@ -52,6 +52,41 @@ export async function typeInto(page: Page, field: Locator, text: string) {
   }).toPass({ timeout: T.action });
 }
 
+// The one retried-click attempt everything below shares: unless the
+// goal is already met, fire the bounded best-effort forced click, then
+// hold this attempt to the goal. Forced, because semantics nodes over
+// an animating canvas (a live seek bar) never satisfy the stability
+// heuristics, so an actionability wait just times out; bounded and
+// swallowed, so a refused click costs 2s and a retry rather than the
+// whole budget. Callers wrap it in the `toPass` budget their gesture
+// deserves.
+//
+// Both polarities guard the click on the goal not being met yet - a
+// prior attempt's click may have landed with the transition just slow,
+// and firing again is what double-triggers a control. For `shows` the
+// guard is the goal being on screen. For `gone` - controls whose
+// success is something leaving - it is the goal still showing: a node
+// that has gone invisible but not yet detached is a transition in
+// flight, and clicking into it would fire the control a second time.
+// The wait is still a count of zero, because a flutter semantics node
+// that is gone is detached, and `gone` may match many rows at once.
+export async function clickToward(
+  trigger: Locator,
+  goal: { shows: Locator } | { gone: Locator },
+) {
+  if ('shows' in goal) {
+    if (!(await goal.shows.isVisible())) {
+      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
+    }
+    await goal.shows.waitFor({ timeout: T.step });
+  } else {
+    if (await goal.gone.first().isVisible()) {
+      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
+    }
+    await expect(goal.gone).toHaveCount(0, { timeout: T.step });
+  }
+}
+
 // Click a canvas-rendered control and wait for what it opens, as one
 // retried unit: flutter web can swallow a click while its handlers are
 // still attaching (the click cousin of the keystroke gap typeInto
@@ -59,18 +94,7 @@ export async function typeInto(page: Page, field: Locator, text: string) {
 // screen never appears at all.
 export async function clickThrough(trigger: Locator, appears: Locator) {
   await expect(async () => {
-    // A prior attempt's click may have landed with the destination
-    // just slow, and navigating away removes the trigger; so the click
-    // is skipped once the destination shows and is best-effort
-    // otherwise (a swallowed click retries, a vanished trigger means
-    // the navigation is already underway).
-    if (!(await appears.isVisible())) {
-      // Forced, like the a11y suite's canvas clicks: semantics nodes
-      // over an animating canvas (a live seek bar) never satisfy the
-      // stability heuristics, so an actionability wait just times out.
-      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
-    }
-    await appears.waitFor({ timeout: T.step });
+    await clickToward(trigger, { shows: appears });
   }).toPass({ timeout: T.nav });
 }
 
@@ -226,10 +250,7 @@ export async function chooseFromMenu(
 ) {
   await expect(async () => {
     if (settled && (await settled.isVisible())) return;
-    if (!(await item.isVisible())) {
-      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
-      await item.waitFor({ timeout: T.step });
-    }
+    await clickToward(trigger, { shows: item });
     // The menu animates into place - and near a screen edge it is
     // repositioned as it grows - while a forced click dispatches at
     // whatever rect the semantics overlay held a frame earlier. That
@@ -261,17 +282,14 @@ export async function chooseFromMenu(
 // Open a menu and leave it standing, as one retried unit.
 //
 // The opening half of `chooseFromMenu`, for the callers that open a menu
-// and let somebody else pick from it. The distinction from
-// `clickThrough` is the whole reason this exists: that one re-clicks its
-// trigger whenever the thing it waits for is missing, and for a menu the
-// trigger is behind the modal barrier - so the retry closes the menu the
-// previous attempt opened, and the round repeats until the budget runs
-// out.
+// and let somebody else pick from it. Behaviourally it is `clickThrough`
+// today - both gained the visible-goal guard that once told them apart -
+// and the separate name stays because the call sites read differently:
+// a menu's trigger sits behind the modal barrier once it opens, which is
+// the hazard the guard exists for, and "open the menu" is what the spec
+// means to say.
 export async function openMenu(trigger: Locator, shows: Locator) {
   await expect(async () => {
-    if (!(await shows.isVisible())) {
-      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
-    }
-    await shows.waitFor({ timeout: T.step });
+    await clickToward(trigger, { shows });
   }).toPass({ timeout: T.nav });
 }

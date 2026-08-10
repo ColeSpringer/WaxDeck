@@ -1052,7 +1052,10 @@ func (l *Library) cueSiblings(ctx context.Context, seed *model.ItemView, srcPath
 	return sibs
 }
 
-// trashToolItems moves items to the catalog's reversible trash.
+// trashToolItems moves items to the catalog's reversible trash. No
+// episode guard: every caller is a book merge, book split, or cue split,
+// so only bk- and tr- items reach here and the catalog's own episode
+// refusal is unreachable.
 func (l *Library) trashToolItems(ctx context.Context, pids []model.PID) error {
 	plan, err := l.lib.PlanDeletePIDs(ctx, pids, model.DeleteTrash)
 	if err != nil {

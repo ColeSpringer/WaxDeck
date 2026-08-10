@@ -2,13 +2,11 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { chooseFromMenu, clickInView, clickThrough } from '../gestures';
 
-export class Cast {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Cast extends Surface {
   picker(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.picker));
   }

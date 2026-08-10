@@ -74,8 +74,8 @@ test('About reports both versions', async ({ app }) => {
 
   // The two numbers a bug report is asked for, from the server that
   // answered rather than from a constant.
-  await expect(app.settings.text(health.version).first()).toBeVisible();
-  await expect(app.settings.text(`v${health.apiVersion}`, true)).toBeVisible();
+  await expect(app.settings.text(health.version)).toBeVisible();
+  await expect(app.settings.text(`v${health.apiVersion}`, { exact: true })).toBeVisible();
 });
 
 test('an account setting reaches the preference document', async ({ app }) => {

@@ -568,46 +568,13 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
-  testWidgets('a replacing play verb offers to take it back', (tester) async {
-    // The offer only ever existed on the queue surface's EARLIER rows;
-    // every other play verb replaced silently.
-    final container = await _pumpShell(tester);
-    final playback = container.read(nowPlayingProvider.notifier);
-    const source = QueueSource(
-      kind: QueueSourceKind.single,
-      label: 'Salt Harbour',
-    );
-
-    // The first play displaced nothing, so it offers nothing.
-    playback.play([testItem('tr-A', title: 'Salt Harbour')], source: source);
-    await tester.pump();
-    await tester.pump();
-    expect(find.text('Replaced what was playing'), findsNothing);
-
-    playback.play([testItem('tr-B', title: 'Kelp Line')], source: source);
-    await tester.pump();
-    await tester.pump();
-    // An affordance still off screen has no semantics node to tap.
-    await tester.pump(const Duration(milliseconds: 750));
-    expect(find.text('Replaced what was playing'), findsOneWidget);
-    expect(container.read(queueControllerProvider).currentPid, 'tr-B');
-
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.queueReplaceUndo));
-    await tester.pump();
-    await tester.pump();
-
-    // Undo puts the displaced queue back, entry and all.
-    expect(container.read(queueControllerProvider).currentPid, 'tr-A');
-
-    container.read(queueControllerProvider.notifier).clear();
-    await tester.pump(const Duration(seconds: 1));
-  });
-
-  testWidgets('a second replacement replaces the toast rather than stacking', (
+  testWidgets('a replacing play verb says nothing and keeps the queue', (
     tester,
   ) async {
-    // The queue holds only the most recent replacement, so a stale
-    // toast would offer to undo a queue already gone.
+    // The toast is gone: replacing the queue is what every play verb
+    // does, and the audio changing says so. What it announced is not -
+    // the displaced queue is still kept, and session history is where it
+    // is offered back.
     final container = await _pumpShell(tester);
     final playback = container.read(nowPlayingProvider.notifier);
     const source = QueueSource(
@@ -621,22 +588,17 @@ void main() {
     playback.play([testItem('tr-B', title: 'Kelp Line')], source: source);
     await tester.pump();
     await tester.pump();
-    playback.play([testItem('tr-C', title: 'Tide Bell')], source: source);
-    await tester.pump();
-    await tester.pump();
     await tester.pump(const Duration(milliseconds: 750));
 
-    // One bar on screen, and it must be the live one: a queued bar would
-    // read as one toast while offering to undo a queue already gone.
-    expect(find.text('Replaced what was playing'), findsOneWidget);
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.queueReplaceUndo));
-    await tester.pump();
-    await tester.pump();
+    expect(find.text('Replaced what was playing'), findsNothing);
     expect(container.read(queueControllerProvider).currentPid, 'tr-B');
 
-    // And nothing is queued behind it offering to undo again.
-    await tester.pump(const Duration(seconds: 5));
-    expect(find.text('Replaced what was playing'), findsNothing);
+    // The displacement is still there to take back, which is the half
+    // that had to survive removing the offer.
+    playback.undoReplace();
+    await tester.pump();
+    await tester.pump();
+    expect(container.read(queueControllerProvider).currentPid, 'tr-A');
 
     container.read(queueControllerProvider.notifier).clear();
     await tester.pump(const Duration(seconds: 1));
@@ -668,35 +630,6 @@ void main() {
     await tester.pump();
 
     expect(find.text('Could not save'), findsOneWidget);
-
-    container.read(queueControllerProvider.notifier).clear();
-    await tester.pump(const Duration(seconds: 1));
-  });
-
-  testWidgets('a queue handed over by another device offers no undo', (
-    tester,
-  ) async {
-    // The offer would undo something this device's user never did, and
-    // leave the two ends disagreeing about what plays.
-    final container = await _pumpShell(tester);
-    final playback = container.read(nowPlayingProvider.notifier);
-    const source = QueueSource(
-      kind: QueueSourceKind.single,
-      label: 'Salt Harbour',
-    );
-
-    playback.play([testItem('tr-A', title: 'Salt Harbour')], source: source);
-    await tester.pump();
-    await tester.pump();
-    await playback.playPids(
-      ['tr-B'],
-      source: QueueSource.none,
-      offerUndo: false,
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 750));
-
-    expect(find.text('Replaced what was playing'), findsNothing);
 
     container.read(queueControllerProvider.notifier).clear();
     await tester.pump(const Duration(seconds: 1));

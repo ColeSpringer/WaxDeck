@@ -6,9 +6,11 @@ paths:
       summary: List playlists visible to the caller
       description: >
         Keyset-paginated list of the caller's own playlists plus every
-        shared playlist, ordered by name then pid. Smart playlist
-        entries omit `itemCount` (membership is computed on read);
-        fetch the playlist detail for a computed count.
+        shared playlist, ordered by name then pid. A static entry
+        carries a live `itemCount`, exact for this caller. Smart
+        entries omit it (evaluating every rule to draw a page of tiles
+        is work a listing does not do); fetch the playlist detail for
+        a computed count.
       tags: [playlists]
       parameters:
         - name: cursor
@@ -688,9 +690,10 @@ components:
       description: >
         A playlist: a manual ordered list (`static`) or a rule
         evaluated per user on read (`smart`). `rule` is present only
-        for smart playlists. `itemCount` is the stored member count
-        for a static playlist; for a smart playlist it is computed on
-        detail reads and omitted from list pages.
+        for smart playlists. `itemCount` is always the caller's own
+        view of the membership: present and live for a static
+        playlist, computed on detail reads and omitted from list pages
+        for a smart one.
       required: [pid, name, kind, visibility, ownerName, isOwner, createdAt, updatedAt]
       properties:
         pid:
@@ -743,7 +746,12 @@ components:
         itemCount:
           type: integer
           description: >
-            Member count. Stored count for static playlists; computed
+            How many members this caller is offered, which is what the
+            member listing beside it returns: archived items, items in
+            libraries the caller has no grant for, and episodes of
+            unsubscribed shows are all out of it. Entries, not distinct
+            items, so a static playlist holding one track twice counts
+            it twice. Live and exact for a static playlist; computed
             for smart playlists on detail reads and absent on list
             pages.
         rule:
@@ -937,7 +945,9 @@ components:
         on write. Condition values are strings on the wire regardless
         of the field's kind: numbers in decimal, booleans as `true`
         or `false`, dates as absolute RFC 3339 timestamps, media
-        types as `music`, `podcast`, or `audiobook`. Date fields also
+        types as `music`, `podcast`, or `audiobook`, and the
+        `playlist` field as a playlist pid (`pl-...`), which is how a
+        rule says "not in my Archive list". Date fields also
         accept the relative operators `inTheLast` and `notInTheLast`,
         whose `value` is a positive whole number of days counted back
         from read time: a rule meaning "played in the last 30 days"
@@ -1011,9 +1021,13 @@ components:
         kind:
           type: string
           description: >
-            Value kind: `text`, `number`, `date`, `boolean`, or
-            `mediaType`. A string, not a closed enum. Editors render
-            the value input from this.
+            Value kind: `text`, `number`, `date`, `boolean`,
+            `mediaType`, or `playlist`. A string, not a closed enum.
+            Editors render the value input from this. A `playlist`
+            value is a playlist pid (`pl-...`), so its editor is a
+            picker over the static playlists the caller can see; a pid
+            naming a deleted, smart, or self-referencing list is
+            accepted and simply matches nothing.
           example: number
         ops:
           type: array

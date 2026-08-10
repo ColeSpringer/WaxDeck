@@ -165,9 +165,12 @@ class NotificationsController extends Notifier<List<WaxNotification>> {
         'A show kept failing to refresh and was disabled.',
         pid == null ? null : WaxRoute.show(pid),
       ),
+      // Not "identified": the marker is shared with the as-is path,
+      // where nothing was identified and saying so would be wrong on
+      // every upload that declined it.
       'import-completed' => (
         NotificationKind.importCompleted,
-        'An upload was identified and added to the library.',
+        'An upload was added to the library.',
         null,
       ),
       'episode-downloaded' => (

@@ -174,7 +174,12 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
       for (final episode in loaded)
         if (switch (_filter) {
               EpisodeFilterChoice.all => true,
-              EpisodeFilterChoice.unplayed => !progress[episode.pid].played,
+              // Never started, matching the server's shelf and the row
+              // dot below: a five-minutes-in episode is in progress, not
+              // unplayed.
+              EpisodeFilterChoice.unplayed => switch (progress[episode.pid]) {
+                final p => !p.played && p.positionMs == 0,
+              },
               EpisodeFilterChoice.downloaded => episode.downloaded,
             } &&
             (_season == null || episode.season == _season) &&

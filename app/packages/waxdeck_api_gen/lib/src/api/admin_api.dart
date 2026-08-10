@@ -2932,7 +2932,7 @@ class AdminApi {
   }
 
   /// Restore a trashed file
-  /// Moves the file back to its original path and re-catalogs it, un-archiving its item. Refuses when the original path is occupied (&#x60;conflict&#x60;). Administrators only. 
+  /// Moves the file back to its original path and re-catalogs it, un-archiving its item. Refuses when the original path is occupied (&#x60;conflict&#x60;), and when it points into the internal podcast download tree, which owns its own files: entries left there by older versions come back by re-downloading the episode, and purge and expiry still apply to them. Administrators only. 
   ///
   /// Parameters:
   /// * [trashId] - Trash entry PID (e.g. `th-01JZX5N8QW3F4V9T2B7KD3M9R6`).

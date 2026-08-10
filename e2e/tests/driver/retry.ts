@@ -1,8 +1,10 @@
-// Retry around the file-mutation lease.
+// Retry around the file-mutation leases.
 //
-// One installation, four workers: a delete, an upload, a rescan and an
-// unfetch all take the same catalog lease, and a spec that wants it
-// while a sibling holds it is refused with `catalog-busy`. That refusal
+// One installation, four workers: a delete, an upload and a rescan all
+// take the catalog's lease, and an unfetch, a retention pass and an
+// unsubscribe's cleanup all take the podcast download tree's. A spec
+// that wants either while a sibling holds it is refused with
+// `catalog-busy` - the two scopes share the code. That refusal
 // clears on its own and is nothing to do with the code under test - any
 // other refusal is, and is rethrown with the server's own message.
 //

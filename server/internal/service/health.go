@@ -983,6 +983,19 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, keepPid strin
 		if pid == keep {
 			return 0, errInvalid("keepItemPid cannot also be removed")
 		}
+		// Judged by the resolved item's kind, not the request's prefix:
+		// the catalog pid is the bare ULID, so an episode wearing a tr-
+		// prefix would pass a prefix check and reach the catalog's
+		// refusal, which reads back in CLI verbs. The read also answers
+		// not-found for a typo before anything moves, the same courtesy
+		// the keeper gets below.
+		it, err := l.lib.Get(ctx, pid)
+		if err != nil {
+			return 0, classify(err)
+		}
+		if it.Kind == model.KindEpisode {
+			return 0, errEpisodeNotDeletable()
+		}
 		removes = append(removes, pid)
 	}
 	// Verify the keeper exists so a typo answers not-found before

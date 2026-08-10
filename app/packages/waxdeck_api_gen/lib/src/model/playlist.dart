@@ -9,7 +9,7 @@ import 'package:built_value/serializer.dart';
 
 part 'playlist.g.dart';
 
-/// A playlist: a manual ordered list (`static`) or a rule evaluated per user on read (`smart`). `rule` is present only for smart playlists. `itemCount` is the stored member count for a static playlist; for a smart playlist it is computed on detail reads and omitted from list pages. 
+/// A playlist: a manual ordered list (`static`) or a rule evaluated per user on read (`smart`). `rule` is present only for smart playlists. `itemCount` is always the caller's own view of the membership: present and live for a static playlist, computed on detail reads and omitted from list pages for a smart one. 
 ///
 /// Properties:
 /// * [pid] - Type-prefixed ULID. Stable for the playlist's lifetime, including across rule edits. 
@@ -20,7 +20,7 @@ part 'playlist.g.dart';
 /// * [ownerName] - The owning user's display name.
 /// * [isOwner] - True when the caller owns this playlist and may edit it.
 /// * [hasArt] - A cover is stored for this playlist, readable at `/items/{pid}/art` with the playlist's own PID. It is true for an owner's uploaded cover and for the mosaic the server builds from the members when there is none; the two are the same slot, and uploading wins until it is cleared. Absent means false. 
-/// * [itemCount] - Member count. Stored count for static playlists; computed for smart playlists on detail reads and absent on list pages. 
+/// * [itemCount] - How many members this caller is offered, which is what the member listing beside it returns: archived items, items in libraries the caller has no grant for, and episodes of unsubscribed shows are all out of it. Entries, not distinct items, so a static playlist holding one track twice counts it twice. Live and exact for a static playlist; computed for smart playlists on detail reads and absent on list pages. 
 /// * [rule] 
 /// * [createdAt] - When the playlist was created.
 /// * [updatedAt] - When the playlist row last changed.
@@ -59,7 +59,7 @@ abstract class Playlist implements Built<Playlist, PlaylistBuilder> {
   @BuiltValueField(wireName: r'hasArt')
   bool? get hasArt;
 
-  /// Member count. Stored count for static playlists; computed for smart playlists on detail reads and absent on list pages. 
+  /// How many members this caller is offered, which is what the member listing beside it returns: archived items, items in libraries the caller has no grant for, and episodes of unsubscribed shows are all out of it. Entries, not distinct items, so a static playlist holding one track twice counts it twice. Live and exact for a static playlist; computed for smart playlists on detail reads and absent on list pages. 
   @BuiltValueField(wireName: r'itemCount')
   int? get itemCount;
 

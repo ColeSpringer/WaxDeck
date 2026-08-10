@@ -21,7 +21,11 @@ submission needs beyond that manifest.
 3. **Desktop entry and icons.** A `com.colespringer.WaxDeck.desktop`
    file and icons (at least 128x128 PNG or scalable SVG) installed
    under `/app/share/applications/` and `/app/share/icons/hicolor/`,
-   both named after the app id.
+   both named after the app id. The icons exist: a full hicolor tree
+   (16 through 512, from the official mark) lives at
+   `app/app/linux/icons/hicolor/` and ships inside the release tarball
+   as `icons/`, so the module installs them from the archive - renaming
+   to the app id - rather than needing new art.
 4. **The submission itself.** A PR against
    `github.com/flathub/flathub` (new-pr branch) containing the
    manifest; after acceptance Flathub creates a dedicated

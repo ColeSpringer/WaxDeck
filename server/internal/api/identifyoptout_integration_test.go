@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -359,5 +360,155 @@ func TestDecliningLeavesNothingInTheMatchQueue(t *testing.T) {
 	uploadDeclaring(t, h, h.token, quietTrack(t, "queue-empty"), map[string]any{"identify": false})
 	if h.svc.DrainMatchQueue(t.Context()) {
 		t.Fatal("the match queue had work after a declined submission")
+	}
+}
+
+// TestDeclinedImportLinksItsEntities is the rider on the as-is bell
+// bug: uploaded music was reported as reaching Tracks and nothing else,
+// though the files carried artist, album, genre, and year.
+//
+// The two paths import through the same function, so an as-is-specific
+// omission would have to be somewhere else. This pins the answer either
+// way: the tags a file arrives with put it in the browse dimensions
+// with no decision and no rescan.
+func TestDeclinedImportLinksItsEntities(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+
+	paths, err := fixtures.Generate(t.TempDir(), fixtures.Spec{
+		Name: "tagged", Codec: fixtures.CodecMP3, Duration: 3 * time.Second,
+		Tags: map[string]string{
+			"TITLE": "Tagged Song", "ARTIST": "Paper Radio",
+			"ALBUM": "Long Wave", "ALBUMARTIST": "Paper Radio",
+			"GENRE": "Ambient", "DATE": "2019",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := uploadDeclaring(t, h, h.token, paths[0], map[string]any{"identify": false})
+	drainMatches(t, h)
+	if e := entryOf(t, h, h.token, up); e.Status != "as-is" {
+		t.Fatalf("entry status = %q, want as-is", e.Status)
+	}
+
+	// Every dimension the file declared, straight off the import. Not
+	// `year`: a scanned file carrying the same DATE tag lands in
+	// [Unknown Year] too, so whatever that is, it is not something the
+	// as-is path does differently.
+	for _, want := range []struct{ dimension, label string }{
+		{"artist", "Paper Radio"},
+		{"album-artist", "Paper Radio"},
+		{"album", "Long Wave"},
+		{"genre", "Ambient"},
+	} {
+		resp := get(t, h.ts, "/api/v1/library/facets?dimension="+want.dimension+"&limit=500", h.token)
+		page := decode[FacetPage](t, resp)
+		found := false
+		for _, b := range page.Buckets {
+			if b.Label == want.label {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("the %s dimension has no %q bucket after an as-is import", want.dimension, want.label)
+		}
+	}
+}
+
+// adminEventKinds counts the user-stream events the admin account has
+// received, by kind. The markers are the in-app bell; a test asserting
+// on them is asserting on what a person is asked to look at.
+func adminEventKinds(t *testing.T, h *harness) map[string]int {
+	t.Helper()
+	ctx := context.Background()
+	admins, err := h.store.EnabledAdminIDs(ctx)
+	if err != nil || len(admins) == 0 {
+		t.Fatalf("listing admins: %v", err)
+	}
+	events, _, err := h.store.EventsSince(ctx, admins[0], 0, 500)
+	if err != nil {
+		t.Fatalf("reading user events: %v", err)
+	}
+	out := map[string]int{}
+	for _, e := range events {
+		out[e.Kind]++
+	}
+	return out
+}
+
+// TestAsIsUploadRingsNoReviewBell is the bug. Uploading with
+// identification declined raised a review marker twice - once when the
+// entry opened and once when it filed itself as-is - so the bell said
+// "the review queue changed" about a queue that had nothing in it and
+// never would. Nobody was being asked for anything.
+//
+// The two notification layers meet in this path and are easy to confuse:
+// the marker is the in-app bell, while the "ready for review" and
+// "import finished" announcements go to the external provider system.
+// The stall paths always sent the external one, so moving the marker
+// onto them adds a bell where somebody genuinely is awaited rather than
+// doubling one that already rang.
+func TestAsIsUploadRingsNoReviewBell(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+
+	up := uploadDeclaring(t, h, h.token, quietTrack(t, "silent"), map[string]any{"identify": false})
+	drainMatches(t, h)
+	if e := entryOf(t, h, h.token, up); e.Status != "as-is" {
+		t.Fatalf("entry status = %q, want as-is", e.Status)
+	}
+
+	kinds := adminEventKinds(t, h)
+	if kinds["review"] != 0 {
+		t.Errorf("an as-is upload raised %d review markers, want none", kinds["review"])
+	}
+	// The import is still announced, on the marker that means it: an
+	// upload did reach the library and the bell should say so once.
+	if kinds["import-completed"] != 1 {
+		t.Errorf("import-completed markers = %d, want 1", kinds["import-completed"])
+	}
+}
+
+// TestStalledAsIsUploadRingsTheReviewBell is the other half. A declined
+// import that cannot proceed leaves the entry pending, which is a person
+// being awaited - so that is where the marker belongs.
+func TestStalledAsIsUploadRingsTheReviewBell(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+
+	// The same track twice: the first lands, the second's destination is
+	// taken and its import refuses. That is the stall path a person is
+	// actually awaited on.
+	first := uploadDeclaring(t, h, h.token, quietTrack(t, "stalled"), map[string]any{"identify": false})
+	if e := entryOf(t, h, h.token, first); e.Status != "as-is" {
+		t.Fatalf("the first copy did not import: %q", e.Status)
+	}
+	if kinds := adminEventKinds(t, h); kinds["review"] != 0 {
+		t.Fatalf("the copy that imported cleanly raised %d review markers", kinds["review"])
+	}
+
+	second := uploadDeclaring(t, h, h.token, quietTrack(t, "stalled"), map[string]any{"identify": false})
+	drainMatches(t, h)
+	if e := entryOf(t, h, h.token, second); e.Status != "pending" {
+		t.Fatalf("entry status = %q, want pending", e.Status)
+	}
+	if kinds := adminEventKinds(t, h); kinds["review"] != 1 {
+		t.Errorf("review markers = %d, want the one the stalled entry raised", kinds["review"])
 	}
 }

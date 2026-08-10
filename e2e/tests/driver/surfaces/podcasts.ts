@@ -2,13 +2,11 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { clickInView, clickThrough, typeInto } from '../gestures';
 
-export class Podcasts {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Podcasts extends Surface {
   add(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.podcastAdd));
   }
@@ -98,10 +96,5 @@ export class Podcasts {
       this.ctx.page.getByRole('button', { name: 'Back' }).first(),
       settledOn,
     );
-  }
-
-  /// Text on the screen, for show notes and other prose.
-  text(what: string | RegExp): Locator {
-    return this.ctx.page.getByText(what).first();
   }
 }

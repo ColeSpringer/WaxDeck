@@ -1,19 +1,24 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../tokens/colors.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 
-/// The WaxDeck logotype: the name in Archivo Expanded with the needle
-/// glyph beside it.
+/// The WaxDeck logotype: the name in Archivo Expanded with the mark
+/// beside it.
 ///
-/// Drawn rather than shipped as an image, so it is crisp at any size, in
-/// any theme, and at any text scale. The SVG master in
-/// `assets/brand/wordmark.svg` exists for the places Flutter is not (the
-/// README, packaging art); this is what the app itself uses on login,
-/// setup, and about.
+/// The mark is the emblem, as a rounded chip of its own paper - the same
+/// shape every app icon this project ships is, derived from the same
+/// master by `tools/generate-brand.py`. A chip rather than a keyed
+/// silhouette because this sits on both themes: the emblem's ink is
+/// dark, and dark ink on a dark surface is a hole where the identity
+/// should be.
+///
+/// The name is still live text, so it stays crisp at any size and any
+/// text scale, and `color` tints it. The chip is artwork and keeps its
+/// own colours; a tinted photograph is not a logo.
+///
+/// Used on login, setup, about, the sidebar header, and the share card.
 class WaxWordmark extends StatelessWidget {
   const WaxWordmark({
     this.size = 28,
@@ -22,13 +27,21 @@ class WaxWordmark extends StatelessWidget {
     super.key,
   });
 
+  /// The chip's image, exposed so a caller capturing a single frame
+  /// (the share card export) can `precacheImage` it first. Everywhere
+  /// else the async decode is fine: the widget repaints when it lands.
+  static const ImageProvider markImage = AssetImage(
+    'assets/brand/emblem-256.png',
+    package: 'waxdeck_ui',
+  );
+
   /// Cap height of the logotype, in logical pixels.
   final double size;
 
   final Color? color;
 
-  /// The needle mark. Dropped where the wordmark sits beside other
-  /// chrome that already carries the identity.
+  /// The mark. Dropped where the wordmark sits beside other chrome that
+  /// already carries the identity.
   final bool showMark;
 
   @override
@@ -42,14 +55,17 @@ class WaxWordmark extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             if (showMark) ...<Widget>[
-              CustomPaint(
-                size: Size(size * 1.15, size * 0.85),
-                painter: _NeedleMarkPainter(
-                  ink: colors.accent,
-                  dial: colors.outline,
-                ),
+              // No clip: the asset's corners are already keyed
+              // transparent at the chip radius by the brand pipeline,
+              // and a ClipRRect here would be a saveLayer per paint
+              // that cuts nothing.
+              Image(
+                image: markImage,
+                width: size * 1.05,
+                height: size * 1.05,
+                filterQuality: FilterQuality.medium,
               ),
-              SizedBox(width: size * 0.35),
+              SizedBox(width: size * 0.32),
             ],
             Text(
               'WaxDeck',
@@ -60,52 +76,6 @@ class WaxWordmark extends StatelessWidget {
       ),
     );
   }
-}
-
-class _NeedleMarkPainter extends CustomPainter {
-  _NeedleMarkPainter({required this.ink, required this.dial});
-
-  final Color ink;
-  final Color dial;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final pivot = Offset(size.width / 2, size.height * 0.94);
-    final radius = size.width * 0.44;
-    const sweep = math.pi * 0.62;
-    final start = -math.pi / 2 - sweep / 2;
-
-    canvas.drawArc(
-      Rect.fromCircle(center: pivot, radius: radius),
-      start,
-      sweep,
-      false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(1, size.width * 0.06)
-        ..strokeCap = StrokeCap.round
-        ..color = dial,
-    );
-
-    final angle = start + sweep * 0.6;
-    canvas.drawLine(
-      pivot,
-      pivot + Offset(math.cos(angle), math.sin(angle)) * radius,
-      Paint()
-        ..strokeWidth = math.max(1.2, size.width * 0.08)
-        ..strokeCap = StrokeCap.round
-        ..color = ink,
-    );
-    canvas.drawCircle(
-      pivot,
-      math.max(1.4, size.width * 0.08),
-      Paint()..color = ink,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_NeedleMarkPainter old) =>
-      old.ink != ink || old.dial != dial;
 }
 
 /// The wordmark centred with a tagline, for login, setup, and about.

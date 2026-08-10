@@ -1518,6 +1518,13 @@ class FakeRepository implements WaxDeckRepository {
         userState: false,
         sortable: true,
       ),
+      RuleField(
+        name: 'playlist',
+        kind: 'playlist',
+        ops: ['is', 'isNot'],
+        userState: false,
+        sortable: false,
+      ),
     ],
     tagKeys: [RuleTagKey(key: 'MOOD', itemCount: 3)],
   );

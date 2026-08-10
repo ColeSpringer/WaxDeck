@@ -2,23 +2,10 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { typeInto } from '../gestures';
 
-export class Admin {
-  constructor(private readonly ctx: Ctx) {}
-
-  console(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.adminConsole));
-  }
-
-  /// One of the console's own sections, which is how Backups and the
-  /// rest are reached now that the sidebar's Curation group holds a
-  /// single entry for the whole console.
-  section(name: string): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.adminSection(name)));
-  }
-
+export class Admin extends Surface {
   /// Import an archive through the backups screen's own control.
   ///
   /// The chooser event is armed before the click that opens it: a native
@@ -36,10 +23,6 @@ export class Admin {
     await chooser.setFiles(zipPath);
   }
 
-  /// A control on an admin section that carries its own identifier.
-  control(id: string): Locator {
-    return this.ctx.page.locator(sem(id));
-  }
 
   /// Fills the libraries screen's add form and submits it. The caller
   /// is already standing on that screen; creation starts a scan of its

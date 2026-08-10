@@ -2,13 +2,11 @@
 
 import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { clickThrough } from '../gestures';
 
-export class Uploads {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Uploads extends Surface {
   /// The shell's add control, which an account with no upload right is
   /// never offered.
   add(): Locator {

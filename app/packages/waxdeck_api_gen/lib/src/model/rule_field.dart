@@ -13,7 +13,7 @@ part 'rule_field.g.dart';
 ///
 /// Properties:
 /// * [name] - Field name as used in conditions and sorts.
-/// * [kind] - Value kind: `text`, `number`, `date`, `boolean`, or `mediaType`. A string, not a closed enum. Editors render the value input from this. 
+/// * [kind] - Value kind: `text`, `number`, `date`, `boolean`, `mediaType`, or `playlist`. A string, not a closed enum. Editors render the value input from this. A `playlist` value is a playlist pid (`pl-...`), so its editor is a picker over the static playlists the caller can see; a pid naming a deleted, smart, or self-referencing list is accepted and simply matches nothing. 
 /// * [ops] - Operators this field accepts.
 /// * [userState] - True when the field reads the evaluating user's playback state rather than shared catalog data. 
 /// * [sortable] - True when the field may appear in `sorts`.
@@ -24,7 +24,7 @@ abstract class RuleField implements Built<RuleField, RuleFieldBuilder> {
   @BuiltValueField(wireName: r'name')
   String get name;
 
-  /// Value kind: `text`, `number`, `date`, `boolean`, or `mediaType`. A string, not a closed enum. Editors render the value input from this. 
+  /// Value kind: `text`, `number`, `date`, `boolean`, `mediaType`, or `playlist`. A string, not a closed enum. Editors render the value input from this. A `playlist` value is a playlist pid (`pl-...`), so its editor is a picker over the static playlists the caller can see; a pid naming a deleted, smart, or self-referencing list is accepted and simply matches nothing. 
   @BuiltValueField(wireName: r'kind')
   String get kind;
 

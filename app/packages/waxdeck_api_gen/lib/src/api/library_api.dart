@@ -145,7 +145,7 @@ class LibraryApi {
   }
 
   /// Delete library items
-  /// Deletes items&#39; files, to the catalog trash by default (reversible from the trash surface) or permanently (&#x60;mode&#x60; &#x60;permanent&#x60;, administrators only). &#x60;dryRun&#x60; answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the &#x60;delete&#x60; permission or the admin role, and every pid must be visible to the caller (&#x60;not-found&#x60; otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. A read-only library answers &#x60;read-only&#x60;. 
+  /// Deletes items&#39; files, to the catalog trash by default (reversible from the trash surface) or permanently (&#x60;mode&#x60; &#x60;permanent&#x60;, administrators only). &#x60;dryRun&#x60; answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the &#x60;delete&#x60; permission or the admin role, and every pid must be visible to the caller (&#x60;not-found&#x60; otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. A read-only library answers &#x60;read-only&#x60;. Podcast episodes are not deletable here, and one anywhere in &#x60;pids&#x60; refuses the whole call (&#x60;invalid-request&#x60;): the podcast download tree owns its own files, and removing an episode&#39;s download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. 
   ///
   /// Parameters:
   /// * [deleteItemsRequest] 

@@ -2,13 +2,11 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { clickThrough, typeInto } from '../gestures';
 
-export class Search {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Search extends Surface {
   /// The field itself. At sidebar width it lives in the chrome header
   /// and the search screen draws none of its own while it is showing,
   /// which is what makes clicking it keep the caret.

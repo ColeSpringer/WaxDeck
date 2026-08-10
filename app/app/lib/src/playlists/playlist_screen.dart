@@ -228,7 +228,19 @@ class _StatusChips extends ConsumerWidget {
     if (rule == null) return const SizedBox.shrink();
     final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
-    final chips = describeRule(rule);
+    // A rule naming another playlist reads as that list's name; the
+    // provider is already loaded here, and a pid the caller cannot
+    // resolve falls back to itself.
+    final known = ref.watch(playlistsProvider).value ?? const <Playlist>[];
+    final chips = describeRule(
+      rule,
+      playlistName: (pid) {
+        for (final pl in known) {
+          if (pl.pid == pid) return pl.name;
+        }
+        return null;
+      },
+    );
     final editable = view.playlist.isOwner;
     final summary = Wrap(
       spacing: WaxSpace.s8,

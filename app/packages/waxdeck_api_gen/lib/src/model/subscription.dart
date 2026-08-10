@@ -16,7 +16,7 @@ part 'subscription.g.dart';
 /// * [show_] 
 /// * [settings] 
 /// * [subscribedAt] - When the caller subscribed.
-/// * [unplayedCount] - How many of this show's cataloged episodes the caller has not crossed the played threshold on, counted the same way `played` is derived everywhere else (from the position reached against the episode's duration, never from a listened-milliseconds ratio). The whole backlog, not a window: this is the number a subscription tile shows, and a count drawn from whatever a client had loaded would claim to be the backlog while being a page of it. Counted against the episodes the caller can see, so an explicit episode hidden from this account is not in it. 
+/// * [unplayedCount] - How many of this show's cataloged episodes the caller has never started: no saved position, and not past the played threshold (which is derived the same way `played` is everywhere else - from the position reached against the episode's duration, never from a listened-milliseconds ratio). Started counts as handled, so a badge stops asking for something already underway; the `unplayed` episode filter and the episode row's own unheard marker use this same definition. The whole backlog, not a window: this is the number a subscription tile shows, and a count drawn from whatever a client had loaded would claim to be the backlog while being a page of it. Counted against the episodes the caller can see, so an explicit episode hidden from this account is not in it. 
 @BuiltValue()
 abstract class Subscription implements Built<Subscription, SubscriptionBuilder> {
   @BuiltValueField(wireName: r'show')
@@ -29,7 +29,7 @@ abstract class Subscription implements Built<Subscription, SubscriptionBuilder> 
   @BuiltValueField(wireName: r'subscribedAt')
   DateTime get subscribedAt;
 
-  /// How many of this show's cataloged episodes the caller has not crossed the played threshold on, counted the same way `played` is derived everywhere else (from the position reached against the episode's duration, never from a listened-milliseconds ratio). The whole backlog, not a window: this is the number a subscription tile shows, and a count drawn from whatever a client had loaded would claim to be the backlog while being a page of it. Counted against the episodes the caller can see, so an explicit episode hidden from this account is not in it. 
+  /// How many of this show's cataloged episodes the caller has never started: no saved position, and not past the played threshold (which is derived the same way `played` is everywhere else - from the position reached against the episode's duration, never from a listened-milliseconds ratio). Started counts as handled, so a badge stops asking for something already underway; the `unplayed` episode filter and the episode row's own unheard marker use this same definition. The whole backlog, not a window: this is the number a subscription tile shows, and a count drawn from whatever a client had loaded would claim to be the backlog while being a page of it. Counted against the episodes the caller can see, so an explicit episode hidden from this account is not in it. 
   @BuiltValueField(wireName: r'unplayedCount')
   int? get unplayedCount;
 

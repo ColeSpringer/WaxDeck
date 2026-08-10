@@ -8,16 +8,14 @@ import {
   sem,
   semPrefix,
 } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { chooseFromMenu, clickThrough } from '../gestures';
 
 /// The dimensions the hub offers, which are also the index locations.
 export type MusicDimension = 'artists' | 'albums' | 'tracks' | 'genres' | 'years';
 
-export class Music {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Music extends Surface {
   /// A tile on the music hub: the way into one dimension's index.
   tile(dimension: MusicDimension): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.musicTile(dimension)));
@@ -103,23 +101,10 @@ export class Music {
     return this.ctx.page.locator(sem(SemanticsIds.albumIdentity));
   }
 
-  /// Text on a listing or an entity screen - a section heading, a name.
-  /// Prose rather than a control, so it carries no identifier and the
-  /// spec is what supplies the words.
-  text(what: string | RegExp): Locator {
-    return this.ctx.page.getByText(what).first();
-  }
-
   /// The A-to-Z rail, drawn only beside an index that is actually in
   /// alphabetical order.
   rail(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.indexRail));
-  }
-
-  /// The A-to-Z chip, which is also the only one of the pair that
-  /// carries an identifier.
-  sort(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.indexSort));
   }
 
   /// Switch the index to biggest-first, which is a listing of its own

@@ -8,13 +8,11 @@ import {
   sem,
   semPrefix,
 } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { clickInView, clickThrough, dragOnto, longPressOn } from '../gestures';
 
-export class Queue {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Queue extends Surface {
   screen(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.queueScreen));
   }
@@ -102,13 +100,6 @@ export class Queue {
     const id = await handle.getAttribute(SEMANTICS_ATTRIBUTE);
     expect(id, 'the first up-next row carries a drag handle').toBeTruthy();
     return id!.slice(SemanticsIdPrefixes.queueEntryDrag.length);
-  }
-
-  /// Text the queue surface is showing - where it is playing from, or
-  /// what it says when there is nothing in it. Neither carries an
-  /// identifier, so the driver finds it and the spec judges the words.
-  text(what: string | RegExp): Locator {
-    return this.ctx.page.getByText(what).first();
   }
 
   /// The queue in the shell's right panel, which exists only where

@@ -54,7 +54,8 @@ func applyItemFilter(b *query.Builder, filter ItemFilter) (*query.Builder, []str
 // one browse-dimension bucket) in stable (title, pid) order for the
 // acting user. The cursor is WaxBin's token inside a scope envelope.
 func (l *Library) Items(ctx context.Context, uc *UserCtx, filter ItemFilter, cursor string, limit int) (Page, error) {
-	b, scope, err := applyItemFilter(visibleItems().OrderBy("title", false), filter)
+	b, scope, err := applyItemFilter(
+		visibleItems().WhereNode(l.contentRuleNode(ctx, uc)).OrderBy("title", false), filter)
 	if err != nil {
 		return Page{}, err
 	}
@@ -131,7 +132,7 @@ var collectionLists = map[string]func() query.Node{
 // comes back full. It is the same filter the bucket's own listing uses,
 // so a count, the list it opens, and a shuffle over it cannot disagree.
 func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter ItemFilter, seed int64, cursor string, limit int) (Page, error) {
-	b, scope, err := applyItemFilter(visibleItems(), filter)
+	b, scope, err := applyItemFilter(visibleItems().WhereNode(l.contentRuleNode(ctx, uc)), filter)
 	if err != nil {
 		return Page{}, err
 	}
@@ -293,6 +294,13 @@ func decodeScopedCursor(cursor, scope string) (string, error) {
 // a show's episodes from your listings while the catalog keeps
 // everything). Restricted callers may get short pages that still carry
 // a cursor; the contract documents that.
+//
+// Tag rules are not applied here, deliberately: both callers conjoin
+// contentRuleNode into the query, so a restricted caller's page comes
+// back full rather than short, and pays no ItemTags read per row. What
+// stays is the advisory check, which is per-item by nature. A third
+// caller has to carry the node too, or it will list what the rules
+// hide.
 func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page, scope string) Page {
 	subs := l.newSubscriptionFilter(uc)
 	out := Page{Items: make([]ItemSummary, 0, len(p.Items))}
@@ -303,7 +311,7 @@ func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page, scope 
 		if !subs.allowsItem(ctx, l, it) {
 			continue
 		}
-		if !l.allowedByContent(ctx, uc, it) {
+		if !advisoryAllows(uc, it) {
 			continue
 		}
 		out.Items = append(out.Items, summary(it))

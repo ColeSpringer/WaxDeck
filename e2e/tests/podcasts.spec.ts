@@ -202,16 +202,17 @@ test('an unfetched episode still streams by enclosure passthrough', async ({ app
   const second = episodes[1];
   await app.seed.fetchEpisode(showPid, second.pid);
 
-  // The fetch's inverse: remove (archive, not delete) and fall back to
-  // streaming the feed's own enclosure through this origin rather than
-  // refusing.
+  // The fetch's inverse: drop the file, keep the episode, and fall back
+  // to streaming the feed's own enclosure through this origin rather
+  // than refusing.
   //
-  // The unfetch can lose a race that is nothing to do with podcasts: it
-  // ends in a delete under the shared file-mutation job lease, and four
-  // workers run against one server, so a sibling spec's upload, rescan
-  // or trash round trip can be holding it. That refusal carries
-  // `catalog-busy` and clears on its own; the in-use refusal, which is
-  // the one this step is about, carries `conflict` and does not.
+  // The unfetch can lose a race that is nothing to do with this spec: it
+  // holds the podcast download tree's file-mutation lease, and four
+  // workers run against one server, so a sibling spec's own unfetch,
+  // retention pass or unsubscribe cleanup can be holding it. That
+  // refusal carries `catalog-busy` and clears on its own; the in-use
+  // refusal, which is the one this step is about, carries `conflict`
+  // and does not.
   await retryCatalogBusy(() =>
     app.api.delete('/episodes/{pid}/fetch', { path: { pid: second.pid } }),
   );

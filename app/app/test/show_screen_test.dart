@@ -193,6 +193,23 @@ void main() {
     expect(find.text('Remote Episode'), findsOneWidget);
   });
 
+  testWidgets('the unplayed filter means never started', (tester) async {
+    final repo = _repo()
+      ..finishedPids.add(downloadedPid)
+      // Five minutes into the other episode: in progress, which the
+      // server's unplayed shelf excludes, so this chip must too.
+      ..playPositions[remotePid] = 300000;
+    await _pump(tester, repo);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.showEpisodeFilter('unplayed')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fetched Episode'), findsNothing);
+    expect(find.text('Remote Episode'), findsNothing);
+  });
+
   testWidgets('search within the show narrows the loaded pages', (
     tester,
   ) async {
@@ -206,6 +223,23 @@ void main() {
 
     expect(find.text('Fetched Episode'), findsNothing);
     expect(find.text('Remote Episode'), findsOneWidget);
+  });
+
+  testWidgets('the unplayed filter means never started', (tester) async {
+    final repo = _repo()
+      ..finishedPids.add(downloadedPid)
+      // Five minutes into the other episode: in progress, which the
+      // server's unplayed shelf excludes, so this chip must too.
+      ..playPositions[remotePid] = 300000;
+    await _pump(tester, repo);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.showEpisodeFilter('unplayed')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fetched Episode'), findsNothing);
+    expect(find.text('Remote Episode'), findsNothing);
   });
 
   testWidgets('no season chip where the feed numbers none', (tester) async {

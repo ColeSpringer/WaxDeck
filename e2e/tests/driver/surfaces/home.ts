@@ -2,14 +2,12 @@
 
 import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { wheelIntoView } from '../gestures';
 import { DEST, Destination } from '../nav';
 
-export class Home {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Home extends Surface {
   /// One shelf, by the collection list it draws from.
   shelf(name: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.shelf(name)));

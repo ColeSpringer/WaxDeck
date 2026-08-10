@@ -283,6 +283,7 @@ func (l *Library) entityArtistNames(ctx context.Context, prefix string, infos ma
 func (l *Library) playlistCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	out := make(map[string]EntityCard, len(pids))
 	departed := map[string]bool{}
+	narrow := l.staticMemberNarrow(ctx, uc)
 	for _, pid := range pids {
 		api := apiPID(PrefixPlaylist, pid)
 		pl, err := l.lib.Playlists().Get(ctx, pid)
@@ -296,10 +297,10 @@ func (l *Library) playlistCards(ctx context.Context, uc *UserCtx, pids []model.P
 		if string(pl.OwnerPID) != uc.CatalogPID && pl.Visibility != model.VisibilityShared {
 			continue
 		}
-		// The listing row's count, not the opened playlist's: cached for a
-		// static list and deliberately absent for a smart one, which is the
-		// same trade a grid of tiles makes.
-		dto := l.playlistDTO(ctx, uc, pl, false)
+		// The listing row's count, not the opened playlist's: one live
+		// indexed COUNT for a static list and deliberately absent for a
+		// smart one, which is the same trade a grid of tiles makes.
+		dto := l.playlistDTO(ctx, uc, pl, false, narrow)
 		out[api] = EntityCard{
 			PID:       api,
 			Kind:      entityCardKind[PrefixPlaylist],

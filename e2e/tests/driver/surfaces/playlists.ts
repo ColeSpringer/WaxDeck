@@ -2,13 +2,11 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { clickThrough, dragOnto, typeInto } from '../gestures';
 
-export class Playlists {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Playlists extends Surface {
   add(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.playlistAdd));
   }
@@ -29,16 +27,6 @@ export class Playlists {
 
   entryDrag(index: number): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.playlistEntryDrag(index)));
-  }
-
-  overflow(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.playlistOverflow));
-  }
-
-  /// Open a playlist from the list. Settles on its first row, which is
-  /// what the list itself never draws.
-  async open(pid: string): Promise<void> {
-    await clickThrough(this.row(pid), this.entry(0));
   }
 
   /// Open a playlist and wait for whatever it should be showing - an
@@ -119,16 +107,4 @@ export class Playlists {
     return this.ctx.page.getByRole('banner', { name });
   }
 
-  /// A control on a playlist's screen that has its own identifier - the
-  /// rename field, the export rows, the visibility switch.
-  control(id: string): Locator {
-    return this.ctx.page.locator(sem(id));
-  }
-
-  /// Text on the list or on a playlist - a name, a rule summary. Names
-  /// are prose the app draws from the account's own data rather than
-  /// controls, so the spec supplies the words.
-  text(what: string | RegExp): Locator {
-    return this.ctx.page.getByText(what).first();
-  }
 }

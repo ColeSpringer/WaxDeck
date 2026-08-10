@@ -2,13 +2,11 @@
 
 import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickThrough, wheelIntoView } from '../gestures';
+import { clickThrough, clickToward, wheelIntoView } from '../gestures';
 
-export class Stats {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Stats extends Surface {
   range(name: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.statsRange(name)));
   }
@@ -30,8 +28,7 @@ export class Stats {
     await this.range(name).waitFor({ timeout: T.assert });
     await expect(until).not.toHaveCount(0);
     await expect(async () => {
-      await this.range(name).click({ timeout: 2_000, force: true }).catch(() => {});
-      await expect(until).toHaveCount(0, { timeout: T.step });
+      await clickToward(this.range(name), { gone: until });
     }).toPass({ timeout: T.nav });
   }
 
@@ -47,11 +44,6 @@ export class Stats {
   /// Switch the recap to the server-wide view.
   async openServerRecap(settledOn: Locator): Promise<void> {
     await clickThrough(this.ctx.page.locator(sem(SemanticsIds.yirServer)), settledOn);
-  }
-
-  /// The listen log's door, which the stats screen also carries.
-  listenLog(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.openListenLog));
   }
 
   /// A figure the screen reports.

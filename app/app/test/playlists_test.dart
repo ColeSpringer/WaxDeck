@@ -772,6 +772,87 @@ void main() {
     expect(find.text('This rule opens read-only'), findsOneWidget);
   });
 
+  testWidgets('rule editor picks a playlist by name', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    // One static list to pick and one smart one that must not appear:
+    // a smart list stores no membership for the field to test.
+    final archive = await repo.createPlaylist(name: 'Archive', kind: 'static');
+    await repo.createPlaylist(
+      name: 'Rules elsewhere',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'rating', op: 'gte', value: '60'),
+        ]),
+      ),
+    );
+    await tester.pumpWidget(
+      _host(repo, const RuleEditorScreen(createName: 'The rest')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
+    await tester.pumpAndSettle();
+    await _pick(tester, SemanticsIds.ruleField(0), 'Playlist');
+    await _pick(tester, SemanticsIds.ruleOp(0), 'is not');
+    await tester.pumpAndSettle();
+
+    // The picker offers the static list and not the smart one.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleValue(0)));
+    await tester.pumpAndSettle();
+    expect(find.text('Rules elsewhere'), findsNothing);
+    await tester.tap(find.text('Archive').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
+    await tester.pumpAndSettle();
+
+    final saved = repo.playlistsByPid.values.singleWhere(
+      (p) => p.name == 'The rest',
+    );
+    final condition = saved.rule!.root.nodes.single;
+    expect(condition.field, 'playlist');
+    expect(condition.op, 'isNot');
+    // The pid rides, not the name: the name is presentation.
+    expect(condition.value, archive.pid);
+  });
+
+  testWidgets('rule editor keeps a playlist value it cannot resolve', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await repo.createPlaylist(name: 'Archive', kind: 'static');
+    // A rule naming a list the fetch does not carry: deleted since the
+    // rule was saved, or beyond the first page. The editor must show it
+    // as unavailable, not silently repoint it at somebody's first list.
+    final orphan = await repo.createPlaylist(
+      name: 'Elsewhere',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(
+            field: 'playlist',
+            op: 'isNot',
+            value: 'pl-departed',
+          ),
+        ]),
+      ),
+    );
+    await tester.pumpWidget(_host(repo, RuleEditorScreen(editing: orphan)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Unavailable list'), findsOneWidget);
+
+    // Saving untouched persists the stored pid, which the server
+    // accepts and matches nothing - the rule means what it meant.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
+    await tester.pumpAndSettle();
+    final saved = repo.playlistsByPid[orphan.pid]!;
+    expect(saved.rule!.root.nodes.single.value, 'pl-departed');
+  });
+
   testWidgets('rule editor builds a relative-date condition', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 7);
@@ -1126,6 +1207,24 @@ void main() {
         ),
         ['Nested conditions'],
       );
+    });
+
+    test('a playlist value reads as its name, and as its pid without one', () {
+      const node = RuleNode.condition(
+        field: 'playlist',
+        op: 'isNot',
+        value: 'pl-archive',
+      );
+      expect(
+        describeCondition(
+          node,
+          playlistName: (pid) => pid == 'pl-archive' ? 'Archive' : null,
+        ),
+        'Playlist is not Archive',
+      );
+      // A rule pointing at a list this reader cannot see still has to
+      // say something true.
+      expect(describeCondition(node), 'Playlist is not pl-archive');
     });
   });
 }

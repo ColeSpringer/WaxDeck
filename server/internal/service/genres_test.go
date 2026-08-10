@@ -196,7 +196,7 @@ func TestCanonicalLabelBeatsScanOrder(t *testing.T) {
 
 	// The stored entity really is the lowercase spelling: without the
 	// canonical label this assertion would be what the browse tab shows.
-	res, err := f.svc.lib.Facet(f.ctx, f.svc.facetScopeBuilder(f.uc).Build(), "genre", "", 0, model.PID(f.uc.CatalogPID))
+	res, err := f.svc.lib.Facet(f.ctx, f.svc.facetScopeBuilder(f.ctx, f.uc).Build(), "genre", "", 0, model.PID(f.uc.CatalogPID))
 	if err != nil {
 		t.Fatalf("raw facet: %v", err)
 	}

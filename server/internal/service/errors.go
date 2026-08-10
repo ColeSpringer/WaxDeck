@@ -62,14 +62,15 @@ const (
 	// transcode-limited at the API).
 	KindTranscodeLimit ErrorKind = "transcode-limited"
 	// KindCatalogBusy marks a request refused because another job holds
-	// the shared file-mutation scope (409 catalog-busy at the API).
-	// Unlike KindConflict it clears on its own.
+	// a shared file-mutation scope - either the catalog's (scan,
+	// organize, delete) or the podcast download tree's (409 catalog-busy
+	// at the API). Unlike KindConflict it clears on its own.
 	KindCatalogBusy ErrorKind = "catalog-busy"
 )
 
-// classifyMutation is classify for a call that takes the catalog's
-// shared file-mutation scope. A conflict there is another job holding
-// the scope, which clears on its own, so it answers catalog-busy rather
+// classifyMutation is classify for a call that takes a shared
+// file-mutation scope. A conflict there is another job holding the
+// scope, which clears on its own, so it answers catalog-busy rather
 // than the conflict that means the caller has to change something.
 func classifyMutation(err error) error {
 	out := classify(err)

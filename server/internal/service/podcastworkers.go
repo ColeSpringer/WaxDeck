@@ -184,6 +184,9 @@ func (l *Library) DrainFetchQueue(ctx context.Context) bool {
 		}
 		return false
 	}
+	// A download's commit tail waits out a busy podcast lease itself (30s
+	// budget); losing past that arrives here as any other failure and
+	// rides the existing backoff.
 	res, err := l.lib.Podcasts().Download(ctx, model.PID(row.Key))
 	if err != nil {
 		l.log.Warn("episode fetch failed", "episode", row.Key, "attempt", row.Attempts+1, "err", err)
@@ -334,6 +337,15 @@ func (l *Library) sweepShowRetention(ctx context.Context, showPID model.PID) err
 
 	res, err := l.lib.Podcasts().ApplyRetention(ctx, showPID)
 	if err != nil {
+		if KindOf(err) == KindConflict {
+			// Another holder of the podcast filesystem lease. Same
+			// deferral as in-use above: try the show again next cycle.
+			l.log.Debug("retention deferred by a busy podcast lease", "show", string(showPID))
+			if qErr := l.db.EnqueueRetention(ctx, string(showPID), time.Now().UnixNano()); qErr != nil {
+				l.log.Warn("re-queuing deferred retention", "show", string(showPID), "err", qErr)
+			}
+			return nil
+		}
 		return classify(err)
 	}
 	if res.Removed > 0 {

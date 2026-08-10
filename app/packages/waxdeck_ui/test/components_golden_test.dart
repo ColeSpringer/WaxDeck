@@ -454,6 +454,9 @@ void main() {
     goldenTest(
       'the shell wears one piece of chrome per size class',
       fileName: 'shell_chrome',
+      // The sidebar wordmark chips the emblem asset; without the
+      // precache the capture races the decode and the chip is blank.
+      pumpBeforeTest: precacheImages,
       builder: () => GoldenTestGroup(
         columns: 2,
         children: <Widget>[
@@ -658,8 +661,10 @@ void main() {
     );
 
     goldenTest(
-      'the wordmark is drawn, not shipped as a picture',
+      'the wordmark sets its name and chips its mark',
       fileName: 'wordmark',
+      // See shell_chrome: the emblem chip must decode before capture.
+      pumpBeforeTest: precacheImages,
       builder: () => GoldenTestGroup(
         columns: 3,
         children: <Widget>[
@@ -668,9 +673,7 @@ void main() {
               name: variant.name,
               child: _themed(
                 variant,
-                const WaxBrandBlock(
-                  tagline: 'Your collection, not a storefront.',
-                ),
+                const WaxBrandBlock(tagline: 'Music, podcasts, and audiobooks'),
               ),
             ),
         ],

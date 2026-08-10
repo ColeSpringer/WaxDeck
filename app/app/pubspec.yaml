@@ -103,3 +103,7 @@ msix_config:
   msix_version: 0.1.0.0
   capabilities: internetClient
   sign_msix: false
+  # The store tile, derived by tools/generate-brand.py beside the .ico.
+  # Without it msix ships its own placeholder, which is a Flutter logo on
+  # the one surface a Windows user sees before installing anything.
+  logo_path: windows/runner/resources/store_logo.png

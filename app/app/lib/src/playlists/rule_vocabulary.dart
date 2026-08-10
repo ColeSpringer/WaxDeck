@@ -96,13 +96,33 @@ List<String> ruleFieldOps(RuleFields vocabulary, String field) {
   return const <String>['is'];
 }
 
+/// The prefix a playlist pid wears, which is how a rule value naming a
+/// playlist is recognised without the vocabulary in hand.
+const rulePlaylistPrefix = 'pl-';
+
+/// Resolves a playlist pid to its name, or null when the caller cannot
+/// see that list (it was deleted, or belongs to somebody else).
+typedef PlaylistNameLookup = String? Function(String pid);
+
 /// A condition value as it should read rather than as it rides.
 ///
 /// Every value is a string on the wire, so its shape is the only signal:
-/// an RFC 3339 instant is a date, and true/false under an equality is
-/// the boolean the editor draws as yes and no. Off the value rather than
-/// the field's kind because a summary has no vocabulary loaded.
-String ruleValueLabel(String value, String op) {
+/// an RFC 3339 instant is a date, true/false under an equality is the
+/// boolean the editor draws as yes and no, and a `pl-` pid is a
+/// playlist. Off the value rather than the field's kind because a
+/// summary has no vocabulary loaded.
+///
+/// A playlist reads as its name where [playlistName] can supply one and
+/// as its pid otherwise: a rule pointing at a deleted list still has to
+/// say something, and the pid is the only true thing left to say.
+String ruleValueLabel(
+  String value,
+  String op, {
+  PlaylistNameLookup? playlistName,
+}) {
+  if (value.startsWith(rulePlaylistPrefix)) {
+    return playlistName?.call(value) ?? value;
+  }
   final at = DateTime.tryParse(value);
   if (at != null && value.contains('-')) {
     return at.toLocal().toString().split(' ').first;
@@ -115,7 +135,7 @@ String ruleValueLabel(String value, String op) {
 
 /// One condition as a phrase: "Genre is Rock", "Added in the last 90
 /// days", "Rating is at least 80".
-String describeCondition(RuleNode node) {
+String describeCondition(RuleNode node, {PlaylistNameLookup? playlistName}) {
   final field = ruleFieldLabel(node.field ?? '');
   final op = node.op ?? '';
   if (ruleUnaryOps.contains(op)) return '$field ${ruleOpLabel(op)}';
@@ -131,7 +151,8 @@ String describeCondition(RuleNode node) {
     return '$field ${ruleOpLabel(op)} $low and $high';
   }
   final value = node.values.isNotEmpty ? node.values.first : (node.value ?? '');
-  return '$field ${ruleOpLabel(op)} ${ruleValueLabel(value, op)}';
+  return '$field ${ruleOpLabel(op)} '
+      '${ruleValueLabel(value, op, playlistName: playlistName)}';
 }
 
 /// A rule as the chips the detail header shows: one per condition, then
@@ -140,7 +161,7 @@ String describeCondition(RuleNode node) {
 /// Flattened: a chip row is a glance, and a nested tree drawn as text is
 /// neither a glance nor an accurate tree. A shape it cannot draw says so
 /// in one chip rather than summarising half of it.
-List<String> describeRule(SmartRule rule) {
+List<String> describeRule(SmartRule rule, {PlaylistNameLookup? playlistName}) {
   final chips = <String>[];
   // Unwrapped so all four of the editor's group modes summarise; the
   // lead chip carries the inversion.
@@ -159,7 +180,7 @@ List<String> describeRule(SmartRule rule) {
     // "None of" over a single chip reads as a heading, not a negation.
     if (negated && root.nodes.length == 1) chips.add('Not');
     for (final node in root.nodes) {
-      chips.add(describeCondition(node));
+      chips.add(describeCondition(node, playlistName: playlistName));
     }
     if (root.nodes.isEmpty) {
       // An empty ALL matches everything and an empty ANY matches
@@ -168,9 +189,8 @@ List<String> describeRule(SmartRule rule) {
       chips.add(everything ? 'Everything' : 'Nothing');
     }
   } else if (root.type == 'condition') {
-    chips.add(
-      negated ? 'Not ${describeCondition(root)}' : describeCondition(root),
-    );
+    final phrase = describeCondition(root, playlistName: playlistName);
+    chips.add(negated ? 'Not $phrase' : phrase);
   } else {
     chips.add('Nested conditions');
   }

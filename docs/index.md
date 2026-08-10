@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="brand/lockup-640.png" width="360" alt="WaxDeck: a candle burning against a record">
+</p>
+
 # WaxDeck
 
 WaxDeck is a self-hosted player, library manager, and metadata

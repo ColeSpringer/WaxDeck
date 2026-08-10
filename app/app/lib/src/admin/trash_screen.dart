@@ -237,17 +237,27 @@ class _RowActions extends StatelessWidget {
   final VoidCallback onRestore;
   final VoidCallback onPurge;
 
+  /// The API types a pid by its prefix; `TrashEntry` carries no kind
+  /// field, so the prefix is the contract's way of saying "episode".
+  static const _episodePidPrefix = 'ep-';
+
   @override
   Widget build(BuildContext context) {
+    // Episodes only reach the trash from before the podcast tree owned
+    // its own files, and the server refuses to restore one into it. The
+    // way back is re-downloading; purge still applies, so the row keeps
+    // its other action rather than drawing a button that always fails.
+    final restorable = !(entry.itemPid?.startsWith(_episodePidPrefix) ?? false);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        WaxIconButton(
-          glyph: WaxIcons.refresh,
-          label: 'Restore ${entry.name}',
-          semanticsId: SemanticsIds.trashRestore(entry.id),
-          onPressed: onRestore,
-        ),
+        if (restorable)
+          WaxIconButton(
+            glyph: WaxIcons.refresh,
+            label: 'Restore ${entry.name}',
+            semanticsId: SemanticsIds.trashRestore(entry.id),
+            onPressed: onRestore,
+          ),
         WaxIconButton(
           glyph: WaxIcons.delete,
           label: 'Purge ${entry.name}',

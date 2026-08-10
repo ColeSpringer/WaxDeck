@@ -328,10 +328,11 @@ func (l *Library) subscribe(ctx context.Context, uc *UserCtx, req SubscribeReque
 
 // Unsubscribe removes the caller's subscription; the show and its
 // episodes stay. With removeDownloads, and only when the caller was
-// the last subscriber, the show's downloaded audio moves to the trash
-// (recoverable; playback state untouched); while other subscribers
-// remain their retention owns the files and the flag is ignored.
-// Unsubscribing from an unfollowed show is a no-op.
+// the last subscriber, the show's downloaded audio is unfetched: the
+// bytes are reclaimed, the episodes stay listed and re-fetchable, and
+// playback state is untouched. While other subscribers remain their
+// retention owns the files and the flag is ignored. Unsubscribing from
+// an unfollowed show is a no-op.
 func (l *Library) Unsubscribe(ctx context.Context, uc *UserCtx, apiShowPID string, removeDownloads bool) error {
 	if err := requirePodcastManagement(uc); err != nil {
 		return err
@@ -365,11 +366,15 @@ func (l *Library) unsubscribe(ctx context.Context, uc *UserCtx, apiShowPID strin
 	return nil
 }
 
-// removeShowDownloads trashes every downloaded episode of a show that
-// nobody subscribes to anymore, skipping files that read as actively
-// played (a non-subscriber can still be listening). Best effort: the
-// unsubscribe already succeeded, and a skipped or failed file simply
-// stays until a later cleanup.
+// removeShowDownloads reclaims the bytes of every downloaded episode of
+// a show nobody subscribes to anymore, through the podcast facade's own
+// Unfetch: the file goes, the episode row and every user's play state
+// stay, and the episode is re-fetchable. Files that read as actively
+// played are skipped (a non-subscriber can still be listening), as are
+// files whose lease stays contended past a short retry. Nothing sweeps
+// those up later - sweepShowRetention returns early once a show has no
+// subscribers - so a skipped file lingers until someone unfetches it
+// explicitly, the same accepted posture as the in-use skip.
 func (l *Library) removeShowDownloads(ctx context.Context, showPID model.PID) {
 	eps, err := l.lib.Podcasts().Episodes(ctx, showPID, 0)
 	if err != nil {
@@ -419,17 +424,59 @@ func (l *Library) removeShowDownloads(ctx context.Context, showPID model.PID) {
 	if len(remove) == 0 {
 		return
 	}
-	plan, err := l.lib.PlanDeletePIDs(ctx, remove, model.DeleteTrash)
-	if err != nil {
-		l.log.Warn("planning download cleanup", "show", string(showPID), "err", err)
-		return
+	// The unsubscribe already committed and this runs inside its request,
+	// so a client disconnect must not strand a half-done cleanup - hence
+	// WithoutCancel. It stays synchronous because it stays bounded:
+	// contended episodes are collected and swept again rather than slept
+	// on one at a time, so the whole cleanup waits out the lease at most
+	// unfetchRetries-1 times regardless of how many episodes a show
+	// holds. The holders are brief - another unfetch, a retention apply,
+	// a download's commit tail - so a settle between sweeps rides out
+	// the overlap; whatever still conflicts after the last sweep is
+	// logged and left fetched.
+	cleanupCtx := context.WithoutCancel(ctx)
+	var reclaimed int64
+	unfetched := 0
+	remaining := remove
+	for sweep := 0; sweep < unfetchRetries && len(remaining) > 0; sweep++ {
+		if sweep > 0 {
+			time.Sleep(unfetchRetryDelay)
+		}
+		var contended []model.PID
+		for _, ep := range remaining {
+			res, err := l.lib.Podcasts().Unfetch(cleanupCtx, ep)
+			if err != nil {
+				if KindOf(err) == KindConflict {
+					contended = append(contended, ep)
+					continue
+				}
+				l.log.Warn("unfetching episode for cleanup",
+					"show", string(showPID), "episode", string(ep), "err", err)
+				continue
+			}
+			if res != nil && res.Unfetched {
+				unfetched++
+				reclaimed += res.ReclaimedBytes
+			}
+		}
+		remaining = contended
 	}
-	if _, err := l.lib.ApplyDelete(ctx, plan); err != nil {
-		l.log.Warn("applying download cleanup", "show", string(showPID), "err", err)
-		return
+	if len(remaining) > 0 {
+		l.log.Warn("cleanup left contended episodes fetched",
+			"show", string(showPID), "episodes", len(remaining))
 	}
-	l.log.Info("unsubscribe reclaimed downloads", "show", string(showPID), "episodes", len(remove))
+	if unfetched > 0 {
+		l.log.Info("unsubscribe reclaimed downloads", "show", string(showPID),
+			"episodes", unfetched, "reclaimedBytes", reclaimed)
+	}
 }
+
+// unfetchRetries sweeps and unfetchRetryDelay between them bound
+// removeShowDownloads' wait on a contended podcast filesystem lease.
+const (
+	unfetchRetries    = 3
+	unfetchRetryDelay = 250 * time.Millisecond
+)
 
 // afterSubscriptionChange fans out everything a subscription change
 // implies: the user's own sync event, the gpodder change log, a
@@ -549,8 +596,15 @@ func (l *Library) countShow(
 	if err != nil {
 		return classify(err)
 	}
+	// Unplayed means never started, not "not finished": an episode
+	// somebody is five minutes into is in progress, and a backlog badge
+	// that keeps counting it is telling a listener to do what they are
+	// already doing. The episode-row dot has always drawn it this way, so
+	// this is the surfaces agreeing rather than a new definition.
 	unplayed, err := l.lib.Count(ctx,
-		showEpisodeQueryFor(uc, pod).Where("played", query.OpIs, 0).Build(),
+		showEpisodeQueryFor(uc, pod).
+			Where("played", query.OpIs, 0).
+			Where("position_ms", query.OpIs, 0).Build(),
 		model.PID(uc.CatalogPID))
 	if err != nil {
 		return classify(err)
@@ -925,16 +979,13 @@ func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpi
 		}
 	}
 
-	// classify, not classifyMutation: Unfetch takes no job handle and no
-	// file-mutation lease, so nothing here can answer the catalog-busy
-	// conflict that translation exists for. That is also the one thing
-	// this verb gives up against the delete it replaced, which ran under
-	// the "delete" job in the fs-mutate scope and so serialized against
-	// scan and organize - filed upstream, since the lease is not
-	// reachable from here.
+	// classifyMutation: Unfetch holds the podcast filesystem lease for its
+	// whole body, so a concurrent retention pass or unsubscribe answers a
+	// conflict that clears on its own. The in-use refusal above is the
+	// other kind - the caller has to stop playing - and stays a conflict.
 	res, err := l.lib.Podcasts().Unfetch(ctx, ep.PID)
 	if err != nil {
-		return classify(err)
+		return classifyMutation(err)
 	}
 	if res != nil && res.Unfetched {
 		l.log.Info("unfetched episode",
@@ -1263,7 +1314,11 @@ func (l *Library) SubscribedEpisodes(
 	case EpisodesInProgress:
 		list = read.ListInProgress
 	case EpisodesUnplayed:
-		scope = scope.Where("played", query.OpIs, 0)
+		// Never started, matching countShow's badge and the episode row's
+		// own dot: a first checkpoint moves an episode out of this shelf
+		// and into the in-progress one, rather than sitting in both.
+		scope = scope.Where("played", query.OpIs, 0).
+			Where("position_ms", query.OpIs, 0)
 	}
 	page, err := l.lib.Browse(ctx, list, read.BrowseOptions{
 		UserPID: model.PID(uc.CatalogPID),

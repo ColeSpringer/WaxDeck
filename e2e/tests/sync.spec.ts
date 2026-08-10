@@ -1,6 +1,5 @@
 import { test, expect } from './fixtures';
-import crypto from 'node:crypto';
-import { APIRequestContext } from '@playwright/test';
+import { subsonic, subsonicCredentials } from './driver/subsonic';
 import { T } from './driver';
 
 // The live-sync slice over the real stack: the delta-sync endpoints, the
@@ -215,7 +214,7 @@ test('a Subsonic client browses and streams read-only', async ({ app, request })
 
     // stream redirects into the tokenized proxy and real bytes flow.
     const stream = await request.get(
-      `/rest/stream?${credentials(who, secret)}&id=${song.id}`,
+      `/rest/stream?${subsonicCredentials(who, secret)}&id=${song.id}`,
       { maxRedirects: 5 },
     );
     expect(stream.status()).toBe(200);
@@ -223,7 +222,7 @@ test('a Subsonic client browses and streams read-only', async ({ app, request })
 
     // The login password never authenticates this surface.
     const rejected = await (
-      await request.get(`/rest/ping?${credentials(who, app.account.password)}&f=json`)
+      await request.get(`/rest/ping?${subsonicCredentials(who, app.account.password)}&f=json`)
     ).json();
     expect(rejected['subsonic-response'].status).toBe('failed');
     expect(rejected['subsonic-response'].error.code).toBe(40);
@@ -234,26 +233,3 @@ test('a Subsonic client browses and streams read-only', async ({ app, request })
   }
 });
 
-// The Subsonic surface is somebody else's protocol - salted-hash auth
-// over query strings, not the first-party contract - so it is driven
-// through the raw request context, the way a real client does.
-const SALT = 'e2esalt';
-
-function credentials(who: string, secret: string) {
-  const t = crypto.createHash('md5').update(secret + SALT).digest('hex');
-  return `u=${encodeURIComponent(who)}&t=${t}&s=${SALT}`;
-}
-
-async function subsonic(
-  request: APIRequestContext,
-  who: string,
-  secret: string,
-  view: string,
-  extra = '',
-) {
-  const res = await request.get(
-    `/rest/${view}?${credentials(who, secret)}&v=1.16.1&c=e2e&f=json${extra}`,
-  );
-  expect(res.status()).toBe(200);
-  return (await res.json())['subsonic-response'];
-}

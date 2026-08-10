@@ -7,12 +7,10 @@ import {
   sem,
   semPrefix,
 } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { clickThrough } from '../gestures';
 
-export class Sharing {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Sharing extends Surface {
   /// The shares list, however this account's happens to be drawn.
   ///
   /// One locator for the empty state and the rows together, because
@@ -37,10 +35,6 @@ export class Sharing {
 
   revoke(pid: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.shareRevoke(pid)));
-  }
-
-  copy(pid: string): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.shareCopy(pid)));
   }
 
   /// Open the shares list from the Account section's own row, which goes

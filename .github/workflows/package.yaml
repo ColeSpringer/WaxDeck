@@ -136,6 +136,10 @@ jobs:
         run: cd app && flutter pub get
       - name: Build linux release
         run: cd app/app && flutter build linux --release
+      # The runner does not read these; they ride along for packagers
+      # (AUR, flatpak) to install under /usr/share/icons.
+      - name: Add hicolor icons to bundle
+        run: cp -r app/app/linux/icons app/app/build/linux/x64/release/bundle/icons
       - name: Tar bundle
         run: tar -czf waxdeck-linux-x64.tar.gz -C app/app/build/linux/x64/release/bundle .
       - name: Validate flatpak manifest

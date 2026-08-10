@@ -971,7 +971,11 @@ paths:
       description: >
         Moves the file back to its original path and re-catalogs it,
         un-archiving its item. Refuses when the original path is
-        occupied (`conflict`). Administrators only.
+        occupied (`conflict`), and when it points into the internal
+        podcast download tree, which owns its own files: entries left
+        there by older versions come back by re-downloading the
+        episode, and purge and expiry still apply to them.
+        Administrators only.
       tags: [admin]
       parameters:
         - $ref: "#/components/parameters/TrashId"

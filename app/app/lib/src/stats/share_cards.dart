@@ -132,11 +132,13 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
   Future<void>? _fetchingCovers;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     // On open, not on export: the preview is the export, so a card with
     // covers has to be showing them before anybody presses anything.
-    _fetchingCovers = _fetchCovers();
+    // Kicked off here rather than in initState because the decodes read
+    // the inherited MediaQuery through `context`.
+    _fetchingCovers ??= _fetchCovers();
   }
 
   /// Fetches and decodes the covers the cards will draw.
@@ -147,6 +149,12 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
   /// future is not finished until `precacheImage` has each one in the
   /// image cache, and only then does the tree hear about them.
   Future<void> _fetchCovers() async {
+    // The wordmark chips the emblem asset now, and it sits in the same
+    // captured frame as the covers, so it gets the same guarantee. A
+    // bundled asset either decodes or the build is broken; the await is
+    // the point.
+    await precacheImage(WaxWordmark.markImage, context, onError: (_, _) {});
+    if (!mounted) return;
     final store = ref.read(artworkStoreProvider);
     // The widest card decides: the story shape lists five.
     final wanted = <ShareCardArtist>[

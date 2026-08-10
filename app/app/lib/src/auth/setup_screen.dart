@@ -74,14 +74,8 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Welcome to WaxDeck',
-                    style: WaxType.titleScreen.copyWith(
-                      color: colors.textPrimary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: WaxSpace.s8),
+                  const WaxBrandBlock(),
+                  const SizedBox(height: WaxSpace.s16),
                   Text(
                     'Create the first administrator account',
                     style: WaxType.body.copyWith(color: colors.textPrimary),

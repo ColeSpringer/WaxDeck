@@ -219,6 +219,11 @@ next condition. What did not survive is the shared `rule-field-select` key
 every picker wore, which is why the widget tests used to pick with
 `.last`.
 
+*Amended:* the `playlist` field added a sixth value-editor kind, a picker
+over the static lists the caller can see. It reuses the same
+`ruleValue(index)` handle the other kinds wear, so the editor's semantics
+contract is unchanged.
+
 A sheet or dialog that finishes a request after being dismissed no longer
 pops. Popping a captured `NavigatorState` after an await pops whatever is
 on top, which after a swipe-away is the screen underneath, so every pop

@@ -2,13 +2,11 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { clickThrough, typeInto } from '../gestures';
 
-export class Review {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Review extends Surface {
   row(entryId: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.reviewRow(entryId)));
   }
@@ -47,18 +45,6 @@ export class Review {
       await typeInto(page, page.locator(sem(SemanticsIds.reviewIdentifyField(name))), value ?? '');
     }
     await page.locator(sem(SemanticsIds.reviewIdentifySubmit)).click({ force: true });
-  }
-
-  approve(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.reviewApprove));
-  }
-
-  skip(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.reviewSkip));
-  }
-
-  filter(name: string): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.reviewFilter(name)));
   }
 
   /// Open one entry and wait for its pane.

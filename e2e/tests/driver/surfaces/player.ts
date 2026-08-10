@@ -2,13 +2,11 @@
 
 import { Locator, expect } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { chooseFromMenu, clickThrough, typeInto } from '../gestures';
 
-export class Player {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Player extends Surface {
   /// Play/pause. Also the marker that something is playing at all,
   /// which is why so many navigation steps settle on it.
   toggle(): Locator {
@@ -168,25 +166,5 @@ export class Player {
       await settledOn.waitFor({ timeout: T.step });
     }).toPass({ timeout: T.nav });
     return true;
-  }
-
-  /// A control on the player, by identifier, for the surfaces that have
-  /// not earned a method yet.
-  control(id: string): Locator {
-    return this.ctx.page.locator(sem(id));
-  }
-
-  /// Text the player is showing - the elapsed readout, a title, the name
-  /// of what a queue is playing from. The clock carries no identifier of
-  /// its own (only the spoken faces publish a timeline handle), so this
-  /// is the "no id exists" case the copy rule allows; the pattern is the
-  /// spec's, which is where the judgement belongs.
-  text(what: string | RegExp): Locator {
-    return this.ctx.page.getByText(what).first();
-  }
-
-  /// Pick a value from a menu the player owns.
-  async choose(trigger: Locator, item: Locator, settled?: Locator): Promise<void> {
-    await chooseFromMenu(trigger, item, settled);
   }
 }

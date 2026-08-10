@@ -228,7 +228,6 @@ abstract final class SemanticsIds {
   static String queueEntrySelect(Object queueId) =>
       'queue-entry-select-$queueId';
   static const String queueRepeat = 'queue-repeat';
-  static const String queueReplaceUndo = 'queue-replace-undo';
   static String queueRestoreSession(Object id) => 'queue-restore-session-$id';
   static const String queueScreen = 'queue-screen';
   static const String queueSelectionBottom = 'queue-selection-bottom';

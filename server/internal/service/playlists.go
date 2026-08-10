@@ -152,6 +152,7 @@ const (
 	ruleKindDate      = "date"
 	ruleKindBoolean   = "boolean"
 	ruleKindMediaType = "mediaType"
+	ruleKindPlaylist  = "playlist"
 )
 
 // Operator sets by value kind. Tag fields reuse the text set minus
@@ -163,6 +164,13 @@ var ruleOpsByKind = map[string][]string{
 	ruleKindDate:      {"before", "after", "inTheRange", "inTheLast", "notInTheLast", "isPresent", "isMissing"},
 	ruleKindBoolean:   {"is"},
 	ruleKindMediaType: {"is", "isNot"},
+	// Two operators, and the exclusions are deliberate. `in`/`notIn`
+	// are deferred rather than refused: no rule kind offers list values
+	// yet, and an Or of `is` says the same thing today. `isPresent` and
+	// `isMissing` never: "in any playlist" would reach across every
+	// other user's private lists, which is not a question a rule gets
+	// to ask.
+	ruleKindPlaylist: {"is", "isNot"},
 }
 
 // presenceOps take no value.
@@ -247,6 +255,7 @@ var ruleFieldSpecs = []ruleFieldSpec{
 	{api: "played", engine: "played", kind: ruleKindBoolean, userState: true, sortable: true, desc: "reached the played threshold"},
 	{api: "finished", engine: "finished", kind: ruleKindBoolean, userState: true, sortable: true, desc: "listened to the end"},
 	{api: "lastPlayedAt", engine: "last_played", kind: ruleKindDate, userState: true, sortable: true, desc: "most recent play; never played is missing"},
+	{api: "playlist", engine: "playlist_pid", kind: ruleKindPlaylist, sortable: false, desc: "sits in a given playlist"},
 }
 
 var (
@@ -549,6 +558,16 @@ func ruleValueToEngine(kind, field, v string) (any, error) {
 			return nil, errInvalid("value for mediaType must be music, podcast, or audiobook")
 		}
 		return mv, nil
+	case ruleKindPlaylist:
+		// Syntactic only. A pid naming a playlist that was deleted, or
+		// one that is smart or is this list itself, matches nothing -
+		// which is the harmless answer, and cheaper than a read on
+		// every rule write to say so.
+		prefix, pid, ok := parseAPIPID(v)
+		if !ok || prefix != PrefixPlaylist {
+			return nil, errInvalid("value for playlist must be a playlist pid")
+		}
+		return pid, nil
 	}
 	return nil, errInvalid("unsupported value kind for " + field)
 }
@@ -671,6 +690,10 @@ func engineValueToRule(kind string, v any) string {
 				}
 			}
 		}
+	case ruleKindPlaylist:
+		if s, ok := v.(string); ok {
+			return apiPID(PrefixPlaylist, model.PID(s))
+		}
 	}
 	switch t := v.(type) {
 	case string:
@@ -698,7 +721,10 @@ func numAsInt64(v any) (int64, bool) {
 }
 
 // playlistDTO converts one catalog playlist for a caller.
-func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playlist, withCount bool) Playlist {
+// narrow is the caller-scope node for static counts; a loop over many
+// rows builds it once with staticMemberNarrow (it costs a subscription
+// read), a single conversion passes nil and pays for its own.
+func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playlist, withCount bool, narrow query.Node) Playlist {
 	out := Playlist{
 		PID:        apiPID(PrefixPlaylist, pl.PID),
 		Name:       pl.Name,
@@ -728,96 +754,21 @@ func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playli
 	// here and 9 from /items indefinitely; the smart branch counted the
 	// rule but not the caller's own visibility.
 	//
-	// withCount still gates the smart kind alone, and for the reason it
-	// always did: evaluating every stored rule to draw a grid of tiles is
-	// the work the flag exists to skip.
-	//
-	// The two paths take the count differently, and the difference is
-	// the point. A caller that asked for the count (a playlist opened)
-	// gets it live, so it cannot disagree with the member listing beside
-	// it - which is the whole bug. A listing row takes it from the cache,
-	// because that path is far hotter than it looks: the client's
-	// playlists provider rides the user-stream fan-out, so every star,
-	// rating, and play-state checkpoint from any device re-runs the whole
-	// page - and none of those can change a static list's membership.
-	switch {
-	case withCount:
-		if n, err := l.visibleMemberCount(ctx, uc, pl); err == nil {
-			out.ItemCount = &n
-		} else {
-			l.log.Warn("counting playlist members", "playlist", pl.PID, "err", err)
-		}
-	case pl.Kind == model.PlaylistStatic:
-		if n, err := l.cachedMemberCount(ctx, uc, pl); err == nil {
+	// A static row always counts, live, whether or not the caller asked:
+	// membership is a query dimension, so the answer is one indexed
+	// COUNT and a listing row can afford the truth. withCount still gates
+	// the smart kind, for the reason it always did - evaluating every
+	// stored rule to draw a grid of tiles is the work the flag exists to
+	// skip - so a smart list still reports no count on a listing, which
+	// clients already treat as absent.
+	if withCount || pl.Kind == model.PlaylistStatic {
+		if n, err := l.visibleMemberCount(ctx, uc, pl, narrow); err == nil {
 			out.ItemCount = &n
 		} else {
 			l.log.Warn("counting playlist members", "playlist", pl.PID, "err", err)
 		}
 	}
 	return out
-}
-
-// How long a listing row's member count is reused, and how many are
-// held. The same pair Subsonic's playlistTotals settled on, for the same
-// computation.
-const (
-	playlistCountTTL = time.Minute
-	playlistCountCap = 4096
-)
-
-// playlistCountKey scopes a cached count to one reader: visibility and
-// subscriptions differ per account, so one household's answer is not
-// another's to reuse.
-type playlistCountKey struct{ userID, pid string }
-
-type playlistCount struct {
-	count       int
-	updatedAtNS int64
-	at          time.Time
-}
-
-// cachedMemberCount is visibleMemberCount for a listing row.
-//
-// Keyed on the playlist's own UpdatedAt, which moves on every membership
-// edit, plus a short TTL for what that timestamp cannot see: an item
-// trashed or restored, a library grant changed, a subscription changed.
-// So a tile can trail its playlist by up to the TTL after a trash, and
-// then agrees again. Deliberately not keyed on the catalog's data
-// version, which looks like the precise answer and is not: it is a
-// PRAGMA that moves on *any* catalog write, play-state checkpoints
-// included, so it would invalidate constantly in exactly the case this
-// exists for while telling us nothing about the membership.
-//
-// The detail read stays live (see playlistDTO), so the count a reader
-// sees beside a member listing is always that listing's own.
-//
-// All of this is a workaround for one missing query field. Playlist
-// membership is the only item relation the engine cannot express, so
-// the count has to hydrate every member rather than being a single
-// indexed Count; `playlist_pid` is filed in docs/upstream-requests.md,
-// and when it lands this function and its TTL go away.
-func (l *Library) cachedMemberCount(ctx context.Context, uc *UserCtx, pl *model.Playlist) (int, error) {
-	key := playlistCountKey{userID: uc.ID, pid: string(pl.PID)}
-	l.countsMu.Lock()
-	held, ok := l.counts[key]
-	l.countsMu.Unlock()
-	if ok && held.updatedAtNS == pl.UpdatedAt && time.Since(held.at) < playlistCountTTL {
-		return held.count, nil
-	}
-	n, err := l.visibleMemberCount(ctx, uc, pl)
-	if err != nil {
-		return 0, err
-	}
-	l.countsMu.Lock()
-	defer l.countsMu.Unlock()
-	if l.counts == nil {
-		l.counts = map[playlistCountKey]playlistCount{}
-	} else if len(l.counts) >= playlistCountCap {
-		// Emptied, not replaced: a fresh map would regrow from nothing.
-		clear(l.counts)
-	}
-	l.counts[key] = playlistCount{count: n, updatedAtNS: pl.UpdatedAt, at: time.Now()}
-	return n, nil
 }
 
 // playlistMembers answers a playlist's members as its owner evaluates
@@ -894,9 +845,100 @@ func (l *Library) memberVisible(ctx context.Context, f memberFilter, it *model.I
 	return f.subs.allowsItem(ctx, l, it)
 }
 
+// staticMemberNarrow is memberVisible as a query node: the three
+// clauses that decide whether a static list's member is offered to this
+// caller, in the form CountItems takes.
+//
+// It tracks memberVisible clause for clause, which is the invariant that
+// keeps a count and its listing from disagreeing. A static list carries
+// no rule, so keepArchived is never set and the state predicate always
+// applies; the library grants are the allow-list form viewVisible asks
+// for per item; and episodes pass only for a subscriber of their show.
+//
+// The two empty cases both fail closed on purpose, matching the per-item
+// filter. No grants compiles to `1=0` and counts nothing. No
+// subscriptions makes the second arm of the Or `1=0`, leaving "anything
+// that is not an episode" - which is what allowsEpisode answers for an
+// empty set. A subscription read that fails is the same answer for the
+// same reason, logged rather than propagated so a podcast outage costs a
+// music playlist its episodes rather than its whole count.
+func (l *Library) staticMemberNarrow(ctx context.Context, uc *UserCtx) query.Node {
+	nodes := []query.Node{
+		query.Cond{Field: "state", Op: query.OpIsNot, Value: string(model.StateArchived)},
+	}
+	if !uc.AllLibraries {
+		libs := make([]string, 0, len(uc.Libraries))
+		for lib := range uc.Libraries {
+			libs = append(libs, lib)
+		}
+		sort.Strings(libs)
+		nodes = append(nodes, inSet("library", libs))
+	}
+	set, err := l.subscribedShowSet(ctx, uc)
+	if err != nil {
+		l.log.Warn("loading subscription set for a playlist count", "user", uc.ID, "err", err)
+		set = nil
+	}
+	shows := make([]string, 0, len(set))
+	for show := range set {
+		shows = append(shows, show)
+	}
+	sort.Strings(shows)
+	nodes = append(nodes, query.Or{Nodes: []query.Node{
+		query.Cond{Field: "kind", Op: query.OpIsNot, Value: string(model.KindEpisode)},
+		inSet("podcast_pid", shows),
+	}})
+	return query.And{Nodes: nodes}
+}
+
+// inSet is field membership within the engine's per-condition value cap
+// (waxbin's maxInValues, 500), chunked into an Or above it - its own
+// docs say a caller needing more should chunk. Without this, a caller
+// following 500+ shows or granted 500+ libraries would fail the count's
+// compile and read null counts forever. An empty set stays one empty
+// OpIn, which compiles to match-nothing: both callers fail closed on
+// purpose.
+func inSet(field string, values []string) query.Node {
+	const maxInValues = 500
+	if len(values) <= maxInValues {
+		return query.Cond{Field: field, Op: query.OpIn, Values: query.Values(values)}
+	}
+	chunks := make([]query.Node, 0, (len(values)+maxInValues-1)/maxInValues)
+	for start := 0; start < len(values); start += maxInValues {
+		end := min(start+maxInValues, len(values))
+		chunks = append(chunks, query.Cond{
+			Field: field, Op: query.OpIn, Values: query.Values(values[start:end]),
+		})
+	}
+	return query.Or{Nodes: chunks}
+}
+
 // visibleMemberCount counts a playlist's members as this caller sees
 // them.
-func (l *Library) visibleMemberCount(ctx context.Context, uc *UserCtx, pl *model.Playlist) (int, error) {
+//
+// A static list counts in the engine: membership is a query dimension
+// now, so the whole thing is one indexed COUNT rather than hydrating
+// every member to filter it in Go. It counts entries, not distinct
+// items, which is what the listing beside it shows - a list holding a
+// track twice reads 2.
+//
+// A smart list deliberately does not, even though CountItems serves both
+// kinds. WaxDeck evaluates a stored rule through evaluableRule, which
+// conjoins the archived predicate *before* the rule's own limit
+// (ADR-0051); CountItems evaluates the rule as stored. For a limited
+// rule over a list holding archived members the two disagree, and the
+// half that has to be right is the one the member listing uses.
+func (l *Library) visibleMemberCount(ctx context.Context, uc *UserCtx, pl *model.Playlist, narrow query.Node) (int, error) {
+	if pl.Kind == model.PlaylistStatic {
+		if narrow == nil {
+			narrow = l.staticMemberNarrow(ctx, uc)
+		}
+		n, err := l.lib.Playlists().CountItems(ctx, pl.PID, pl.OwnerPID, narrow)
+		if err != nil {
+			return 0, classify(err)
+		}
+		return n, nil
+	}
 	members, err := l.playlistMembers(ctx, pl)
 	if err != nil {
 		return 0, err
@@ -970,12 +1012,15 @@ func (l *Library) Playlists(ctx context.Context, uc *UserCtx, containsItem, curs
 		return PlaylistPage{}, err
 	}
 	out := PlaylistPage{Playlists: []Playlist{}}
+	// Once for the page: the node depends only on the caller, and every
+	// static row's count rides it.
+	narrow := l.staticMemberNarrow(ctx, uc)
 	for i := off; i < len(all); i++ {
 		if len(out.Playlists) == limit {
 			out.Next = encodeOffsetCursor(i)
 			break
 		}
-		out.Playlists = append(out.Playlists, l.playlistDTO(ctx, uc, all[i], false))
+		out.Playlists = append(out.Playlists, l.playlistDTO(ctx, uc, all[i], false, narrow))
 	}
 	return out, nil
 }
@@ -1015,7 +1060,7 @@ func (l *Library) PlaylistByPID(ctx context.Context, uc *UserCtx, apiPlaylistPID
 	if err != nil {
 		return Playlist{}, err
 	}
-	return l.playlistDTO(ctx, uc, pl, true), nil
+	return l.playlistDTO(ctx, uc, pl, true, nil), nil
 }
 
 // CreatePlaylist creates a static or smart playlist owned by the
@@ -1081,7 +1126,7 @@ func (l *Library) CreatePlaylist(ctx context.Context, uc *UserCtx, req PlaylistC
 	// back on.
 	l.refreshPlaylistCover(ctx, pl)
 	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pid))
-	return l.playlistDTO(ctx, uc, pl, true), nil
+	return l.playlistDTO(ctx, uc, pl, true, nil), nil
 }
 
 // UpdatePlaylist applies a partial update: a rename, a visibility
@@ -1166,7 +1211,7 @@ func (l *Library) UpdatePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 		// which loads no members of its own.
 		l.refreshPlaylistCover(ctx, got)
 	}
-	return l.playlistDTO(ctx, uc, got, true), nil
+	return l.playlistDTO(ctx, uc, got, true, nil), nil
 }
 
 // DeletePlaylist deletes an owned playlist.
@@ -1435,7 +1480,7 @@ func (l *Library) ImportPlaylistM3U(ctx context.Context, uc *UserCtx, name, visi
 	}
 	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pl.PID))
 	return M3uImportOutcome{
-		Playlist:       l.playlistDTO(ctx, uc, pl, true),
+		Playlist:       l.playlistDTO(ctx, uc, pl, true, nil),
 		Matched:        res.Matched,
 		Unmatched:      res.Unmatched,
 		UnmatchedPaths: res.UnmatchedPaths,

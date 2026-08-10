@@ -13,6 +13,8 @@ github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNU
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/colespringer/waxbin v0.0.0-20260807053401-227d33fad6f1 h1:UreR3KdxRGSZfnWP0vEWSg6qBTlZr8+Kc39sBJkTvng=
 github.com/colespringer/waxbin v0.0.0-20260807053401-227d33fad6f1/go.mod h1:EzKcymzGb08mmhGlQiMx8yocI22vxsDAshyMK0rH2PQ=
+github.com/colespringer/waxbin v0.0.0-20260808023905-c311199af92a h1:2iJslLPoUTav8JzhxDf8WTsjiEVh3/ue8tEfqHLxDLw=
+github.com/colespringer/waxbin v0.0.0-20260808023905-c311199af92a/go.mod h1:EzKcymzGb08mmhGlQiMx8yocI22vxsDAshyMK0rH2PQ=
 github.com/colespringer/waxflow v0.0.0-20260806093739-43cd9685ab82 h1:Ec2mdC6hdV9A/c3I4YcsAif5xsDzEUG3qcFCzPvGdjo=
 github.com/colespringer/waxflow v0.0.0-20260806093739-43cd9685ab82/go.mod h1:8mAo9F494kAckHAdJRd6xQa3xJsjOYhy+6C096s1ans=
 github.com/colespringer/waxflow/cli v0.0.0-20260806093739-43cd9685ab82 h1:izpsqpKeRhRP55EM8NJXQd++1Wsq7BmFDKUV4P8459I=

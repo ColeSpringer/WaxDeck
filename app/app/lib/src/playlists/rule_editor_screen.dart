@@ -692,6 +692,56 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             },
           ),
         );
+      case 'playlist':
+        // Static lists only, and every one this caller can see - their
+        // own plus shared. A smart list stores no membership for the
+        // field to test, and the list being edited is smart by
+        // definition, so self-reference is out of the picker for free.
+        final lists = <Playlist>[
+          for (final pl
+              in ref.watch(playlistsProvider).value ?? const <Playlist>[])
+            if (!pl.isSmart) pl,
+        ];
+        if (lists.isEmpty) {
+          return Text(
+            'No playlists to choose',
+            style: WaxType.caption.copyWith(
+              color: WaxColors.of(context).textSecondary,
+            ),
+          );
+        }
+        // Only a fresh condition gets a default, like the media-type
+        // picker. A saved value the fetch does not carry - the list was
+        // deleted, converted to smart, unshared, or sits beyond the
+        // first page - is kept and shown as unavailable rather than
+        // silently repointed at somebody's first list: the server
+        // accepts any pl- pid (it matches nothing), and a Save must
+        // persist what the person saw, not what build() decided.
+        if (condition.value.isEmpty) {
+          condition.value = lists.first.pid;
+        }
+        final known = lists.any((pl) => pl.pid == condition.value);
+        return SizedBox(
+          width: 200,
+          child: _Picker<String>(
+            semanticsId: SemanticsIds.ruleValue(index),
+            label: 'Value',
+            value: condition.value,
+            entries: <DropdownMenuEntry<String>>[
+              for (final pl in lists)
+                DropdownMenuEntry<String>(value: pl.pid, label: pl.name),
+              if (!known)
+                DropdownMenuEntry<String>(
+                  value: condition.value,
+                  label: 'Unavailable list',
+                ),
+            ],
+            onSelected: (value) {
+              condition.value = value;
+              _changed();
+            },
+          ),
+        );
       case 'date' when ruleRelativeOps.contains(condition.op):
         return _RangeOrSingle(
           low: _valueField(condition, parent, index, low: true, number: true),

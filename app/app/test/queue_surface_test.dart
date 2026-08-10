@@ -283,6 +283,41 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('putting a session back offers the live queue back', (
+      tester,
+    ) async {
+      // The one undo affordance for a replaced queue, and the reason
+      // `undoReplace` stayed when the "Replaced what was playing" toast
+      // went: restoring from here replaces something that is playing, so
+      // a mis-tap in a list of old sessions has to be recoverable.
+      final repository = FakeRepository()
+        ..sessionHistory = <PlaybackSessionHistoryEntry>[
+          _session('ps-1', pids: ['tr-9', 'tr-8'], index: 1),
+        ];
+      final container = await _pump(tester, repository: repository);
+      container
+          .read(queueControllerProvider.notifier)
+          .playNow(['tr-1', 'tr-2'], source: _album, startIndex: 1);
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueRestoreSession('ps-1')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 750));
+
+      expect(container.read(queueControllerProvider).pids, ['tr-9', 'tr-8']);
+      await tester.tap(find.text('Undo'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final queue = container.read(queueControllerProvider);
+      expect(queue.pids, ['tr-1', 'tr-2']);
+      expect(queue.currentPid, 'tr-2');
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('a server with no history offers nothing', (tester) async {
       await _pump(tester);
 

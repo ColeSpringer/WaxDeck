@@ -17,7 +17,7 @@ pkgrel=1
 pkgdesc="Self-hosted player and library manager for music, podcasts, and audiobooks (desktop client)"
 arch=('x86_64')
 url="https://github.com/ColeSpringer/WaxDeck"
-license=('MIT')
+license=('GPL-3.0-only')
 depends=('gtk3' 'libsecret')
 provides=('waxdeck')
 conflicts=('waxdeck')
@@ -39,10 +39,21 @@ Type=Application
 Name=WaxDeck
 Comment=Self-hosted player and library manager for music, podcasts, and audiobooks
 Exec=waxdeck
+Icon=waxdeck
 Categories=AudioVideo;Audio;Player;
 EOF
 
-  # License: MIT, from the repo (not shipped inside the bundle).
-  # Add an install of LICENSE here once the release attaches it, or
-  # fetch it as a second source entry.
+  # The tarball ships the hicolor tree under icons/ (from the packaging
+  # workflow). Guarded so the template still packages a pre-icons
+  # release tarball.
+  for dir in "$srcdir"/icons/hicolor/*/apps; do
+    [ -f "$dir/waxdeck.png" ] || continue
+    size=$(basename "$(dirname "$dir")")
+    install -Dm644 "$dir/waxdeck.png" \
+      "$pkgdir/usr/share/icons/hicolor/$size/apps/waxdeck.png"
+  done
+
+  # License: GPL-3.0-only, from the repo (not shipped inside the
+  # bundle). Add an install of LICENSE here once the release attaches
+  # it, or fetch it as a second source entry.
 }

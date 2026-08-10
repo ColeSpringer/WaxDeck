@@ -171,7 +171,7 @@ class FoundationsPage extends StatelessWidget {
           style: WaxType.monoData.copyWith(color: colors.textSecondary),
         ),
         const SizedBox(height: WaxSpace.s32),
-        const WaxBrandBlock(tagline: 'Your collection, not a storefront.'),
+        const WaxBrandBlock(tagline: 'Music, podcasts, and audiobooks'),
         const SizedBox(height: WaxSpace.s32),
       ],
     );

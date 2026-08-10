@@ -109,18 +109,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'WaxDeck',
-                    style: WaxType.titleScreen.copyWith(
-                      color: colors.textPrimary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: WaxSpace.s8),
-                  Text(
-                    'Music, podcasts, and audiobooks',
-                    style: WaxType.body.copyWith(color: colors.textPrimary),
-                    textAlign: TextAlign.center,
+                  // The mark, not the name set as a heading: this is the
+                  // first screen an account ever sees, and the one place
+                  // the identity is the whole content.
+                  const WaxBrandBlock(
+                    tagline: 'Music, podcasts, and audiobooks',
                   ),
                   const SizedBox(height: WaxSpace.s32),
                   Semantics(

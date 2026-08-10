@@ -165,30 +165,12 @@ here waits on upstream.
   list rather than about artwork, and `-covers=false` is the run that
   tells the two apart.
 
-- `[in-repo]` **Discord presence has no image at all until the mark is
-  final.** The status, the track, the artist, the album and the progress
-  bar all render; the square beside them is blank, because Discord draws
-  it from an art asset uploaded to the application and none has been
-  uploaded. That is waiting on the logo rather than on any code: the
-  client already sends the key (`kDiscordCoverAsset`, the string
-  `waxdeck`, in `app/app/lib/src/desktop/discord_presence.dart`), and
-  Discord renders an activity with no large image when the key resolves
-  to nothing, which is why presence ships looking deliberate rather than
-  broken. **To close it:** upload a square PNG under exactly that key in
-  the developer portal's art assets for application
-  `1534302390650405078`, and nothing needs rebuilding - the key is
-  resolved by Discord at display time, so an existing install picks the
-  image up. 512 px is the size the other surfaces settled on. If the
-  final mark wants a different key, change the constant with it. Worth
-  doing in the same pass as any other brand asset that lands with the
-  logo, since `tools/generate-brand.py` will be re-run anyway.
-
 - `[in-repo]` **Discord presence shows the application's own cover, not
   the album's.** Presence shipped in P22 (ADR-0045) with the status,
   the track, the artist, the album, and the timestamps that drive the
-  progress bar; the image beside them is the asset uploaded against the
-  Discord application (see the entry above - not yet uploaded), the same
-  for every track whenever it is. The two richer sources
+  progress bar; the image beside them is the `waxdeck` art
+  asset uploaded against the Discord application (the emblem, since
+  the official mark landed), the same for every track. The two richer sources
   named when this was first recorded are both out of reach today, and
   for different reasons. **Cover Art Archive** needs a MusicBrainz
   release id on the item read surface, which is an upstream ask (see
@@ -320,6 +302,18 @@ here waits on upstream.
   it non-blocking is that a real regression can land on main and sit
   there until Tuesday - which is still the better failure than the one
   it replaced, where nobody found out at all.
+- `[in-repo]` **The macOS DMG mounts with a generic volume icon.** The
+  packaging job builds it with a bare
+  `hdiutil create -volname WaxDeck -srcfolder ...`
+  (`.github/workflows/package.yaml`), which names the volume but gives
+  it no icon, so Finder shows the stock disk image while it is mounted.
+  Fixing it needs an `.icns` (the brand pipeline emits PNGs; ICNS is a
+  container format of its own, via `iconutil` on the runner or a small
+  writer in `tools/generate-brand.py`) plus the stamping plumbing - a
+  `.VolumeIcon.icns` in the source folder with its custom-icon Finder
+  bit set, which is what `create-dmg` exists to script. Quality-only,
+  and the DMG is still unsigned template-stage packaging, so it waits
+  for the signing pass rather than growing the workflow now.
 - `[in-repo]` **F-Droid.** Android is the one platform whose artifacts
   reach people through the GitHub Release and nothing else;
   `deploy/packaging/` is desktop-only. F-Droid is the intended channel
@@ -795,29 +789,6 @@ here waits on upstream.
   a library nothing else in the file touches. Weighed against ADR-0050's
   preference for scheduling facts living in the config, which is why the
   flag is written there.
-
-- `[in-repo]` **A residual of ADR-0049's driver layer: duplicated
-  shapes worth folding.** The driver itself landed; what is left is the
-  drift inside it, measured rather than estimated. `text()` is defined
-  nine times and has already diverged - seven copies return `.first()`,
-  two (discovery, settings) take an `exact` flag and return the
-  unfiltered locator, so the same call means "first match" on seven
-  surfaces and a strict-mode violation on two, and two call sites paper
-  over it by writing `.first()` themselves (`settings.spec.ts:77`,
-  `discovery.spec.ts:42`). `constructor(private readonly ctx: Ctx) {}`
-  appears twenty times across nineteen files and belongs on an abstract
-  `Surface` in `driver/context.ts`. The hand-rolled retry unit appears
-  five times with the same `2_000` literal, and `async function
-  subsonic(...)` is defined twice (sync.spec.ts and playlists.spec.ts).
-  Roughly thirty exported surface methods have no callers at all
-  (Sharing.row/revoke/copy, Review.approve/skip/filter, Admin.console
-  /section, Queue.screen/entry, Player.ready/control/choose,
-  Playlists.open/overflow, Music.sort/anyItem, Auth.error/signOut,
-  Shell.ready, Settings.ready, Books.hub, Radio.hub, Home.card,
-  Stats.listenLog) - each an unexercised locator contract that a
-  semantics-id rename rots silently, and `strict: true` without
-  `noUnusedLocals` cannot see them.
-
 
 ## Decided, not deferred
 

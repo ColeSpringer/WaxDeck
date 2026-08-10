@@ -952,8 +952,8 @@ func TestUnsubscribeRemovesDownloads(t *testing.T) {
 	resp.Body.Close()
 
 	// Sam is the last subscriber; the flag now reclaims the audio. The
-	// episodes stay browsable (archive, never delete) but undownloaded,
-	// and streaming refuses until fetched again.
+	// episodes stay browsable and undownloaded - unfetched, never
+	// archived - and still play by enclosure passthrough.
 	resp = reqAs(t, h, "DELETE", "/api/v1/podcasts/"+sub.Show.Pid+"?removeDownloads=true", sam.Token, nil)
 	if resp.StatusCode != 204 {
 		t.Fatalf("last unsubscribe status = %d, want 204", resp.StatusCode)
@@ -978,6 +978,16 @@ func TestUnsubscribeRemovesDownloads(t *testing.T) {
 	}
 	if u := decode[PlayInfo](t, resp).Url; !strings.HasPrefix(u, "/media/enclosure?") {
 		t.Fatalf("play-info url after cleanup = %q, want the passthrough relay", u)
+	}
+
+	// The discriminating assertion, and the reason the cleanup reclaims
+	// through Unfetch rather than the catalog's delete: an archived
+	// episode drops out of the counted view, so a re-subscriber would
+	// see a backlog smaller than the list beside it (ADR-0052).
+	resp = h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	resp.Body.Close()
+	if got := unplayedFor(t, h, sub.Show.Pid); got != 2 {
+		t.Fatalf("unplayedCount after cleanup = %d, want 2 unfetched-not-archived episodes", got)
 	}
 }
 
@@ -1888,17 +1898,31 @@ func TestSubscribedEpisodesAndUnplayedCount(t *testing.T) {
 	putPlayState(t, h, finished.Pid, finished.DurationMs)
 	putPlayState(t, h, started.Pid, 1_000)
 
-	if got := unplayedFor(t, h, show); got != 2 {
-		t.Errorf("unplayedCount = %d after finishing one, want 2", got)
+	// One finished and one started, so one of three is left: unplayed
+	// means never started, not "not finished". A badge that kept
+	// counting the started one would be telling a listener to do what
+	// they are already doing, and the episode row's own dot has always
+	// read it this way.
+	if got := unplayedFor(t, h, show); got != 1 {
+		t.Errorf("unplayedCount = %d after finishing one and starting one, want 1", got)
 	}
 
 	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=unplayed", h.token)
-	for _, ep := range decode[EpisodePage](t, resp).Items {
+	unplayed := decode[EpisodePage](t, resp).Items
+	for _, ep := range unplayed {
 		if ep.Pid == finished.Pid {
 			t.Error("a finished episode is still in the unplayed listing")
 		}
+		if ep.Pid == started.Pid {
+			t.Error("a started episode is still in the unplayed listing")
+		}
+	}
+	if len(unplayed) != 1 {
+		t.Errorf("unplayed listing holds %d of three episodes, want 1", len(unplayed))
 	}
 
+	// And it is in the other shelf rather than in neither: the two
+	// filters partition what the caller has not finished.
 	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=in-progress", h.token)
 	inProgress := decode[EpisodePage](t, resp).Items
 	if len(inProgress) != 1 || inProgress[0].Pid != started.Pid {

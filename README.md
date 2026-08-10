@@ -1,11 +1,11 @@
+<p align="center">
+  <img src="docs/brand/lockup-640.png" width="360" alt="WaxDeck: a candle burning against a record">
+</p>
+
 # WaxDeck
 
 Self-hosted player, library manager, and metadata completer for **music, podcasts, and
 audiobooks**.
-
-> Status: **contracts and walking skeleton.** The API contract, codegen pipelines,
-> compose skeleton, fixture generator, CI, and packaging matrix exist; features land
-> incrementally.
 
 ## Layout
 
@@ -54,7 +54,5 @@ spec changes.
 
 ## License
 
-GPL-3.0-only. See [LICENSE](LICENSE). WaxDeck is the one copyleft repo in
-the Wax series; the sibling libraries (WaxBin, WaxFlow, WaxTap, WaxLabel)
-are MIT. Contributions are accepted under the project license, no CLA
-(see [CONTRIBUTING.md](CONTRIBUTING.md)).
+GPL-3.0-only. See [LICENSE](LICENSE). Contributions are accepted under the project 
+license, no CLA (see [CONTRIBUTING.md](CONTRIBUTING.md)).

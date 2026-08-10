@@ -2,17 +2,11 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { chooseFromMenu, clickThrough } from '../gestures';
 
-export class Books {
-  constructor(private readonly ctx: Ctx) {}
-
-  hub(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.booksHub));
-  }
-
+export class Books extends Surface {
   /// A book's card on the hub.
   card(pid: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.book(pid)));
@@ -98,9 +92,5 @@ export class Books {
   /// way out, an empty state's offer. Copy, so the spec names it.
   action(name: string): Locator {
     return this.ctx.page.getByRole('button', { name });
-  }
-
-  text(what: string | RegExp): Locator {
-    return this.ctx.page.getByText(what).first();
   }
 }

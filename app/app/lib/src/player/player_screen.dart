@@ -577,7 +577,10 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
               label: 'Car mode',
               semanticsId: SemanticsIds.playerCarMode,
             ),
-          if (canDelete)
+          // Not for episodes: the podcast tree owns its own files and the
+          // server refuses this verb there. "Remove download" is the
+          // episode's equivalent, and it lives on the episode's surfaces.
+          if (canDelete && _item.mediaType != MediaType.podcast)
             const WaxMenuItem(
               value: _PlayerMenuAction.delete,
               label: 'Delete files...',

@@ -9,12 +9,10 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 
-export class Sso {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Sso extends Surface {
   /// The provider's button on WaxDeck's own login screen.
   provider(id: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.oidcLogin(id)));

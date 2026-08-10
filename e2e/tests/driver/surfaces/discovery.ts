@@ -2,13 +2,11 @@
 
 import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickThrough } from '../gestures';
+import { clickThrough, clickToward } from '../gestures';
 
-export class Discovery {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Discovery extends Surface {
   /// The Discover control on the player, which is where a mix starts.
   discover(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.playerDiscover));
@@ -43,16 +41,7 @@ export class Discovery {
     await clickThrough(this.discover(), mix);
     await clickThrough(mix, run);
     await expect(async () => {
-      if (await run.isVisible()) {
-        await run.click({ timeout: 2_000, force: true }).catch(() => {});
-      }
-      await expect(run).toBeHidden({ timeout: T.step });
+      await clickToward(run, { gone: run });
     }).toPass({ timeout: T.nav });
-  }
-
-  /// Text a discovery surface is showing - a heading, a track title that
-  /// should or should not be in a mix.
-  text(what: string | RegExp, exact = false): Locator {
-    return this.ctx.page.getByText(what, { exact });
   }
 }

@@ -658,6 +658,11 @@ paths:
         Items keep their catalog identity: an item that loses its
         last file is archived, not erased, and play history
         survives. A read-only library answers `read-only`.
+        Podcast episodes are not deletable here, and one anywhere in
+        `pids` refuses the whole call (`invalid-request`): the podcast
+        download tree owns its own files, and removing an episode's
+        download is its own endpoint, keeping the episode
+        re-fetchable rather than journalling a restore.
       tags: [library]
       requestBody:
         required: true

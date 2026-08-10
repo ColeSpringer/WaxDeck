@@ -162,10 +162,20 @@ type DeleteItemsResultDTO struct {
 	Entries []DeletePlanDTO
 }
 
+// errEpisodeNotDeletable refuses a podcast episode on a delete surface.
+// The podcast download tree owns its own files, so the catalog's delete
+// does not reach into it; removing a download is a different contract
+// anyway - no undo journal, gated on a subscription - which is why these
+// paths refuse rather than quietly routing to it.
+func errEpisodeNotDeletable() error {
+	return errInvalid("podcast episodes cannot be deleted here; remove the episode's download instead")
+}
+
 // DeleteItems deletes items' files, to the trash by default. Callers
 // need the delete permission or the admin role; permanent mode is
-// admin-only. Every pid must be visible to the caller, and every
-// touched library must be writable.
+// admin-only. Every pid must be visible to the caller, every touched
+// library must be writable, and no pid may name a podcast episode.
+// The whole list is refused when one does, matching the catalog.
 func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string, mode string, dryRun bool) (DeleteItemsResultDTO, error) {
 	if !uc.Admin && !uc.Delete {
 		return DeleteItemsResultDTO{}, &Error{Kind: KindForbidden, Msg: "this account cannot delete library items"}
@@ -195,6 +205,9 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 		it, err := l.getVisibleItem(ctx, uc, p)
 		if err != nil {
 			return DeleteItemsResultDTO{}, err
+		}
+		if it.Kind == model.KindEpisode {
+			return DeleteItemsResultDTO{}, errEpisodeNotDeletable()
 		}
 		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
 			return DeleteItemsResultDTO{}, err

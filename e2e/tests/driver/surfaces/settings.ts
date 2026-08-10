@@ -3,13 +3,11 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { chooseFromMenu, clickThrough, typeInto } from '../gestures';
 
-export class Settings {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Settings extends Surface {
   search(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.settingsSearch));
   }
@@ -62,11 +60,6 @@ export class Settings {
     await chooseFromMenu(this.setting(name), option, settled);
   }
 
-  /// A control this account's settings draw that has its own identifier -
-  /// the scrobbling switches, the theme picker, the sign-out row.
-  control(id: string): Locator {
-    return this.ctx.page.locator(sem(id));
-  }
 
   /// Open a row that leads somewhere, and wait for what it opens.
   async openSetting(name: string, lands: string): Promise<void> {
@@ -94,15 +87,5 @@ export class Settings {
   /// reads as.
   buttonNamed(name: string | RegExp): Locator {
     return this.ctx.page.getByRole('button', { name });
-  }
-
-  /// Text on the screen, for the rows that are prose rather than
-  /// controls - the version numbers About reports.
-  text(what: string | RegExp, exact = false): Locator {
-    return this.ctx.page.getByText(what, { exact });
-  }
-
-  async ready(): Promise<void> {
-    await this.search().waitFor({ timeout: T.nav });
   }
 }

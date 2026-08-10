@@ -20,13 +20,13 @@ package service
 // restricted caller's answer is not a function of the tail alone. A
 // restricted caller's enumeration is computed live every time.
 //
-// Bucket counts are library-scoped, not fully visibility-scoped. The
-// enumeration narrows to the caller's granted libraries, which is the
-// axis that actually hides content; the per-item podcast-subscription
-// and content-rule filters the drill list applies are per-item decisions
-// no aggregation can express. The drill list stays exact, so a bucket
-// can read higher than the list it opens, the same way every restricted
-// listing in this service can return a short page.
+// Bucket counts carry the caller's granted libraries and their tag
+// rules, which is everything that hides an item except two residuals,
+// both per-item decisions no aggregation expresses: an episode's
+// feed-declared advisory flag, and the podcast-subscription scoping
+// that narrows the `kind` dimension's episode bucket. So a music
+// dimension's count and the list it opens agree exactly, and only the
+// `kind` dimension can still read high.
 
 import (
 	"context"
@@ -314,7 +314,7 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, q FacetQuery) (FacetP
 	// scope is a request error for every caller: answering an ungranted
 	// one with an empty page instead would make the refusal depend on who
 	// asked.
-	scoped, err := l.facetScopeQuery(uc, scope)
+	scoped, err := l.facetScopeQuery(ctx, uc, scope)
 	if err != nil {
 		return FacetPage{}, err
 	}
@@ -399,7 +399,18 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 	// moved. Keying the scope in instead would mint an unbounded number
 	// of entries, one per entity, which is what the bound on the scoped
 	// read makes unnecessary - it is cheap because it is scoped.
-	cacheable := uc.AllLibraries && !scope.scoped()
+	//
+	// The content-rule half of the gate is newer than the library half
+	// and matters for the same reason: the scope query carries the
+	// caller's tag rules now, so an account holding every library but a
+	// deny rule computes a narrowed enumeration, and publishing that
+	// under a key naming only the dimension would hand everyone else the
+	// narrowed one. The predicate is "no tag rules", exactly when
+	// contentRuleNode is nil: the advisory flag never enters this query,
+	// so an ordinary rule-free account computes the same enumeration an
+	// explicit one does and shares its cache line.
+	ruleFree := uc.Admin || (len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0)
+	cacheable := uc.AllLibraries && ruleFree && !scope.scoped()
 	if cacheable {
 		l.facets.mu.Lock()
 		if l.facets.gen == gen {
@@ -664,8 +675,12 @@ func facetLess(a, b FacetBucket) bool {
 // it further: the two never met before this, and composing them is what
 // answers "the albums this artist is credited on" as album buckets
 // rather than as a download of item rows.
-func (l *Library) facetScopeBuilder(uc *UserCtx) *query.Builder {
-	b := visibleItems()
+func (l *Library) facetScopeBuilder(ctx context.Context, uc *UserCtx) *query.Builder {
+	// The caller's tag rules, as a node rather than the per-item pass
+	// that used to be their only home: a bucket count that ignored them
+	// read higher than the list it opened, and an "Appears on" card could
+	// open onto nothing.
+	b := visibleItems().WhereNode(l.contentRuleNode(ctx, uc))
 	if uc.AllLibraries {
 		return b
 	}
@@ -685,8 +700,8 @@ func (l *Library) facetScopeBuilder(uc *UserCtx) *query.Builder {
 // facetScopeQuery is facetScopeBuilder narrowed by an optional scope
 // bucket and built. An empty scope.Facet is the whole-library
 // enumeration this endpoint has always answered.
-func (l *Library) facetScopeQuery(uc *UserCtx, scope facetScope) (query.Query, error) {
-	b := l.facetScopeBuilder(uc)
+func (l *Library) facetScopeQuery(ctx context.Context, uc *UserCtx, scope facetScope) (query.Query, error) {
+	b := l.facetScopeBuilder(ctx, uc)
 	if scope.Facet == "" {
 		return b.Build(), nil
 	}

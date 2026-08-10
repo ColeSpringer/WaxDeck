@@ -202,6 +202,10 @@ type Library struct {
 	// full-visibility browse-dimension enumerations.
 	genres genreVocabulary
 	facets facetCache
+	// tagValues holds the stored spellings of each custom-tag field, for
+	// compiling a caller's tag rules into a query. Same generation as
+	// facets, since both are functions of the catalog's contents.
+	tagValues tagValueCache
 	// podcastDir and podcastRootName locate the episode download
 	// library; defaultRetentionKeep is the unset-subscriber policy;
 	// retentionInUseWindow gates the sweep's in-use deferral.
@@ -358,10 +362,6 @@ type Library struct {
 	// radioArtCache holds what it has answered.
 	radioArtResolver RadioArtResolver
 	radioArtCache    radioArt
-	// counts memoizes playlist member counts for listing rows, which the
-	// user-stream fan-out re-runs far more often than they change.
-	countsMu sync.Mutex
-	counts   map[playlistCountKey]playlistCount
 }
 
 // SocketFileName is the IPC socket beside the catalog DB. It is a local

@@ -33,13 +33,13 @@ test('an instant mix starts from any playing track', async ({ app }) => {
   // Confirming pushes the mix list and a player for its first track on
   // top. The seed is never in its own mix, so the seed title vanishing
   // proves the new player is up before popping back onto the list.
-  await expect(app.discovery.text('Bravo Song', true)).toHaveCount(0);
+  await expect(app.discovery.text('Bravo Song', { exact: true })).toHaveCount(0);
 
   // The player's own control, by handle: it is a collapse chevron named
   // "Collapse player" since the rebuild onto the scaffold, so a match on
   // "Back" finds the mix list's button underneath and pops that instead.
   await app.player.collapse(app.discovery.item('mix', 0));
-  await expect(app.discovery.text('Instant mix', true).first()).toBeVisible();
+  await expect(app.discovery.text('Instant mix', { exact: true })).toBeVisible();
 
   // The basis chip reports whichever engine answered; coverage may or
   // may not have landed by the time this spec runs.

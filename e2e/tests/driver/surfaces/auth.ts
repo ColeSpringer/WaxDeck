@@ -5,7 +5,7 @@ import { SemanticsIds, sem } from '../../semantics-ids';
 import { Api } from '../api';
 import { T } from '../budgets';
 import { clickThrough, openMenu, typeInto } from '../gestures';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 
 /// Signing in and out.
 ///
@@ -15,9 +15,7 @@ import { Ctx } from '../context';
 /// journey for every test to re-drive. What is left here is for the
 /// specs whose subject IS the door: first run, sign-up, identity, the
 /// accessibility walk, and the walking skeleton.
-export class Auth {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Auth extends Surface {
   /// Drive the real login form, as a person does: open the app cold and
   /// sign in from wherever it puts you.
   async signInViaForm(who: { username: string; password: string } = this.ctx.account) {
@@ -104,12 +102,6 @@ export class Auth {
     return this.ctx.page.locator(sem(SemanticsIds.loginSubmit));
   }
 
-  /// What the form says when it refuses. Returned, not asserted: the
-  /// wording is the spec's to judge.
-  error(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.loginError));
-  }
-
   async expectAtLogin() {
     await this.submit().waitFor({ timeout: T.nav });
   }
@@ -121,19 +113,10 @@ export class Auth {
     await this.ctx.page.goto('/');
     await this.expectAtLogin();
   }
-
-  /// Sign out through the app. The router's redirect is what unwinds the
-  /// stack, so there is nothing to pop by hand.
-  async signOut() {
-    await this.ctx.page.locator(sem(SemanticsIds.logoutButton)).click();
-    await this.expectAtLogin();
-  }
 }
 
 /// The shell itself: the chrome every screen hangs off.
-export class Shell {
-  constructor(private readonly ctx: Ctx) {}
-
+export class Shell extends Surface {
   /// The nav rail, present exactly when the app is signed in and no
   /// pushed screen is over it.
   region(): Locator {
@@ -148,12 +131,6 @@ export class Shell {
   /// has something in it, which is itself an assertion.
   navGroup(name: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.navGroup(name)));
-  }
-
-  /// Waits until the app has booted far enough to draw the chrome. What
-  /// a signed-in spec is waiting for when it opens the app at all.
-  async ready() {
-    await this.region().waitFor({ timeout: T.nav });
   }
 
   /// The avatar that opens the account menu. Returned as well as

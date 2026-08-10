@@ -1,6 +1,5 @@
 import { test, expect } from './fixtures';
-import crypto from 'node:crypto';
-import { APIRequestContext } from '@playwright/test';
+import { subsonic } from './driver/subsonic';
 
 // The playlists slice over the real stack: the rule editor building a
 // smart playlist in the browser, live re-evaluation when user state
@@ -68,6 +67,45 @@ test('a smart playlist with user-state rules live-updates', async ({ app }) => {
   } finally {
     await app.seed.star(target.pid, false);
     await app.api.delete('/playlists/{pid}', { path: { pid } });
+  }
+});
+
+test('a smart rule excludes the members of another playlist', async ({ app }) => {
+  // Playlist membership as a rule dimension: "everything except what is
+  // already in that list", which is what the field landed for. Built
+  // over the API rather than through the editor - the editor's picker is
+  // covered by a widget test, and what is worth proving over the real
+  // stack is that the engine actually excludes the members.
+  const target = await app.seed.item('Alpha Song');
+  const archive = await app.seed.createPlaylist('Archive Of One', [target.pid]);
+
+  const rest = await app.seed.createSmartPlaylist('Everything Else', {
+    root: {
+      type: 'all',
+      nodes: [
+        { type: 'condition', field: 'mediaType', op: 'is', value: 'music' },
+        { type: 'condition', field: 'playlist', op: 'isNot', value: archive },
+      ],
+    },
+  });
+
+  try {
+    const titles = async () => {
+      const items = await app.api.tryGet('/playlists/{pid}/items', { path: { pid: rest } });
+      return (items?.entries ?? []).map((e) => e.item.title);
+    };
+    await expect.poll(titles).not.toContain('Alpha Song');
+    // Not empty either: an excluded member is the subject, and a rule
+    // that matched nothing would pass the assertion above for free.
+    expect((await titles()).length).toBeGreaterThan(0);
+
+    // And the detail header names the list rather than showing its pid.
+    await app.nav.enter('playlists');
+    await app.playlists.openShowing(rest, app.playlists.ruleSummary());
+    await expect(app.playlists.text('Playlist is not Archive Of One')).toBeVisible();
+  } finally {
+    await app.api.delete('/playlists/{pid}', { path: { pid: rest } });
+    await app.api.delete('/playlists/{pid}', { path: { pid: archive } });
   }
 });
 
@@ -198,23 +236,3 @@ test('a Subsonic client manages playlists, stars, scrobbles, and radio', async (
   }
 });
 
-// The Subsonic surface is somebody else's protocol - salted-hash auth
-// over query strings, not the first-party contract - so it is driven
-// through the raw request context, the way a real client does.
-async function subsonic(
-  request: APIRequestContext,
-  who: string,
-  secret: string,
-  view: string,
-  extra = '',
-) {
-  const salt = 'ple2esalt';
-  const t = crypto.createHash('md5').update(secret + salt).digest('hex');
-  const res = await request.get(
-    `/rest/${view}?u=${encodeURIComponent(who)}&t=${t}&s=${salt}&v=1.16.1&c=e2e&f=json${extra}`,
-  );
-  expect(res.status()).toBe(200);
-  const body = (await res.json())['subsonic-response'];
-  expect(body.status).toBe('ok');
-  return body;
-}

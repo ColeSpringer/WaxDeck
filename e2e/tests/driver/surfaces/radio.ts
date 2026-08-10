@@ -2,17 +2,11 @@
 
 import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
-import { Ctx } from '../context';
+import { Surface } from '../context';
 import { T } from '../budgets';
 import { clickInView, clickThrough } from '../gestures';
 
-export class Radio {
-  constructor(private readonly ctx: Ctx) {}
-
-  hub(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.radioHub));
-  }
-
+export class Radio extends Surface {
   /// One station's row in the library.
   station(pid: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.radio(pid)));
@@ -121,9 +115,5 @@ export class Radio {
   /// browser refused the programmatic start.
   transport(name: RegExp): Locator {
     return this.ctx.page.getByRole('button', { name }).first();
-  }
-
-  text(what: string | RegExp): Locator {
-    return this.ctx.page.getByText(what).first();
   }
 }

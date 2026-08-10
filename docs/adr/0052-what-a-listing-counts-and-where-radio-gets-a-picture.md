@@ -85,6 +85,55 @@ visibility. Both now count the caller's own filtered membership.
 `withCount` still gates the smart kind alone: it exists to keep a grid
 of tiles from evaluating every stored rule, which is real work.
 
+**Amended: both paths count live, and the cache is gone.** The split
+below was written while playlist membership was the one item relation
+the query engine could not express, so counting meant hydrating every
+member. `playlist_pid` landed upstream, and with it
+`Playlists().CountItems`, so a static list's count is one indexed
+`COUNT` and a listing row can afford to be right. `cachedMemberCount`,
+its key, its TTL, and the per-user map behind it are deleted; a trashed
+member leaves a listing row immediately rather than within a minute.
+
+Three things about the new shape are decisions rather than mechanics.
+
+**The narrow mirrors `memberVisible` clause for clause,** and that
+correspondence is the invariant: state, library grants, and the
+subscription scope, written as a query node instead of a per-item check.
+Both empty cases fail closed the way the per-item filter does - no
+grants compiles to `1=0`, no subscriptions leaves "anything that is not
+an episode". If a fourth clause is ever added to one, it has to be added
+to the other or a count and its listing part ways again, which is the
+failure this whole section exists about.
+
+**Smart lists deliberately do not use `CountItems`,** even though it
+serves both kinds exactly. WaxDeck evaluates a stored rule through
+`evaluableRule`, which conjoins the archived predicate *before* the
+rule's own limit (ADR-0051); `CountItems` evaluates the rule as stored.
+For a limited rule over a list holding archived members the two
+disagree, and the half that has to win is the one the member listing
+uses. Smart lists keep hydrating, and keep reporting no count on a
+listing page.
+
+**The steady-state cost moved, on purpose.** A page of N static
+playlists now runs N indexed counts instead of memoized hydration, so
+the shape went from "cheap until UpdatedAt or the TTL moves, then
+hydrate everything" to "always count, always cheap". That is what the
+upstream ask and this ADR's own deletion condition both anticipated. The
+one bulk-count primitive upstream, the `GroupPlaylist` facet, cannot
+serve this listing: it counts distinct items where the listing counts
+entries, and its bucket set is owner-or-shared rather than the caller's
+page. If listing latency ever measures hot, a bulk count is a new
+upstream ask on evidence, not something to build ahead of it.
+
+Subsonic's `playlistTotals` cache stays. It reports a duration beside
+the count, duration still needs the members hydrated, and one hydration
+answers both - counting separately there would add a query without
+removing a walk.
+
+*What follows is the superseded reasoning, kept because it names the
+pressure the listing path is under and why the obvious per-member
+spelling is the cheap one.*
+
 **The two paths take that count differently, and the split is the
 decision.** A caller that asked for the count - a playlist opened - gets
 it live, so it cannot disagree with the member listing beside it, which
@@ -283,6 +332,14 @@ alternative is the count bug above. One visible consequence:
 handler classifies plainly rather than translating a conflict nothing on
 that path can raise.
 
+**Amended: it takes a lease now, its own.** Upstream answered by giving
+the podcast download tree a `podcast-fs` scope rather than folding it
+into `fs-mutate`, so an unfetch serializes against the retention and
+download passes that touch the same files without blocking on a scan
+that cannot. `catalog-busy` is back on that endpoint, and the handler's
+translation is live again. ADR-0059 records the rest of what the scope
+changed, including the two delete surfaces that now refuse an episode.
+
 ### Radio artwork has two rungs and a fallback under both
 
 A station face drew the matched track's cover, then the station logo,
@@ -412,6 +469,12 @@ On the opened playlist that is a read per open; on the listing it is a
 read per playlist per minute rather than per fan-out event, which is
 what makes the correctness affordable on a page the user stream re-runs
 constantly.
+
+*Amended:* it is one indexed `COUNT` per static row now, on every read,
+and the minute of staleness is gone with the cache. What a listing row
+reports and what its member listing hands back can no longer differ,
+which was the standing hazard: two numbers computed from two sources, of
+which only one was checked by a test.
 
 Cursors minted before this deploy answer 400 once. That is deliberate,
 and the alternative is answering them plausibly and wrongly.

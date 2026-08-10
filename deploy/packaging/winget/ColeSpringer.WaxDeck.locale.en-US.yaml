@@ -10,7 +10,7 @@ PublisherUrl: https://github.com/ColeSpringer
 PublisherSupportUrl: https://github.com/ColeSpringer/WaxDeck/issues
 PackageName: WaxDeck
 PackageUrl: https://github.com/ColeSpringer/WaxDeck
-License: MIT
+License: GPL-3.0-only
 LicenseUrl: https://github.com/ColeSpringer/WaxDeck/blob/main/LICENSE
 ShortDescription: Self-hosted player and library manager for music, podcasts, and audiobooks
 Moniker: waxdeck

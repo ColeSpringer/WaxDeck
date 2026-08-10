@@ -925,7 +925,7 @@ class PlaylistsApi {
   }
 
   /// List playlists visible to the caller
-  /// Keyset-paginated list of the caller&#39;s own playlists plus every shared playlist, ordered by name then pid. Smart playlist entries omit &#x60;itemCount&#x60; (membership is computed on read); fetch the playlist detail for a computed count. 
+  /// Keyset-paginated list of the caller&#39;s own playlists plus every shared playlist, ordered by name then pid. A static entry carries a live &#x60;itemCount&#x60;, exact for this caller. Smart entries omit it (evaluating every rule to draw a page of tiles is work a listing does not do); fetch the playlist detail for a computed count. 
   ///
   /// Parameters:
   /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 

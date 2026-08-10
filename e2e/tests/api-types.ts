@@ -504,7 +504,7 @@ export interface paths {
         put?: never;
         /**
          * Restore a trashed file
-         * @description Moves the file back to its original path and re-catalogs it, un-archiving its item. Refuses when the original path is occupied (`conflict`). Administrators only.
+         * @description Moves the file back to its original path and re-catalogs it, un-archiving its item. Refuses when the original path is occupied (`conflict`), and when it points into the internal podcast download tree, which owns its own files: entries left there by older versions come back by re-downloading the episode, and purge and expiry still apply to them. Administrators only.
          */
         post: operations["restoreTrashEntry"];
         delete?: never;
@@ -1444,7 +1444,7 @@ export interface paths {
         put?: never;
         /**
          * Delete library items
-         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. A read-only library answers `read-only`.
+         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. A read-only library answers `read-only`. Podcast episodes are not deletable here, and one anywhere in `pids` refuses the whole call (`invalid-request`): the podcast download tree owns its own files, and removing an episode's download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore.
          */
         post: operations["deleteLibraryItems"];
         delete?: never;
@@ -2597,7 +2597,7 @@ export interface paths {
         };
         /**
          * List playlists visible to the caller
-         * @description Keyset-paginated list of the caller's own playlists plus every shared playlist, ordered by name then pid. Smart playlist entries omit `itemCount` (membership is computed on read); fetch the playlist detail for a computed count.
+         * @description Keyset-paginated list of the caller's own playlists plus every shared playlist, ordered by name then pid. A static entry carries a live `itemCount`, exact for this caller. Smart entries omit it (evaluating every rule to draw a page of tiles is work a listing does not do); fetch the playlist detail for a computed count.
          */
         get: operations["listPlaylists"];
         put?: never;
@@ -2872,7 +2872,7 @@ export interface paths {
         post?: never;
         /**
          * Unsubscribe from a show
-         * @description Removes the calling user's subscription. The show, its episodes, and every user's playback state stay in the catalog. By default downloaded files stay too, governed by the remaining subscribers' retention; with `removeDownloads` set, and only when the caller was the show's last subscriber, the downloaded audio moves into the library trash (archive, never delete: recoverable until purged, playback state untouched, episodes fetchable again after a re-subscribe). Files someone is listening to right now are skipped by that cleanup. While other subscribers remain the flag is ignored: the files are theirs as much as the caller's. Unsubscribing from a show the caller does not follow is a no-op success.
+         * @description Removes the calling user's subscription. The show, its episodes, and every user's playback state stay in the catalog. By default downloaded files stay too, governed by the remaining subscribers' retention; with `removeDownloads` set, and only when the caller was the show's last subscriber, the downloaded audio is removed the same way `DELETE /episodes/{pid}/fetch` removes it: the bytes go, the episode stays listed and re-fetchable, and every user's playback state is untouched. The bytes are not recoverable from the trash, because the source is. Files someone is listening to right now are skipped, as are any whose removal loses a race with another job on the podcast download tree; a skipped file stays until it is removed explicitly. While other subscribers remain the flag is ignored: the files are theirs as much as the caller's. Unsubscribing from a show the caller does not follow is a no-op success.
          */
         delete: operations["unsubscribePodcast"];
         options?: never;
@@ -7398,7 +7398,7 @@ export interface components {
             name: string;
             refs: components["schemas"]["PortableRef"][];
         };
-        /** @description A playlist: a manual ordered list (`static`) or a rule evaluated per user on read (`smart`). `rule` is present only for smart playlists. `itemCount` is the stored member count for a static playlist; for a smart playlist it is computed on detail reads and omitted from list pages. */
+        /** @description A playlist: a manual ordered list (`static`) or a rule evaluated per user on read (`smart`). `rule` is present only for smart playlists. `itemCount` is always the caller's own view of the membership: present and live for a static playlist, computed on detail reads and omitted from list pages for a smart one. */
         Playlist: {
             /**
              * @description Type-prefixed ULID. Stable for the playlist's lifetime, including across rule edits.
@@ -7434,7 +7434,7 @@ export interface components {
             isOwner: boolean;
             /** @description A cover is stored for this playlist, readable at `/items/{pid}/art` with the playlist's own PID. It is true for an owner's uploaded cover and for the mosaic the server builds from the members when there is none; the two are the same slot, and uploading wins until it is cleared. Absent means false. */
             hasArt?: boolean;
-            /** @description Member count. Stored count for static playlists; computed for smart playlists on detail reads and absent on list pages. */
+            /** @description How many members this caller is offered, which is what the member listing beside it returns: archived items, items in libraries the caller has no grant for, and episodes of unsubscribed shows are all out of it. Entries, not distinct items, so a static playlist holding one track twice counts it twice. Live and exact for a static playlist; computed for smart playlists on detail reads and absent on list pages. */
             itemCount?: number;
             rule?: components["schemas"]["SmartRule"];
             /**
@@ -7519,7 +7519,7 @@ export interface components {
              */
             limitSeed?: number;
         };
-        /** @description One node of a rule's condition tree. `type` selects the shape: `all` (every child must match) and `any` (at least one child must match) carry `nodes`; `not` inverts its single `node`; `condition` compares one `field` with `op` against `value` (or `values` for `inTheRange`, exactly two, low then high). An `all` with no children matches everything; an `any` with no children matches nothing. Unknown `type` strings are rejected on write. Condition values are strings on the wire regardless of the field's kind: numbers in decimal, booleans as `true` or `false`, dates as absolute RFC 3339 timestamps, media types as `music`, `podcast`, or `audiobook`. Date fields also accept the relative operators `inTheLast` and `notInTheLast`, whose `value` is a positive whole number of days counted back from read time: a rule meaning "played in the last 30 days" re-evaluates its window on every read instead of pinning an absolute cutoff. `inTheRange` is inclusive on both ends. The field vocabulary and each field's accepted operators come from the rule-fields endpoint; custom tags are addressed as `tag.KEY`. */
+        /** @description One node of a rule's condition tree. `type` selects the shape: `all` (every child must match) and `any` (at least one child must match) carry `nodes`; `not` inverts its single `node`; `condition` compares one `field` with `op` against `value` (or `values` for `inTheRange`, exactly two, low then high). An `all` with no children matches everything; an `any` with no children matches nothing. Unknown `type` strings are rejected on write. Condition values are strings on the wire regardless of the field's kind: numbers in decimal, booleans as `true` or `false`, dates as absolute RFC 3339 timestamps, media types as `music`, `podcast`, or `audiobook`, and the `playlist` field as a playlist pid (`pl-...`), which is how a rule says "not in my Archive list". Date fields also accept the relative operators `inTheLast` and `notInTheLast`, whose `value` is a positive whole number of days counted back from read time: a rule meaning "played in the last 30 days" re-evaluates its window on every read instead of pinning an absolute cutoff. `inTheRange` is inclusive on both ends. The field vocabulary and each field's accepted operators come from the rule-fields endpoint; custom tags are addressed as `tag.KEY`. */
         RuleNode: {
             /**
              * @description `all`, `any`, `not`, or `condition`.
@@ -7565,7 +7565,7 @@ export interface components {
              */
             name: string;
             /**
-             * @description Value kind: `text`, `number`, `date`, `boolean`, or `mediaType`. A string, not a closed enum. Editors render the value input from this.
+             * @description Value kind: `text`, `number`, `date`, `boolean`, `mediaType`, or `playlist`. A string, not a closed enum. Editors render the value input from this. A `playlist` value is a playlist pid (`pl-...`), so its editor is a picker over the static playlists the caller can see; a pid naming a deleted, smart, or self-referencing list is accepted and simply matches nothing.
              * @example number
              */
             kind: string;
@@ -7715,7 +7715,7 @@ export interface components {
              */
             subscribedAt: string;
             /**
-             * @description How many of this show's cataloged episodes the caller has not crossed the played threshold on, counted the same way `played` is derived everywhere else (from the position reached against the episode's duration, never from a listened-milliseconds ratio).
+             * @description How many of this show's cataloged episodes the caller has never started: no saved position, and not past the played threshold (which is derived the same way `played` is everywhere else - from the position reached against the episode's duration, never from a listened-milliseconds ratio). Started counts as handled, so a badge stops asking for something already underway; the `unplayed` episode filter and the episode row's own unheard marker use this same definition.
              *     The whole backlog, not a window: this is the number a subscription tile shows, and a count drawn from whatever a client had loaded would claim to be the backlog while being a page of it. Counted against the episodes the caller can see, so an explicit episode hidden from this account is not in it.
              */
             unplayedCount?: number;
@@ -14470,7 +14470,7 @@ export interface operations {
     listSubscribedEpisodes: {
         parameters: {
             query?: {
-                /** @description Which episodes to page. `latest` takes every episode of every followed show; `unplayed` drops the ones the caller has crossed the played threshold on; `in-progress` keeps only the ones with a saved position that are not finished. */
+                /** @description Which episodes to page. `latest` takes every episode of every followed show; `unplayed` keeps only the ones the caller has never started (no saved position, and not past the played threshold); `in-progress` keeps only the ones with a saved position that are not finished. The two are disjoint, so a first checkpoint moves an episode from one to the other rather than leaving it in both. */
                 filter?: "latest" | "unplayed" | "in-progress";
                 /** @description Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. */
                 cursor?: string;
@@ -14743,7 +14743,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            /** @description The episode is being listened to right now (code `conflict`) and removing the file would kill the stream; it clears only when playback stops. */
+            /** @description The removal was refused. `conflict`: the episode is being listened to right now and removing the file would kill the stream; it clears only when playback stops, so retrying by itself does not help. `catalog-busy`: another job holds the podcast download tree's shared file-mutation scope, which clears on its own, so an unattended retry is worth something. */
             409: {
                 headers: {
                     [name: string]: unknown;

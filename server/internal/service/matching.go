@@ -256,13 +256,20 @@ func (l *Library) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payloa
 		}
 		l.matchWakeup()
 	}
-	// The marker is an invalidation hint - it is what makes the review
-	// screen refetch - so it is not suppressed, it is batched. A scan
-	// that discovers a library opens thousands of entries, and one
-	// event per entry per administrator is a flood that arrives faster
-	// than the pacer behind it can spend. The sweeper raises one marker
-	// per pass instead, once it knows how many it opened.
-	if e.Origin != reviewOriginScan {
+	// Only when a person is actually being awaited. An entry that
+	// declined identification is on its way to importing itself with the
+	// tags it arrived with, so a bell saying "the review queue changed"
+	// asks somebody to look at a queue they have nothing to do in -
+	// which is what an as-is upload used to ring. If that import stalls,
+	// importDeclinedEntry rings then, when it is true.
+	//
+	// The scan origin is excluded for a different reason: batching, not
+	// relevance. A scan that discovers a library opens thousands of
+	// entries, and one event per entry per administrator is a flood that
+	// arrives faster than the pacer behind it can spend. The sweeper
+	// raises one marker per pass instead, once it knows how many it
+	// opened.
+	if identify && e.Origin != reviewOriginScan {
 		l.notifyReview(ctx, e.ID, e.UploadedBy)
 	}
 	return e.ID, nil
@@ -282,6 +289,15 @@ func (l *Library) resolveIdentify(ctx context.Context, userID string, asked *boo
 // importDeclinedEntry files a declined submission as-is, as the button
 // would; an import that refuses leaves it pending for a person. Called
 // after the caller links its upload rows, which settling keys on.
+//
+// The review marker is raised here and only here, on the three paths
+// that leave the entry pending. Two notification layers meet in this
+// function and they are easy to mistake for each other: notifyReview
+// fans a user-stream marker, which is the in-app bell, while
+// notifyReviewReady and notifyImported go to the external provider
+// system. The stall paths already sent the external one and never rang
+// the bell; the success path rang the bell for a queue with nothing in
+// it. Both are now the other way round.
 func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 	entry, err := l.db.ReviewEntryByID(ctx, entryID)
 	if err != nil {
@@ -306,6 +322,7 @@ func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 	if l.entryHasFlaggedDuplicate(ctx, entryID) {
 		l.log.Info("a declined submission waits for review: it duplicates something", "entry", entryID)
 		l.notifyReviewReady(ctx, &entry)
+		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 		return
 	}
 
@@ -318,6 +335,7 @@ func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 	if err := l.CheckWritable(ctx, bareLib); err != nil {
 		l.log.Info("a declined submission waits for review", "entry", entryID, "err", err)
 		l.notifyReviewReady(ctx, &entry)
+		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 		return
 	}
 
@@ -329,6 +347,7 @@ func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 		l.log.Warn("a declined submission could not import; it waits for review",
 			"entry", entryID, "err", err)
 		l.notifyReviewReady(ctx, &entry)
+		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 		return
 	}
 	entry.Payload = marshalJSON(payload)
@@ -342,7 +361,6 @@ func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 		l.log.Warn("marking a declined submission imported", "entry", entryID, "err", err)
 		return
 	}
-	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 	l.notifyImported(ctx, &entry)
 }
 
