@@ -7,8 +7,8 @@
 
 ## --- stage 1: Flutter web build ----------------------------------------------
 # Pin note: 3.44.0 is the newest 3.44.x tag published at ghcr.io/cirruslabs/flutter
-# as of 2026-07 (3.44.6 exists as a Flutter stable release but has no image tag
-# yet). Bump when cirruslabs catches up so this matches CI's 3.44.6.
+# as of 2026-08 (3.44.9 exists as a Flutter stable release but has no image tag
+# yet). Bump when cirruslabs catches up so this matches CI's 3.44.9.
 #
 # --platform=$BUILDPLATFORM: the web bundle is architecture-independent, so
 # multi-arch builds (release workflow) run this stage once on the build host
