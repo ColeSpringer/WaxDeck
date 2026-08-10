@@ -4,54 +4,75 @@
 
 # WaxDeck
 
-Self-hosted player, library manager, and metadata completer for **music, podcasts, and
-audiobooks**.
+Self-hosted player, library manager, and metadata completer for music,
+podcasts, and audiobooks. One server, one origin: the REST API, the
+streaming surface, the web app, and the compatibility APIs all live on
+port 4420.
 
-## Layout
+- Metadata completion: a matching engine, a review queue, and a full
+  editor. New audio arrives by upload or straight from a URL.
+- Podcasts and audiobooks are first-class: subscriptions, chapters,
+  and resume are per-user and follow you across devices.
+- Manual and smart playlists, internet radio, and scrobbling.
+- Sonic discovery from analysis of your own files: instant mixes,
+  similar tracks, sonic paths, and listening stats.
+- Multi-device control and handoff, Chromecast, DLNA, and a jukebox.
+- Public share links: hand anyone a track, playlist, book, or episode,
+  no account needed.
+- Subsonic and gpodder compatibility, so the apps you already use keep
+  working.
+- Accounts with per-library visibility and optional OIDC single
+  sign-on; scheduled backups, an audit log, and migration from
+  Navidrome or Audiobookshelf.
 
-| Path | What |
-|---|---|
-| `api/` | The contract: `spec/` (hand-edited fragments, one per API domain) bundled into `openapi.yaml` (REST, `/api/v1`) + `events.md` (WebSocket envelope). First artifact, single source of truth: server handlers and the Dart client are generated from it. |
-| `server/` | Go module. `oapi-codegen` strict-server over stdlib `net/http`; embeds the Flutter web build. |
-| `app/` | Flutter workspace (melos/pub workspace): `packages/waxdeck_api_gen` (generated dio client), `packages/waxdeck_api` (hand-written repository layer over it), `app` (adaptive shell). |
-| `deploy/` | `compose.yaml` + profiles, `Dockerfile`, `.env.example`. |
-| `fixtures/` | Fixture *generator* that synthesizes tiny media at test-setup (WaxFlow codec packages + optional ffmpeg). No binary media in git. |
-| `e2e/` | Compose harness + Playwright suite. |
-| `tools/` | Codegen configs and scripts (oapi-codegen, openapi-generator, spectral, oasdiff). |
-
-## Quick start (development)
+## Run it
 
 ```sh
-make generate   # spec to Go server stubs + Dart client (checked for drift in CI)
-make test       # Go + Flutter tests
-make web        # Flutter web build into server embed dir
-make build      # Go server binary with embedded web UI (requires `make web` first)
-make run        # build + run on http://localhost:4420
+git clone https://github.com/ColeSpringer/WaxDeck.git && cd WaxDeck
+make up
 ```
 
-Deployment (compose):
+The first run writes `deploy/.env`; point `WAXDECK_LIBRARY` in it at
+your music and `make up` again. Open http://localhost:4420 and create
+the administrator. `make down` stops the stack and keeps your data;
+your library is bind-mounted, never copied.
+
+Without Docker, `make run` (Go 1.26, Flutter 3.44) serves the same
+thing as a single binary with the web UI embedded: originals stream
+directly, and transcoding, gapless playback, and voice boost arrive
+when you add the streaming engine.
+[Getting started](docs/getting-started.md) covers both paths end to
+end.
+
+To run compose directly rather than through `make up`:
 
 ```sh
-cd deploy && cp .env.example .env   # edit paths/keys
+cd deploy && cp .env.example .env   # edit paths and keys
 mkdir -p waxflow-config && cp waxflow-config.example.json waxflow-config/waxflow.json
-docker compose up -d                # waxdeck on :4420, waxflow internal-only
+docker compose up -d
 ```
 
-The second line seeds the streaming engine's roots file, which the server
-then owns: creating a library at runtime merges it into that file and has
-the engine reconcile, so a new root streams without a restart. `make up`
-does both steps for you.
+## Clients
 
-## Contract-first rule
+The web app ships inside the server. The same Flutter app builds for
+Android, macOS, Linux, and Windows from `app/`, and any Subsonic
+client or gpodder podcast app can connect to the compatibility APIs.
 
-The contract is the single source of truth, authored as fragments in `api/spec/`
-and bundled into `api/openapi.yaml` by `make generate`. Never hand-edit generated
-code (`api/openapi.yaml`, `server/internal/api/gen.go`,
-`app/packages/waxdeck_api_gen/`). Edit fragments, run `make generate`, commit
-fragments, bundle, and generated code together. CI fails on drift and on breaking
-spec changes.
+## Documentation
+
+[docs/](docs/index.md) holds the guides: getting started, curation and
+metadata, podcasts and audiobooks, playlists and integrations,
+discovery, sharing, casting, administration, and running behind a
+reverse proxy.
+
+## Developing
+
+`make generate` regenerates everything from the API contract and
+`make lint test` is the gate on every change; the workflow lives in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-GPL-3.0-only. See [LICENSE](LICENSE). Contributions are accepted under the project 
-license, no CLA (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+GPL-3.0-only (see [LICENSE](LICENSE)). Contributions are accepted
+under the project license with no CLA; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
