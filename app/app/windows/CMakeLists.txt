@@ -70,6 +70,23 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# The C++20 floor turns MSVC conformance mode on (/std:c++20 implies
+# /permissive-), and the leanflutter plugins' sources predate it: their
+# in-class members are declared with qualified names, which conformance
+# rejects as C4596. Those targets get permissive mode back - an option,
+# never an edit to sources nobody here owns - and option order makes
+# this win over the standard settings. window_manager is in the list on
+# source inspection: the first dispatched run died on the other two
+# before reaching it, and it carries the same idiom.
+foreach(nonconformant_plugin
+  screen_retriever_windows_plugin
+  tray_manager_plugin
+  window_manager_plugin)
+  if(TARGET ${nonconformant_plugin})
+    target_compile_options(${nonconformant_plugin} PRIVATE /permissive)
+  endif()
+endforeach()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

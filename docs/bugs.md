@@ -2,6 +2,34 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add it not overly clear.
 
+- [8-11-2026] The desktop engine fails its own conformance suite on
+  linux: 21 of 30 pass, and the nine that fail are the entire gapless
+  family plus play-after-completion - the exact contracts the suite
+  exists to hold (run 31454998093 is the first execution any CI ever
+  gave it; this dev box cannot build the linux target at all, so
+  nothing local ever could). The failures are deterministic, not
+  runner flake: every boundary and event count reads 0, positions land
+  on exact whole seconds the contract says they must be under (the
+  clipped-boundary case reads 4.000 where near-zero is expected, the
+  now-playing case reads 8.000 where less is required), and play after
+  completion answers false - the motivating bug of the whole suite,
+  back on another backend. Together they say one thing: mpv's playlist
+  boundary never surfaces as an item transition - no index advance, no
+  boundary event, positions accumulating across the seam, and a
+  completed item that will not restart. just_audio_media_kit 2.1.0
+  does implement clipping (Media start/end) and index tracking
+  (playlist.index), so the gap is between what prefetch-playlist
+  actually emits on ubuntu's libmpv2 and what that bridge expects, or
+  in waxdeck_player's preload layer above it. The journey half passes:
+  sign-in and plain playback work on linux; the red is the gapless
+  corners. Windows rides the same engine route and has never run the
+  suite either, so assume it shares this until a run says otherwise.
+  Needs a session on a real Linux desktop (`bash e2e/run-desktop.sh`,
+  or dispatch desktop-conformance and read the log). The suite is
+  weekly and deliberately not a merge gate, so it stays red on
+  Thursdays until this is taken - the designed behavior, not a broken
+  pipeline.
+
 - [8-9-2026] I dont think the android app respects system theme. I believe it defaults to light mode.
 
 - [8-9-2026] Android app has a large forheard.

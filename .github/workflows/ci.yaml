@@ -388,11 +388,15 @@ jobs:
             -H "Authorization: Bearer $TOKEN" |
             grep -o 'tr-[0-9A-Z]\{26\}' | head -1)
           test -n "$PID" || { echo "::error::no track pid in the search response"; exit 1; }
-          # head -1, not a greedy sed: `.*"url":"` would take the last
-          # url in the document rather than this item's.
+          # A real JSON decode, not a grep: Go HTML-escapes `&` inside
+          # JSON strings as &, every actual client decodes it away,
+          # and a shell pipeline that does not hands the server a URL
+          # whose pid ends in a literal backslash-u-0026 - which the
+          # media token then honestly refuses. The first run of this
+          # gate failed exactly there.
           URL=$(curl -sf "$BASE/api/v1/items/$PID/play-info" \
             -H "Authorization: Bearer $TOKEN" |
-            grep -o '"url":"[^"]*"' | head -1 | cut -d'"' -f4)
+            python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])')
           test -n "$URL" || { echo "::error::play-info resolved no stream url for $PID"; exit 1; }
           # The url is origin-relative and carries its own media token, so
           # it needs no bearer header. A range request answers 206.
