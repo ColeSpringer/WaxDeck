@@ -2,33 +2,35 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add it not overly clear.
 
-- [8-11-2026] The desktop engine fails its own conformance suite on
-  linux: 21 of 30 pass, and the nine that fail are the entire gapless
-  family plus play-after-completion - the exact contracts the suite
-  exists to hold (run 31454998093 is the first execution any CI ever
-  gave it; this dev box cannot build the linux target at all, so
-  nothing local ever could). The failures are deterministic, not
-  runner flake: every boundary and event count reads 0, positions land
-  on exact whole seconds the contract says they must be under (the
-  clipped-boundary case reads 4.000 where near-zero is expected, the
-  now-playing case reads 8.000 where less is required), and play after
-  completion answers false - the motivating bug of the whole suite,
-  back on another backend. Together they say one thing: mpv's playlist
-  boundary never surfaces as an item transition - no index advance, no
-  boundary event, positions accumulating across the seam, and a
-  completed item that will not restart. just_audio_media_kit 2.1.0
-  does implement clipping (Media start/end) and index tracking
-  (playlist.index), so the gap is between what prefetch-playlist
-  actually emits on ubuntu's libmpv2 and what that bridge expects, or
-  in waxdeck_player's preload layer above it. The journey half passes:
-  sign-in and plain playback work on linux; the red is the gapless
-  corners. Windows rides the same engine route and has never run the
-  suite either, so assume it shares this until a run says otherwise.
-  Needs a session on a real Linux desktop (`bash e2e/run-desktop.sh`,
-  or dispatch desktop-conformance and read the log). The suite is
-  weekly and deliberately not a merge gate, so it stays red on
-  Thursdays until this is taken - the designed behavior, not a broken
-  pipeline.
+- [8-11-2026] **Resolved the same day, two root causes.** The desktop
+  engine failed its conformance suite on linux CI, 9 of 30 (the whole
+  gapless family plus play-after-completion, run 31454998093 - the
+  suite's first execution anywhere linux). Reproduced end to end in an
+  ubuntu:24.04 container with flutter, xvfb, and a pulse null sink,
+  after mpv itself was exonerated: the CLI advances playlists
+  correctly on 0.35, 0.37, 0.40, and 0.41, through the null and pulse
+  outputs, seeks near eof included. Cause one, the eight gapless
+  failures: the real-engine harness's `advance()` waited a fixed 1.5
+  seconds after seeking near the end, and the pulse null sink drains
+  about two - the seam's boundary landed roughly 600ms after every
+  assertion had already run, deterministically, which is why the
+  counts read 0 and positions pegged at exact item lengths. CoreAudio
+  and the emulator drain faster, which is all "passes on macOS and
+  Android" ever meant. `advance()` now waits on evidence instead of
+  the wall clock: the seam's position reset or playback ending for
+  the seek path, and the engine's own position clock for the play-out
+  path (a replay's fresh pipeline spends wall time before the clock
+  moves). Cause two, play-after-completion: just_audio_media_kit
+  never leaves its completed state on a bare seek - media_kit flickers
+  buffering (the state's only exit) solely when a file loads, and
+  libmpv 0.36+ ignores a same-value playlist-pos write, so the
+  same-index jump that happens to work on the bundled macOS libmpv
+  0.35 is a no-op everywhere current. `JustAudioEngine.play()` now
+  gives the seek a 500ms grace and then reloads the held source
+  outright, which walks the state through loading on every backend.
+  Verified 30/30 in ubuntu:24.04 (libmpv 0.37, the CI shape),
+  ubuntu:25.04 (0.40), and macOS via a scratchpad app around
+  waxdeck_player driving media_kit's mpv (bundled 0.35).
 
 - [8-9-2026] I dont think the android app respects system theme. I believe it defaults to light mode.
 

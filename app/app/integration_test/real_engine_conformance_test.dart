@@ -58,10 +58,38 @@ class RealEngineHarness extends AudioEngineHarness {
         target = duration - runway;
       }
       await engine.seek(target);
-      await Future<void>.delayed(runway + const Duration(seconds: 1));
+      // The wall clock is not the media clock behind this seek: the
+      // seam only arrives once the audio pipeline drains, and a pulse
+      // null sink holds about two seconds where CoreAudio holds under
+      // one - a fixed wait raced that drain and lost on exactly one
+      // platform, which read as eight engine failures on linux CI. So
+      // the wait is for evidence the seam passed: the position falling
+      // away from the runway (a boundary reset), or playback ending
+      // (completion), with a cap for an engine that does neither.
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        if (!engine.playing) break;
+        if (engine.position < target - const Duration(seconds: 1)) break;
+      }
+      // A beat for the seam's own events to reach their listeners.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       return;
     }
-    await Future<void>.delayed(amount + const Duration(milliseconds: 300));
+    // Short amounts play out for real, measured on the engine's own
+    // clock rather than the wall: a fresh pipeline (a replay's reload,
+    // a cold sink) spends wall time before the position moves, and a
+    // fixed sleep charged that spin-up against the media time it was
+    // supposed to advance. A paused or completed engine cannot advance
+    // media time at all, so the wait ends rather than burning the cap.
+    final from = engine.position;
+    final deadline = DateTime.now().add(amount + const Duration(seconds: 10));
+    while (DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      if (!engine.playing) break;
+      if (engine.position - from >= amount) break;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 300));
   }
 }
 

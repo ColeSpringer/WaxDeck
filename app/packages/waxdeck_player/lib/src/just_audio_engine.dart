@@ -287,12 +287,37 @@ class JustAudioEngine implements AudioEnginePort {
     // play-when-ready: on web it does not, because seeking to the index
     // already loaded just moves currentTime and never issues a play.
     //
-    // No `index:` on the seek. It would name the item already playing,
-    // and just_audio_media_kit treats any non-null index as a playlist
-    // jump, reloading the item on the desktops for nothing.
+    // The mpv bridge never leaves the completed state on its own: its
+    // one exit is a buffering flicker, media_kit emits one only when a
+    // file loads, and neither a bare seek nor a same-index jump loads
+    // anything (libmpv 0.36+ ignores a playlist-pos write that does not
+    // change the value). `playing`, gated on leaving completed, would
+    // then report false over a replay that is audibly running. So: the
+    // seek first, a short grace for the backends that clear on it, and
+    // past the grace the held source is reloaded outright - the load
+    // walk fires on every backend, and the refetch it costs is paid
+    // only where the state machine offered no other door.
     if (_player.processingState == ProcessingState.completed) {
       await _player.pause();
       await _player.seek(Duration.zero);
+      var cleared = true;
+      try {
+        await _player.processingStateStream
+            .firstWhere((s) => s != ProcessingState.completed)
+            .timeout(const Duration(milliseconds: 500));
+      } on TimeoutException {
+        cleared = false;
+      }
+      final source = _loadedSource;
+      if (!cleared && source != null) {
+        // A replay is a fresh single-item window, like stop-then-play:
+        // the reload drops anything preloaded behind the completed
+        // item, and the fields follow the list.
+        _preloadedSource = null;
+        _preloadedLength = null;
+        await _player.setAudioSources([source], initialIndex: 0);
+        _repairWindow();
+      }
     }
     // just_audio's own `play()` resolves when playback *stops*, which is
     // its documented contract ("completes when the playback completes or
