@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"net/http"
+
+	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 )
 
 // The wire shapes. One set of structs renders both response formats:
@@ -21,6 +23,7 @@ type envelope struct {
 
 	Error         *subError         `xml:"error,omitempty" json:"error,omitempty"`
 	License       *license          `xml:"license,omitempty" json:"license,omitempty"`
+	User          *subsonicUser     `xml:"user,omitempty" json:"user,omitempty"`
 	MusicFolders  *musicFolders     `xml:"musicFolders,omitempty" json:"musicFolders,omitempty"`
 	Artists       *artistsID3       `xml:"artists,omitempty" json:"artists,omitempty"`
 	Artist        *artistWithAlbums `xml:"artist,omitempty" json:"artist,omitempty"`
@@ -143,6 +146,29 @@ type subError struct {
 
 type license struct {
 	Valid bool `xml:"valid,attr" json:"valid"`
+}
+
+// subsonicUser is the account and its capability flags. Clients read it
+// at sign-in to decide which controls to draw at all, so a role claimed
+// here that the server then refuses is worse than one denied up front:
+// every flag below maps to something WaxDeck actually honors, and the
+// ones with no WaxDeck equivalent (comments, video conversion) are
+// false rather than optimistic.
+type subsonicUser struct {
+	Username            string `xml:"username,attr" json:"username"`
+	ScrobblingEnabled   bool   `xml:"scrobblingEnabled,attr" json:"scrobblingEnabled"`
+	AdminRole           bool   `xml:"adminRole,attr" json:"adminRole"`
+	SettingsRole        bool   `xml:"settingsRole,attr" json:"settingsRole"`
+	DownloadRole        bool   `xml:"downloadRole,attr" json:"downloadRole"`
+	UploadRole          bool   `xml:"uploadRole,attr" json:"uploadRole"`
+	PlaylistRole        bool   `xml:"playlistRole,attr" json:"playlistRole"`
+	CoverArtRole        bool   `xml:"coverArtRole,attr" json:"coverArtRole"`
+	CommentRole         bool   `xml:"commentRole,attr" json:"commentRole"`
+	PodcastRole         bool   `xml:"podcastRole,attr" json:"podcastRole"`
+	StreamRole          bool   `xml:"streamRole,attr" json:"streamRole"`
+	JukeboxRole         bool   `xml:"jukeboxRole,attr" json:"jukeboxRole"`
+	ShareRole           bool   `xml:"shareRole,attr" json:"shareRole"`
+	VideoConversionRole bool   `xml:"videoConversionRole,attr" json:"videoConversionRole"`
 }
 
 type musicFolders struct {
@@ -328,15 +354,27 @@ func (al *album) id3() albumID3 {
 	}
 }
 
-// subsonicMimes maps source containers for the contentType attribute.
-var subsonicMimes = map[string]string{
-	"flac": "audio/flac",
-	"mp3":  "audio/mpeg",
-	"ogg":  "audio/ogg",
-	"mp4":  "audio/mp4",
-	"wav":  "audio/wav",
-	"aiff": "audio/aiff",
-	"adts": "audio/aac",
+// formatFacts derives a child's suffix and contentType from the stored
+// container, over the one normalized mime table (flow.ContainerMime).
+// The suffix is the extension a file of the family wears - the stored
+// labels that are container names rather than extensions get spelled
+// back ("matroska" is a .mka, "wavpack" a .wv, "asf" a .wma) - and
+// contentType is never omitted: Feishin's tracks index dereferences it
+// on every row without checking, so one unknown-format file would
+// otherwise hold the whole listing at a skeleton forever, retrying a
+// response that never stops being 200.
+func formatFacts(container string) (suffix, mime string) {
+	switch key := flow.NormalizeContainer(container); key {
+	case "matroska":
+		suffix = "mka"
+	case "wavpack":
+		suffix = "wv"
+	case "asf":
+		suffix = "wma"
+	default:
+		suffix = key
+	}
+	return suffix, flow.ContainerMime(container)
 }
 
 // albumDirChild renders an album as a folder-mode directory entry.
@@ -358,6 +396,7 @@ func albumDirChild(al *album) child {
 }
 
 func songChild(tr track, al *album) child {
+	suffix, mime := formatFacts(tr.Container)
 	c := child{
 		ID:          tr.PID,
 		IsDir:       false,
@@ -370,14 +409,25 @@ func songChild(tr track, al *album) child {
 		Genre:       tr.Genre,
 		CoverArt:    tr.PID,
 		Duration:    int(tr.DurationMS / 1000),
-		Suffix:      tr.Container,
-		ContentType: subsonicMimes[tr.Container],
+		Suffix:      suffix,
+		ContentType: mime,
 		Type:        "music",
 	}
 	if al != nil {
 		c.AlbumID = al.id
 		c.ArtistID = al.artistID
 		c.Parent = c.AlbumID
+		// An untagged file still belongs to a group, and that group has a
+		// display name ("[Unknown Album]"). Sending its id without its
+		// name leaves a client holding an album reference it cannot
+		// draw: every row is bound to song.album, and the folder views
+		// name the same group in full.
+		if c.Album == "" {
+			c.Album = al.name
+		}
+		if c.Artist == "" {
+			c.Artist = al.artist
+		}
 	}
 	return c
 }

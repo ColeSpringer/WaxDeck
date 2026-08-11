@@ -9,11 +9,14 @@ import { J, T } from './driver';
 // contract a real deployment exercises.
 //
 // Everything here is server-global - the settings row, the backup set,
-// the trash, the library table - so this file is its own project, last
-// in the chain and not parallel with itself. The `describe.serial`
-// wrapper the settings pair used to need is that project's
-// `fullyParallel: false` now, which is a fact about scheduling rather
-// than a fact about these two tests.
+// the trash, the library table - so this file is its own project, in
+// the chain rather than beside it. It is no longer one worker in order,
+// though: what forced that was server-wide read-only, which refuses
+// every write on the stack while it is on, and that test now has a
+// project of its own after this one (admin-readonly.spec.ts). What is
+// left needs serializing only where two tests share one surface, which
+// is the backup set and nothing else - hence one `describe.serial` and
+// four tests that run beside each other.
 
 test('the audit log answers who deleted a playlist', async ({ app }) => {
   const items = await app.api.get('/library/items', { query: { limit: 5 } });
@@ -33,54 +36,104 @@ test('the audit log answers who deleted a playlist', async ({ app }) => {
   expect(hit!.targetName).toBe('Doomed playlist');
 });
 
-test('a backup archive is written, downloadable, and stageable', async ({ app }) => {
-  const started = await app.api.raw.post('/admin/backups');
-  // A concurrent run from a retry answers conflict; both converge on
-  // polling the list for a finished archive.
-  expect([202, 409]).toContain(started.status());
+// Both of these read the backup set - one creates an archive and
+// stages it, the other exports and imports one back - and there is
+// one backup set on the server. Serial against each other, and only
+// against each other: the rest of this file owns different global
+// surfaces and runs beside them.
+test.describe.serial('backup lifecycle', () => {
+  test('a backup archive is written, downloadable, and stageable', async ({ app }) => {
+    const started = await app.api.raw.post('/admin/backups');
+    // A concurrent run from a retry answers conflict; both converge on
+    // polling the list for a finished archive.
+    expect([202, 409]).toContain(started.status());
 
-  let backup: { id: string; state: string; sizeBytes?: number } | undefined;
-  await expect(async () => {
-    const list = await app.api.get('/admin/backups');
-    backup = (list.backups ?? []).find((b) => b.state === 'done');
-    expect(backup, 'a finished backup appears').toBeTruthy();
-  }).toPass({ timeout: T.fetch });
+    let backup: { id: string; state: string; sizeBytes?: number } | undefined;
+    await expect(async () => {
+      const list = await app.api.get('/admin/backups');
+      backup = (list.backups ?? []).find((b) => b.state === 'done');
+      expect(backup, 'a finished backup appears').toBeTruthy();
+    }).toPass({ timeout: T.fetch });
 
-  expect(backup!.sizeBytes).toBeGreaterThan(0);
-  const archive = await app.api.raw.get('/admin/backups/{backupId}/archive', {
-    path: { backupId: backup!.id },
+    expect(backup!.sizeBytes).toBeGreaterThan(0);
+    const archive = await app.api.raw.get('/admin/backups/{backupId}/archive', {
+      path: { backupId: backup!.id },
+    });
+    expect(archive.ok()).toBeTruthy();
+    expect(archive.headers()['content-type']).toContain('zip');
+    expect((await archive.body()).length).toBe(backup!.sizeBytes);
+
+    // The archive serves ranges, so an interrupted download of a
+    // multi-gigabyte one resumes rather than starting over.
+    const partial = await app.api.raw.get('/admin/backups/{backupId}/archive', {
+      path: { backupId: backup!.id },
+      headers: { Range: 'bytes=8-23' },
+    });
+    expect(partial.status()).toBe(206);
+    expect(partial.headers()['content-range']).toBe(`bytes 8-23/${backup!.sizeBytes}`);
+    expect((await partial.body()).length).toBe(16);
+
+    const plan = await app.api.post('/admin/backups/{backupId}/restore', {
+      path: { backupId: backup!.id },
+    });
+    expect(plan.backupId).toBe(backup!.id);
+    expect(plan.keyfilePresent).toBe(true);
+    expect(plan.keyfileMatches).toBe(true);
+
+    expect((await app.api.raw.get('/admin/backups/restore')).ok()).toBeTruthy();
+
+    // The staged backup refuses deletion; cancelling releases it.
+    const refused = await app.api.raw.delete('/admin/backups/{backupId}', {
+      path: { backupId: backup!.id },
+    });
+    expect(refused.status()).toBe(409);
+    const cancel = await app.api.raw.delete('/admin/backups/restore');
+    expect(cancel.status()).toBe(204);
+    expect((await app.api.raw.get('/admin/backups/restore')).status()).toBe(404);
   });
-  expect(archive.ok()).toBeTruthy();
-  expect(archive.headers()['content-type']).toContain('zip');
-  expect((await archive.body()).length).toBe(backup!.sizeBytes);
 
-  // The archive serves ranges, so an interrupted download of a
-  // multi-gigabyte one resumes rather than starting over.
-  const partial = await app.api.raw.get('/admin/backups/{backupId}/archive', {
-    path: { backupId: backup!.id },
-    headers: { Range: 'bytes=8-23' },
+  test('an exported archive imports back through the backups screen', async ({ app }) => {
+    test.setTimeout(J.long);
+
+    // A genuine archive to round-trip: create (or reuse) one and download
+    // its bytes - the import endpoint validates real WaxDeck backups, so a
+    // synthetic zip would be refused.
+    const started = await app.api.raw.post('/admin/backups');
+    expect([202, 409]).toContain(started.status());
+    let archiveId = '';
+    await expect(async () => {
+      const list = await app.api.get('/admin/backups');
+      const done = (list.backups ?? []).find((b) => b.state === 'done');
+      expect(done, 'a finished backup appears').toBeTruthy();
+      archiveId = done!.id;
+    }).toPass({ timeout: T.fetch });
+    const archive = await app.api.raw.get('/admin/backups/{backupId}/archive', {
+      path: { backupId: archiveId },
+    });
+    expect(archive.ok()).toBeTruthy();
+    const fs = await import('node:fs/promises');
+    const os = await import('node:os');
+    const pathMod = await import('node:path');
+    const zipPath = pathMod.join(
+      await fs.mkdtemp(pathMod.join(os.tmpdir(), 'waxdeck-e2e-')),
+      'roundtrip.zip',
+    );
+    await fs.writeFile(zipPath, await archive.body());
+
+    // Import it back through the backups screen, reached the way an
+    // administrator reaches it: the console, then its own section list.
+    await app.nav.to('adminBackups');
+    await app.admin.importBackup(zipPath);
+
+    // The imported archive joins the listing with its own trigger.
+    await expect(async () => {
+      const list = await app.api.get('/admin/backups');
+      expect(
+        (list.backups ?? []).some((b) => b.trigger === 'imported' && b.state === 'done'),
+        'the imported archive appears in the list',
+      ).toBeTruthy();
+    }).toPass({ timeout: T.fetch });
   });
-  expect(partial.status()).toBe(206);
-  expect(partial.headers()['content-range']).toBe(`bytes 8-23/${backup!.sizeBytes}`);
-  expect((await partial.body()).length).toBe(16);
-
-  const plan = await app.api.post('/admin/backups/{backupId}/restore', {
-    path: { backupId: backup!.id },
-  });
-  expect(plan.backupId).toBe(backup!.id);
-  expect(plan.keyfilePresent).toBe(true);
-  expect(plan.keyfileMatches).toBe(true);
-
-  expect((await app.api.raw.get('/admin/backups/restore')).ok()).toBeTruthy();
-
-  // The staged backup refuses deletion; cancelling releases it.
-  const refused = await app.api.raw.delete('/admin/backups/{backupId}', {
-    path: { backupId: backup!.id },
-  });
-  expect(refused.status()).toBe(409);
-  const cancel = await app.api.raw.delete('/admin/backups/restore');
-  expect(cancel.status()).toBe(204);
-  expect((await app.api.raw.get('/admin/backups/restore')).status()).toBe(404);
 });
 
 test('signup requests await approval and invites pre-approve', async ({ app }) => {
@@ -112,7 +165,7 @@ test('signup requests await approval and invites pre-approve', async ({ app }) =
   expect(closed.status()).toBe(403);
 
   // Opened here and closed in the `finally`, like the read-only switch
-  // below. It is server-global: a run that dies between the two writes
+  // in admin-readonly.spec.ts. It is server-global: a run that dies between the two writes
   // leaves open signup on for every later run on this stack, and
   // signup-ui - whose whole subject is the invite path an account meets
   // when open signup is OFF - then fails somewhere else entirely.
@@ -183,21 +236,6 @@ test('signup requests await approval and invites pre-approve', async ({ app }) =
   }
 });
 
-test('read-only mode refuses uploads and releases', async ({ app }) => {
-  const settings = await app.api.get('/admin/settings');
-
-  await app.api.put('/admin/settings', { data: { ...settings, readOnly: true } });
-  try {
-    const refused = await app.api.raw.post('/uploads', {
-      data: { fileName: 'nope.mp3', sizeBytes: 1024, mediaType: 'music' },
-    });
-    expect(refused.status()).toBe(409);
-    expect((await refused.json()).code).toBe('read-only');
-  } finally {
-    await app.api.put('/admin/settings', { data: { ...settings, readOnly: false } });
-  }
-});
-
 test('deleted items land in the trash and restore cleanly', async ({ app }) => {
   // The tail of a wide page: the round trip briefly removes a file, and
   // a reused stack carries earlier runs' uploads, so this keeps clear of
@@ -236,49 +274,6 @@ test('deleted items land in the trash and restore cleanly', async ({ app }) => {
   // The restore re-scans the file back into the catalog.
   await expect(async () => {
     expect((await app.api.raw.get('/items/{pid}', { path: { pid } })).ok()).toBeTruthy();
-  }).toPass({ timeout: T.fetch });
-});
-
-test('an exported archive imports back through the backups screen', async ({ app }) => {
-  test.setTimeout(J.long);
-
-  // A genuine archive to round-trip: create (or reuse) one and download
-  // its bytes - the import endpoint validates real WaxDeck backups, so a
-  // synthetic zip would be refused.
-  const started = await app.api.raw.post('/admin/backups');
-  expect([202, 409]).toContain(started.status());
-  let archiveId = '';
-  await expect(async () => {
-    const list = await app.api.get('/admin/backups');
-    const done = (list.backups ?? []).find((b) => b.state === 'done');
-    expect(done, 'a finished backup appears').toBeTruthy();
-    archiveId = done!.id;
-  }).toPass({ timeout: T.fetch });
-  const archive = await app.api.raw.get('/admin/backups/{backupId}/archive', {
-    path: { backupId: archiveId },
-  });
-  expect(archive.ok()).toBeTruthy();
-  const fs = await import('node:fs/promises');
-  const os = await import('node:os');
-  const pathMod = await import('node:path');
-  const zipPath = pathMod.join(
-    await fs.mkdtemp(pathMod.join(os.tmpdir(), 'waxdeck-e2e-')),
-    'roundtrip.zip',
-  );
-  await fs.writeFile(zipPath, await archive.body());
-
-  // Import it back through the backups screen, reached the way an
-  // administrator reaches it: the console, then its own section list.
-  await app.nav.to('adminBackups');
-  await app.admin.importBackup(zipPath);
-
-  // The imported archive joins the listing with its own trigger.
-  await expect(async () => {
-    const list = await app.api.get('/admin/backups');
-    expect(
-      (list.backups ?? []).some((b) => b.trigger === 'imported' && b.state === 'done'),
-      'the imported archive appears in the list',
-    ).toBeTruthy();
   }).toPass({ timeout: T.fetch });
 });
 

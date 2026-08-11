@@ -16,7 +16,7 @@ import 'session_artwork.dart';
 
 /// Keeps every OS media surface saying what this device is actually
 /// playing: the lock screen and Android Auto, the browser's MediaSession,
-/// MPRIS, the Windows transport controls, and macOS's now-playing panel.
+/// MPRIS, and the Windows transport controls.
 ///
 /// One feed for all of them, because they are one seam: the handler in
 /// `waxdeck_player` is what each platform's implementation reads, so a

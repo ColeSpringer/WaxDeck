@@ -8,7 +8,6 @@ import 'package:path_provider/path_provider.dart';
 import 'share_card_export.dart';
 
 /// Android hands the card to the share sheet; the desktops write a file.
-/// iOS is cut for v1 and would take Android's channel if it returned.
 ShareCardExporter createShareCardExporter() =>
     defaultTargetPlatform == TargetPlatform.android
     ? const _AndroidShareCardExporter()

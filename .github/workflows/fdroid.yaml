@@ -1,0 +1,238 @@
+# The self-hosted F-Droid repository: one job builds a signed index
+# over a release's per-ABI APKs, one deploys it to GitHub Pages.
+# Stateless by design: every run rebuilds the repo from the release it
+# serves, so the index offers exactly one version per ABI and nothing
+# accumulates - republishing is re-running, not curating a growing
+# tree. The fdroiddata submission is the channel's other half and lives
+# in deploy/packaging/fdroid/.
+#
+# The "published" event fires when the release is created, which is
+# before the packaging matrix attaches the APKs to it - so the download
+# step polls for them rather than losing that race.
+#
+# Dispatch is the dry run: it indexes the latest release into a plain
+# artifact and touches nothing public. Flip dry_run off to publish from
+# a dispatch, which is how a failed release-triggered run is redone.
+#
+# pages and id-token are what actions/deploy-pages requires; this is
+# the one workflow that needs more than contents: read.
+name: F-Droid repo
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build the index into a plain artifact; do not touch Pages."
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# No cancel-in-progress: a half-cancelled Pages deployment is worse
+# than a queued one.
+concurrency:
+  group: fdroid-pages
+
+env:
+  FDROIDSERVER_VERSION: "2.4.5"
+  REPO_URL: https://colespringer.github.io/WaxDeck/repo
+  # SHA-256 of the index-signing certificate in
+  # deploy/keys/waxdeck-fdroid-index.p12; clients refuse the repo
+  # without it. Recompute per deploy/packaging/fdroid/README.md if the
+  # index key is ever reissued.
+  REPO_FINGERPRINT: 18BB5776333A744A3C0519BF9C019C09C745E0FFE5207AF5BF8F4D054D9CBE35
+  # SHA-256 of the upload-key certificate. Pinned twice on purpose: the
+  # metadata's AllowedAPKSigningKeys makes fdroid drop a wrong-signed
+  # APK, and the assert step turns that silent drop into a loud red.
+  UPLOAD_CERT_SHA256: 3d14cc35fefd8cd7f63867f81d482bb684d139b7686a89645760fabc4bc1b79f
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    outputs:
+      publish: ${{ steps.mode.outputs.publish }}
+      tag: ${{ steps.rel.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Decide the mode
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          if [ "$EVENT" = release ] || [ "$DRY" = false ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+      # A dispatch before the first release has nothing to index; that
+      # is a notice, not a failure.
+      - name: Resolve the release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          tag="$EVENT_TAG"
+          if [ -z "$tag" ]; then
+            tag="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          fi
+          if [ -z "$tag" ]; then
+            echo "::notice::no release exists yet; nothing to index"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Download the per-ABI APKs
+        if: steps.rel.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p fdroid/repo
+          n=0
+          for _ in $(seq 1 45); do
+            # A transient API failure counts as zero and the loop keeps
+            # waiting: a bare failing assignment would abort the step
+            # under errexit and defeat the retry it sits inside.
+            n="$(gh release view "$TAG" --json assets \
+              --jq '[.assets[].name | select(test("^waxdeck-android-(armeabi-v7a|arm64-v8a|x86_64)-.*\\.apk$"))] | length' \
+              || echo 0)"
+            [ "$n" -ge 3 ] && break
+            echo "release carries $n of 3 per-ABI APKs; waiting for the packaging matrix"
+            sleep 60
+          done
+          [ "$n" -ge 3 ] || {
+            echo "::error::the per-ABI APKs never appeared on $TAG; re-dispatch once the release workflow finishes"
+            exit 1
+          }
+          gh release download "$TAG" --dir fdroid/repo \
+            --pattern 'waxdeck-android-armeabi-v7a-*.apk' \
+            --pattern 'waxdeck-android-arm64-v8a-*.apk' \
+            --pattern 'waxdeck-android-x86_64-*.apk'
+          ls -l fdroid/repo
+      # The universal APK stays on the GitHub Release for sideloaders.
+      # F-Droid clients pick by versionCode, and the split builds carry
+      # distinct ones (Flutter stamps abi*1000 + pubspec build number),
+      # so the three coexist in one index and every device is offered
+      # its own ABI.
+      - name: Assert the APKs carry the upload key
+        if: steps.rel.outputs.tag != ''
+        run: |
+          set -euo pipefail
+          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          for apk in fdroid/repo/*.apk; do
+            got="$("$tools/apksigner" verify --print-certs "$apk" |
+              awk -F': ' '/SHA-256 digest/ { print $2; exit }')"
+            if [ "$got" != "$UPLOAD_CERT_SHA256" ]; then
+              echo "::error::$apk is signed with $got, not the upload key; a debug-signed build must never enter the repo"
+              exit 1
+            fi
+          done
+      - uses: actions/setup-python@v7
+        if: steps.rel.outputs.tag != ''
+        with:
+          python-version: "3.12"
+      - name: Install fdroidserver
+        if: steps.rel.outputs.tag != ''
+        run: pip install "fdroidserver==${FDROIDSERVER_VERSION}"
+      # config.yml reads the passwords from the environment ({env: ...}),
+      # so the secret lands in no file; the keystore itself has to.
+      # Store texts come from fastlane so the index and the fdroiddata
+      # listing can never say different things.
+      - name: Build the signed index
+        if: steps.rel.outputs.tag != ''
+        env:
+          FDROID_KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
+          keystorepass: ${{ secrets.FDROID_KEYSTORE_PASS }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::FDROID_KEYSTORE_BASE64 is unset; the index cannot be signed (deploy/packaging/fdroid/README.md has the setup)"
+            exit 1
+          fi
+          printf '%s' "$FDROID_KEYSTORE_BASE64" | base64 -d > fdroid/keystore.p12
+          mkdir -p fdroid/metadata fdroid/repo/icons
+          cp fastlane/metadata/android/en-US/images/icon.png fdroid/repo/icons/waxdeck.png
+          cat > fdroid/config.yml <<EOF
+          repo_url: $REPO_URL
+          repo_name: WaxDeck
+          repo_icon: waxdeck.png
+          repo_description: >-
+            The official repository for the WaxDeck Android app. Serves the
+            current release, one APK per ABI, straight from the GitHub
+            Release the tag built.
+          archive_older: 0
+          keystore: keystore.p12
+          repo_keyalias: waxdeck-fdroid
+          keystorepass: {env: keystorepass}
+          keypass: {env: keystorepass}
+          EOF
+          {
+            printf 'License: GPL-3.0-only\n'
+            printf 'AuthorName: Cole Springer\n'
+            printf 'WebSite: https://github.com/ColeSpringer/WaxDeck\n'
+            printf 'SourceCode: https://github.com/ColeSpringer/WaxDeck\n'
+            printf 'IssueTracker: https://github.com/ColeSpringer/WaxDeck/issues\n'
+            printf 'Changelog: https://github.com/ColeSpringer/WaxDeck/releases\n'
+            printf 'Categories:\n  - Multimedia\n'
+            printf 'AllowedAPKSigningKeys: %s\n' "$UPLOAD_CERT_SHA256"
+            printf 'Name: %s\n' "$(cat fastlane/metadata/android/en-US/title.txt)"
+            printf 'Summary: %s\n' "$(cat fastlane/metadata/android/en-US/short_description.txt)"
+            printf 'Description: |\n'
+            sed 's/^/  /' fastlane/metadata/android/en-US/full_description.txt
+          } > fdroid/metadata/com.colespringer.waxdeck.yml
+          (cd fdroid && fdroid update --pretty)
+          # One test per line: under errexit a failing left-hand side of
+          # && is exempt, and a repo without its index entry point must
+          # never reach the deploy.
+          test -f fdroid/repo/entry.jar
+          test -f fdroid/repo/index-v1.jar
+          echo "::notice::repo built for $REPO_URL?fingerprint=$REPO_FINGERPRINT"
+      - name: Assemble the site
+        if: steps.rel.outputs.tag != ''
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          cp -r fdroid/repo site/repo
+          cat > site/index.html <<EOF
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>WaxDeck F-Droid repository</title>
+          <h1>WaxDeck F-Droid repository</h1>
+          <p>Add this repository to an F-Droid client:</p>
+          <p><code>$REPO_URL?fingerprint=$REPO_FINGERPRINT</code></p>
+          <p>Source, issues, and releases:
+          <a href="https://github.com/ColeSpringer/WaxDeck">github.com/ColeSpringer/WaxDeck</a>.</p>
+          EOF
+      - name: Upload the dry-run artifact
+        if: steps.rel.outputs.tag != '' && steps.mode.outputs.publish != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: fdroid-repo-dry-run
+          path: site
+          if-no-files-found: error
+      - uses: actions/configure-pages@v6
+        if: steps.rel.outputs.tag != '' && steps.mode.outputs.publish == 'true'
+      - uses: actions/upload-pages-artifact@v5
+        if: steps.rel.outputs.tag != '' && steps.mode.outputs.publish == 'true'
+        with:
+          path: site
+
+  deploy:
+    needs: [index]
+    if: needs.index.outputs.publish == 'true' && needs.index.outputs.tag != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

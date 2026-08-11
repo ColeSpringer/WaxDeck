@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-/// Starts loading any on-demand script faces (Arabic, Hebrew, Thai, CJK)
+/// Starts loading any on-demand script faces (the deferred scripts)
 /// the server's metadata will need on screen.
 ///
 /// One interceptor on the API transport instead of a warm call in every

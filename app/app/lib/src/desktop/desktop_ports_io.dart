@@ -38,8 +38,7 @@ MiniWindowPort createMiniWindowPort() =>
 
 TrayPort createTrayPort() => _isDesktop ? PluginTray() : const NoTray();
 
-bool get _isDesktop =>
-    Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+bool get _isDesktop => Platform.isLinux || Platform.isWindows;
 
 /// Whether this Linux session is Wayland.
 ///
@@ -209,12 +208,7 @@ class PluginTray with TrayListener implements TrayPort {
 
   Future<void> _draw(TrayFace face) async {
     final state = face.playing ? 'playing' : 'paused';
-    await trayManager.setIcon(
-      'assets/tray/$state${_iconSuffix()}.png',
-      // macOS tints a template image for the menu bar it is sitting in,
-      // which is the only way to be legible in both.
-      isTemplate: Platform.isMacOS,
-    );
+    await trayManager.setIcon('assets/tray/$state${_iconSuffix()}.png');
     await trayManager.setToolTip(
       face.title == null
           ? 'WaxDeck'
@@ -226,15 +220,14 @@ class PluginTray with TrayListener implements TrayPort {
     await trayManager.setContextMenu(_menu(face));
   }
 
-  /// macOS tints a template image; Linux takes the mark's own colour;
-  /// Windows picks neither, so the app must, and choosing wrong is a
+  /// Linux takes the mark's own colour; Windows picks neither light nor
+  /// dark for the app, so the app must, and choosing wrong is a
   /// near-white mark on a near-white taskbar.
   ///
   /// Brightness is an approximation there - Windows themes apps and the
   /// taskbar separately and this reports the app's - but it agrees for
   /// anyone who has not split them, and needs no plugin.
   String _iconSuffix() {
-    if (Platform.isMacOS) return '-template';
     if (!Platform.isWindows) return '';
     // Named for the taskbar they suit: `-dark` is the light-inked mark.
     return PlatformDispatcher.instance.platformBrightness == Brightness.dark
@@ -278,8 +271,7 @@ class PluginTray with TrayListener implements TrayPort {
     );
   }
 
-  /// A left click is "show me the app" on Windows and Linux; macOS opens
-  /// the menu itself and never delivers this.
+  /// A left click is "show me the app" on Windows and Linux.
   @override
   void onTrayIconMouseDown() => _actions?.onShow();
 

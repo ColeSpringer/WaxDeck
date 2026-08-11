@@ -258,8 +258,8 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
 /// Initializes the OS media session around the engine. Called once at
 /// startup on every platform that has one: the notification and Android
 /// Auto's drawer on Android, MediaSession in the browser, MPRIS on
-/// Linux, the transport controls on Windows, and the now-playing panel
-/// on macOS. The browse tree is what makes the app appear in a head
+/// Linux, and the transport controls on Windows. The browse tree is
+/// what makes the app appear in a head
 /// unit's media drawer, where the platform renders one.
 /// [notificationColor] tints the Android notification. It is a parameter
 /// rather than a constant because the value is a design token this

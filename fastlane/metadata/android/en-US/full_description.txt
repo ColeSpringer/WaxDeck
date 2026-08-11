@@ -1,0 +1,22 @@
+The Android app for your WaxDeck server.
+
+WaxDeck is a self-hosted player, library manager, and metadata
+completer for music, podcasts, and audiobooks. One server, one origin:
+the REST API, the streaming surface, the web app, and the
+compatibility APIs all live on port 4420.
+
+- Metadata completion: a matching engine, a review queue, and a full
+  editor. New audio arrives by upload or straight from a URL.
+- Podcasts and audiobooks are first-class: subscriptions, chapters,
+  and resume are per-user and follow you across devices.
+- Manual and smart playlists, internet radio, and scrobbling.
+- Sonic discovery from analysis of your own files: instant mixes,
+  similar tracks, sonic paths, and listening stats.
+- Multi-device control and handoff, Chromecast, DLNA, and a jukebox.
+- Public share links: hand anyone a track, playlist, book, or episode,
+  no account needed.
+- Subsonic and gpodder compatibility, so the apps you already use keep
+  working.
+- Accounts with per-library visibility and optional OIDC single
+  sign-on; scheduled backups, an audit log, and migration from
+  Navidrome or Audiobookshelf.

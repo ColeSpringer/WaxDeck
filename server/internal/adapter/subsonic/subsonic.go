@@ -134,6 +134,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.ok(w, r, envelope{})
 	case "getLicense":
 		h.ok(w, r, envelope{License: &license{Valid: true}})
+	case "getUser":
+		h.getUser(w, r, u, uc)
 	case "getOpenSubsonicExtensions":
 		h.getOpenSubsonicExtensions(w, r)
 	case "getMusicFolders":
@@ -264,6 +266,59 @@ func (h *Handler) authenticate(r *http.Request) (*wdb.User, int, string) {
 		return nil, 40, "wrong username or password"
 	}
 	return u, 0, ""
+}
+
+// getUser answers the caller's account and what it may do. Clients call
+// it as the first request after credentials are entered - it is how
+// Feishin decides the sign-in worked - so a server without it is a
+// server they cannot log in to, whatever else it implements.
+//
+// The username parameter is honored only for the caller's own account
+// unless the caller is an administrator, which is the protocol's rule
+// and also keeps the surface from confirming that some other account
+// exists.
+func (h *Handler) getUser(w http.ResponseWriter, r *http.Request, u *wdb.User, uc *service.UserCtx) {
+	target, tc := u, uc
+	if asked := r.Form.Get("username"); asked != "" && !strings.EqualFold(asked, u.Username) {
+		if !uc.Admin {
+			h.fail(w, r, 50, "you are not authorized to read that user")
+			return
+		}
+		// Resolved for real, not echoed: answering the admin's own row
+		// under somebody else's name would hand a management tool the
+		// wrong account's roles.
+		other, err := h.svc.UserByName(r.Context(), asked)
+		if err != nil {
+			h.failFromService(w, r, err, "no such user")
+			return
+		}
+		oc, err := h.svc.UserCtx(r.Context(), other)
+		if err != nil {
+			h.fail(w, r, 0, "resolving user failed")
+			return
+		}
+		target, tc = other, oc
+	}
+	h.ok(w, r, envelope{User: &subsonicUser{
+		Username:          target.Username,
+		ScrobblingEnabled: true,
+		AdminRole:         tc.Admin,
+		SettingsRole:      tc.Admin,
+		// Cover art is set through the catalog's own editor, which is
+		// an administrator surface.
+		CoverArtRole: tc.Admin,
+		DownloadRole: tc.Download,
+		UploadRole:   tc.UploadEnabled,
+		PlaylistRole: true,
+		PodcastRole:  tc.ManagePodcasts,
+		StreamRole:   true,
+		ShareRole:    tc.SharedOutputs,
+		// Nothing behind these: there are no comments, jukeboxControl
+		// refuses, and the transcoder serves audio only.
+		CommentRole:         false,
+		JukeboxRole:         false,
+		VideoConversionRole: false,
+	}})
 }
 
 // --- browse ------------------------------------------------------------------
@@ -466,11 +521,24 @@ func (h *Handler) search3(w http.ResponseWriter, r *http.Request, uc *service.Us
 	artistCount := formInt(r, "artistCount", 20)
 	albumCount := formInt(r, "albumCount", 20)
 	songCount := formInt(r, "songCount", 20)
+	// The offsets are how a client walks a result set larger than one
+	// page, and clients lean on them harder than "page 2" suggests:
+	// Feishin discovers how many tracks a server holds by asking for
+	// one song at a rising offset until the answer is empty, so a
+	// surface that ignores songOffset answers song one forever and its
+	// track list never finishes loading.
+	artistSkip := max(formInt(r, "artistOffset", 0), 0)
+	albumSkip := max(formInt(r, "albumOffset", 0), 0)
+	songSkip := max(formInt(r, "songOffset", 0), 0)
 	for _, a := range idx.artists {
 		if len(out.Artists) >= artistCount {
 			break
 		}
 		if match(a.name) {
+			if artistSkip > 0 {
+				artistSkip--
+				continue
+			}
 			out.Artists = append(out.Artists, a.id3())
 		}
 	}
@@ -479,6 +547,10 @@ func (h *Handler) search3(w http.ResponseWriter, r *http.Request, uc *service.Us
 			break
 		}
 		if match(al.name) || match(al.artist) {
+			if albumSkip > 0 {
+				albumSkip--
+				continue
+			}
 			out.Albums = append(out.Albums, al.id3())
 		}
 	}
@@ -487,6 +559,10 @@ func (h *Handler) search3(w http.ResponseWriter, r *http.Request, uc *service.Us
 			break
 		}
 		if match(tr.Title) || match(tr.Artist) || match(tr.Album) {
+			if songSkip > 0 {
+				songSkip--
+				continue
+			}
 			al := idx.albumForTrack(tr)
 			out.Songs = append(out.Songs, songChild(tr, al))
 		}

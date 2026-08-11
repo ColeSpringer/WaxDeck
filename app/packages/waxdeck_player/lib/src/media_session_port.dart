@@ -28,8 +28,8 @@ abstract interface class BrowseSourcePort {
 }
 
 /// One thing an OS media surface names: what is playing now on the lock
-/// screen, MPRIS, the Windows transport controls and macOS's now-playing
-/// panel, or one row of the queue a head unit renders as up-next.
+/// screen, MPRIS, or the Windows transport controls, or one row of the
+/// queue a head unit renders as up-next.
 ///
 /// A plain view-data struct rather than the app's `ItemSummary`, for the
 /// same reason the design system takes one: this package knows nothing

@@ -77,7 +77,7 @@ The limit caps what may sit in staging awaiting a decision, so
 importing an upload frees the room it held.
 
 Files reach the flow three ways: a file picker on every platform, a
-folder picker on desktop (Linux, macOS, Windows - Android folder
+folder picker on desktop (Linux, Windows - Android folder
 access means SAF tree URIs, which the picker port does not speak),
 and drag-and-drop onto the library or uploads screen on web and
 desktop. Web transfers read the browser's file handles in windows, so

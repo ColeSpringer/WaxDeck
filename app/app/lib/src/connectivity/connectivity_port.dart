@@ -42,8 +42,8 @@ abstract interface class ConnectivityPort {
 ///
 /// The platform's own metered flag would be the exact answer and no
 /// plugin exposes it portably (Android has `isActiveNetworkMetered`,
-/// iOS has `NWPathMonitor.isExpensive`, neither is on this plugin's
-/// surface). The transport is the honest stand-in, and it happens to be
+/// which is not on this plugin's surface). The transport is the honest
+/// stand-in, and it happens to be
 /// the question the settings themselves ask: they say "on wifi only",
 /// not "on an unmetered connection".
 class PluginConnectivity implements ConnectivityPort {

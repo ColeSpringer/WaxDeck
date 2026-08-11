@@ -23,8 +23,8 @@ The release workflow (`.github/workflows/release.yaml`) does the rest:
 - **Desktop installers.** The packaging matrix
   (`.github/workflows/package.yaml`, reused via `workflow_call`) runs
   with the tag's version and its artifacts are attached to the same
-  release: macOS dmg, Linux tar.gz, Windows zip, MSIX, the Velopack
-  `Setup.exe`, and the full Velopack output as a zip.
+  release: Linux tar.gz, Windows zip, MSIX, the Velopack `Setup.exe`,
+  and the full Velopack output as a zip.
 - **Android APKs.** From the same matrix: one per ABI
   (`armeabi-v7a`, `arm64-v8a`, `x86_64`) for anyone who cares about
   download size, plus a universal one for anyone who does not know
@@ -99,15 +99,18 @@ not in that total:
   (see the deferred-work entry on flutter/flutter#190039). They are
   embedded because the engine resolves them at runtime from this origin
   and a LAN-only instance cannot reach Google's CDN.
-- **On-demand fonts.** Noto Sans CJK 15.7 MB, Arabic 598 KB, Thai
-  89 KB, Hebrew 32 KB - fetched only when metadata in those scripts
-  appears on screen. CJK is unsubset by decision: a curated
-  core still renders tofu for names outside it.
+- **On-demand fonts.** Twenty deferred faces, about 34 MB in all -
+  Noto Sans CJK at 16 MB and the colour emoji face at 10.4 MB are the
+  bulk, the fifteen script faces plus Arabic, Thai, and Hebrew the rest
+  (`waxdeck_ui/assets/fonts/README.md` carries the list) - each fetched
+  only when metadata in its script appears on screen. CJK is unsubset
+  by decision: a curated core still renders tofu for names outside it.
 - **`NOTICES`, 1.49 MB**, fetched only if somebody opens the licence
   page.
 
-The whole embedded tree is 67.5 MB, which is what a server binary
-gains from `-tags withweb`. Note that WaxDeck serves these
+The whole embedded tree is about 84 MB (67.5 measured before the
+sixteen newest deferred faces, plus their 16.7), which is what a server
+binary gains from `-tags withweb`. Note that WaxDeck serves these
 uncompressed; a reverse proxy that compresses is worth roughly the
 gzip column on every cold load.
 
@@ -205,27 +208,36 @@ without it the pubspec version is used.
 
 ## After the workflow finishes
 
-Package-channel manifests are updated by hand per release; the
+Desktop package-channel manifests are updated by hand per release; the
 templates and per-channel notes live in `deploy/packaging/`. Fill in
-the new version and artifact checksums for winget, Homebrew, the AUR,
-and Flathub as each channel opens. Android has no channel there yet:
-the APKs reach people through the GitHub Release only, and F-Droid is
-its own slice (deferred-work.md).
+the new version and artifact checksums for winget, the AUR, and
+Flathub as each channel opens.
 
-The desktop artifacts are not signed. The Windows and macOS ones are
-unsigned and unnotarized, which blocks the winget submission outright
-and makes Gatekeeper quarantine the dmg; the release notes should say
-so until signing lands. Android is the exception in kind rather than
-degree: an APK must be signed to install at all, so an unsigned build
-is not a thing that exists. With the four secrets set it carries the
-upload key and is publishable; without them it is debug-signed, which
-installs for testing and cannot be published.
+Android needs no per-release chore: publishing the release triggers
+`.github/workflows/fdroid.yaml`, which rebuilds the self-hosted
+F-Droid repository's signed index over the new per-ABI APKs and
+redeploys it to GitHub Pages. Anyone adds the repository with the full
+line - the fingerprint is the credential, and a URL without it is
+refused:
 
-That posture constrains macOS entitlements. Restricted entitlements -
-`keychain-access-groups` is the one that came up - make
-`flutter build macos --release` demand a development certificate, so
-they cannot be added while the build is unsigned; the entitlement goes
-in with the signing work.
+```
+https://colespringer.github.io/WaxDeck/repo?fingerprint=18BB5776333A744A3C0519BF9C019C09C745E0FFE5207AF5BF8F4D054D9CBE35
+```
+
+The fdroiddata submission - the main F-Droid catalogue - is prepared
+in `deploy/packaging/fdroid/` and waits on the first tag; once
+accepted, their bot opens each new tag's version bump on its own. Both
+halves and the signing keys are documented in
+`deploy/packaging/fdroid/README.md`; the keys themselves live in
+gitignored `deploy/keys/`, which wants an off-machine backup.
+
+The desktop artifacts are not signed. The Windows ones are unsigned,
+which blocks the winget submission outright; the release notes should
+say so until signing lands. Android is the exception in kind rather
+than degree: an APK must be signed to install at all, so an unsigned
+build is not a thing that exists. With the four secrets set it carries
+the upload key and is publishable; without them it is debug-signed,
+which installs for testing and cannot be published.
 
 The desktop app has no self-updater, so releases propagate through
 package managers and direct downloads only; there is no update channel

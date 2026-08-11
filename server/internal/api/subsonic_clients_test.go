@@ -12,6 +12,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/colespringer/waxdeck/fixtures"
+
+	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 // The real-client conformance suite. Each test replays the request
@@ -57,6 +61,40 @@ func mustOK(t *testing.T, h *harness, secret, client, view, extra string) map[st
 	env := clientCall(t, h, secret, client, view, extra)
 	if env["status"] != "ok" {
 		t.Fatalf("%s (%s) = %v", view, client, env)
+	}
+	return env
+}
+
+// clientPostOK performs the call the way Feishin actually ships it:
+// every parameter, credentials included, form-encoded in a POST body
+// with nothing on the URL. GET coverage says nothing about this path.
+func clientPostOK(t *testing.T, h *harness, secret, client, view string, form url.Values) map[string]any {
+	t.Helper()
+	salt := fmt.Sprintf("s%d", time.Now().UnixNano())
+	sum := md5.Sum([]byte(secret + salt))
+	form.Set("u", "admin")
+	form.Set("t", hex.EncodeToString(sum[:]))
+	form.Set("s", salt)
+	form.Set("v", "1.16.1")
+	form.Set("c", client)
+	form.Set("f", "json")
+	resp, err := http.Post(h.ts.URL+"/rest/"+view,
+		"application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST %s (%s) status = %d: %s", view, client, resp.StatusCode, body)
+	}
+	var wrapper map[string]map[string]any
+	if err := json.Unmarshal(body, &wrapper); err != nil {
+		t.Fatalf("POST %s (%s): %v (%s)", view, client, err, body)
+	}
+	env, ok := wrapper["subsonic-response"]
+	if !ok || env["status"] != "ok" {
+		t.Fatalf("POST %s (%s) = %v", view, client, env)
 	}
 	return env
 }
@@ -159,14 +197,35 @@ func TestSubsonicClientDSub(t *testing.T) {
 
 func TestSubsonicClientFeishin(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t)
+	// The tracks index serves the whole library, so the harness carries
+	// the two shapes that broke it in the browser harness: an ADTS AAC,
+	// whose stored container is the composite label "aac (adts)", and a
+	// garbage file with no probeable container at all.
+	exotic := t.TempDir()
+	if _, err := fixtures.Generate(exotic,
+		fixtures.Spec{Codec: fixtures.CodecAAC, Container: fixtures.ContainerADTS},
+		fixtures.Spec{Codec: fixtures.CodecFLAC, Corrupt: fixtures.CorruptGarbage},
+	); err != nil {
+		t.Fatalf("generating exotic fixtures: %v", err)
+	}
+	h := newHarness(t, service.Root{Name: "exotic", Path: exotic})
 	secret := newSubsonicSecret(t, h)
 	const c = "Feishin"
 
 	// Feishin connects, then syncs by tags with paged album lists.
+	//
+	// getUser is the very first call, and it is the whole sign-in: the
+	// credentials form submits, this answers, and the app either enters
+	// or stays on the login screen. The trace used to start at ping,
+	// which is why a server that could serve every other call here
+	// still could not be logged into - the browser harness found it.
+	env := mustOK(t, h, secret, c, "getUser.view", "&username=admin")
+	if u := jmap(env["user"]); u["username"] != "admin" || u["streamRole"] != true {
+		t.Fatalf("getUser = %v", env["user"])
+	}
 	mustOK(t, h, secret, c, "ping.view", "")
 	mustOK(t, h, secret, c, "getMusicFolders.view", "")
-	env := mustOK(t, h, secret, c, "getArtists.view", "")
+	env = mustOK(t, h, secret, c, "getArtists.view", "")
 	var artistID string
 	for _, sec := range jlist(jmap(env["artists"])["index"]) {
 		for _, a := range jlist(jmap(sec)["artist"]) {
@@ -221,6 +280,54 @@ func TestSubsonicClientFeishin(t *testing.T) {
 	}
 	mustOK(t, h, secret, c, "unstar.view", "&id="+songID)
 	mustOK(t, h, secret, c, "setRating.view", "&id="+songID+"&rating=4")
+
+	// The tracks index, POSTed the way Feishin ships every request. It
+	// is the one surface that serializes the whole library, exotic
+	// shapes included, and its renderer dereferences contentType on
+	// every row without checking - so the field is load-bearing on every
+	// song, however unprobeable the file. The browser harness found the
+	// miss as a listing stuck at a skeleton, retrying a 200 forever.
+	// First the count probe: one song at a rising offset until empty.
+	env = clientPostOK(t, h, secret, c, "search3.view", url.Values{
+		"query": {""}, "songCount": {"1"}, "songOffset": {"0"},
+		"albumCount": {"0"}, "artistCount": {"0"},
+	})
+	if n := len(jlist(jmap(env["searchResult3"])["song"])); n != 1 {
+		t.Fatalf("count probe at offset 0 = %d songs, want 1", n)
+	}
+	env = clientPostOK(t, h, secret, c, "search3.view", url.Values{
+		"query": {""}, "songCount": {"1"}, "songOffset": {"5000"},
+		"albumCount": {"0"}, "artistCount": {"0"},
+	})
+	if n := len(jlist(jmap(env["searchResult3"])["song"])); n != 0 {
+		t.Fatalf("count probe past the end = %d songs, want 0", n)
+	}
+	env = clientPostOK(t, h, secret, c, "search3.view", url.Values{
+		"query": {""}, "songCount": {"100"}, "songOffset": {"0"},
+		"albumCount": {"0"}, "artistCount": {"0"},
+	})
+	songs := jlist(jmap(env["searchResult3"])["song"])
+	if len(songs) < 5 {
+		t.Fatalf("tracks index = %d songs, want the whole library", len(songs))
+	}
+	sawADTS := false
+	for _, s := range songs {
+		sm := jmap(s)
+		ct, _ := sm["contentType"].(string)
+		if ct == "" {
+			t.Fatalf("song %v carries no contentType", sm["title"])
+		}
+		suffix, _ := sm["suffix"].(string)
+		if strings.ContainsAny(suffix, " ()") {
+			t.Fatalf("suffix %q is a probe label, not an extension", suffix)
+		}
+		if suffix == "aac" && ct == "audio/aac" {
+			sawADTS = true
+		}
+	}
+	if !sawADTS {
+		t.Fatal("the ADTS fixture did not serialize as suffix aac + audio/aac")
+	}
 
 	// Search-as-you-type and play.
 	env = mustOK(t, h, secret, c, "search3.view", "&query=Alpha&artistCount=20&albumCount=20&songCount=20")

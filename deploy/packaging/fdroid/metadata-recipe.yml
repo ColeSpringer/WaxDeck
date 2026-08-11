@@ -1,0 +1,46 @@
+# The fdroiddata recipe for com.colespringer.waxdeck, ready to submit
+# as metadata/com.colespringer.waxdeck.yml once the first v* tag
+# exists. Every PLACEHOLDER note says what to fill in and where the
+# value comes from; the store texts themselves are not duplicated here
+# because fdroiddata reads them from fastlane/metadata/ in this repo.
+Categories:
+  - Multimedia
+License: GPL-3.0-only
+AuthorName: Cole Springer
+WebSite: https://github.com/ColeSpringer/WaxDeck
+SourceCode: https://github.com/ColeSpringer/WaxDeck
+IssueTracker: https://github.com/ColeSpringer/WaxDeck/issues
+Changelog: https://github.com/ColeSpringer/WaxDeck/releases
+
+RepoType: git
+Repo: https://github.com/ColeSpringer/WaxDeck
+
+Builds:
+  # PLACEHOLDER: the first tagged release. versionName is the tag
+  # without its v; versionCode is that tag's pubspec build number (the
+  # +N in app/app/pubspec.yaml - the release workflow refuses to build
+  # a tag whose pubspec was not prepared, so the two cannot disagree).
+  - versionName: PLACEHOLDER
+    versionCode: PLACEHOLDER
+    commit: vPLACEHOLDER
+    subdir: app/app
+    # AGP here builds on Java 21 (the same JDK CI pins); align the
+    # install dance with current fdroiddata practice at submission.
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-21-jdk-headless
+    srclibs:
+      - flutter@3.44.9
+    output: build/app/outputs/flutter-apk/app-release.apk
+    scandelete:
+      - .pub-cache
+    build:
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter pub get
+      - $$flutter$$/bin/flutter build apk --release
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags ^v[0-9]
+CurrentVersion: PLACEHOLDER
+CurrentVersionCode: PLACEHOLDER

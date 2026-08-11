@@ -131,6 +131,20 @@ class AboutScreen extends ConsumerWidget {
                       applicationVersion: appVersionLabel,
                     ),
                   ),
+                  SizedBox(height: sectionGap),
+                  SectionHeader(title: 'Diagnostics'),
+                  WaxOptionRow(
+                    title: 'Defect log',
+                    subtitle:
+                        'Errors the app caught on its own, newest first, with '
+                        'a way to copy them into a bug report.',
+                    glyph: WaxIcons.warning,
+                    semanticsId: SemanticsIds.aboutDefects,
+                    trailing: const WaxIcon(WaxIcons.forward, size: 16),
+                    // A location beneath this one, so the same reasoning
+                    // as the About row above: it can be linked to.
+                    onTap: () => context.go(WaxRoute.settingsDefects),
+                  ),
                   const SizedBox(height: WaxSpace.s32),
                 ],
               ),

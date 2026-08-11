@@ -190,6 +190,11 @@ func (h *Handler) entryChild(idx *index, it service.ItemSummary) child {
 		CoverArt: it.PID,
 		Duration: int(it.DurationMS / 1000),
 		Type:     it.MediaType,
+		// The summary row carries no container, so the floor stands in:
+		// contentType is load-bearing on every child (formatFacts says
+		// why), and bookmarks, starred, and playlist entries all render
+		// episodes and books through this arm.
+		ContentType: "application/octet-stream",
 	}
 }
 

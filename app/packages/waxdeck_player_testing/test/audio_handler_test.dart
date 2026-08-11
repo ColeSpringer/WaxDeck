@@ -4,7 +4,7 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 /// The handler drives every OS media surface - the Android notification
 /// and Auto, MediaSession in the browser, MPRIS, the Windows transport
-/// controls, macOS's now-playing panel - because all of them are
+/// controls - because all of them are
 /// implementations of the one interface it speaks. Its state is what
 /// each of them draws, so what it publishes is worth pinning.
 ///

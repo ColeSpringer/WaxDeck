@@ -12,6 +12,20 @@ import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
 
+/// The field names each provider's login form uses.
+///
+/// Two providers stand behind the same journey - the bare-binary test
+/// IdP the suite runs by default, and a real dex when the compose
+/// harness is up - and they differ in nothing but this. Naming the
+/// dialects here keeps that difference out of the specs, which say who
+/// they are signing in as and not what the form calls its fields.
+const FORMS = {
+  testidp: { username: 'idp_username', password: 'idp_password' },
+  dex: { username: 'login', password: 'password' },
+} as const;
+
+export type SsoForm = keyof typeof FORMS;
+
 export class Sso extends Surface {
   /// The provider's button on WaxDeck's own login screen.
   provider(id: string): Locator {
@@ -29,16 +43,18 @@ export class Sso extends Surface {
     provider: string,
     who: { username: string; password: string },
     at: RegExp,
+    form: SsoForm = 'testidp',
   ): Promise<void> {
     const page = this.ctx.page;
+    const fields = FORMS[form];
     const button = this.provider(provider);
     await button.waitFor({ timeout: T.nav });
     await button.click();
 
     // The provider's own login form, on the provider's own origin.
     await page.waitForURL(at, { timeout: T.nav });
-    await page.locator('input[name="idp_username"]').fill(who.username);
-    await page.locator('input[name="idp_password"]').fill(who.password);
+    await page.locator(`input[name="${fields.username}"]`).fill(who.username);
+    await page.locator(`input[name="${fields.password}"]`).fill(who.password);
     await page.locator('button[type="submit"]').click();
 
     // Back through the server callback, and the app loads signed in.

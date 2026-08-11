@@ -55,8 +55,15 @@ docker compose up -d
 ## Clients
 
 The web app ships inside the server. The same Flutter app builds for
-Android, macOS, Linux, and Windows from `app/`, and any Subsonic
-client or gpodder podcast app can connect to the compatibility APIs.
+Android, Linux, and Windows from `app/`, and any Subsonic client or
+gpodder podcast app can connect to the compatibility APIs.
+
+On Android, add the F-Droid repository and each release arrives as an
+update (the fingerprint is part of the address):
+
+```
+https://colespringer.github.io/WaxDeck/repo?fingerprint=18BB5776333A744A3C0519BF9C019C09C745E0FFE5207AF5BF8F4D054D9CBE35
+```
 
 ## Documentation
 

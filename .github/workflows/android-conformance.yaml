@@ -1,9 +1,16 @@
 # The real-engine conformance suite against just_audio's Android
-# backend, on an emulator. Scheduled and on demand, never a merge gate:
-# the suite waits on real playback timing throughout, and an emulator
-# booting on a shared-CPU runner is exactly the shape that turns those
-# waits into flakes. Promoting it to a gate is a decision to make after
-# a few dozen runs have said whether it is stable, not before.
+# backend, on an emulator. Runs on pushes that touch the surfaces the
+# engine contract rides, plus the weekly sweep and on demand. "Gate"
+# means the run is visible on the push and nothing more - the repo has
+# no branch protection, so what it buys is a regression surfacing on
+# the commit that made it instead of on Tuesday.
+#
+# Promoted on evidence: four dispatched runs on the 3.44.9 pin came
+# back three green and one failure in which zero tests ran - "Failed
+# to start Dart Development Service", the harness dying before the
+# suite, with all four contending for the gradle cache at once. The
+# suite itself has not failed, so the harness gets a second attempt
+# below before the run reports red; a real regression fails both.
 #
 # Why it exists at all: the port contract says a play after completion
 # restarts the item; the FakeEngine implemented that and just_audio did
@@ -18,9 +25,30 @@
 name: Android engine conformance
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "app/packages/waxdeck_player/**"
+      - "app/packages/waxdeck_player_testing/**"
+      - "app/app/integration_test/**"
+      - "app/app/android/**"
+      - "app/app/pubspec.yaml"
+      - "app/pubspec.lock"
+      - "fixtures/**"
+      - ".github/workflows/android-conformance.yaml"
   schedule:
     - cron: "43 5 * * 2" # Tuesdays, 05:43 UTC
   workflow_dispatch:
+
+# A push stacked on another push wants the newer emulator, not a queue
+# of them - but only pushes supersede each other. The event name is in
+# the group and cancellation is push-only, because everything on main
+# shares one ref: a plain ref group would let a merge cancel the weekly
+# sweep mid-run, and concurrent dispatches (the promotion evidence was
+# four at once) would cancel each other.
+concurrency:
+  group: android-conformance-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 permissions:
   contents: read
@@ -90,6 +118,8 @@ jobs:
       # published at every API level, and a weekly job that dies in
       # sdkmanager is worse than one that boots two minutes slower.
       - name: Conformance suite on the emulator
+        id: first
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -104,6 +134,27 @@ jobs:
           # runner has no host audio either, so this asks the emulator
           # for a device that discards what it is given, which is exactly
           # what a silenced conformance run wants.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+          script: >-
+            cd app/app &&
+            flutter test integration_test/real_engine_conformance_test.dart
+            -d emulator-5554
+            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac
+      # The identical run again, only when the first failed: the one
+      # observed failure mode is the harness dying before any test
+      # starts, and a retry is cheaper than the promotion question
+      # reopening on every flake. A real regression fails both attempts,
+      # and both show in the log.
+      - name: Conformance suite, second attempt
+        if: steps.first.outcome == 'failure'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          # Pinned identically to the first attempt, comment and all up
+          # there: a retry that runs a different emulator answers a
+          # different question.
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           script: >-
             cd app/app &&

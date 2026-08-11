@@ -1,11 +1,16 @@
-import 'package:flutter/widgets.dart';
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart' show BrowserContextMenu;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
 import 'src/app.dart';
 import 'src/artwork/artwork_providers.dart';
 import 'src/auto/media_session_init.dart';
+import 'src/diagnostics/defect_log.dart';
 import 'src/desktop/desktop_ports_io.dart'
     if (dart.library.js_interop) 'src/desktop/desktop_ports_stub.dart';
 import 'src/shell/url_strategy/url_strategy.dart';
@@ -17,6 +22,11 @@ Future<void> main() async {
   // locations live in the path, so this has to be set before anything
   // parses one. No-op off the web.
   useWaxUrlStrategy();
+  // The design system answers right-click itself - a card's secondary
+  // tap is its More menu - so the browser's own menu would stack on top
+  // of every one. Unawaited: first paint must not wait on a menu
+  // preference.
+  if (kIsWeb) unawaited(BrowserContextMenu.disableContextMenu());
   // Before anything can decode a cover: this app draws grids of them,
   // and the framework's defaults are sized for apps that draw a few.
   applyArtworkImageCacheBounds();
@@ -34,6 +44,10 @@ Future<void> main() async {
   // observer is the live fan-out's ledger of in-flight first builds; it
   // only works registered here, from the first element.
   final container = ProviderContainer(observers: [FirstBuildObserver()]);
+  // Before anything else can raise: the paged controllers rethrow the
+  // defects they cannot handle on purpose, and until this is installed
+  // there is nothing on the other end of that.
+  installDefectHandlers(container);
   await initMediaSession(container);
   runApp(
     UncontrolledProviderScope(container: container, child: const WaxDeckApp()),

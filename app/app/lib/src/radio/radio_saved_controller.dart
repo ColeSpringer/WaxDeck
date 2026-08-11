@@ -66,7 +66,7 @@ class RadioSavedController extends AsyncNotifier<RadioSavedState> {
     } catch (_) {
       // Anything else is a defect rather than a hiccup. Release the
       // paging guard first, or leaving it set wedges paging silently,
-      // then let the error reach the zone's handler.
+      // then let the error reach the app's error handler.
       if (generation == _generation) {
         state = AsyncData(current.copyWith(loadingMore: false));
       }

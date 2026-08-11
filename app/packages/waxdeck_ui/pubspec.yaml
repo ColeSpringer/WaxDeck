@@ -44,7 +44,7 @@ flutter:
     - family: SplineSansMono
       fonts:
         - asset: fonts/SplineSansMono-Variable.ttf
-    # The fallback scripts (Arabic, Hebrew, Thai, CJK) are deliberately
+    # The fallback scripts (the deferred set) are deliberately
     # not declared here: declared fonts load eagerly at web startup, so
     # they live in assets/fonts/ and WaxFonts loads each from WaxDeck's
     # own origin the first time text on screen needs its script.

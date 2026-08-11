@@ -42,21 +42,28 @@ test('the row action menu opens and copies to the clipboard', async ({
     .toBe('Proposed Title 04');
 });
 
-// @quarantine - it opens the browser's own context menu, which is an OS
-// window: a sibling stealing focus while it is up loses the Escape that
-// dismisses it and the selection with it. Passes alone and passes most
-// full runs; it has now failed twice across a few dozen, which is the
-// bar this suite set for not believing a test any more. It keeps running
-// in the soak, where a failure is information. See docs/deferred-work.md.
-test('a right click does not destroy the selection @quarantine', async ({
+// A secondary click over selected canvas text, and what survives it.
+//
+// This was the suite's one quarantined test, and the browser's native
+// context menu was why: an OS window, outside the DOM, dismissed by an
+// Escape that a sibling worker stealing focus could swallow. The menu
+// was never the subject. Suppressing it at the DOM before the click
+// leaves the secondary-button pointer events reaching Flutter exactly as
+// they did, and what is left is deterministic - Flutter's own menu is a
+// widget, and Escape closes it every time.
+//
+// The gate finding is unchanged and worth keeping in prose: the click
+// costs the selection either way (a copy straight after it lands
+// nothing), so what is measurable is recovery - re-selecting and copying
+// delivers afterwards. Had the click permanently wrecked selection, no
+// number of retries would land the text.
+test('a right click does not destroy the selection', async ({
   rawPage: page,
 }) => {
-  // On the web build a secondary click over selected canvas text opens
-  // the BROWSER's native context menu (Flutter defers to it by
-  // default), which lives outside the DOM and cannot be scripted or
-  // asserted from here; that fact is part of the gate record. What can
-  // be pinned: the click must not wreck the selection, and keyboard
-  // copy must still deliver it afterwards.
+  // No synthetic contextmenu suppression here: the app disables the
+  // browser's own menu itself on web (main.dart - the design system
+  // answers right-click with its More menus), so this drives exactly
+  // what ships.
   const cell = page.locator(sem(SemanticsIds.protoCellCurrent(7)));
   await cell.scrollIntoViewIfNeeded();
   const box = (await cell.boundingBox())!;
@@ -66,23 +73,22 @@ test('a right click does not destroy the selection @quarantine', async ({
   await page.mouse.move(box.x + box.width - 2, y, { steps: 8 });
   await page.mouse.up();
   await page.mouse.click(box.x + box.width / 2, y, { button: 'right' });
-  await page.keyboard.press('Escape'); // dismiss whatever menu appeared
 
-  // Recorded gate finding: the native menu costs the selection (a
-  // copy here lands nothing), so the measurable guarantee is recovery,
-  // not survival: re-selecting and copying delivers afterwards. The
-  // whole select-copy-read round retries, because a canvas drag can
-  // miss on any attempt (the same async-semantics gap typeInto retries
-  // around); if the menu had permanently wrecked selection, no number
-  // of retries would ever land the text.
+  // The prototype answers a secondary tap with its own row menu, which
+  // is a pushed route and swallows the pointer events the drag below
+  // needs. Waited for and then dismissed, rather than dismissed blind:
+  // an Escape sent before the menu is up leaves it open for the rest of
+  // the test, which is the shape of the flake that quarantined this.
+  const menuItem = page.locator(sem(SemanticsIds.protoMenuCopy));
+  await menuItem.waitFor({ timeout: 10_000 });
+  await page.keyboard.press('Escape');
+  await menuItem.waitFor({ state: 'hidden', timeout: 10_000 });
+
+  // The select-copy-read round retries: a canvas drag can miss on any
+  // attempt (the same async-semantics gap typeInto retries around).
+  // Fresh geometry every attempt, because an earlier one can scroll the
+  // view and a drag along a stale box selects nothing.
   await expect(async () => {
-    // The native menu can open late, after the first Escape already
-    // fired; a still-open menu swallows every later mouse event, so
-    // each attempt dismisses again before selecting. Fresh geometry
-    // every attempt too: the dismissed menu or an earlier attempt can
-    // scroll the view, and a drag along a stale box selects nothing
-    // on every retry.
-    await page.keyboard.press('Escape');
     await cell.scrollIntoViewIfNeeded();
     const fresh = (await cell.boundingBox())!;
     const fy = fresh.y + fresh.height / 2;

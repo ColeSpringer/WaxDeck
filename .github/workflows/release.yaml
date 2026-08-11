@@ -5,7 +5,7 @@
 #     (web UI embedded) and attaches the archives to a GitHub Release;
 #   - runs the packaging matrix (package.yaml via workflow_call) and attaches
 #     the desktop installers and the Android APKs to the same release.
-# Nothing here notarizes, and only Android is signed; see docs/releasing.md.
+# Only Android is signed; see docs/releasing.md.
 name: Release
 
 on:
@@ -181,8 +181,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p assets
-          cp artifacts/waxdeck-macos-dmg/waxdeck-macos.dmg \
-            "assets/waxdeck-macos-${VERSION}.dmg"
           cp artifacts/waxdeck-linux-tar/waxdeck-linux-x64.tar.gz \
             "assets/waxdeck-linux-x64-${VERSION}.tar.gz"
           cp artifacts/waxdeck-windows-zip/waxdeck-windows-x64.zip \

@@ -146,8 +146,11 @@ export default defineConfig({
         /admin-wizard\.spec\.ts/,
         /uploads\.spec\.ts/,
         /admin-ops\.spec\.ts/,
+        /admin-readonly\.spec\.ts/,
         /editing-prototype\.spec\.ts/,
         /a11y-audit\.spec\.ts/,
+        /feishin\.spec\.ts/,
+        /identity-dex\.spec\.ts/,
       ],
       dependencies: ['setup'],
       ...motion('reduce'),
@@ -182,39 +185,39 @@ export default defineConfig({
       dependencies: ['wave'],
       ...motion('reduce'),
     },
-    // Not parallel with itself, for two reasons, and the second is the
-    // one that decides it. Two tests here read the whole settings
-    // object, change one field and put it back, and the endpoint stores
-    // each field as its own row - so concurrent replaces interleave and
-    // drop each other's change. A `describe.serial` around that pair
-    // would answer that much.
+    // The admin console's own global surfaces: the settings row, the
+    // backup set, the trash, the library table. Parallel with itself,
+    // with one `describe.serial` inside the file around the pair that
+    // shares the backup set.
     //
-    // It would not answer the rest. One of the pair turns SERVER-WIDE
-    // read-only on for the length of its body, and read-only refuses
-    // every write on the stack with a 409 - the trash round trip's
-    // `/library/items/delete`, the uploads, the runtime library. That is
-    // the same global switch the chaining above exists to keep off the
-    // uploads project, seen from inside the file. Serializing two tests
-    // against each other does nothing about a switch one of them holds
-    // while the other five run.
-    //
-    // So this is one worker in order. Giving the idle workers back means
-    // making the read-only test stop being global - its own project, or
-    // a per-library flag - not rescheduling around it.
+    // It used to be one worker in order, and the reason was one test:
+    // server-wide read-only, which refuses every write on the stack
+    // while it is on. That is a switch, not a race, so serializing the
+    // file against itself was the only answer available from inside it -
+    // and it idled three of four workers for the length of the project.
+    // The switch has its own project below instead.
     {
       name: 'mutators-admin',
       testMatch: /admin-ops\.spec\.ts/,
       dependencies: ['mutators-uploads'],
-      fullyParallel: false,
+      ...motion('reduce'),
+    },
+    // Server-wide read-only, alone on the stack. One test, one project,
+    // after everything that writes and before everything that follows:
+    // that is what "global" costs, paid once rather than charged to six
+    // tests that only shared a file with it.
+    {
+      name: 'mutators-readonly',
+      testMatch: /admin-readonly\.spec\.ts/,
+      dependencies: ['mutators-admin'],
       ...motion('reduce'),
     },
     // Animated paths stay covered, and this sits BEFORE the focus
     // projects rather than at the very end. Playwright skips a project
-    // whose dependency had failures, and the focus projects are where
-    // the quarantined test lives - so with this last, one test the suite
-    // has already stopped believing would take the only unreduced
-    // coverage in the run down with it, in the soak especially, where
-    // quarantine is included on purpose.
+    // whose dependency had failures, and the focus projects are the
+    // flake-prone tail by construction - they fight the OS for focus -
+    // so with this last, a late focus failure would take the only
+    // unreduced coverage in the run down with it.
     //
     // It still may not run beside `wave`: both match ui.spec.ts, and two
     // copies of one test at once is the aliasing the account model
@@ -226,7 +229,7 @@ export default defineConfig({
       // Anchored both ends: a bare /ui\.spec\.ts/ is a substring match
       // over the whole path and picks up signup-ui.spec.ts too.
       testMatch: /[\\/]ui\.spec\.ts$/,
-      dependencies: ['mutators-admin'],
+      dependencies: ['mutators-readonly'],
       ...motion('no-preference'),
     },
     // Focus-sensitive specs run last, one at a time (projects chain
@@ -246,6 +249,37 @@ export default defineConfig({
       dependencies: ['focus-a11y'],
       ...motion('reduce'),
     },
+    // The real third-party client, which needs a container this suite
+    // does not start: present only when FEISHIN_BASE_URL names one, so a
+    // plain `npx playwright test` neither runs it nor reports it skipped
+    // forever. It depends on setup the way sso-dex does: its fixtures
+    // mint an account through /auth/bootstrap, and a first-wave start on
+    // a non-external run would race the wizard's own bootstrap into a
+    // 409 that takes everything chained behind setup down. The CI job
+    // runs it by name against the compose stack.
+    ...(process.env.FEISHIN_BASE_URL
+      ? [
+          {
+            name: 'feishin',
+            testMatch: /feishin\.spec\.ts/,
+            dependencies: ['setup'],
+            ...motion('reduce'),
+          },
+        ]
+      : []),
+    // The SSO journey against a real dex, which run-sso-dex.sh brings up
+    // before it invokes this project by name. Conditional for the same
+    // reason as feishin: without the container there is nothing to drive.
+    ...(process.env.WAXDECK_DEX_SSO
+      ? [
+          {
+            name: 'sso-dex',
+            testMatch: /identity-dex\.spec\.ts/,
+            dependencies: ['setup'],
+            ...motion('reduce'),
+          },
+        ]
+      : []),
   ],
   // run-stack.sh synthesizes the fixture library, starts the WaxFlow
   // streaming sidecar, and execs the server binary built with the embedded
@@ -269,11 +303,21 @@ export default defineConfig({
     // server somebody already bootstrapped makes the one test the
     // stack exists for skip itself. Failing on a busy port is the
     // louder and more useful answer.
-    {
-      command: './run-wizard-stack.sh',
-      url: `${wizardBaseURL}/api/v1/health`,
-      reuseExistingServer: false,
-      timeout: 120_000,
-    },
+    //
+    // Dropped for the dex run, which selects one project by name:
+    // playwright boots every webServer entry regardless of what is
+    // selected, so this would start a whole second installation for a
+    // spec that never opens it - and then fail the run on the port if
+    // one is already there.
+    ...(process.env.WAXDECK_DEX_SSO
+      ? []
+      : [
+          {
+            command: './run-wizard-stack.sh',
+            url: `${wizardBaseURL}/api/v1/health`,
+            reuseExistingServer: false,
+            timeout: 120_000,
+          },
+        ]),
   ],
 });

@@ -387,6 +387,61 @@ void main() {
         gate.complete();
       },
     );
+
+    test('a first build that fails is a landing, not a hang', () async {
+      // The edge the entry named: a first build that never lands kept
+      // its topic's retry timer re-arming for the life of the session.
+      // Request deadlines close it - a hung request now ends in a
+      // timeout, and an error landing prunes the ledger exactly as a
+      // value landing does.
+      final observer = FirstBuildObserver();
+      final repository = _GatedRepository(items: const [_track]);
+      final created = await repository.createPlaylist(
+        name: 'By Hand',
+        kind: 'static',
+      );
+      final container = ProviderContainer(
+        overrides: [repositoryProvider.overrideWithValue(repository)],
+        observers: [observer],
+      );
+      addTearDown(container.dispose);
+      final fanOut = InvalidationFanOut(
+        container: container,
+        firstBuilds: observer,
+        families: [playlistDetailProvider],
+      );
+
+      repository.gatedPid = created.pid;
+      final gate = repository.gate = Completer<void>();
+      final instance = playlistDetailProvider(created.pid);
+      final sub = container.listen(instance, (_, _) {});
+      addTearDown(sub.close);
+      expect(observer.inFirstBuild(instance), isTrue);
+
+      gate.completeError(
+        const WaxDeckApiException(
+          code: 'timeout',
+          message: 'the server did not answer in time',
+        ),
+      );
+      await pumpEventQueue();
+      // Riverpod 3 retries a failed provider on its own, so the state
+      // that follows is a loading carrying the error rather than a bare
+      // AsyncError. Either way the build landed, which is what the
+      // ledger keys on.
+      expect(container.read(instance).hasError, isTrue);
+
+      expect(
+        observer.inFirstBuild(instance),
+        isFalse,
+        reason: 'an error is a landing',
+      );
+      expect(
+        fanOut.sweep(),
+        isTrue,
+        reason: 'nothing is owed for it, so no retry timer re-arms',
+      );
+    });
   });
 
   group('InvalidationFanOut', () {

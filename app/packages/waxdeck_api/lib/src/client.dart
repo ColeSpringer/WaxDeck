@@ -1501,13 +1501,42 @@ class WaxDeckClient implements WaxDeckRepository {
     final trimmed = baseUrl.replaceAll(RegExp(r'/+$'), '');
     final transport = dio ?? Dio();
     transport.options.baseUrl = '$trimmed/api/v1';
+    // Deadlines, so a request that never lands becomes an error instead
+    // of a future nobody ever completes. A hung first build is what kept
+    // the live fan-out's retry timer re-arming for the life of a session.
+    //
+    // The receive budget caps the wait for the response line and then
+    // runs between chunks, so a slow but flowing download never trips
+    // it and an upload's body is sent before the timer starts - but a
+    // handler that does its whole job before answering is on the clock
+    // for all of it, which is what the long-operation flag below is
+    // for. On web the adapter has no chunk view at all: it sets the
+    // XHR timeout to connect+receive over the entire request, upload
+    // included. sendTimeout stays unset on purpose: it budgets the
+    // request body, and a 1 MB chunk on a slow uplink is a legitimate
+    // slow send.
+    transport.options.connectTimeout = const Duration(seconds: 10);
+    transport.options.receiveTimeout = const Duration(seconds: 30);
     return WaxDeckClient._(trimmed, gen.WaxdeckApiGen(dio: transport));
   }
+
+  /// Marks a call whose server side does its whole job before the
+  /// response line, so the ordinary receive budget would call a healthy
+  /// operation dead. Set through the generated methods' `extra` map.
+  static const String _longOperation = 'waxdeck-long-operation';
 
   WaxDeckClient._(this._baseUrl, this._gen) {
     _gen.dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+          // Importing a backup archive io.Copies and fsyncs the lot
+          // before it answers 201, and on web the XHR timeout covers
+          // the upload too - thirty seconds would fail a healthy
+          // import and invite a duplicate-archive retry. Widened per
+          // call rather than loosening every request's budget.
+          if (options.extra[_longOperation] == true) {
+            options.receiveTimeout = const Duration(minutes: 30);
+          }
           final token = _authToken;
           if (token != null && !options.headers.containsKey('Authorization')) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -4228,6 +4257,7 @@ class WaxDeckClient implements WaxDeckRepository {
       // flows through in transport-sized pieces instead of being
       // buffered whole.
       body: MultipartFile.fromStream(openRead, sizeBytes),
+      extra: const {_longOperation: true},
     );
     return backupFromGen(_require(response.data));
   });
@@ -4389,6 +4419,25 @@ class WaxDeckClient implements WaxDeckRepository {
 /// strings get one decode attempt before falling back to a transport
 /// error.
 WaxDeckApiException apiExceptionFromDio(DioException e) {
+  // A deadline first, and by type rather than by body: there is no
+  // response to read a code out of, and callers that tell a timeout
+  // from a refusal need a name for it rather than the generic
+  // transport fallback. The name is client-minted like 'transport'
+  // beside it, and deliberately NOT the spec's `timeout` - that enum
+  // value means a player-routed command whose endpoint is still
+  // connected (the connect bus mints it), and a handler written to
+  // that meaning must not also catch plain HTTP deadlines.
+  switch (e.type) {
+    case DioExceptionType.connectionTimeout:
+    case DioExceptionType.sendTimeout:
+    case DioExceptionType.receiveTimeout:
+      return WaxDeckApiException(
+        code: 'transport-timeout',
+        message: e.message ?? 'the server did not answer in time',
+      );
+    default:
+      break;
+  }
   var data = e.response?.data;
   if (data is String) {
     try {

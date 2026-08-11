@@ -9,8 +9,8 @@ import '../sync/sync_providers.dart';
 import 'auto_browse.dart';
 
 /// Registers the OS media session: the Android notification and Auto's
-/// browse tree, the browser's MediaSession, MPRIS on Linux, the Windows
-/// transport controls, and macOS's now-playing panel.
+/// browse tree, the browser's MediaSession, MPRIS on Linux, and the
+/// Windows transport controls.
 ///
 /// One registration for all of them. audio_service is federated, so
 /// Linux and Windows are implementations of the same interface the
@@ -74,12 +74,9 @@ const Duration _registrationLimit = Duration(seconds: 5);
 
 /// Whether this platform has a media session to register.
 ///
-/// Everything WaxDeck ships on does now. iOS is the one absence, and it
-/// is absent because the client is: the platform's own support is
-/// audio_service's, and it comes back with the platform.
+/// Everything WaxDeck ships on does.
 bool get _hasMediaSession =>
     kIsWeb ||
     defaultTargetPlatform == TargetPlatform.android ||
     defaultTargetPlatform == TargetPlatform.linux ||
-    defaultTargetPlatform == TargetPlatform.macOS ||
     defaultTargetPlatform == TargetPlatform.windows;

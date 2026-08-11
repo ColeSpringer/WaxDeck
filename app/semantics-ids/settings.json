@@ -1,11 +1,15 @@
 {
   "doc": "Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.",
   "ids": {
+    "aboutDefects": "about-defects",
     "aboutLicenses": "about-licenses",
     "aboutOpen": "about-open",
     "aboutRow": "about",
     "appPasswordAdd": "app-password-add",
     "appPasswordRevoke": "app-password-revoke-{id}",
+    "defectsClear": "defects-clear",
+    "defectsCopy": "defects-copy",
+    "defectsScreen": "defects-screen",
     "deviceRename": "device-rename-{id}",
     "deviceRevoke": "device-revoke-{id}",
     "deviceRow": "device-row-{id}",

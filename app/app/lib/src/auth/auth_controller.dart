@@ -137,8 +137,10 @@ class AuthController extends AsyncNotifier<SessionState> {
       return;
     }
     final result = switch (defaultTargetPlatform) {
-      TargetPlatform.android || TargetPlatform.iOS =>
-        await flow.loginWithDeepLink(provider, deviceName: waxDeckDeviceName),
+      TargetPlatform.android => await flow.loginWithDeepLink(
+        provider,
+        deviceName: waxDeckDeviceName,
+      ),
       _ => await flow.loginWithLoopback(
         provider,
         deviceName: waxDeckDeviceName,

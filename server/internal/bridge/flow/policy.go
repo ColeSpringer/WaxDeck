@@ -164,16 +164,49 @@ type Shape struct {
 }
 
 // containerMime maps source containers to the media type a direct play
-// of that container serves.
+// of that container serves. Keys are NormalizeContainer's output - the
+// stored labels are WaxLabel's names lowercased by the scan ("aac
+// (adts)", "aifc", "matroska", "wavpack", "asf") - with the extension
+// spellings kept beside them as belt.
 var containerMime = map[string]string{
-	"flac": "audio/flac",
-	"mp3":  "audio/mpeg",
-	"wav":  "audio/wav",
-	"aiff": "audio/aiff",
-	"ogg":  "audio/ogg",
-	"mp4":  "audio/mp4",
-	"adts": "audio/aac",
-	"mka":  "audio/x-matroska",
+	"flac":     "audio/flac",
+	"mp3":      "audio/mpeg",
+	"wav":      "audio/wav",
+	"aiff":     "audio/aiff",
+	"aifc":     "audio/aiff",
+	"ogg":      "audio/ogg",
+	"opus":     "audio/ogg",
+	"mp4":      "audio/mp4",
+	"m4a":      "audio/mp4",
+	"m4b":      "audio/mp4",
+	"aac":      "audio/aac",
+	"adts":     "audio/aac",
+	"matroska": "audio/x-matroska",
+	"mka":      "audio/x-matroska",
+	"webm":     "audio/webm",
+	"asf":      "audio/x-ms-wma",
+	"wma":      "audio/x-ms-wma",
+	"ape":      "audio/x-ape",
+	"wavpack":  "audio/x-wavpack",
+	"wv":       "audio/x-wavpack",
+}
+
+// NormalizeContainer folds a stored container label onto the family key
+// the mime tables use: the first word, lowercased, so a composite probe
+// label like "aac (adts)" lands on its family.
+func NormalizeContainer(label string) string {
+	key, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(label)), " ")
+	return key
+}
+
+// ContainerMime answers the media type for a stored container label,
+// application/octet-stream where nothing better is known. Never empty:
+// real clients dereference content types without checking.
+func ContainerMime(label string) string {
+	if m, ok := containerMime[NormalizeContainer(label)]; ok {
+		return m
+	}
+	return "application/octet-stream"
 }
 
 // formatMime maps explicitly requested output formats to the media
@@ -317,7 +350,7 @@ func DeviceFormat(src Source, shape Shape, caps *client.Caps, accepts []string, 
 	}
 	wanted := canonicalize(accepts)
 	if shape.Format == "auto" {
-		if mime := containerMime[src.Container]; mime != "" {
+		if mime, ok := containerMime[NormalizeContainer(src.Container)]; ok {
 			if c, ok := canonicalMime[mime]; ok {
 				mime = c
 			}
@@ -374,11 +407,7 @@ func ShapeFor(src Source, caps *client.Caps, voiceBoost bool) Shape {
 		return pick("mp3")
 	}
 	if !src.Virtual {
-		mime := containerMime[src.Container]
-		if mime == "" {
-			mime = "application/octet-stream"
-		}
-		return Shape{Format: "auto", MimeType: mime, Seekable: true}
+		return Shape{Format: "auto", MimeType: ContainerMime(src.Container), Seekable: true}
 	}
 	if slices.Contains(caps.Delivery.CutFormats, src.Codec) {
 		return pick(src.Codec)

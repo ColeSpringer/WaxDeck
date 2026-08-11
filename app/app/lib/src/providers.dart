@@ -27,7 +27,7 @@ String get waxDeckBaseUrl =>
 ///
 /// The transport carries the font-warmup interceptor: every response is
 /// where library metadata first arrives, so the deferred script faces
-/// (Arabic, Hebrew, Thai, CJK) start loading before any screen lays the
+/// (the deferred scripts) start loading before any screen lays the
 /// text out, with no per-screen wiring to forget.
 final repositoryProvider = Provider<WaxDeckRepository>(
   (ref) => WaxDeckClient(
@@ -67,7 +67,6 @@ final desktopProvider = Provider<bool>(
   (ref) =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.linux ||
-          defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.windows),
 );
 
@@ -111,11 +110,10 @@ String get listenClientId {
   if (kIsWeb) return 'waxdeck-flutter-web';
   return switch (defaultTargetPlatform) {
     TargetPlatform.android => 'waxdeck-flutter-android',
-    TargetPlatform.iOS => 'waxdeck-flutter-ios',
     TargetPlatform.linux => 'waxdeck-flutter-linux',
-    TargetPlatform.macOS => 'waxdeck-flutter-macos',
     TargetPlatform.windows => 'waxdeck-flutter-windows',
-    TargetPlatform.fuchsia => 'waxdeck-flutter-fuchsia',
+    // Nothing else builds; the arm keeps the switch total.
+    _ => 'waxdeck-flutter',
   };
 }
 
@@ -125,10 +123,8 @@ String? get waxDeckDeviceName {
   if (kIsWeb) return null;
   return switch (defaultTargetPlatform) {
     TargetPlatform.android => 'WaxDeck Android',
-    TargetPlatform.iOS => 'WaxDeck iOS',
     TargetPlatform.linux => 'WaxDeck Linux',
-    TargetPlatform.macOS => 'WaxDeck macOS',
     TargetPlatform.windows => 'WaxDeck Windows',
-    TargetPlatform.fuchsia => 'WaxDeck Fuchsia',
+    _ => 'WaxDeck',
   };
 }

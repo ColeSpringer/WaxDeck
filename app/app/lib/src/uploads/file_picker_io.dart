@@ -51,8 +51,7 @@ class _IoFilePickerPort implements FilePickerPort {
   static const _anyGroup = XTypeGroup(label: 'All files');
 
   @override
-  bool get canPickFolders =>
-      Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+  bool get canPickFolders => Platform.isLinux || Platform.isWindows;
 
   @override
   Future<List<PickedAudioFile>> pickAudioFiles() async {

@@ -347,11 +347,8 @@ endif
 # verified for real. Needs a display and an audio sink; the runner says
 # how to wrap it on a headless box, which is what the scheduled
 # desktop-conformance workflow does.
-#
-# DEVICE names the desktop to run on - `make e2e-desktop DEVICE=macos`,
-# linux when unset.
 e2e-desktop:
-	bash e2e/run-desktop.sh $(DEVICE)
+	bash e2e/run-desktop.sh
 
 dist:
 	docker build -f deploy/Dockerfile -t waxdeck:dev .

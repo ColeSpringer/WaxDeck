@@ -260,7 +260,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # The analyzer is behind a profile, and a stack that never starts it
-      # never proves the worker token both halves share.
+      # never proves the worker token both halves share. CORS is
+      # deliberately NOT here: this job's purpose is the stack an
+      # operator brings up, and the default deployment runs the bare
+      # handler with no origin named - so the boot and the smoke run
+      # that path, and the Feishin phase recreates waxdeck with the
+      # origin only once the default shape has answered.
       COMPOSE_PROFILES: similarity
     steps:
       - uses: actions/checkout@v7
@@ -340,6 +345,12 @@ jobs:
       # administrator (a no-op 409 afterwards), log in, and search for
       # something the scan should have found. A stack that comes up and
       # cannot answer this is up in name only.
+      #
+      # The password is the e2e suite's own (accounts.ts ADMIN_PASS): the
+      # Feishin step below mints its account through the same fixtures,
+      # and they reach a stack this step has already bootstrapped, so a
+      # password of this step's own choosing would close the door on
+      # them.
       - name: Smoke the stack
         run: |
           set -euo pipefail
@@ -347,10 +358,10 @@ jobs:
           for _ in $(seq 1 60); do
             curl -sf -X POST "$BASE/api/v1/auth/bootstrap" \
               -H 'Content-Type: application/json' \
-              -d '{"username":"admin","password":"wax-ci-pass"}' >/dev/null 2>&1 || true
+              -d '{"username":"admin","password":"wax-e2e-pass"}' >/dev/null 2>&1 || true
             TOKEN=$(curl -sf -X POST "$BASE/api/v1/auth/login" \
               -H 'Content-Type: application/json' \
-              -d '{"username":"admin","password":"wax-ci-pass"}' |
+              -d '{"username":"admin","password":"wax-e2e-pass"}' |
               sed -n 's/.*"token":"\([^"]*\)".*/\1/p') || true
             if [ -n "${TOKEN:-}" ] && curl -sf "$BASE/api/v1/library/search?q=Alpha" \
               -H "Authorization: Bearer $TOKEN" | grep -q '"tr-'; then
@@ -393,12 +404,82 @@ jobs:
             exit 1
             ;;
           esac
+      # And now a real client against that stack, rather than an emulated
+      # trace of one: Feishin's own web build, from its own compose
+      # project (a test fixture, so it lives in e2e/clients rather than
+      # in the production file), signed in over the Subsonic surface and
+      # asked to play something. External mode - the stack is already up,
+      # so playwright starts no server of its own.
+      #
+      # The origin lands only now, after the default-config boot and
+      # smoke: Feishin's page calls the server cross-origin, so waxdeck
+      # is recreated naming it, and the health poll covers the restart.
+      # Every variable the boot step set rides along - a recreate that
+      # dropped WAXDECK_LIBRARY would re-bind the container to nothing.
+      - name: Name the Feishin origin
+        env:
+          WAXDECK_CORS_ORIGINS: http://localhost:19180
+          WAXDECK_LIBRARY: ${{ runner.temp }}/library
+          WAXDECK_MATCHING: "false"
+        run: |
+          set -euo pipefail
+          WAXDECK_UID=$(id -u) WAXDECK_GID=$(id -g) \
+            docker compose -f deploy/compose.yaml up -d --no-build waxdeck
+          for _ in $(seq 1 60); do
+            curl -sf http://localhost:4420/api/v1/health >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          echo "::error::waxdeck never came back after the CORS recreate"
+          exit 1
+      - name: Serve Feishin beside the stack
+        run: docker compose -f e2e/clients/compose.yaml up -d --wait
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install e2e dependencies
+        run: cd e2e && npm ci --no-audit --no-fund
+      - name: Cache Playwright browsers
+        id: browser-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+      - name: Install Playwright browser
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: cd e2e && npx playwright install --with-deps chromium
+      - name: Install Playwright system dependencies
+        if: steps.browser-cache.outputs.cache-hit == 'true'
+        run: cd e2e && npx playwright install-deps chromium
+      - name: Drive Feishin against the stack
+        env:
+          WAXDECK_BASE_URL: http://localhost:4420
+          FEISHIN_BASE_URL: http://localhost:19180
+        run: cd e2e && npx playwright test --project=feishin
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: feishin-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+      # Best-effort lines: the step shell is bash -e, so a failing first
+      # compose call (deploy/.env missing interpolates to an error)
+      # would otherwise skip the Feishin logs - the one diagnostic for a
+      # feishin-project failure - or leak its container and port.
       - name: Stack logs
         if: failure()
-        run: docker compose -f deploy/compose.yaml logs --no-color
+        run: |
+          docker compose -f deploy/compose.yaml logs --no-color || true
+          docker compose -f e2e/clients/compose.yaml logs --no-color || true
       - name: Tear down
         if: always()
-        run: docker compose -f deploy/compose.yaml down
+        run: |
+          docker compose -f deploy/compose.yaml down || true
+          docker compose -f e2e/clients/compose.yaml down
 
   e2e:
     runs-on: ubuntu-latest
@@ -475,3 +556,17 @@ jobs:
             e2e/playwright-report
             e2e/test-results
           retention-days: 7
+      # The same sign-on journey against a real dex rather than the
+      # bare-binary test IdP. Last in the job on purpose: it is a second
+      # playwright run, and a second run rewrites test-results/report.json
+      # - so it goes after the step that reads that file and after the
+      # upload that carries it.
+      - name: Single sign-on against dex
+        run: bash e2e/run-sso-dex.sh
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: sso-dex-report
+          path: e2e/test-results
+          retention-days: 7
+          if-no-files-found: ignore

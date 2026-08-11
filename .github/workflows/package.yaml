@@ -1,6 +1,6 @@
-# Packaging matrix: the three desktops (unsigned artifacts) and Android
-# APKs. Built now so packaging never becomes a late surprise;
-# notarization and the desktop signing land later.
+# Packaging matrix: the two desktops (unsigned artifacts) and Android
+# APKs. Built now so packaging never becomes a late surprise; the
+# desktop signing lands later.
 #
 # Also callable as a reusable workflow: the release workflow invokes it
 # with the tag's version so the same matrix produces the release
@@ -87,32 +87,6 @@ jobs:
         with:
           name: waxdeck-windows-zip
           path: waxdeck-windows-x64.zip
-          if-no-files-found: error
-
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-      - run: flutter config --enable-macos-desktop
-      - name: Pub get (workspace root)
-        run: cd app && flutter pub get
-      - name: Build macos release (unsigned)
-        run: cd app/app && flutter build macos --release
-      - name: Create DMG
-        run: |
-          APP_PATH=$(ls -d app/app/build/macos/Build/Products/Release/*.app | head -n 1)
-          if [ -z "$APP_PATH" ]; then echo "no .app bundle found" >&2; exit 1; fi
-          echo "Packaging $APP_PATH"
-          hdiutil create -volname WaxDeck -srcfolder "$APP_PATH" -ov -format UDZO waxdeck-macos.dmg
-      - uses: actions/upload-artifact@v7
-        with:
-          name: waxdeck-macos-dmg
-          path: waxdeck-macos.dmg
           if-no-files-found: error
 
   linux:

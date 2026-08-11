@@ -42,6 +42,7 @@ import 'package:waxdeck/src/radio/radio_saved_screen.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
+import 'package:waxdeck/src/diagnostics/defect_log_screen.dart';
 import 'package:waxdeck/src/settings/about_screen.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_screen.dart';
@@ -138,6 +139,7 @@ final _locations = <String, Type>{
   // A literal beside the `:section` pattern, which would otherwise match
   // it and the redirect would bounce it back to the settings home.
   WaxRoute.settingsAbout: AboutScreen,
+  WaxRoute.settingsDefects: DefectLogScreen,
   WaxRoute.shares: SharesScreen,
   WaxRoute.uploads: UploadsScreen,
   WaxRoute.tasks: TasksScreen,
@@ -204,6 +206,9 @@ final _stackedInShell = <String>{
   for (final section in SettingsSection.values)
     WaxRoute.settingsSection(section),
   WaxRoute.settingsAbout,
+  // Two deep: About under settings, and the log under About, so back
+  // walks the way it was opened.
+  WaxRoute.settingsDefects,
   // Beneath settings now, so `go` builds settings under it and back
   // lands on the row that opened it - which is what let the Account
   // section stop pushing.

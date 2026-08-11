@@ -315,7 +315,7 @@ abstract class ArtworkStore {
 /// `CachedArtworkStore`.
 class NetworkArtworkStore extends ArtworkStore {
   NetworkArtworkStore({required this.baseUrl, this.token, Dio? client})
-    : _dio = client ?? Dio();
+    : _dio = client ?? artworkTransport();
 
   @override
   final String baseUrl;
@@ -497,6 +497,19 @@ Map<String, String> authHeadersFor(
   if (value == null || value.isEmpty) return const <String, String>{};
   return <String, String>{'Authorization': 'Bearer $value'};
 }
+
+/// The transport an artwork store fetches over.
+///
+/// Its own deadlines, tighter than the API client's: a cover is one
+/// small image among a screenful, and a request that hangs holds a
+/// connection out of a pool the rest of the grid is queueing for. A
+/// failure here is a monogram, so a short budget costs nothing.
+Dio artworkTransport() => Dio(
+  BaseOptions(
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 15),
+  ),
+);
 
 /// One artwork GET. Answers null for a 304 (the caller already has these
 /// bytes) and for any failure, which is always drawable: a missing cover

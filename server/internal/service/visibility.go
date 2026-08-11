@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -51,6 +52,21 @@ type UserCtx struct {
 // entirely for this caller: explicit content allowed and no tag rules.
 func (uc *UserCtx) ContentUnrestricted() bool {
 	return uc.Explicit && len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0
+}
+
+// UserByName resolves an account row by its username, for the surfaces
+// where the caller names somebody else - the Subsonic getUser view is
+// the one such surface today. Answers KindNotFound for a name no
+// account carries; the caller decides who may ask.
+func (l *Library) UserByName(ctx context.Context, username string) (*wdb.User, error) {
+	u, err := l.db.UserByUsername(ctx, username)
+	if err != nil {
+		if errors.Is(err, wdb.ErrNotFound) {
+			return nil, &Error{Kind: KindNotFound, Err: err}
+		}
+		return nil, &Error{Kind: KindInternal, Err: err}
+	}
+	return u, nil
 }
 
 // UserCtx assembles the per-request user context from an account row.

@@ -1,0 +1,28 @@
+# Dex, and only dex.
+#
+# The waxdeck server stays the host binary the rest of the suite runs, so
+# the browser and the server address the provider by the same loopback
+# name and no container has to resolve the other side. That is the whole
+# reason this is one service rather than a second copy of the stack.
+#
+# Pinned by digest because it is third-party code this repo executes.
+
+name: waxdeck-sso
+
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.44.0@sha256:5d0656fce7d453c0e3b2706abf40c0d0ce5b371fb0b73b3cf714d05f35fa5f86
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    ports:
+      - "127.0.0.1:5556:5556"
+    volumes:
+      - ./dex.yaml:/etc/dex/config.yaml:ro
+    read_only: true
+    # Dex expands environment references in its config through a temp
+    # file before it reads it, so a read-only root filesystem alone stops
+    # it starting at all.
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true

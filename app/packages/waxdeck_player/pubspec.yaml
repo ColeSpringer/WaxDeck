@@ -20,8 +20,8 @@ dependencies:
   # media surfaces: MPRIS on Linux, System Media Transport Controls on
   # Windows. Never imported - both register themselves as implementations
   # of audio_service_platform_interface - so the handler above is the
-  # whole seam, on every platform. Android, iOS, macOS and web ship
-  # inside audio_service itself.
+  # whole seam, on every platform. Android and web ship inside
+  # audio_service itself.
   audio_service_mpris: 0.2.1
   audio_service_win: 0.0.3
   audio_session: 0.2.4

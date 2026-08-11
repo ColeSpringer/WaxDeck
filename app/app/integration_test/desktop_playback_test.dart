@@ -1,8 +1,8 @@
 // The desktop counterpart of the playwright UI journey: the real app on a
-// real desktop platform, with the real audio engine (mpv via media_kit on
-// Linux and Windows, AVFoundation on macOS), against the same cold stack.
-// Run it with e2e/run-desktop.sh, which starts the stack, waits for the
-// startup scan, and invokes `flutter test integration_test -d <device>`.
+// real desktop platform, with the real audio engine (mpv via media_kit),
+// against the same cold stack. Run it with e2e/run-desktop.sh, which
+// starts the stack, waits for the startup scan, and invokes
+// `flutter test integration_test -d linux`.
 import 'dart:convert';
 import 'dart:io';
 

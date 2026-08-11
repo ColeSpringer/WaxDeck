@@ -10,8 +10,8 @@ a number here rather than by redrawing anything.
 Two derived shapes carry it. The **chip** is the emblem on its own paper,
 rounded - what an app icon is, and what puts the mark on a dark surface
 without a halo. The **silhouette** is the emblem keyed out of that paper
-into pure alpha, for the surfaces that supply their own colour: a macOS
-template image, an Android status-bar icon, a Linux tray glyph.
+into pure alpha, for the surfaces that supply their own colour: an
+Android status-bar icon, a Linux tray glyph.
 
 Both are measured, not authored. Paper is read off the master's corner
 patches, and the silhouette is keyed on blurred darkness rather than on
@@ -34,7 +34,6 @@ changes.
 from __future__ import annotations
 
 import base64
-import json
 import math
 import os
 import struct
@@ -955,21 +954,16 @@ def hex_colour(colour) -> str:
 def tray(brand: Brand, out: Path) -> None:
     """The desktop tray glyphs: the emblem as a silhouette, badged.
 
-    Three platform conventions and two transport states. macOS wants a
-    template image - black with alpha, which the system inverts for a
-    dark menu bar - and Windows wants the pair drawn for it, because a
-    taskbar's own theme is what decides which reads. Linux takes a
-    colour glyph, where a StatusNotifier host draws one at all.
+    Two platform conventions and two transport states. Windows wants the
+    light/dark pair drawn for it, because a taskbar's own theme is what
+    decides which reads. Linux takes a colour glyph, where a
+    StatusNotifier host draws one at all.
 
     The tight crop throughout: a menu bar renders these at 16 to 22
     points, and the tonearm is noise at that size.
     """
     for state in ("playing", "paused"):
         accent = AMBER if state == "playing" else TEXT_LIGHT
-        write(
-            out / f"{state}-template.png",
-            badged(brand.silhouette(44, (0, 0, 0), tight=True), state, (0, 0, 0)).to_png(),
-        )
         write(
             out / f"{state}-light.png",
             badged(brand.silhouette(32, CANVAS_DARK, tight=True), state, CANVAS_DARK).to_png(),
@@ -981,33 +975,6 @@ def tray(brand: Brand, out: Path) -> None:
         # The colour Linux variant keeps the artwork and takes an amber
         # badge, which is the one place the state gets a colour of its own.
         write(out / f"{state}.png", badged(brand.chip(48, tight=True), state, accent).to_png())
-
-
-def macos(brand: Brand, appicon: Path) -> None:
-    entries = []
-    for size, scales in ((16, (1, 2)), (32, (1, 2)), (128, (1, 2)), (256, (1, 2)), (512, (1, 2))):
-        for scale in scales:
-            pixels = size * scale
-            name = f"app_icon_{pixels}.png"
-            write(appicon / name, brand.chip(pixels, tight=pixels <= 32).to_png())
-            entries.append(
-                {
-                    "size": f"{size}x{size}",
-                    "idiom": "mac",
-                    "filename": name,
-                    "scale": f"{scale}x",
-                }
-            )
-    write(
-        appicon / "Contents.json",
-        (
-            json.dumps(
-                {"images": entries, "info": {"version": 1, "author": "waxdeck"}},
-                indent=2,
-            )
-            + "\n"
-        ).encode(),
-    )
 
 
 def web(brand: Brand, web_dir: Path) -> None:
@@ -1141,9 +1108,9 @@ def main() -> int:
 
     print("brand: android")
     android(brand, APP / "android/app/src/main/res")
-
-    print("brand: macos")
-    macos(brand, APP / "macos/Runner/Assets.xcassets/AppIcon.appiconset")
+    # The F-Droid listing icon, kept beside the store texts: fastlane is
+    # the layout fdroidserver and the fdroiddata pipeline both read.
+    write(ROOT / "fastlane/metadata/android/en-US/images/icon.png", brand.chip(512).to_png())
 
     print("brand: windows")
     write_ico(APP / "windows/runner/resources/app_icon.ico", brand, (16, 24, 32, 48, 64, 128, 256))
@@ -1178,7 +1145,6 @@ def main() -> int:
     for state in ("playing", "paused"):
         accent = AMBER if state == "playing" else TEXT_LIGHT
         tiles += [
-            (f"{state}-template", badged(brand.silhouette(44, (0, 0, 0), tight=True), state, (0, 0, 0))),
             (f"{state}-light", badged(brand.silhouette(32, CANVAS_DARK, tight=True), state, CANVAS_DARK)),
             (f"{state}-dark", badged(brand.silhouette(32, TEXT_LIGHT, tight=True), state, TEXT_LIGHT)),
             (f"{state}-colour", badged(brand.chip(48, tight=True), state, accent)),

@@ -37,6 +37,7 @@ const write = process.argv.includes('--write-baseline');
 const ADMIN_SHAPES = [
   'admin-console',
   'admin-ops',
+  'admin-readonly',
   'driver-smoke',
   'notifications',
   'review-queue',

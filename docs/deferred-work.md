@@ -2,8 +2,8 @@
 
 The tracked list of WaxDeck work that was cut from an otherwise
 shipped slice. Roadmap items that have simply not started yet do not
-belong here, and deliberate v1 scope exclusions live in the roadmap
-and the ADRs; this list is for the residuals that would otherwise
+belong here, and deliberate v1 scope exclusions live in the roadmap;
+this list is for the residuals that would otherwise
 survive only as a sentence in a progress note. Agents: when you cut
 something from a slice, add it here in the same change (as with
 upstream-requests.md, which holds the sibling-repo asks); when the
@@ -82,25 +82,12 @@ here waits on upstream.
   medium, which is the half a listener can act on; the layout also asks
   for device free space beside it, and that half is cut rather than faked.
   Nothing in Dart's own libraries answers how much room a volume has left:
-  `dart:io` has no `statvfs`, `Process.run` is unavailable on iOS
-  altogether, and there is no `df` on Windows, so the subprocess route is
-  broken on the two platforms that matter most for downloads. What it
+  `dart:io` has no `statvfs`, there is no `df` on Windows, and shelling
+  out on Android is at the mercy of SELinux policy, so the subprocess
+  route is broken exactly where downloads live. What it
   wants is a plugin behind a WaxDeck-owned port per the wrapping rule,
   which is a pinned dependency and a decision of its own for one number.
   Worth taking with the next plugin that lands for another reason.
-- `[in-repo]` **The language picker the layout blueprint specifies and
-  Settings does not draw.** Blocked on the app being localized at all,
-  which nothing here has started: no `flutter_localizations` in any
-  pubspec in the workspace, no `l10n.yaml`, no `.arb`, and around 1,200
-  user-facing string literals in `app/app/lib` by a conservative count -
-  an undercount, because the help lines are written as multi-line
-  concatenations a grep reads as several. `Prefs.locale` is carried
-  through `PrefsController` so a write preserves it, and read by nothing.
-  The size is not the whole of it: extraction is code and finishes,
-  translation is people and does not, so a picker offered before there is
-  a second language to pick is the same empty control as one offered
-  before extraction. Worth taking when somebody is ready to own the
-  translations, not before.
 - `[in-repo]` **The web perf gate's measurement run is still owed.** Parked
   for the larger UI and UX overhaul rather than spot-fixed, and the code
   the run needs has now landed: the corpus writes one directory per album
@@ -252,123 +239,138 @@ here waits on upstream.
 ## Compatibility
 
 - `[in-repo]` **NSP import and export.**
-- `[in-repo]` **Driving a real client binary in CI.** Regated from
-  `[hardware]`: the blocker recorded here was "no Docker in the dev
-  distro", and Docker is available now, so what is left is ours to build.
-  The CORS half is now decided and built: `WAXDECK_CORS_ORIGINS` names
-  the origins a browser client may call from, default-off so an
-  unconfigured server is unchanged, exact-match, and never with
-  credentials. What is left is the harness - a client in a compose
-  service beside the stack CI already brings up, driven and asserted on
-  the way the e2e suite drives the web build. The client trace suites
-  (Subsonic and gpodder) are the automated stand-in meanwhile and fail on
-  missing endpoints.
+- `[in-repo]` **The Subsonic index is rebuilt per request for
+  library-restricted accounts.** The grouped index every browse and
+  `search3` ride is cached tail-keyed for full-visibility callers and
+  rebuilt from a whole-catalog `TrackFacts` sweep for anyone holding
+  library grants - and a real client pages hard: Feishin discovers its
+  track count by walking `search3` at rising offsets, so a restricted
+  account on a 50k-track library pays a full sweep per page of a walk
+  that takes dozens of pages. The fix shape is a second cache keyed on
+  the catalog tail plus the caller's grant set, invalidated exactly as
+  the shared one is; not taken yet because the sweep is honest, just
+  repeated, and the compatibility surface's heavy users today are
+  single-account instances.
+
+## Localization
+
+- `[in-repo]` **The app is not localized, and the language picker the
+  layout blueprint specifies waits on it.** Nothing has started: no
+  `flutter_localizations` in any pubspec in the workspace, no
+  `l10n.yaml`, no `.arb`, and around 1,200 user-facing string literals
+  in `app/app/lib` by a conservative count - an undercount, because
+  the help lines are written as multi-line concatenations a grep reads
+  as several. `Prefs.locale` is already in the contract (a BCP 47 tag,
+  `api/spec/users.yaml`), carried through `PrefsController` so a write
+  preserves it, and read by nothing. The plumbing is the small half
+  and is the stock first-party pipeline: `flutter_localizations` plus
+  `intl`, one ARB per locale, `AppLocalizations` generated into the
+  tree (the synthetic-package route is gone in 3.44) as one more
+  generated-never-typed surface beside the semantics ids; wiring it is
+  two lines on `MaterialApp.router` in `app/app/lib/src/app.dart`,
+  which also switches on Material's own widget strings. The sweep is
+  the big half and lives entirely in the screens - `waxdeck_ui` takes
+  plain view-data strings by rule, so the design system needs no ARB
+  of its own - and the same pass owns the formatting, because it is
+  hand-rolled and locale-blind today: the relative times ("just now",
+  "3m ago"), `format_bytes.dart`, and the padLeft date and duration
+  helpers all become `intl` date, number, and plural messages. Locale
+  resolution is system first with `Prefs.locale` as the override once
+  something finally reads it, and the picker draws then, not before:
+  extraction is code and finishes, translation is people and does not,
+  so a picker offered before there is a second language to pick is an
+  empty control. ARB is what Weblate consumes, which is how a GPL
+  project bound for F-Droid gets its second language. Already paid for
+  or cheap: the e2e suite drives semantics identifiers, not visible
+  labels, so translations cannot break it; the CI goldens block text
+  out and the readable Linux ones render the default locale, so en
+  stays the golden locale; a CJK UI locale needs `ensureScript` at
+  startup for its own script, because the fonts warmup interceptor
+  only sees text arriving in API responses and a static UI string
+  never does (the owned-set mechanism the fonts paragraph under
+  Decided records); and an Arabic or Hebrew UI locale would add a
+  left/right-to-Directional sweep, with the faces themselves already
+  shipped for content. Worth taking when somebody is ready to own the
+  translations, not before.
+- `[in-repo]` **Error surfaces speak the server's English.** The
+  contract splits the roles - `code` is the stable machine value,
+  `message` is "not stable, do not parse" (`api/spec/_shared.yaml`) -
+  and the app inverts them: a couple hundred `.message` reads render
+  the server's sentence verbatim (`SnackBar(content: Text(e.message))`
+  is the dominant shape, the inline `AsyncValue.error` widgets the
+  rest), and `code` picks words nowhere - its five uses are control
+  flow. Localizing errors means moving the boundary to the code: a
+  client table from the spec's code enum to localized sentences, with
+  the server `message` kept as the fallback for a code the table does
+  not know. The server never localizes - no Accept-Language on the
+  API, messages stay developer English for the logs - which is what
+  keeps the backend out of the translation business permanently. Two
+  traps to take deliberately. Where one code covers many causes, a
+  generic per-code sentence loses the specifics: `feature-unavailable`
+  is the umbrella code, and the device picker already tells the
+  multi-part refusal apart by phrase-matching the message, the
+  coupling `TestMultiPartRefusalWording` holds together - those cases
+  want structured params on the `Error` schema, a spec change, not
+  smarter parsing, and that picker is the first customer. And
+  `waxdeck_api` mints three English sentences of its own for transport
+  failures (timeout, network error, empty body) in a package that will
+  never hold an ARB, so those become machine kinds on
+  `WaxDeckApiException` for the app to word.
+- `[in-repo]` **Two server-authored label surfaces flip to client
+  tokens.** Health rule labels (`server/internal/service/health.go`
+  maps `missing-art` to "Missing cover art"; the health screen draws
+  `rule.label ?? rule.rule`) and the notification event catalog
+  descriptions (`server/internal/service/notify.go`, drawn as help
+  text in the notification settings) are English composed in Go and
+  rendered as-is. The shape to copy is what the tasks screen already
+  does for task types and states: the client maps the machine token to
+  its own label and the server string stays as the fallback for a
+  token the client predates. No spec change; the fields remain, the
+  client stops preferring them.
+- `[in-repo]` **The server-rendered pages are English by
+  construction.** Three surfaces never load the SPA, so no client
+  table can reach them: the share landing page
+  (`server/internal/api/sharepage.go`, `lang="en"` hardcoded, and its
+  audience is strangers on phones - the readers least likely to share
+  the instance owner's language), the OIDC sign-on pages
+  (`server/internal/api/oidc.go`), and the Last.fm callback page
+  (`server/internal/api/integrations.go`). If these localize it is
+  server-side and small - a dozen strings each behind Accept-Language
+  with an English fallback, the share page first because of who reads
+  it, and its expiry stamp is date formatting, the same locale
+  question in a different coat. English is an acceptable answer for
+  all three meanwhile; the entry exists so that is chosen, not
+  discovered.
+- `[in-repo]` **Outbound notification prose leaves the app in
+  English.** Titles and bodies are composed in Go ("Backup failed";
+  "Backup completed" with its size and duration,
+  `server/internal/service/backups.go`) and delivered through
+  `EmitServerNotification` to ntfy, Discord, and webhooks - read
+  outside the app, where no client table can follow. If it ever
+  localizes it is server-side, and the reader is known: a delivery
+  target belongs to an account, and accounts carry `Prefs.locale`, so
+  the emitting path could word each delivery for its recipient -
+  though one instance-wide notification locale is probably the honest
+  size of the feature. Waits for someone to ask; recorded so the asker
+  is not told it is a client gap.
+- `[upstream]` **Name ordering is ASCII-folded codepoint order.**
+  Browse and the indexes ride WaxBin's stored `sort_key`, and
+  `model.SortKey` says exactly what that is: lowercased,
+  article-stripped, digit-padded, compared BINARY - "ASCII-level
+  folding" by its own comment, with "Unicode collation can be added
+  here without changing callers or the stored column" as the standing
+  invitation. So "Édith" sorts after "z", and every non-Latin name
+  sorts by codepoint: stable and grouped, wrong for any library that
+  is not English. The ask lives in upstream-requests.md - Unicode
+  folding in `SortKey`, locale-independent only, since a stored column
+  is one ordering for everyone. What WaxDeck inherits when it lands:
+  stored keys need recomputing (WaxBin's `sortKeyDrift` verifier
+  already counts stale ones, so detection exists), and a keyset cursor
+  minted across the upgrade walks the rest of its pages in the old
+  order - bounded, worth knowing, not worth machinery.
 
 ## Infrastructure
 
-- `[in-repo]` **Promote the Android conformance run to a merge gate.**
-  It is scheduled and dispatch-only on purpose: the suite waits on real
-  playback timing throughout, and an emulator booting on a shared-CPU
-  runner is the shape that turns those waits into flakes. Deciding
-  wants a few dozen runs behind it, not an opinion. The cost of leaving
-  it non-blocking is that a real regression can land on main and sit
-  there until Tuesday - which is still the better failure than the one
-  it replaced, where nobody found out at all.
-- `[in-repo]` **The macOS DMG mounts with a generic volume icon.** The
-  packaging job builds it with a bare
-  `hdiutil create -volname WaxDeck -srcfolder ...`
-  (`.github/workflows/package.yaml`), which names the volume but gives
-  it no icon, so Finder shows the stock disk image while it is mounted.
-  Fixing it needs an `.icns` (the brand pipeline emits PNGs; ICNS is a
-  container format of its own, via `iconutil` on the runner or a small
-  writer in `tools/generate-brand.py`) plus the stamping plumbing - a
-  `.VolumeIcon.icns` in the source folder with its custom-icon Finder
-  bit set, which is what `create-dmg` exists to script. Quality-only,
-  and the DMG is still unsigned template-stage packaging, so it waits
-  for the signing pass rather than growing the workflow now.
-- `[in-repo]` **F-Droid.** Android is the one platform whose artifacts
-  reach people through the GitHub Release and nothing else;
-  `deploy/packaging/` is desktop-only. F-Droid is the intended channel
-  and it is a slice of its own - either a metadata recipe in
-  fdroiddata, which means their build server has to reproduce the APK
-  from source, or a self-hosted repo, which means owning the index and
-  its signing key. Neither is a per-release chore like the winget or
-  Homebrew templates, which is why it is not sitting beside them.
-- `[in-repo]` **The macOS keychain entitlement, and whether a login
-  actually persists.** The sandboxed app has
-  `network.client` + `network.server`, which is what let it reach a
-  server at all; `keychain-access-groups` was left out because it is a
-  restricted entitlement that makes the release build demand a
-  development certificate, and the artifacts are deliberately unsigned.
-  What is unverified is the thing it was meant to fix: whether a login
-  survives a relaunch of the packaged app. It could not be tested
-  before, because an app that cannot open a connection can never sign
-  in to begin with, so the original diagnosis was inference rather than
-  observation. The plugin passes no `groupId`, so the default access
-  group applies and this may simply work. If it does not, the fix is
-  the entitlement, and the entitlement needs signing - so both land
-  together, with the check being: sign in, quit, relaunch, still signed
-  in. `SecureCredentialStore` swallows storage failures by design, so
-  the symptom is silence, not an error.
-- `[in-repo]` **The Windows plugin targets still compile as C++17, with
-  one target lifted out of it.** `apply_standard_settings` is Flutter's
-  stock template function and pins `cxx_std_17`; eleven third-party
-  plugins and the runner inherit it, warnings-as-errors (`/W4 /WX`)
-  included. `audio_service_win` had to leave C++17 because C++/WinRT
-  falls back to the deprecated `<experimental/coroutine>` there and
-  current MSVC refuses to compile it, so that one target is raised to
-  C++20 privately in `app/app/windows/CMakeLists.txt` rather than the
-  shared function being moved - along with
-  `_HAS_STREAM_INSERTION_OPERATORS_DELETED_IN_CXX20=1`, the STL escape
-  hatch for the stream-insertion deletion C++20 brought with it (the
-  plugin streams `hstring::c_str()` into `std::cerr`, and P1423R3
-  deletes that overload; per the STL's `_HAS_*` convention the macro
-  must be 1 to keep the old overloads - 0 is the C++20 default, so
-  defining it 0 changes nothing, a mistake this repo has already made
-  once). Whoever raises the shared floor inherits that
-  trap for every target that logs wide strings. Raising the floor for
-  everything is the
-  tidier end state, but under `/WX` a standard bump turns any fresh
-  C++20 deprecation - implicit `this` capture in `[=]`, `u8""` becoming
-  `char8_t`, deprecated `volatile` compound assignment - into a build
-  failure inside sources nobody here owns. Ten of those eleven compile
-  today, and the likeliest to trip is `media_kit_libs_windows_audio`,
-  untouched upstream since September 2023; expect to deal with it, or
-  replace it, in the same pass. Deferred so it happens deliberately
-  rather than while the packaging jobs are already red.
-
-- `[in-repo]` **The app installs no top-level error handler, so the
-  defects its controllers deliberately rethrow reach nothing.** Every
-  paged controller catches the expected transport failure, keeps what it
-  has, and rethrows anything else - a decode failure, a bad cast - with
-  a comment saying the error is left to "reach the zone's handler
-  instead of vanishing here". There is no such handler: `main.dart` sets
-  neither `PlatformDispatcher.instance.onError` nor `FlutterError.onError`
-  and runs no guarded zone, and the nine call sites drop the future
-  besides. So the rethrow is caught by the root zone, printed in debug,
-  and silently discarded in release - the opposite of what the comments
-  promise. Wrapping the call sites in `unawaited` would change nothing;
-  what is missing is the handler, and what it should *do* is the
-  decision: there is no logging or telemetry surface for it to report
-  into, so "print it" and "show the listener something" and "send it
-  somewhere" are three different products. Left for that decision rather
-  than guessed at, and the comments corrected with it - they are the
-  part actively misleading today. Found during phase 3 review; the
-  pattern is older, and the saved-radio list shares it exactly.
-
-- `[in-repo]` **Scripts outside the owned font set render tofu on web,
-  online and off alike.** The owned chain covers Latin, Greek,
-  Cyrillic, Arabic, Hebrew, Thai, and CJK, and the engine's own CDN
-  fallback (its Roboto default and per-glyph Noto shards) is
-  deliberately pointed at an unrouted same-origin path, so an instance
-  behaves identically with and without internet: Devanagari, Tamil,
-  emoji, and anything else unbundled renders as boxes instead of
-  sometimes-working via Google. That trade is deliberate;
-  what remains is growing the set as real libraries need it, which is
-  one face per script in `tools/fetch-fonts.sh` plus a `WaxScript`
-  entry and detection range in `WaxFonts` (emoji is the awkward one: a
-  color-emoji face is its own multi-megabyte decision). Native builds
-  keep using system fonts and are unaffected.
 - `[in-repo]` **The e2e renderer hang is diagnosed: a memory race
   inside multi-threaded skwasm.** The old shape - one suite run in
   about four, a random spec stalls mid-step, page unresponsive,
@@ -420,27 +422,6 @@ here waits on upstream.
   carrying it is the specific trigger to re-check, sharper than "when
   the issue closes": the issue can close on the PR alone, which changes
   nothing here until the pinned engine ships it.
-- `[in-repo]` **The live fan-out's accepted edges.** The
-  invalidation fan-out defers around in-flight first builds via a
-  `ProviderObserver` ledger; three edges are known, each bounded, none
-  observed outside construction. A first build that never lands (a hung
-  request; no transport deadline exists) keeps its topic's retry timer
-  re-arming every window for the life of the session - a set lookup per
-  tick, no network; closes for free if request deadlines ever land. A
-  watched instance invalidated mid-first-build from outside the fan-out
-  rebuilds into a bare loading the notification gate suppresses, so that
-  one instance rides plain pacing until a differing state lands - the
-  pre-deferral behavior, not a new failure. And a nested `ProviderScope`
-  overriding a fan-out target would sit outside `allProviders`'
-  enumeration (children are excluded), unreachable by sweep and retry
-  alike, as it already was by the plain invalidations before the pacer;
-  no such scope exists, and whoever introduces one takes the fan-out's
-  enumeration with it.
-- `[in-repo]` **Compose e2e harness with the real dex IdP.** The browser SSO
-  journey runs against the bare-binary test IdP; dex returns when the
-  compose harness exists. Regated from `[hardware]` with the entry above
-  and for the same reason: the harness is a compose service, Docker is
-  here, and nothing about it needs a device this box lacks.
 
 ## Curation and metadata
 
@@ -726,36 +707,24 @@ here waits on upstream.
   per-station bit, and the only per-user station state that exists is the
   favourites list; whoever adds a second one should decide whether they
   share a shape.
-- `[in-repo]` **`editing-prototype`'s right-click selection check is
-  quarantined.** It drives a secondary click over selected canvas text,
-  which on the web build opens the BROWSER's native context menu - an OS
-  window, outside the DOM, dismissed by an Escape that a sibling stealing
-  focus swallows. It passes alone and passes most full runs; across a few
-  dozen it has failed twice, which is the bar this suite set for no
-  longer believing a test. Tagged `@quarantine`, so it is out
-  of the blocking projects and still runs in the soak. To retire the
-  entry: either pin the selection through something that does not depend
-  on the native menu closing, or decide the prototype's go/no-go record
-  no longer needs this probe and delete it.
-
-- `[in-repo]` **`mutators-admin` runs seven tests single-file to protect
-  one global switch.** The project sets `fullyParallel: false` and is
-  itself a dependency barrier, so three of four workers idle for its
-  length and that idling compounds into the back half of the run.
-  Wrapping the two `/admin/settings` read-modify-writers in a
-  `describe.serial` and dropping the flag looks like the fix and is not:
-  one of that pair turns server-wide read-only on for the length of its
-  body, and read-only refuses every write on the stack with a 409 - the
-  trash round trip, the uploads, the runtime library. It is the same
-  global switch the project chaining already exists to keep off the
-  uploads project, seen from inside the file. What would actually free
-  the workers is making the read-only test stop being global: its own
-  project after this one, or a per-library read-only flag it can set on
-  a library nothing else in the file touches. Weighed against the
-  preference for scheduling facts living in the config, which is why the
-  flag is written there.
 
 ## Decided, not deferred
+
+The macOS desktop and iOS targets are dropped, not deferred. Desktop
+is Linux and Windows, mobile is Android, and a Mac or an iPhone
+reaches WaxDeck through the web app the server already serves - or any
+Subsonic client. What rode on the platform went with it: the DMG
+packaging and its volume icon, the Homebrew cask, and the sandboxed
+keychain question, which was answered before the drop and is worth
+keeping: an unsigned sandboxed build cannot use the data-protection
+keychain at all (`SecItemAdd` answers `errSecMissingEntitlement`, the
+store swallows it by design, and every launch asks for a password
+again), and the workaround that did work pinned the credential to the
+exact binary, so a rebuild raised an authorization dialog. Fixing it
+meant a developer certificate, which was never going to be bought.
+One engine consequence, and it is a simplification: both shipped
+desktops now route through media_kit/mpv, so the desktop conformance
+suite holds one engine to the port contract instead of two.
 
 Every browse validates the caller's pid, and that is a behaviour
 change WaxDeck accepted rather than work it postponed. waxbin's
@@ -771,6 +740,53 @@ the field used to be ignored, which waxbin warns about and WaxDeck
 takes on purpose - validation beats a silent fallback to
 default-scoped results. There is nothing to build and no upstream ask
 behind it; do not file one.
+
+The owned font set grows one face at a time, and that is the mechanism
+rather than a stopgap. It now covers Latin, Greek, Cyrillic, Arabic,
+Hebrew, Thai and CJK eagerly-or-on-demand as before, plus fifteen more
+scripts (Devanagari, Bengali, Gurmukhi, Gujarati, Tamil, Telugu,
+Kannada, Malayalam, Sinhala, Khmer, Lao, Myanmar, Georgian, Armenian,
+Ethiopic) and a colour emoji face, all deferred: about 34 MB of assets
+that cost a startup nothing, because a library reaches for one only when
+a title is written in that script. The engine's own CDN fallback stays
+pointed at an unrouted same-origin path, so an instance still behaves
+identically with and without internet. What is deliberately absent -
+Oriya, Tibetan, and the rest - waits for the same evidence the fifteen
+had: a real library that would otherwise render boxes. Adding one is a
+row in `tools/fetch-fonts.sh`, a `WaxScript` value, and a detection
+range, which is the whole of it.
+
+The live fan-out's worst edge is closed, and the two that remain are
+accepted rather than owed. The fan-out defers around in-flight first
+builds through a `ProviderObserver` ledger, and the edge that mattered
+was a first build that never landed at all: with no transport deadline
+anywhere, a hung request kept its topic's retry timer re-arming every
+window for the life of the session. Every transport now has one - the
+API client 10s to connect and 30s between response chunks, artwork
+10s/15s, the sync socket 10s to finish its upgrade and a 30s ping after
+that - so a request that hangs ends as a `timeout`, and an error is a
+landing the ledger prunes exactly as a value is. Two edges are left,
+both bounded and neither worth machinery. A watched instance invalidated
+mid-first-build from outside the fan-out rebuilds into a bare loading
+the notification gate suppresses, so that one instance rides plain
+pacing until a differing state lands, which is the pre-deferral
+behaviour and not a new failure. And a nested `ProviderScope` overriding
+a fan-out target would sit outside `allProviders`' enumeration (children
+are excluded), unreachable by sweep and retry alike, as it already was
+by the plain invalidations before the pacer; no such scope exists, and
+whoever introduces one takes the fan-out's enumeration with it.
+
+Cross-origin access is opt-in and stays that way. A browser client
+served from somewhere else - a self-hosted Feishin, which CI now drives
+against the stack - cannot call a server that does not name its origin,
+so `WAXDECK_CORS_ORIGINS` names them: exact origins only, no wildcard
+and no pattern, never with credentials (the compatibility surfaces carry
+their own app-password auth, so nothing needs the cookie), applied to
+the whole mux with the preflight answered before the router. Empty by
+default, which is every deployment that just uses the bundled web app,
+and an unconfigured server behaves exactly as it did. There is nothing
+left to build here; a deployment that wants a browser client sets the
+variable.
 
 Signup spends its rate-limit budget on success as well as failure, and
 that is the anti-abuse decision rather than a missing `Success` call.
@@ -815,4 +831,13 @@ flag), so files' own ITUNESADVISORY tags ride the custom-tag surface
 the deny-list mechanism, not a per-track flag. Audiobooks have no
 explicit convention anywhere; custom tags cover anyone who wants one.
 Scope-level non-goals and accepted risks live in the roadmap's
-post-v1 section and the ADRs.
+post-v1 section.
+
+What stays English is chosen, not overlooked. The Subsonic and
+gpodder adapters answer third-party clients in protocol strings and
+localize nothing. The API `Error.message` stays developer English
+everywhere - the localization boundary is the `code`, per the
+Localization entries - and so does the diagnostic prose on the admin
+surfaces: a failed task's `error`, a job's progress note, a
+migration's cautions. Translating diagnostics trades grep-ability
+for polish on the one surface whose reader wants the grep.

@@ -1,0 +1,35 @@
+# Feishin, and only Feishin: a real third-party client for the e2e spec
+# that drives one (e2e/tests/feishin.spec.ts).
+#
+# A separate compose project rather than a service in deploy/compose.yaml:
+# this is a test fixture, and the production file should not read as a
+# recommendation to run somebody else's client beside the stack. It needs
+# no shared network either - the browser loads Feishin from this origin
+# and calls waxdeck from there, which is why the server has to name it in
+# WAXDECK_CORS_ORIGINS=http://localhost:19180 before the spec can pass.
+#
+# The server is pinned into the image rather than added through its UI,
+# so nothing has to drive an add-server form, and the client
+# authenticates over the Subsonic surface with an app password the spec
+# mints. Loopback-published on purpose. Pinned by digest because it is
+# third-party code this repo executes.
+
+name: waxdeck-clients
+
+services:
+  feishin:
+    image: ghcr.io/jeffvli/feishin:1.12.1@sha256:1806f71faf5ccb1941790d0b61f4f8b9add8a0228a1fbae275db5a61ab99ddd1
+    # 9180 inside is Feishin's own port; the host side is 19180 because
+    # loopback 9180 is contested space - on at least one dev Mac a
+    # root-owned Logitech daemon answers it, invisibly to an unprivileged
+    # lsof, and a fixture should not fight a daemon for a port.
+    ports:
+      - "127.0.0.1:19180:9180"
+    environment:
+      # The browser resolves this, not the container: it is the address
+      # the page's own fetches go to.
+      SERVER_URL: ${WAXDECK_CLIENT_BASE:-http://localhost:4420}
+      SERVER_NAME: WaxDeck
+      SERVER_TYPE: subsonic
+      SERVER_LOCK: "true"
+      ANALYTICS_DISABLED: "true"

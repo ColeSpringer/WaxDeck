@@ -61,6 +61,11 @@ FEEDSERV=$!
 # The test identity provider backs the browser-driven single sign-on
 # scenario. The server discovers the issuer at startup and fails fast,
 # so wait for it to answer before launching waxdeck.
+#
+# It launches even when the OIDC variables below point somewhere else
+# (run-sso-dex.sh points them at a real dex): one spare process on a
+# loopback port is cheaper than a second code path through this script,
+# and the default run is then byte-for-byte what it always was.
 "$RUN_DIR/testidp" -addr 127.0.0.1:4419 -issuer http://127.0.0.1:4419 &
 IDP=$!
 for _ in $(seq 1 50); do
@@ -80,10 +85,11 @@ WAXDECK_FLOW_API_KEY=e2e-test-key \
 WAXDECK_FLOW_CONFIG="$RUN_DIR/waxflow.json" \
 WAXDECK_PUBLIC_BASE=http://localhost:4420 \
 WAXDECK_WORKER_TOKENS=e2e-worker-token \
-WAXDECK_OIDC_ISSUER=http://127.0.0.1:4419 \
-WAXDECK_OIDC_ID=testidp \
-WAXDECK_OIDC_NAME="Test SSO" \
-WAXDECK_OIDC_CLIENT_ID=waxdeck-e2e \
+WAXDECK_OIDC_ISSUER=${WAXDECK_OIDC_ISSUER:-http://127.0.0.1:4419} \
+WAXDECK_OIDC_ID=${WAXDECK_OIDC_ID:-testidp} \
+WAXDECK_OIDC_NAME=${WAXDECK_OIDC_NAME:-Test SSO} \
+WAXDECK_OIDC_CLIENT_ID=${WAXDECK_OIDC_CLIENT_ID:-waxdeck-e2e} \
+WAXDECK_OIDC_CLIENT_SECRET=${WAXDECK_OIDC_CLIENT_SECRET:-} \
 	"$E2E_DIR/../server/waxdeck" &
 SERVER=$!
 

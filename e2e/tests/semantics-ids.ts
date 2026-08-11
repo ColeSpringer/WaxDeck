@@ -629,11 +629,15 @@ export const SemanticsIds = {
   searchTruncated: 'search-truncated',
 
   // settings: Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.
+  aboutDefects: 'about-defects',
   aboutLicenses: 'about-licenses',
   aboutOpen: 'about-open',
   aboutRow: 'about',
   appPasswordAdd: 'app-password-add',
   appPasswordRevoke: (id: string | number) => `app-password-revoke-${id}`,
+  defectsClear: 'defects-clear',
+  defectsCopy: 'defects-copy',
+  defectsScreen: 'defects-screen',
   deviceRename: (id: string | number) => `device-rename-${id}`,
   deviceRevoke: (id: string | number) => `device-revoke-${id}`,
   deviceRow: (id: string | number) => `device-row-${id}`,

@@ -161,6 +161,12 @@ abstract final class WaxRoute {
   /// table so the literal wins over it.
   static const settingsAbout = '$settings/about';
 
+  /// What the app caught and nobody saw. Beneath About because that is
+  /// where a bug report is assembled, and a location rather than a push
+  /// for the same reason About is one: somebody being asked for it can
+  /// be sent straight here.
+  static const settingsDefects = '$settingsAbout/defects';
+
   /// The caller's public links, beneath settings.
   ///
   /// Its ancestry is real: it is opened from the Account section's own

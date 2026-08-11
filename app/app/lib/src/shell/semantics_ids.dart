@@ -643,11 +643,15 @@ abstract final class SemanticsIds {
   static const String searchTruncated = 'search-truncated';
 
   // settings: Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.
+  static const String aboutDefects = 'about-defects';
   static const String aboutLicenses = 'about-licenses';
   static const String aboutOpen = 'about-open';
   static const String aboutRow = 'about';
   static const String appPasswordAdd = 'app-password-add';
   static String appPasswordRevoke(Object id) => 'app-password-revoke-$id';
+  static const String defectsClear = 'defects-clear';
+  static const String defectsCopy = 'defects-copy';
+  static const String defectsScreen = 'defects-screen';
   static String deviceRename(Object id) => 'device-rename-$id';
   static String deviceRevoke(Object id) => 'device-revoke-$id';
   static String deviceRow(Object id) => 'device-row-$id';

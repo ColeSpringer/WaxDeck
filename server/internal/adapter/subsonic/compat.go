@@ -342,6 +342,9 @@ func episodeShape(ep service.EpisodeSummary, show service.PodcastShow) podcastEp
 			CoverArt: ep.PID,
 			Duration: int(ep.DurationMS / 1000),
 			Type:     "podcast",
+			// The episode row carries no container; the floor keeps
+			// contentType present (formatFacts says why it must be).
+			ContentType: "application/octet-stream",
 		},
 		ChannelID: showPID,
 	}

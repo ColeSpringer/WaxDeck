@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/colespringer/waxbin/model"
+
+	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 )
 
 // DownloadFile is one downloadable backing file of an item: everything
@@ -36,26 +38,6 @@ type DownloadResolution struct {
 	SpanStartMS int64
 	SpanEndMS   int64
 	HasSpan     bool
-}
-
-// downloadMimes maps source containers to the media type the original
-// bytes are served as; unknowns fall back to octet-stream (the bytes
-// are still the bytes).
-var downloadMimes = map[string]string{
-	"flac": "audio/flac",
-	"mp3":  "audio/mpeg",
-	"wav":  "audio/wav",
-	"aiff": "audio/aiff",
-	"ogg":  "audio/ogg",
-	"mp4":  "audio/mp4",
-	"m4a":  "audio/mp4",
-	"m4b":  "audio/mp4",
-	"adts": "audio/aac",
-	"mka":  "audio/x-matroska",
-	"webm": "audio/webm",
-	"wma":  "audio/x-ms-wma",
-	"ape":  "audio/x-ape",
-	"wv":   "audio/x-wavpack",
 }
 
 // DownloadInfo resolves the caller-visible item's original files for
@@ -151,10 +133,10 @@ func (l *Library) downloadFile(ctx context.Context, filePID model.PID) (Download
 	if err != nil {
 		return DownloadFile{}, classify(err)
 	}
-	mime := downloadMimes[f.Container]
-	if mime == "" {
-		mime = "application/octet-stream"
-	}
+	// The one container-to-mime table, normalized: the stored label is
+	// a probe name ("aac (adts)"), not a key, and a raw lookup floored
+	// every AAC download to octet-stream.
+	mime := flow.ContainerMime(f.Container)
 	return DownloadFile{
 		FilePID: string(f.PID),
 		// The raw path bytes are the real filesystem name; DisplayPath

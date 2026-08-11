@@ -6,8 +6,9 @@ import 'file_picker_impl.dart' as impl;
 import 'file_picker_port.dart';
 
 /// Flattens a drop into lazy picked-file references, filtered to
-/// [extensions]. Three shapes arrive: recursive children (web), a plain
-/// path (Linux, Windows), or a childless directory item (macOS).
+/// [extensions]. Two shapes arrive today - recursive children (web) and
+/// a plain path (Linux, Windows) - and a childless directory item is
+/// kept as the defensive third.
 Future<List<PickedAudioFile>> normalizeDrop(
   List<DropItem> items,
   Set<String> extensions,

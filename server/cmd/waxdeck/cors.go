@@ -149,6 +149,11 @@ func (w *corsWriter) ReadFrom(r io.Reader) (int64, error) {
 }
 
 func (w *corsWriter) Flush() {
+	// A flush with nothing written yet commits an implicit 200, so this
+	// is a header-committing path like the three above it - a handler
+	// that replaced Vary and then flushed would otherwise publish a
+	// grant a shared cache can key without Origin.
+	w.keepVary()
 	_ = http.NewResponseController(w.ResponseWriter).Flush()
 }
 

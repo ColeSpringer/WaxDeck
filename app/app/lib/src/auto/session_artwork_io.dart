@@ -1,7 +1,7 @@
 /// The native build's cover for the OS media surfaces.
 ///
 /// Every one of them - the Android notification, MPRIS, the Windows
-/// transport controls, macOS's now-playing panel - fetches the artwork
+/// transport controls - fetches the artwork
 /// out of process, and none of them can be handed this app's bearer
 /// token. So the bytes are fetched here, through the store that already
 /// authenticates and already caches them, and written to a file the OS

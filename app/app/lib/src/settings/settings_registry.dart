@@ -215,7 +215,19 @@ const settingsRegistry = <SettingEntry>[
     id: 'about',
     title: 'About WaxDeck',
     section: SettingsSection.account,
-    keywords: <String>['version', 'licenses', 'open source', 'build'],
+    // The defect log lives on the About page rather than as a control of
+    // its own, so About is what a search for it has to find.
+    keywords: <String>[
+      'version',
+      'licenses',
+      'open source',
+      'build',
+      'defects',
+      'errors',
+      'diagnostics',
+      'log',
+      'crash',
+    ],
   ),
 
   // Playback

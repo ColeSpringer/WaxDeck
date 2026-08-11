@@ -138,15 +138,20 @@ subject is really the app.
 ## Projects
 
 ```
-setup → wave → mutators-uploads → mutators-admin → focus-a11y → focus-editing → motion-smoke
+setup → wave → mutators-uploads → mutators-admin → mutators-readonly → motion-smoke → focus-a11y → focus-editing
 ```
 
-`wave` is everything that owns its own state, four workers wide. The two
+`wave` is everything that owns its own state, four workers wide. The
 mutator projects hold what per-test accounts cannot divide - the files on
 disk, the trash, the library table, the admin settings row - and uploads
 runs before the console because the read-only switch refuses every upload
-while it is on. `mutators-admin` is not parallel with itself. The focus
-projects need OS focus and so run alone.
+while it is on. `mutators-admin` runs parallel except its backup pair
+(serial by declaration); `mutators-readonly` holds the read-only window
+alone, so nothing else ever meets a refusing server. motion-smoke sits
+before the focus projects on purpose - they fight the OS for focus and
+are the flake-prone tail, and a late failure there must not cost the one
+unreduced-motion pass. `feishin` and `sso-dex` join only when their
+containers are up (`FEISHIN_BASE_URL`, `WAXDECK_DEX_SSO`).
 
 ## Running
 

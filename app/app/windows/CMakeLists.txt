@@ -38,7 +38,20 @@ add_definitions(-DUNICODE -D_UNICODE)
 # default. In most cases, you should add new options to specific targets instead
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
-  target_compile_features(${TARGET} PUBLIC cxx_std_17)
+  # C++20 rather than the template's C++17: C++/WinRT falls back to the
+  # deprecated <experimental/coroutine> under 17, which current MSVC
+  # refuses to compile, and any plugin that touches WinRT hits it. A
+  # per-plugin lift only moves the floor for whichever plugin trips
+  # next, so the floor is the whole build's.
+  target_compile_features(${TARGET} PUBLIC cxx_std_20)
+  # C++20 in turn deletes streaming a wide string into a narrow ostream
+  # (P1423R3), which plugin logging does (hstring::c_str() into
+  # std::cerr). The STL's escape hatch follows the _HAS_* convention -
+  # 1 keeps the overloads C++20 deletes (the wide string prints as a
+  # pointer, as under C++17); 0 is already the C++20 default and
+  # deletes them.
+  target_compile_definitions(${TARGET} PRIVATE
+    "_HAS_STREAM_INSERTION_OPERATORS_DELETED_IN_CXX20=1")
   target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
@@ -56,21 +69,6 @@ add_subdirectory("runner")
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
-
-# C++/WinRT falls back to the deprecated <experimental/coroutine> under
-# C++17, which current MSVC refuses to compile. C++20 gives it the standard
-# <coroutine> instead. Scoped to this target rather than raised in
-# apply_standard_settings, which every other plugin inherits, and PRIVATE so
-# it stops at this plugin's own sources rather than reaching the runner.
-target_compile_features(audio_service_win_plugin PRIVATE cxx_std_20)
-# C++20 in turn deletes streaming a wide string into a narrow ostream
-# (P1423R3), which the plugin's thumbnail error logging does
-# (hstring::c_str() into std::cerr). The STL's escape hatch follows the
-# _HAS_* convention - 1 keeps the overloads C++20 deletes (the wide
-# string prints as a pointer, as under C++17); 0 is already the C++20
-# default and deletes them.
-target_compile_definitions(audio_service_win_plugin PRIVATE
-  "_HAS_STREAM_INSERTION_OPERATORS_DELETED_IN_CXX20=1")
 
 
 # === Installation ===

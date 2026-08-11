@@ -143,7 +143,7 @@ void main() {
 
   group('non-Latin metadata', () {
     test('renders from bundled faces rather than a fetched fallback', () {
-      // Arabic, Hebrew, Thai, and CJK metadata have to measure as real
+      // Metadata in the deferred scripts has to measure as real
       // glyphs. A missing face collapses to notdef boxes of a different
       // width, or to zero-width nothing. Han, kana, and hangul all ride
       // the one CJK face, so each is proved separately.

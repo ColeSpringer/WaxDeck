@@ -1,0 +1,45 @@
+# The identity provider the browser SSO journey meets when it runs
+# against a real one rather than against the bare-binary test IdP.
+#
+# Everything here is a fixture, and every literal in it is load-bearing.
+# OIDC compares URIs as strings, so the issuer is `127.0.0.1:5556` in all
+# three places that name it (here, WAXDECK_OIDC_ISSUER, the spec's URL
+# assertion) and the app origin is `localhost:4420` in all three that
+# name that (WAXDECK_PUBLIC_BASE, the redirect below, playwright's
+# baseURL). Mixing the two spellings within either group is a mismatch
+# refusal, not a redirect that happens to work.
+issuer: http://127.0.0.1:5556/dex
+
+# Nothing survives the container, which is what a fixture should do.
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  # Dex shows a consent screen for a static client by default, and the
+  # journey has no reason to know that: without this the browser stops
+  # on a grant page after the password form and the spec times out
+  # somewhere that looks like the callback.
+  skipApprovalScreen: true
+
+staticClients:
+  - id: waxdeck-e2e
+    name: WaxDeck
+    secret: waxdeck-e2e-secret
+    redirectURIs:
+      - http://localhost:4420/api/v1/auth/oidc/callback
+
+enablePasswordDB: true
+staticPasswords:
+  # The same person the test IdP provisions, so the two harnesses assert
+  # the same account. The hash is bcrypt of `mithrandir-e2e`, generated
+  # once and committed - it guards nothing but a throwaway container.
+  # Whoever regenerates it with `htpasswd -bnBC 10 "" '<pass>'` must
+  # strip the leading colon that leaves behind, or dex reads the hash as
+  # invalid and every sign-in fails as wrong credentials.
+  - email: gandalf@waxdeck.e2e
+    hash: "$2y$10$0VX5jc6OLMZrWBNRLCqCae/9.ODYw2GJDZWlP/HamHPwiOfUKdQ0m"
+    username: gandalf
+    userID: "1c1a5e70-4d0a-4a17-9a0e-8f9c1a2b3c4d"

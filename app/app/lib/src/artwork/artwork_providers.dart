@@ -61,7 +61,7 @@ void applyArtworkImageCacheBounds({bool? web, TargetPlatform? platform}) {
   return switch (platform) {
     // A phone: a dozen cells a screen, but at pixel ratio 3, so each one
     // costs more than a desktop's does.
-    TargetPlatform.android || TargetPlatform.iOS => (64, 400),
+    TargetPlatform.android => (64, 400),
     // Desktop windows are wide, and a library on one gets scrolled a
     // long way before it gets scrolled back.
     _ => (160, 800),

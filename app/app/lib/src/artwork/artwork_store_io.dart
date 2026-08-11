@@ -55,7 +55,7 @@ class CachedArtworkStore extends ArtworkStore {
     Dio? client,
     CacheManager? cache,
     Directory? pinDirectory,
-  }) : _dio = client ?? Dio(),
+  }) : _dio = client ?? artworkTransport(),
        _pinDir = pinDirectory == null
            ? null
            : Future<Directory>.value(pinDirectory),

@@ -79,8 +79,7 @@ const _mediaDefine = String.fromEnvironment('WAXDECK_CONFORMANCE_MEDIA');
 ///
 /// An app on a device has no host path to open, so the emulator run
 /// serves the tone over loopback HTTP instead - which is also the shape
-/// a real library stream takes, and the only shape that gets past the
-/// macOS sandbox.
+/// a real library stream takes.
 String _mediaUrl(String value) =>
     value.startsWith('http://') || value.startsWith('https://')
     ? value

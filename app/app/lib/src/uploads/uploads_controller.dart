@@ -109,7 +109,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       // a bad cast. Release the paging guard first - loadingMore is
       // what keeps two fetches from racing, so leaving it set would
       // wedge paging permanently and silently - then let the error
-      // reach the zone's handler instead of vanishing here.
+      // reach the app's error handler instead of vanishing here.
       if (generation == _generation) {
         state = AsyncData(_copy(current, loadingMore: false));
       }

@@ -26,7 +26,6 @@ final localVolumeAvailableProvider = Provider<bool>(
   (ref) =>
       kIsWeb ||
       defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.macOS ||
       defaultTargetPlatform == TargetPlatform.windows,
 );
 

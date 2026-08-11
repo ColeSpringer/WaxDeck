@@ -20,6 +20,7 @@ import '../admin/users_screen.dart';
 import '../auth/auth_controller.dart';
 import '../auto/media_session_feed.dart';
 import '../desktop/discord_binder.dart';
+import '../diagnostics/defect_log_screen.dart';
 import '../desktop/tray_binder.dart';
 import '../auth/login_screen.dart';
 import '../auth/setup_screen.dart';
@@ -540,6 +541,12 @@ List<RouteBase> shellRoutes() => <RouteBase>[
               GoRoute(
                 path: 'about',
                 builder: (context, state) => const AboutScreen(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: 'defects',
+                    builder: (context, state) => const DefectLogScreen(),
+                  ),
+                ],
               ),
               // Also ahead of the pattern: "shares" is a literal segment,
               // not a section name.
@@ -754,8 +761,8 @@ class _SignedInScope extends ConsumerWidget {
     ref.watch(syncBinderProvider);
     ref.watch(queuePersistenceProvider);
     ref.watch(queueRefillProvider);
-    // What the lock screen, the head unit, MPRIS, the Windows transport
-    // controls and macOS's now-playing panel all say. Here rather than
+    // What the lock screen, the head unit, MPRIS, and the Windows
+    // transport controls all say. Here rather than
     // beside the deck bar: those surfaces are what somebody looks at
     // with the app minimized, which is exactly when no bar is built.
     // Not where registration failed: the feed would build a queue per

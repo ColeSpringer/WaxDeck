@@ -186,6 +186,31 @@ func TestWithCORSKeepsVaryAHandlerOverwrote(t *testing.T) {
 	}
 }
 
+// Flush commits headers like a write does: a handler that replaced Vary
+// and then flushed - never having called Write or WriteHeader - must not
+// publish a grant a shared cache can key without Origin.
+func TestWithCORSKeepsVaryAcrossFlush(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Vary", "Accept")
+		w.(http.Flusher).Flush()
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/media/art", nil)
+	req.Header.Set("Origin", "http://localhost:9180")
+
+	withCORS([]string{"http://localhost:9180"}, next).ServeHTTP(rec, req)
+
+	var sawOrigin bool
+	for _, v := range rec.Header().Values("Vary") {
+		if v == "Origin" {
+			sawOrigin = true
+		}
+	}
+	if !sawOrigin {
+		t.Errorf("Vary = %v; want Origin to survive a flush-first handler", rec.Header().Values("Vary"))
+	}
+}
+
 // Not duplicated when the handler already varies on Origin itself.
 func TestWithCORSDoesNotDuplicateVaryOrigin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

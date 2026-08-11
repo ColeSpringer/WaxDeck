@@ -21,6 +21,10 @@ type subsonicEnv struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
+	User *struct {
+		Username  string `json:"username"`
+		AdminRole bool   `json:"adminRole"`
+	} `json:"user"`
 	Artists *struct {
 		Index []struct {
 			Name    string `json:"name"`
@@ -339,5 +343,65 @@ func TestSubsonicVisibility(t *testing.T) {
 	}
 	if env.Artists != nil && len(env.Artists.Index) != 0 {
 		t.Fatalf("restricted user sees artists: %+v", env.Artists)
+	}
+}
+
+// getUser resolves the named account for administrators rather than
+// echoing the caller: an admin management tool asking about a member
+// must get that member's row and roles. Non-admins keep the uniform
+// refusal, and a name nobody carries answers 70 to the one caller
+// allowed to learn that.
+func TestSubsonicGetUserResolvesTarget(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "getuser-member", "password": "member-pass",
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create user status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	call := func(secret, caller, target string) subsonicEnv {
+		t.Helper()
+		salt := "gu123"
+		sum := md5.Sum([]byte(secret + salt))
+		u := h.ts.URL + "/rest/getUser?u=" + caller + "&t=" + hex.EncodeToString(sum[:]) +
+			"&s=" + salt + "&f=json&username=" + target
+		getResp, err := http.Get(u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(getResp.Body)
+		getResp.Body.Close()
+		var wrapper map[string]subsonicEnv
+		if err := json.Unmarshal(body, &wrapper); err != nil {
+			t.Fatalf("getUser: %v (%s)", err, body)
+		}
+		return wrapper["subsonic-response"]
+	}
+
+	adminSecret := newSubsonicSecret(t, h)
+	env := call(adminSecret, "admin", "getuser-member")
+	if env.Status != "ok" || env.User == nil ||
+		env.User.Username != "getuser-member" || env.User.AdminRole {
+		t.Fatalf("admin asking about the member = %+v, user %+v", env, env.User)
+	}
+
+	env = call(adminSecret, "admin", "getuser-nobody")
+	if env.Status != "failed" || env.Error == nil || env.Error.Code != 70 {
+		t.Fatalf("admin asking about a missing name = %+v", env)
+	}
+
+	memberToken := loginAs(t, h.ts, "getuser-member", "member-pass").Token
+	resp = postJSON(t, h.ts.URL+"/api/v1/users/me/app-passwords", memberToken, `{"label":"member subsonic"}`)
+	if resp.StatusCode != 201 {
+		t.Fatalf("member app password status = %d", resp.StatusCode)
+	}
+	memberSecret := decode[AppPasswordCreated](t, resp).Secret
+	env = call(memberSecret, "getuser-member", "admin")
+	if env.Status != "failed" || env.Error == nil || env.Error.Code != 50 {
+		t.Fatalf("member asking about the admin = %+v", env)
 	}
 }

@@ -23,8 +23,7 @@ import 'discord_presence.dart';
 DiscordPresencePort createDiscordPresencePort() =>
     _isDesktop ? DiscordIpcPresence() : const NoDiscordPresence();
 
-bool get _isDesktop =>
-    Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+bool get _isDesktop => Platform.isLinux || Platform.isWindows;
 
 /// The IPC opcodes this client uses. There are two more (CLOSE and
 /// PONG) and both are things Discord says, not things it is told.
