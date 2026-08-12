@@ -1,25 +1,16 @@
-import { spawn, ChildProcess } from 'node:child_process';
+import { spawn, execFileSync, ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 import { test, expect } from './fixtures';
 
-// The desktop loopback sign-on round trip with a real browser in the
-// middle: a plain-Dart probe runs the app's genuine flow (ephemeral
-// localhost listener, PKCE verifier, code exchange) and reports the
-// URL it wants opened; this spec drives chromium through the identity
-// provider's login form; the provider redirect chain lands on the
-// probe's listener; the probe finishes the exchange and hands back the
-// session it won.
+// The desktop loopback sign-on round trip: a plain-Dart probe runs the
+// app's real flow (localhost listener, PKCE, code exchange) while this
+// spec plays the human in the browser between its two output lines.
 
 const APP_DIR = path.resolve(__dirname, '..', '..', 'app', 'app');
 
-/// Everything the probe has said, and a way to wait for the next thing.
-///
-/// One listener for the child's whole life, because a per-wait listener
-/// loses output: removing the last `data` listener does not pause a
-/// flowing stream in Node, so anything written while nobody is listening
-/// is discarded rather than buffered - and this spec spends half a minute
-/// driving a browser between the probe's two lines. That window is exactly
-/// where the answer arrives.
+/// Buffers the probe's output for the child's whole life: a flowing Node
+/// stream discards what nobody is listening for, and the answer arrives
+/// exactly while this spec is off driving the browser.
 class ProbeOutput {
   private buffer = '';
   private exit: number | null = null;
@@ -80,10 +71,16 @@ class ProbeOutput {
 }
 
 test('desktop loopback sign-on completes through a real browser', async ({ rawPage: page, request, baseURL }) => {
-  const probe = spawn('dart', ['run', 'tool/oidc_loopback_probe.dart', baseURL!], {
-    cwd: APP_DIR,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  // Windows: `dart` is dart.bat, which only a shell can exec.
+  const probeArgs = ['run', 'tool/oidc_loopback_probe.dart', baseURL!];
+  const probe: ChildProcess =
+    process.platform === 'win32'
+      ? spawn(['dart', ...probeArgs].join(' '), {
+          cwd: APP_DIR,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          shell: true,
+        })
+      : spawn('dart', probeArgs, { cwd: APP_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
   const output = new ProbeOutput(probe);
   try {
     // The probe binds its listener and asks for a browser.
@@ -117,6 +114,13 @@ test('desktop loopback sign-on completes through a real browser', async ({ rawPa
     const devices = (await sessions.json()).sessions as Array<{ deviceName?: string; current: boolean }>;
     expect(devices.some((s) => s.deviceName === 'Loopback Probe' && s.current)).toBe(true);
   } finally {
-    probe.kill('SIGKILL');
+    // shell:true makes the direct child cmd.exe; kill() would orphan dart.
+    if (process.platform === 'win32' && probe.pid) {
+      try {
+        execFileSync('taskkill', ['/pid', String(probe.pid), '/T', '/F'], { stdio: 'ignore' });
+      } catch {}
+    } else {
+      probe.kill('SIGKILL');
+    }
   }
 });

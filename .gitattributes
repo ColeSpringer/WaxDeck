@@ -1,0 +1,12 @@
+# LF on disk on every OS: gofmt and dart format read raw bytes.
+* text=auto eol=lf
+
+# Binary, never rewritten - text=auto's NUL heuristic can misread a
+# corrupt vendored sample, and a rewritten byte is a broken fixture.
+*.png -text
+*.ico -text
+*.ttf -text
+*.otf -text
+*.wma -text
+*.ape -text
+*.wv -text

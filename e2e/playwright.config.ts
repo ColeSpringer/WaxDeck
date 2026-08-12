@@ -1,27 +1,35 @@
 import { defineConfig, devices } from '@playwright/test';
+import { existsSync } from 'node:fs';
 
-// Point at an already-running stack with WAXDECK_BASE_URL (the compose-based
-// harness comes later); by default we launch the locally built binaries.
+// WAXDECK_BASE_URL points at an already-running stack; by default we
+// launch the locally built binaries.
 const baseURL = process.env.WAXDECK_BASE_URL ?? 'http://localhost:4420';
 const external = !!process.env.WAXDECK_BASE_URL;
 
-// The rootless second server the first-run wizard journey drives
-// (run-wizard-stack.sh). The main stack boots with the fixture library
-// configured, so the wizard's entry condition - an administrator whose
-// server has no libraries - can never hold there. Local only: an
-// external target is one server at one URL, so the wizard project does
-// not exist on external runs.
+// Windows spawns webServer commands through cmd.exe, which cannot exec a
+// shebang script; name Git's bash explicitly (bare `bash` on PATH is WSL's).
+const bash = (() => {
+  if (process.platform !== 'win32') return 'bash';
+  const candidates = [
+    process.env.WAXDECK_GIT_BASH,
+    'C:/Program Files/Git/bin/bash.exe',
+    process.env.LOCALAPPDATA && `${process.env.LOCALAPPDATA}/Programs/Git/bin/bash.exe`,
+  ].filter((p): p is string => !!p);
+  const found = candidates.find((p) => existsSync(p));
+  if (!found && !external) {
+    throw new Error('Git bash not found; set WAXDECK_GIT_BASH to <Git>/bin/bash.exe');
+  }
+  return found ?? 'bash';
+})();
+
+// The rootless second server the wizard journey drives: the main stack
+// boots with libraries configured, so the wizard's entry condition can
+// never hold there.
 const wizardBaseURL = 'http://localhost:4430';
 
-// Retries hide flakes, so the two runs that are supposed to find them get
-// none: E2E_RETRIES=0 is what the soak workflow and a local repeat-each
-// run set. CI keeps one, not the two it used to: a test that needs three
-// attempts is a quarantine candidate, not a pass.
-// Parsed rather than coerced: `Number('')` is 0 and `Number('x')` is
-// NaN, and Playwright reads both as "no retries" - so a workflow that
-// sets E2E_RETRIES from an input nobody filled in, or a typo, silently
-// turns CI's one retry off and reports flakes as failures. Only an
-// actual integer counts as having asked.
+// E2E_RETRIES=0 is the flake-hunting runs' setting; CI keeps one retry.
+// Validated as an integer because Playwright reads '' and NaN as "no
+// retries", which would silently disarm CI's retry.
 const askedRetries = Number(process.env.E2E_RETRIES);
 const retries = Number.isInteger(askedRetries) && askedRetries >= 0
   ? askedRetries
@@ -29,16 +37,9 @@ const retries = Number.isInteger(askedRetries) && askedRetries >= 0
     ? 1
     : 0;
 
-// A project's motion mode in one place: the browser's own accessibility
-// channel, and the copy of it the suite asserts against. `metadata` is
-// what the canary reads (tests/fixtures.ts), so a project that forgets
-// to declare a mode fails loudly rather than inheriting one silently.
-//
-// reducedMotion rides `contextOptions` because Playwright has no
-// top-level `use.reducedMotion`; note that makes it whole-object, so a
-// project setting contextOptions replaces the inherited object rather
-// than merging into it - which is why the mode is spread from here
-// instead of being written per project.
+// A project's motion mode in one place; `metadata` is what the canary in
+// fixtures.ts reads. contextOptions is replaced whole, not merged, which
+// is why the mode is spread from here instead of written per project.
 const motion = (mode: 'reduce' | 'no-preference') => ({
   metadata: { motion: mode },
   use: {
@@ -50,38 +51,21 @@ const motion = (mode: 'reduce' | 'no-preference') => ({
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
-  // Playback-heavy specs stream real audio while clipboard specs need
-  // OS focus; too many concurrent pages makes both flaky. Four workers
-  // keeps the suite fast without the contention.
+  // Streaming and focus-sensitive specs both flake with more concurrency.
   workers: 4,
-  // Playwright's 30s default is a budget for a page; a spec here boots
-  // the real Flutter web client against the real stack, and the one that
-  // signs two of them in takes 15s on an idle workstation. Four workers
-  // on a four-vCPU runner roughly doubles that, which is how connect
-  // came to fail every CI run while passing locally in half the time.
-  // 120s is what the heavy specs were already asking for one
-  // `test.setTimeout` at a time; the ones that need longer than that
-  // still say so themselves.
+  // A spec boots the real Flutter client against the real stack; 30s is a
+  // page-speed budget, not a stack-speed one.
   timeout: 120_000,
-  // The assert tier from tests/driver/budgets.ts, as the default every
-  // `expect` and `expect.poll` gets. Playwright's own default is 5s,
-  // which is a browser-speed number and too short for anything that
-  // waits on this server; a spec that needs longer says which tier
-  // (`{ timeout: T.fetch }`), and a spec that says nothing gets the
-  // right answer instead of a surprise. Spelled here rather than
-  // imported so the config stays free of the tests' module graph.
+  // The assert tier from tests/driver/budgets.ts, spelled here so the
+  // config stays out of the tests' module graph.
   expect: { timeout: 15_000 },
   forbidOnly: !!process.env.CI,
   retries,
-  // A quarantined test is one the suite has stopped believing and has
-  // not yet fixed; it keeps running in the soak, where its failures are
-  // information rather than a red PR. Every `@quarantine` tag owes a
-  // docs/deferred-work.md entry in the same commit, so the exclusion is
-  // a tracked debt rather than a place things go to be forgotten.
+  // Quarantined tests run only in the soak; every @quarantine tag owes a
+  // docs/deferred-work.md entry in the same commit.
   grepInvert: process.env.E2E_QUARANTINE === 'include' ? undefined : /@quarantine/,
-  // The JSON report is what the CI job walks to annotate flaky tests; it
-  // lands under test-results/ so the artifact upload carries it next to
-  // the traces and hang evidence that explain them.
+  // The JSON report is what CI walks to annotate flaky tests; under
+  // test-results/ so the artifact upload carries it beside the traces.
   reporter: process.env.CI
     ? [
         ['list'],
@@ -91,54 +75,29 @@ export default defineConfig({
     : 'list',
   use: {
     baseURL,
-    // Kept on failure rather than on first retry: local runs do not
-    // retry, so a flake that shows up once in a dozen runs would
-    // otherwise leave nothing behind to diagnose it with.
+    // On failure, not first retry: local runs never retry, and a flake
+    // would otherwise leave nothing to diagnose.
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    // The full Chromium in its new headless mode, not the old
-    // chrome-headless-shell that Playwright reaches for by default.
-    // The web build is wasm (skwasm rasterizes in a dedicated worker
-    // behind SharedArrayBuffer), and the shell segfaults on it: the
-    // kernel log records signal 11 in `chrome-headless` and
-    // `DedicatedWorker` threads, which surfaces as an unexplained
-    // "Page crashed" in whichever spec happened to be logging in. The
-    // full binary is also what people actually run.
+    // Full Chromium, not the default chrome-headless-shell: the shell
+    // segfaults on the wasm build (signal 11 in its skwasm worker),
+    // surfacing as an unexplained "Page crashed".
     channel: 'chromium',
-    // The playback specs stream real audio for as long as their fixtures
-    // last, and on a workstation that comes out of the speakers. Nothing
-    // in the suite asserts audible sound - playback is checked through
-    // positions and the server's own play accounting - so the browser is
-    // muted and the suite is safe to run anywhere.
+    // Playback specs stream real audio; nothing asserts audible sound,
+    // so mute keeps the suite runnable on a workstation.
     launchOptions: { args: ['--mute-audio'] },
   },
   projects: [
-    // First-run setup runs alone before everything else: it drives the
-    // one-shot bootstrap wizard every other spec assumes has happened.
+    // Runs alone first: the one-shot bootstrap every other spec assumes.
     {
       name: 'setup',
       testMatch: /first-run\.spec\.ts/,
       ...motion('reduce'),
     },
-    // Every blocking project asks the browser for reduced motion, which
-    // Flutter 3.44's web engine reads as AccessibilityFeatures
-    // .disableAnimations: route transitions, sheets and every default
-    // AnimationController collapse to 5% of their duration, and
-    // WaxMotion.of hands widgets its `reduced` token set. That removes
-    // the whole class of failure where a click lands on a rect that is
-    // still moving. It is the browser's real accessibility channel, not
-    // a test seam - a listener who asks for reduced motion gets exactly
-    // this app.
-    //
-    // The wave is everything that owns its own state. Every test in it
-    // holds an account minted from its own title, so nothing
-    // here shares a queue, a star, a position or a preference document
-    // with anything else - which is what lets it stay fully parallel
-    // with no serial groups inside it. `prefs-radio` used to sit between
-    // this and the focus projects, because settings and radio both
-    // replace the whole preference document and the clobbering is per
-    // document rather than per key; two accounts is two documents, so it
-    // is gone.
+    // Reduced motion is the browser's real accessibility channel: Flutter
+    // collapses animations, so clicks stop landing on moving rects.
+    // The wave is everything that owns its own state - per-test accounts
+    // share nothing, which is what lets it stay fully parallel.
     {
       name: 'wave',
       testIgnore: [
@@ -155,10 +114,7 @@ export default defineConfig({
       dependencies: ['setup'],
       ...motion('reduce'),
     },
-    // The wizard journey runs against its own rootless server, so it
-    // depends on nothing here and nothing here depends on it: the two
-    // stacks share no state, and the only account it touches is the
-    // administrator it creates on its own installation.
+    // Runs against its own rootless server; the two stacks share no state.
     ...(external
       ? []
       : [
@@ -169,74 +125,44 @@ export default defineConfig({
             use: { ...motion('reduce').use, baseURL: wizardBaseURL },
           },
         ]),
-    // The catalog mutators, which per-test accounts cannot divide: the
-    // files on disk, the mutation lease, the trash, the library table
-    // and the admin settings row are one installation's, however many
-    // accounts are looking at them.
-    //
-    // Uploads first, then the admin console, and the order is the point:
-    // admin-ops flips the read-only switch, which refuses every upload
-    // server-wide while it is on. With the two projects chained, that
-    // window cannot overlap an upload - the deferred-work entry that
-    // used to describe this hazard is closed by the ordering.
+    // Catalog mutators, which per-test accounts cannot divide. Uploads
+    // before admin-ops on purpose: admin-ops flips server-wide read-only,
+    // and the chain keeps that window from overlapping an upload.
     {
       name: 'mutators-uploads',
       testMatch: /uploads\.spec\.ts/,
       dependencies: ['wave'],
       ...motion('reduce'),
     },
-    // The admin console's own global surfaces: the settings row, the
-    // backup set, the trash, the library table. Parallel with itself,
-    // with one `describe.serial` inside the file around the pair that
-    // shares the backup set.
-    //
-    // It used to be one worker in order, and the reason was one test:
-    // server-wide read-only, which refuses every write on the stack
-    // while it is on. That is a switch, not a race, so serializing the
-    // file against itself was the only answer available from inside it -
-    // and it idled three of four workers for the length of the project.
-    // The switch has its own project below instead.
+    // The admin console's global surfaces; parallel with itself, with one
+    // describe.serial around the pair sharing the backup set.
     {
       name: 'mutators-admin',
       testMatch: /admin-ops\.spec\.ts/,
       dependencies: ['mutators-uploads'],
       ...motion('reduce'),
     },
-    // Server-wide read-only, alone on the stack. One test, one project,
-    // after everything that writes and before everything that follows:
-    // that is what "global" costs, paid once rather than charged to six
-    // tests that only shared a file with it.
+    // Server-wide read-only, alone on the stack: the global switch's cost
+    // paid once instead of charged to every test sharing its file.
     {
       name: 'mutators-readonly',
       testMatch: /admin-readonly\.spec\.ts/,
       dependencies: ['mutators-admin'],
       ...motion('reduce'),
     },
-    // Animated paths stay covered, and this sits BEFORE the focus
-    // projects rather than at the very end. Playwright skips a project
-    // whose dependency had failures, and the focus projects are the
-    // flake-prone tail by construction - they fight the OS for focus -
-    // so with this last, a late focus failure would take the only
-    // unreduced coverage in the run down with it.
-    //
-    // It still may not run beside `wave`: both match ui.spec.ts, and two
-    // copies of one test at once is the aliasing the account model
-    // removes. The
-    // account key names the project now, so that is belt and braces
-    // rather than the only thing holding it.
+    // Unreduced-motion coverage. Before the focus projects: those are the
+    // flake-prone tail, and a skipped dependency would take this run's
+    // only unreduced pass down with it. Not beside wave: both match
+    // ui.spec.ts, and one test running twice at once aliases.
     {
       name: 'motion-smoke',
-      // Anchored both ends: a bare /ui\.spec\.ts/ is a substring match
-      // over the whole path and picks up signup-ui.spec.ts too.
+      // Anchored both ends or it also matches signup-ui.spec.ts.
       testMatch: /[\\/]ui\.spec\.ts$/,
       dependencies: ['mutators-readonly'],
       ...motion('no-preference'),
     },
-    // Focus-sensitive specs run last, one at a time (projects chain
-    // through dependencies): text selection, clipboard, native context
-    // menus, and the semantics walk all lose OS focus to sibling
-    // workers' pages and flake. Last also means a quarantined failure
-    // here costs no other project its run.
+    // Focus-sensitive specs run last, one at a time: they lose OS focus
+    // to sibling workers' pages and flake.
     {
       name: 'focus-a11y',
       testMatch: /a11y-audit\.spec\.ts/,
@@ -249,14 +175,9 @@ export default defineConfig({
       dependencies: ['focus-a11y'],
       ...motion('reduce'),
     },
-    // The real third-party client, which needs a container this suite
-    // does not start: present only when FEISHIN_BASE_URL names one, so a
-    // plain `npx playwright test` neither runs it nor reports it skipped
-    // forever. It depends on setup the way sso-dex does: its fixtures
-    // mint an account through /auth/bootstrap, and a first-wave start on
-    // a non-external run would race the wizard's own bootstrap into a
-    // 409 that takes everything chained behind setup down. The CI job
-    // runs it by name against the compose stack.
+    // The real third-party client; present only when FEISHIN_BASE_URL
+    // names its container. Depends on setup so its bootstrap cannot race
+    // the wizard's into a 409.
     ...(process.env.FEISHIN_BASE_URL
       ? [
           {
@@ -267,9 +188,8 @@ export default defineConfig({
           },
         ]
       : []),
-    // The SSO journey against a real dex, which run-sso-dex.sh brings up
-    // before it invokes this project by name. Conditional for the same
-    // reason as feishin: without the container there is nothing to drive.
+    // SSO against a real dex; run-sso-dex.sh brings the container up
+    // before invoking this project by name.
     ...(process.env.WAXDECK_DEX_SSO
       ? [
           {
@@ -281,39 +201,25 @@ export default defineConfig({
         ]
       : []),
   ],
-  // run-stack.sh synthesizes the fixture library, starts the WaxFlow
-  // streaming sidecar, and execs the server binary built with the embedded
-  // web UI (`make web build`, or CI's equivalent); the server scans the
-  // fixture library at startup. In CI, always start a fresh stack and fail
-  // if the port is already taken, so tests never silently run against a
-  // foreign process. Locally, reuse a dev-run stack (or a WAXDECK_BASE_URL
-  // target) if one is present.
+  // run-stack.sh synthesizes fixtures, starts the sidecar, and execs the
+  // prebuilt server. CI never reuses a running stack, so tests cannot
+  // silently run against a foreign process; local runs may.
   webServer: external ? undefined : [
     {
-      command: './run-stack.sh',
+      command: `"${bash}" run-stack.sh`,
       url: `${baseURL}/api/v1/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
-    // The wizard's rootless server: the same binary over an empty data
-    // dir, no sidecar, no roots (see run-wizard-stack.sh).
-    //
-    // Never reused, unlike the main stack. This one is single-use by
-    // construction: its spec walks a door that closes behind it, so a
-    // server somebody already bootstrapped makes the one test the
-    // stack exists for skip itself. Failing on a busy port is the
-    // louder and more useful answer.
-    //
-    // Dropped for the dex run, which selects one project by name:
-    // playwright boots every webServer entry regardless of what is
-    // selected, so this would start a whole second installation for a
-    // spec that never opens it - and then fail the run on the port if
-    // one is already there.
+    // The wizard's rootless server. Never reused: its spec walks a door
+    // that closes behind it, so a bootstrapped leftover makes the one
+    // test skip itself. Dropped for the dex run, which boots no wizard
+    // spec but would still pay for (and maybe fail on) this port.
     ...(process.env.WAXDECK_DEX_SSO
       ? []
       : [
           {
-            command: './run-wizard-stack.sh',
+            command: `"${bash}" run-wizard-stack.sh`,
             url: `${wizardBaseURL}/api/v1/health`,
             reuseExistingServer: false,
             timeout: 120_000,

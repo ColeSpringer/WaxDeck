@@ -15,8 +15,9 @@ compose stack with the streaming sidecar.
 
 ## Developing
 
-Go 1.26 and Flutter 3.44 (a pub workspace under `app/`). The everyday
-loop:
+Go 1.26 and Flutter 3.44 (a pub workspace under `app/`). On Windows,
+install GNU make (`winget install ezwinports.make`); recipes run
+through Git's bash, so make works from any shell. The everyday loop:
 
 ```sh
 make generate   # api/spec/ fragments to api/openapi.yaml, Go server stubs, Dart client
