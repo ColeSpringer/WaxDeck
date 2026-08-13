@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import 'client_prefs.dart';
 
@@ -67,25 +68,43 @@ class PrefsController extends AsyncNotifier<Prefs> {
   Future<void> setTimezone(String timezone) =>
       _write((current) => current.copyWith(timezone: timezone));
 
+  /// Stores the BCP 47 tag the interface draws in. Same replace
+  /// semantics as [setTheme].
+  Future<void> setLocale(String tag) =>
+      _write((current) => current.copyWith(locale: tag));
+
+  /// Clears the stored locale so the interface follows the system again.
+  Future<void> clearLocale() => _write((c) => _cleared(c, locale: true));
+
   /// Clears the stored timezone so stats fall back to the server
-  /// default (UTC). PUT replaces the whole preference document and
-  /// copyWith cannot null a field, so the document is rebuilt without
-  /// it.
-  Future<void> clearTimezone() => _write(
-    (current) => Prefs(
-      locale: current.locale,
-      theme: current.theme,
-      sharedStatsOptOut: current.sharedStatsOptOut,
-      radioFavorites: current.radioFavorites,
-      pinned: current.pinned,
-      crossfadeSeconds: current.crossfadeSeconds,
-      replayGain: current.replayGain,
-      radioScrobbleOptOut: current.radioScrobbleOptOut,
-      identifyOptOut: current.identifyOptOut,
-      browseShowUnknown: current.browseShowUnknown,
-      browseSorts: current.browseSorts,
-      autoplay: current.autoplay,
-    ),
+  /// default (UTC).
+  Future<void> clearTimezone() => _write((c) => _cleared(c, timezone: true));
+
+  /// [current] with the named fields dropped.
+  ///
+  /// PUT replaces the whole document and [Prefs.copyWith] treats null as
+  /// "keep", so a field can only be cleared by rebuilding around it. One
+  /// literal, not one per clearable field: a preference added to Prefs
+  /// but forgotten here deletes itself the next time anyone clears
+  /// anything.
+  static Prefs _cleared(
+    Prefs current, {
+    bool locale = false,
+    bool timezone = false,
+  }) => Prefs(
+    timezone: timezone ? null : current.timezone,
+    locale: locale ? null : current.locale,
+    theme: current.theme,
+    sharedStatsOptOut: current.sharedStatsOptOut,
+    radioFavorites: current.radioFavorites,
+    pinned: current.pinned,
+    crossfadeSeconds: current.crossfadeSeconds,
+    replayGain: current.replayGain,
+    radioScrobbleOptOut: current.radioScrobbleOptOut,
+    identifyOptOut: current.identifyOptOut,
+    browseShowUnknown: current.browseShowUnknown,
+    browseSorts: current.browseSorts,
+    autoplay: current.autoplay,
   );
 
   /// Stores the crossfade a server-rendered queue is joined with.
@@ -153,6 +172,16 @@ class PrefsController extends AsyncNotifier<Prefs> {
 final prefsControllerProvider = AsyncNotifierProvider<PrefsController, Prefs>(
   PrefsController.new,
 );
+
+/// The UI locale override from the synced preference; null follows the
+/// system. Signed out, prefs are the empty document, so the system
+/// decides - same rule as the theme.
+final localeOverrideProvider = Provider<Locale?>((ref) {
+  final tag = ref.watch(prefsControllerProvider).value?.locale;
+  if (tag == null || tag.isEmpty) return null;
+  // An unparseable tag answers null, which is the system too.
+  return localeFromTag(tag);
+});
 
 /// Material theme mode derived from the synced preference. The unset
 /// state follows the platform: someone who never chose a theme has told

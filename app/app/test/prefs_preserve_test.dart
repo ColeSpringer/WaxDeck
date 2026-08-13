@@ -8,6 +8,34 @@ import 'fakes.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
 
+/// One clearable preference: how to clear it, and how to read it back.
+typedef _Clear = ({
+  String name,
+  Future<void> Function(PrefsController) clear,
+  String? Function(Prefs) read,
+});
+
+const _stored = Prefs(
+  timezone: 'America/Denver',
+  locale: 'es',
+  theme: ThemePref.oled,
+  sharedStatsOptOut: true,
+  radioFavorites: <String>['rs-01JZX5N8QW3F4V9T2B7KD3M9R6'],
+  pinned: <String>['al-01JZX5N8QW3F4V9T2B7KD3M9R6'],
+  crossfadeSeconds: 4.5,
+  replayGain: true,
+  radioScrobbleOptOut: true,
+  identifyOptOut: true,
+  browseShowUnknown: false,
+  browseSorts: <String, String>{'artist': 'label'},
+  autoplay: false,
+);
+
+final _clears = <_Clear>[
+  (name: 'timezone', clear: (n) => n.clearTimezone(), read: (p) => p.timezone),
+  (name: 'locale', clear: (n) => n.clearLocale(), read: (p) => p.locale),
+];
+
 void main() {
   test(
     'an early theme change never wipes stored timezone and locale',
@@ -41,48 +69,46 @@ void main() {
     },
   );
 
-  // clearTimezone is the one write that rebuilds the document by hand,
-  // because copyWith cannot null a field. Every field added to Prefs has
-  // to be added to that literal too, or clearing a timezone silently
-  // deletes it - which for a pin list is a home shelf emptying itself.
-  test('clearing the timezone keeps every other stored field', () async {
-    final repo = FakeRepository()
-      ..sessionState = const SessionState(authenticated: true, user: _user)
-      ..prefs = const Prefs(
-        timezone: 'America/Denver',
-        locale: 'en-US',
-        theme: ThemePref.oled,
-        sharedStatsOptOut: true,
-        radioFavorites: <String>['rs-01JZX5N8QW3F4V9T2B7KD3M9R6'],
-        pinned: <String>['al-01JZX5N8QW3F4V9T2B7KD3M9R6'],
-        crossfadeSeconds: 4.5,
-        replayGain: true,
-        radioScrobbleOptOut: true,
-        identifyOptOut: true,
-        browseShowUnknown: false,
-        browseSorts: <String, String>{'artist': 'label'},
-        autoplay: false,
-      );
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
+  // The clears are the one kind of write that rebuilds the document by
+  // hand, because copyWith cannot null a field. Every preference added
+  // to Prefs has to reach that literal too, or clearing anything
+  // silently deletes it - which for a pin list is a home shelf emptying
+  // itself. Tabled, so whichever clear lands next costs one line.
+  for (final subject in _clears) {
+    test(
+      'clearing the ${subject.name} keeps every other stored field',
+      () async {
+        final repo = FakeRepository()
+          ..sessionState = const SessionState(authenticated: true, user: _user)
+          ..prefs = _stored;
+        final container = ProviderContainer(
+          overrides: [repositoryProvider.overrideWithValue(repo)],
+        );
+        addTearDown(container.dispose);
+
+        await subject.clear(container.read(prefsControllerProvider.notifier));
+
+        final kept = repo.prefs;
+        expect(subject.read(kept), isNull);
+        for (final other in _clears.where((o) => o.name != subject.name)) {
+          expect(
+            other.read(kept),
+            other.read(_stored),
+            reason: 'clearing the ${subject.name} kept the ${other.name}',
+          );
+        }
+        expect(kept.theme, ThemePref.oled);
+        expect(kept.sharedStatsOptOut, isTrue);
+        expect(kept.radioFavorites, <String>['rs-01JZX5N8QW3F4V9T2B7KD3M9R6']);
+        expect(kept.pinned, <String>['al-01JZX5N8QW3F4V9T2B7KD3M9R6']);
+        expect(kept.crossfadeSeconds, 4.5);
+        expect(kept.replayGain, isTrue);
+        expect(kept.radioScrobbleOptOut, isTrue);
+        expect(kept.identifyOptOut, isTrue);
+        expect(kept.browseShowUnknown, isFalse);
+        expect(kept.browseSorts, <String, String>{'artist': 'label'});
+        expect(kept.autoplay, isFalse);
+      },
     );
-    addTearDown(container.dispose);
-
-    await container.read(prefsControllerProvider.notifier).clearTimezone();
-
-    final stored = repo.prefs;
-    expect(stored.timezone, isNull);
-    expect(stored.locale, 'en-US');
-    expect(stored.theme, ThemePref.oled);
-    expect(stored.sharedStatsOptOut, isTrue);
-    expect(stored.radioFavorites, <String>['rs-01JZX5N8QW3F4V9T2B7KD3M9R6']);
-    expect(stored.pinned, <String>['al-01JZX5N8QW3F4V9T2B7KD3M9R6']);
-    expect(stored.crossfadeSeconds, 4.5);
-    expect(stored.replayGain, isTrue);
-    expect(stored.radioScrobbleOptOut, isTrue);
-    expect(stored.identifyOptOut, isTrue);
-    expect(stored.browseShowUnknown, isFalse);
-    expect(stored.browseSorts, <String, String>{'artist': 'label'});
-    expect(stored.autoplay, isFalse);
-  });
+  }
 }

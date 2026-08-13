@@ -75,6 +75,11 @@ export default defineConfig({
     : 'list',
   use: {
     baseURL,
+    // The suite reads English: role-and-name lookups, copy assertions,
+    // durations spelled out in words. The app takes its locale from the
+    // browser now, so without this a runner whose desktop is Spanish
+    // gets a Spanish UI and every one of those lookups misses.
+    locale: 'en-US',
     // On failure, not first retry: local runs never retry, and a flake
     // would otherwise leave nothing to diagnose.
     trace: 'retain-on-failure',

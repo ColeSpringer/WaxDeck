@@ -1,4 +1,4 @@
-.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-mirror lint spec-lint test test-server test-fixtures test-app test-app-chrome \
+.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-l10n gen-mirror lint spec-lint test test-server test-fixtures test-app test-app-chrome \
         web build run up down reset logs drift-check oasdiff e2e e2e-desktop dist clean \
         path-doctor
 
@@ -42,7 +42,7 @@ APP_WEB_OUT := app/app/build/web
 
 ## --- codegen -----------------------------------------------------------------
 
-generate: gen-go gen-dart gen-semantics gen-api-types gen-version gen-mirror gen-notices
+generate: gen-go gen-dart gen-semantics gen-api-types gen-l10n gen-version gen-mirror gen-notices
 
 # Bundles the api/spec/ fragments into the committed spec every consumer
 # reads. Phony on purpose: a fresh checkout gives bundle and fragments
@@ -68,6 +68,12 @@ gen-semantics:
 # `generate` runs on Go- and Dart-only changes too.
 gen-api-types: spec-bundle
 	cd e2e && { test -d node_modules || npm ci --no-audit --no-fund; } && npm run --silent gen-types
+
+# The app's copy, committed rather than built on the fly, so a
+# translation that fails to compile fails here and not in a release.
+# gen-l10n formats what it writes; nothing formats it again.
+gen-l10n:
+	cd app/app && flutter gen-l10n
 
 # The app version from the pubspec that declares it; Flutter answers no
 # version at runtime without a plugin, and a hand-typed copy goes stale.
@@ -155,6 +161,7 @@ drift-check: generate
 	git diff --exit-code -- $(SPEC) server/internal/api app/packages/waxdeck_api_gen \
 		app/app/lib/src/shell/semantics_ids.dart e2e/tests/semantics-ids.ts \
 		e2e/tests/api-types.ts \
+		app/app/lib/src/l10n/gen \
 		app/app/lib/src/shell/app_version.dart \
 		app/packages/waxdeck_data/lib/src/database.g.dart \
 		server/internal/notices/third_party_notices.txt app/app/LICENSE

@@ -3,6 +3,8 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'auth/auth_controller.dart';
 import 'desktop/mini_window.dart';
+import 'l10n/l10n.dart';
+import 'l10n/locale_warmup.dart';
 import 'settings/client_prefs.dart';
 import 'settings/prefs_controller.dart';
 import 'shell/router.dart';
@@ -17,7 +19,12 @@ class WaxDeckApp extends ConsumerWidget {
     // third theme. Art-driven accent stays scoped to player subtrees.
     final spec = ref.watch(waxThemeSpecProvider);
     return MaterialApp.router(
+      // brand, not copy
       title: 'WaxDeck',
+      // Null follows the platform; a stored preference overrides it.
+      locale: ref.watch(localeOverrideProvider),
+      localizationsDelegates: waxLocalizationsDelegates,
+      supportedLocales: waxSupportedLocales,
       theme: buildWaxTheme(
         variant: WaxThemeVariant.light,
         density: spec.density,
@@ -39,8 +46,14 @@ class WaxDeckApp extends ConsumerWidget {
       //
       // The mini window wraps all of it, above the router: what it hides
       // is the whole app, and it keeps that app mounted while it does.
+      //
+      // The warmup sits in the builder because Localizations wraps the
+      // builder's subtree: this is the highest place the resolved locale
+      // can be read from.
       builder: (context, child) => MiniWindowGate(
-        child: _ReducedMotion(child: _BootGate(child: child!)),
+        child: _ReducedMotion(
+          child: LocaleFontWarmup(child: _BootGate(child: child!)),
+        ),
       ),
     );
   }

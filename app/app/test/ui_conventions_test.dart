@@ -3,13 +3,14 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// The design-system conventions a compiler cannot see, as a ratchet.
+/// The conventions a compiler cannot see, as a ratchet.
 ///
 /// The app's screens are supposed to reach for `waxdeck_ui` - its rows,
 /// its glyphs, its spacing ladder, its type - rather than for Material's
-/// primitives. Most of that is habit, and habits regress silently: a
-/// screen written in a hurry grows a `SwitchListTile` beside nine
-/// `WaxSettingRow`s and nothing says so.
+/// primitives, and to look their copy up rather than type it. Most of
+/// that is habit, and habits regress silently: a screen written in a
+/// hurry grows a `SwitchListTile` beside nine `WaxSettingRow`s and
+/// nothing says so.
 ///
 /// So it is counted, per file, against a committed allowlist that may
 /// only ever shrink. A count over its allowance fails with the
@@ -31,11 +32,12 @@ void main() {
 
       for (final file in _sources()) {
         final path = file.path.split(Platform.pathSeparator).join('/');
-        if (_generated.contains(path)) continue;
+        if (_isGenerated(path)) continue;
         final source = file.readAsStringSync();
         final lines = source.split('\n');
         final code = _code(source);
         for (final rule in _rules) {
+          if (!rule.appliesTo(path)) continue;
           for (final hit in rule.find(code)) {
             // Offsets survive the blanking - a comment becomes spaces of
             // the same width - so the line is the file's own.
@@ -114,11 +116,15 @@ void main() {
 }
 
 /// The generated sources, in which every rule is meaningless because
-/// nobody writes them.
+/// nobody writes them. A directory stands for everything under it.
 const _generated = <String>[
   'lib/src/shell/semantics_ids.dart',
   'lib/src/shell/app_version.dart',
+  'lib/src/l10n/gen',
 ];
+
+bool _isGenerated(String path) =>
+    _generated.any((g) => path == g || path.startsWith('$g/'));
 
 /// Every package that *consumes* the design system, relative to
 /// `app/app`, which is where this test runs.
@@ -129,7 +135,8 @@ const _generated = <String>[
 /// to the conventions - including the catalogue, which is the taste
 /// reference the screen-level audit judges against and would otherwise
 /// be the one Flutter app in the repo where a `SwitchListTile` is
-/// invisible.
+/// invisible. Its copy is the one thing it is not held to; see
+/// [_CopyRule.appliesTo].
 const _roots = <String>[
   'lib',
   '../packages/waxdeck_ui/example/lib',
@@ -162,14 +169,18 @@ class _Rule {
   final RegExp pattern;
   final String fix;
 
+  /// Whether this rule has anything to say about [path]. Rules cover
+  /// every root unless one of them is a rule's stated exception.
+  bool appliesTo(String path) => true;
+
   Iterable<_Hit> find(String code) =>
       pattern.allMatches(code).map((m) => _Hit(m.start));
 }
 
-/// The insets rule, which the other three's shape does not fit. An
-/// `EdgeInsets` call runs across lines as often as not and nests
-/// brackets when an argument is computed, so its arguments are read by
-/// walking the brackets rather than by a pattern.
+/// The insets rule, which a bare pattern does not fit. An `EdgeInsets`
+/// call runs across lines as often as not and nests brackets when an
+/// argument is computed, so its arguments are read by walking the
+/// brackets rather than by matching.
 class _InsetsRule extends _Rule {
   _InsetsRule()
     : super(
@@ -290,6 +301,122 @@ class _GapRule extends _Rule {
   }
 }
 
+/// The copy rule: an English sentence typed into a widget rather than
+/// looked up.
+///
+/// Copy is the one convention that cannot be spotted by its shape - a
+/// string literal is a string literal - so it is spotted by its
+/// position: the child of a `Text`, or the value of an argument name
+/// that carries words to a reader. Everything else a widget is handed
+/// (a pid, a wire token, a semantics identifier, a route) reaches it
+/// under a different name.
+///
+/// A literal with no letters left once its interpolations are removed is
+/// not copy: `'$count'` and `'  -  '` are formatting, and counting them
+/// would put a floor on a file that has nothing to translate.
+class _CopyRule extends _Rule {
+  _CopyRule()
+    : super(
+        name: 'hardcoded-copy',
+        // Counted, not guessed: a name missing here is a surface the
+        // sweep declares finished without ever seeing. Re-derive with
+        //     grep -rnoE "\b<name>:\s*(const\s+)?r?['\"]" lib
+        pattern: RegExp(
+          r'\b(?:Selectable)?Text\(\s*(?:const\s+)?|'
+          r'\b(?:label|labelText|title|subtitle|overline|caption|help'
+          r'|helperText|hint|hintText|tooltip|semanticLabel|emptyTitle'
+          r'|emptyMessage|confirmLabel|confirmWord|actionLabel'
+          r'|spokenActionLabel|blurb|detail|message|text)'
+          r':\s*(?:const\s+)?',
+        ),
+        fix:
+            'move it to an ARB key and read it through context.l10n '
+            '(context.waxL10n inside the design system)',
+      );
+
+  /// Interpolations, so what is left is what a translator would work on.
+  static final _interpolation = RegExp(r'\$\{[^{}]*\}|\$\w+');
+  static final _letter = RegExp(r'[A-Za-z]');
+
+  /// The catalogue's strings are the demo library it draws - album
+  /// titles, specimen copy - and none of it is ever translated, so
+  /// counting them would put a permanent floor on the one root where a
+  /// nonzero count means nothing.
+  @override
+  bool appliesTo(String path) =>
+      !path.startsWith('../packages/waxdeck_ui/example/');
+
+  @override
+  Iterable<_Hit> find(String code) sync* {
+    for (final match in pattern.allMatches(code)) {
+      final literal = _literalAt(code, match.end);
+      if (literal == null) continue;
+      final words = literal.replaceAll(_interpolation, '');
+      if (!_letter.hasMatch(words)) continue;
+      yield _Hit(match.start, _preview(words));
+    }
+  }
+
+  static String _preview(String words) {
+    final flat = words.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return flat.length <= 40 ? "'$flat'" : "'${flat.substring(0, 39)}...'";
+  }
+
+  /// The body of the string literal at [start], or null if what stands
+  /// there is not one.
+  ///
+  /// Only the first segment of an adjacent-string concatenation is
+  /// read, which is the count this rule wants: prose split across lines
+  /// is one copy site and becomes one ARB key.
+  ///
+  /// Interpolations are walked rather than stopped at, because a quote
+  /// inside one (`'Added "${item.title}"'`) is not the literal's end.
+  static String? _literalAt(String code, int start) {
+    var i = start;
+    final raw = i < code.length && code[i] == 'r';
+    if (raw) i++;
+    final quote = _quoteAt(code, i);
+    if (quote == null) return null;
+    i += quote.length;
+    final body = StringBuffer();
+    while (i < code.length) {
+      if (!raw && code[i] == r'\' && i + 1 < code.length) {
+        body.write(code.substring(i, i + 2));
+        i += 2;
+        continue;
+      }
+      if (!raw && code.startsWith(r'${', i)) {
+        // Nested quotes and braces live in here; hand the whole
+        // interpolation through so the stripper can drop it whole.
+        final end = _interpolationEnd(code, i + 2);
+        if (end == null) return null;
+        body.write(code.substring(i, end));
+        i = end;
+        continue;
+      }
+      if (code.startsWith(quote, i)) return body.toString();
+      // A single-quoted literal cannot span a line; an unterminated one
+      // is a scan that went wrong, not a finding.
+      if (quote.length == 1 && code[i] == '\n') return null;
+      body.write(code[i]);
+      i++;
+    }
+    return null;
+  }
+
+  static int? _interpolationEnd(String code, int start) {
+    var depth = 1;
+    for (var i = start; i < code.length; i++) {
+      if (code[i] == '{') depth++;
+      if (code[i] == '}') {
+        depth--;
+        if (depth == 0) return i + 1;
+      }
+    }
+    return null;
+  }
+}
+
 final _rules = <_Rule>[
   _Rule(
     name: 'material-list-tile',
@@ -325,6 +452,7 @@ final _rules = <_Rule>[
     pattern: RegExp(r'\bBorderRadius\.circular\(\s*\d'),
     fix: 'use WaxRadius, which owns the corner scale',
   ),
+  _CopyRule(),
 ];
 
 class _Finding {

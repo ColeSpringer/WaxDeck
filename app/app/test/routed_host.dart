@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -29,7 +30,15 @@ const _testPushed = '$_testRoot/pushed';
 /// keys a page by its path and its path parameters, a query is neither, and
 /// the same State is reused. Declared ahead of the app's own routes so this
 /// one wins the match.
-Widget routedHost(Widget screen, {bool pushed = false, String? at}) {
+///
+/// Pass [locale] for a screen whose copy is what the test is about; the
+/// default is the locale every other assertion in the suite reads.
+Widget routedHost(
+  Widget screen, {
+  bool pushed = false,
+  String? at,
+  Locale locale = const Locale('en'),
+}) {
   final root = at ?? _testRoot;
   final router = GoRouter(
     initialLocation: pushed ? _testPushed : root,
@@ -47,5 +56,10 @@ Widget routedHost(Widget screen, {bool pushed = false, String? at}) {
     ],
   );
   addTearDown(router.dispose);
-  return MaterialApp.router(routerConfig: router);
+  return MaterialApp.router(
+    routerConfig: router,
+    locale: locale,
+    localizationsDelegates: waxLocalizationsDelegates,
+    supportedLocales: waxSupportedLocales,
+  );
 }

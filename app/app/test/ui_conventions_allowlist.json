@@ -1,1 +1,350 @@
-{}
+{
+  "lib/src/admin/admin_shares_screen.dart": {
+    "hardcoded-copy": 4
+  },
+  "lib/src/admin/audit_screen.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/admin/backups_screen.dart": {
+    "hardcoded-copy": 29
+  },
+  "lib/src/admin/dashboard_screen.dart": {
+    "hardcoded-copy": 13
+  },
+  "lib/src/admin/first_run_wizard.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/admin/genres_screen.dart": {
+    "hardcoded-copy": 27
+  },
+  "lib/src/admin/libraries_screen.dart": {
+    "hardcoded-copy": 26
+  },
+  "lib/src/admin/migrate_screen.dart": {
+    "hardcoded-copy": 23
+  },
+  "lib/src/admin/notifications_screen.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/admin/schedules_screen.dart": {
+    "hardcoded-copy": 8
+  },
+  "lib/src/admin/server_settings_screen.dart": {
+    "hardcoded-copy": 31
+  },
+  "lib/src/admin/trash_screen.dart": {
+    "hardcoded-copy": 22
+  },
+  "lib/src/admin/user_edit_screen.dart": {
+    "hardcoded-copy": 57
+  },
+  "lib/src/admin/users_screen.dart": {
+    "hardcoded-copy": 47
+  },
+  "lib/src/app.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/auth/login_screen.dart": {
+    "hardcoded-copy": 5
+  },
+  "lib/src/auth/setup_screen.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/auth/signup_screen.dart": {
+    "hardcoded-copy": 10
+  },
+  "lib/src/auto/auto_browse.dart": {
+    "hardcoded-copy": 5
+  },
+  "lib/src/books/book_screen.dart": {
+    "hardcoded-copy": 33
+  },
+  "lib/src/books/books_screen.dart": {
+    "hardcoded-copy": 11
+  },
+  "lib/src/connect/cast_preflight.dart": {
+    "hardcoded-copy": 8
+  },
+  "lib/src/connect/connect_bus.dart": {
+    "hardcoded-copy": 4
+  },
+  "lib/src/connect/connect_controller.dart": {
+    "hardcoded-copy": 3
+  },
+  "lib/src/connect/device_picker.dart": {
+    "hardcoded-copy": 17
+  },
+  "lib/src/connect/queue_gateway.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/connect/remote_screen.dart": {
+    "hardcoded-copy": 10
+  },
+  "lib/src/connect/remote_session.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/desktop/desktop_ports_io.dart": {
+    "hardcoded-copy": 4
+  },
+  "lib/src/desktop/mini_window.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/diagnostics/defect_log_screen.dart": {
+    "hardcoded-copy": 8
+  },
+  "lib/src/discovery/discovery_actions.dart": {
+    "hardcoded-copy": 11
+  },
+  "lib/src/discovery/track_list_screen.dart": {
+    "hardcoded-copy": 3
+  },
+  "lib/src/downloads/downloads_screen.dart": {
+    "hardcoded-copy": 18
+  },
+  "lib/src/health/diagnostics_screen.dart": {
+    "hardcoded-copy": 8
+  },
+  "lib/src/health/health_screen.dart": {
+    "hardcoded-copy": 46
+  },
+  "lib/src/home/home_screen.dart": {
+    "hardcoded-copy": 22
+  },
+  "lib/src/home/home_shelves.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/home/item_shelf.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/home/mix_shelf.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/home/pin_action.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/home/pinned_shelf.dart": {
+    "hardcoded-copy": 8
+  },
+  "lib/src/library/item_delete.dart": {
+    "hardcoded-copy": 11
+  },
+  "lib/src/metadata/artwork_manager.dart": {
+    "hardcoded-copy": 9
+  },
+  "lib/src/metadata/metadata_screen.dart": {
+    "hardcoded-copy": 44
+  },
+  "lib/src/music/album_detail.dart": {
+    "hardcoded-copy": 10
+  },
+  "lib/src/music/album_editor_screen.dart": {
+    "hardcoded-copy": 16
+  },
+  "lib/src/music/album_screen.dart": {
+    "hardcoded-copy": 12
+  },
+  "lib/src/music/artist_screen.dart": {
+    "hardcoded-copy": 8
+  },
+  "lib/src/music/index_screen.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/music/listing_screen.dart": {
+    "hardcoded-copy": 2
+  },
+  "lib/src/music/music_controllers.dart": {
+    "hardcoded-copy": 5
+  },
+  "lib/src/music/music_hub_screen.dart": {
+    "hardcoded-copy": 11
+  },
+  "lib/src/notifications/notifications_bell.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/organize/organize_screen.dart": {
+    "hardcoded-copy": 22
+  },
+  "lib/src/player/bookmarks.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/player/car_mode_screen.dart": {
+    "hardcoded-copy": 3
+  },
+  "lib/src/player/deck_bar_host.dart": {
+    "hardcoded-copy": 4
+  },
+  "lib/src/player/entity_star_rating_row.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/player/item_star_rating_row.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/player/lyrics.dart": {
+    "hardcoded-copy": 7
+  },
+  "lib/src/player/player_screen.dart": {
+    "hardcoded-copy": 30
+  },
+  "lib/src/player/radio_face.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/player/sleep_timer.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/player/speed_sheet.dart": {
+    "hardcoded-copy": 4
+  },
+  "lib/src/player/spoken_face.dart": {
+    "hardcoded-copy": 10
+  },
+  "lib/src/player/visualizer_screen.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/playlists/add_to_playlist_sheet.dart": {
+    "hardcoded-copy": 8
+  },
+  "lib/src/playlists/playlist_create.dart": {
+    "hardcoded-copy": 10
+  },
+  "lib/src/playlists/playlist_import.dart": {
+    "hardcoded-copy": 7
+  },
+  "lib/src/playlists/playlist_screen.dart": {
+    "hardcoded-copy": 37
+  },
+  "lib/src/playlists/playlists_screen.dart": {
+    "hardcoded-copy": 8
+  },
+  "lib/src/playlists/rule_editor_screen.dart": {
+    "hardcoded-copy": 35
+  },
+  "lib/src/podcasts/credits.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/podcasts/episode_screen.dart": {
+    "hardcoded-copy": 13
+  },
+  "lib/src/podcasts/mark_older_played_dialog.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/podcasts/podcasts_screen.dart": {
+    "hardcoded-copy": 30
+  },
+  "lib/src/podcasts/show_screen.dart": {
+    "hardcoded-copy": 26
+  },
+  "lib/src/podcasts/subscription_settings_sheet.dart": {
+    "hardcoded-copy": 22
+  },
+  "lib/src/prototype/editing_prototype_screen.dart": {
+    "hardcoded-copy": 8
+  },
+  "lib/src/queue/queue_panel.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/queue/queue_screen.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/queue/queue_view.dart": {
+    "hardcoded-copy": 14
+  },
+  "lib/src/queue/session_history.dart": {
+    "hardcoded-copy": 4
+  },
+  "lib/src/radio/add_station.dart": {
+    "hardcoded-copy": 14
+  },
+  "lib/src/radio/radio_saved_menu.dart": {
+    "hardcoded-copy": 9
+  },
+  "lib/src/radio/radio_saved_screen.dart": {
+    "hardcoded-copy": 7
+  },
+  "lib/src/radio/radio_screen.dart": {
+    "hardcoded-copy": 13
+  },
+  "lib/src/review/review_entry_screen.dart": {
+    "hardcoded-copy": 30
+  },
+  "lib/src/review/review_screen.dart": {
+    "hardcoded-copy": 10
+  },
+  "lib/src/search/search_chrome.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/search/search_screen.dart": {
+    "hardcoded-copy": 29
+  },
+  "lib/src/settings/about_screen.dart": {
+    "hardcoded-copy": 15
+  },
+  "lib/src/settings/account_sections.dart": {
+    "hardcoded-copy": 24
+  },
+  "lib/src/settings/integrations_sections.dart": {
+    "hardcoded-copy": 64
+  },
+  "lib/src/settings/listening_sections.dart": {
+    "hardcoded-copy": 16
+  },
+  "lib/src/settings/settings_registry.dart": {
+    "hardcoded-copy": 43
+  },
+  "lib/src/settings/settings_screen.dart": {
+    "hardcoded-copy": 5
+  },
+  "lib/src/settings/settings_section_screen.dart": {
+    "hardcoded-copy": 113
+  },
+  "lib/src/sharing/share_dialog.dart": {
+    "hardcoded-copy": 14
+  },
+  "lib/src/sharing/share_rows.dart": {
+    "hardcoded-copy": 2
+  },
+  "lib/src/sharing/shares_screen.dart": {
+    "hardcoded-copy": 4
+  },
+  "lib/src/shell/adaptive_shell.dart": {
+    "hardcoded-copy": 2
+  },
+  "lib/src/shell/command_palette.dart": {
+    "hardcoded-copy": 13
+  },
+  "lib/src/shell/commands.dart": {
+    "hardcoded-copy": 21
+  },
+  "lib/src/shell/lifecycle_banners.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/shell/router.dart": {
+    "hardcoded-copy": 3
+  },
+  "lib/src/stats/listen_log_screen.dart": {
+    "hardcoded-copy": 5
+  },
+  "lib/src/stats/share_cards.dart": {
+    "hardcoded-copy": 6
+  },
+  "lib/src/stats/stats_screen.dart": {
+    "hardcoded-copy": 19
+  },
+  "lib/src/stats/year_in_review_screen.dart": {
+    "hardcoded-copy": 25
+  },
+  "lib/src/tools/tasks_screen.dart": {
+    "hardcoded-copy": 7
+  },
+  "lib/src/uploads/add_to_library.dart": {
+    "hardcoded-copy": 19
+  },
+  "lib/src/uploads/file_picker_io.dart": {
+    "hardcoded-copy": 2
+  },
+  "lib/src/uploads/file_picker_web.dart": {
+    "hardcoded-copy": 1
+  },
+  "lib/src/uploads/uploads_screen.dart": {
+    "hardcoded-copy": 16
+  }
+}

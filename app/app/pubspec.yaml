@@ -14,6 +14,15 @@ dependencies:
   # An SDK package, so it is versioned with Flutter rather than pinned.
   flutter_web_plugins:
     sdk: flutter
+  # Material's own strings, and the delegates AppLocalizations rides in
+  # beside them. An SDK package like the two above.
+  flutter_localizations:
+    sdk: flutter
+  # ICU plurals and CLDR dates behind the generated localizations.
+  # Pinned to exactly what this Flutter's flutter_localizations takes:
+  # another version would move the date symbols the app and the server's
+  # pages were made to agree on.
+  intl: 0.20.2
   # Riverpod is pinned exact: state-management idioms shift between minors and
   # this codebase tracks v3 idioms only. Note that 3.4 added a dependency on
   # `listen`, whose only release is 1.0.0-beta.4, so a prerelease sits in the
@@ -84,6 +93,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # On for gen-l10n's sake, not the build's: it refuses to run without
+  # this flag. `make generate` is what mints the localizations, and a
+  # build that regenerates them writes the same bytes.
+  generate: true
 
   assets:
     # The tray glyphs, drawn by tools/generate-brand.py: the mark with no
