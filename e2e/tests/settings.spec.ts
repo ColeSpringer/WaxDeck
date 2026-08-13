@@ -4,16 +4,11 @@ import { SemanticsIds } from './semantics-ids';
 
 // The settings surface over the real stack: the searchable sections, a
 // per-device preference that survives a reload without touching the
-// account, and account preferences that reach the server's own document.
+// account, and account preferences that reach the server's document.
 //
-// Every test here owns its account, which is what lets the last two say
-// what they mean. They used to be a serial group with a comment
-// explaining that `PUT /users/me/prefs` replaces the whole document, so
-// two browsers writing different keys at once was last-writer-wins over
-// fields neither meant to touch - and that key disjointness was not the
-// protection it read as, because the clobbering is per document. Nothing
-// else writes this account's document now, so the group is gone, the
-// assertions are exact, and nothing has to be put back at the end.
+// Every test owns its account, so the assertions can be exact:
+// `PUT /users/me/prefs` replaces the whole document, and two browsers
+// writing it at once is last-writer-wins over fields neither touched.
 
 test('the sections are locations, and search finds a setting inside one', async ({ app }) => {
   await app.nav.enter('settings');
@@ -23,10 +18,8 @@ test('the sections are locations, and search finds a setting inside one', async 
   await app.settings.openSection('playback', 'skip-back');
   expect(app.nav.location()).toMatch(/settings\/playback/);
 
-  // Back lands on the settings home rather than leaving the app - which
-  // is the assertion, and the reason this is the browser's own Back and
-  // not another `enter`: a router that pushed where it should have gone
-  // leaves Back unloading the SPA, and a re-entry could never see it.
+  // The browser's own Back, not another `enter`: a router that pushed
+  // where it should have gone leaves Back unloading the SPA.
   await app.nav.back('settings');
 
   // A word that appears in no setting's name still finds it: the
@@ -39,14 +32,13 @@ test('a per-device setting survives a reload without reaching the account', asyn
   await app.nav.enter('settings');
   await app.settings.openSection('playback', 'skip-back');
 
-  await app.settings.choose('skip-back', app.settings.menuItem('45 seconds'));
+  await app.settings.choose('skip-back', app.settings.option('skip-back', 45));
   const chosen = app.settings.buttonNamed('Skip back by, 45 seconds');
   await expect(chosen).toBeVisible();
 
-  // The whole point of the per-device store: it is on this browser's
-  // own storage, so a reload keeps it and the account's document never
-  // hears about it. The nav tier, because what follows the reload is a
-  // full wasm boot rather than a value settling.
+  // The point of the per-device store: this browser's own storage keeps
+  // it and the account's document never hears. The nav tier, because a
+  // reload is a full wasm boot rather than a value settling.
   await app.nav.reload();
   await expect(chosen).toBeVisible({ timeout: T.nav });
 
@@ -62,13 +54,9 @@ test('About reports both versions', async ({ app }) => {
   // From Account, which is where a listener looks: Server's version row
   // is administrators-only.
   //
-  // Account's About row sits under the device list, which is what used
-  // to push it past the fold - the shared administrator collected a
-  // session per worker per run, and a row that is not laid out publishes
-  // no semantics node to click. What keeps it reachable is upstream, in
-  // `mintAccount`: an account that already exists has its old sessions
-  // revoked before this run's login, so the list is one row long however
-  // many times the stack has been reused.
+  // About sits under the device list, so a long list would push it past
+  // the fold and it would publish no node to click. `mintAccount` revokes
+  // an existing account's old sessions, keeping the list one row.
   await app.settings.openSection('account', 'about');
   await app.settings.openSetting('about', SemanticsIds.aboutLicenses);
 
@@ -82,21 +70,17 @@ test('an account setting reaches the preference document', async ({ app }) => {
   await app.nav.enter('settings');
   await app.settings.openSection('playback', 'crossfade');
 
-  await app.settings.choose('crossfade', app.settings.menuItem('6 seconds'));
+  await app.settings.choose('crossfade', app.settings.option('crossfade', 6));
   await expect
     .poll(async () => (await app.api.tryGet('/users/me/prefs'))?.crossfadeSeconds)
     .toBe(6);
 
-  // Off has to survive the round trip too, and the contract says what
-  // that means: "Zero or absent is a gapless butt join". So the server
-  // dropping the zero is a legal way to store off, and asserting a
-  // literal 0 on the field would be asserting something nobody promised.
-  //
-  // What must NOT pass as off is a document that never arrived - which a
-  // plain `?? 0` would, since `tryGet` answers undefined on any non-2xx.
-  // So the read and the field are separated: an unread document reports
-  // itself and keeps polling, and only then is absent read as zero.
-  await app.settings.choose('crossfade', app.settings.menuItem('Off'));
+  // The contract says "zero or absent is a gapless butt join", so
+  // dropping the zero is a legal way to store off. What must not pass as
+  // off is a document that never arrived, which a plain `?? 0` would:
+  // `tryGet` answers undefined on any non-2xx, so the read and the field
+  // are checked separately.
+  await app.settings.choose('crossfade', app.settings.option('crossfade', 0));
   await expect
     .poll(async () => {
       const prefs = await app.api.tryGet('/users/me/prefs');
@@ -106,12 +90,8 @@ test('an account setting reaches the preference document', async ({ app }) => {
 });
 
 test('the radio scrobbling switch stores the opt-out inverted', async ({ app }) => {
-  // Seeded on, because nothing puts it back at the end. The account is
-  // this test's own and nobody else reads it, so restoring it for a
-  // sibling is one of the things the account model removes - but the
-  // account outlives the run, and a second run against the same stack
-  // would meet the switch already off and fail on its first assertion.
-  // The precondition is "scrobbling is on"; establishing it is seeding.
+  // Seeded on, because nothing puts it back: the account outlives the
+  // run, so a second run would meet the switch already off.
   await app.seed.prefs({ radioScrobbleOptOut: false });
   await app.nav.enter('settings');
   await app.settings.openSectionShowing(
@@ -130,11 +110,8 @@ test('the radio scrobbling switch stores the opt-out inverted', async ({ app }) 
     // so the two are inverses and this is where that stays honest.
     .toBe(true);
 
-  // And back on, which is the half that makes it a round trip: a switch
-  // that writes the opt-out and never clears it satisfies everything
-  // above. Not cleanup - the account is this test's own and the seed at
-  // the top is what guarantees the starting state - but the other
-  // direction of the same claim.
+  // And back on: a switch that writes the opt-out and never clears it
+  // satisfies everything above. The other direction, not cleanup.
   await radio.click();
   await expect(radio).toBeChecked();
   await expect

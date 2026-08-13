@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -125,13 +126,16 @@ func TestRootsConfigPreservesForeignKeys(t *testing.T) {
 	}
 
 	// The operator's mode survives: the file can hold secrets, and the
-	// sidecar reads it as whatever user it runs as.
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o640 {
-		t.Errorf("mode = %v, want 0640 carried over from the replaced file", perm)
+	// sidecar reads it as whatever user it runs as. Asked only off
+	// Windows, which has no POSIX bits to report.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o640 {
+			t.Errorf("mode = %v, want 0640 carried over from the replaced file", perm)
+		}
 	}
 }
 
@@ -195,13 +199,9 @@ func TestReloadRootsWritesThenPosts(t *testing.T) {
 	}
 }
 
-// TestSyncRootRollsBackARefusal covers the path the sidecar cannot
-// open: it opens each root with os.Root while reconciling, and that
-// refusal is what tells an administrator the mount is wrong. The
-// refused root must not survive it. The sidecar opens its roots at
-// startup too, so a config carrying one it just rejected would turn its
-// next restart into a boot failure -- and the leftover would be re-sent
-// with the next library and take that one down with it.
+// TestSyncRootRollsBackARefusal: a root the sidecar cannot open must not
+// survive in the config. It opens its roots at startup too, so a
+// leftover would turn the next restart into a boot failure.
 func TestSyncRootRollsBackARefusal(t *testing.T) {
 	path := writeConfig(t, t.TempDir())
 	before, err := os.ReadFile(path)
@@ -236,13 +236,11 @@ func TestSyncRootRollsBackARefusal(t *testing.T) {
 	}
 }
 
-// TestSyncRootCarriesTheSidecarsCode is what going through the typed
-// client buys over the hand-rolled POST it replaced: the daemon's error
-// envelope is decoded into a waxerr code, and the %w wrap keeps it
-// classifiable at the caller instead of leaving a string to match on. The
-// code here is deliberately not the one the status alone would produce --
-// the client falls back to internal for anything but a 401, so reading
-// overloaded off a 503 proves the envelope itself was read.
+// TestSyncRootCarriesTheSidecarsCode: the daemon's error envelope is
+// decoded into a waxerr code the caller can classify. The code is
+// deliberately not what the status alone gives - the client falls back
+// to internal for anything but a 401, so overloaded off a 503 proves the
+// envelope was read.
 func TestSyncRootCarriesTheSidecarsCode(t *testing.T) {
 	path := writeConfig(t, t.TempDir())
 	b := newRootBridge(t, reloadCapsJSON(), path, []Root{{Name: "lib", Path: "/library"}},
@@ -357,11 +355,9 @@ func TestRootsReloadNeedsConfigPath(t *testing.T) {
 	}
 }
 
-// TestAddRootResolvesStreamRefs is the half a sidecar reload cannot do:
-// stream-ref resolution walks the bridge's own root table, so a library
-// the bridge never learned streams from nowhere however well the reload
-// went. It also pins the longest-path-first ordering, which a plain
-// append would break for a nested root.
+// TestAddRootResolvesStreamRefs: resolution walks the bridge's own root
+// table, so a library it never learned streams from nowhere whatever the
+// reload did. Also pins longest-path-first, which a plain append breaks.
 func TestAddRootResolvesStreamRefs(t *testing.T) {
 	b := newRootBridge(t, reloadCapsJSON(), "", []Root{{Name: "lib", Path: "/srv/media"}}, nil)
 
@@ -390,13 +386,10 @@ func TestAddRootResolvesStreamRefs(t *testing.T) {
 	}
 }
 
-// TestRootsConfigMergesByName is why the roots array is merged rather
-// than replaced. `path` in this file is the sidecar's view of the
-// filesystem, which need only coincide with WaxDeck's because the
-// compose topology mounts both at the same place; rewriting it from
-// WaxDeck's table would repoint a working root at a path the sidecar
-// cannot open, and would delete a root the operator configured there
-// and WaxDeck knows nothing about.
+// TestRootsConfigMergesByName: `path` here is the sidecar's view of the
+// filesystem, so rewriting it from WaxDeck's table would repoint a
+// working root, and replacing the array would drop roots the operator
+// configured and WaxDeck knows nothing about.
 func TestRootsConfigMergesByName(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "waxflow.json")

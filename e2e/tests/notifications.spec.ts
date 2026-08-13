@@ -2,13 +2,9 @@ import { test, expect } from './fixtures';
 import { T } from './driver';
 import { startJsonSink } from './support/json-sink';
 
-// Notification delivery against the live stack: the administrator
-// creates a server-scope webhook target pointed at a loopback sink,
-// requests a per-target test, and the queued delivery arrives with the
-// documented payload while the outcome lands on the target's health
-// fields. Scoping, gating, and per-provider payloads are covered by
-// the server's integration tests; this scenario pins the deployed
-// path: API to outbox to worker tick to a real HTTP delivery.
+// Notification delivery against the live stack. Scoping, gating and
+// per-provider payloads are the server's integration tests; this pins
+// the deployed path: API to outbox to worker tick to real HTTP.
 
 test('a server-scope webhook target delivers a test end to end', async ({ app }) => {
   const catalog = (await app.api.get('/notifications/events')).events ?? [];
@@ -20,11 +16,8 @@ test('a server-scope webhook target delivers a test end to end', async ({ app })
   const sink = await startJsonSink();
   let pid = '';
   try {
-    // Deleted in the `finally` rather than reused by label: a
-    // notification target is server-global, so unlike this account's own
-    // playlists it would outlive the run for every other administrator
-    // as well - and it points at a loopback port that will not exist by
-    // then.
+    // Deleted in the `finally`: a target is server-global, so it would
+    // outlive the run pointing at a loopback port that is gone.
     const target = await app.api.post('/admin/notification-targets', {
       data: {
         kind: 'webhook',
@@ -84,9 +77,20 @@ test('a server-scope webhook target delivers a test end to end', async ({ app })
 // The bell: the in-app half of the same news. Web has no sync engine, so
 // this exercises notifications_binder's puller end to end.
 
-test('the bell reports what happened while the app was open', async ({ app }) => {
+test('the bell reports what happened while the app was open', async ({
+  app,
+  page,
+}) => {
+  // The client draws "while the app was open" itself, minting a cursor
+  // on the way up and reporting nothing from before it. Armed ahead of
+  // the navigation that causes it, or it may already have been served.
+  const minted = page.waitForResponse(
+    (r) => r.url().includes('/sync/server') && !r.url().includes('since='),
+    { timeout: T.nav },
+  );
   await app.nav.enter('home');
   await expect(app.shell.notificationsBell()).toBeVisible();
+  await minted;
 
   // The cheapest change that emits a marker: no bytes move.
   const session = await app.api.post('/uploads', {
@@ -96,15 +100,16 @@ test('the bell reports what happened while the app was open', async ({ app }) =>
 
   try {
     await app.shell.notificationsBadged();
-    await app.shell.openNotifications();
-    // The copy is the contract, so the spec names it. On the accessible
-    // name because a menu row is a labelled node with no text of its own.
-    await expect(app.shell.notificationRow(0)).toHaveAccessibleName(
+    // The copy is the contract, so the spec names it. Waited for by that
+    // copy rather than read off the top of the list: the catalog is
+    // shared, so the news that badges the bell first is not necessarily
+    // this test's own.
+    const mine = await app.shell.openNotificationsUntil(
       'Uploads: An upload changed.',
     );
 
     // And the row is a link, not a label.
-    await app.shell.notificationRow(0).click();
+    await mine.click();
     await app.nav.expectAt('uploads');
 
     // Clear empties the bell rather than only unbadging it. Walked

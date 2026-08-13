@@ -1,5 +1,6 @@
 .PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-mirror lint spec-lint test test-server test-fixtures test-app test-app-chrome \
-        web build run up down reset logs drift-check oasdiff e2e e2e-desktop dist clean
+        web build run up down reset logs drift-check oasdiff e2e e2e-desktop dist clean \
+        path-doctor
 
 # Windows: run the POSIX recipes through Git's bash and userland, so
 # make works from any shell. Override GIT_ROOT if Git lives elsewhere.
@@ -15,7 +16,23 @@ ifeq ($(wildcard $(subst $(SP),\ ,$(GIT_ROOT))/bin/bash.exe),)
   endif
 endif
 SHELL := $(GIT_ROOT)/bin/bash.exe
-export PATH := $(GIT_ROOT)/usr/bin;$(PATH)
+# Both halves are needed: bash prepends /usr/bin to its own shells, and
+# the export covers the metacharacter-free lines make direct-spawns
+# without it. The cost is usr/bin's coreutils link.exe outranking
+# MSVC's linker, so a target that wraps an MSVC build prefixes
+# $(MSVC_NATIVE_PATH); `make path-doctor` shows what resolves where.
+# The capture is immediate and taken before the prepend, since `?=`
+# would expand $(PATH) after it and defeat itself.
+ifeq ($(origin WAXDECK_NATIVE_PATH),undefined)
+export WAXDECK_NATIVE_PATH := $(PATH)
+else
+export WAXDECK_NATIVE_PATH
+endif
+export PATH := $(GIT_ROOT)/usr/bin;$(WAXDECK_NATIVE_PATH)
+# The caller's own PATH as a per-command environment prefix, unix-form.
+MSVC_NATIVE_PATH = PATH="$$(cygpath -up '$(WAXDECK_NATIVE_PATH)')"
+else
+MSVC_NATIVE_PATH :=
 endif
 
 SPEC        := api/openapi.yaml
@@ -265,3 +282,20 @@ dist:
 
 clean:
 	rm -rf server/waxdeck $(WEB_DIST) app/app/build e2e/test-results e2e/playwright-report
+
+## --- diagnostics --------------------------------------------------------------
+
+# What a recipe's PATH resolves, and how to get MSVC's linker back.
+# Every line carries a metacharacter, so it routes through SHELL.
+path-doctor:
+	@echo "SHELL=$(SHELL)"; echo "make $(MAKE_VERSION)"
+	@echo "PATH=$$PATH"
+	@echo "WAXDECK_NATIVE_PATH=$${WAXDECK_NATIVE_PATH:-<unset: not Windows>}"
+	@for t in find sed cp bash link; do \
+	   echo "  $$t -> $$(command -v $$t || echo '<none>')"; \
+	 done
+ifeq ($(OS),Windows_NT)
+	@echo "link on make's PATH:"; where link 2>&1 | sed 's/^/  /'
+	@echo "link on the caller's PATH (\$$(MSVC_NATIVE_PATH)):"; \
+	 $(MSVC_NATIVE_PATH) where link 2>&1 | sed 's/^/  /'
+endif

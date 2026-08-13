@@ -64,33 +64,20 @@ final firstRunProgressProvider =
 
 /// Whether the guided first run is on, and which step it is showing.
 ///
-/// Entry is strict - an administrator looking at a server with no
-/// libraries - and it is the only part anything can derive. Steps two
-/// and three are reached by *continuing*, not by re-deriving, because
-/// derivation contradicts itself here: both later steps require
-/// libraries to exist, so a gate wide enough to reach them would put
-/// the wizard back on every healthy idle server and on every manual
-/// rescan. Nothing stateless can tell "added a library thirty seconds
-/// ago" from "running fine since March".
+/// Only entry is derived - an administrator on a server with no
+/// libraries. Steps two and three are reached by continuing, because
+/// both require libraries to exist, so a gate wide enough to re-derive
+/// them would put the wizard back on every healthy idle server.
 ///
-/// Which is why continuing is written down. Held in memory alone, the
-/// tour was as long as a page: the console's own surface is the web,
-/// where a reload is one keystroke, and after one the wizard could
-/// neither continue (the entry condition it would have to re-derive is
-/// no longer true, so steps two and three became unreachable for that
-/// server) nor stay dismissed (a skip on a still-rootless server came
-/// straight back). Both are the same missing fact, and
-/// [FirstRunProgress] is it. Per device, because a tour is something a
-/// person walked through rather than a property of an account.
+/// So continuing is written down in [FirstRunProgress], per device: held
+/// in memory it lasted one reload, after which the tour could neither
+/// continue nor stay skipped.
 ///
-/// The stored value arrives a beat after the first build - the store is
-/// read asynchronously - and the wizard is written to survive that
-/// rather than to wait for it: every step is derived from the stage and
-/// the live server state together, so the answer corrects itself when
-/// the read lands. The cost is at most a frame of dashboard before a
-/// resumed tour draws, which is the right way round; a frame of *wizard*
-/// on a healthy server would be the console's first lie to somebody who
-/// has run it for a year.
+/// That stored value arrives a beat after the first build, and every
+/// step is derived from it and live server state together, so the answer
+/// corrects itself rather than waiting. A frame of dashboard before a
+/// resumed tour is the right way round; a frame of wizard on a healthy
+/// server would not be.
 class FirstRunWizard extends Notifier<FirstRunStep?> {
   FirstRunStep? _last;
 
@@ -112,16 +99,10 @@ class FirstRunWizard extends Notifier<FirstRunStep?> {
       return _at(FirstRunStep.addLibrary, FirstRunStage.addLibrary);
     }
 
-    // Step two is answered by the library having been read, which is a
-    // scan job existing at all rather than one caught mid-flight. A
-    // running scan is the same answer seen at a different moment: a
-    // handful of files is indexed between two reads of this list, and a
-    // step that could only be satisfied by observing the running state
-    // would strand exactly the smallest libraries on it, clicking Scan
-    // at a server that keeps finishing before anyone looks.
-    //
-    // It has to be this rather than `warmingUp`, which is true from a
-    // server's first boot - before there is anything warming - and
+    // A scan job existing at all, not one caught mid-flight: a small
+    // library finishes between two reads of this list, and a step
+    // needing the running state would strand exactly those. Not
+    // `warmingUp` either, which is true from a server's first boot and
     // would skip the step that starts the scan.
     final jobs = ref.watch(adminJobsProvider).value ?? const <Job>[];
     final scanning = jobs.any(
@@ -132,7 +113,10 @@ class FirstRunWizard extends Notifier<FirstRunStep?> {
         jobs.any((job) => job.kind == 'scan');
     if (!scanned) return _at(FirstRunStep.scan, FirstRunStage.scan);
 
-    final warming = ref.watch(healthProvider).value?.warmingUp ?? false;
+    // No answer reads as still warming, since `done` is written down and
+    // assuming a finish would end the tour for good. That covers a
+    // failed read as well as a pending one, neither carrying a value.
+    final warming = ref.watch(healthProvider).value?.warmingUp ?? true;
     if (scanning || warming) {
       return _at(FirstRunStep.warming, FirstRunStage.warming);
     }
@@ -147,11 +131,9 @@ class FirstRunWizard extends Notifier<FirstRunStep?> {
     return _last = step;
   }
 
-  /// Writes down the stage this build reached, after the build has
-  /// settled: a provider may not change another one mid-build, and this
-  /// is a write rather than a read. Cheap to repeat - [reach] ignores
-  /// anything that is not further along - so every build may schedule
-  /// one without the value ever walking backwards.
+  /// Writes down the stage this build reached, after the build settles:
+  /// a provider may not change another mid-build. Cheap to repeat, since
+  /// [reach] ignores anything not further along.
   void _remember(FirstRunStage stage) {
     unawaited(
       Future<void>.microtask(() {

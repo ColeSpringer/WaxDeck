@@ -9,12 +9,10 @@ import { Surface } from '../context';
 
 /// Signing in and out.
 ///
-/// Almost nothing calls this. The suite plants the session as a cookie
-/// before the first navigation (see tests/fixtures.ts), so a spec opens
-/// the app already signed in - which is both faster and one less shared
-/// journey for every test to re-drive. What is left here is for the
-/// specs whose subject IS the door: first run, sign-up, identity, the
-/// accessibility walk, and the walking skeleton.
+/// Almost nothing calls this: the suite plants the session as a cookie
+/// before the first navigation (tests/fixtures.ts), so a spec opens the
+/// app already signed in. What is left is for the specs whose subject IS
+/// the door - first run, sign-up, identity, the accessibility walk.
 export class Auth extends Surface {
   /// Drive the real login form, as a person does: open the app cold and
   /// sign in from wherever it puts you.
@@ -23,13 +21,9 @@ export class Auth extends Surface {
     await this.signInHere(who);
   }
 
-  /// Sign in on the form that is already showing.
-  ///
-  /// For a spec that arrived at the door by a route of its own - a deep
-  /// link the redirect carried through, a sign-out - where opening the
-  /// app afresh would throw away the very location under test.
-  /// `lands` is what should follow; the chrome, unless the point is that
-  /// the login carried somebody somewhere in particular.
+  /// Sign in on the form that is already showing, for a spec that
+  /// arrived by a route of its own and would lose the location under
+  /// test by opening the app afresh. `lands` is what should follow.
   async signInHere(
     who: { username: string; password: string } = this.ctx.account,
     lands?: Locator,
@@ -43,12 +37,9 @@ export class Auth extends Surface {
     await (lands ?? page.locator(sem(SemanticsIds.navRegion))).waitFor({ timeout: T.nav });
   }
 
-  /// Walk in off the login screen with an invite.
-  ///
-  /// Settles on the login form rather than on the chrome: an invited
-  /// signup activates the account immediately, so the screen pops back
-  /// to the form prefilled. (`signup-result` renders only for the
-  /// pending path, where an administrator has still to approve.)
+  /// Walk in off the login screen with an invite. Settles on the form
+  /// rather than the chrome: an invited signup activates immediately and
+  /// pops back to it prefilled, `signup-result` being the pending path.
   async signUpViaForm(who: { username: string; password: string; invite: string }) {
     const page = this.ctx.page;
     const field = (id: string) => page.locator(sem(id));
@@ -73,15 +64,10 @@ export class Auth extends Surface {
     await page.locator(sem(SemanticsIds.navRegion)).waitFor({ timeout: T.nav });
   }
 
-  /// The server as the BROWSER sees it.
-  ///
-  /// An API hand over the page's own request context, so the
-  /// `waxdeck_session` cookie is what authenticates and no bearer token
-  /// rides along. That distinction is the whole subject of the specs
-  /// that drive the door: a spec's own hand answers for the token it was
-  /// handed and says nothing about what the app is actually signed in
-  /// as - which for a single-sign-on account is not this test's account
-  /// at all.
+  /// The server as the BROWSER sees it: the page's own request context,
+  /// so the `waxdeck_session` cookie authenticates and no bearer token
+  /// rides along. A spec's own hand answers for the token it was handed
+  /// and says nothing about what the app is signed in as.
   browserApi(): Api {
     return new Api(this.ctx.page.request, '');
   }
@@ -106,9 +92,8 @@ export class Auth extends Surface {
     await this.submit().waitFor({ timeout: T.nav });
   }
 
-  /// Open the app cold and stop at the door. For the specs that mean the
-  /// door itself, where what the address bar reads on arrival is part of
-  /// what they assert.
+  /// Open the app cold and stop at the door, for the specs where what
+  /// the address bar reads on arrival is part of the assertion.
   async enterLogin() {
     await this.ctx.page.goto('/');
     await this.expectAtLogin();
@@ -133,17 +118,15 @@ export class Shell extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.navGroup(name)));
   }
 
-  /// The avatar that opens the account menu. Returned as well as
-  /// clickable because where it sits is itself an assertion: below rail
-  /// width it belongs to the top app bar rather than to the tab bar, and
-  /// the only way to tell those apart is geometry.
+  /// The avatar that opens the account menu. Returned rather than
+  /// clicked because where it sits is itself an assertion: below rail
+  /// width it belongs to the app bar, and only geometry tells them apart.
   account(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.navAccount));
   }
 
-  /// A verb the account menu offers. Signing out is the only one today;
-  /// the destinations the menu also carries below rail width keep their
-  /// own destination identifiers and come from `destination`.
+  /// A verb the account menu offers. The destinations it also carries
+  /// below rail width keep their own ids and come from `destination`.
   accountVerb(name: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.navAccountAction(name)));
   }
@@ -171,6 +154,13 @@ export class Shell extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.notificationRow(index)));
   }
 
+  /// A row of the open bell by its copy, a menu row having no text of
+  /// its own. Not by position: the catalog is one installation every
+  /// worker writes to, so newest-first is not mine-first.
+  notificationNamed(name: string): Locator {
+    return this.ctx.page.getByRole('menuitem', { name, exact: true });
+  }
+
   notificationsClear(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.notificationsClear));
   }
@@ -188,6 +178,27 @@ export class Shell extends Surface {
   /// the account menu is opened rather than clicked through.
   async openNotifications(): Promise<void> {
     await openMenu(this.notificationsBell(), this.notificationRow(0));
+  }
+
+  /// Open the bell and wait for one particular piece of news.
+  ///
+  /// Re-opened rather than waited out: the menu holds the rows it opened
+  /// with, and the badge that brought us here was not necessarily this
+  /// test's news.
+  async openNotificationsUntil(name: string): Promise<Locator> {
+    const row = this.notificationNamed(name);
+    await expect(async () => {
+      if (await row.isVisible()) return;
+      // Closed first, because `openMenu` reads an open menu as done.
+      await this.ctx.page.keyboard.press('Escape');
+      await expect(this.notificationRow(0)).toBeHidden({ timeout: T.step });
+      await openMenu(this.notificationsBell(), this.notificationRow(0));
+      await expect(row).toBeVisible({ timeout: T.step });
+      // The assert tier, not the fetch one: waiting for the news to
+      // arrive is `notificationsBadged`'s job, so a budget long enough
+      // for that would turn a copy change into a minute of nothing.
+    }).toPass({ timeout: T.assert });
+    return row;
   }
 }
 

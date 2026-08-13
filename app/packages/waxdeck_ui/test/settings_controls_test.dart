@@ -14,12 +14,9 @@ Widget _host(Widget child, {double height = 200}) => MaterialApp(
 );
 
 /// Fires the semantics tap action on the node carrying [identifier], the
-/// way a screen reader activates a control - which is a different path
-/// from a pointer tap and is the one worth checking separately.
-///
-/// The owner comes off the node rather than off the binding: the node is
-/// the thing the action is for, and reaching through the binding means
-/// picking which pipeline owner holds it.
+/// way a screen reader activates a control - a different path from a
+/// pointer tap, and worth checking separately. The owner comes off the
+/// node, since reaching through the binding means picking one.
 void activateBySemantics(WidgetTester tester, String identifier) {
   final node = tester.getSemantics(find.bySemanticsIdentifier(identifier));
   node.owner!.performAction(node.id, SemanticsAction.tap);
@@ -42,11 +39,9 @@ void main() {
         ),
       );
 
-      // A switch announces its state; a button would announce neither
-      // "on" nor a way to hear it change. Checked flag by flag rather
-      // than with an exhaustive matcher, because the node also carries
-      // the focus action the ring needs and that is not what this is
-      // about.
+      // A switch announces its state; a button announces neither "on"
+      // nor a way to hear it change. Flag by flag, because the node also
+      // carries the focus action the ring needs.
       expect(
         tester.getSemantics(find.bySemanticsIdentifier('setting-radio')),
         matchesSemantics(
@@ -154,11 +149,8 @@ void main() {
     testWidgets('a tap opens exactly one menu, not one per gesture path', (
       tester,
     ) async {
-      // The reason this test exists: WaxTappable contributes semantics,
-      // the focus flag, and the ring and adds no gesture, so the child
-      // carries the pointer handler - which leaves two ways in. If they
-      // both fired, two menus would stack and every option would be
-      // found twice.
+      // WaxTappable adds no gesture, so the child carries the pointer
+      // handler - two ways in. Both firing would stack two menus.
       await tester.pumpWidget(_host(choice(<String>[])));
 
       await tester.tap(find.bySemanticsIdentifier('setting-skip-back'));
@@ -183,6 +175,40 @@ void main() {
       await tester.tap(find.text('45 seconds'));
       await tester.pumpAndSettle();
       expect(chosen, <int>[45]);
+      handle.dispose();
+    });
+
+    testWidgets('an open menu identifies its rows by value, not by label', (
+      tester,
+    ) async {
+      // The e2e suite drives menus by this, so translating a label must
+      // not move it.
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(
+          WaxChoice<int>(
+            value: 15,
+            options: const <int>[15, 30, 45],
+            labelFor: (value) => '$value seconds',
+            label: 'Skip back by',
+            semanticsId: 'setting-skip-back',
+            optionSemanticsIdFor: (value) => 'setting-option-skip-back-$value',
+            onChanged: (_) {},
+          ),
+        ),
+      );
+
+      await tester.tap(find.bySemanticsIdentifier('setting-skip-back'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.bySemanticsIdentifier('setting-option-skip-back-45'),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier('setting-option-skip-back-30'),
+        findsOneWidget,
+      );
       handle.dispose();
     });
 
@@ -328,12 +354,8 @@ void main() {
         ),
       );
 
-      // Reported disabled as well as drawn so, and with no tap to
-      // offer: a control that looks dead and answers anyway is the
-      // worse half of the pair. Asserted flag by flag rather than
-      // against a whole node, because the disabled shape here is
-      // WaxSwitch's disabled shape and this is not the place to pin
-      // every one of its flags.
+      // Reported disabled as well as drawn so, with no tap to offer: a
+      // control that looks dead and answers anyway is the worse half.
       final data = tester
           .getSemantics(find.bySemanticsIdentifier('delete-mode-permanent'))
           .getSemanticsData();

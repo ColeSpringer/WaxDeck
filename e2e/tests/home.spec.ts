@@ -90,20 +90,21 @@ test('an album pinned from its own screen turns up on home', async ({
   await app.music.openEntity();
   const title = app.nav.location();
 
-  await app.music.togglePin();
-  await app.nav.enter('home');
-  await app.home.revealShelf('pinned');
-
   // The pid is what the shelf card is addressed by, and it is the last
   // segment of the album's own location - which is the round trip the
   // whole thing rests on: a pid stored, resolved, and drawn.
   const pid = decodeURIComponent(title.split('/').pop()!);
+
+  await app.music.togglePin(pid);
+  await app.nav.enter('home');
+  await app.home.revealShelf('pinned');
+
   await expect(app.home.card('pinned', pid)).toBeVisible();
 
   // And unpinning from the album screen takes it away again, so the
   // shelf never accumulates what a listener meant to remove.
   await app.nav.open(title, app.music.entityShuffle());
-  await app.music.togglePin();
+  await app.music.togglePin(pid);
   await app.nav.enter('home');
   await expect(app.home.shelf('pinned')).toBeHidden();
 });

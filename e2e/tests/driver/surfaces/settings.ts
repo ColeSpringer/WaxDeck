@@ -5,7 +5,7 @@ import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough, typeInto } from '../gestures';
+import { chooseFromMenu, clickThrough, typeInto, wheelIntoViewport } from '../gestures';
 
 export class Settings extends Surface {
   search(): Locator {
@@ -56,8 +56,13 @@ export class Settings extends Surface {
   /// Choose a value from a setting's menu. The menu-at-rest wait lives in
   /// the gesture: near a screen edge a popup is repositioned as it grows,
   /// and a click at a rect read a frame earlier lands one row off.
+  ///
+  /// Wheeled into the viewport first: a section is longer than the
+  /// window, and a row below the fold still reports visible.
   async choose(name: string, option: Locator, settled?: Locator): Promise<void> {
-    await chooseFromMenu(this.setting(name), option, settled);
+    const trigger = this.setting(name);
+    await wheelIntoViewport(this.ctx.page, trigger);
+    await chooseFromMenu(trigger, option, settled);
   }
 
 
@@ -66,19 +71,17 @@ export class Settings extends Surface {
     await clickThrough(this.setting(name), this.control(lands));
   }
 
-  /// A row in an open menu, by the label a person reads. Menus draw no
-  /// identifier per option, so this is the "no id exists" case the copy
-  /// rule allows a driver - and what the label says is still the spec's
-  /// to assert, since the spec is what names it here.
-  menuItem(name: string): Locator {
-    return this.ctx.page.getByRole('menuitem', { name });
+  /// A row in an open setting menu, by the value it stands for. Not by
+  /// the label: that is copy, and it translates. What the row reads is
+  /// still the spec's to assert, through `buttonNamed`.
+  option(setting: string, value: string | number): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.settingOption(setting, value)));
   }
 
-  /// A switch by its accessible name. Same reasoning as `menuItem`, and
-  /// deliberately not forced: this screen settles, so Playwright's own
-  /// stability wait is the right one - a forced click at a rect read a
-  /// moment earlier lands on whatever moved into that spot while the
-  /// rows above finished loading their connection state.
+  /// A switch by its accessible name - the "no id exists" case the copy
+  /// rule allows a driver. Deliberately not forced: this screen settles,
+  /// so a forced click at a rect read a moment earlier lands on whatever
+  /// moved into that spot while the rows above finished loading.
   switchNamed(name: string | RegExp): Locator {
     return this.ctx.page.getByRole('switch', { name });
   }

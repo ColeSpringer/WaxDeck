@@ -15,6 +15,9 @@ import 'notifications_controller.dart';
 /// Empty is a legitimate state and says so rather than disabling the
 /// control: a session that has been quiet is not a broken bell, and a
 /// dead control invites a reload.
+/// Clear's value. Every other row carries a location, and none is empty.
+const _clearValue = '';
+
 class NotificationsBell extends ConsumerWidget {
   const NotificationsBell({super.key});
 
@@ -22,40 +25,37 @@ class NotificationsBell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rows = ref.watch(notificationsProvider);
     final unseen = ref.watch(unseenNotificationsProvider);
-    return WaxMenuButton<int>(
+    return WaxMenuButton<String>(
       glyph: WaxIcons.bell,
       label: unseen == 0 ? 'Notifications' : 'Notifications, $unseen unread',
       semanticsId: SemanticsIds.notificationsBell,
       badge: unseen == 0 ? null : '$unseen',
       emptyLabel: 'Nothing has happened yet.',
       onOpen: ref.read(notificationsProvider.notifier).markSeen,
-      items: <WaxMenuItem<int>>[
+      items: <WaxMenuItem<String>>[
         for (var i = 0; i < rows.length; i++)
-          WaxMenuItem<int>(
-            value: i,
+          WaxMenuItem<String>(
+            // Not the index: the menu holds the list it opened with, and
+            // news landing behind it shifts every index down one.
+            value: rows[i].location,
             label: '${rows[i].kind.label}: ${rows[i].message}',
             glyph: rows[i].kind.glyph,
             semanticsId: SemanticsIds.notificationRow(i),
           ),
         if (rows.isNotEmpty)
-          WaxMenuItem<int>(
-            value: -1,
+          WaxMenuItem<String>(
+            value: _clearValue,
             label: 'Clear',
             glyph: WaxIcons.close,
             semanticsId: SemanticsIds.notificationsClear,
           ),
       ],
-      onSelected: (index) {
-        if (index < 0) {
+      onSelected: (location) {
+        if (location == _clearValue) {
           ref.read(notificationsProvider.notifier).clear();
           return;
         }
-        // Re-read rather than closing over the list the menu was built
-        // from: a change can land while the menu is open, and following
-        // a stale index would open somebody else's surface.
-        final held = ref.read(notificationsProvider);
-        if (index >= held.length) return;
-        context.go(held[index].location);
+        context.go(location);
       },
     );
   }

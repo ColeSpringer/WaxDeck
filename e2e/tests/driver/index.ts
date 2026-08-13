@@ -1,21 +1,13 @@
-// The app, as something a spec can talk to.
+// The app, as something a spec can talk to. A spec says what it wants
+// to happen; this layer knows how, so a renamed control edits one
+// surface rather than a dozen spec files.
 //
-// A spec says what it wants to happen; this layer knows how. That
-// division is the whole point: 292 raw `page.locator(...)` calls used to
-// mean that renaming a control, moving a screen or restructuring the
-// sidebar edited a dozen spec files, none of which were about the thing
-// that changed. Now the locators live in one place per surface, and a
-// spec reads as the scenario it is.
+// The `page` fixture a spec receives has no `locator` and no `getBy*`,
+// so reaching around the driver does not compile.
 //
-// The `page` fixture a spec receives is narrowed to a type with no
-// `locator` and no `getBy*` on it, so this is not a convention anybody
-// has to remember - reaching around the driver does not compile.
-//
-// **Copy stays with the spec.** The driver finds a control and hands
-// back a locator; whether it says the right thing is the spec's
-// assertion, because that copy is the contract with the listener and a
-// spec is where a contract belongs. The driver uses text of its own only
-// where a control carries no identifier, and says so where it does.
+// **Copy stays with the spec**, because it is the contract with the
+// listener. The driver uses text of its own only where a control
+// carries no identifier, and says so where it does.
 
 import { Locator, Page, expect } from '@playwright/test';
 import { Account } from '../accounts';
@@ -115,22 +107,16 @@ export function createApp(ctx: Ctx): App {
   return new App(ctx);
 }
 
-/// The rule the shared server imposes on assertions, stated once here
-/// because it is the one thing a spec author has to hold in mind.
+/// The rule the shared server imposes on assertions.
 ///
-/// Per-user state - a queue, a star, a position, a subscription, a
-/// preference - belongs to this test's own account, so exact counts and
-/// absence are both legal. Catalog state does not: a reused stack
-/// carries previous runs' uploads, and three other workers are writing
-/// to it right now, so a catalog listing is asserted by the presence of
-/// what this test made and never by what it does not contain.
+/// Per-user state - a queue, a star, a position, a preference - belongs
+/// to this test's own account, so exact counts and absence are both
+/// legal. Catalog state does not: a reused stack carries earlier runs'
+/// uploads and three workers are writing to it, so a catalog listing is
+/// asserted by the presence of what this test made, never by absence.
 ///
-/// Deliberately prose rather than helpers. A pair of `own`/`catalog`
-/// assertion functions lived here and had no callers; the first draft of
-/// one sorted with the default lexicographic comparator, which is wrong
-/// for the numbers its signature invited. Untested helpers teach the
-/// rule less well than the rule does, and the first spec that needs one
-/// can write it against a real case.
+/// Prose rather than helpers, deliberately: an untested pair of them
+/// lived here with no callers and a wrong comparator.
 
 export { retryCatalogBusy } from './retry';
 
@@ -141,6 +127,7 @@ export {
   chooseFromMenu,
   typeInto,
   wheelIntoView,
+  wheelIntoViewport,
 } from './gestures';
 export { DEST } from './nav';
 export type { Ctx } from './context';

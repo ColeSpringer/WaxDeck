@@ -656,6 +656,7 @@ export const SemanticsIds = {
   scrobblerSetupLastfm: 'scrobbler-setup-lastfm',
   serverSummary: 'server-summary',
   setting: (id: string | number) => `setting-${id}`,
+  settingOption: (id: string | number, value: string | number) => `setting-option-${id}-${value}`,
   settingsResult: (id: string | number) => `settings-result-${id}`,
   settingsScreen: 'settings-screen',
   settingsSearch: 'settings-search',
@@ -958,6 +959,7 @@ export const SemanticsIdPrefixes = {
   scrobblerConnect: 'scrobbler-connect-',
   scrobblerDisconnect: 'scrobbler-disconnect-',
   setting: 'setting-',
+  settingOption: 'setting-option-',
   settingsResult: 'settings-result-',
   settingsSection: 'settings-section-',
 

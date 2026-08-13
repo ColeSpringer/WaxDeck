@@ -240,30 +240,31 @@ func (d *DB) EnqueueSimilarity(ctx context.Context, essence, itemPID string) err
 	return nil
 }
 
-// maxAnalysisAttempts caps how often one essence is offered to
-// workers. An item a worker leases but never reports (undecodable,
-// crashes the model) would otherwise re-lease forever; past the cap
-// it stops being offered and drops out of the queue depth. Attempts
-// only grow when someone actually leases, so an idle queue never
-// burns them, and a re-rip changes the essence and starts fresh.
+// maxAnalysisAttempts caps how often one essence is offered. An item a
+// worker leases but never reports would otherwise re-lease forever.
+// Attempts grow only on a lease, and a re-rip starts fresh.
 const maxAnalysisAttempts = 8
 
 // LeaseSimilarityWork leases up to limit queue rows for a worker. The
 // lease expires on its own, so a crashed worker's items return to the
 // queue without cleanup.
 func (d *DB) LeaseSimilarityWork(ctx context.Context, limit int, lease time.Duration) ([]SimilarityWork, error) {
-	now := time.Now().UnixNano()
-	until := time.Now().Add(lease).UnixNano()
+	// One clock read for both ends, and expired at now rather than
+	// before it: a zero lease is over when taken, and Windows' clock
+	// need not tick between two reads in one loop.
+	now := time.Now()
+	nowNS := now.UnixNano()
+	until := now.Add(lease).UnixNano()
 	rows, err := d.w.QueryContext(ctx, `
 		UPDATE similarity_queue
 		SET lease_until_ns = ?, attempts = attempts + 1
 		WHERE essence IN (
 			SELECT essence FROM similarity_queue
-			WHERE lease_until_ns < ? AND attempts < ?
+			WHERE lease_until_ns <= ? AND attempts < ?
 			ORDER BY enqueued_at_ns
 			LIMIT ?
 		)
-		RETURNING essence, item_pid`, until, now, maxAnalysisAttempts, limit)
+		RETURNING essence, item_pid`, until, nowNS, maxAnalysisAttempts, limit)
 	if err != nil {
 		return nil, fmt.Errorf("db: leasing analysis work: %w", err)
 	}
@@ -350,11 +351,9 @@ func (d *DB) EmbeddingItemPID(ctx context.Context, essence string) (string, erro
 	return pid, nil
 }
 
-// EmbeddingItemPIDs answers stored item pids for a batch of essences
-// in a few chunked IN queries; absent essences are absent keys. The
-// discovery surface resolves whole candidate pools through this (a
-// wide mix scans thousands of edges), so per-essence round trips are
-// the wrong shape.
+// EmbeddingItemPIDs answers stored item pids for a batch of essences in
+// a few chunked IN queries; absent essences are absent keys. Discovery
+// resolves whole candidate pools here, so round trips are wrong.
 func (d *DB) EmbeddingItemPIDs(ctx context.Context, essences []string) (map[string]string, error) {
 	out := make(map[string]string, len(essences))
 	const chunkSize = 500

@@ -10,20 +10,21 @@ void main() {
   test(
     'flattens web-style directory items, rebuilding relative dirs',
     () async {
-      // The shape desktop_drop delivers for a web folder drop: nested
-      // directory items whose children carry names, sizes, and lazy
-      // handles. On the test VM the io XFile derives its name from the
-      // path, so the fakes carry name-shaped paths.
+      // The shape desktop_drop delivers for a web folder drop. On the
+      // test VM the io XFile ignores the name it is handed and splits
+      // one off the path, so the fakes join the host's way.
+      final sep = Platform.pathSeparator;
+      String fake(String name) => '${sep}drop-fake$sep$name';
       DropItemFile file(String name) => DropItemFile.fromData(
         Uint8List(4),
         name: name,
         length: 4,
-        path: '/drop-fake/$name',
+        path: fake(name),
       );
       final items = <DropItem>[
-        DropItemDirectory('/drop-fake/Boxset', [
-          DropItemDirectory('/drop-fake/CD1', [file('one.flac')], name: 'CD1'),
-          DropItemDirectory('/drop-fake/CD2', [file('two.flac')], name: 'CD2'),
+        DropItemDirectory(fake('Boxset'), [
+          DropItemDirectory(fake('CD1'), [file('one.flac')], name: 'CD1'),
+          DropItemDirectory(fake('CD2'), [file('two.flac')], name: 'CD2'),
           file('cover.jpg'),
         ], name: 'Boxset'),
         file('loose.mp3'),

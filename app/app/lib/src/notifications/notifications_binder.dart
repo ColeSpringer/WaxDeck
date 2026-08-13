@@ -11,14 +11,10 @@ import 'notifications_controller.dart';
 /// Pulls the caller's server-state changes for a client that does not
 /// mirror them.
 ///
-/// The web build has no sync engine and no cursor of its own: it reacts
-/// to user invalidations by refetching whatever is on screen, and an
-/// invalidation frame carries no detail at all. So the bell needs its own
-/// walk of `/sync/server`, which is what this is.
-///
-/// The first call mints a cursor and reports nothing, which is the point:
-/// a session that has just started has not observed anything yet, and
-/// replaying whatever the account did on another device last week as
+/// The web build has no sync engine and no cursor, and an invalidation
+/// frame carries no detail, so the bell walks `/sync/server` itself.
+/// The first call mints a cursor and reports nothing: a session that
+/// just started has observed nothing yet, and replaying last week as
 /// "just now" would be a lie with a badge on it.
 class UserEventPuller {
   UserEventPuller({required this.repository, required this.onEvent});
@@ -28,16 +24,32 @@ class UserEventPuller {
 
   String? _since;
   bool _running = false;
+  bool _pending = false;
   bool _stopped = false;
 
   void stop() => _stopped = true;
 
-  /// Reads everything after the held cursor. Re-entrant calls are
-  /// dropped rather than queued: the hint that prompted them says the
-  /// stream moved, and a walk already in flight will see it.
+  /// Reads everything after the held cursor. A hint arriving mid-walk is
+  /// remembered rather than dropped: the first call only mints the
+  /// cursor, so a change landing during boot had nothing to recover it.
   Future<void> pull() async {
-    if (_running || _stopped) return;
+    if (_stopped) return;
+    if (_running) {
+      _pending = true;
+      return;
+    }
     _running = true;
+    try {
+      do {
+        _pending = false;
+        await _walk();
+      } while (_pending && !_stopped);
+    } finally {
+      _running = false;
+    }
+  }
+
+  Future<void> _walk() async {
     try {
       var since = _since;
       if (since == null) {
@@ -50,34 +62,23 @@ class UserEventPuller {
         for (final event in page.events) {
           onEvent(event);
         }
-        // Advanced per page rather than once at the end: a walk cut
-        // short - a page that throws, a session that stopped - would
-        // otherwise leave the cursor where it started and re-report
-        // every page it had already handed out. The rows deduplicate on
-        // their kind, so the cost of getting this wrong is small, but
-        // keeping the progress costs nothing.
+        // Advanced per page, so a walk cut short does not re-report the
+        // pages it already handed out.
         since = page.nextSince;
         _since = since;
         if (!page.more) break;
       }
     } on WaxDeckApiException catch (error) {
-      // A cursor the server can no longer serve contiguously answers
-      // sync-reset. Nothing here mirrors anything, so re-minting is the
-      // whole recovery: the gap is events this session did not see, and
-      // the bell already promises only what it saw.
+      // Nothing here mirrors anything, so re-minting is the whole
+      // recovery from a cursor the server can no longer serve.
       if (error.code == 'sync-reset') _since = null;
-    } finally {
-      _running = false;
     }
   }
 }
 
-/// Feeds the bell for as long as a session lasts.
-///
-/// Both transports end at the same recorder. Native has an engine that
-/// already reads this stream to keep its mirror current, so it publishes
-/// what it read; web has no engine and walks the stream itself off the
-/// same invalidation hint the rest of the client refetches on.
+/// Feeds the bell for as long as a session lasts. Native's engine
+/// already reads this stream for its mirror and publishes what it read;
+/// web has no engine and walks it off the same invalidation hint.
 final notificationsBinderProvider = Provider.autoDispose<void>((ref) {
   final notifications = ref.read(notificationsProvider.notifier);
 
@@ -96,10 +97,8 @@ final notificationsBinderProvider = Provider.autoDispose<void>((ref) {
     final subscription = engine.serverEvents.listen(
       notifications.recordServerEvent,
     );
-    // Nothing to clear on the way out: the list empties when the account
-    // changes, which the controller watches for itself. A disposal
-    // callback that modified another provider would assert in debug and
-    // be swallowed in release.
+    // Nothing to clear on the way out: the controller empties the list
+    // on an account change, and a disposal callback may not touch it.
     ref.onDispose(subscription.cancel);
     return;
   }
@@ -108,9 +107,8 @@ final notificationsBinderProvider = Provider.autoDispose<void>((ref) {
     repository: ref.watch(repositoryProvider),
     onEvent: notifications.recordServerEvent,
   );
-  // Minted immediately rather than on the first hint, so the first
-  // change after a launch is reported rather than swallowed by the
-  // cursor mint it would otherwise have paid for.
+  // Minted immediately, so the first change after a launch is reported
+  // rather than swallowed by the mint it would have paid for.
   unawaited(puller.pull());
   final listener = ref.listen(userStreamTickProvider, (_, _) {
     unawaited(puller.pull());
@@ -121,11 +119,9 @@ final notificationsBinderProvider = Provider.autoDispose<void>((ref) {
   });
 });
 
-/// Bumped every time the user topic reports a change.
-///
-/// A counter rather than a callback, so the binder can watch it the way
-/// every other consumer of the live channel watches provider state, and
-/// so a test can drive it without a socket.
+/// Bumped every time the user topic reports a change. A counter rather
+/// than a callback, so the binder watches it as provider state and a
+/// test can drive it without a socket.
 class UserStreamTick extends Notifier<int> {
   @override
   int build() => 0;

@@ -11,14 +11,10 @@ import 'controls.dart';
 /// A settings row: what the setting is, one line saying what it does, and
 /// the control that changes it.
 ///
-/// The help line is required rather than optional, which is the whole
-/// design of the settings surface: every leaf setting carries one
-/// sentence of inline help, so nobody has to guess what "Prepare the next
-/// track" means from four words and a switch.
-///
-/// The row is not itself tappable. Its control is the control, and a row
-/// that also handled taps would give a switch two ways to be flipped and
-/// a screen reader two nodes claiming the same job.
+/// Help is required, not optional: every leaf setting carries a sentence
+/// so nobody guesses what four words and a switch mean. The row is not
+/// itself tappable, or a switch would have two ways to be flipped and a
+/// screen reader two nodes claiming the same job.
 class WaxSettingRow extends StatelessWidget {
   const WaxSettingRow({
     required this.title,
@@ -113,18 +109,14 @@ class WaxRadioOption<T> {
 /// A short list of choices with every one of them, and its consequence,
 /// on screen at once.
 ///
-/// The counterpart to [WaxChoice] rather than a duplicate of it, and the
-/// line between them is whether the options have to be read to be
-/// chosen between. A settings row picks from a list of speeds, where
-/// only the current one matters and the rest can wait behind a tap; a
-/// destructive dialog asks "trash or permanent", where hiding the second
-/// answer behind a tap is how somebody deletes a library by mistake.
+/// The counterpart to [WaxChoice], not a duplicate: the line is whether
+/// the options have to be read to be chosen between. Speeds can wait
+/// behind a tap; "trash or permanent" hidden behind one is how somebody
+/// deletes a library by mistake.
 ///
-/// Built the way [WaxSwitch] is built - one semantics node per option
-/// carrying its own name, a handle the suite can steer by, the focus
-/// ring - and announcing with `inMutuallyExclusiveGroup` and `checked`,
-/// which is what tells a screen reader that choosing one un-chooses the
-/// rest. Each option is its own tab stop, as each switch is.
+/// One semantics node per option, announcing with
+/// `inMutuallyExclusiveGroup` and `checked` so a screen reader knows
+/// choosing one un-chooses the rest.
 class WaxRadioGroup<T> extends StatelessWidget {
   const WaxRadioGroup({
     required this.value,
@@ -306,17 +298,13 @@ class _Mark extends StatelessWidget {
   );
 }
 
-/// The house switch.
+/// The house switch: Material's [Switch] painted by the theme, with one
+/// semantics node carrying the setting's name, a handle the suite can
+/// steer by, and the focus ring.
 ///
-/// Material's [Switch] underneath, painted by the theme, with the three
-/// things every WaxDeck control needs bolted on the way the rest of the
-/// design system does them: one semantics node carrying the setting's
-/// name, a handle the suite can steer by, and the focus ring.
-///
-/// It announces as a switch rather than as a button, because a switch's
-/// state is the whole point and `toggled` is what a screen reader reads
-/// out. That is why this does not simply wrap [WaxTappable], which
-/// announces buttons.
+/// Announces as a switch, not a button, because `toggled` is what a
+/// screen reader reads out - which is why it does not wrap
+/// [WaxTappable].
 class WaxSwitch extends StatefulWidget {
   const WaxSwitch({
     required this.value,
@@ -423,6 +411,7 @@ class WaxChoice<T> extends StatelessWidget {
     required this.onChanged,
     required this.label,
     this.semanticsId,
+    this.optionSemanticsIdFor,
     super.key,
   });
 
@@ -444,6 +433,10 @@ class WaxChoice<T> extends StatelessWidget {
 
   final String? semanticsId;
 
+  /// The identifier each option row publishes. Keyed on the value, not
+  /// the label: a label is copy, and it translates.
+  final String Function(T value)? optionSemanticsIdFor;
+
   Future<void> _open(BuildContext context) async {
     final colors = WaxColors.of(context);
     final trigger = context.findRenderObject()! as RenderBox;
@@ -463,6 +456,7 @@ class WaxChoice<T> extends StatelessWidget {
           PopupMenuItem<T>(
             value: option,
             child: Semantics(
+              identifier: optionSemanticsIdFor?.call(option),
               selected: option == value,
               child: Row(
                 children: <Widget>[
@@ -513,11 +507,9 @@ class WaxChoice<T> extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  // Flexible so a narrow column (a table cell, a
-                  // cramped settings row) makes the value ellipsize
-                  // rather than overflowing its box. The chevron beside
-                  // it is what says the control is a control, so it
-                  // keeps its width and the text yields.
+                  // Flexible so a narrow column ellipsizes the value
+                  // rather than overflowing. The chevron keeps its width
+                  // because it is what says this is a control.
                   Flexible(
                     child: Text(
                       labelFor(value),

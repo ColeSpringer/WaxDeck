@@ -371,28 +371,15 @@ here waits on upstream.
 
 ## Infrastructure
 
-- `[in-repo]` **make's Windows PATH shadows MSVC's link.exe.** The
-  Windows shell pin prepends Git's usr/bin to every recipe's PATH -
-  that is where make finds find and sed, and also where coreutils'
-  link.exe now outranks MSVC's for anything resolving the linker by
-  PATH name. The Windows desktop app is a shipped target, but its
-  builds never pass through make (packaging calls `flutter build
-  windows` directly, and Flutter's CMake flow locates MSVC via
-  vswhere, not PATH), so nothing breaks today. The day a make target
-  wraps an MSVC build on Windows, linker resolution is the first
-  suspect.
-
-- `[in-repo]` **Three e2e specs fail on a Windows dev box.** The suite
-  runs on Windows now (the launchers hand native paths to the Go
-  binaries and Playwright names Git's bash), and the rest of the wave
-  passes, but three specs fail deterministically where Linux CI passes
-  them: home's pinned shelf never scrolls into view (`wheelIntoView`
-  times out), settings' playback menu never shows its item, and the
-  admin wizard's library create never issues its POST - its trace
-  shows both fields verified full and the submit clicked, then no
-  network call. All three are semantics-driven interactions against
-  the wasm build on Windows Chrome; the wizard trace is the starting
-  evidence.
+- `[upstream]` **Six Go tests are red on a Windows dev box.** Book
+  merge, book split, cue split, metadata write-back and the import
+  failure case in `internal/api`, plus provenance stamping in
+  `internal/waxtapsource`, all fail with "rename ... Access is denied".
+  One cause, recorded in `upstream-requests.md`: WaxLabel's `saveBack`
+  holds the source open across its own atomic rename, which Windows
+  refuses. Nothing to do in this repo - the handle is internal to it -
+  so `make test` stays red on Windows until that lands. Linux CI is
+  unaffected, and no shipped target writes tags on Windows.
 
 - `[in-repo]` **The e2e renderer hang is diagnosed: a memory race
   inside multi-threaded skwasm.** The old shape - one suite run in

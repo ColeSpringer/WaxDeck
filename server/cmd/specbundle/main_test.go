@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -127,13 +128,16 @@ components:
 		t.Error("missing request body RB")
 	}
 
-	// A fresh bundle must not inherit the temp file's 0600 mode.
-	st, err := os.Stat(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if st.Mode().Perm() != 0o644 {
-		t.Errorf("bundle mode = %o, want 644", st.Mode().Perm())
+	// A fresh bundle must not inherit the temp file's 0600 mode. Asked
+	// only off Windows, which has no POSIX bits to report.
+	if runtime.GOOS != "windows" {
+		st, err := os.Stat(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Mode().Perm() != 0o644 {
+			t.Errorf("bundle mode = %o, want 644", st.Mode().Perm())
+		}
 	}
 
 	// Second run must be a no-op on identical input. Anchor the mtime in
@@ -145,7 +149,7 @@ components:
 	if err := bundle(src, out); err != nil {
 		t.Fatal(err)
 	}
-	st, err = os.Stat(out)
+	st, err := os.Stat(out)
 	if err != nil {
 		t.Fatal(err)
 	}

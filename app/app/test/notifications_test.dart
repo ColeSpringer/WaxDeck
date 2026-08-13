@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
@@ -281,6 +283,34 @@ void main() {
       expect(seen, hasLength(1), reason: 'and reported nothing twice');
     });
 
+    test('a hint during the minting pull is answered, not dropped', () async {
+      // The bell's failure mode on a quiet client: the change lands
+      // mid-mint, and a dropped hint has no second one to recover on.
+      final repo = _SyncRepository();
+      final seen = <ServerSyncEvent>[];
+      final puller = UserEventPuller(repository: repo, onEvent: seen.add);
+
+      repo.hold = Completer<void>();
+      final minting = puller.pull();
+      unawaited(puller.pull());
+      repo.pages = <ServerSyncPage>[
+        ServerSyncPage(
+          events: <ServerSyncEvent>[_marker('upload', pid: 'up-1')],
+          nextSince: 'c1',
+        ),
+      ];
+      repo.hold!.complete();
+      repo.hold = null;
+      await minting;
+
+      expect(
+        seen.map((e) => e.kind),
+        <String>['upload'],
+        reason: 'the walk the hint asked for ran once the mint was done',
+      );
+      expect(repo.sinceCalls, <String?>[null, 'c0']);
+    });
+
     test('a reset re-mints rather than replaying an old week', () async {
       final repo = _SyncRepository();
       final seen = <ServerSyncEvent>[];
@@ -316,6 +346,9 @@ class _SyncRepository extends FakeRepository {
 
   WaxDeckApiException? failWith;
 
+  /// Held open, so a test can land a hint mid-walk.
+  Completer<void>? hold;
+
   /// Throws once this many pages into the current walk, for the walk
   /// that is cut short halfway.
   int? failAfter;
@@ -324,6 +357,8 @@ class _SyncRepository extends FakeRepository {
   @override
   Future<ServerSyncPage> syncServer({String? since, int? limit}) async {
     sinceCalls.add(since);
+    final held = hold;
+    if (held != null) await held.future;
     final failure = failWith;
     if (failure != null) throw failure;
     if (failAfter != null && since != null) {

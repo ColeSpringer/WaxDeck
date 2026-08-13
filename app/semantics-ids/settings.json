@@ -28,6 +28,7 @@
     "scrobblerSetupLastfm": "scrobbler-setup-lastfm",
     "serverSummary": "server-summary",
     "setting": "setting-{id}",
+    "settingOption": "setting-option-{id}-{value}",
     "settingsResult": "settings-result-{id}",
     "settingsScreen": "settings-screen",
     "settingsSearch": "settings-search",

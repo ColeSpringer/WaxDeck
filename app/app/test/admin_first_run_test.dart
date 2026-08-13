@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
@@ -16,6 +18,30 @@ import 'fakes.dart';
 import 'routed_host.dart';
 
 const _admin = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
+
+/// A health read that never lands.
+class _PendingHealth extends HealthController {
+  @override
+  Future<HealthSummary> build() => Completer<HealthSummary>().future;
+}
+
+/// A health read that fails, having never landed once.
+class _FailingHealth extends HealthController {
+  @override
+  Future<HealthSummary> build() async => throw StateError('health is down');
+}
+
+/// A repository whose library list never answers.
+class _PendingLibraries extends FakeRepository {
+  _PendingLibraries()
+    : super(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      );
+
+  @override
+  Future<List<LibraryInfo>> listLibraries({bool counts = false}) =>
+      Completer<List<LibraryInfo>>().future;
+}
 
 ProviderContainer _container(
   FakeRepository repo, {
@@ -161,6 +187,78 @@ void main() {
     );
   });
 
+  // Ending the tour on an unanswered read is permanent, so looking at
+  // the console a beat too early would lose the rest of it.
+  testWidgets('an unanswered health read does not end the tour', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..healthSummary = const HealthSummary(
+        score: 0,
+        totalItems: 0,
+        evaluatedItems: 0,
+        warmingUp: true,
+      );
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        clientSettingsStoreProvider.overrideWithValue(
+          MemoryClientSettingsStore(),
+        ),
+        healthProvider.overrideWith(_PendingHealth.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    await _pump(tester, container);
+
+    // Library in, scan recorded: only health stands before the end.
+    repo.libraries.add(_library());
+    repo.jobs = <Job>[_scan('done')];
+    container.invalidate(librariesProvider);
+    container.invalidate(adminJobsProvider);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.adminWizard),
+      findsOneWidget,
+      reason: 'the tour waits for the answer rather than assuming one',
+    );
+    expect(
+      _step(FirstRunStep.warming),
+      findsOneWidget,
+      reason: 'and holds the step the scan already reached, not an older one',
+    );
+  });
+
+  // An error is as unknown as a pending read, and a first one carries no
+  // previous value to fall back on.
+  testWidgets('a failed health read does not end the tour either', (
+    tester,
+  ) async {
+    final repo = _repo();
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        clientSettingsStoreProvider.overrideWithValue(
+          MemoryClientSettingsStore(),
+        ),
+        healthProvider.overrideWith(_FailingHealth.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    await _pump(tester, container);
+
+    repo.libraries.add(_library());
+    repo.jobs = <Job>[_scan('done')];
+    container.invalidate(librariesProvider);
+    container.invalidate(adminJobsProvider);
+    await tester.pumpAndSettle();
+
+    expect(_step(FirstRunStep.warming), findsOneWidget);
+  });
+
   // The case that makes the entry condition strict rather than derived:
   // a healthy idle server, or one somebody just rescanned, must never be
   // handed a wizard.
@@ -201,13 +299,9 @@ void main() {
     expect(find.bySemanticsIdentifier(SemanticsIds.adminWizard), findsNothing);
   });
 
-  // The wedge this closes: a library added from the console starts a
-  // scan server-side, so a client holding an empty job list is stale
-  // the moment it lands. The wizard reads that list to decide it is on
-  // step two, offers the scan that is already running, and the server
-  // refuses - and if the refusal changed nothing, nothing else would
-  // ever refetch the list. Step two would own the console for the rest
-  // of the session with only "skip" out of it.
+  // A create starts a scan server-side, so the job list is stale on
+  // arrival: the wizard offers a scan already running, and if the
+  // refusal refetched nothing, step two would own the console.
   testWidgets('a refused scan refreshes the job list rather than sticking', (
     tester,
   ) async {
@@ -246,15 +340,10 @@ void main() {
     expect(_step(FirstRunStep.warming), findsOneWidget);
   });
 
-  // The console's own surface is the web, where a reload is one
-  // keystroke. Both halves of what that used to cost are below: a tour
-  // that could not continue, and a skip that did not stick.
-  /// A reload, as these two providers see one: both are disposed and
-  /// rebuilt, so the wizard starts with no memory and the progress
-  /// re-reads the device store - which is what a refreshed tab is. The
-  /// rest of the container is left alone deliberately; restarting the
-  /// whole app inside a widget test means a second live container, and
-  /// the first one's timers outlive the tree it was pumped into.
+  /// A reload as these two providers see one: both disposed and rebuilt,
+  /// so the wizard starts with no memory and the progress re-reads the
+  /// device store. The rest of the container is left alone, since a
+  /// second live one leaves the first's timers running.
   Future<void> reload(WidgetTester tester, ProviderContainer container) async {
     container
       ..invalidate(firstRunWizardProvider)
@@ -300,6 +389,25 @@ void main() {
     // as ever - and it stays dismissed anyway, which is what the word
     // "skip" promises.
     await reload(tester, container);
+
+    expect(find.bySemanticsIdentifier(SemanticsIds.adminWizard), findsNothing);
+  });
+
+  // The asymmetry with the health guard above, which holds a step when
+  // its read is unknown. Here nothing about the server is known at all,
+  // and the stored stage alone is not evidence the tour is still on:
+  // warm-up may have finished while this device was away. So an
+  // unanswered library list draws no wizard, not the stage's step.
+  testWidgets('an unanswered library list draws no wizard mid-tour', (
+    tester,
+  ) async {
+    final store = MemoryClientSettingsStore();
+    await store.write(
+      ClientSettingKeys.firstRunProgress,
+      FirstRunStage.scan.name,
+    );
+
+    await _pump(tester, _container(_PendingLibraries(), store: store));
 
     expect(find.bySemanticsIdentifier(SemanticsIds.adminWizard), findsNothing);
   });

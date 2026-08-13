@@ -21,12 +21,9 @@ import 'listening_sections.dart';
 import 'prefs_controller.dart';
 import 'settings_registry.dart';
 
-/// One settings section, at its own location.
-///
-/// A drilled-in screen with a back arrow rather than a pane swap: the
-/// sections have nothing to say to each other, and settings is not a
-/// place anybody stays. It leaves to the settings home even when opened
-/// cold, so a shared link to Playback still has somewhere to go back to.
+/// One settings section, at its own location. A drilled-in screen rather
+/// than a pane swap, leaving to the settings home even when opened cold,
+/// so a shared link to Playback has somewhere to go back to.
 class SettingsSectionScreen extends ConsumerWidget {
   const SettingsSectionScreen({required this.section, super.key});
 
@@ -39,23 +36,18 @@ class SettingsSectionScreen extends ConsumerWidget {
     return WaxScaffold(
       title: section.title,
       largeTitle: false,
-      // No identifier of its own, deliberately. The obvious one is the
-      // row's, and giving the screen that handle makes one identifier
-      // name two different things: a retried click meant for the row
-      // lands in the middle of the screen it already opened, which is
-      // how this was found. The section is proven by its URL and by the
-      // controls in it.
+      // No identifier of its own: the obvious one is the row's, and one
+      // id naming two things means a retried click meant for the row
+      // lands in the screen it already opened. The URL proves it.
       onBack: () => context.leave(fallback: WaxRoute.settings),
       slivers: <Widget>[
         SliverPadding(
           padding:
               sizeClass.gutter + const EdgeInsets.only(bottom: WaxSpace.s32),
           sliver: SliverToBoxAdapter(
-            // Settings rows are a title, a sentence, and a control: past
-            // the reading width the sentence and its control drift so far
-            // apart that the pair stops reading as one row. `ReadingColumn`
-            // rather than a bare `ConstrainedBox`, which a sliver's tight
-            // cross-axis width resolves straight back to the full window.
+            // Past the reading width a row's sentence and its control
+            // drift too far apart to read as one. `ReadingColumn` and not
+            // `ConstrainedBox`, which a sliver resolves back to full.
             child: ReadingColumn(
               child: switch (section) {
                 SettingsSection.account => const AccountSectionBody(),
@@ -134,6 +126,8 @@ class _PlaybackBody extends ConsumerWidget {
                 labelFor: spellSeconds,
                 label: 'Skip back by',
                 semanticsId: SemanticsIds.setting('skip-back'),
+                optionSemanticsIdFor: (seconds) =>
+                    SemanticsIds.settingOption('skip-back', seconds),
                 onChanged: ref.read(skipBackSecondsProvider.notifier).set,
               ),
             ),
@@ -229,11 +223,9 @@ class _PlaybackBody extends ConsumerWidget {
                 onChanged: ref.read(carModeButtonProvider.notifier).set,
               ),
             ),
-            // Desktop alone: this is about a machine left playing in a
-            // room, and neither a phone that locks its own screen nor a
-            // browser tab is that. A switch with nothing behind it is
-            // the promise a settings screen must not make, so it is
-            // absent rather than disabled.
+            // Desktop alone: this is a machine left playing in a room,
+            // which a phone or a tab is not. Absent rather than
+            // disabled, since a switch with nothing behind it lies.
             if (ref.watch(desktopProvider))
               WaxSettingRow(
                 title: 'Open the visualizer when idle',
@@ -266,6 +258,9 @@ class _PlaybackBody extends ConsumerWidget {
                     seconds == 0 ? 'Off' : spellSeconds(seconds.round()),
                 label: 'Casting crossfade',
                 semanticsId: SemanticsIds.setting('crossfade'),
+                // Rounded: the options are doubles, and a spec names 6.
+                optionSemanticsIdFor: (seconds) =>
+                    SemanticsIds.settingOption('crossfade', seconds.round()),
                 onChanged: prefs == null
                     ? null
                     : prefsController.setCrossfadeSeconds,
@@ -420,12 +415,9 @@ class _LibraryBody extends ConsumerWidget {
   }
 }
 
-/// What this account can see, read-only.
-///
-/// Here so a household member can answer "why can I not find that album"
-/// without asking whoever runs the server. Nothing here is settable: the
-/// grant is the administrator's, and a control that looked like one would
-/// be a refusal waiting to happen.
+/// What this account can see, read-only, so a household member can
+/// answer "why can I not find that album" without asking. The grant is
+/// the administrator's, so a control here would be a refusal waiting.
 class _LibraryAccessRow extends ConsumerWidget {
   const _LibraryAccessRow();
 
@@ -526,13 +518,9 @@ class _DownloadsBody extends ConsumerWidget {
   }
 }
 
-/// Clearing the artwork cache.
-///
-/// No size beside it, deliberately. The store keeps covers through a
-/// cache manager that does not report a total, and a number invented from
-/// the pins WaxDeck knows about would be smaller than what is on disk -
-/// which is worse than no number, because the point of the row is to
-/// explain where the space went.
+/// Clearing the artwork cache. No size beside it: the cache manager
+/// reports no total, and a number derived from the pins WaxDeck knows
+/// would understate the disk - worse than none, for a row about space.
 class _ArtworkCacheRow extends ConsumerStatefulWidget {
   const _ArtworkCacheRow();
 
@@ -765,11 +753,9 @@ class _AppearanceBody extends ConsumerWidget {
             ),
             WaxSettingRow(
               title: 'Card captions',
-              // Hover is the only way back to a hidden caption, so on a
-              // machine with no pointer the choice is refused rather
-              // than taken and quietly ignored - the control's own rule
-              // about live-looking controls that drop what they are
-              // given - and the line says why it is refused.
+              // Hover is the only way back to a hidden caption, so with
+              // no pointer the choice is refused rather than taken and
+              // quietly ignored, and the help line says why.
               help: hasPointer
                   ? 'The lines under a cover in a grid'
                   : 'Always shown: hiding them needs a pointer to bring '
@@ -856,11 +842,9 @@ class _ServerBody extends ConsumerWidget {
           title: 'This server',
           children: <Widget>[
             const AboutRow(semanticsId: SemanticsIds.serverSummary),
-            // A door rather than a control panel. The switches that
-            // used to sit here are decisions about the server, and they
-            // belong beside the other ones: "read-only mode" was a
-            // sibling of "reduce motion" while they lived in a list of
-            // personal preferences.
+            // A door rather than a control panel: the switches that used
+            // to sit here are decisions about the server, and belong
+            // beside the other ones.
             WaxOptionRow(
               title: 'Open the admin console',
               subtitle: 'Libraries, users, scans, backups, and the audit log',

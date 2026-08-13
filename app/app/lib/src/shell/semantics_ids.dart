@@ -673,6 +673,8 @@ abstract final class SemanticsIds {
   static const String scrobblerSetupLastfm = 'scrobbler-setup-lastfm';
   static const String serverSummary = 'server-summary';
   static String setting(Object id) => 'setting-$id';
+  static String settingOption(Object id, Object value) =>
+      'setting-option-$id-$value';
   static String settingsResult(Object id) => 'settings-result-$id';
   static const String settingsScreen = 'settings-screen';
   static const String settingsSearch = 'settings-search';

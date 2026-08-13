@@ -1,6 +1,6 @@
 // The music domain: the hub, the indexes it opens, and a listing.
 
-import { Locator } from '@playwright/test';
+import { expect, Locator } from '@playwright/test';
 import {
   SEMANTICS_ATTRIBUTE,
   SemanticsIds,
@@ -83,16 +83,26 @@ export class Music extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.entityPin));
   }
 
-  /// Pin or unpin whatever entity screen is open.
+  /// Pin or unpin the entity screen that is open, which the caller names
+  /// by pid rather than this parsing it back out of the URL.
   ///
   /// `chooseFromMenu` rather than `clickThrough`: a retried click on an
   /// overflow trigger lands on the modal barrier and closes the menu the
-  /// previous attempt opened. No `settled` locator, because the row
-  /// produces nothing on this screen - the shelf it changes is on home -
-  /// so the menu going away is the proof, which is what a value picker
-  /// leaves behind too.
-  async togglePin(): Promise<void> {
-    await chooseFromMenu(this.entityOverflow(), this.entityPin());
+  /// previous attempt opened.
+  ///
+  /// The row produces nothing here, so the gesture falls back to the
+  /// menu going away - which a dismissal satisfies too. The preference
+  /// document is the only honest proof, and reading it first keeps a
+  /// landed toggle from being fired back the other way.
+  async togglePin(pid: string): Promise<void> {
+    const pinned = async () =>
+      (((await this.ctx.api.get('/users/me/prefs')).pinned ?? []) as string[]).includes(pid);
+    const want = !(await pinned());
+    await expect(async () => {
+      if ((await pinned()) === want) return;
+      await chooseFromMenu(this.entityOverflow(), this.entityPin());
+      await expect.poll(pinned, { timeout: T.assert }).toBe(want);
+    }).toPass({ timeout: T.fetch });
   }
 
   /// The release identity block, drawn only where the album entity
@@ -107,13 +117,9 @@ export class Music extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.indexRail));
   }
 
-  /// Switch the index to biggest-first, which is a listing of its own
-  /// with its own cursor space.
-  ///
-  /// By its label, not by an identifier: the chip row publishes one only
-  /// on the A-to-Z chip, so this is the "no id exists" case the copy
-  /// rule allows a driver - and it is the driver rather than five specs
-  /// that owns the string.
+  /// Switch the index to biggest-first, a listing of its own with its
+  /// own cursor space. By label, since the chip row publishes an id only
+  /// on the A-to-Z chip - the "no id exists" case the copy rule allows.
   async sortByCount(): Promise<void> {
     await this.ctx.page.getByRole('button', { name: 'Most items' }).click();
   }
@@ -146,10 +152,9 @@ export class Music extends Surface {
       SEMANTICS_ATTRIBUTE,
     )) as string[];
     const pids = ids.map((id) => id.slice(SemanticsIdPrefixes.item.length));
-    // The registry's prefix covers every item row, not only tracks, so a
-    // caller that means one medium filters by pid type here rather than
-    // spelling `item-tr-` into a selector - a literal the registry could
-    // not rename.
+    // The prefix covers every item row, not only tracks, so a caller
+    // that means one medium filters here rather than spelling `item-tr-`
+    // into a selector the registry could not rename.
     return type === undefined ? pids : pids.filter((pid) => pid.startsWith(`${type}-`));
   }
 }
