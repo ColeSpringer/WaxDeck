@@ -246,6 +246,9 @@ class ListeningStatsRangeEnum extends EnumClass {
   /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'all')
   static const ListeningStatsRangeEnum all = _$listeningStatsRangeEnum_all;
+  /// The range that was aggregated.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const ListeningStatsRangeEnum unknownDefaultOpenApi = _$listeningStatsRangeEnum_unknownDefaultOpenApi;
 
   static Serializer<ListeningStatsRangeEnum> get serializer => _$listeningStatsRangeEnumSerializer;
 
@@ -266,6 +269,9 @@ class ListeningStatsBucketEnum extends EnumClass {
   /// The bucket size used.
   @BuiltValueEnumConst(wireName: r'month')
   static const ListeningStatsBucketEnum month = _$listeningStatsBucketEnum_month;
+  /// The bucket size used.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const ListeningStatsBucketEnum unknownDefaultOpenApi = _$listeningStatsBucketEnum_unknownDefaultOpenApi;
 
   static Serializer<ListeningStatsBucketEnum> get serializer => _$listeningStatsBucketEnumSerializer;
 

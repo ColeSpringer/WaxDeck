@@ -184,7 +184,13 @@ failure. `error` frames carry the API error vocabulary in `code` (
 `timeout` when a routed command's target connection did not answer within
 the server's routing deadline, ten seconds). An `error` frame without an
 `id` is connection-level (a malformed frame that could not be parsed far
-enough to find one).
+enough to find one). A refusal whose code covers several causes may also
+carry `params`, the same flat string map on the same best-effort terms
+the REST `Error` schema documents, so a refusal reachable over either
+transport says the same thing on both. A `cmd-result` from a player
+client never carries params: the codes a client endpoint may answer are
+whitelisted before they reach the wire, and passing its own detail
+through to other listeners would need the same treatment.
 
 ### Commands (controller to server)
 

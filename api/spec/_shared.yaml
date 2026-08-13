@@ -119,6 +119,22 @@ components:
           type: string
           description: Human-readable explanation (not stable, do not parse).
           example: no item with pid tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        params:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Machine-readable detail, where one code covers several causes
+            a client has to tell apart. `code` names which keys can appear
+            (see the API-level description); values are always strings.
+            Best-effort per refusal, never guaranteed by code: an error of
+            the same code with no params is an ordinary one, so read this
+            as a refinement rather than requiring it. `message` says the
+            same thing in prose, so a client that ignores this reads what
+            it always read. Clients must ignore keys they do not know.
+          example:
+            feature: multi-part-audiobook
+            pid: bk-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     MediaType:
       type: string

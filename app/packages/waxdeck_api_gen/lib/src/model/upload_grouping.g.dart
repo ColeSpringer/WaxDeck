@@ -9,6 +9,9 @@ part of 'upload_grouping.dart';
 const UploadGrouping _$auto = const UploadGrouping._('auto');
 const UploadGrouping _$album = const UploadGrouping._('album');
 const UploadGrouping _$tracks = const UploadGrouping._('tracks');
+const UploadGrouping _$unknownDefaultOpenApi = const UploadGrouping._(
+  'unknownDefaultOpenApi',
+);
 
 UploadGrouping _$valueOf(String name) {
   switch (name) {
@@ -18,13 +21,15 @@ UploadGrouping _$valueOf(String name) {
       return _$album;
     case 'tracks':
       return _$tracks;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
 final BuiltSet<UploadGrouping> _$values = BuiltSet<UploadGrouping>(
-  const <UploadGrouping>[_$auto, _$album, _$tracks],
+  const <UploadGrouping>[_$auto, _$album, _$tracks, _$unknownDefaultOpenApi],
 );
 
 class _$UploadGroupingMeta {
@@ -32,6 +37,7 @@ class _$UploadGroupingMeta {
   UploadGrouping get auto => _$auto;
   UploadGrouping get album => _$album;
   UploadGrouping get tracks => _$tracks;
+  UploadGrouping get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   UploadGrouping valueOf(String name) => _$valueOf(name);
   BuiltSet<UploadGrouping> get values => _$values;
 }
@@ -50,11 +56,13 @@ class _$UploadGroupingSerializer
     'auto': 'auto',
     'album': 'album',
     'tracks': 'tracks',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'auto': 'auto',
     'album': 'album',
     'tracks': 'tracks',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

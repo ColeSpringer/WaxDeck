@@ -325,6 +325,9 @@ class PortableRefKindEnum extends EnumClass {
   /// What the ref describes.
   @BuiltValueEnumConst(wireName: r'episode')
   static const PortableRefKindEnum episode = _$portableRefKindEnum_episode;
+  /// What the ref describes.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const PortableRefKindEnum unknownDefaultOpenApi = _$portableRefKindEnum_unknownDefaultOpenApi;
 
   static Serializer<PortableRefKindEnum> get serializer => _$portableRefKindEnumSerializer;
 

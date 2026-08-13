@@ -143,6 +143,9 @@ class ReviewDecisionActionEnum extends EnumClass {
   /// The decision to apply.
   @BuiltValueEnumConst(wireName: r'discard')
   static const ReviewDecisionActionEnum discard = _$reviewDecisionActionEnum_discard;
+  /// The decision to apply.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const ReviewDecisionActionEnum unknownDefaultOpenApi = _$reviewDecisionActionEnum_unknownDefaultOpenApi;
 
   static Serializer<ReviewDecisionActionEnum> get serializer => _$reviewDecisionActionEnumSerializer;
 

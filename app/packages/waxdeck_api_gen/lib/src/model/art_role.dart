@@ -26,6 +26,9 @@ class ArtRole extends EnumClass {
   /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans and enrichment; `back`, `disc`, `booklet`, and `background` are set explicitly and resolve at the entity's own level. Defaults to `front`. 
   @BuiltValueEnumConst(wireName: r'background')
   static const ArtRole background = _$background;
+  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans and enrichment; `back`, `disc`, `booklet`, and `background` are set explicitly and resolve at the entity's own level. Defaults to `front`. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const ArtRole unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 
   static Serializer<ArtRole> get serializer => _$artRoleSerializer;
 

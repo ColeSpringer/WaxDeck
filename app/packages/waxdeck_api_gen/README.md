@@ -119,6 +119,21 @@ Conventions:
   endpoint is still connected, unlike `endpoint-offline`, so
   retrying is more useful than refreshing the endpoint list).
   New codes may appear; clients must treat unknown codes as opaque.
+- An error may also carry `params`, a flat map of strings holding the
+  machine-readable detail a code alone cannot express, and `code` names
+  which keys can turn up. It is best-effort per refusal rather than
+  guaranteed by code: a refusal that has params fills them, and one
+  that does not is an ordinary error of that code, so clients read
+  params as a refinement and never require them. Under
+  `feature-unavailable` - the umbrella for anything this server cannot
+  do for a request - the defined keys are `feature`, the missing
+  capability, and `pid`, the subject it was asked about; the values
+  defined for `feature` so far are `multi-part-audiobook` (a book this
+  server cannot yet split across a device endpoint) and
+  `windowed-track` (a track that is a window into a larger file), and
+  other refusals under that code carry no params yet. Values are
+  strings even when they read as numbers. Clients must ignore keys
+  they do not know, and an absent `params` means the plain code.
 - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
   server origin, the same origin that serves this API and the web UI.
   They live outside `/api/v1` and are not declared as operations here:

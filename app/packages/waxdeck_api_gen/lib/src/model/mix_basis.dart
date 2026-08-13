@@ -17,6 +17,9 @@ class MixBasis extends EnumClass {
   /// Which engine answered a discovery request: `sonic` used stored audio embeddings, `metadata` used genre and artist heuristics (the zero-setup fallback). 
   @BuiltValueEnumConst(wireName: r'metadata')
   static const MixBasis metadata = _$metadata;
+  /// Which engine answered a discovery request: `sonic` used stored audio embeddings, `metadata` used genre and artist heuristics (the zero-setup fallback). 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const MixBasis unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 
   static Serializer<MixBasis> get serializer => _$mixBasisSerializer;
 

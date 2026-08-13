@@ -10,6 +10,8 @@ const PrefsThemeEnum _$prefsThemeEnum_system = const PrefsThemeEnum._('system');
 const PrefsThemeEnum _$prefsThemeEnum_dark = const PrefsThemeEnum._('dark');
 const PrefsThemeEnum _$prefsThemeEnum_light = const PrefsThemeEnum._('light');
 const PrefsThemeEnum _$prefsThemeEnum_oled = const PrefsThemeEnum._('oled');
+const PrefsThemeEnum _$prefsThemeEnum_unknownDefaultOpenApi =
+    const PrefsThemeEnum._('unknownDefaultOpenApi');
 
 PrefsThemeEnum _$prefsThemeEnumValueOf(String name) {
   switch (name) {
@@ -21,8 +23,10 @@ PrefsThemeEnum _$prefsThemeEnumValueOf(String name) {
       return _$prefsThemeEnum_light;
     case 'oled':
       return _$prefsThemeEnum_oled;
+    case 'unknownDefaultOpenApi':
+      return _$prefsThemeEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$prefsThemeEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -32,12 +36,15 @@ final BuiltSet<PrefsThemeEnum> _$prefsThemeEnumValues =
       _$prefsThemeEnum_dark,
       _$prefsThemeEnum_light,
       _$prefsThemeEnum_oled,
+      _$prefsThemeEnum_unknownDefaultOpenApi,
     ]);
 
 const PrefsBrowseSortsEnum _$prefsBrowseSortsEnum_count =
     const PrefsBrowseSortsEnum._('count');
 const PrefsBrowseSortsEnum _$prefsBrowseSortsEnum_label =
     const PrefsBrowseSortsEnum._('label');
+const PrefsBrowseSortsEnum _$prefsBrowseSortsEnum_unknownDefaultOpenApi =
+    const PrefsBrowseSortsEnum._('unknownDefaultOpenApi');
 
 PrefsBrowseSortsEnum _$prefsBrowseSortsEnumValueOf(String name) {
   switch (name) {
@@ -45,8 +52,10 @@ PrefsBrowseSortsEnum _$prefsBrowseSortsEnumValueOf(String name) {
       return _$prefsBrowseSortsEnum_count;
     case 'label':
       return _$prefsBrowseSortsEnum_label;
+    case 'unknownDefaultOpenApi':
+      return _$prefsBrowseSortsEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$prefsBrowseSortsEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -54,6 +63,7 @@ final BuiltSet<PrefsBrowseSortsEnum> _$prefsBrowseSortsEnumValues =
     BuiltSet<PrefsBrowseSortsEnum>(const <PrefsBrowseSortsEnum>[
       _$prefsBrowseSortsEnum_count,
       _$prefsBrowseSortsEnum_label,
+      _$prefsBrowseSortsEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<PrefsThemeEnum> _$prefsThemeEnumSerializer =
@@ -68,12 +78,14 @@ class _$PrefsThemeEnumSerializer
     'dark': 'dark',
     'light': 'light',
     'oled': 'oled',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'system': 'system',
     'dark': 'dark',
     'light': 'light',
     'oled': 'oled',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override
@@ -103,10 +115,12 @@ class _$PrefsBrowseSortsEnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'count': 'count',
     'label': 'label',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'count': 'count',
     'label': 'label',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

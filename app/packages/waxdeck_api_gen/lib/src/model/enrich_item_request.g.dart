@@ -14,6 +14,9 @@ const EnrichItemRequestWantEnum _$enrichItemRequestWantEnum_genres =
     const EnrichItemRequestWantEnum._('genres');
 const EnrichItemRequestWantEnum _$enrichItemRequestWantEnum_book =
     const EnrichItemRequestWantEnum._('book');
+const EnrichItemRequestWantEnum
+_$enrichItemRequestWantEnum_unknownDefaultOpenApi =
+    const EnrichItemRequestWantEnum._('unknownDefaultOpenApi');
 
 EnrichItemRequestWantEnum _$enrichItemRequestWantEnumValueOf(String name) {
   switch (name) {
@@ -25,8 +28,10 @@ EnrichItemRequestWantEnum _$enrichItemRequestWantEnumValueOf(String name) {
       return _$enrichItemRequestWantEnum_genres;
     case 'book':
       return _$enrichItemRequestWantEnum_book;
+    case 'unknownDefaultOpenApi':
+      return _$enrichItemRequestWantEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$enrichItemRequestWantEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -36,6 +41,7 @@ final BuiltSet<EnrichItemRequestWantEnum> _$enrichItemRequestWantEnumValues =
       _$enrichItemRequestWantEnum_lyrics,
       _$enrichItemRequestWantEnum_genres,
       _$enrichItemRequestWantEnum_book,
+      _$enrichItemRequestWantEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<EnrichItemRequestWantEnum> _$enrichItemRequestWantEnumSerializer =
@@ -48,12 +54,14 @@ class _$EnrichItemRequestWantEnumSerializer
     'lyrics': 'lyrics',
     'genres': 'genres',
     'book': 'book',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'cover': 'cover',
     'lyrics': 'lyrics',
     'genres': 'genres',
     'book': 'book',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

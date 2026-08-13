@@ -64,6 +64,51 @@ void main() {
     }
   });
 
+  // The detail behind an umbrella code. A caller keys on it instead of
+  // matching the message's prose, so what does and does not become a
+  // param has to be exact.
+  group('structured params', () {
+    test('a string map carries through', () {
+      final e = apiExceptionFromDio(
+        _dioError({
+          'code': 'feature-unavailable',
+          'message': 'multi-part audiobooks cannot play on this endpoint yet',
+          'params': {'feature': 'multi-part-audiobook', 'pid': 'bk-1'},
+        }),
+      );
+      expect(e.params, {'feature': 'multi-part-audiobook', 'pid': 'bk-1'});
+    });
+
+    test('an error without params reports null, not an empty map', () {
+      final e = apiExceptionFromDio(
+        _dioError({'code': 'not-found', 'message': 'no such item'}),
+      );
+      expect(e.params, isNull);
+    });
+
+    test('a value that is not a string drops its key', () {
+      final e = apiExceptionFromDio(
+        _dioError({
+          'code': 'feature-unavailable',
+          'message': 'nope',
+          'params': {'feature': 'windowed-track', 'parts': 3},
+        }),
+      );
+      expect(e.params, {'feature': 'windowed-track'});
+    });
+
+    test('params that are not an object at all report null', () {
+      final e = apiExceptionFromDio(
+        _dioError({
+          'code': 'feature-unavailable',
+          'message': 'nope',
+          'params': 'multi-part-audiobook',
+        }),
+      );
+      expect(e.params, isNull);
+    });
+  });
+
   test('the client arms connect and receive deadlines, and not send', () {
     final dio = Dio();
     WaxDeckClient(baseUrl: 'http://example.invalid', dio: dio);

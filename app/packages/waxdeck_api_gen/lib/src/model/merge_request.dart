@@ -155,6 +155,9 @@ class MergeRequestEntityTypeEnum extends EnumClass {
   /// What is being merged.
   @BuiltValueEnumConst(wireName: r'genre')
   static const MergeRequestEntityTypeEnum genre = _$mergeRequestEntityTypeEnum_genre;
+  /// What is being merged.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const MergeRequestEntityTypeEnum unknownDefaultOpenApi = _$mergeRequestEntityTypeEnum_unknownDefaultOpenApi;
 
   static Serializer<MergeRequestEntityTypeEnum> get serializer => _$mergeRequestEntityTypeEnumSerializer;
 

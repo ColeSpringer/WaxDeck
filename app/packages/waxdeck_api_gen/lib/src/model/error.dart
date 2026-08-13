@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -13,6 +14,7 @@ part 'error.g.dart';
 /// Properties:
 /// * [code] - Stable machine-readable error code.
 /// * [message] - Human-readable explanation (not stable, do not parse).
+/// * [params] - Machine-readable detail, where one code covers several causes a client has to tell apart. `code` names which keys can appear (see the API-level description); values are always strings. Best-effort per refusal, never guaranteed by code: an error of the same code with no params is an ordinary one, so read this as a refinement rather than requiring it. `message` says the same thing in prose, so a client that ignores this reads what it always read. Clients must ignore keys they do not know. 
 @BuiltValue()
 abstract class Error implements Built<Error, ErrorBuilder> {
   /// Stable machine-readable error code.
@@ -22,6 +24,10 @@ abstract class Error implements Built<Error, ErrorBuilder> {
   /// Human-readable explanation (not stable, do not parse).
   @BuiltValueField(wireName: r'message')
   String get message;
+
+  /// Machine-readable detail, where one code covers several causes a client has to tell apart. `code` names which keys can appear (see the API-level description); values are always strings. Best-effort per refusal, never guaranteed by code: an error of the same code with no params is an ordinary one, so read this as a refinement rather than requiring it. `message` says the same thing in prose, so a client that ignores this reads what it always read. Clients must ignore keys they do not know. 
+  @BuiltValueField(wireName: r'params')
+  BuiltMap<String, String>? get params;
 
   Error._();
 
@@ -56,6 +62,13 @@ class _$ErrorSerializer implements PrimitiveSerializer<Error> {
       object.message,
       specifiedType: const FullType(String),
     );
+    if (object.params != null) {
+      yield r'params';
+      yield serializers.serialize(
+        object.params,
+        specifiedType: const FullType(BuiltMap, [FullType(String), FullType(String)]),
+      );
+    }
   }
 
   @override
@@ -92,6 +105,13 @@ class _$ErrorSerializer implements PrimitiveSerializer<Error> {
             specifiedType: const FullType(String),
           ) as String;
           result.message = valueDes;
+          break;
+        case r'params':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltMap, [FullType(String), FullType(String)]),
+          ) as BuiltMap<String, String>;
+          result.params.replace(valueDes);
           break;
         default:
           unhandled.add(key);

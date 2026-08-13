@@ -18,6 +18,8 @@ const TopListKindEnum _$topListKindEnum_genres = const TopListKindEnum._(
 const TopListKindEnum _$topListKindEnum_shows = const TopListKindEnum._(
   'shows',
 );
+const TopListKindEnum _$topListKindEnum_unknownDefaultOpenApi =
+    const TopListKindEnum._('unknownDefaultOpenApi');
 
 TopListKindEnum _$topListKindEnumValueOf(String name) {
   switch (name) {
@@ -29,8 +31,10 @@ TopListKindEnum _$topListKindEnumValueOf(String name) {
       return _$topListKindEnum_genres;
     case 'shows':
       return _$topListKindEnum_shows;
+    case 'unknownDefaultOpenApi':
+      return _$topListKindEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$topListKindEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -40,6 +44,7 @@ final BuiltSet<TopListKindEnum> _$topListKindEnumValues =
       _$topListKindEnum_albums,
       _$topListKindEnum_genres,
       _$topListKindEnum_shows,
+      _$topListKindEnum_unknownDefaultOpenApi,
     ]);
 
 const TopListRangeEnum _$topListRangeEnum_n7d = const TopListRangeEnum._('n7d');
@@ -53,6 +58,8 @@ const TopListRangeEnum _$topListRangeEnum_n365d = const TopListRangeEnum._(
   'n365d',
 );
 const TopListRangeEnum _$topListRangeEnum_all = const TopListRangeEnum._('all');
+const TopListRangeEnum _$topListRangeEnum_unknownDefaultOpenApi =
+    const TopListRangeEnum._('unknownDefaultOpenApi');
 
 TopListRangeEnum _$topListRangeEnumValueOf(String name) {
   switch (name) {
@@ -66,8 +73,10 @@ TopListRangeEnum _$topListRangeEnumValueOf(String name) {
       return _$topListRangeEnum_n365d;
     case 'all':
       return _$topListRangeEnum_all;
+    case 'unknownDefaultOpenApi':
+      return _$topListRangeEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$topListRangeEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -78,6 +87,7 @@ final BuiltSet<TopListRangeEnum> _$topListRangeEnumValues =
       _$topListRangeEnum_n90d,
       _$topListRangeEnum_n365d,
       _$topListRangeEnum_all,
+      _$topListRangeEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<TopListKindEnum> _$topListKindEnumSerializer =
@@ -92,12 +102,14 @@ class _$TopListKindEnumSerializer
     'albums': 'albums',
     'genres': 'genres',
     'shows': 'shows',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'artists': 'artists',
     'albums': 'albums',
     'genres': 'genres',
     'shows': 'shows',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override
@@ -130,6 +142,7 @@ class _$TopListRangeEnumSerializer
     'n90d': '90d',
     'n365d': '365d',
     'all': 'all',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     '7d': 'n7d',
@@ -137,6 +150,7 @@ class _$TopListRangeEnumSerializer
     '90d': 'n90d',
     '365d': 'n365d',
     'all': 'all',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

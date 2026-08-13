@@ -8,6 +8,7 @@ part of 'role.dart';
 
 const Role _$admin = const Role._('admin');
 const Role _$user = const Role._('user');
+const Role _$unknownDefaultOpenApi = const Role._('unknownDefaultOpenApi');
 
 Role _$valueOf(String name) {
   switch (name) {
@@ -15,17 +16,24 @@ Role _$valueOf(String name) {
       return _$admin;
     case 'user':
       return _$user;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
-final BuiltSet<Role> _$values = BuiltSet<Role>(const <Role>[_$admin, _$user]);
+final BuiltSet<Role> _$values = BuiltSet<Role>(const <Role>[
+  _$admin,
+  _$user,
+  _$unknownDefaultOpenApi,
+]);
 
 class _$RoleMeta {
   const _$RoleMeta();
   Role get admin => _$admin;
   Role get user => _$user;
+  Role get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   Role valueOf(String name) => _$valueOf(name);
   BuiltSet<Role> get values => _$values;
 }
@@ -41,10 +49,12 @@ class _$RoleSerializer implements PrimitiveSerializer<Role> {
   static const Map<String, Object> _toWire = const <String, Object>{
     'admin': 'admin',
     'user': 'user',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'admin': 'admin',
     'user': 'user',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

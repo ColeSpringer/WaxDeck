@@ -101,8 +101,13 @@ test('a share link plays anonymously and dies on revocation', async ({
   expect(share.allowDownload).toBe(false);
 
   // The capability URL works with no credentials at all: a fresh
-  // request context, no cookies, no bearer.
-  const anon = await playwright.request.newContext({ baseURL });
+  // request context, no cookies, no bearer. The language is pinned
+  // because the page's chrome is negotiated and the copy asserted below
+  // is the English wording, which no runner's locale should decide.
+  const anon = await playwright.request.newContext({
+    baseURL,
+    extraHTTPHeaders: { 'Accept-Language': 'en' },
+  });
   try {
     const landing = await anon.get(share.url);
     expect(landing.status()).toBe(200);

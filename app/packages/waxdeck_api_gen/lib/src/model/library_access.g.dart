@@ -10,6 +10,8 @@ const LibraryAccessModeEnum _$libraryAccessModeEnum_all =
     const LibraryAccessModeEnum._('all');
 const LibraryAccessModeEnum _$libraryAccessModeEnum_granted =
     const LibraryAccessModeEnum._('granted');
+const LibraryAccessModeEnum _$libraryAccessModeEnum_unknownDefaultOpenApi =
+    const LibraryAccessModeEnum._('unknownDefaultOpenApi');
 
 LibraryAccessModeEnum _$libraryAccessModeEnumValueOf(String name) {
   switch (name) {
@@ -17,8 +19,10 @@ LibraryAccessModeEnum _$libraryAccessModeEnumValueOf(String name) {
       return _$libraryAccessModeEnum_all;
     case 'granted':
       return _$libraryAccessModeEnum_granted;
+    case 'unknownDefaultOpenApi':
+      return _$libraryAccessModeEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$libraryAccessModeEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -26,6 +30,7 @@ final BuiltSet<LibraryAccessModeEnum> _$libraryAccessModeEnumValues =
     BuiltSet<LibraryAccessModeEnum>(const <LibraryAccessModeEnum>[
       _$libraryAccessModeEnum_all,
       _$libraryAccessModeEnum_granted,
+      _$libraryAccessModeEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<LibraryAccessModeEnum> _$libraryAccessModeEnumSerializer =
@@ -36,10 +41,12 @@ class _$LibraryAccessModeEnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'all': 'all',
     'granted': 'granted',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'all': 'all',
     'granted': 'granted',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

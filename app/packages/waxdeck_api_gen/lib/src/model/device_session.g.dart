@@ -10,6 +10,8 @@ const DeviceSessionKindEnum _$deviceSessionKindEnum_web =
     const DeviceSessionKindEnum._('web');
 const DeviceSessionKindEnum _$deviceSessionKindEnum_device =
     const DeviceSessionKindEnum._('device');
+const DeviceSessionKindEnum _$deviceSessionKindEnum_unknownDefaultOpenApi =
+    const DeviceSessionKindEnum._('unknownDefaultOpenApi');
 
 DeviceSessionKindEnum _$deviceSessionKindEnumValueOf(String name) {
   switch (name) {
@@ -17,8 +19,10 @@ DeviceSessionKindEnum _$deviceSessionKindEnumValueOf(String name) {
       return _$deviceSessionKindEnum_web;
     case 'device':
       return _$deviceSessionKindEnum_device;
+    case 'unknownDefaultOpenApi':
+      return _$deviceSessionKindEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$deviceSessionKindEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -26,6 +30,7 @@ final BuiltSet<DeviceSessionKindEnum> _$deviceSessionKindEnumValues =
     BuiltSet<DeviceSessionKindEnum>(const <DeviceSessionKindEnum>[
       _$deviceSessionKindEnum_web,
       _$deviceSessionKindEnum_device,
+      _$deviceSessionKindEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<DeviceSessionKindEnum> _$deviceSessionKindEnumSerializer =
@@ -36,10 +41,12 @@ class _$DeviceSessionKindEnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'web': 'web',
     'device': 'device',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'web': 'web',
     'device': 'device',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

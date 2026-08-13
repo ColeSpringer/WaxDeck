@@ -258,6 +258,32 @@ func TestOidcWebFlow(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.Contains(string(body), "Sign-on failed") {
 		t.Fatalf("replayed state: status %d body %.80s", resp.StatusCode, body)
 	}
+	// The page declares its own encoding: the strict server answers
+	// text/html with no charset parameter, so a translated page's
+	// accents depend on this tag.
+	if !strings.Contains(string(body), `<meta charset="utf-8">`) {
+		t.Errorf("sign-on page carries no charset meta: %.120s", body)
+	}
+
+	// The same failure in Spanish. The English assertion above is the
+	// fallback pin: it runs with no Accept-Language at all.
+	req, reqErr := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/oidc/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	if reqErr != nil {
+		t.Fatal(reqErr)
+	}
+	req.Header.Set("Accept-Language", "es-MX,es;q=0.9")
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(body), "No se pudo iniciar sesión") {
+		t.Errorf("es sign-on page = %.200s", body)
+	}
+	if !strings.Contains(string(body), `<html lang="es">`) {
+		t.Errorf("es sign-on page carries no lang attribute: %.120s", body)
+	}
 
 	// A second login maps onto the same account, not a duplicate.
 	resp, err = client.Get(ts.URL + "/api/v1/auth/oidc/start?provider=dex")

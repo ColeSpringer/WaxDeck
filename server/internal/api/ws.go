@@ -81,10 +81,11 @@ type wsAckFrame struct {
 }
 
 type wsErrorFrame struct {
-	Type    string `json:"type"`
-	ID      string `json:"id,omitempty"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Type    string            `json:"type"`
+	ID      string            `json:"id,omitempty"`
+	Code    string            `json:"code"`
+	Message string            `json:"message"`
+	Params  map[string]string `json:"params,omitempty"`
 }
 
 type wsPongFrame struct {
@@ -271,7 +272,7 @@ func (s *Server) dispatchWS(ctx context.Context, link *connect.ClientLink, out c
 		}
 		snap, err := s.connect.HandleCommand(ctx, link, f.SessionID, f.Verb, args)
 		if err != nil {
-			enqueue(wsErrorFrame{Type: "error", ID: f.ID, Code: wsErrorCode(err), Message: err.Error()})
+			enqueue(wsErrorFrame{Type: "error", ID: f.ID, Code: wsErrorCode(err), Message: err.Error(), Params: refusalParams(err)})
 			return
 		}
 		ack := wsAckFrame{Type: "ack", ID: f.ID}
@@ -280,6 +281,9 @@ func (s *Server) dispatchWS(ctx context.Context, link *connect.ClientLink, out c
 		}
 		enqueue(ack)
 	case "cmd-result":
+		// Deliberately no params: a client endpoint's code is
+		// whitelisted before it reaches the wire, and an arbitrary map
+		// from one would need the same treatment designed for it.
 		ok := f.OK != nil && *f.OK
 		s.connect.HandleCommandResult(f.ID, ok, f.Code, f.Message)
 	case "session-report":
@@ -358,6 +362,21 @@ func wsErrorCode(err error) string {
 	default:
 		return "invalid-request"
 	}
+}
+
+// refusalParams is the machine detail behind a refusal, for the codes
+// that cover more than one cause. Nil for everything else, which the
+// frame's omitempty turns into an absent field, and nil for a code the
+// whitelist rejected, for the reason connectHTTP withholds it there.
+func refusalParams(err error) map[string]string {
+	var inv connect.InvalidError
+	if !errors.As(err, &inv) || len(inv.Params) == 0 {
+		return nil
+	}
+	if _, code := refusalStatus(inv.Code); code != inv.Code {
+		return nil
+	}
+	return inv.Params
 }
 
 func (s *Server) wsWrite(ctx context.Context, c *websocket.Conn, v any) error {

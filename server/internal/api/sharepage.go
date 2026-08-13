@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/pagetext"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -81,9 +82,15 @@ func shareHeaders(w http.ResponseWriter) {
 // ServeSharePage renders the landing page.
 func (s *Server) ServeSharePage(w http.ResponseWriter, r *http.Request) {
 	shareHeaders(w)
+	// The two HTML answers are the only share responses that vary by
+	// language; the stream and download routes carry bytes, and art is
+	// cached publicly. Negotiated from the request rather than the
+	// context: this page is not a strict-server handler.
+	w.Header().Set("Vary", "Accept-Language")
+	loc := pagetext.For(pagetext.Negotiate(r.Header.Get("Accept-Language")))
 	pub, _, ok := s.resolveShareRequest(r)
 	if !ok {
-		shareNotFound(w)
+		shareNotFound(w, loc)
 		return
 	}
 	base := "/s/" + url.PathEscape(r.PathValue("token"))
@@ -95,6 +102,8 @@ func (s *Server) ServeSharePage(w http.ResponseWriter, r *http.Request) {
 		StreamURL string
 	}
 	data := struct {
+		Lang        string
+		T           *pagetext.Strings
 		Title       string
 		Subtitle    string
 		ArtURL      string
@@ -105,6 +114,8 @@ func (s *Server) ServeSharePage(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt   string
 		Single      bool
 	}{
+		Lang:     loc.Lang,
+		T:        loc,
 		Title:    pub.Title,
 		Subtitle: pub.Subtitle,
 		// The page's one download link points at the first entry; a
@@ -124,7 +135,7 @@ func (s *Server) ServeSharePage(w http.ResponseWriter, r *http.Request) {
 		data.DownloadURL = base + "/download"
 	}
 	if !pub.Share.ExpiresAt.IsZero() {
-		data.ExpiresAt = pub.Share.ExpiresAt.UTC().Format("Jan 2, 2006")
+		data.ExpiresAt = loc.FormatDate(pub.Share.ExpiresAt.UTC())
 	}
 	for i, it := range pub.Items {
 		streamURL := base + "/stream?i=" + strconv.Itoa(i)
@@ -160,12 +171,14 @@ func formatShareDuration(ms int64) string {
 	return fmt.Sprintf("%d:%02d", total/60, total%60)
 }
 
-func shareNotFound(w http.ResponseWriter) {
+func shareNotFound(w http.ResponseWriter, loc *pagetext.Strings) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
-	fmt.Fprint(w, `<!doctype html><meta charset="utf-8"><title>Not found</title>`+
+	// Neither value is user-supplied, so the concatenation stays; both
+	// come from this repo's own tables.
+	fmt.Fprintf(w, `<!doctype html><html lang="%s"><meta charset="utf-8"><title>%s</title>`+
 		`<p style="font-family:system-ui;margin:3em auto;max-width:30em;text-align:center">`+
-		`This link does not exist, has expired, or was revoked.</p>`)
+		`%s</p>`, loc.Lang, loc.ShareNotFoundTitle, loc.ShareNotFoundBody)
 }
 
 // ServeShareStream streams one member of a share.
@@ -330,7 +343,7 @@ func (s *Server) serveShareFile(w http.ResponseWriter, r *http.Request, apiItemP
 // OpenGraph and Twitter tags for link previews, one audio element per
 // entry (preload=none keeps a long playlist cheap).
 var sharePageTmpl = template.Must(template.New("share").Parse(`<!doctype html>
-<html lang="en">
+<html lang="{{.Lang}}">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
@@ -372,8 +385,8 @@ var sharePageTmpl = template.Must(template.New("share").Parse(`<!doctype html>
     </li>
     {{end}}
   </ol>
-  {{if .Download}}<p style="text-align:center"><a class="dl" href="{{.DownloadURL}}">Download</a></p>{{end}}
-  <p class="foot">Shared with WaxDeck{{if .ExpiresAt}} &middot; link expires {{.ExpiresAt}}{{end}}</p>
+  {{if .Download}}<p style="text-align:center"><a class="dl" href="{{.DownloadURL}}">{{.T.ShareDownload}}</a></p>{{end}}
+  <p class="foot">{{.T.ShareSharedWith}}{{if .ExpiresAt}} &middot; {{.T.ShareExpiresPrefix}} {{.ExpiresAt}}{{end}}</p>
 </main>
 </html>
 `))

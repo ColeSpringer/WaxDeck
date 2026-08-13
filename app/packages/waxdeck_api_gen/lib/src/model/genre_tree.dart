@@ -133,6 +133,9 @@ class GenreTreeSource_Enum extends EnumClass {
   /// `default` while the instance runs on the tree WaxDeck ships, `custom` once one has been stored here. 
   @BuiltValueEnumConst(wireName: r'custom')
   static const GenreTreeSource_Enum custom = _$genreTreeSourceEnum_custom;
+  /// `default` while the instance runs on the tree WaxDeck ships, `custom` once one has been stored here. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const GenreTreeSource_Enum unknownDefaultOpenApi = _$genreTreeSourceEnum_unknownDefaultOpenApi;
 
   static Serializer<GenreTreeSource_Enum> get serializer => _$genreTreeSourceEnumSerializer;
 

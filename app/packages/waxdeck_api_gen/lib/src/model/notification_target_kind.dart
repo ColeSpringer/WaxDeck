@@ -32,6 +32,9 @@ class NotificationTargetKind extends EnumClass {
   /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
   @BuiltValueEnumConst(wireName: r'unifiedpush')
   static const NotificationTargetKind unifiedpush = _$unifiedpush;
+  /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const NotificationTargetKind unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 
   static Serializer<NotificationTargetKind> get serializer => _$notificationTargetKindSerializer;
 

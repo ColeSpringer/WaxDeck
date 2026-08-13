@@ -17,6 +17,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/connect"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
+	"github.com/colespringer/waxdeck/server/internal/pagetext"
 	"github.com/colespringer/waxdeck/server/internal/service"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
@@ -1083,6 +1084,10 @@ const (
 	ctxPrincipal ctxKey = iota
 	ctxRemoteIP
 	ctxClient
+	// The raw header, unparsed: only the handful of handlers that
+	// render HTML negotiate it, and they are strict-server methods with
+	// no *http.Request to read it from themselves.
+	ctxAcceptLanguage
 )
 
 // publicPaths are reachable without a session (per the spec's per-operation
@@ -1103,6 +1108,17 @@ var publicPaths = map[string]bool{
 	"/api/v1/scrobble/lastfm/callback": true,
 }
 
+// pageVaryPaths answer HTML whose words follow Accept-Language. Set
+// here because their generated response types expose no header hook,
+// and needed because not every answer is single-use: a server with no
+// OIDC configured renders the same 200 for the same bare URL, with no
+// Cache-Control to stop a shared cache handing it to the next reader in
+// the wrong language. The share page sets its own.
+var pageVaryPaths = map[string]bool{
+	"/api/v1/auth/oidc/callback":       true,
+	"/api/v1/scrobble/lastfm/callback": true,
+}
+
 // AuthMiddleware resolves the session (cookie or bearer) into the
 // request context, rejects unauthenticated calls to protected
 // endpoints, and demands CSRF proof for cookie-authenticated
@@ -1112,6 +1128,10 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), ctxRemoteIP, s.trusted.clientIP(r))
 		ctx = context.WithValue(ctx, ctxClient, clientHint(r))
+		ctx = context.WithValue(ctx, ctxAcceptLanguage, r.Header.Get("Accept-Language"))
+		if pageVaryPaths[r.URL.Path] {
+			w.Header().Set("Vary", "Accept-Language")
+		}
 
 		// Worker endpoints take the worker token and nothing else: they
 		// ignore library visibility, so a user session must never open
@@ -1222,6 +1242,15 @@ func remoteIPFromContext(ctx context.Context) string {
 func clientFromContext(ctx context.Context) string {
 	c, _ := ctx.Value(ctxClient).(string)
 	return c
+}
+
+// pageStringsFromContext is the words for a rendered HTML page, in the
+// reader's language where the server has them. Only the page handlers
+// call it: the JSON API answers developer English whatever the browser
+// asked for, which is what keeps the backend out of translation.
+func pageStringsFromContext(ctx context.Context) *pagetext.Strings {
+	header, _ := ctx.Value(ctxAcceptLanguage).(string)
+	return pagetext.For(pagetext.Negotiate(header))
 }
 
 // requireUserCtx resolves the principal into the service-layer user

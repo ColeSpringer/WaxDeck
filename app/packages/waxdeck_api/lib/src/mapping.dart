@@ -133,12 +133,17 @@ Prefs prefsFromGen(gen.Prefs prefs) {
     radioScrobbleOptOut: prefs.radioScrobbleOptOut,
     identifyOptOut: prefs.identifyOptOut,
     browseShowUnknown: prefs.browseShowUnknown,
-    // Carried in wire form, unrecognized values included: see
-    // Prefs.browseSorts.
+    // Carried in wire form: see Prefs.browseSorts.
     browseSorts: sorts == null
         ? null
         : <String, String>{
-            for (final entry in sorts.entries) entry.key: entry.value.name,
+            for (final entry in sorts.entries)
+              // A sort this build does not know arrives as the
+              // generator's sentinel, whose name would go back out as a
+              // wire value the server rejects, failing the whole save.
+              // Dropped instead; that facet opens in the default.
+              if (entry.value != gen.PrefsBrowseSortsEnum.unknownDefaultOpenApi)
+                entry.key: entry.value.name,
           },
     autoplay: prefs.autoplay,
   );
@@ -254,12 +259,9 @@ ItemDetail itemDetailFromGen(gen.Item item, {String baseUrl = ''}) {
 /// which is a shape callers already handle because the endpoint omits
 /// what it cannot resolve.
 ///
-/// It does not, today, protect against a server that adds a kind. The
-/// generated enum carries no `fallback` member, so `valueOf` throws
-/// while deserializing and the whole page fails before this runs - true
-/// of every generated enum in this client, not of this one. Kept as the
-/// shape the guard should have, and as the place the fix lands if the
-/// generator ever emits a sentinel.
+/// A kind a newer server added deserializes to the generator's sentinel
+/// rather than throwing, so it reaches this switch and takes the same
+/// drop: one card missing from a shelf instead of a failed page.
 EntityCardKind? entityCardKindFromGen(gen.EntityCardKindEnum kind) =>
     switch (kind) {
       gen.EntityCardKindEnum.album => EntityCardKind.album,
@@ -268,6 +270,7 @@ EntityCardKind? entityCardKindFromGen(gen.EntityCardKindEnum kind) =>
       gen.EntityCardKindEnum.playlist => EntityCardKind.playlist,
       gen.EntityCardKindEnum.podcast => EntityCardKind.podcast,
       gen.EntityCardKindEnum.book => EntityCardKind.book,
+      gen.EntityCardKindEnum.unknownDefaultOpenApi => null,
       _ => null,
     };
 
@@ -1317,6 +1320,9 @@ GenreTree genreTreeFromGen(gen.GenreTree t) => GenreTree(
   genres: t.genres.map(genreNodeFromGen).toList(growable: false),
 );
 
+/// A mode this build predates arrives as the generator's sentinel name:
+/// fine to show, never to send back, since the server rejects its wire
+/// value. Writes pick from a fixed option list, so nothing does.
 String libraryMatchingModeFromGen(gen.LibraryMatching m) => m.mode.name;
 
 gen.LibraryMatching libraryMatchingModeToGen(String mode) {
@@ -1716,6 +1722,9 @@ EnrichmentStatus enrichmentStatusFromGen(gen.EnrichmentStatus status) {
   );
 }
 
+/// A mode this build predates lands in [LibraryAccess.mode] as the
+/// generator's sentinel name: fine to show, never to send back. The
+/// screens that write access build the mode from literals, so nothing does.
 LibraryAccess libraryAccessFromGen(gen.LibraryAccess access) {
   return LibraryAccess(
     mode: access.mode.name,

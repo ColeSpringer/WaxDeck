@@ -43,18 +43,22 @@ func (r *ConnectResolver) Entries(ctx context.Context, userID string, pids []str
 // instead" rather than rendering a dead end: client endpoints handle
 // books fully, and this is the only thing wrong.
 //
-// The wording is load-bearing past this package. `feature-unavailable`
-// is the umbrella code for everything a target cannot play - a windowed
-// track sent to a device answers it too - so the code alone cannot say
-// which refusal this is, and the client's device picker keys on the
-// phrase "multi-part audiobook" to turn this one into that offer (see
-// app/app/lib/src/connect/device_picker.dart). Rewording it without
-// moving that is how the offer silently becomes a dead end again, so
-// TestMultiPartRefusalWording pins the phrase.
+// `feature-unavailable` is the umbrella code for everything a target
+// cannot play - a windowed track sent to a device answers it too - so
+// the params are what say which refusal this is, and a controller keys
+// on `feature` to turn this one into that offer.
+//
+// The phrase stays load-bearing anyway: it is what a client that
+// predates params reads, and the app's device picker still falls back
+// to matching it (app/app/lib/src/connect/device_picker.dart).
+// TestMultiPartRefusalWording pins both channels, so rewording the
+// message without moving that fallback fails there rather than turning
+// the offer back into a dead end in the field.
 func multiPartRefusal(pid string) connect.InvalidError {
 	return connect.InvalidError{
-		Msg:  "multi-part audiobooks cannot play on this endpoint yet: " + pid,
-		Code: "feature-unavailable",
+		Msg:    "multi-part audiobooks cannot play on this endpoint yet: " + pid,
+		Code:   "feature-unavailable",
+		Params: map[string]string{"feature": "multi-part-audiobook", "pid": pid},
 	}
 }
 
@@ -152,8 +156,9 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 			}
 			if res.HasSpan {
 				return nil, connect.InvalidError{
-					Msg:  "this track is a window into a larger file and needs the streaming engine to cast: " + e.PID,
-					Code: "feature-unavailable",
+					Msg:    "this track is a window into a larger file and needs the streaming engine to cast: " + e.PID,
+					Code:   "feature-unavailable",
+					Params: map[string]string{"feature": "windowed-track", "pid": e.PID},
 				}
 			}
 			token, _ := r.Media.MintFor(userID, e.PID, ttl)
@@ -348,34 +353,44 @@ func endedSessionJSON(e connect.EndedSession) PlaybackSessionHistoryEntry {
 	return out
 }
 
-// connectError maps connect errors onto typed responses; the bool is
-// false for errors the caller should surface as 500.
-func connectHTTP(err error) (status int, code, msg string, ok bool) {
+// connectHTTP maps connect errors onto typed responses; the bool is
+// false for errors the caller should surface as 500. It answers the
+// whole Error rather than its parts so a refusal's params ride out
+// with it instead of needing a return value of their own.
+func connectHTTP(err error) (status int, body Error, ok bool) {
 	var inv connect.InvalidError
 	switch {
 	case errors.Is(err, connect.ErrNotFound):
-		return http.StatusNotFound, "not-found", "no such endpoint or session is visible to you", true
+		return http.StatusNotFound, errObj("not-found", "no such endpoint or session is visible to you"), true
 	case errors.Is(err, connect.ErrEndpointOffline):
-		return http.StatusConflict, "endpoint-offline", err.Error(), true
+		return http.StatusConflict, errObj("endpoint-offline", err.Error()), true
 	case errors.Is(err, connect.ErrForbidden):
-		return http.StatusForbidden, "forbidden", err.Error(), true
+		return http.StatusForbidden, errObj("forbidden", err.Error()), true
 	case errors.Is(err, connect.ErrTimeout):
 		// `timeout`, not `endpoint-offline`: the endpoint is connected
 		// and silent, and telling a controller to refresh the endpoint
 		// list would send it looking for a departure that did not
 		// happen. The socket has always said `timeout` here.
-		return http.StatusConflict, "timeout", "the endpoint did not answer in time", true
+		return http.StatusConflict, errObj("timeout", "the endpoint did not answer in time"), true
 	case errors.As(err, &inv):
 		status, code := refusalStatus(inv.Code)
-		return status, code, inv.Msg, true
+		body := errObj(code, inv.Msg)
+		// Only where the code survived the whitelist: params keys are
+		// documented per code, so a set minted for a rejected one would
+		// arrive describing the `invalid-request` it degraded to, and
+		// the whitelist is what it would be walking around.
+		if len(inv.Params) > 0 && code == inv.Code {
+			body.Params = &inv.Params
+		}
+		return status, body, true
 	}
 	if service.KindOf(err) == service.KindNotFound {
-		return http.StatusNotFound, "not-found", err.Error(), true
+		return http.StatusNotFound, errObj("not-found", err.Error()), true
 	}
 	if service.KindOf(err) == service.KindConflict {
-		return http.StatusConflict, "conflict", err.Error(), true
+		return http.StatusConflict, errObj("conflict", err.Error()), true
 	}
-	return 0, "", "", false
+	return 0, Error{}, false
 }
 
 func (s *Server) ListPlayerEndpoints(ctx context.Context, _ ListPlayerEndpointsRequestObject) (ListPlayerEndpointsResponseObject, error) {
@@ -452,18 +467,18 @@ func (s *Server) CreatePlaybackSession(ctx context.Context, req CreatePlaybackSe
 	}
 	snap, err := s.connect.CreateSession(ctx, p.User.ID, p.User.Username, body.EndpointId, body.ItemPids, index, positionMS, play)
 	if err != nil {
-		if status, code, msg, ok := connectHTTP(err); ok {
+		if status, body, ok := connectHTTP(err); ok {
 			switch status {
 			case http.StatusNotFound:
-				return CreatePlaybackSession404JSONResponse{NotFoundJSONResponse(errObj(code, msg))}, nil
+				return CreatePlaybackSession404JSONResponse{NotFoundJSONResponse(body)}, nil
 			case http.StatusConflict:
-				return CreatePlaybackSession409JSONResponse{PlaybackConflictJSONResponse(errObj(code, msg))}, nil
+				return CreatePlaybackSession409JSONResponse{PlaybackConflictJSONResponse(body)}, nil
 			case http.StatusBadRequest:
-				return CreatePlaybackSession400JSONResponse{InvalidRequestJSONResponse(errObj(code, msg))}, nil
+				return CreatePlaybackSession400JSONResponse{InvalidRequestJSONResponse(body)}, nil
 			case http.StatusForbidden:
-				return CreatePlaybackSession403JSONResponse{ForbiddenJSONResponse(errObj(code, msg))}, nil
+				return CreatePlaybackSession403JSONResponse{ForbiddenJSONResponse(body)}, nil
 			case http.StatusNotImplemented:
-				return CreatePlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(errObj(code, msg))}, nil
+				return CreatePlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(body)}, nil
 			}
 		}
 		return nil, err
@@ -510,22 +525,22 @@ func (s *Server) TransferPlaybackSession(ctx context.Context, req TransferPlayba
 	}
 	snap, err := s.connect.Transfer(ctx, p.User.ID, req.SessionId, req.Body.EndpointId)
 	if err != nil {
-		if status, code, msg, ok := connectHTTP(err); ok {
+		if status, body, ok := connectHTTP(err); ok {
 			switch status {
 			case http.StatusNotFound:
-				return TransferPlaybackSession404JSONResponse{NotFoundJSONResponse(errObj(code, msg))}, nil
+				return TransferPlaybackSession404JSONResponse{NotFoundJSONResponse(body)}, nil
 			case http.StatusConflict:
-				return TransferPlaybackSession409JSONResponse{PlaybackConflictJSONResponse(errObj(code, msg))}, nil
+				return TransferPlaybackSession409JSONResponse{PlaybackConflictJSONResponse(body)}, nil
 			case http.StatusBadRequest:
-				return TransferPlaybackSession400JSONResponse{InvalidRequestJSONResponse(errObj(code, msg))}, nil
+				return TransferPlaybackSession400JSONResponse{InvalidRequestJSONResponse(body)}, nil
 			case http.StatusForbidden:
 				// A 403, not a 404 wearing a `forbidden` code: both
 				// refusals here are about the target endpoint, and the
 				// session the caller named is one they can see and
 				// drive.
-				return TransferPlaybackSession403JSONResponse{ForbiddenJSONResponse(errObj(code, msg))}, nil
+				return TransferPlaybackSession403JSONResponse{ForbiddenJSONResponse(body)}, nil
 			case http.StatusNotImplemented:
-				return TransferPlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(errObj(code, msg))}, nil
+				return TransferPlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(body)}, nil
 			}
 		}
 		return nil, err

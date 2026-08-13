@@ -58,15 +58,20 @@ here waits on upstream.
   enrichment field nothing writes yet - the same provider gap that keeps
   artist artwork from existing - so it stays sequenced behind that
   rather than behind a query.
-- `[in-repo]` **A new enum kind breaks the client rather than being
-  dropped.** The generated Dart enums carry no `fallback` member, so
-  `valueOf` throws while deserializing and one unknown value fails the
-  whole page - `resolveEntities` would fail the pinned shelf entirely
-  rather than dropping one card. Every enum in the client shares this;
-  the fix is a spec-wide sentinel (`unknown_default_open_api`) plus the
-  generator flag that emits it, which is one decision across the whole
-  contract rather than a per-endpoint patch. `entityCardKindFromGen`
-  already has the drop-shaped guard for the day it lands.
+- `[in-repo]` **A browse sort this client predates is erased by the
+  next preference write.** `Prefs.browseSorts` values are a closed enum
+  in the spec, so an order only a newer server knows deserializes to
+  the generated sentinel. `prefsFromGen` drops that entry rather than
+  let the sentinel's wire value fail every save, and because the PUT
+  replaces the whole document, the next write of any preference -
+  theme, autoplay, crossfade - takes that dimension's stored order off
+  the server too. No client-side fix reaches it: the original string is
+  gone before the mapping layer sees it. The fix is the contract, and
+  it is small - make the values free strings, the way `Error.code` and
+  `Share.targetKind` already are for the same reason, which removes the
+  sentinel from this field and makes the round-trip preservation
+  `Prefs.browseSorts` documents actually true. Worth taking with the
+  next change to the sort vocabulary rather than on its own.
 - `[in-repo]` **A place cannot be marked offline.** Audiobook bookmarks
   are a live read against the server: the sheet fetches on
   open and marking one needs a round trip. Everything else a listener
@@ -213,11 +218,20 @@ here waits on upstream.
   the session manager. When it lands, delete the client's special
   case with it: `feature-unavailable` is the umbrella code for
   everything a target cannot play (a windowed track answers it too),
-  so the picker tells this refusal apart by the phrase
-  "multi-part audiobook" in the server's message - `multiPartRefusal` in
-  `server/internal/api/player.go`,
-  `_explain` in `app/app/lib/src/connect/device_picker.dart`, and
-  `TestMultiPartRefusalWording` holding the two together.
+  so the refusal carries `params` (`feature: multi-part-audiobook`
+  plus the `pid`) as the machine key a picker reads -
+  `multiPartRefusal` in `server/internal/api/player.go`, `_explain`
+  in `app/app/lib/src/connect/device_picker.dart` (still matching the
+  message's phrase, which stays as the fallback for a server older
+  than params), and `TestMultiPartRefusalWording` holding both
+  channels together. A `cmd-result` from a client endpoint carries no
+  params by decision: its codes are whitelisted before they reach the
+  wire and an arbitrary map would need the same treatment designed
+  for it. The other refusals under `feature-unavailable` - queue
+  timelines, sonic paths, the file tools, the share surface, every
+  service `KindFeature` - carry no params either; the spec calls them
+  best-effort per refusal for that reason, and each gains a `feature`
+  value when something needs to tell it apart.
 - `[in-repo]` **Cast preflight verifies server-side only.** The
   reachability verdict is the server fetching itself through each
   candidate base; true device-side verification (loading a probe URL
@@ -307,15 +321,27 @@ here waits on upstream.
   keeps the backend out of the translation business permanently. Two
   traps to take deliberately. Where one code covers many causes, a
   generic per-code sentence loses the specifics: `feature-unavailable`
-  is the umbrella code, and the device picker already tells the
-  multi-part refusal apart by phrase-matching the message, the
-  coupling `TestMultiPartRefusalWording` holds together - those cases
-  want structured params on the `Error` schema, a spec change, not
-  smarter parsing, and that picker is the first customer. And
-  `waxdeck_api` mints three English sentences of its own for transport
-  failures (timeout, network error, empty body) in a package that will
-  never hold an ARB, so those become machine kinds on
-  `WaxDeckApiException` for the app to word.
+  is the umbrella code, and the device picker tells the multi-part
+  refusal apart by phrase-matching the message. The `Error` schema now
+  carries optional `params` for exactly that, and the refusal fills it
+  (`feature`, `pid`), so the picker's own switch to keying on it - and
+  demoting the phrase match to the old-server fallback - is the
+  remaining half. The three
+  English sentences `waxdeck_api` mints for transport failures now carry
+  codes of their own (`transport`, `transport-timeout`,
+  `transport-empty`, documented on `WaxDeckApiException`), so the client
+  table words them the same way it words the server's - the package that
+  will never hold an ARB no longer has to. Two things the table has to
+  take with it. The app mints `internal` for four of its own local
+  failures (`connect_bus.dart` :53 and :126, `connect_controller.dart`
+  :344, `queue_gateway.dart` :272), so a sentence keyed on that code
+  alone would tell a listener whose seek failed on their own device to
+  report a server bug; those want client codes of their own, the way
+  the transport mints got them. And the socket's error frames now carry
+  `params` server-side while `connect_bus.dart`'s error arm reads only
+  `code` and `message`, so the same refusal keeps its machine key over
+  REST and loses it over the socket - the bus adopts it alongside the
+  device picker.
 - `[in-repo]` **Two server-authored label surfaces flip to client
   tokens.** Health rule labels (`server/internal/service/health.go`
   maps `missing-art` to "Missing cover art"; the health screen draws
@@ -327,20 +353,6 @@ here waits on upstream.
   its own label and the server string stays as the fallback for a
   token the client predates. No spec change; the fields remain, the
   client stops preferring them.
-- `[in-repo]` **The server-rendered pages are English by
-  construction.** Three surfaces never load the SPA, so no client
-  table can reach them: the share landing page
-  (`server/internal/api/sharepage.go`, `lang="en"` hardcoded, and its
-  audience is strangers on phones - the readers least likely to share
-  the instance owner's language), the OIDC sign-on pages
-  (`server/internal/api/oidc.go`), and the Last.fm callback page
-  (`server/internal/api/integrations.go`). If these localize it is
-  server-side and small - a dozen strings each behind Accept-Language
-  with an English fallback, the share page first because of who reads
-  it, and its expiry stamp is date formatting, the same locale
-  question in a different coat. English is an acceptable answer for
-  all three meanwhile; the entry exists so that is chosen, not
-  discovered.
 - `[in-repo]` **Outbound notification prose leaves the app in
   English.** Titles and bodies are composed in Go ("Backup failed";
   "Backup completed" with its size and duration,

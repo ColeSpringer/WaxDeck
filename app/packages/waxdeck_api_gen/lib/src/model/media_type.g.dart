@@ -9,6 +9,9 @@ part of 'media_type.dart';
 const MediaType _$music = const MediaType._('music');
 const MediaType _$podcast = const MediaType._('podcast');
 const MediaType _$audiobook = const MediaType._('audiobook');
+const MediaType _$unknownDefaultOpenApi = const MediaType._(
+  'unknownDefaultOpenApi',
+);
 
 MediaType _$valueOf(String name) {
   switch (name) {
@@ -18,8 +21,10 @@ MediaType _$valueOf(String name) {
       return _$podcast;
     case 'audiobook':
       return _$audiobook;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
@@ -27,6 +32,7 @@ final BuiltSet<MediaType> _$values = BuiltSet<MediaType>(const <MediaType>[
   _$music,
   _$podcast,
   _$audiobook,
+  _$unknownDefaultOpenApi,
 ]);
 
 class _$MediaTypeMeta {
@@ -34,6 +40,7 @@ class _$MediaTypeMeta {
   MediaType get music => _$music;
   MediaType get podcast => _$podcast;
   MediaType get audiobook => _$audiobook;
+  MediaType get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   MediaType valueOf(String name) => _$valueOf(name);
   BuiltSet<MediaType> get values => _$values;
 }
@@ -50,11 +57,13 @@ class _$MediaTypeSerializer implements PrimitiveSerializer<MediaType> {
     'music': 'music',
     'podcast': 'podcast',
     'audiobook': 'audiobook',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'music': 'music',
     'podcast': 'podcast',
     'audiobook': 'audiobook',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

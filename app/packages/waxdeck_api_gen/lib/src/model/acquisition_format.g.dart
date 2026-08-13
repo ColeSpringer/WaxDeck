@@ -11,6 +11,9 @@ const AcquisitionFormat _$opus = const AcquisitionFormat._('opus');
 const AcquisitionFormat _$mp3 = const AcquisitionFormat._('mp3');
 const AcquisitionFormat _$m4a = const AcquisitionFormat._('m4a');
 const AcquisitionFormat _$flac = const AcquisitionFormat._('flac');
+const AcquisitionFormat _$unknownDefaultOpenApi = const AcquisitionFormat._(
+  'unknownDefaultOpenApi',
+);
 
 AcquisitionFormat _$valueOf(String name) {
   switch (name) {
@@ -24,13 +27,22 @@ AcquisitionFormat _$valueOf(String name) {
       return _$m4a;
     case 'flac':
       return _$flac;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
 final BuiltSet<AcquisitionFormat> _$values = BuiltSet<AcquisitionFormat>(
-  const <AcquisitionFormat>[_$best, _$opus, _$mp3, _$m4a, _$flac],
+  const <AcquisitionFormat>[
+    _$best,
+    _$opus,
+    _$mp3,
+    _$m4a,
+    _$flac,
+    _$unknownDefaultOpenApi,
+  ],
 );
 
 class _$AcquisitionFormatMeta {
@@ -40,6 +52,7 @@ class _$AcquisitionFormatMeta {
   AcquisitionFormat get mp3 => _$mp3;
   AcquisitionFormat get m4a => _$m4a;
   AcquisitionFormat get flac => _$flac;
+  AcquisitionFormat get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   AcquisitionFormat valueOf(String name) => _$valueOf(name);
   BuiltSet<AcquisitionFormat> get values => _$values;
 }
@@ -61,6 +74,7 @@ class _$AcquisitionFormatSerializer
     'mp3': 'mp3',
     'm4a': 'm4a',
     'flac': 'flac',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'best': 'best',
@@ -68,6 +82,7 @@ class _$AcquisitionFormatSerializer
     'mp3': 'mp3',
     'm4a': 'm4a',
     'flac': 'flac',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

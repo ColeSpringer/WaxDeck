@@ -16,6 +16,8 @@ const ListeningStatsRangeEnum _$listeningStatsRangeEnum_n365d =
     const ListeningStatsRangeEnum._('n365d');
 const ListeningStatsRangeEnum _$listeningStatsRangeEnum_all =
     const ListeningStatsRangeEnum._('all');
+const ListeningStatsRangeEnum _$listeningStatsRangeEnum_unknownDefaultOpenApi =
+    const ListeningStatsRangeEnum._('unknownDefaultOpenApi');
 
 ListeningStatsRangeEnum _$listeningStatsRangeEnumValueOf(String name) {
   switch (name) {
@@ -29,8 +31,10 @@ ListeningStatsRangeEnum _$listeningStatsRangeEnumValueOf(String name) {
       return _$listeningStatsRangeEnum_n365d;
     case 'all':
       return _$listeningStatsRangeEnum_all;
+    case 'unknownDefaultOpenApi':
+      return _$listeningStatsRangeEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$listeningStatsRangeEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -41,6 +45,7 @@ final BuiltSet<ListeningStatsRangeEnum> _$listeningStatsRangeEnumValues =
       _$listeningStatsRangeEnum_n90d,
       _$listeningStatsRangeEnum_n365d,
       _$listeningStatsRangeEnum_all,
+      _$listeningStatsRangeEnum_unknownDefaultOpenApi,
     ]);
 
 const ListeningStatsBucketEnum _$listeningStatsBucketEnum_day =
@@ -49,6 +54,9 @@ const ListeningStatsBucketEnum _$listeningStatsBucketEnum_week =
     const ListeningStatsBucketEnum._('week');
 const ListeningStatsBucketEnum _$listeningStatsBucketEnum_month =
     const ListeningStatsBucketEnum._('month');
+const ListeningStatsBucketEnum
+_$listeningStatsBucketEnum_unknownDefaultOpenApi =
+    const ListeningStatsBucketEnum._('unknownDefaultOpenApi');
 
 ListeningStatsBucketEnum _$listeningStatsBucketEnumValueOf(String name) {
   switch (name) {
@@ -58,8 +66,10 @@ ListeningStatsBucketEnum _$listeningStatsBucketEnumValueOf(String name) {
       return _$listeningStatsBucketEnum_week;
     case 'month':
       return _$listeningStatsBucketEnum_month;
+    case 'unknownDefaultOpenApi':
+      return _$listeningStatsBucketEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$listeningStatsBucketEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -68,6 +78,7 @@ final BuiltSet<ListeningStatsBucketEnum> _$listeningStatsBucketEnumValues =
       _$listeningStatsBucketEnum_day,
       _$listeningStatsBucketEnum_week,
       _$listeningStatsBucketEnum_month,
+      _$listeningStatsBucketEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<ListeningStatsRangeEnum> _$listeningStatsRangeEnumSerializer =
@@ -83,6 +94,7 @@ class _$ListeningStatsRangeEnumSerializer
     'n90d': '90d',
     'n365d': '365d',
     'all': 'all',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     '7d': 'n7d',
@@ -90,6 +102,7 @@ class _$ListeningStatsRangeEnumSerializer
     '90d': 'n90d',
     '365d': 'n365d',
     'all': 'all',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override
@@ -120,11 +133,13 @@ class _$ListeningStatsBucketEnumSerializer
     'day': 'day',
     'week': 'week',
     'month': 'month',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'day': 'day',
     'week': 'week',
     'month': 'month',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

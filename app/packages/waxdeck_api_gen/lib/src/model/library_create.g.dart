@@ -12,6 +12,8 @@ const LibraryCreateMediaEnum _$libraryCreateMediaEnum_audiobook =
     const LibraryCreateMediaEnum._('audiobook');
 const LibraryCreateMediaEnum _$libraryCreateMediaEnum_mixed =
     const LibraryCreateMediaEnum._('mixed');
+const LibraryCreateMediaEnum _$libraryCreateMediaEnum_unknownDefaultOpenApi =
+    const LibraryCreateMediaEnum._('unknownDefaultOpenApi');
 
 LibraryCreateMediaEnum _$libraryCreateMediaEnumValueOf(String name) {
   switch (name) {
@@ -21,8 +23,10 @@ LibraryCreateMediaEnum _$libraryCreateMediaEnumValueOf(String name) {
       return _$libraryCreateMediaEnum_audiobook;
     case 'mixed':
       return _$libraryCreateMediaEnum_mixed;
+    case 'unknownDefaultOpenApi':
+      return _$libraryCreateMediaEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$libraryCreateMediaEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -31,6 +35,7 @@ final BuiltSet<LibraryCreateMediaEnum> _$libraryCreateMediaEnumValues =
       _$libraryCreateMediaEnum_music,
       _$libraryCreateMediaEnum_audiobook,
       _$libraryCreateMediaEnum_mixed,
+      _$libraryCreateMediaEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<LibraryCreateMediaEnum> _$libraryCreateMediaEnumSerializer =
@@ -42,11 +47,13 @@ class _$LibraryCreateMediaEnumSerializer
     'music': 'music',
     'audiobook': 'audiobook',
     'mixed': 'mixed',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'music': 'music',
     'audiobook': 'audiobook',
     'mixed': 'mixed',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

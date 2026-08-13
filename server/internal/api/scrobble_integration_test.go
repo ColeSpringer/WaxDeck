@@ -352,6 +352,35 @@ func TestLastfmConnectSurface(t *testing.T) {
 	if !strings.Contains(string(body), "Last.fm") {
 		t.Fatalf("callback page = %s", body)
 	}
+	if !strings.Contains(string(body), `<html lang="en">`) ||
+		!strings.Contains(string(body), `<meta charset="utf-8">`) {
+		t.Errorf("callback page declares no language or encoding: %s", body)
+	}
+
+	// The same page for a Spanish reader. This callback carries no
+	// session, so the header is the only thing that can say.
+	cbReq, err := http.NewRequest(http.MethodGet, h.ts.URL+"/api/v1/scrobble/lastfm/callback?state=bogus&token=tok", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cbReq.Header.Set("Accept-Language", "es")
+	esResp, err := http.DefaultClient.Do(cbReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	esBody, _ := io.ReadAll(esResp.Body)
+	esResp.Body.Close()
+	if esResp.StatusCode != 400 {
+		t.Fatalf("es bogus-state callback status = %d, want 400", esResp.StatusCode)
+	}
+	if !strings.Contains(string(esBody), "Error de conexión con Last.fm") ||
+		!strings.Contains(string(esBody), `<html lang="es">`) {
+		t.Errorf("es callback page = %s", esBody)
+	}
+	// Carried by the middleware, the page having no header hook.
+	if v := esResp.Header.Get("Vary"); !strings.Contains(v, "Accept-Language") {
+		t.Errorf("Vary = %q, want it to name Accept-Language", v)
+	}
 
 	// Disconnecting a never-connected slot is a 404.
 	resp = h.deleteReq(t, "/api/v1/users/me/scrobblers/lastfm")

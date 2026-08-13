@@ -26,6 +26,9 @@ class AcquisitionFormat extends EnumClass {
   /// Preferred delivered audio format for a URL acquisition. \"best\", the default, copies the source's highest-quality audio with no re-encode (Opus, in practice, for YouTube). The others transcode to that container for device compatibility, at some quality cost from a lossy source (FLAC is a lossless container of that same lossy audio, not a quality gain). 
   @BuiltValueEnumConst(wireName: r'flac')
   static const AcquisitionFormat flac = _$flac;
+  /// Preferred delivered audio format for a URL acquisition. \"best\", the default, copies the source's highest-quality audio with no re-encode (Opus, in practice, for YouTube). The others transcode to that container for device compatibility, at some quality cost from a lossy source (FLAC is a lossless container of that same lossy audio, not a quality gain). 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const AcquisitionFormat unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 
   static Serializer<AcquisitionFormat> get serializer => _$acquisitionFormatSerializer;
 

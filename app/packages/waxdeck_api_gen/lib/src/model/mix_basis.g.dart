@@ -8,6 +8,9 @@ part of 'mix_basis.dart';
 
 const MixBasis _$sonic = const MixBasis._('sonic');
 const MixBasis _$metadata = const MixBasis._('metadata');
+const MixBasis _$unknownDefaultOpenApi = const MixBasis._(
+  'unknownDefaultOpenApi',
+);
 
 MixBasis _$valueOf(String name) {
   switch (name) {
@@ -15,20 +18,24 @@ MixBasis _$valueOf(String name) {
       return _$sonic;
     case 'metadata':
       return _$metadata;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
 final BuiltSet<MixBasis> _$values = BuiltSet<MixBasis>(const <MixBasis>[
   _$sonic,
   _$metadata,
+  _$unknownDefaultOpenApi,
 ]);
 
 class _$MixBasisMeta {
   const _$MixBasisMeta();
   MixBasis get sonic => _$sonic;
   MixBasis get metadata => _$metadata;
+  MixBasis get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   MixBasis valueOf(String name) => _$valueOf(name);
   BuiltSet<MixBasis> get values => _$values;
 }
@@ -44,10 +51,12 @@ class _$MixBasisSerializer implements PrimitiveSerializer<MixBasis> {
   static const Map<String, Object> _toWire = const <String, Object>{
     'sonic': 'sonic',
     'metadata': 'metadata',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'sonic': 'sonic',
     'metadata': 'metadata',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

@@ -17,6 +17,9 @@ class Role extends EnumClass {
   /// An assignable account role. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
   @BuiltValueEnumConst(wireName: r'user')
   static const Role user = _$user;
+  /// An assignable account role. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const Role unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 
   static Serializer<Role> get serializer => _$roleSerializer;
 

@@ -218,6 +218,9 @@ class EntityCardKindEnum extends EnumClass {
   /// What the card is about, which is what a tap opens.
   @BuiltValueEnumConst(wireName: r'book')
   static const EntityCardKindEnum book = _$entityCardKindEnum_book;
+  /// What the card is about, which is what a tap opens.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const EntityCardKindEnum unknownDefaultOpenApi = _$entityCardKindEnum_unknownDefaultOpenApi;
 
   static Serializer<EntityCardKindEnum> get serializer => _$entityCardKindEnumSerializer;
 

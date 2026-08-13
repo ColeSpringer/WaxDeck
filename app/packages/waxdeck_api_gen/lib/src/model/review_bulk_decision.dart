@@ -141,6 +141,9 @@ class ReviewBulkDecisionActionEnum extends EnumClass {
   /// The decision. `approve` uses each entry's ranked best candidate. 
   @BuiltValueEnumConst(wireName: r'discard')
   static const ReviewBulkDecisionActionEnum discard = _$reviewBulkDecisionActionEnum_discard;
+  /// The decision. `approve` uses each entry's ranked best candidate. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const ReviewBulkDecisionActionEnum unknownDefaultOpenApi = _$reviewBulkDecisionActionEnum_unknownDefaultOpenApi;
 
   static Serializer<ReviewBulkDecisionActionEnum> get serializer => _$reviewBulkDecisionActionEnumSerializer;
 

@@ -23,6 +23,9 @@ class ScheduleKind extends EnumClass {
   /// A schedulable job kind. A shared named schema on purpose (the path parameter and the schedule object both use it): identical inline enums make the Dart generator emit one enum class into two files, which does not compile. `analyze` is off by default and costs a full audio decode per file; see `POST /library/analyze` for what it produces and what it costs. A firing that collides with an analyze pass already running is skipped rather than recorded as run, so it retries on the next tick instead of waiting for the next scheduled window. 
   @BuiltValueEnumConst(wireName: r'analyze')
   static const ScheduleKind analyze = _$analyze;
+  /// A schedulable job kind. A shared named schema on purpose (the path parameter and the schedule object both use it): identical inline enums make the Dart generator emit one enum class into two files, which does not compile. `analyze` is off by default and costs a full audio decode per file; see `POST /library/analyze` for what it produces and what it costs. A firing that collides with an analyze pass already running is skipped rather than recorded as run, so it retries on the next tick instead of waiting for the next scheduled window. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const ScheduleKind unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 
   static Serializer<ScheduleKind> get serializer => _$scheduleKindSerializer;
 

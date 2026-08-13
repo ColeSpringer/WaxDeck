@@ -20,6 +20,9 @@ class UploadGrouping extends EnumClass {
   /// How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them, `tracks` one entry per file, and `auto` clusters them into album units by their tags and relative paths (disc subfolders fold into their parent). 
   @BuiltValueEnumConst(wireName: r'tracks')
   static const UploadGrouping tracks = _$tracks;
+  /// How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them, `tracks` one entry per file, and `auto` clusters them into album units by their tags and relative paths (disc subfolders fold into their parent). 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const UploadGrouping unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 
   static Serializer<UploadGrouping> get serializer => _$uploadGroupingSerializer;
 

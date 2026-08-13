@@ -175,6 +175,9 @@ class LibraryCreateMediaEnum extends EnumClass {
   /// Content class the root holds. `mixed` (the default) admits both tracks and books. 
   @BuiltValueEnumConst(wireName: r'mixed')
   static const LibraryCreateMediaEnum mixed = _$libraryCreateMediaEnum_mixed;
+  /// Content class the root holds. `mixed` (the default) admits both tracks and books. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const LibraryCreateMediaEnum unknownDefaultOpenApi = _$libraryCreateMediaEnum_unknownDefaultOpenApi;
 
   static Serializer<LibraryCreateMediaEnum> get serializer => _$libraryCreateMediaEnumSerializer;
 

@@ -795,15 +795,27 @@ func pGet(t *testing.T, h *harness, path, token string, out any) {
 // restored dead end. See app/app/lib/src/connect/device_picker.dart.
 func TestMultiPartRefusalWording(t *testing.T) {
 	t.Parallel()
-	refusal := multiPartRefusal("bk-01HZZZZZZZZZZZZZZZZZZZZZZZ")
+	const pid = "bk-01HZZZZZZZZZZZZZZZZZZZZZZZ"
+	refusal := multiPartRefusal(pid)
 	if refusal.Code != "feature-unavailable" {
 		t.Errorf("code = %q, want feature-unavailable", refusal.Code)
 	}
+	// The params are what a controller keys on: `feature-unavailable`
+	// covers every reason a target cannot play something, so the code
+	// alone does not say which refusal this is.
+	if got := refusal.Params["feature"]; got != "multi-part-audiobook" {
+		t.Errorf("params[feature] = %q, want multi-part-audiobook", got)
+	}
+	if got := refusal.Params["pid"]; got != pid {
+		t.Errorf("params[pid] = %q, want %q", got, pid)
+	}
+	// The phrase stays pinned beside them: it is what a client that
+	// predates params reads, and the picker's fallback still matches it.
 	if !strings.Contains(refusal.Msg, "multi-part audiobook") {
 		t.Errorf("message = %q, must contain %q for the picker to recognise it",
 			refusal.Msg, "multi-part audiobook")
 	}
-	if !strings.Contains(refusal.Msg, "bk-01HZZZZZZZZZZZZZZZZZZZZZZZ") {
+	if !strings.Contains(refusal.Msg, pid) {
 		t.Errorf("message = %q, must name the pid the spec says it names", refusal.Msg)
 	}
 }

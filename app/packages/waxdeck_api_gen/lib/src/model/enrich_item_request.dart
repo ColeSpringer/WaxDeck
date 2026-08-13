@@ -117,6 +117,8 @@ class EnrichItemRequestWantEnum extends EnumClass {
   static const EnrichItemRequestWantEnum genres = _$enrichItemRequestWantEnum_genres;
   @BuiltValueEnumConst(wireName: r'book')
   static const EnrichItemRequestWantEnum book = _$enrichItemRequestWantEnum_book;
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const EnrichItemRequestWantEnum unknownDefaultOpenApi = _$enrichItemRequestWantEnum_unknownDefaultOpenApi;
 
   static Serializer<EnrichItemRequestWantEnum> get serializer => _$enrichItemRequestWantEnumSerializer;
 

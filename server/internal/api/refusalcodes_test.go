@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -89,19 +90,80 @@ func TestBothSeamsCarryRefusalCodes(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			status, code, msg, ok := connectHTTP(tc.err)
+			status, body, ok := connectHTTP(tc.err)
 			if !ok {
 				t.Fatalf("connectHTTP did not recognize %v", tc.err)
 			}
-			if status != tc.wantStatus || code != tc.wantCode {
-				t.Errorf("connectHTTP = (%d, %q), want (%d, %q)", status, code, tc.wantStatus, tc.wantCode)
+			if status != tc.wantStatus || body.Code != tc.wantCode {
+				t.Errorf("connectHTTP = (%d, %q), want (%d, %q)", status, body.Code, tc.wantStatus, tc.wantCode)
 			}
-			if msg != tc.wantMsg {
-				t.Errorf("connectHTTP message = %q, want %q", msg, tc.wantMsg)
+			if body.Message != tc.wantMsg {
+				t.Errorf("connectHTTP message = %q, want %q", body.Message, tc.wantMsg)
 			}
 			if got := wsErrorCode(tc.err); got != tc.wantCode {
 				t.Errorf("wsErrorCode = %q, want %q", got, tc.wantCode)
 			}
 		})
+	}
+}
+
+// A refusal's params are detail the code cannot carry, so they have to
+// survive both seams intact or the client is back to reading prose.
+func TestBothSeamsCarryRefusalParams(t *testing.T) {
+	t.Parallel()
+	err := connect.InvalidError{
+		Msg:    "multi-part audiobooks cannot play on this endpoint yet: bk-1",
+		Code:   "feature-unavailable",
+		Params: map[string]string{"feature": "multi-part-audiobook", "pid": "bk-1"},
+	}
+
+	_, body, ok := connectHTTP(err)
+	if !ok {
+		t.Fatalf("connectHTTP did not recognize %v", err)
+	}
+	if body.Params == nil {
+		t.Fatal("connectHTTP dropped the refusal's params")
+	}
+	if got := (*body.Params)["feature"]; got != "multi-part-audiobook" {
+		t.Errorf("params[feature] = %q, want multi-part-audiobook", got)
+	}
+	if got := (*body.Params)["pid"]; got != "bk-1" {
+		t.Errorf("params[pid] = %q, want bk-1", got)
+	}
+
+	frame := wsErrorFrame{Code: wsErrorCode(err), Message: err.Error(), Params: refusalParams(err)}
+	if frame.Params["feature"] != "multi-part-audiobook" || frame.Params["pid"] != "bk-1" {
+		t.Errorf("ws frame params = %v, want the refusal's", frame.Params)
+	}
+
+	// A code the whitelist rejects loses its params with it: they would
+	// otherwise describe a refusal that is not the one being answered.
+	rejected := connect.InvalidError{
+		Msg:    "the client rejected the command",
+		Code:   "wat",
+		Params: map[string]string{"feature": "invented-by-the-endpoint"},
+	}
+	if _, body, ok := connectHTTP(rejected); !ok || body.Code != "invalid-request" || body.Params != nil {
+		t.Errorf("connectHTTP(%q) = (%q, %v), want (invalid-request, no params)", rejected.Code, body.Code, body.Params)
+	}
+	if got := refusalParams(rejected); got != nil {
+		t.Errorf("refusalParams for a rejected code = %v, want nil", got)
+	}
+
+	// An uncoded refusal carries none, and the wire omits the field
+	// rather than sending an empty object.
+	plain := connect.InvalidError{Msg: "seek needs a non-negative positionMs"}
+	if _, body, ok := connectHTTP(plain); !ok || body.Params != nil {
+		t.Errorf("connectHTTP params = %v, want nil", body.Params)
+	}
+	if got := refusalParams(plain); got != nil {
+		t.Errorf("refusalParams = %v, want nil", got)
+	}
+	wire, err2 := json.Marshal(wsErrorFrame{Type: "error", Code: "invalid-request", Message: plain.Msg, Params: refusalParams(plain)})
+	if err2 != nil {
+		t.Fatalf("marshalling the frame: %v", err2)
+	}
+	if strings.Contains(string(wire), "params") {
+		t.Errorf("frame without params serialized as %s", wire)
 	}
 }

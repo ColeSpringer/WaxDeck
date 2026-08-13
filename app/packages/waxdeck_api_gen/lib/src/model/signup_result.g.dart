@@ -10,6 +10,8 @@ const SignupResultStateEnum _$signupResultStateEnum_pending =
     const SignupResultStateEnum._('pending');
 const SignupResultStateEnum _$signupResultStateEnum_active =
     const SignupResultStateEnum._('active');
+const SignupResultStateEnum _$signupResultStateEnum_unknownDefaultOpenApi =
+    const SignupResultStateEnum._('unknownDefaultOpenApi');
 
 SignupResultStateEnum _$signupResultStateEnumValueOf(String name) {
   switch (name) {
@@ -17,8 +19,10 @@ SignupResultStateEnum _$signupResultStateEnumValueOf(String name) {
       return _$signupResultStateEnum_pending;
     case 'active':
       return _$signupResultStateEnum_active;
+    case 'unknownDefaultOpenApi':
+      return _$signupResultStateEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$signupResultStateEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -26,6 +30,7 @@ final BuiltSet<SignupResultStateEnum> _$signupResultStateEnumValues =
     BuiltSet<SignupResultStateEnum>(const <SignupResultStateEnum>[
       _$signupResultStateEnum_pending,
       _$signupResultStateEnum_active,
+      _$signupResultStateEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<SignupResultStateEnum> _$signupResultStateEnumSerializer =
@@ -36,10 +41,12 @@ class _$SignupResultStateEnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'pending': 'pending',
     'active': 'active',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'pending': 'pending',
     'active': 'active',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

@@ -10,6 +10,8 @@ const ListenSessionSource_Enum _$listenSessionSourceEnum_live =
     const ListenSessionSource_Enum._('live');
 const ListenSessionSource_Enum _$listenSessionSourceEnum_import_ =
     const ListenSessionSource_Enum._('import_');
+const ListenSessionSource_Enum _$listenSessionSourceEnum_unknownDefaultOpenApi =
+    const ListenSessionSource_Enum._('unknownDefaultOpenApi');
 
 ListenSessionSource_Enum _$listenSessionSourceEnumValueOf(String name) {
   switch (name) {
@@ -17,8 +19,10 @@ ListenSessionSource_Enum _$listenSessionSourceEnumValueOf(String name) {
       return _$listenSessionSourceEnum_live;
     case 'import_':
       return _$listenSessionSourceEnum_import_;
+    case 'unknownDefaultOpenApi':
+      return _$listenSessionSourceEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$listenSessionSourceEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -26,6 +30,7 @@ final BuiltSet<ListenSessionSource_Enum> _$listenSessionSourceEnumValues =
     BuiltSet<ListenSessionSource_Enum>(const <ListenSessionSource_Enum>[
       _$listenSessionSourceEnum_live,
       _$listenSessionSourceEnum_import_,
+      _$listenSessionSourceEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<ListenSessionSource_Enum> _$listenSessionSourceEnumSerializer =
@@ -36,10 +41,12 @@ class _$ListenSessionSource_EnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'live': 'live',
     'import_': 'import',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'live': 'live',
     'import': 'import_',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

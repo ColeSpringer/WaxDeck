@@ -20,20 +20,37 @@ class ServerHealth {
 }
 
 /// Structured API error (the spec's `Error` schema), thrown by the client.
+///
+/// A failure with no answer to read a code out of still arrives as one
+/// of these, so this package mints three of its own: `transport` (the
+/// request did not complete), `transport-timeout` (no answer in time,
+/// deliberately not the spec's `timeout`, which means a routed command
+/// whose endpoint is still connected), and `transport-empty` (an answer
+/// with no body). Stable client vocabulary, absent from the spec's list,
+/// so a caller wording errors by code covers them alongside it.
 class WaxDeckApiException implements Exception {
   const WaxDeckApiException({
     required this.code,
     required this.message,
     this.statusCode,
+    this.params,
   });
 
-  /// Stable machine-readable code (`unauthenticated`, `not-found`, and so on).
+  /// Stable machine-readable code (`unauthenticated`, `not-found`, and so
+  /// on), or one of this package's own transport codes.
   final String code;
 
   /// Human-readable explanation; not stable, never parse it.
   final String message;
 
   final int? statusCode;
+
+  /// Machine-readable detail for the codes that cover more than one
+  /// cause, keyed as the contract documents per code
+  /// (`feature-unavailable` carries `feature` and `pid`). Best-effort:
+  /// null covers a refusal that mints none and a server older than the
+  /// field alike, so refine on it, never require it.
+  final Map<String, String>? params;
 
   @override
   String toString() => 'WaxDeckApiException($code, $statusCode): $message';
@@ -309,8 +326,15 @@ class Prefs {
 
   /// The order each browse index opens in, by dimension name, in wire
   /// form; read through [browseSortFor]. Strings rather than [FacetSort]
-  /// so a value this build cannot read survives the round trip instead
-  /// of being erased by the next write to another dimension.
+  /// so a value [FacetSort] does not name survives the round trip
+  /// instead of being erased by the next write to another dimension.
+  ///
+  /// A value the *generated* client predates does not survive, and not
+  /// only locally: it drops on the way in as the generator's sentinel,
+  /// and since the PUT replaces the document, the next write of any
+  /// preference takes that dimension's order off the server too.
+  /// Dropping still beats keeping it, whose wire value fails every save;
+  /// the real fix is the contract, and docs/deferred-work.md holds it.
   final Map<String, String>? browseSorts;
 
   /// The stored order for one dimension, or null when there is none and

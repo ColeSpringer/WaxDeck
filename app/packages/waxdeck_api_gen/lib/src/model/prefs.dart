@@ -352,6 +352,9 @@ class PrefsThemeEnum extends EnumClass {
   /// Preferred app theme.
   @BuiltValueEnumConst(wireName: r'oled')
   static const PrefsThemeEnum oled = _$prefsThemeEnum_oled;
+  /// Preferred app theme.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const PrefsThemeEnum unknownDefaultOpenApi = _$prefsThemeEnum_unknownDefaultOpenApi;
 
   static Serializer<PrefsThemeEnum> get serializer => _$prefsThemeEnumSerializer;
 
@@ -367,6 +370,8 @@ class PrefsBrowseSortsEnum extends EnumClass {
   static const PrefsBrowseSortsEnum count = _$prefsBrowseSortsEnum_count;
   @BuiltValueEnumConst(wireName: r'label')
   static const PrefsBrowseSortsEnum label = _$prefsBrowseSortsEnum_label;
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const PrefsBrowseSortsEnum unknownDefaultOpenApi = _$prefsBrowseSortsEnum_unknownDefaultOpenApi;
 
   static Serializer<PrefsBrowseSortsEnum> get serializer => _$prefsBrowseSortsEnumSerializer;
 

@@ -157,6 +157,9 @@ class TopListKindEnum extends EnumClass {
   /// Which top list this is.
   @BuiltValueEnumConst(wireName: r'shows')
   static const TopListKindEnum shows = _$topListKindEnum_shows;
+  /// Which top list this is.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const TopListKindEnum unknownDefaultOpenApi = _$topListKindEnum_unknownDefaultOpenApi;
 
   static Serializer<TopListKindEnum> get serializer => _$topListKindEnumSerializer;
 
@@ -183,6 +186,9 @@ class TopListRangeEnum extends EnumClass {
   /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'all')
   static const TopListRangeEnum all = _$topListRangeEnum_all;
+  /// The range that was aggregated.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const TopListRangeEnum unknownDefaultOpenApi = _$topListRangeEnum_unknownDefaultOpenApi;
 
   static Serializer<TopListRangeEnum> get serializer => _$topListRangeEnumSerializer;
 

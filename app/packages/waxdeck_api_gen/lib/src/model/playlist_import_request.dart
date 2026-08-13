@@ -185,6 +185,9 @@ class PlaylistImportRequestSource_Enum extends EnumClass {
   /// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
   @BuiltValueEnumConst(wireName: r'portable')
   static const PlaylistImportRequestSource_Enum portable = _$playlistImportRequestSourceEnum_portable;
+  /// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const PlaylistImportRequestSource_Enum unknownDefaultOpenApi = _$playlistImportRequestSourceEnum_unknownDefaultOpenApi;
 
   static Serializer<PlaylistImportRequestSource_Enum> get serializer => _$playlistImportRequestSourceEnumSerializer;
 

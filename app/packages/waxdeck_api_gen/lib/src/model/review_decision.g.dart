@@ -16,6 +16,9 @@ const ReviewDecisionActionEnum _$reviewDecisionActionEnum_skip =
     const ReviewDecisionActionEnum._('skip');
 const ReviewDecisionActionEnum _$reviewDecisionActionEnum_discard =
     const ReviewDecisionActionEnum._('discard');
+const ReviewDecisionActionEnum
+_$reviewDecisionActionEnum_unknownDefaultOpenApi =
+    const ReviewDecisionActionEnum._('unknownDefaultOpenApi');
 
 ReviewDecisionActionEnum _$reviewDecisionActionEnumValueOf(String name) {
   switch (name) {
@@ -29,8 +32,10 @@ ReviewDecisionActionEnum _$reviewDecisionActionEnumValueOf(String name) {
       return _$reviewDecisionActionEnum_skip;
     case 'discard':
       return _$reviewDecisionActionEnum_discard;
+    case 'unknownDefaultOpenApi':
+      return _$reviewDecisionActionEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$reviewDecisionActionEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -41,6 +46,7 @@ final BuiltSet<ReviewDecisionActionEnum> _$reviewDecisionActionEnumValues =
       _$reviewDecisionActionEnum_unofficial,
       _$reviewDecisionActionEnum_skip,
       _$reviewDecisionActionEnum_discard,
+      _$reviewDecisionActionEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<ReviewDecisionActionEnum> _$reviewDecisionActionEnumSerializer =
@@ -54,6 +60,7 @@ class _$ReviewDecisionActionEnumSerializer
     'unofficial': 'unofficial',
     'skip': 'skip',
     'discard': 'discard',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'approve': 'approve',
@@ -61,6 +68,7 @@ class _$ReviewDecisionActionEnumSerializer
     'unofficial': 'unofficial',
     'skip': 'skip',
     'discard': 'discard',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

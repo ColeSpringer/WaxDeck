@@ -19,6 +19,8 @@ const EntityCardKindEnum _$entityCardKindEnum_podcast =
 const EntityCardKindEnum _$entityCardKindEnum_book = const EntityCardKindEnum._(
   'book',
 );
+const EntityCardKindEnum _$entityCardKindEnum_unknownDefaultOpenApi =
+    const EntityCardKindEnum._('unknownDefaultOpenApi');
 
 EntityCardKindEnum _$entityCardKindEnumValueOf(String name) {
   switch (name) {
@@ -34,8 +36,10 @@ EntityCardKindEnum _$entityCardKindEnumValueOf(String name) {
       return _$entityCardKindEnum_podcast;
     case 'book':
       return _$entityCardKindEnum_book;
+    case 'unknownDefaultOpenApi':
+      return _$entityCardKindEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$entityCardKindEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -47,6 +51,7 @@ final BuiltSet<EntityCardKindEnum> _$entityCardKindEnumValues =
       _$entityCardKindEnum_playlist,
       _$entityCardKindEnum_podcast,
       _$entityCardKindEnum_book,
+      _$entityCardKindEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<EntityCardKindEnum> _$entityCardKindEnumSerializer =
@@ -61,6 +66,7 @@ class _$EntityCardKindEnumSerializer
     'playlist': 'playlist',
     'podcast': 'podcast',
     'book': 'book',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'album': 'album',
@@ -69,6 +75,7 @@ class _$EntityCardKindEnumSerializer
     'playlist': 'playlist',
     'podcast': 'podcast',
     'book': 'book',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

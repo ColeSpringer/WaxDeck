@@ -275,6 +275,9 @@ class ListenLogEntrySource_Enum extends EnumClass {
   /// `live` playback or a backdated `import`.
   @BuiltValueEnumConst(wireName: r'import')
   static const ListenLogEntrySource_Enum import_ = _$listenLogEntrySourceEnum_import_;
+  /// `live` playback or a backdated `import`.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const ListenLogEntrySource_Enum unknownDefaultOpenApi = _$listenLogEntrySourceEnum_unknownDefaultOpenApi;
 
   static Serializer<ListenLogEntrySource_Enum> get serializer => _$listenLogEntrySourceEnumSerializer;
 

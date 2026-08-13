@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/colespringer/waxdeck/server/internal/pagetext"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -60,21 +61,25 @@ func (s *Server) StartOidc(ctx context.Context, req StartOidcRequestObject) (Sta
 }
 
 func (s *Server) OidcCallback(ctx context.Context, req OidcCallbackRequestObject) (OidcCallbackResponseObject, error) {
+	loc := pageStringsFromContext(ctx)
 	if s.oidc == nil {
-		return oidcErrorPage("single sign-on is not configured on this server"), nil
+		return oidcErrorPage(loc, loc.OidcNotConfigured), nil
 	}
 	if e := deref(req.Params.Error); e != "" {
-		return oidcErrorPage(fmt.Sprintf("the identity provider reported: %s %s", e, deref(req.Params.ErrorDescription))), nil
+		return oidcErrorPage(loc, fmt.Sprintf(loc.OidcProviderReported, e, deref(req.Params.ErrorDescription))), nil
 	}
 	state := deref(req.Params.State)
 	code := deref(req.Params.Code)
 	if state == "" || code == "" {
-		return oidcErrorPage("the identity provider sent an incomplete callback"), nil
+		return oidcErrorPage(loc, loc.OidcIncompleteCallback), nil
 	}
 	done, err := s.oidc.HandleCallback(ctx, state, code)
 	if err != nil {
 		s.log.Warn("oidc callback failed", "err", err)
-		return oidcErrorPage("sign-on could not be completed: " + err.Error()), nil
+		// The Go error stays English on purpose: it is a diagnostic a
+		// reader pastes into a bug report, and a translated one is a
+		// string nobody can grep for.
+		return oidcErrorPage(loc, loc.OidcCouldNotComplete+": "+err.Error()), nil
 	}
 	acct, err := s.svc.ResolveOidcAccount(ctx, service.OidcIdentity{
 		Provider: done.Identity.Provider,
@@ -86,7 +91,7 @@ func (s *Server) OidcCallback(ctx context.Context, req OidcCallbackRequestObject
 	})
 	if err != nil {
 		s.log.Warn("oidc account resolution failed", "err", err)
-		return oidcErrorPage("sign-on could not be completed: " + err.Error()), nil
+		return oidcErrorPage(loc, loc.OidcCouldNotComplete+": "+err.Error()), nil
 	}
 	switch done.Mode {
 	case "web":
@@ -122,9 +127,9 @@ func (s *Server) OidcCallback(ctx context.Context, req OidcCallbackRequestObject
 		if err != nil {
 			return nil, err
 		}
-		return oidcCodePage(otc), nil
+		return oidcCodePage(loc, otc), nil
 	default:
-		return oidcErrorPage("unknown flow mode"), nil
+		return oidcErrorPage(loc, loc.OidcUnknownMode), nil
 	}
 }
 
@@ -192,32 +197,51 @@ func safeRedirectPath(p string) bool {
 	return err == nil && !u.IsAbs() && u.Host == ""
 }
 
-// The completion pages carry no user-agent-derived content; everything
-// interpolated is escaped by html/template.
+// Everything the completion pages interpolate is escaped by
+// html/template, the provider's own `error` and `error_description`
+// among it: those reach us through the user agent. The charset meta is
+// load-bearing rather than decorative: the strict server answers plain
+// `text/html` with no charset parameter, so a page whose words carry
+// accents needs the document to declare its own encoding.
+//
+// `Vary: Accept-Language` rides on these too, from AuthMiddleware
+// (pageVaryPaths) since the response types take no headers: the
+// callback is mostly a single-use capability URL, but not every answer
+// is one.
 var (
 	codePageTmpl = template.Must(template.New("code").Parse(`<!doctype html>
-<title>WaxDeck sign-on</title>
+<html lang="{{.T.Lang}}">
+<meta charset="utf-8">
+<title>{{.T.OidcTitle}}</title>
 <style>body{font-family:system-ui;margin:3rem auto;max-width:30rem;text-align:center}code{font-size:1.4rem;background:#eee;padding:.4rem .8rem;border-radius:.4rem;display:inline-block;margin:1rem}</style>
-<h1>Almost there</h1>
-<p>Enter this one-time code in the app to finish signing in. It expires in a few minutes.</p>
-<code>{{.}}</code>`))
+<h1>{{.T.OidcCodeHeading}}</h1>
+<p>{{.T.OidcCodeBody}}</p>
+<code>{{.Code}}</code>`))
 
 	errorPageTmpl = template.Must(template.New("error").Parse(`<!doctype html>
-<title>WaxDeck sign-on</title>
+<html lang="{{.T.Lang}}">
+<meta charset="utf-8">
+<title>{{.T.OidcTitle}}</title>
 <style>body{font-family:system-ui;margin:3rem auto;max-width:30rem;text-align:center}</style>
-<h1>Sign-on failed</h1>
-<p>{{.}}</p>
-<p><a href="/">Back to WaxDeck</a></p>`))
+<h1>{{.T.OidcErrorHeading}}</h1>
+<p>{{.Message}}</p>
+<p><a href="/">{{.T.OidcBackLink}}</a></p>`))
 )
 
-func oidcCodePage(code string) OidcCallbackResponseObject {
+func oidcCodePage(loc *pagetext.Strings, code string) OidcCallbackResponseObject {
 	var b strings.Builder
-	_ = codePageTmpl.Execute(&b, code)
+	_ = codePageTmpl.Execute(&b, struct {
+		T    *pagetext.Strings
+		Code string
+	}{loc, code})
 	return OidcCallback200TexthtmlResponse{Body: strings.NewReader(b.String()), ContentLength: int64(b.Len())}
 }
 
-func oidcErrorPage(msg string) OidcCallbackResponseObject {
+func oidcErrorPage(loc *pagetext.Strings, msg string) OidcCallbackResponseObject {
 	var b strings.Builder
-	_ = errorPageTmpl.Execute(&b, msg)
+	_ = errorPageTmpl.Execute(&b, struct {
+		T       *pagetext.Strings
+		Message string
+	}{loc, msg})
 	return OidcCallback200TexthtmlResponse{Body: strings.NewReader(b.String()), ContentLength: int64(b.Len())}
 }

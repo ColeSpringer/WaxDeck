@@ -115,6 +115,9 @@ class SignupResultStateEnum extends EnumClass {
   /// `pending` awaits an administrator's approval before it can log in; `active` (invited) can log in immediately. 
   @BuiltValueEnumConst(wireName: r'active')
   static const SignupResultStateEnum active = _$signupResultStateEnum_active;
+  /// `pending` awaits an administrator's approval before it can log in; `active` (invited) can log in immediately. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const SignupResultStateEnum unknownDefaultOpenApi = _$signupResultStateEnum_unknownDefaultOpenApi;
 
   static Serializer<SignupResultStateEnum> get serializer => _$signupResultStateEnumSerializer;
 

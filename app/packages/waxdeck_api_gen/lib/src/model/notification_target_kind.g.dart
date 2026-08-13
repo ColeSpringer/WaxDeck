@@ -25,6 +25,8 @@ const NotificationTargetKind _$apprise = const NotificationTargetKind._(
 const NotificationTargetKind _$unifiedpush = const NotificationTargetKind._(
   'unifiedpush',
 );
+const NotificationTargetKind _$unknownDefaultOpenApi =
+    const NotificationTargetKind._('unknownDefaultOpenApi');
 
 NotificationTargetKind _$valueOf(String name) {
   switch (name) {
@@ -42,8 +44,10 @@ NotificationTargetKind _$valueOf(String name) {
       return _$apprise;
     case 'unifiedpush':
       return _$unifiedpush;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
@@ -56,6 +60,7 @@ final BuiltSet<NotificationTargetKind> _$values =
       _$webhook,
       _$apprise,
       _$unifiedpush,
+      _$unknownDefaultOpenApi,
     ]);
 
 class _$NotificationTargetKindMeta {
@@ -67,6 +72,7 @@ class _$NotificationTargetKindMeta {
   NotificationTargetKind get webhook => _$webhook;
   NotificationTargetKind get apprise => _$apprise;
   NotificationTargetKind get unifiedpush => _$unifiedpush;
+  NotificationTargetKind get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   NotificationTargetKind valueOf(String name) => _$valueOf(name);
   BuiltSet<NotificationTargetKind> get values => _$values;
 }
@@ -90,6 +96,7 @@ class _$NotificationTargetKindSerializer
     'webhook': 'webhook',
     'apprise': 'apprise',
     'unifiedpush': 'unifiedpush',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'pushover': 'pushover',
@@ -99,6 +106,7 @@ class _$NotificationTargetKindSerializer
     'webhook': 'webhook',
     'apprise': 'apprise',
     'unifiedpush': 'unifiedpush',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

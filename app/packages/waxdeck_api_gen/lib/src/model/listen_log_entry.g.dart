@@ -10,6 +10,9 @@ const ListenLogEntrySource_Enum _$listenLogEntrySourceEnum_live =
     const ListenLogEntrySource_Enum._('live');
 const ListenLogEntrySource_Enum _$listenLogEntrySourceEnum_import_ =
     const ListenLogEntrySource_Enum._('import_');
+const ListenLogEntrySource_Enum
+_$listenLogEntrySourceEnum_unknownDefaultOpenApi =
+    const ListenLogEntrySource_Enum._('unknownDefaultOpenApi');
 
 ListenLogEntrySource_Enum _$listenLogEntrySourceEnumValueOf(String name) {
   switch (name) {
@@ -17,8 +20,10 @@ ListenLogEntrySource_Enum _$listenLogEntrySourceEnumValueOf(String name) {
       return _$listenLogEntrySourceEnum_live;
     case 'import_':
       return _$listenLogEntrySourceEnum_import_;
+    case 'unknownDefaultOpenApi':
+      return _$listenLogEntrySourceEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$listenLogEntrySourceEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -26,6 +31,7 @@ final BuiltSet<ListenLogEntrySource_Enum> _$listenLogEntrySourceEnumValues =
     BuiltSet<ListenLogEntrySource_Enum>(const <ListenLogEntrySource_Enum>[
       _$listenLogEntrySourceEnum_live,
       _$listenLogEntrySourceEnum_import_,
+      _$listenLogEntrySourceEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<ListenLogEntrySource_Enum> _$listenLogEntrySourceEnumSerializer =
@@ -36,10 +42,12 @@ class _$ListenLogEntrySource_EnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'live': 'live',
     'import_': 'import',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'live': 'live',
     'import': 'import_',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

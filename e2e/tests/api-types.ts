@@ -4444,6 +4444,16 @@ export interface components {
              * @example no item with pid tr-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             message: string;
+            /**
+             * @description Machine-readable detail, where one code covers several causes a client has to tell apart. `code` names which keys can appear (see the API-level description); values are always strings. Best-effort per refusal, never guaranteed by code: an error of the same code with no params is an ordinary one, so read this as a refinement rather than requiring it. `message` says the same thing in prose, so a client that ignores this reads what it always read. Clients must ignore keys they do not know.
+             * @example {
+             *       "feature": "multi-part-audiobook",
+             *       "pid": "bk-01JZX5N8QW3F4V9T2B7KD3M9R6"
+             *     }
+             */
+            params?: {
+                [key: string]: string;
+            };
         };
         /**
          * @description The three first-class media types.
@@ -5478,6 +5488,16 @@ export interface components {
             code: string;
             /** @description Human-readable detail. */
             message: string;
+            /**
+             * @description Machine-readable detail keyed per code, the same shape and rules as the REST `Error` schema's `params`: a refusal a client can hit over either transport says the same thing on both.
+             * @example {
+             *       "feature": "multi-part-audiobook",
+             *       "pid": "bk-01JZX5N8QW3F4V9T2B7KD3M9R6"
+             *     }
+             */
+            params?: {
+                [key: string]: string;
+            };
         };
         /** @description Client-to-server: declare this connection a controllable player endpoint. Answered with an ack carrying `endpointId`. The endpoint lives while the connection does. */
         WsRegisterEndpointFrame: {

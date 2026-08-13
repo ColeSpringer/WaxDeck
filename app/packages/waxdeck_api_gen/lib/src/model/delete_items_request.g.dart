@@ -10,6 +10,9 @@ const DeleteItemsRequestModeEnum _$deleteItemsRequestModeEnum_trash =
     const DeleteItemsRequestModeEnum._('trash');
 const DeleteItemsRequestModeEnum _$deleteItemsRequestModeEnum_permanent =
     const DeleteItemsRequestModeEnum._('permanent');
+const DeleteItemsRequestModeEnum
+_$deleteItemsRequestModeEnum_unknownDefaultOpenApi =
+    const DeleteItemsRequestModeEnum._('unknownDefaultOpenApi');
 
 DeleteItemsRequestModeEnum _$deleteItemsRequestModeEnumValueOf(String name) {
   switch (name) {
@@ -17,8 +20,10 @@ DeleteItemsRequestModeEnum _$deleteItemsRequestModeEnumValueOf(String name) {
       return _$deleteItemsRequestModeEnum_trash;
     case 'permanent':
       return _$deleteItemsRequestModeEnum_permanent;
+    case 'unknownDefaultOpenApi':
+      return _$deleteItemsRequestModeEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$deleteItemsRequestModeEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -26,6 +31,7 @@ final BuiltSet<DeleteItemsRequestModeEnum> _$deleteItemsRequestModeEnumValues =
     BuiltSet<DeleteItemsRequestModeEnum>(const <DeleteItemsRequestModeEnum>[
       _$deleteItemsRequestModeEnum_trash,
       _$deleteItemsRequestModeEnum_permanent,
+      _$deleteItemsRequestModeEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<DeleteItemsRequestModeEnum> _$deleteItemsRequestModeEnumSerializer =
@@ -36,10 +42,12 @@ class _$DeleteItemsRequestModeEnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'trash': 'trash',
     'permanent': 'permanent',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'trash': 'trash',
     'permanent': 'permanent',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

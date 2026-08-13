@@ -4196,9 +4196,13 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<List<Schedule>> listSchedules() => _guard(() async {
     final response = await _gen.getAdminApi().listSchedules();
-    return _require(
-      response.data,
-    ).schedules.map(scheduleFromGen).toList(growable: false);
+    return _require(response.data).schedules
+        // A kind this build predates arrives as the generator's
+        // sentinel, and the kind is the path a save PUTs to: drawing the
+        // row would offer an edit that cannot land. Left out instead.
+        .where((s) => s.kind != gen.ScheduleKind.unknownDefaultOpenApi)
+        .map(scheduleFromGen)
+        .toList(growable: false);
   });
 
   @override
@@ -4403,8 +4407,12 @@ class WaxDeckClient implements WaxDeckRepository {
 
   T _require<T>(T? body) {
     if (body == null) {
+      // Client-minted like 'transport' beside it, and not the spec's
+      // `internal`: a truncated answer says nothing about whether the
+      // server faulted, so wording the two alike would send a reader to
+      // report a bug that may not exist.
       throw const WaxDeckApiException(
-        code: 'internal',
+        code: 'transport-empty',
         message: 'empty response body',
       );
     }
@@ -4454,6 +4462,7 @@ WaxDeckApiException apiExceptionFromDio(DioException e) {
         code: code,
         message: message,
         statusCode: e.response?.statusCode,
+        params: _stringParams(data['params']),
       );
     }
   }
@@ -4462,6 +4471,21 @@ WaxDeckApiException apiExceptionFromDio(DioException e) {
     message: e.message ?? 'network error',
     statusCode: e.response?.statusCode,
   );
+}
+
+/// An error's `params` as a plain string map, or null for anything that
+/// is not one. A key or value of another type is dropped rather than
+/// stringified, and an empty result reads as absent: a caller branches
+/// on these, and branching on a guess is worse than taking the fallback.
+Map<String, String>? _stringParams(Object? raw) {
+  if (raw is! Map) return null;
+  final out = <String, String>{};
+  for (final entry in raw.entries) {
+    final key = entry.key;
+    final value = entry.value;
+    if (key is String && value is String) out[key] = value;
+  }
+  return out.isEmpty ? null : out;
 }
 
 /// Builds the generated create body for a notification target. Config

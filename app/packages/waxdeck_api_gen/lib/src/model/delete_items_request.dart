@@ -155,6 +155,9 @@ class DeleteItemsRequestModeEnum extends EnumClass {
   /// `trash` is reversible from the trash surface; `permanent` bypasses it (administrators only). 
   @BuiltValueEnumConst(wireName: r'permanent')
   static const DeleteItemsRequestModeEnum permanent = _$deleteItemsRequestModeEnum_permanent;
+  /// `trash` is reversible from the trash surface; `permanent` bypasses it (administrators only). 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const DeleteItemsRequestModeEnum unknownDefaultOpenApi = _$deleteItemsRequestModeEnum_unknownDefaultOpenApi;
 
   static Serializer<DeleteItemsRequestModeEnum> get serializer => _$deleteItemsRequestModeEnumSerializer;
 

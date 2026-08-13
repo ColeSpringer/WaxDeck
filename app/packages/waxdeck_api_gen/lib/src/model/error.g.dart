@@ -11,11 +11,14 @@ class _$Error extends Error {
   final String code;
   @override
   final String message;
+  @override
+  final BuiltMap<String, String>? params;
 
   factory _$Error([void Function(ErrorBuilder)? updates]) =>
       (ErrorBuilder()..update(updates))._build();
 
-  _$Error._({required this.code, required this.message}) : super._();
+  _$Error._({required this.code, required this.message, this.params})
+    : super._();
   @override
   Error rebuild(void Function(ErrorBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -26,7 +29,10 @@ class _$Error extends Error {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is Error && code == other.code && message == other.message;
+    return other is Error &&
+        code == other.code &&
+        message == other.message &&
+        params == other.params;
   }
 
   @override
@@ -34,6 +40,7 @@ class _$Error extends Error {
     var _$hash = 0;
     _$hash = $jc(_$hash, code.hashCode);
     _$hash = $jc(_$hash, message.hashCode);
+    _$hash = $jc(_$hash, params.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -42,7 +49,8 @@ class _$Error extends Error {
   String toString() {
     return (newBuiltValueToStringHelper(r'Error')
           ..add('code', code)
-          ..add('message', message))
+          ..add('message', message)
+          ..add('params', params))
         .toString();
   }
 }
@@ -58,6 +66,11 @@ class ErrorBuilder implements Builder<Error, ErrorBuilder> {
   String? get message => _$this._message;
   set message(String? message) => _$this._message = message;
 
+  MapBuilder<String, String>? _params;
+  MapBuilder<String, String> get params =>
+      _$this._params ??= MapBuilder<String, String>();
+  set params(MapBuilder<String, String>? params) => _$this._params = params;
+
   ErrorBuilder() {
     Error._defaults(this);
   }
@@ -67,6 +80,7 @@ class ErrorBuilder implements Builder<Error, ErrorBuilder> {
     if ($v != null) {
       _code = $v.code;
       _message = $v.message;
+      _params = $v.params?.toBuilder();
       _$v = null;
     }
     return this;
@@ -86,16 +100,29 @@ class ErrorBuilder implements Builder<Error, ErrorBuilder> {
   Error build() => _build();
 
   _$Error _build() {
-    final _$result =
-        _$v ??
-        _$Error._(
-          code: BuiltValueNullFieldError.checkNotNull(code, r'Error', 'code'),
-          message: BuiltValueNullFieldError.checkNotNull(
-            message,
-            r'Error',
-            'message',
-          ),
-        );
+    _$Error _$result;
+    try {
+      _$result =
+          _$v ??
+          _$Error._(
+            code: BuiltValueNullFieldError.checkNotNull(code, r'Error', 'code'),
+            message: BuiltValueNullFieldError.checkNotNull(
+              message,
+              r'Error',
+              'message',
+            ),
+            params: _params?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'params';
+        _params?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(r'Error', _$failedField, e.toString());
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

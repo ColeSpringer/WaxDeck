@@ -16,6 +16,9 @@ const ReviewBulkDecisionActionEnum _$reviewBulkDecisionActionEnum_skip =
     const ReviewBulkDecisionActionEnum._('skip');
 const ReviewBulkDecisionActionEnum _$reviewBulkDecisionActionEnum_discard =
     const ReviewBulkDecisionActionEnum._('discard');
+const ReviewBulkDecisionActionEnum
+_$reviewBulkDecisionActionEnum_unknownDefaultOpenApi =
+    const ReviewBulkDecisionActionEnum._('unknownDefaultOpenApi');
 
 ReviewBulkDecisionActionEnum _$reviewBulkDecisionActionEnumValueOf(
   String name,
@@ -31,8 +34,10 @@ ReviewBulkDecisionActionEnum _$reviewBulkDecisionActionEnumValueOf(
       return _$reviewBulkDecisionActionEnum_skip;
     case 'discard':
       return _$reviewBulkDecisionActionEnum_discard;
+    case 'unknownDefaultOpenApi':
+      return _$reviewBulkDecisionActionEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$reviewBulkDecisionActionEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -44,6 +49,7 @@ _$reviewBulkDecisionActionEnumValues =
       _$reviewBulkDecisionActionEnum_unofficial,
       _$reviewBulkDecisionActionEnum_skip,
       _$reviewBulkDecisionActionEnum_discard,
+      _$reviewBulkDecisionActionEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<ReviewBulkDecisionActionEnum>
@@ -58,6 +64,7 @@ class _$ReviewBulkDecisionActionEnumSerializer
     'unofficial': 'unofficial',
     'skip': 'skip',
     'discard': 'discard',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'approve': 'approve',
@@ -65,6 +72,7 @@ class _$ReviewBulkDecisionActionEnumSerializer
     'unofficial': 'unofficial',
     'skip': 'skip',
     'discard': 'discard',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

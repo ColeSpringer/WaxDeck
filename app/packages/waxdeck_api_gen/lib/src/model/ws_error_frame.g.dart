@@ -15,6 +15,8 @@ class _$WsErrorFrame extends WsErrorFrame {
   final String code;
   @override
   final String message;
+  @override
+  final BuiltMap<String, String>? params;
 
   factory _$WsErrorFrame([void Function(WsErrorFrameBuilder)? updates]) =>
       (WsErrorFrameBuilder()..update(updates))._build();
@@ -24,6 +26,7 @@ class _$WsErrorFrame extends WsErrorFrame {
     this.id,
     required this.code,
     required this.message,
+    this.params,
   }) : super._();
   @override
   WsErrorFrame rebuild(void Function(WsErrorFrameBuilder) updates) =>
@@ -39,7 +42,8 @@ class _$WsErrorFrame extends WsErrorFrame {
         type == other.type &&
         id == other.id &&
         code == other.code &&
-        message == other.message;
+        message == other.message &&
+        params == other.params;
   }
 
   @override
@@ -49,6 +53,7 @@ class _$WsErrorFrame extends WsErrorFrame {
     _$hash = $jc(_$hash, id.hashCode);
     _$hash = $jc(_$hash, code.hashCode);
     _$hash = $jc(_$hash, message.hashCode);
+    _$hash = $jc(_$hash, params.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -59,7 +64,8 @@ class _$WsErrorFrame extends WsErrorFrame {
           ..add('type', type)
           ..add('id', id)
           ..add('code', code)
-          ..add('message', message))
+          ..add('message', message)
+          ..add('params', params))
         .toString();
   }
 }
@@ -84,6 +90,11 @@ class WsErrorFrameBuilder
   String? get message => _$this._message;
   set message(String? message) => _$this._message = message;
 
+  MapBuilder<String, String>? _params;
+  MapBuilder<String, String> get params =>
+      _$this._params ??= MapBuilder<String, String>();
+  set params(MapBuilder<String, String>? params) => _$this._params = params;
+
   WsErrorFrameBuilder() {
     WsErrorFrame._defaults(this);
   }
@@ -95,6 +106,7 @@ class WsErrorFrameBuilder
       _id = $v.id;
       _code = $v.code;
       _message = $v.message;
+      _params = $v.params?.toBuilder();
       _$v = null;
     }
     return this;
@@ -114,26 +126,43 @@ class WsErrorFrameBuilder
   WsErrorFrame build() => _build();
 
   _$WsErrorFrame _build() {
-    final _$result =
-        _$v ??
-        _$WsErrorFrame._(
-          type: BuiltValueNullFieldError.checkNotNull(
-            type,
-            r'WsErrorFrame',
-            'type',
-          ),
-          id: id,
-          code: BuiltValueNullFieldError.checkNotNull(
-            code,
-            r'WsErrorFrame',
-            'code',
-          ),
-          message: BuiltValueNullFieldError.checkNotNull(
-            message,
-            r'WsErrorFrame',
-            'message',
-          ),
+    _$WsErrorFrame _$result;
+    try {
+      _$result =
+          _$v ??
+          _$WsErrorFrame._(
+            type: BuiltValueNullFieldError.checkNotNull(
+              type,
+              r'WsErrorFrame',
+              'type',
+            ),
+            id: id,
+            code: BuiltValueNullFieldError.checkNotNull(
+              code,
+              r'WsErrorFrame',
+              'code',
+            ),
+            message: BuiltValueNullFieldError.checkNotNull(
+              message,
+              r'WsErrorFrame',
+              'message',
+            ),
+            params: _params?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'params';
+        _params?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'WsErrorFrame',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

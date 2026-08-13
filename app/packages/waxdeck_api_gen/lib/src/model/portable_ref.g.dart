@@ -12,6 +12,8 @@ const PortableRefKindEnum _$portableRefKindEnum_book =
     const PortableRefKindEnum._('book');
 const PortableRefKindEnum _$portableRefKindEnum_episode =
     const PortableRefKindEnum._('episode');
+const PortableRefKindEnum _$portableRefKindEnum_unknownDefaultOpenApi =
+    const PortableRefKindEnum._('unknownDefaultOpenApi');
 
 PortableRefKindEnum _$portableRefKindEnumValueOf(String name) {
   switch (name) {
@@ -21,8 +23,10 @@ PortableRefKindEnum _$portableRefKindEnumValueOf(String name) {
       return _$portableRefKindEnum_book;
     case 'episode':
       return _$portableRefKindEnum_episode;
+    case 'unknownDefaultOpenApi':
+      return _$portableRefKindEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$portableRefKindEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -31,6 +35,7 @@ final BuiltSet<PortableRefKindEnum> _$portableRefKindEnumValues =
       _$portableRefKindEnum_track,
       _$portableRefKindEnum_book,
       _$portableRefKindEnum_episode,
+      _$portableRefKindEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<PortableRefKindEnum> _$portableRefKindEnumSerializer =
@@ -42,11 +47,13 @@ class _$PortableRefKindEnumSerializer
     'track': 'track',
     'book': 'book',
     'episode': 'episode',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'track': 'track',
     'book': 'book',
     'episode': 'episode',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

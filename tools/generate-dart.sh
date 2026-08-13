@@ -37,7 +37,7 @@ npx --yes @openapitools/openapi-generator-cli generate \
   -i "$SPEC" \
   -g dart-dio \
   -o "$OUT" \
-  --additional-properties=pubName=waxdeck_api_gen,pubVersion=0.1.0,pubDescription=Generated-WaxDeck-API-client-do-not-edit
+  --additional-properties=pubName=waxdeck_api_gen,pubVersion=0.1.0,pubDescription=Generated-WaxDeck-API-client-do-not-edit,enumUnknownDefaultCase=true
 
 # --- 3. Make the generated package a workspace member --------------------------
 # The dart-dio template still emits a pre-3.5 SDK lower bound, which forbids

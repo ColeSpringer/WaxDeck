@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
+	"html/template"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
+	"github.com/colespringer/waxdeck/server/internal/pagetext"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -692,26 +693,35 @@ func (s *Server) StartLastfmConnect(ctx context.Context, _ StartLastfmConnectReq
 }
 
 func (s *Server) LastfmCallback(ctx context.Context, req LastfmCallbackRequestObject) (LastfmCallbackResponseObject, error) {
+	loc := pageStringsFromContext(ctx)
 	username, err := s.svc.CompleteLastfmConnect(ctx, req.Params.State, req.Params.Token)
 	if err != nil {
-		msg := kindMessage(err, "the authorization could not be completed")
-		page := scrobblePage("Last.fm connection failed", msg)
+		// A message the service carried up is a diagnostic and shows in
+		// its own English; the localized sentence is what stands in when
+		// there is none.
+		msg := kindMessage(err, loc.LastfmFailedBody)
+		page := scrobblePage(loc, loc.LastfmFailedTitle, msg)
 		if service.KindOf(err) == service.KindService {
 			return LastfmCallback502TexthtmlResponse{Body: strings.NewReader(page), ContentLength: int64(len(page))}, nil
 		}
 		return LastfmCallback400TexthtmlResponse{Body: strings.NewReader(page), ContentLength: int64(len(page))}, nil
 	}
-	page := scrobblePage("Last.fm connected",
-		"Connected as "+username+". You can close this window; WaxDeck delivers your scrobbles from here on.")
+	page := scrobblePage(loc, loc.LastfmConnectedTitle, fmt.Sprintf(loc.LastfmConnectedBody, username))
 	return LastfmCallback200TexthtmlResponse{Body: strings.NewReader(page), ContentLength: int64(len(page))}, nil
 }
 
-// scrobblePage renders the tiny human-facing callback page. All values
-// are escaped; the page carries no scripts.
-func scrobblePage(title, body string) string {
-	return "<!doctype html><html><head><meta charset=\"utf-8\"><title>" +
-		html.EscapeString(title) + "</title></head><body style=\"font-family: sans-serif; max-width: 32em; margin: 4em auto;\"><h1>" +
-		html.EscapeString(title) + "</h1><p>" + html.EscapeString(body) + "</p></body></html>"
+// scrobblePageTmpl is the tiny human-facing callback page. A template
+// rather than concatenation so escaping is the default rather than a
+// call somebody has to remember; the page carries no scripts.
+var scrobblePageTmpl = template.Must(template.New("scrobble").Parse(
+	`<!doctype html><html lang="{{.Lang}}"><head><meta charset="utf-8"><title>{{.Title}}</title></head>` +
+		`<body style="font-family: sans-serif; max-width: 32em; margin: 4em auto;">` +
+		`<h1>{{.Title}}</h1><p>{{.Body}}</p></body></html>`))
+
+func scrobblePage(loc *pagetext.Strings, title, body string) string {
+	var b strings.Builder
+	_ = scrobblePageTmpl.Execute(&b, struct{ Lang, Title, Body string }{loc.Lang, title, body})
+	return b.String()
 }
 
 // --- push registrations -----------------------------------------------------------

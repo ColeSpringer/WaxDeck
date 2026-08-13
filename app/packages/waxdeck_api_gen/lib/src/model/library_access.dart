@@ -134,6 +134,9 @@ class LibraryAccessModeEnum extends EnumClass {
   /// Access mode.
   @BuiltValueEnumConst(wireName: r'granted')
   static const LibraryAccessModeEnum granted = _$libraryAccessModeEnum_granted;
+  /// Access mode.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const LibraryAccessModeEnum unknownDefaultOpenApi = _$libraryAccessModeEnum_unknownDefaultOpenApi;
 
   static Serializer<LibraryAccessModeEnum> get serializer => _$libraryAccessModeEnumSerializer;
 

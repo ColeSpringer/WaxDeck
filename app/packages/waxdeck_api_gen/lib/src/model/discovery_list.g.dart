@@ -15,6 +15,9 @@ const DiscoveryList _$starred = const DiscoveryList._('starred');
 const DiscoveryList _$alphabetical = const DiscoveryList._('alphabetical');
 const DiscoveryList _$neverPlayed = const DiscoveryList._('neverPlayed');
 const DiscoveryList _$rediscover = const DiscoveryList._('rediscover');
+const DiscoveryList _$unknownDefaultOpenApi = const DiscoveryList._(
+  'unknownDefaultOpenApi',
+);
 
 DiscoveryList _$valueOf(String name) {
   switch (name) {
@@ -36,8 +39,10 @@ DiscoveryList _$valueOf(String name) {
       return _$neverPlayed;
     case 'rediscover':
       return _$rediscover;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
@@ -52,6 +57,7 @@ final BuiltSet<DiscoveryList> _$values =
       _$alphabetical,
       _$neverPlayed,
       _$rediscover,
+      _$unknownDefaultOpenApi,
     ]);
 
 class _$DiscoveryListMeta {
@@ -65,6 +71,7 @@ class _$DiscoveryListMeta {
   DiscoveryList get alphabetical => _$alphabetical;
   DiscoveryList get neverPlayed => _$neverPlayed;
   DiscoveryList get rediscover => _$rediscover;
+  DiscoveryList get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   DiscoveryList valueOf(String name) => _$valueOf(name);
   BuiltSet<DiscoveryList> get values => _$values;
 }
@@ -88,6 +95,7 @@ class _$DiscoveryListSerializer implements PrimitiveSerializer<DiscoveryList> {
     'alphabetical': 'alphabetical',
     'neverPlayed': 'never-played',
     'rediscover': 'rediscover',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'newest': 'newest',
@@ -99,6 +107,7 @@ class _$DiscoveryListSerializer implements PrimitiveSerializer<DiscoveryList> {
     'alphabetical': 'alphabetical',
     'never-played': 'neverPlayed',
     'rediscover': 'rediscover',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

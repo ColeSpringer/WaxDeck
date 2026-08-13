@@ -10,6 +10,8 @@ const GenreTreeSource_Enum _$genreTreeSourceEnum_default_ =
     const GenreTreeSource_Enum._('default_');
 const GenreTreeSource_Enum _$genreTreeSourceEnum_custom =
     const GenreTreeSource_Enum._('custom');
+const GenreTreeSource_Enum _$genreTreeSourceEnum_unknownDefaultOpenApi =
+    const GenreTreeSource_Enum._('unknownDefaultOpenApi');
 
 GenreTreeSource_Enum _$genreTreeSourceEnumValueOf(String name) {
   switch (name) {
@@ -17,8 +19,10 @@ GenreTreeSource_Enum _$genreTreeSourceEnumValueOf(String name) {
       return _$genreTreeSourceEnum_default_;
     case 'custom':
       return _$genreTreeSourceEnum_custom;
+    case 'unknownDefaultOpenApi':
+      return _$genreTreeSourceEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$genreTreeSourceEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -26,6 +30,7 @@ final BuiltSet<GenreTreeSource_Enum> _$genreTreeSourceEnumValues =
     BuiltSet<GenreTreeSource_Enum>(const <GenreTreeSource_Enum>[
       _$genreTreeSourceEnum_default_,
       _$genreTreeSourceEnum_custom,
+      _$genreTreeSourceEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<GenreTreeSource_Enum> _$genreTreeSourceEnumSerializer =
@@ -36,10 +41,12 @@ class _$GenreTreeSource_EnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'default_': 'default',
     'custom': 'custom',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'default': 'default_',
     'custom': 'custom',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

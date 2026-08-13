@@ -12,6 +12,8 @@ const LibraryMatchingModeEnum _$libraryMatchingModeEnum_review =
     const LibraryMatchingModeEnum._('review');
 const LibraryMatchingModeEnum _$libraryMatchingModeEnum_off =
     const LibraryMatchingModeEnum._('off');
+const LibraryMatchingModeEnum _$libraryMatchingModeEnum_unknownDefaultOpenApi =
+    const LibraryMatchingModeEnum._('unknownDefaultOpenApi');
 
 LibraryMatchingModeEnum _$libraryMatchingModeEnumValueOf(String name) {
   switch (name) {
@@ -21,8 +23,10 @@ LibraryMatchingModeEnum _$libraryMatchingModeEnumValueOf(String name) {
       return _$libraryMatchingModeEnum_review;
     case 'off':
       return _$libraryMatchingModeEnum_off;
+    case 'unknownDefaultOpenApi':
+      return _$libraryMatchingModeEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$libraryMatchingModeEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -31,6 +35,7 @@ final BuiltSet<LibraryMatchingModeEnum> _$libraryMatchingModeEnumValues =
       _$libraryMatchingModeEnum_auto,
       _$libraryMatchingModeEnum_review,
       _$libraryMatchingModeEnum_off,
+      _$libraryMatchingModeEnum_unknownDefaultOpenApi,
     ]);
 
 Serializer<LibraryMatchingModeEnum> _$libraryMatchingModeEnumSerializer =
@@ -42,11 +47,13 @@ class _$LibraryMatchingModeEnumSerializer
     'auto': 'auto',
     'review': 'review',
     'off': 'off',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'auto': 'auto',
     'review': 'review',
     'off': 'off',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

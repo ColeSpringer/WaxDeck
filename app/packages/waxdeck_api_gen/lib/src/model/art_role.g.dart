@@ -11,6 +11,9 @@ const ArtRole _$back = const ArtRole._('back');
 const ArtRole _$disc = const ArtRole._('disc');
 const ArtRole _$booklet = const ArtRole._('booklet');
 const ArtRole _$background = const ArtRole._('background');
+const ArtRole _$unknownDefaultOpenApi = const ArtRole._(
+  'unknownDefaultOpenApi',
+);
 
 ArtRole _$valueOf(String name) {
   switch (name) {
@@ -24,8 +27,10 @@ ArtRole _$valueOf(String name) {
       return _$booklet;
     case 'background':
       return _$background;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
@@ -35,6 +40,7 @@ final BuiltSet<ArtRole> _$values = BuiltSet<ArtRole>(const <ArtRole>[
   _$disc,
   _$booklet,
   _$background,
+  _$unknownDefaultOpenApi,
 ]);
 
 class _$ArtRoleMeta {
@@ -44,6 +50,7 @@ class _$ArtRoleMeta {
   ArtRole get disc => _$disc;
   ArtRole get booklet => _$booklet;
   ArtRole get background => _$background;
+  ArtRole get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   ArtRole valueOf(String name) => _$valueOf(name);
   BuiltSet<ArtRole> get values => _$values;
 }
@@ -62,6 +69,7 @@ class _$ArtRoleSerializer implements PrimitiveSerializer<ArtRole> {
     'disc': 'disc',
     'booklet': 'booklet',
     'background': 'background',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'front': 'front',
@@ -69,6 +77,7 @@ class _$ArtRoleSerializer implements PrimitiveSerializer<ArtRole> {
     'disc': 'disc',
     'booklet': 'booklet',
     'background': 'background',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

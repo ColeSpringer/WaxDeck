@@ -22,6 +22,9 @@ const PlaylistImportRequestSource_Enum _$playlistImportRequestSourceEnum_text =
 const PlaylistImportRequestSource_Enum
 _$playlistImportRequestSourceEnum_portable =
     const PlaylistImportRequestSource_Enum._('portable');
+const PlaylistImportRequestSource_Enum
+_$playlistImportRequestSourceEnum_unknownDefaultOpenApi =
+    const PlaylistImportRequestSource_Enum._('unknownDefaultOpenApi');
 
 PlaylistImportRequestSource_Enum _$playlistImportRequestSourceEnumValueOf(
   String name,
@@ -39,8 +42,10 @@ PlaylistImportRequestSource_Enum _$playlistImportRequestSourceEnumValueOf(
       return _$playlistImportRequestSourceEnum_text;
     case 'portable':
       return _$playlistImportRequestSourceEnum_portable;
+    case 'unknownDefaultOpenApi':
+      return _$playlistImportRequestSourceEnum_unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$playlistImportRequestSourceEnum_unknownDefaultOpenApi;
   }
 }
 
@@ -54,6 +59,7 @@ _$playlistImportRequestSourceEnumValues =
         _$playlistImportRequestSourceEnum_csv,
         _$playlistImportRequestSourceEnum_text,
         _$playlistImportRequestSourceEnum_portable,
+        _$playlistImportRequestSourceEnum_unknownDefaultOpenApi,
       ],
     );
 
@@ -70,6 +76,7 @@ class _$PlaylistImportRequestSource_EnumSerializer
     'csv': 'csv',
     'text': 'text',
     'portable': 'portable',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'spotify': 'spotify',
@@ -78,6 +85,7 @@ class _$PlaylistImportRequestSource_EnumSerializer
     'csv': 'csv',
     'text': 'text',
     'portable': 'portable',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

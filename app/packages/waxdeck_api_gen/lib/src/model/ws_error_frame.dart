@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -15,6 +16,7 @@ part 'ws_error_frame.g.dart';
 /// * [id] - The failed frame's correlation id, when known.
 /// * [code] - Machine-readable error code.
 /// * [message] - Human-readable detail.
+/// * [params] - Machine-readable detail keyed per code, the same shape and rules as the REST `Error` schema's `params`: a refusal a client can hit over either transport says the same thing on both. 
 @BuiltValue()
 abstract class WsErrorFrame implements Built<WsErrorFrame, WsErrorFrameBuilder> {
   /// Always `error`.
@@ -32,6 +34,10 @@ abstract class WsErrorFrame implements Built<WsErrorFrame, WsErrorFrameBuilder> 
   /// Human-readable detail.
   @BuiltValueField(wireName: r'message')
   String get message;
+
+  /// Machine-readable detail keyed per code, the same shape and rules as the REST `Error` schema's `params`: a refusal a client can hit over either transport says the same thing on both. 
+  @BuiltValueField(wireName: r'params')
+  BuiltMap<String, String>? get params;
 
   WsErrorFrame._();
 
@@ -78,6 +84,13 @@ class _$WsErrorFrameSerializer implements PrimitiveSerializer<WsErrorFrame> {
       object.message,
       specifiedType: const FullType(String),
     );
+    if (object.params != null) {
+      yield r'params';
+      yield serializers.serialize(
+        object.params,
+        specifiedType: const FullType(BuiltMap, [FullType(String), FullType(String)]),
+      );
+    }
   }
 
   @override
@@ -128,6 +141,13 @@ class _$WsErrorFrameSerializer implements PrimitiveSerializer<WsErrorFrame> {
             specifiedType: const FullType(String),
           ) as String;
           result.message = valueDes;
+          break;
+        case r'params':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltMap, [FullType(String), FullType(String)]),
+          ) as BuiltMap<String, String>;
+          result.params.replace(valueDes);
           break;
         default:
           unhandled.add(key);

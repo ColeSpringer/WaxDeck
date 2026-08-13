@@ -20,6 +20,9 @@ class MediaType extends EnumClass {
   /// The three first-class media types.
   @BuiltValueEnumConst(wireName: r'audiobook')
   static const MediaType audiobook = _$audiobook;
+  /// The three first-class media types.
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const MediaType unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 
   static Serializer<MediaType> get serializer => _$mediaTypeSerializer;
 

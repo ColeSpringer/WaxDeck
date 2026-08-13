@@ -8,6 +8,9 @@ part of 'facet_sort.dart';
 
 const FacetSort _$count = const FacetSort._('count');
 const FacetSort _$label = const FacetSort._('label');
+const FacetSort _$unknownDefaultOpenApi = const FacetSort._(
+  'unknownDefaultOpenApi',
+);
 
 FacetSort _$valueOf(String name) {
   switch (name) {
@@ -15,20 +18,24 @@ FacetSort _$valueOf(String name) {
       return _$count;
     case 'label':
       return _$label;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
 final BuiltSet<FacetSort> _$values = BuiltSet<FacetSort>(const <FacetSort>[
   _$count,
   _$label,
+  _$unknownDefaultOpenApi,
 ]);
 
 class _$FacetSortMeta {
   const _$FacetSortMeta();
   FacetSort get count => _$count;
   FacetSort get label => _$label;
+  FacetSort get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   FacetSort valueOf(String name) => _$valueOf(name);
   BuiltSet<FacetSort> get values => _$values;
 }
@@ -44,10 +51,12 @@ class _$FacetSortSerializer implements PrimitiveSerializer<FacetSort> {
   static const Map<String, Object> _toWire = const <String, Object>{
     'count': 'count',
     'label': 'label',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'count': 'count',
     'label': 'label',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

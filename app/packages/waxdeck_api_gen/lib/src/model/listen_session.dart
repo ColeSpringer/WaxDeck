@@ -243,6 +243,9 @@ class ListenSessionSource_Enum extends EnumClass {
   /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. 
   @BuiltValueEnumConst(wireName: r'import')
   static const ListenSessionSource_Enum import_ = _$listenSessionSourceEnum_import_;
+  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const ListenSessionSource_Enum unknownDefaultOpenApi = _$listenSessionSourceEnum_unknownDefaultOpenApi;
 
   static Serializer<ListenSessionSource_Enum> get serializer => _$listenSessionSourceEnumSerializer;
 

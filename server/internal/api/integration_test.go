@@ -186,6 +186,13 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	mux.HandleFunc("GET /media/enclosure", srv.ServeEnclosure)
 	mux.HandleFunc("GET /media/art", srv.ServeMediaArt)
 	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
+	// The public share surface, mounted as main.go mounts it (minus the
+	// metrics wrapper, which is main.go's own): the landing page reads
+	// its token out of the route pattern, so it needs the real pattern.
+	mux.HandleFunc("GET /s/{token}", srv.ServeSharePage)
+	mux.HandleFunc("GET /s/{token}/stream", srv.ServeShareStream)
+	mux.HandleFunc("GET /s/{token}/art", srv.ServeShareArt)
+	mux.HandleFunc("GET /s/{token}/download", srv.ServeShareDownload)
 	mux.Handle("/rest/", subsonic.New(svc, bridge, media, "test", log))
 	if bridge != nil {
 		mux.HandleFunc("/media/stream", bridge.ServeStream)

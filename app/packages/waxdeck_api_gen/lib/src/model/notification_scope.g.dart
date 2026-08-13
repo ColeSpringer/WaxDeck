@@ -8,6 +8,9 @@ part of 'notification_scope.dart';
 
 const NotificationScope _$server = const NotificationScope._('server');
 const NotificationScope _$user = const NotificationScope._('user');
+const NotificationScope _$unknownDefaultOpenApi = const NotificationScope._(
+  'unknownDefaultOpenApi',
+);
 
 NotificationScope _$valueOf(String name) {
   switch (name) {
@@ -15,19 +18,22 @@ NotificationScope _$valueOf(String name) {
       return _$server;
     case 'user':
       return _$user;
+    case 'unknownDefaultOpenApi':
+      return _$unknownDefaultOpenApi;
     default:
-      throw ArgumentError(name);
+      return _$unknownDefaultOpenApi;
   }
 }
 
 final BuiltSet<NotificationScope> _$values = BuiltSet<NotificationScope>(
-  const <NotificationScope>[_$server, _$user],
+  const <NotificationScope>[_$server, _$user, _$unknownDefaultOpenApi],
 );
 
 class _$NotificationScopeMeta {
   const _$NotificationScopeMeta();
   NotificationScope get server => _$server;
   NotificationScope get user => _$user;
+  NotificationScope get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   NotificationScope valueOf(String name) => _$valueOf(name);
   BuiltSet<NotificationScope> get values => _$values;
 }
@@ -46,10 +52,12 @@ class _$NotificationScopeSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'server': 'server',
     'user': 'user',
+    'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'server': 'server',
     'user': 'user',
+    'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
   @override

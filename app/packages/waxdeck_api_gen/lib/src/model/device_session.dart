@@ -223,6 +223,9 @@ class DeviceSessionKindEnum extends EnumClass {
   /// `web` sessions authenticate with the cookie; `device` sessions with a bearer token. 
   @BuiltValueEnumConst(wireName: r'device')
   static const DeviceSessionKindEnum device = _$deviceSessionKindEnum_device;
+  /// `web` sessions authenticate with the cookie; `device` sessions with a bearer token. 
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const DeviceSessionKindEnum unknownDefaultOpenApi = _$deviceSessionKindEnum_unknownDefaultOpenApi;
 
   static Serializer<DeviceSessionKindEnum> get serializer => _$deviceSessionKindEnumSerializer;
 
