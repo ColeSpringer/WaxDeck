@@ -5,7 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
-import '../format_bytes.dart';
+import '../l10n/l10n.dart';
 import '../search/search_chrome.dart';
 import '../shell/semantics_ids.dart';
 import 'downloads_controller.dart';
@@ -93,6 +93,7 @@ class _StorageHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         sizeClass.gutter.horizontal / 2,
@@ -111,7 +112,7 @@ class _StorageHeader extends ConsumerWidget {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    formatBytes(downloads.usedBytes),
+                    l10n.formatBytes(downloads.usedBytes),
                     style: WaxType.titleEntity.copyWith(
                       color: colors.textPrimary,
                     ),
@@ -133,7 +134,7 @@ class _StorageHeader extends ConsumerWidget {
                 for (final domain in downloads.byDomain)
                   CodecChip(
                     '${_mediumLabel(domain.mediaType)} '
-                    '${formatBytes(domain.bytes)}',
+                    '${l10n.formatBytes(domain.bytes)}',
                   ),
               ],
             ),
@@ -147,12 +148,13 @@ class _StorageHeader extends ConsumerWidget {
     // Read before the dialog: this runs unawaited, so `ref` may be dead
     // by the time the answer comes back.
     final notifier = ref.read(downloadsProvider.notifier);
+    final freed = context.l10n.formatBytes(downloads.usedBytes);
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove every download?'),
         content: Text(
-          'This frees ${formatBytes(downloads.usedBytes)}. Nothing leaves '
+          'This frees $freed. Nothing leaves '
           'the library: everything here plays again with the server '
           'reachable.',
         ),
@@ -249,6 +251,7 @@ class _Transfers extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.l10n;
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: sizeClass.gutter.horizontal / 2,
@@ -271,7 +274,7 @@ class _Transfers extends ConsumerWidget {
                 // The progress bar under the row, which is the sliver
                 // MediaListRow already draws for a resume position.
                 progress: fractions[entry.pid] ?? 0,
-                trailingText: formatBytes(entry.record.sizeBytes),
+                trailingText: l10n.formatBytes(entry.record.sizeBytes),
                 semanticsId: SemanticsIds.downloadRow(entry.pid),
               ),
               actions: <Widget>[
@@ -364,6 +367,7 @@ class _Groups extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.l10n;
     final groups = downloads.groups;
     return SliverPadding(
       padding: EdgeInsets.symmetric(
@@ -393,7 +397,7 @@ class _Groups extends ConsumerWidget {
                   progress: entry.finished
                       ? null
                       : _fraction(entry.progress, entry.item?.durationMs),
-                  trailingText: formatBytes(entry.record.sizeBytes),
+                  trailingText: l10n.formatBytes(entry.record.sizeBytes),
                   semanticsId: SemanticsIds.downloadRow(entry.pid),
                 ),
                 actions: <Widget>[

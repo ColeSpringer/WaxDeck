@@ -87,8 +87,8 @@ class MediaTileData {
 
   /// What a screen reader hears in place of [trailingText], where the
   /// drawn form is abbreviated for the room it has. "6 hr" is the right
-  /// caption and the wrong thing to read aloud; [spellDuration] is what
-  /// belongs here. Defaults to the drawn text.
+  /// caption and the wrong thing to read aloud; `WaxLocalizations`'s
+  /// `spellDuration` is what belongs here. Defaults to the drawn text.
   final String? trailingSpoken;
 
   /// A word over the artwork naming what kind of thing this is, where the
@@ -223,51 +223,4 @@ String formatTimecode(Duration d) {
     return '$hours:${minutes.toString().padLeft(2, '0')}:$seconds';
   }
   return '$minutes:$seconds';
-}
-
-/// A duration as a span rather than as a position: "6 hr", "1 hr 20 min",
-/// "45 min".
-///
-/// For the readouts that answer "how much", where a timecode answers the
-/// wrong question - an audiobook with "7:50:12" left is telling you a
-/// clock time. Minutes are dropped past ten hours, where they are noise,
-/// and a span under a minute rounds up rather than reading "0 min".
-///
-/// Abbreviated on purpose, because it lives in captions and cells that
-/// have room for a few characters. What a screen reader should hear is
-/// [spellDuration]; the components that draw one carry both.
-String formatSpan(Duration d) {
-  final total = d.inSeconds.abs();
-  final hours = total ~/ 3600;
-  final minutes = (total % 3600) ~/ 60;
-  if (hours == 0) return '${minutes == 0 ? 1 : minutes} min';
-  if (minutes == 0 || hours >= 10) return '$hours hr';
-  return '$hours hr $minutes min';
-}
-
-/// Spells a duration for screen readers and for prose: "2 minutes
-/// 41 seconds", "8 hours 2 minutes".
-///
-/// Every unit is named and hours are their own step: this is the only
-/// positional feedback a screen-reader user gets, and an audiobook read
-/// as "482 minutes 13" is not feedback.
-String spellDuration(Duration d) {
-  final total = d.inSeconds.abs();
-  final hours = total ~/ 3600;
-  final minutes = (total % 3600) ~/ 60;
-  final seconds = total % 60;
-
-  String unit(int value, String singular) =>
-      '$value $singular${value == 1 ? '' : 's'}';
-
-  if (hours > 0) {
-    // Seconds are noise at this scale, and a screen reader reads every
-    // word of them.
-    return minutes == 0
-        ? unit(hours, 'hour')
-        : '${unit(hours, 'hour')} ${unit(minutes, 'minute')}';
-  }
-  if (minutes == 0) return unit(seconds, 'second');
-  if (seconds == 0) return unit(minutes, 'minute');
-  return '${unit(minutes, 'minute')} ${unit(seconds, 'second')}';
 }

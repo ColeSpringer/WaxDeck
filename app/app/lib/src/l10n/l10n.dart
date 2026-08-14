@@ -1,8 +1,12 @@
 import 'package:flutter/widgets.dart';
 import 'package:intl/locale.dart' as intl;
+import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxLocalizations;
 
+import 'explain_error.dart';
 import 'gen/app_localizations.dart';
 
+export 'explain_error.dart';
+export 'formats.dart';
 export 'gen/app_localizations.dart';
 
 /// The single import for the app's copy: `context.l10n.<key>`.
@@ -12,12 +16,25 @@ export 'gen/app_localizations.dart';
 /// leaf that draws it is what localizes.
 extension L10nX on BuildContext {
   AppLocalizations get l10n => AppLocalizations.of(this);
+
+  /// The one sentence an error surface shows. See [explainError]: the
+  /// boundary is the code, and the server's message is the fallback.
+  String explain(Object error) => explainError(l10n, error);
 }
 
 /// Every delegate a WaxDeck host installs, in one list so the app and
 /// the test hosts cannot drift apart.
+///
+/// The design system's table rides here too. Without it the components
+/// still draw - `context.waxL10n` answers English when no delegate is
+/// installed, which is what keeps the package's own tests plain - so its
+/// absence in a host would show only as a Spanish screen with English
+/// buttons on it.
 const List<LocalizationsDelegate<dynamic>> waxLocalizationsDelegates =
-    AppLocalizations.localizationsDelegates;
+    <LocalizationsDelegate<dynamic>>[
+      ...AppLocalizations.localizationsDelegates,
+      WaxLocalizations.delegate,
+    ];
 
 /// The locales the app offers, English first by construction.
 ///

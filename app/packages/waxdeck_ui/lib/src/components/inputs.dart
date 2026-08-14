@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
@@ -228,7 +229,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
                     ? const SizedBox.shrink()
                     : WaxIconButton(
                         glyph: WaxIcons.close,
-                        label: 'Clear ${widget.label.toLowerCase()}',
+                        label: context.waxL10n.inputsClear(widget.label),
                         size: 16,
                         semanticsId: widget.clearSemanticsId,
                         onPressed: _clear,
@@ -245,9 +246,9 @@ class _WaxTextFieldState extends State<WaxTextField> {
       children: <Widget>[
         if (widget.showLabel)
           Padding(
-            padding: const EdgeInsets.only(
+            padding: const EdgeInsetsDirectional.only(
               bottom: WaxSpace.s4,
-              left: WaxSpace.s12,
+              start: WaxSpace.s12,
             ),
             // Excluded rather than drawn as a `Semantics` label: the
             // field already carries this exact string as its accessible
@@ -262,9 +263,9 @@ class _WaxTextFieldState extends State<WaxTextField> {
         field,
         if (error != null)
           Padding(
-            padding: const EdgeInsets.only(
+            padding: const EdgeInsetsDirectional.only(
               top: WaxSpace.s4,
-              left: WaxSpace.s12,
+              start: WaxSpace.s12,
             ),
             child: Text(
               error,
@@ -287,8 +288,8 @@ class SearchField extends StatelessWidget {
   const SearchField({
     this.controller,
     this.focusNode,
-    this.hint = 'Search',
-    this.label = 'Search',
+    this.hint,
+    this.label,
     this.onChanged,
     this.onSubmitted,
     this.autofocus = false,
@@ -299,8 +300,13 @@ class SearchField extends StatelessWidget {
 
   final TextEditingController? controller;
   final FocusNode? focusNode;
-  final String hint;
-  final String label;
+
+  /// Placeholder text inside the empty field. Null takes the design
+  /// system's own.
+  final String? hint;
+
+  /// The field's accessible name. Null takes the design system's own.
+  final String? label;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
 
@@ -311,8 +317,8 @@ class SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return WaxTextField(
-      label: label,
-      hint: hint,
+      label: label ?? context.waxL10n.inputsSearchLabel,
+      hint: hint ?? context.waxL10n.inputsSearchHint,
       glyph: WaxIcons.search,
       controller: controller,
       focusNode: focusNode,

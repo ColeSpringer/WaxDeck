@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -87,6 +88,7 @@ class _ListeningSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(listeningStatsProvider);
     final bucket = ref.watch(statsBucketProvider);
+    final l10n = context.l10n;
     return switch (stats) {
       AsyncData(:final value) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -129,8 +131,8 @@ class _ListeningSection extends ConsumerWidget {
             ListeningBarChart(
               key: const Key('stats-chart'),
               values: <int>[for (final b in value.buckets) b.ms],
-              labels: _chartLabels(value.buckets),
-              summary: _chartSummary(value.buckets, bucket),
+              labels: _chartLabels(l10n, value.buckets),
+              summary: _chartSummary(l10n, value.buckets, bucket),
             ),
             const SizedBox(height: WaxSpace.s8),
             Align(
@@ -156,29 +158,32 @@ class _ListeningSection extends ConsumerWidget {
     };
   }
 
-  static String _stamp(DateTime day) {
-    final month = day.month.toString().padLeft(2, '0');
-    final date = day.day.toString().padLeft(2, '0');
-    return '$month-$date';
-  }
-
   /// First and last bucket dates only; a label on every bar would just
   /// collide.
-  static Map<int, String> _chartLabels(List<ListeningBucket> buckets) {
+  static Map<int, String> _chartLabels(
+    AppLocalizations l10n,
+    List<ListeningBucket> buckets,
+  ) {
     if (buckets.isEmpty) return const <int, String>{};
     if (buckets.length == 1) {
-      return <int, String>{0: _stamp(buckets.first.start)};
+      return <int, String>{
+        0: l10n.formatMonthDayNumericOnDay(buckets.first.start),
+      };
     }
     return <int, String>{
-      0: _stamp(buckets.first.start),
-      buckets.length - 1: _stamp(buckets.last.start),
+      0: l10n.formatMonthDayNumericOnDay(buckets.first.start),
+      buckets.length - 1: l10n.formatMonthDayNumericOnDay(buckets.last.start),
     };
   }
 
   /// What the chart says out loud: the span it covers, and where the
   /// most listening landed. Not a reading of every bar, which for a
   /// year of days would be 365 numbers nobody can hold.
-  static String _chartSummary(List<ListeningBucket> buckets, String bucket) {
+  static String _chartSummary(
+    AppLocalizations l10n,
+    List<ListeningBucket> buckets,
+    String bucket,
+  ) {
     if (buckets.isEmpty) return 'No listening in this range.';
     var peak = buckets.first;
     for (final b in buckets) {
@@ -186,9 +191,10 @@ class _ListeningSection extends ConsumerWidget {
     }
     final unit = StatsScreen.bucketLabel(bucket).toLowerCase();
     return 'Listening by $unit, ${buckets.length} bars from '
-        '${_stamp(buckets.first.start)} to ${_stamp(buckets.last.start)}. '
+        '${l10n.formatMonthDayNumericOnDay(buckets.first.start)} to '
+        '${l10n.formatMonthDayNumericOnDay(buckets.last.start)}. '
         'The most was ${formatListenTime(peak.ms)} '
-        'on ${_stamp(peak.start)}.';
+        'on ${l10n.formatMonthDayNumericOnDay(peak.start)}.';
   }
 }
 

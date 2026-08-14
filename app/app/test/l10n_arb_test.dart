@@ -173,6 +173,15 @@ const _bundles = <_Bundle>[
     prefix: 'app',
     locales: <String>['en', 'es'],
   ),
+  // The design system keeps a table of its own, for the copy no caller
+  // can pass in. Checked from here rather than from that package,
+  // because these are the checks and there is one of them.
+  _Bundle(
+    name: 'waxdeck_ui',
+    dir: '../packages/waxdeck_ui/lib/src/l10n/arb',
+    prefix: 'wax',
+    locales: <String>['en', 'es'],
+  ),
 ];
 
 /// An ARB file split into its messages and their `@` metadata.

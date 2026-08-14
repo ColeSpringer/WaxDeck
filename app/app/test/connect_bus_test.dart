@@ -56,7 +56,7 @@ void main() {
         isA<WaxDeckApiException>().having(
           (e) => e.code,
           'code',
-          'service-unreachable',
+          'local-channel-offline',
         ),
       ),
     );

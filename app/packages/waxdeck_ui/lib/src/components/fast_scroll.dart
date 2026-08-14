@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
@@ -111,7 +112,7 @@ class _FastScrollRailState extends State<FastScrollRail> {
             // button, and merged they become one rail-sized tap target
             // that jumps to whichever letter merged last.
             explicitChildNodes: true,
-            label: 'Jump to a letter',
+            label: context.waxL10n.fastScrollLabel,
             child: GestureDetector(
               // Drag only: a tap belongs to the letter it lands on, and a
               // detector claiming both would take it from them.
@@ -182,7 +183,7 @@ class _RailLetter extends StatelessWidget {
     return Semantics(
       identifier: semanticsId,
       button: true,
-      label: 'Jump to $letter',
+      label: context.waxL10n.fastScrollJumpTo(letter),
       excludeSemantics: true,
       onTap: onTap,
       child: GestureDetector(

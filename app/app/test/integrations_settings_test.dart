@@ -9,6 +9,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxSwitch;
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 /// The switch inside one event row. The key names the row; the control
 /// is what a tap has to land on.
@@ -29,9 +30,7 @@ Widget _host(FakeRepository repo, Widget child) => ProviderScope(
     repositoryProvider.overrideWithValue(repo),
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
   ],
-  child: MaterialApp(
-    home: Scaffold(body: ListView(children: [child])),
-  ),
+  child: localizedHost(Scaffold(body: ListView(children: [child]))),
 );
 
 FakeRepository _adminRepo() => FakeRepository(

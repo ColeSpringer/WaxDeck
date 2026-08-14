@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
@@ -240,14 +241,15 @@ class _Status extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final parts = <String>[
       if (schedule.lastRunAt != null)
-        'Last run ${_stamp(schedule.lastRunAt!)}'
+        'Last run ${l10n.formatStamp(schedule.lastRunAt!)}'
             '${schedule.lastStatus == null ? '' : ' (${schedule.lastStatus})'}',
       // A disabled schedule has no next run, and the server sends none;
       // saying "next: never" for one somebody just switched off is noise.
       if (schedule.enabled && schedule.nextRunAt != null)
-        'Next ${_stamp(schedule.nextRunAt!)}',
+        'Next ${l10n.formatStamp(schedule.nextRunAt!)}',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,12 +269,5 @@ class _Status extends StatelessWidget {
           ),
       ],
     );
-  }
-
-  static String _stamp(DateTime at) {
-    final local = at.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${local.year}-${two(local.month)}-${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}';
   }
 }

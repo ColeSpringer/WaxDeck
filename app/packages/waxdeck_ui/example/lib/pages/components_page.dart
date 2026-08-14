@@ -196,7 +196,7 @@ class _ComponentsPageState extends State<ComponentsPage> {
           selected: _visualizer.name,
           segments: <WaxSegment>[
             for (final mode in WaxVisualizerMode.values)
-              WaxSegment(name: mode.name, label: mode.label),
+              WaxSegment(name: mode.name, label: mode.label(context.waxL10n)),
           ],
           onSelect: (name) => setState(
             () => _visualizer = WaxVisualizerMode.values.byName(name),

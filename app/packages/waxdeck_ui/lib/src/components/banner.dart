@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../theme/wax_layout.dart';
 import '../tokens/colors.dart';
 import '../tokens/spacing.dart';
@@ -159,7 +160,7 @@ class WaxBanner extends StatelessWidget {
                 if (onDismiss != null)
                   WaxIconButton(
                     glyph: WaxIcons.close,
-                    label: 'Dismiss',
+                    label: context.waxL10n.bannerDismiss,
                     size: 16,
                     onPressed: onDismiss,
                     semanticsId: dismissSemanticsId,

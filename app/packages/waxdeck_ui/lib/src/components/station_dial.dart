@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
@@ -164,6 +165,7 @@ class _StationDialState extends State<StationDial> {
 
     final at = _centred + 1;
     final of = widget.stations.length;
+    final l10n = context.waxL10n;
 
     return Semantics(
       identifier: widget.semanticsId,
@@ -176,13 +178,21 @@ class _StationDialState extends State<StationDial> {
       // moving the needle was a flick or a mouse tap on a logo, and neither
       // is available to a keyboard or a screen reader. Two nodes rather
       // than thirteen, and the needle moves.
-      label: 'Station dial',
-      value: '${centred.name}, $at of $of',
+      label: l10n.stationDialLabel,
+      value: l10n.stationDialStation(centred.name, at, of),
       increasedValue: _centred + 1 < of
-          ? '${widget.stations[_centred + 1].name}, ${at + 1} of $of'
+          ? l10n.stationDialStation(
+              widget.stations[_centred + 1].name,
+              at + 1,
+              of,
+            )
           : null,
       decreasedValue: _centred > 0
-          ? '${widget.stations[_centred - 1].name}, ${at - 1} of $of'
+          ? l10n.stationDialStation(
+              widget.stations[_centred - 1].name,
+              at - 1,
+              of,
+            )
           : null,
       onIncrease: _centred + 1 < of ? () => _centre(_centred + 1) : null,
       onDecrease: _centred > 0 ? () => _centre(_centred - 1) : null,
@@ -294,7 +304,9 @@ class _StationDialState extends State<StationDial> {
                 // pause, because a paused live stream resumes at the live
                 // edge anyway.
                 WaxButton(
-                  label: centred.playing ? 'Stop' : 'Tune in',
+                  label: centred.playing
+                      ? l10n.commonStop
+                      : l10n.stationDialTuneIn,
                   kind: centred.playing
                       ? WaxButtonKind.tonal
                       : WaxButtonKind.filled,
@@ -400,7 +412,7 @@ class _Slot extends StatelessWidget {
                       borderRadius: WaxRadius.pill,
                     ),
                     child: Text(
-                      'LIVE',
+                      context.waxL10n.commonLiveChip,
                       style: WaxType.overline.copyWith(
                         color: colors.radio.onContainer,
                       ),

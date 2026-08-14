@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
 import '../theme/wax_layout.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
@@ -485,7 +486,7 @@ class WaxChoice<T> extends StatelessWidget {
       // Its own context, so the menu opens against this control rather
       // than against whatever laid the section out.
       builder: (context) => WaxTappable(
-        label: '$label, ${labelFor(value)}',
+        label: context.waxL10n.settingsChoiceValue(label, labelFor(value)),
         semanticsId: semanticsId,
         borderRadius: WaxRadius.thumb,
         onPressed: enabled ? () => _open(context) : null,

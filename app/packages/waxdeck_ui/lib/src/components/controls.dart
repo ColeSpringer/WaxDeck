@@ -5,13 +5,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import '../theme/wax_layout.dart';
-import 'view_data.dart';
 
 /// The two-tone focus ring.
 ///
@@ -1158,7 +1158,9 @@ class _WaxSliderState extends State<WaxSlider> {
           if (widget.onMute != null)
             WaxIconButton(
               glyph: glyph,
-              label: _muted ? 'Unmute' : 'Mute',
+              label: _muted
+                  ? context.waxL10n.controlsUnmute
+                  : context.waxL10n.controlsMute,
               size: 18,
               active: _muted,
               onPressed: widget.onMute,
@@ -1282,7 +1284,7 @@ class WaxMenuButton<T> extends StatelessWidget {
     required this.items,
     required this.onSelected,
     this.glyph = WaxIcons.more,
-    this.label = 'More',
+    this.label,
     this.semanticsId,
     this.size = 20,
     this.badge,
@@ -1294,7 +1296,10 @@ class WaxMenuButton<T> extends StatelessWidget {
   final List<WaxMenuItem<T>> items;
   final ValueChanged<T> onSelected;
   final WaxGlyph glyph;
-  final String label;
+
+  /// The trigger's accessible name. Null takes the design system's
+  /// own word for an overflow.
+  final String? label;
   final String? semanticsId;
   final double size;
 
@@ -1380,7 +1385,7 @@ class WaxMenuButton<T> extends StatelessWidget {
     // than against whatever laid the bar out.
     builder: (context) => WaxIconButton(
       glyph: glyph,
-      label: label,
+      label: label ?? context.waxL10n.commonMore,
       size: size,
       badge: badge,
       semanticsId: semanticsId,
@@ -1425,7 +1430,9 @@ class StarButton extends StatelessWidget {
       curve: WaxMotion.emphasized,
       child: WaxIconButton(
         glyph: WaxIcons.star,
-        label: starred ? 'Unstar' : 'Star',
+        label: starred
+            ? context.waxL10n.controlsUnstar
+            : context.waxL10n.controlsStar,
         semanticsId: semanticsId,
         active: starred,
         size: size,
@@ -1578,21 +1585,23 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
     // without meaning to (an unresolved duration, a session frame carrying
     // none), so the guard is here rather than in each of them.
     final enabled = widget.onSeek != null && widget.duration > Duration.zero;
+    final l10n = context.waxL10n;
 
     return Semantics(
       identifier: widget.semanticsId,
       slider: true,
       enabled: enabled,
-      label: 'Position',
-      value:
-          '${spellDuration(widget.position)} of '
-          '${spellDuration(widget.duration)}',
+      label: l10n.controlsSeekLabel,
+      value: l10n.controlsSeekValue(
+        l10n.spellDuration(widget.position),
+        l10n.spellDuration(widget.duration),
+      ),
       // Position is announced as a spoken time rather than a percentage,
       // and the step values ride along: a slider that offers increase
       // without saying where increasing lands is a half-built control
       // (and an assertion failure).
-      increasedValue: spellDuration(_offsetBy(widget.step)),
-      decreasedValue: spellDuration(_offsetBy(-widget.step)),
+      increasedValue: l10n.spellDuration(_offsetBy(widget.step)),
+      decreasedValue: l10n.spellDuration(_offsetBy(-widget.step)),
       onIncrease: enabled ? () => _seekBy(widget.step) : null,
       onDecrease: enabled ? () => _seekBy(-widget.step) : null,
       child: ExcludeSemantics(

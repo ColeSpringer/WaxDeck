@@ -99,6 +99,30 @@ abstract class AppLocalizations {
     Locale('es'),
   ];
 
+  /// A file size under a kilobyte, drawn as bytes. B is the unit abbreviation; translate it only where the language uses another.
+  ///
+  /// In en, this message translates to:
+  /// **'{bytes, plural, =1{1 B} other{{bytes} B}}'**
+  String bytesB(int bytes);
+
+  /// A file size in gigabytes, to one decimal. GB is the unit abbreviation; translate it only where the language uses another.
+  ///
+  /// In en, this message translates to:
+  /// **'{gigabytes} GB'**
+  String bytesGb(double gigabytes);
+
+  /// A file size in whole kilobytes. KB is the unit abbreviation; translate it only where the language uses another.
+  ///
+  /// In en, this message translates to:
+  /// **'{kilobytes} KB'**
+  String bytesKb(int kilobytes);
+
+  /// A file size in megabytes, to one decimal. MB is the unit abbreviation; translate it only where the language uses another.
+  ///
+  /// In en, this message translates to:
+  /// **'{megabytes} MB'**
+  String bytesMb(double megabytes);
+
   /// Button that closes a dialog or sheet without doing what it asked about.
   ///
   /// In en, this message translates to:
@@ -111,17 +135,455 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get commonRetry;
 
+  /// Snackbar when handing a multi-part audiobook to a device that cannot play one. {endpoint} is that device's user-chosen name.
+  ///
+  /// In en, this message translates to:
+  /// **'Multi-part audiobooks can\'t play on {endpoint} yet. Play it on this device instead.'**
+  String devicesMultiPartAudiobook(String endpoint);
+
+  /// Snackbar when the device picker is asked to hand playback over with nothing playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is playing here to send. Start something first.'**
+  String get devicesNothingToSend;
+
+  /// Error sentence for the spec code `catalog-busy`: a file-moving request cannot start yet, and this one clears on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Another job is holding the library\'s files. Try again shortly.'**
+  String get errorCatalogBusy;
+
+  /// Error sentence for the spec code `catalog-maintenance`.
+  ///
+  /// In en, this message translates to:
+  /// **'The library is busy with maintenance. Try again shortly.'**
+  String get errorCatalogMaintenance;
+
+  /// Error sentence for the spec code `conflict`: the state moved under the request.
+  ///
+  /// In en, this message translates to:
+  /// **'Something else changed this first. Take another look and try again.'**
+  String get errorConflict;
+
+  /// Error sentence for the spec code `directory-unavailable`, such as the radio station directory.
+  ///
+  /// In en, this message translates to:
+  /// **'The directory service did not answer. Try again later.'**
+  String get errorDirectoryUnavailable;
+
+  /// Error sentence for the spec code `endpoint-offline`.
+  ///
+  /// In en, this message translates to:
+  /// **'That device is not connected. Refresh the list of devices.'**
+  String get errorEndpointOffline;
+
+  /// Error sentence for the spec code `feature-unavailable` where nothing more specific is known about which capability is missing.
+  ///
+  /// In en, this message translates to:
+  /// **'This server is not running the feature that request needs.'**
+  String get errorFeatureUnavailable;
+
+  /// Error sentence for the spec code `feed-unreachable`.
+  ///
+  /// In en, this message translates to:
+  /// **'The feed\'s own server did not answer, or did not answer with a feed.'**
+  String get errorFeedUnreachable;
+
+  /// Error sentence for the spec code `field-locked`.
+  ///
+  /// In en, this message translates to:
+  /// **'That field is locked. Unlock it, or save with the override.'**
+  String get errorFieldLocked;
+
+  /// Error sentence for the spec code `forbidden`: signed in, but without the permission.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is not allowed to do that.'**
+  String get errorForbidden;
+
+  /// Error sentence for the spec code `internal`.
+  ///
+  /// In en, this message translates to:
+  /// **'The server ran into a problem it could not handle.'**
+  String get errorInternal;
+
+  /// Error sentence for the spec code `invalid-request`.
+  ///
+  /// In en, this message translates to:
+  /// **'That request was not something the server could act on.'**
+  String get errorInvalidRequest;
+
+  /// Error sentence for the client's own `local-channel-offline` code: the event socket this device controls playback over is down. Nothing outside WaxDeck failed.
+  ///
+  /// In en, this message translates to:
+  /// **'WaxDeck lost its live connection to the server. It reconnects on its own; try again in a moment.'**
+  String get errorLocalChannelOffline;
+
+  /// Error sentence for the client's own `local-command-timeout` code: a command sent over the event socket ran past this device's deadline.
+  ///
+  /// In en, this message translates to:
+  /// **'The server did not answer that command in time. Try again.'**
+  String get errorLocalCommandTimeout;
+
+  /// Error sentence for the client's own `local-unregistered` code: playback was asked to move here before this device finished announcing itself as a player.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is not set up as a player yet. Try again in a moment.'**
+  String get errorLocalUnregistered;
+
+  /// Error sentence for `feature-unavailable` when the params name the feature as multi-part-audiobook: a book this server cannot yet split across a device.
+  ///
+  /// In en, this message translates to:
+  /// **'Multi-part audiobooks can\'t play on another device yet. Play it on this one instead.'**
+  String get errorMultiPartAudiobook;
+
+  /// Error sentence for the client's own `transport` code: the request never reached a server that could answer it.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach the server. Check the connection and try again.'**
+  String get errorNetwork;
+
+  /// Error sentence for the spec code `not-found`.
+  ///
+  /// In en, this message translates to:
+  /// **'That is not here any more.'**
+  String get errorNotFound;
+
+  /// Error sentence for the spec code `quota-exceeded`.
+  ///
+  /// In en, this message translates to:
+  /// **'That would go over the storage limit.'**
+  String get errorQuotaExceeded;
+
+  /// Error sentence for the spec code `rate-limited`.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many attempts. Wait a moment and try again.'**
+  String get errorRateLimited;
+
+  /// Error sentence for the spec code `read-only`: reads and playback keep working.
+  ///
+  /// In en, this message translates to:
+  /// **'The library is read-only right now, so nothing can be changed.'**
+  String get errorReadOnly;
+
+  /// Error sentence for the spec code `service-unreachable`, such as a scrobbling provider.
+  ///
+  /// In en, this message translates to:
+  /// **'An outside service this needs did not answer. Try again later.'**
+  String get errorServiceUnreachable;
+
+  /// Error sentence for the spec code `source-unavailable`: an acquisition integration this server does not run.
+  ///
+  /// In en, this message translates to:
+  /// **'This server is not running the source that request needs.'**
+  String get errorSourceUnavailable;
+
+  /// Error sentence for the spec code `stream-stale`: a minted media URL no longer matches the file it points at.
+  ///
+  /// In en, this message translates to:
+  /// **'This file changed on the server. Open it again to play it.'**
+  String get errorStreamStale;
+
+  /// Error sentence for the spec code `sync-reset`: the local copy predates the change history the server kept.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is too far behind to catch up, so it will sync again from scratch.'**
+  String get errorSyncReset;
+
+  /// Error sentence for the spec code `timeout`: a command sent to a player that is still connected but did not reply.
+  ///
+  /// In en, this message translates to:
+  /// **'The device did not answer in time. Try again.'**
+  String get errorTimeout;
+
+  /// Error sentence for the spec code `transcode-limited`.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many streams are being converted at once. Try again in a moment.'**
+  String get errorTranscodeLimited;
+
+  /// Error sentence for the client's own `transport-empty` code: an answer arrived with no body in it.
+  ///
+  /// In en, this message translates to:
+  /// **'The server\'s answer arrived empty.'**
+  String get errorTransportEmpty;
+
+  /// Error sentence for the client's own `transport-timeout` code: the connection itself ran out of time.
+  ///
+  /// In en, this message translates to:
+  /// **'The server did not answer in time.'**
+  String get errorTransportTimeout;
+
+  /// Error sentence for the spec code `unauthenticated`: the session is gone, or was never there.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in again to carry on.'**
+  String get errorUnauthenticated;
+
   /// What an error surface shows when nothing more specific is known.
   ///
   /// In en, this message translates to:
   /// **'Something went wrong.'**
   String get errorUnexpected;
 
+  /// Error sentence for the spec code `unsupported-format`.
+  ///
+  /// In en, this message translates to:
+  /// **'This server does not accept that file\'s format.'**
+  String get errorUnsupportedFormat;
+
+  /// Error sentence for `feature-unavailable` when the params name the feature as windowed-track.
+  ///
+  /// In en, this message translates to:
+  /// **'This track is part of a larger file, which another device can\'t play yet. Play it on this one instead.'**
+  String get errorWindowedTrack;
+
+  /// Name of the health rule `corrupt-audio`, which counts files whose audio will not decode.
+  ///
+  /// In en, this message translates to:
+  /// **'Corrupt audio'**
+  String get healthCorruptAudio;
+
+  /// Accessible name of the button that runs a health rule's bulk fix. {rule} is that rule's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix {rule}'**
+  String healthFixRule(String rule);
+
+  /// Name of the health rule `genre-whitelist`, which counts items tagged with a genre the server's genre tree does not have.
+  ///
+  /// In en, this message translates to:
+  /// **'Genre outside the canonical tree'**
+  String get healthGenreWhitelist;
+
+  /// Name of the health rule `legacy-tags`, which counts files carrying only an older tag format.
+  ///
+  /// In en, this message translates to:
+  /// **'Legacy-only tags'**
+  String get healthLegacyTags;
+
+  /// Name of the health rule `missing-art`.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing cover art'**
+  String get healthMissingArt;
+
+  /// Name of the health rule `missing-asin`. ASIN is Amazon's identifier for an audiobook and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing ASIN'**
+  String get healthMissingAsin;
+
+  /// Name of the health rule `missing-genre`.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing genre'**
+  String get healthMissingGenre;
+
+  /// Name of the health rule `missing-lyrics`.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing lyrics'**
+  String get healthMissingLyrics;
+
+  /// Name of the health rule `missing-mbid`. MusicBrainz is a product name and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing MusicBrainz identifier'**
+  String get healthMissingMbid;
+
+  /// Name of the health rule `missing-narrator`.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing narrator'**
+  String get healthMissingNarrator;
+
+  /// Name of the health rule `missing-year`.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing release year'**
+  String get healthMissingYear;
+
+  /// Name of the health rule `path-mismatch`.
+  ///
+  /// In en, this message translates to:
+  /// **'File path does not match the organize profile'**
+  String get healthPathMismatch;
+
+  /// Name of the health rule `small-art`.
+  ///
+  /// In en, this message translates to:
+  /// **'Low-resolution cover art'**
+  String get healthSmallArt;
+
+  /// Name of the health rule `write-unsynced`.
+  ///
+  /// In en, this message translates to:
+  /// **'File tags out of sync with the catalog'**
+  String get healthWriteUnsynced;
+
   /// Never displayed. Any natural sentence in this language, written the way the language actually is, accents and all: the app scans it for the scripts this locale needs and loads their fonts before the interface draws.
   ///
   /// In en, this message translates to:
   /// **'Music, podcasts, and audiobooks.'**
   String get localeFontSample;
+
+  /// What the `backup-completed` notification is about, drawn under its switch.
+  ///
+  /// In en, this message translates to:
+  /// **'A backup archive finished building.'**
+  String get notifBackupCompletedHelp;
+
+  /// Switch label for the `backup-completed` notification.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup finished'**
+  String get notifBackupCompletedTitle;
+
+  /// What the `backup-failed` notification is about, drawn under its switch.
+  ///
+  /// In en, this message translates to:
+  /// **'A backup attempt failed.'**
+  String get notifBackupFailedHelp;
+
+  /// Switch label for the `backup-failed` notification.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup failed'**
+  String get notifBackupFailedTitle;
+
+  /// What the `episode-downloaded` notification is about, drawn under its switch.
+  ///
+  /// In en, this message translates to:
+  /// **'A new episode of a subscribed show finished downloading.'**
+  String get notifEpisodeDownloadedHelp;
+
+  /// Switch label for the `episode-downloaded` notification.
+  ///
+  /// In en, this message translates to:
+  /// **'New episode downloaded'**
+  String get notifEpisodeDownloadedTitle;
+
+  /// What the `feed-disabled` notification is about, drawn under its switch.
+  ///
+  /// In en, this message translates to:
+  /// **'A subscribed feed kept failing and was disabled.'**
+  String get notifFeedDisabledHelp;
+
+  /// Switch label for the `feed-disabled` notification.
+  ///
+  /// In en, this message translates to:
+  /// **'Feed switched off'**
+  String get notifFeedDisabledTitle;
+
+  /// What the `import-completed` notification is about, drawn under its switch.
+  ///
+  /// In en, this message translates to:
+  /// **'An upload or acquisition identified confidently enough to file itself, with no review.'**
+  String get notifImportCompletedHelp;
+
+  /// Switch label for the `import-completed` notification.
+  ///
+  /// In en, this message translates to:
+  /// **'Filed without review'**
+  String get notifImportCompletedTitle;
+
+  /// What the `review-ready` notification is about, drawn under its switch.
+  ///
+  /// In en, this message translates to:
+  /// **'An upload or acquisition finished identification and waits in the review queue.'**
+  String get notifReviewReadyHelp;
+
+  /// Switch label for the `review-ready` notification.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for review'**
+  String get notifReviewReadyTitle;
+
+  /// What the `signup-requested` notification is about, drawn under its switch.
+  ///
+  /// In en, this message translates to:
+  /// **'A new account request is waiting for approval.'**
+  String get notifSignupRequestedHelp;
+
+  /// Switch label for the `signup-requested` notification.
+  ///
+  /// In en, this message translates to:
+  /// **'Account request'**
+  String get notifSignupRequestedTitle;
+
+  /// How long ago something happened, in days, on a dashboard tile with room for a few words.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{1 d ago} other{{days} d ago}}'**
+  String relDaysAgo(int days);
+
+  /// How long ago something happened, in days, in the audit log's own column - abbreviated hard, because a reader scans a page of these rather than reading one.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{1d ago} other{{days}d ago}}'**
+  String relDaysShort(int days);
+
+  /// What a scheduled job's next-run caption says once that time has passed and the run has not started yet.
+  ///
+  /// In en, this message translates to:
+  /// **'due now'**
+  String get relDueNow;
+
+  /// How long ago something happened, in hours, on a dashboard tile with room for a few words.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{1 h ago} other{{hours} h ago}}'**
+  String relHoursAgo(int hours);
+
+  /// How long ago something happened, in hours, in the audit log's own column - abbreviated hard, because a reader scans a page of these rather than reading one.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{1h ago} other{{hours}h ago}}'**
+  String relHoursShort(int hours);
+
+  /// How long until a scheduled job runs, in days.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{in 1 d} other{in {days} d}}'**
+  String relInDays(int days);
+
+  /// How long until a scheduled job runs, in hours.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{in 1 h} other{in {hours} h}}'**
+  String relInHours(int hours);
+
+  /// How long until a scheduled job runs, in minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =1{in 1 min} other{in {minutes} min}}'**
+  String relInMinutes(int minutes);
+
+  /// How long ago something happened when it happened within the last minute.
+  ///
+  /// In en, this message translates to:
+  /// **'just now'**
+  String get relJustNow;
+
+  /// How long ago something happened, in minutes, on a dashboard tile with room for a few words.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =1{1 min ago} other{{minutes} min ago}}'**
+  String relMinutesAgo(int minutes);
+
+  /// How long ago something happened, in minutes, in the audit log's own column - abbreviated hard, because a reader scans a page of these rather than reading one.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =1{1m ago} other{{minutes}m ago}}'**
+  String relMinutesShort(int minutes);
+
+  /// How long ago something happened, in months, in the audit log's own column. Anything older than a month reads in months and no further.
+  ///
+  /// In en, this message translates to:
+  /// **'{months, plural, =1{1mo ago} other{{months}mo ago}}'**
+  String relMonthsShort(int months);
 }
 
 class _AppLocalizationsDelegate

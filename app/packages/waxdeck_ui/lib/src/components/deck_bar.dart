@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
 import '../tokens/radii.dart';
@@ -157,6 +159,7 @@ class DeckBar extends StatelessWidget {
     // diagram shows there.
     final compact = !sizeClass.hasSidebar;
     final colors = WaxColors.of(context);
+    final l10n = context.waxL10n;
 
     return Semantics(
       identifier: ids.bar,
@@ -166,7 +169,7 @@ class DeckBar extends StatelessWidget {
       // timecodes fold into this node's label, so the bar announced its
       // own elapsed time and re-announced it at every tick.
       explicitChildNodes: true,
-      label: 'Now playing bar',
+      label: l10n.deckBarLabel,
       // What is playing and whether it is, but not where it stands: the
       // position moves several times a second, and a container value
       // that moved with it would both re-announce itself at every tick
@@ -175,12 +178,13 @@ class DeckBar extends StatelessWidget {
       // it as a spoken time.
       value: <String?>[
         autoplayBlocked
-            ? 'Paused by the browser'
-            : (now.playing ? 'Playing' : 'Paused'),
-        if (now.live) 'Live',
+            ? l10n.deckBarPausedByBrowser
+            : (now.playing ? l10n.commonPlaying : l10n.commonPaused),
+        if (now.live) l10n.deckBarLive,
         now.title,
         now.subtitle,
-        if (now.remoteEndpoint != null) 'on ${now.remoteEndpoint}',
+        if (now.remoteEndpoint != null)
+          l10n.deckBarOnEndpoint(now.remoteEndpoint!),
       ].nonNulls.join(', '),
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -259,11 +263,11 @@ class DeckBar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
               child: Row(
                 children: <Widget>[
-                  _artwork(48),
+                  _artwork(context, 48),
                   const SizedBox(width: WaxSpace.s12),
                   Expanded(
                     child: ExcludeSemantics(
-                      child: _titleBlock(colors, compact: true),
+                      child: _titleBlock(context, colors, compact: true),
                     ),
                   ),
                   ..._transport(context, colors, compact: true),
@@ -308,6 +312,7 @@ class DeckBar extends StatelessWidget {
   static const double _seekSlot = 24;
 
   Widget _zones(BuildContext context, WaxColors colors, double available) {
+    final l10n = context.waxL10n;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
       child: Row(
@@ -333,11 +338,11 @@ class DeckBar extends StatelessWidget {
               },
               child: Row(
                 children: <Widget>[
-                  _artwork(56),
+                  _artwork(context, 56),
                   const SizedBox(width: WaxSpace.s12),
                   Flexible(
                     child: ExcludeSemantics(
-                      child: _titleBlock(colors, compact: false),
+                      child: _titleBlock(context, colors, compact: false),
                     ),
                   ),
                   // Only where the caller wired it, which is the rule the
@@ -365,8 +370,8 @@ class DeckBar extends StatelessWidget {
                     WaxIconButton(
                       glyph: WaxIcons.heart,
                       label: now.songSaved
-                          ? 'Forget this song'
-                          : 'Save this song',
+                          ? l10n.deckBarForgetSong
+                          : l10n.deckBarSaveSong,
                       size: 16,
                       active: now.songSaved,
                       semanticsId: ids.saveSong,
@@ -485,11 +490,11 @@ class DeckBar extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              if (now.speed != null) _speedChip(colors),
+              if (now.speed != null) _speedChip(context, colors),
               if (actions.onQueue != null)
                 WaxIconButton(
                   glyph: WaxIcons.queue,
-                  label: 'Queue',
+                  label: l10n.deckBarQueue,
                   size: 18,
                   onPressed: actions.onQueue,
                   semanticsId: ids.queue,
@@ -497,7 +502,7 @@ class DeckBar extends StatelessWidget {
               if (actions.onLyrics != null)
                 WaxIconButton(
                   glyph: WaxIcons.lyrics,
-                  label: 'Lyrics',
+                  label: l10n.deckBarLyrics,
                   size: 18,
                   onPressed: actions.onLyrics,
                   semanticsId: ids.lyrics,
@@ -505,7 +510,7 @@ class DeckBar extends StatelessWidget {
               if (actions.onCast != null)
                 WaxIconButton(
                   glyph: WaxIcons.cast,
-                  label: 'Play on another device',
+                  label: l10n.deckBarCast,
                   size: 18,
                   active: now.remoteEndpoint != null,
                   onPressed: actions.onCast,
@@ -517,7 +522,7 @@ class DeckBar extends StatelessWidget {
                 WaxSlider(
                   value: now.volume!,
                   onChanged: actions.onVolume,
-                  label: 'Volume',
+                  label: l10n.deckBarVolume,
                   glyph: WaxIcons.volume,
                   mutedGlyph: WaxIcons.volumeMuted,
                   onMute: actions.onMute,
@@ -529,7 +534,7 @@ class DeckBar extends StatelessWidget {
               if (actions.onMore != null)
                 WaxIconButton(
                   glyph: WaxIcons.more,
-                  label: 'More',
+                  label: l10n.commonMore,
                   size: 18,
                   onPressed: actions.onMore,
                   semanticsId: ids.more,
@@ -555,8 +560,8 @@ class DeckBar extends StatelessWidget {
   /// already tight enough that adding one overflowed it by four pixels.
   /// The cover is 48 to 56 px of target that was doing nothing, and a
   /// caret in its corner says what pressing it does.
-  Widget _artwork(double size) => WaxTappable(
-    label: 'Open the player',
+  Widget _artwork(BuildContext context, double size) => WaxTappable(
+    label: context.waxL10n.deckBarExpand,
     semanticsId: ids.expand,
     onPressed: actions.onExpand,
     borderRadius: WaxRadius.thumb,
@@ -610,7 +615,11 @@ class DeckBar extends StatelessWidget {
     ),
   );
 
-  Widget _titleBlock(WaxColors colors, {required bool compact}) {
+  Widget _titleBlock(
+    BuildContext context,
+    WaxColors colors, {
+    required bool compact,
+  }) {
     // One line, fade-clipped. No marquee anywhere: it is motion and an
     // accessibility liability, and the full text is always reachable
     // through the player or a tooltip.
@@ -634,7 +643,7 @@ class DeckBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             if (now.live) ...<Widget>[
-              _livePill(colors),
+              _livePill(context, colors),
               const SizedBox(width: WaxSpace.s8),
             ],
             Flexible(
@@ -655,27 +664,34 @@ class DeckBar extends StatelessWidget {
     );
   }
 
-  Widget _livePill(WaxColors colors) => Container(
+  Widget _livePill(BuildContext context, WaxColors colors) => Container(
     padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s4, vertical: 1),
     decoration: BoxDecoration(
       color: colors.radio.container,
       borderRadius: WaxRadius.pill,
     ),
     child: Text(
-      'LIVE',
+      context.waxL10n.commonLiveChip,
       style: WaxType.overline.copyWith(color: colors.radio.onContainer),
     ),
   );
 
-  Widget _speedChip(WaxColors colors) => Container(
-    margin: const EdgeInsets.only(right: WaxSpace.s8),
+  Widget _speedChip(BuildContext context, WaxColors colors) => Container(
+    margin: const EdgeInsetsDirectional.only(end: WaxSpace.s8),
     padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8, vertical: 2),
     decoration: BoxDecoration(
       color: colors.surface2,
       borderRadius: WaxRadius.pill,
     ),
     child: Text(
-      '${now.speed!.toStringAsFixed(now.speed! % 1 == 0 ? 0 : 2)}x',
+      // Two decimals unless the rate is whole, and the separator is
+      // the locale's: 1,5x is how half again reads in most of Europe.
+      context.waxL10n.deckBarSpeed(
+        NumberFormat.decimalPatternDigits(
+          locale: context.waxL10n.localeName,
+          decimalDigits: now.speed! % 1 == 0 ? 0 : 2,
+        ).format(now.speed),
+      ),
       style: WaxType.monoData.copyWith(color: colors.textSecondary),
     ),
   );
@@ -690,9 +706,12 @@ class DeckBar extends StatelessWidget {
         : (now.playing
               ? (now.live ? WaxIcons.stop : WaxIcons.pause)
               : WaxIcons.play);
+    final l10n = context.waxL10n;
     final playLabel = autoplayBlocked
-        ? 'Tap to resume'
-        : (now.playing ? (now.live ? 'Stop' : 'Pause') : 'Play');
+        ? l10n.deckBarTapToResume
+        : (now.playing
+              ? (now.live ? l10n.commonStop : l10n.commonPause)
+              : l10n.commonPlay);
 
     return <Widget>[
       if (!compact)
@@ -701,7 +720,7 @@ class DeckBar extends StatelessWidget {
           // A control that cycles says which state it is in, in its own
           // name as well as its tint: greyscale and a screen reader both
           // have to be able to tell.
-          label: now.shuffled ? 'Shuffle on' : 'Shuffle off',
+          label: now.shuffled ? l10n.deckBarShuffleOn : l10n.deckBarShuffleOff,
           size: 18,
           active: now.shuffled,
           onPressed: now.live ? null : actions.onShuffle,
@@ -710,7 +729,7 @@ class DeckBar extends StatelessWidget {
       if (_spokenWord)
         WaxIconButton(
           glyph: WaxIcons.rewind,
-          label: 'Back ${spellDuration(actions.skipBackBy)}',
+          label: l10n.deckBarSkipBack(l10n.spellDuration(actions.skipBackBy)),
           size: compact ? 20 : 22,
           onPressed: actions.onSkipBack,
           semanticsId: ids.skipBack,
@@ -718,7 +737,7 @@ class DeckBar extends StatelessWidget {
       else if (!compact)
         WaxIconButton(
           glyph: WaxIcons.previous,
-          label: 'Previous',
+          label: l10n.commonPrevious,
           size: 22,
           onPressed: now.live ? null : actions.onPrevious,
           semanticsId: ids.previous,
@@ -727,7 +746,9 @@ class DeckBar extends StatelessWidget {
       if (_spokenWord)
         WaxIconButton(
           glyph: WaxIcons.fastForward,
-          label: 'Forward ${spellDuration(actions.skipForwardBy)}',
+          label: l10n.deckBarSkipForward(
+            l10n.spellDuration(actions.skipForwardBy),
+          ),
           size: compact ? 20 : 22,
           onPressed: actions.onSkipForward,
           semanticsId: ids.skipForward,
@@ -735,7 +756,7 @@ class DeckBar extends StatelessWidget {
       else
         WaxIconButton(
           glyph: WaxIcons.next,
-          label: 'Next',
+          label: l10n.commonNext,
           size: compact ? 20 : 22,
           onPressed: now.live ? null : actions.onNext,
           semanticsId: ids.next,
@@ -746,9 +767,9 @@ class DeckBar extends StatelessWidget {
               ? WaxIcons.repeatOne
               : WaxIcons.repeatAll,
           label: switch (now.repeat) {
-            WaxRepeat.off => 'Repeat off',
-            WaxRepeat.all => 'Repeat all',
-            WaxRepeat.one => 'Repeat one',
+            WaxRepeat.off => l10n.deckBarRepeatOff,
+            WaxRepeat.all => l10n.deckBarRepeatAll,
+            WaxRepeat.one => l10n.deckBarRepeatOne,
           },
           size: 18,
           active: now.repeat != WaxRepeat.off,
@@ -825,7 +846,7 @@ class DeckBarOffer extends StatelessWidget {
     this.artwork,
     this.domain = WaxDomain.music,
     this.shape = ArtworkShape.square,
-    this.resumeLabel = 'Resume',
+    this.resumeLabel,
     this.semanticsId,
     this.resumeSemanticsId,
     this.dismissSemanticsId,
@@ -840,7 +861,8 @@ class DeckBarOffer extends StatelessWidget {
   final WaxDomain domain;
   final ArtworkShape shape;
 
-  final String resumeLabel;
+  /// What the resume button says. Null takes the design system's own.
+  final String? resumeLabel;
   final VoidCallback onResume;
   final VoidCallback onDismiss;
 
@@ -851,12 +873,13 @@ class DeckBarOffer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.waxL10n;
     return Semantics(
       identifier: semanticsId,
       container: true,
       explicitChildNodes: true,
       label: <String?>[
-        'Pick up where you left off',
+        l10n.deckBarOfferTitle,
         title,
         subtitle,
       ].nonNulls.join(', '),
@@ -903,7 +926,7 @@ class DeckBarOffer extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            subtitle ?? 'Pick up where you left off',
+                            subtitle ?? l10n.deckBarOfferTitle,
                             maxLines: 1,
                             overflow: TextOverflow.fade,
                             softWrap: false,
@@ -917,7 +940,7 @@ class DeckBarOffer extends StatelessWidget {
                   ),
                   const SizedBox(width: WaxSpace.s8),
                   WaxButton(
-                    label: resumeLabel,
+                    label: resumeLabel ?? l10n.deckBarResume,
                     kind: WaxButtonKind.tonal,
                     icon: WaxIcons.play,
                     onPressed: onResume,
@@ -925,7 +948,7 @@ class DeckBarOffer extends StatelessWidget {
                   ),
                   WaxIconButton(
                     glyph: WaxIcons.close,
-                    label: 'Not now',
+                    label: l10n.deckBarNotNow,
                     size: 18,
                     onPressed: onDismiss,
                     semanticsId: dismissSemanticsId,

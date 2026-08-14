@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
 import '../tokens/spacing.dart';
@@ -136,7 +137,7 @@ class WaxScaffold extends StatelessWidget {
                           ? null
                           : WaxIconButton(
                               glyph: WaxIcons.back,
-                              label: 'Back',
+                              label: context.waxL10n.scaffoldBack,
                               onPressed: onBack,
                               semanticsId: backSemanticsId,
                             ),
@@ -153,8 +154,8 @@ class WaxScaffold extends StatelessWidget {
                             ),
                       flexibleSpace: largeTitle
                           ? FlexibleSpaceBar(
-                              titlePadding: EdgeInsets.only(
-                                left: onBack == null
+                              titlePadding: EdgeInsetsDirectional.only(
+                                start: onBack == null
                                     ? sizeClass.gutter.horizontal / 2
                                     : WaxSpace.s48,
                                 bottom: WaxSpace.s12,

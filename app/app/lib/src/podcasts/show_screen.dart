@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../home/pin_action.dart';
 import '../home/pinned_controller.dart';
 import '../player/now_playing_controller.dart';
@@ -21,25 +22,6 @@ import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
 import 'show_notes.dart';
 import 'subscription_settings_sheet.dart';
-
-String formatEpisodeDate(DateTime when) {
-  final local = when.toLocal();
-  final month = local.month.toString().padLeft(2, '0');
-  final day = local.day.toString().padLeft(2, '0');
-  return '${local.year}-$month-$day';
-}
-
-/// The publication date as a row's leading readout: month and day, since
-/// a show's episodes are read in the order they arrived and the year is
-/// the same for almost all of them.
-String formatEpisodeDayMonth(DateTime when) {
-  final local = when.toLocal();
-  const months = <String>[
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-  return '${months[local.month - 1]} ${local.day}';
-}
 
 String formatEpisodeDuration(int durationMs) {
   final d = Duration(milliseconds: durationMs);
@@ -638,6 +620,7 @@ class _ShowHeader extends ConsumerWidget {
     }
 
     final count = show.episodeCount;
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -648,7 +631,7 @@ class _ShowHeader extends ConsumerWidget {
           metadata: <String>[
             if (count != null) '$count ${count == 1 ? 'episode' : 'episodes'}',
             if (show.lastPublishedAt != null)
-              'Latest ${formatEpisodeDate(show.lastPublishedAt!)}',
+              'Latest ${l10n.formatDate(show.lastPublishedAt!)}',
             if (show.explicit) 'Explicit',
           ].join(' · '),
           artwork: ref.watch(artworkStoreProvider).source(show.artUrl),
@@ -869,7 +852,7 @@ class _EpisodeRow extends ConsumerWidget {
         unplayed: !progress.played && progress.positionMs == 0,
         semanticsId: SemanticsIds.episode(episode.pid),
       ),
-      leadingText: formatEpisodeDayMonth(episode.publishedAt),
+      leadingText: context.l10n.formatMonthDay(episode.publishedAt),
       onSelect: selecting ? onSelect : null,
       selectSemanticsId: SemanticsIds.episodeSelect(episode.pid),
       selected: selected,

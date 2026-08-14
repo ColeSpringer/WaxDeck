@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../format_bytes.dart';
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
@@ -32,6 +32,7 @@ class TrashScreen extends ConsumerWidget {
     TrashEntry entry,
   ) async {
     final messenger = ref.read(shellMessengerProvider.notifier);
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -58,7 +59,7 @@ class TrashScreen extends ConsumerWidget {
     try {
       final reclaimed = await ref.read(trashProvider.notifier).purge(entry.id);
       messenger.show(
-        'Purged ${entry.name}, reclaimed ${formatBytes(reclaimed)}',
+        'Purged ${entry.name}, reclaimed ${l10n.formatBytes(reclaimed)}',
       );
     } on WaxDeckApiException catch (error) {
       messenger.show(error.message);
@@ -70,6 +71,7 @@ class TrashScreen extends ConsumerWidget {
   /// one press away from the row that restores one.
   Future<void> _empty(BuildContext context, WidgetRef ref) async {
     final messenger = ref.read(shellMessengerProvider.notifier);
+    final l10n = context.l10n;
     final confirmed = await showTypedConfirm(
       context,
       title: 'Empty the trash?',
@@ -87,7 +89,7 @@ class TrashScreen extends ConsumerWidget {
       final result = await ref.read(trashProvider.notifier).empty();
       messenger.show(
         'Purged ${result.purged} files, reclaimed '
-        '${formatBytes(result.reclaimedBytes)}',
+        '${l10n.formatBytes(result.reclaimedBytes)}',
       );
     } on WaxDeckApiException catch (error) {
       messenger.show(error.message);
@@ -98,6 +100,7 @@ class TrashScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final trash = ref.watch(trashProvider);
     final includeRestored = ref.watch(trashIncludeRestoredProvider);
     return WaxScaffold(
@@ -175,9 +178,9 @@ class TrashScreen extends ConsumerWidget {
                     label: 'Size',
                     width: 92,
                     numeric: true,
-                    text: (entry) => formatBytes(entry.sizeBytes),
+                    text: (entry) => l10n.formatBytes(entry.sizeBytes),
                     cell: (context, entry) => Text(
-                      formatBytes(entry.sizeBytes),
+                      l10n.formatBytes(entry.sizeBytes),
                       style: WaxType.monoData.copyWith(
                         color: colors.textSecondary,
                       ),
@@ -186,9 +189,9 @@ class TrashScreen extends ConsumerWidget {
                   WaxColumn<TrashEntry>(
                     label: 'Trashed',
                     width: 108,
-                    text: (entry) => _date(entry.trashedAt),
+                    text: (entry) => l10n.formatDate(entry.trashedAt),
                     cell: (context, entry) => Text(
-                      _date(entry.trashedAt),
+                      l10n.formatDate(entry.trashedAt),
                       style: WaxType.monoData.copyWith(
                         color: colors.textSecondary,
                       ),
@@ -216,13 +219,6 @@ class TrashScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  static String _date(DateTime at) {
-    final local = at.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
   }
 }
 

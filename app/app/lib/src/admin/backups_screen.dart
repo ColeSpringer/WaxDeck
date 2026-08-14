@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -9,7 +10,6 @@ import '../uploads/audio_drop_area.dart';
 import '../uploads/file_picker_port.dart';
 import 'admin_console.dart';
 import 'admin_providers.dart';
-import '../format_bytes.dart';
 
 /// Backup archives with create, import, download, delete, staged
 /// restore, and how many the server keeps.
@@ -236,13 +236,6 @@ class _BackupRow extends ConsumerWidget {
 
   final Backup backup;
 
-  static String _date(DateTime at) {
-    final local = at.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
-  }
-
   Future<void> _stageRestore(BuildContext context, WidgetRef ref) async {
     final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
@@ -311,12 +304,13 @@ class _BackupRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final size = backup.sizeBytes;
     final subtitle = [
-      if (size != null) formatBytes(size),
+      if (size != null) l10n.formatBytes(size),
       backup.state,
       backup.trigger,
-      _date(backup.createdAt),
+      l10n.formatDate(backup.createdAt),
     ].join(', ');
     return WaxOptionRow(
       key: ValueKey(SemanticsIds.backupRow(backup.id)),

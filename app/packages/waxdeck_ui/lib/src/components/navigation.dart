@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../theme/wax_layout.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
@@ -355,9 +356,9 @@ class _NavItemState extends State<_NavItem> {
         duration: motion.quick,
         curve: WaxMotion.emphasized,
         constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
-        padding: EdgeInsets.only(
-          left: widget.indent ? WaxSpace.s32 : WaxSpace.s12,
-          right: WaxSpace.s12,
+        padding: EdgeInsetsDirectional.only(
+          start: widget.indent ? WaxSpace.s32 : WaxSpace.s12,
+          end: WaxSpace.s12,
         ),
         decoration: BoxDecoration(
           color: background,
@@ -526,7 +527,7 @@ class WaxNavRail extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     this.secondary = const <WaxNavEntry>[],
-    this.overflowLabel = 'More',
+    this.overflowLabel,
     this.overflowSemanticsId,
     this.account,
     this.semanticsId,
@@ -537,7 +538,10 @@ class WaxNavRail extends StatelessWidget {
   final String? selected;
   final ValueChanged<String> onSelect;
   final List<WaxNavEntry> secondary;
-  final String overflowLabel;
+
+  /// The overflow trigger's accessible name. Null takes the design
+  /// system's own.
+  final String? overflowLabel;
   final String? overflowSemanticsId;
 
   /// The account control, under the overflow at the foot of the rail.
@@ -593,7 +597,7 @@ class WaxNavRail extends StatelessWidget {
                     entries: secondary,
                     selected: selected,
                     onSelect: onSelect,
-                    label: overflowLabel,
+                    label: overflowLabel ?? context.waxL10n.commonMore,
                     semanticsId: overflowSemanticsId,
                   ),
                 if (account != null) ...<Widget>[
@@ -699,7 +703,7 @@ class WaxNavOverflowButton extends StatelessWidget {
     required this.entries,
     required this.onSelect,
     this.selected,
-    this.label = 'More',
+    this.label,
     this.semanticsId,
     super.key,
   });
@@ -707,7 +711,9 @@ class WaxNavOverflowButton extends StatelessWidget {
   final List<WaxNavEntry> entries;
   final ValueChanged<String> onSelect;
   final String? selected;
-  final String label;
+
+  /// The trigger's accessible name. Null takes the design system's own.
+  final String? label;
   final String? semanticsId;
 
   Future<void> _open(BuildContext context) async {
@@ -722,7 +728,7 @@ class WaxNavOverflowButton extends StatelessWidget {
   Widget build(BuildContext context) => Builder(
     builder: (context) => WaxIconButton(
       glyph: WaxIcons.more,
-      label: label,
+      label: label ?? context.waxL10n.commonMore,
       size: 22,
       semanticsId: semanticsId,
       onPressed: () => _open(context),
@@ -747,7 +753,7 @@ class WaxAccountButton extends StatelessWidget {
     this.onSelect,
     this.selected,
     this.labelled = false,
-    this.label = 'Account',
+    this.label,
     super.key,
   });
 
@@ -763,7 +769,8 @@ class WaxAccountButton extends StatelessWidget {
   final bool labelled;
 
   /// The accessible name, and the visible label where one is drawn.
-  final String label;
+  /// Null takes the design system's own.
+  final String? label;
 
   Future<void> _open(BuildContext context) async {
     final colors = WaxColors.of(context);
@@ -812,7 +819,7 @@ class WaxAccountButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Builder(
     builder: (context) => _NavItem(
-      label: label,
+      label: label ?? context.waxL10n.navAccount,
       monogram: account.name,
       semanticsId: account.semanticsId,
       selected: false,
@@ -1047,8 +1054,8 @@ class _WaxSidebarState extends State<WaxSidebar> {
                           WaxIconButton(
                             glyph: collapsed ? WaxIcons.forward : WaxIcons.back,
                             label: collapsed
-                                ? 'Expand sidebar'
-                                : 'Collapse sidebar',
+                                ? context.waxL10n.navExpandSidebar
+                                : context.waxL10n.navCollapseSidebar,
                             semanticsId: widget.collapseSemanticsId,
                             onPressed: widget.onToggleCollapsed,
                           ),
@@ -1084,8 +1091,8 @@ class _WaxSidebarState extends State<WaxSidebar> {
           WaxIconButton(
             glyph: open ? WaxIcons.collapse : WaxIcons.forward,
             label: open
-                ? 'Collapse ${destination.label}'
-                : 'Expand ${destination.label}',
+                ? context.waxL10n.navCollapseSection(destination.label)
+                : context.waxL10n.navExpandSection(destination.label),
             size: 16,
             semanticsId: destination.discloseSemanticsId,
             onPressed: () =>
@@ -1169,7 +1176,7 @@ class _NavRegion extends StatelessWidget {
     identifier: semanticsId,
     container: true,
     explicitChildNodes: true,
-    label: 'Main navigation',
+    label: context.waxL10n.navMain,
     // Its own Material, so each piece of chrome stands alone: the ink and
     // menu machinery underneath the house controls needs one, and the
     // caller's content pane is not it.
@@ -1561,7 +1568,7 @@ class _SkipLinkState extends State<_SkipLink> {
     return Semantics(
       identifier: widget.semanticsId,
       button: true,
-      label: 'Skip to content',
+      label: context.waxL10n.navSkipToContent,
       excludeSemantics: true,
       onTap: widget.onSkip,
       focusable: true,
@@ -1613,7 +1620,7 @@ class _SkipLinkState extends State<_SkipLink> {
                         vertical: WaxSpace.s8,
                       ),
                       child: Text(
-                        'Skip to content',
+                        context.waxL10n.navSkipToContent,
                         style: WaxType.label.copyWith(
                           color: _focused
                               ? colors.onAccentContainer

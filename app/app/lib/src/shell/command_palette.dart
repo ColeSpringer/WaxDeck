@@ -118,11 +118,9 @@ class _CommandPaletteDialog extends ConsumerWidget {
           busy: hits.isLoading,
           semanticsId: SemanticsIds.commandPalette,
           fieldSemanticsId: SemanticsIds.commandPaletteField,
-          hint: 'Search, or type a command',
           emptyTitle: query.typed.isEmpty
               ? 'Nothing to run'
               : 'Nothing matches "${query.typed}"',
-          emptyMessage: 'Try fewer words, or a different one.',
           onQueryChanged: ref.read(paletteQueryProvider.notifier).type,
           onClose: () => Navigator.of(context).pop(),
           onRun: (id) {

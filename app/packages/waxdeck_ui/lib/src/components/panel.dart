@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../theme/wax_layout.dart';
 import '../tokens/colors.dart';
 import '../tokens/spacing.dart';
@@ -98,7 +99,7 @@ class WaxSidePanel extends StatelessWidget {
                       if (onClose != null)
                         WaxIconButton(
                           glyph: WaxIcons.close,
-                          label: 'Close panel',
+                          label: context.waxL10n.panelClose,
                           size: 18,
                           onPressed: onClose,
                           semanticsId: closeSemanticsId,

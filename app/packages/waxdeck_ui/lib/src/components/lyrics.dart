@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
@@ -234,7 +235,7 @@ class _LyricsViewState extends State<LyricsView> {
       identifier: widget.semanticsId,
       container: true,
       explicitChildNodes: true,
-      label: 'Lyrics',
+      label: context.waxL10n.lyricsLabel,
       child: Stack(
         children: <Widget>[
           NotificationListener<Notification>(
@@ -252,7 +253,7 @@ class _LyricsViewState extends State<LyricsView> {
               right: WaxSpace.s12,
               bottom: WaxSpace.s12,
               child: WaxButton(
-                label: 'Follow along',
+                label: context.waxL10n.lyricsFollowAlong,
                 kind: WaxButtonKind.tonal,
                 semanticsId: widget.followSemanticsId,
                 onPressed: () {
@@ -333,7 +334,7 @@ class _LyricsViewState extends State<LyricsView> {
     return Semantics(
       identifier: widget.semanticsId,
       container: true,
-      label: 'Lyrics',
+      label: context.waxL10n.lyricsLabel,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(WaxSpace.s16),
         child: Center(

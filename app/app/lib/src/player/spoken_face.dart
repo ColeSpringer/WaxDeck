@@ -307,7 +307,7 @@ class _BookSeekState extends ConsumerState<BookSeek> {
               // Always the whole book, whichever bar is drawn: it is the
               // answer the chapter view cannot give, and the reason the
               // toggle is not needed most of the time.
-              remainingLabel: _bookProgress(total, at),
+              remainingLabel: _bookProgress(context.waxL10n, total, at),
               onSeek: (to) => unawaited(widget.session.seek(start + to)),
               semanticsId: SemanticsIds.playerSeek,
             ),
@@ -379,13 +379,13 @@ class _BookSeekState extends ConsumerState<BookSeek> {
   /// "42 percent, 6 hr 12 min left" (5.3). Percent and a span, because
   /// each answers a question the other does not: how far in, and how
   /// much of the evening this is.
-  String? _bookProgress(Duration total, Duration at) {
+  String? _bookProgress(WaxLocalizations l10n, Duration total, Duration at) {
     final totalMs = total.inMilliseconds;
     if (totalMs <= 0) return null;
     final percent = ((at.inMilliseconds / totalMs) * 100).clamp(0, 100).round();
     final left = total - at;
     if (left <= Duration.zero) return '$percent percent';
-    return '$percent percent, ${formatSpan(left)} left';
+    return '$percent percent, ${l10n.formatSpan(left)} left';
   }
 }
 

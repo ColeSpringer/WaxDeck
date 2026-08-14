@@ -89,7 +89,7 @@ class ConnectBus {
       _pending.remove(id);
       completer.completeError(
         const WaxDeckApiException(
-          code: 'service-unreachable',
+          code: 'local-channel-offline',
           message: 'the event channel is offline',
         ),
       );
@@ -100,7 +100,7 @@ class ConnectBus {
       onTimeout: () {
         _pending.remove(id);
         throw const WaxDeckApiException(
-          code: 'timeout',
+          code: 'local-command-timeout',
           message: 'the server did not answer the command',
         );
       },
@@ -123,7 +123,7 @@ class ConnectBus {
     final id = ack['endpointId'];
     if (id is! String || id.isEmpty) {
       throw const WaxDeckApiException(
-        code: 'internal',
+        code: 'local-protocol',
         message: 'registration ack carried no endpoint id',
       );
     }
@@ -223,7 +223,7 @@ class ConnectBus {
       if (!completer.isCompleted) {
         completer.completeError(
           const WaxDeckApiException(
-            code: 'service-unreachable',
+            code: 'local-channel-offline',
             message: 'the event channel closed',
           ),
         );

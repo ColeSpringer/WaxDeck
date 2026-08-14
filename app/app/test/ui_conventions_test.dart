@@ -126,23 +126,30 @@ const _generated = <String>[
 bool _isGenerated(String path) =>
     _generated.any((g) => path == g || path.startsWith('$g/'));
 
-/// Every package that *consumes* the design system, relative to
-/// `app/app`, which is where this test runs.
+/// Every package held to the conventions, relative to `app/app`, which
+/// is where this test runs.
 ///
-/// `waxdeck_ui` itself is deliberately absent: it declares the ladder,
-/// the glyphs, and the type scale, so raw measurements and Material
-/// primitives are what it is made of. Everything else that draws is held
-/// to the conventions - including the catalogue, which is the taste
-/// reference the screen-level audit judges against and would otherwise
-/// be the one Flutter app in the repo where a `SwitchListTile` is
-/// invisible. Its copy is the one thing it is not held to; see
-/// [_CopyRule.appliesTo].
+/// The catalogue is in because it is the taste reference the
+/// screen-level audit judges against and would otherwise be the one
+/// Flutter app in the repo where a `SwitchListTile` is invisible. Its
+/// copy is the one thing it is not held to; see [_CopyRule.appliesTo].
+///
+/// `waxdeck_ui` itself is in for one rule and out for the rest: it
+/// declares the ladder, the glyphs, and the type scale, so raw
+/// measurements and Material primitives are what it is made of - but its
+/// copy is copy like anywhere else, and it holds eighty strings no caller
+/// can pass in. See [_Rule.appliesTo], which is where that split lives.
 const _roots = <String>[
   'lib',
+  _designSystem,
   '../packages/waxdeck_ui/example/lib',
   '../packages/waxdeck_data/lib',
   '../packages/waxdeck_player/lib',
 ];
+
+/// The design system's own sources, which every rule but the copy one
+/// has nothing to say about.
+const _designSystem = '../packages/waxdeck_ui/lib';
 
 List<File> _sources() => <File>[
   for (final root in _roots)
@@ -169,9 +176,14 @@ class _Rule {
   final RegExp pattern;
   final String fix;
 
-  /// Whether this rule has anything to say about [path]. Rules cover
-  /// every root unless one of them is a rule's stated exception.
-  bool appliesTo(String path) => true;
+  /// Whether this rule has anything to say about [path].
+  ///
+  /// The design system is the standing exception: it is what the ladder,
+  /// the glyphs, and the type scale are made of, so counting raw
+  /// measurements and Material primitives there would count the
+  /// definitions. [_CopyRule] overrides this, because copy is copy
+  /// wherever it is written.
+  bool appliesTo(String path) => !path.startsWith('$_designSystem/');
 
   Iterable<_Hit> find(String code) =>
       pattern.allMatches(code).map((m) => _Hit(m.start));
@@ -338,8 +350,12 @@ class _CopyRule extends _Rule {
   static final _interpolation = RegExp(r'\$\{[^{}]*\}|\$\w+');
   static final _letter = RegExp(r'[A-Za-z]');
 
-  /// The catalogue's strings are the demo library it draws - album
-  /// titles, specimen copy - and none of it is ever translated, so
+  /// The design system is in - its components own eighty strings a
+  /// caller cannot reach, and that is exactly the copy that goes
+  /// untranslated by default.
+  ///
+  /// The catalogue is out: its strings are the demo library it draws -
+  /// album titles, specimen copy - and none of it is ever translated, so
   /// counting them would put a permanent floor on the one root where a
   /// nonzero count means nothing.
   @override

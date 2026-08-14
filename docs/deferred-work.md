@@ -269,28 +269,24 @@ here waits on upstream.
 ## Localization
 
 - `[in-repo]` **The app is not localized, and the language picker the
-  layout blueprint specifies waits on it.** Nothing has started: no
-  `flutter_localizations` in any pubspec in the workspace, no
-  `l10n.yaml`, no `.arb`, and around 1,200 user-facing string literals
-  in `app/app/lib` by a conservative count - an undercount, because
-  the help lines are written as multi-line concatenations a grep reads
-  as several. `Prefs.locale` is already in the contract (a BCP 47 tag,
-  `api/spec/users.yaml`), carried through `PrefsController` so a write
-  preserves it, and read by nothing. The plumbing is the small half
-  and is the stock first-party pipeline: `flutter_localizations` plus
-  `intl`, one ARB per locale, `AppLocalizations` generated into the
-  tree (the synthetic-package route is gone in 3.44) as one more
-  generated-never-typed surface beside the semantics ids; wiring it is
-  two lines on `MaterialApp.router` in `app/app/lib/src/app.dart`,
-  which also switches on Material's own widget strings. The sweep is
-  the big half and lives entirely in the screens - `waxdeck_ui` takes
-  plain view-data strings by rule, so the design system needs no ARB
-  of its own - and the same pass owns the formatting, because it is
-  hand-rolled and locale-blind today: the relative times ("just now",
-  "3m ago"), `format_bytes.dart`, and the padLeft date and duration
-  helpers all become `intl` date, number, and plural messages. Locale
-  resolution is system first with `Prefs.locale` as the override once
-  something finally reads it, and the picker draws then, not before:
+  layout blueprint specifies waits on it.** The plumbing is done and the
+  sweep is not. `flutter_localizations` and `intl` are in both pubspecs,
+  `l10n.yaml` and ARBs exist for `app/app` and for the design system, and
+  `make generate` mints both tables under drift-check. `Prefs.locale`
+  (a BCP 47 tag, `api/spec/users.yaml`) is read now: the app resolves
+  system-first with the preference as the override. What is left is the
+  screens - around 1,200 user-facing string literals in `app/app/lib`,
+  which the `hardcoded-copy` ratchet counts per file so a sweep slice
+  cannot stall half-done, and the count is an undercount because the help
+  lines are multi-line concatenations a grep reads as several. Three
+  things the plumbing half already answered, recorded because the
+  original entry guessed otherwise: the design system needed an ARB of
+  its own after all (its components carry ~80 strings no caller can pass
+  in, so `WaxLocalizations` is a package-owned delegate on the
+  `MaterialLocalizations` pattern); the formatting is done, with
+  `format_bytes.dart` and every padLeft date helper folded into
+  `WaxFormats` and the durations into `WaxLocalizations`; and the picker
+  is what still waits, on the same reasoning as before:
   extraction is code and finishes, translation is people and does not,
   so a picker offered before there is a second language to pick is an
   empty control. ARB is what Weblate consumes, which is how a GPL
@@ -322,37 +318,42 @@ here waits on upstream.
   traps to take deliberately. Where one code covers many causes, a
   generic per-code sentence loses the specifics: `feature-unavailable`
   is the umbrella code, and the device picker tells the multi-part
-  refusal apart by phrase-matching the message. The `Error` schema now
-  carries optional `params` for exactly that, and the refusal fills it
-  (`feature`, `pid`), so the picker's own switch to keying on it - and
-  demoting the phrase match to the old-server fallback - is the
-  remaining half. The three
-  English sentences `waxdeck_api` mints for transport failures now carry
-  codes of their own (`transport`, `transport-timeout`,
-  `transport-empty`, documented on `WaxDeckApiException`), so the client
-  table words them the same way it words the server's - the package that
-  will never hold an ARB no longer has to. Two things the table has to
-  take with it. The app mints `internal` for four of its own local
-  failures (`connect_bus.dart` :53 and :126, `connect_controller.dart`
-  :344, `queue_gateway.dart` :272), so a sentence keyed on that code
-  alone would tell a listener whose seek failed on their own device to
-  report a server bug; those want client codes of their own, the way
-  the transport mints got them. And the socket's error frames now carry
-  `params` server-side while `connect_bus.dart`'s error arm reads only
-  `code` and `message`, so the same refusal keeps its machine key over
-  REST and loses it over the socket - the bus adopts it alongside the
-  device picker.
-- `[in-repo]` **Two server-authored label surfaces flip to client
-  tokens.** Health rule labels (`server/internal/service/health.go`
-  maps `missing-art` to "Missing cover art"; the health screen draws
-  `rule.label ?? rule.rule`) and the notification event catalog
-  descriptions (`server/internal/service/notify.go`, drawn as help
-  text in the notification settings) are English composed in Go and
-  rendered as-is. The shape to copy is what the tasks screen already
-  does for task types and states: the client maps the machine token to
-  its own label and the server string stays as the fallback for a
-  token the client predates. No spec change; the fields remain, the
-  client stops preferring them.
+  refusal apart by phrase-matching the message. The table exists
+  now (`app/app/lib/src/l10n/explain_error.dart`: one sentence per code
+  in both locales, guarded by a test that reads the code list out of the
+  committed bundle rather than out of a second copy of it), the three
+  transport codes `waxdeck_api` mints are worded there beside the
+  server's, and the device picker keys the multi-part refusal on the
+  `params` the schema now carries, with the phrase match demoted to the
+  old-server fallback. What remains is adoption: `Text(e.message)` at
+  some 45 snackbar sites, the `AsyncError` branches, and the
+  `ErrorState` uses all still draw the server's sentence, and each
+  screen slice converts its own as it is swept. Two things that adoption
+  has to take with it. The app mints `internal` for three of its own
+  local failures (`connect_bus.dart` :53's default,
+  `connect_controller.dart` :344, `queue_gateway.dart` :272), and the
+  table words that code as a server fault, so a listener whose seek
+  failed on their own device would be told to report a server bug; those
+  want client codes of their own, the way the transport mints got them,
+  before any of those three surfaces adopts `context.explain`. And the
+  socket's error frames carry `params` server-side while
+  `connect_bus.dart`'s error arm reads only `code` and `message`, so the
+  same refusal keeps its machine key over REST and loses it over the
+  socket - the bus adopts it the way the picker just did.
+- `[in-repo]` **A notification event a newer server adds draws its wire
+  token as a heading.** The client maps the seven event names to titles
+  and help of its own (`app/app/lib/src/settings/notify_labels.dart`),
+  falling back to the server's description for help and to the raw token
+  for the title, because the catalogue the server sends carries no title
+  at all. The error codes and the health rules both have a completeness
+  test that reads the vocabulary out of `api/openapi.yaml` and fails when
+  the client has no arm for one; the events cannot have the same test,
+  because the spec names only an example (`api/spec/notifications.yaml`)
+  while the set itself lives in Go (`service/notify.go`'s catalogue). The
+  fix is prose, not schema: enumerate the event names in the endpoint's
+  description the way the health rules already are, then slice it the way
+  `error_table_test.dart` slices the codes. Worth taking with the next
+  event that lands, which is when the gap first costs something.
 - `[in-repo]` **Outbound notification prose leaves the app in
   English.** Titles and bodies are composed in Go ("Backup failed";
   "Backup completed" with its size and duration,

@@ -241,7 +241,7 @@ class RemoteSessionController extends Notifier<RemoteSession?> {
     final own = ref.read(connectControllerProvider).endpointId.value;
     if (own == null) {
       throw const WaxDeckApiException(
-        code: 'service-unreachable',
+        code: 'local-unregistered',
         message: 'this device is not registered as a player yet',
       );
     }

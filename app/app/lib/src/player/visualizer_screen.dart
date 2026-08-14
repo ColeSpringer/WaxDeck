@@ -249,7 +249,7 @@ class _VisualizerState extends ConsumerState<_Visualizer> {
               for (final mode in WaxVisualizerMode.values)
                 WaxSegment(
                   name: mode.name,
-                  label: mode.label,
+                  label: mode.label(context.waxL10n),
                   semanticsId: SemanticsIds.visualizerMode(mode.name),
                 ),
             ],

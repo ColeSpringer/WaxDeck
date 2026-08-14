@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
@@ -50,7 +51,7 @@ class EmptyState extends StatelessWidget {
       explicitChildNodes: true,
       // A container that stops merging its descendants keeps no text of
       // its own, so the label has to be carried across with the boundary.
-      label: '$title. $message',
+      label: context.waxL10n.statesSpoken(title, message),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
@@ -104,7 +105,7 @@ class EmptyState extends StatelessWidget {
 class ErrorState extends StatelessWidget {
   const ErrorState({
     required this.message,
-    this.title = "Something didn't load",
+    this.title,
     this.onRetry,
     this.detail,
     this.semanticsId,
@@ -112,7 +113,9 @@ class ErrorState extends StatelessWidget {
     super.key,
   });
 
-  final String title;
+  /// The heading over [message]. Null takes the design system's own,
+  /// which is what nearly every caller wants.
+  final String? title;
   final String message;
   final VoidCallback? onRetry;
 
@@ -130,6 +133,8 @@ class ErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.waxL10n;
+    final heading = title ?? l10n.statesErrorTitle;
     return Semantics(
       identifier: semanticsId,
       container: true,
@@ -140,7 +145,7 @@ class ErrorState extends StatelessWidget {
       // Carried across with the boundary, and here it is load-bearing
       // twice over: this pane is a live region, so a container with no
       // text of its own would announce an empty string on every error.
-      label: '$title. $message',
+      label: l10n.statesSpoken(heading, message),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
@@ -155,7 +160,7 @@ class ErrorState extends StatelessWidget {
                 // the live region above announces the failure once, and
                 // these are what a reader navigates to afterwards.
                 Text(
-                  title,
+                  heading,
                   textAlign: TextAlign.center,
                   style: WaxType.headline.copyWith(color: colors.textPrimary),
                 ),
@@ -178,7 +183,7 @@ class ErrorState extends StatelessWidget {
                 if (onRetry != null) ...<Widget>[
                   const SizedBox(height: WaxSpace.s20),
                   WaxButton(
-                    label: 'Try again',
+                    label: l10n.statesTryAgain,
                     kind: WaxButtonKind.tonal,
                     icon: WaxIcons.refresh,
                     onPressed: onRetry,

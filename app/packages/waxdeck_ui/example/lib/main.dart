@@ -49,6 +49,19 @@ class _CatalogAppState extends State<CatalogApp> {
       title: 'WaxDeck design system',
       debugShowCheckedModeBanner: false,
       theme: theme,
+      // The catalogue is the taste reference, so it installs the design
+      // system's own table rather than riding the English fallback.
+      localizationsDelegates: WaxLocalizations.localizationsDelegates,
+      // English first by construction, for the reason the app's own list
+      // says: resolution falls back to the first entry, and gen-l10n
+      // emits its list alphabetically - right today and wrong the day a
+      // ca or de ARB lands.
+      supportedLocales: <Locale>[
+        const Locale('en'),
+        ...WaxLocalizations.supportedLocales.where(
+          (l) => l != const Locale('en'),
+        ),
+      ],
       home: Builder(
         builder: (context) => MediaQuery(
           data: MediaQuery.of(

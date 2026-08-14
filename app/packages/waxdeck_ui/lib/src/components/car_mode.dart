@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../theme/theme_builder.dart';
 import '../theme/wax_layout.dart';
 import '../tokens/colors.dart';
@@ -118,14 +119,20 @@ class CarModeScaffold extends StatelessWidget {
             (velocity < 0 ? onNext : onPrevious)?.call();
           },
           child: SafeArea(
-            child: LayoutBuilder(builder: (context, c) => _body(colors, c)),
+            child: LayoutBuilder(
+              builder: (context, c) => _body(context, colors, c),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _body(WaxColors colors, BoxConstraints constraints) {
+  Widget _body(
+    BuildContext context,
+    WaxColors colors,
+    BoxConstraints constraints,
+  ) {
     // The artwork takes the top half and the controls the bottom, which
     // is 5.6's own division: the cover says what is playing from across
     // a cabin, and the buttons are where a hand goes without looking.
@@ -138,7 +145,7 @@ class CarModeScaffold extends StatelessWidget {
             padding: const EdgeInsets.all(WaxSpace.s8),
             child: WaxIconButton(
               glyph: WaxIcons.close,
-              label: 'Leave car mode',
+              label: context.waxL10n.carModeLeave,
               // Oversized like everything else here, and in the corner
               // furthest from the transport: leaving is deliberate.
               size: 36,

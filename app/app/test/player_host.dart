@@ -12,6 +12,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 /// One item played the way a row tap plays it: on its own, with nothing
 /// after it.
@@ -112,7 +113,7 @@ Future<void> pumpPlayerInto(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: harness.container,
-      child: host?.call(player) ?? const MaterialApp(home: player),
+      child: host?.call(player) ?? localizedHost(player),
     ),
   );
   await tester.pumpAndSettle();

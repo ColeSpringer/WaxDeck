@@ -8,10 +8,19 @@ environment:
   sdk: ^3.12.0
   flutter: ">=3.44.0"
 
-# This package depends on Flutter and nothing else: it never imports
-# waxdeck_api, so components take plain view-data structs and the app
-# maps API models at call sites. That keeps golden tests free of the API
-# fakes and keeps the design system out of invalidation traffic.
+# This package depends on Flutter and the SDK's own localization packages
+# and nothing else: it never imports waxdeck_api, so components take plain
+# view-data structs and the app maps API models at call sites. That keeps
+# golden tests free of the API fakes and keeps the design system out of
+# invalidation traffic.
+#
+# intl is the one deliberate exception to "Flutter only". The components
+# carry ~80 strings of their own - mostly accessibility labels nobody can
+# pass in - so the package owns a WaxLocalizations delegate the way
+# Material owns MaterialLocalizations, and gen-l10n's output imports intl.
+# It is a first-party Dart team package, pinned exact to the same version
+# app/app takes; the rule's targets (waxdeck_api, community plugins) stay
+# excluded.
 #
 # The icon set is vendored rather than depended on: phosphor_flutter
 # subclasses IconData, which Flutter 3.44 made a final class, so the
@@ -20,6 +29,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: 0.20.2
 
 dev_dependencies:
   flutter_test:
@@ -29,6 +41,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # On for gen-l10n's sake, not the build's: it refuses to run without
+  # this flag. `make generate` is what mints the localizations, and a
+  # build that regenerates them writes the same bytes.
+  generate: true
 
   # Variable fonts, declared once per family: the type tokens select
   # weights and widths through FontVariation, which reaches the axis

@@ -8,6 +8,7 @@ import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
@@ -20,7 +21,7 @@ ProviderContainer _container(FakeRepository repo) {
 Widget _host(FakeRepository repo, [ProviderContainer? container]) =>
     UncontrolledProviderScope(
       container: container ?? _container(repo),
-      child: const MaterialApp(home: TrashScreen()),
+      child: localizedHost(const TrashScreen()),
     );
 
 TrashEntry _entry(String id, {DateTime? restoredAt}) => TrashEntry(

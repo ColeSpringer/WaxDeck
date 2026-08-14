@@ -44,6 +44,23 @@ void main() {
       );
     });
 
+    test('the design system speaks every language the app offers', () {
+      // Nothing else reports this. `context.waxL10n` answers English
+      // when a locale has no table of its own, precisely so the
+      // package's own tests can pump a bare MaterialApp - so an ARB
+      // added to app/app alone would render every screen in the new
+      // language with English transport buttons and error panes, and no
+      // test would fail. This is that test.
+      expect(
+        WaxLocalizations.supportedLocales.toSet(),
+        AppLocalizations.supportedLocales.toSet(),
+        reason:
+            'a locale the app offers and the design system has no ARB for '
+            'renders its components in English; add the matching '
+            'app/packages/waxdeck_ui/lib/src/l10n/arb/wax_<locale>.arb',
+      );
+    });
+
     test('resolution lands on es for a Spanish variant and en otherwise', () {
       // The list the app actually passes, run through the resolver
       // MaterialApp uses when no localeResolutionCallback is set.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../theme/wax_layout.dart';
 import '../tokens/colors.dart';
 import '../tokens/elevation.dart';
@@ -65,11 +66,11 @@ class WaxCommandPalette extends StatefulWidget {
     required this.onQueryChanged,
     required this.onRun,
     this.onClose,
-    this.hint = 'Search, or type a command',
-    this.label = 'Command palette',
+    this.hint,
+    this.label,
     this.busy = false,
-    this.emptyTitle = 'Nothing matches',
-    this.emptyMessage = 'Try fewer words, or a different one.',
+    this.emptyTitle,
+    this.emptyMessage,
     this.width = 560,
     this.maxHeight = 440,
     this.semanticsId,
@@ -86,17 +87,20 @@ class WaxCommandPalette extends StatefulWidget {
 
   final VoidCallback? onClose;
 
-  final String hint;
+  /// Placeholder text in the field. Null takes the design system's own.
+  final String? hint;
 
-  /// The field's accessible name, and the palette's own.
-  final String label;
+  /// The field's accessible name, and the palette's own. Null takes the
+  /// design system's own.
+  final String? label;
 
   /// Draws pending results. Rows in hand stay up meanwhile, so the list
   /// does not flicker once per character.
   final bool busy;
 
-  final String emptyTitle;
-  final String emptyMessage;
+  /// What an empty result says. Null takes the design system's own.
+  final String? emptyTitle;
+  final String? emptyMessage;
 
   final double width;
   final double maxHeight;
@@ -203,7 +207,7 @@ class _WaxCommandPaletteState extends State<WaxCommandPalette> {
       identifier: widget.semanticsId,
       container: true,
       explicitChildNodes: true,
-      label: widget.label,
+      label: widget.label ?? context.waxL10n.paletteLabel,
       child: CallbackShortcuts(
         // Above the field: a single-line field does nothing with the
         // vertical arrows, and Esc must close from wherever the caret is.
@@ -236,8 +240,8 @@ class _WaxCommandPaletteState extends State<WaxCommandPalette> {
                       controller: _query,
                       focusNode: _focus,
                       autofocus: true,
-                      hint: widget.hint,
-                      label: widget.label,
+                      hint: widget.hint ?? context.waxL10n.paletteHint,
+                      label: widget.label ?? context.waxL10n.paletteLabel,
                       onChanged: _onChanged,
                       // Focus back first: submitting a search field
                       // drops it by convention, and a palette that
@@ -267,8 +271,8 @@ class _WaxCommandPaletteState extends State<WaxCommandPalette> {
     child: widget.busy
         ? const SkeletonShapes(shape: SkeletonShape.list)
         : EmptyState(
-            title: widget.emptyTitle,
-            message: widget.emptyMessage,
+            title: widget.emptyTitle ?? context.waxL10n.paletteEmptyTitle,
+            message: widget.emptyMessage ?? context.waxL10n.paletteEmptyMessage,
             glyph: WaxIcons.search,
           ),
   );
@@ -359,7 +363,7 @@ class WaxShortcutGroup {
 class WaxShortcutSheet extends StatelessWidget {
   const WaxShortcutSheet({
     required this.groups,
-    this.title = 'Keyboard shortcuts',
+    this.title,
     this.onClose,
     this.width = 520,
     this.maxHeight = 520,
@@ -369,7 +373,9 @@ class WaxShortcutSheet extends StatelessWidget {
   });
 
   final List<WaxShortcutGroup> groups;
-  final String title;
+
+  /// The sheet's heading. Null takes the design system's own.
+  final String? title;
   final VoidCallback? onClose;
   final double width;
   final double maxHeight;
@@ -380,12 +386,14 @@ class WaxShortcutSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final layout = WaxLayout.of(context);
+    final l10n = context.waxL10n;
+    final heading = title ?? l10n.paletteShortcutsTitle;
 
     return Semantics(
       identifier: semanticsId,
       container: true,
       explicitChildNodes: true,
-      label: title,
+      label: heading,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: width, maxHeight: maxHeight),
         child: DecoratedBox(
@@ -412,7 +420,7 @@ class WaxShortcutSheet extends StatelessWidget {
                     children: <Widget>[
                       Expanded(
                         child: Text(
-                          title,
+                          heading,
                           style: WaxType.headline.copyWith(
                             color: colors.textPrimary,
                           ),
@@ -421,7 +429,7 @@ class WaxShortcutSheet extends StatelessWidget {
                       if (onClose != null)
                         WaxIconButton(
                           glyph: WaxIcons.close,
-                          label: 'Close',
+                          label: l10n.paletteClose,
                           size: 18,
                           onPressed: onClose,
                           semanticsId: closeSemanticsId,
@@ -461,7 +469,10 @@ class WaxShortcutSheet extends StatelessWidget {
                               // row at a time.
                               child: Semantics(
                                 identifier: row.semanticsId,
-                                label: '${row.label}, ${row.keys}',
+                                label: l10n.paletteShortcutRow(
+                                  row.label,
+                                  row.keys,
+                                ),
                                 excludeSemantics: true,
                                 child: Row(
                                   children: <Widget>[

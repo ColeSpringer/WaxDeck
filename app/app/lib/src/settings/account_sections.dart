@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'about_screen.dart';
@@ -276,16 +277,10 @@ class _DeviceSessions extends ConsumerWidget {
     }
   }
 
-  static String _date(DateTime at) {
-    final local = at.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sessions = ref.watch(sessionsControllerProvider);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -303,7 +298,7 @@ class _DeviceSessions extends ConsumerWidget {
                   // titled by its browser, and "Firefox / signed in
                   // with Firefox" says one thing twice.
                   subtitle: <String>[
-                    'Signed in ${_date(session.createdAt)}',
+                    'Signed in ${l10n.formatDate(session.createdAt)}',
                     if (session.deviceName != null) ?session.client,
                   ].join(' with '),
                   glyph: session.kind == SessionKind.web

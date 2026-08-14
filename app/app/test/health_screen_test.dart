@@ -97,7 +97,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('87'), findsOneWidget);
-    expect(find.text('Missing artwork'), findsOneWidget);
+    // The client's own word for the rule, not the label the server sent
+    // beside it: the token is the boundary, and the server's label is
+    // the fallback for a rule this app does not know.
+    expect(find.text('Missing cover art'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
     // Only fixable rules with failures get a Fix button.
     expect(

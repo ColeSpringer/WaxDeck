@@ -1,4 +1,7 @@
 {
+  "../packages/waxdeck_ui/lib/src/components/wordmark.dart": {
+    "hardcoded-copy": 2
+  },
   "lib/src/admin/admin_shares_screen.dart": {
     "hardcoded-copy": 4
   },
@@ -72,7 +75,7 @@
     "hardcoded-copy": 3
   },
   "lib/src/connect/device_picker.dart": {
-    "hardcoded-copy": 17
+    "hardcoded-copy": 16
   },
   "lib/src/connect/queue_gateway.dart": {
     "hardcoded-copy": 1
@@ -105,7 +108,7 @@
     "hardcoded-copy": 8
   },
   "lib/src/health/health_screen.dart": {
-    "hardcoded-copy": 46
+    "hardcoded-copy": 45
   },
   "lib/src/home/home_screen.dart": {
     "hardcoded-copy": 22
@@ -309,7 +312,7 @@
     "hardcoded-copy": 2
   },
   "lib/src/shell/command_palette.dart": {
-    "hardcoded-copy": 13
+    "hardcoded-copy": 11
   },
   "lib/src/shell/commands.dart": {
     "hardcoded-copy": 21

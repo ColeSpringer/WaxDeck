@@ -5,11 +5,13 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../admin/admin_console.dart';
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'health_controller.dart';
+import 'health_labels.dart';
 
 /// The library health dashboard: the score headline, the per-rule
 /// failure counts with fixes, and the duplicate and quality-upgrade
@@ -288,6 +290,7 @@ class _RuleTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return WaxTable<HealthRuleCount>(
       rows: rules,
       rowId: (rule) => rule.rule,
@@ -302,9 +305,9 @@ class _RuleTable extends StatelessWidget {
         WaxColumn<HealthRuleCount>(
           label: 'Rule',
           priority: WaxColumnPriority.primary,
-          text: (rule) => rule.label ?? rule.rule,
+          text: (rule) => healthRuleLabel(l10n, rule),
           cell: (context, rule) => Text(
-            rule.label ?? rule.rule,
+            healthRuleLabel(l10n, rule),
             style: WaxType.titleItem.copyWith(color: colors.textPrimary),
             overflow: TextOverflow.ellipsis,
           ),
@@ -325,7 +328,7 @@ class _RuleTable extends StatelessWidget {
       trailing: (context, rule) => rule.fixable && rule.failing > 0
           ? WaxIconButton(
               glyph: WaxIcons.success,
-              label: 'Fix ${rule.label ?? rule.rule}',
+              label: l10n.healthFixRule(healthRuleLabel(l10n, rule)),
               semanticsId: SemanticsIds.healthFix(rule.rule),
               onPressed: () => onFix(rule.rule),
             )
@@ -524,6 +527,10 @@ class HealthIssuesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final issues = ref.watch(healthIssuesProvider(rule));
+    // The rule arrives as its own path segment, so the title is the
+    // client's word for it rather than the wire token the table it was
+    // opened from already stopped drawing.
+    final title = healthRuleName(context.l10n, rule) ?? rule;
     // A failed "load more" keeps the list intact, so surface it on the
     // flag's rising edge; scrolling again retries.
     ref.listen(healthIssuesProvider(rule), (prev, next) {
@@ -547,7 +554,7 @@ class HealthIssuesScreen extends ConsumerWidget {
         return false;
       },
       child: WaxScaffold(
-        title: rule,
+        title: title,
         largeTitle: false,
         semanticsId: SemanticsIds.adminHealthRule,
         onBack: () => context.leave(fallback: WaxRoute.health),

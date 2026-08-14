@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
@@ -65,6 +66,7 @@ class TransportCluster extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.waxL10n;
     final spoken = onSkipBack != null || onSkipForward != null;
 
     return Row(
@@ -73,7 +75,7 @@ class TransportCluster extends StatelessWidget {
         if (onShuffle != null)
           WaxIconButton(
             glyph: WaxIcons.shuffle,
-            label: shuffled ? 'Shuffle off' : 'Shuffle',
+            label: shuffled ? l10n.playerShuffleOff : l10n.playerShuffle,
             active: shuffled,
             onPressed: onShuffle,
             semanticsId: ids.shuffle,
@@ -81,7 +83,7 @@ class TransportCluster extends StatelessWidget {
         if (spoken)
           WaxIconButton(
             glyph: WaxIcons.rewind,
-            label: 'Back $skipBackSeconds seconds',
+            label: l10n.playerSkipBackSeconds(skipBackSeconds),
             size: 28,
             onPressed: onSkipBack,
             semanticsId: ids.skipBack,
@@ -89,7 +91,7 @@ class TransportCluster extends StatelessWidget {
         else if (onPrevious != null)
           WaxIconButton(
             glyph: WaxIcons.previous,
-            label: 'Previous',
+            label: l10n.commonPrevious,
             size: 28,
             onPressed: onPrevious,
             semanticsId: ids.previous,
@@ -99,7 +101,9 @@ class TransportCluster extends StatelessWidget {
           child: Semantics(
             identifier: ids.play,
             button: true,
-            label: playing ? (live ? 'Stop' : 'Pause') : 'Play',
+            label: playing
+                ? (live ? l10n.commonStop : l10n.commonPause)
+                : l10n.commonPlay,
             excludeSemantics: true,
             onTap: onPlayPause,
             child: Material(
@@ -129,7 +133,7 @@ class TransportCluster extends StatelessWidget {
         if (spoken)
           WaxIconButton(
             glyph: WaxIcons.fastForward,
-            label: 'Forward $skipForwardSeconds seconds',
+            label: l10n.playerSkipForwardSeconds(skipForwardSeconds),
             size: 28,
             onPressed: onSkipForward,
             semanticsId: ids.skipForward,
@@ -137,7 +141,7 @@ class TransportCluster extends StatelessWidget {
         else if (onNext != null)
           WaxIconButton(
             glyph: WaxIcons.next,
-            label: 'Next',
+            label: l10n.commonNext,
             size: 28,
             onPressed: onNext,
             semanticsId: ids.next,
@@ -145,7 +149,7 @@ class TransportCluster extends StatelessWidget {
         if (onRepeat != null)
           WaxIconButton(
             glyph: repeat ? WaxIcons.repeatOne : WaxIcons.repeatAll,
-            label: repeat ? 'Repeat one' : 'Repeat',
+            label: repeat ? l10n.playerRepeatOne : l10n.playerRepeat,
             active: repeat,
             onPressed: onRepeat,
             semanticsId: ids.repeat,
@@ -201,7 +205,7 @@ class SeekCluster extends StatelessWidget {
               borderRadius: WaxRadius.pill,
             ),
             child: Text(
-              'LIVE',
+              context.waxL10n.commonLiveChip,
               style: WaxType.overline.copyWith(color: colors.radio.onContainer),
             ),
           ),
@@ -531,7 +535,7 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           padding: _headerControlGutter,
           child: WaxIconButton(
             glyph: WaxIcons.collapse,
-            label: 'Collapse player',
+            label: context.waxL10n.playerCollapse,
             onPressed: widget.onCollapse,
             semanticsId: widget.ids.collapse,
           ),

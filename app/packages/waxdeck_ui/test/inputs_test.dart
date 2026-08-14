@@ -115,8 +115,10 @@ void main() {
       await tester.pump();
       expect(changes.last, 'nightjar');
 
-      // The clear control appears only with text in the field.
-      final clear = find.bySemanticsLabel('Clear search');
+      // The clear control appears only with text in the field. It names
+      // the field as the field is written: the label is copy, and
+      // lowercasing it was a rule only English has.
+      final clear = find.bySemanticsLabel('Clear Search');
       expect(clear, findsOneWidget);
       await tester.tap(clear);
       await tester.pump();
@@ -128,7 +130,7 @@ void main() {
         isEmpty,
       );
       expect(changes.last, isEmpty);
-      expect(find.bySemanticsLabel('Clear search'), findsNothing);
+      expect(find.bySemanticsLabel('Clear Search'), findsNothing);
     });
 
     testWidgets('names the input itself, not a wrapper around it', (
@@ -563,19 +565,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.widget<AnimatedOpacity>(captions()).opacity, 0);
-    });
-  });
-
-  group('formatSpan', () {
-    test('answers how much, not what time it is', () {
-      expect(formatSpan(const Duration(hours: 6)), '6 hr');
-      expect(formatSpan(const Duration(hours: 1, minutes: 20)), '1 hr 20 min');
-      expect(formatSpan(const Duration(minutes: 45)), '45 min');
-      // Minutes are noise past ten hours, and a span under a minute is
-      // still a minute rather than none.
-      expect(formatSpan(const Duration(hours: 12, minutes: 40)), '12 hr');
-      expect(formatSpan(const Duration(seconds: 20)), '1 min');
-      expect(formatSpan(Duration.zero), '1 min');
     });
   });
 

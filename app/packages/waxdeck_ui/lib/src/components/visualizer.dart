@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import 'artwork.dart';
@@ -12,14 +13,16 @@ import 'view_data.dart';
 /// Which picture the visualizer is drawing.
 enum WaxVisualizerMode {
   /// The whole track's peak landscape, with the playhead sweeping it.
-  waveform('Waveform'),
+  waveform,
 
   /// The cover as a turning disc inside a ring of the same peaks.
-  platter('Platter');
+  platter;
 
-  const WaxVisualizerMode(this.label);
-
-  final String label;
+  /// This picture's name, for the control that switches between them.
+  String label(WaxLocalizations l10n) => switch (this) {
+    WaxVisualizerMode.waveform => l10n.visualizerWaveform,
+    WaxVisualizerMode.platter => l10n.visualizerPlatter,
+  };
 }
 
 /// The visualizer's picture: the track's own shape, drawn large.
@@ -205,7 +208,7 @@ class _VisualizerStageState extends State<VisualizerStage>
       // The picture is decoration; the surface around it carries the
       // controls, and the seek bar under them is the addressable one.
       // A screen reader gets a named region rather than a wall of paint.
-      label: 'Visualizer',
+      label: context.waxL10n.visualizerLabel,
       child: seek == null
           ? picture
           : LayoutBuilder(

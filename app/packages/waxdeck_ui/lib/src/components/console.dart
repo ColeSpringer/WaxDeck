@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
 import '../tokens/radii.dart';
@@ -397,7 +398,7 @@ class _RowCard<T> extends StatelessWidget {
               padding: const EdgeInsets.only(top: WaxSpace.s12),
               child: WaxIconButton(
                 glyph: WaxIcons.info,
-                label: 'Details for $id',
+                label: context.waxL10n.consoleDetailsFor(id),
                 size: 16,
                 semanticsId: detailSemanticsId,
                 onPressed: () => _showDetails(context, colors),
@@ -539,13 +540,13 @@ class StatTile extends StatelessWidget {
       return Semantics(
         identifier: semanticsId,
         container: true,
-        label: '$label, $value',
+        label: context.waxL10n.consoleStat(label, value),
         excludeSemantics: true,
         child: body,
       );
     }
     return WaxTappable(
-      label: '$label, $value',
+      label: context.waxL10n.consoleStat(label, value),
       semanticsId: semanticsId,
       borderRadius: WaxRadius.card,
       onPressed: onTap,
@@ -639,7 +640,7 @@ class _TypedConfirmDialogState extends State<_TypedConfirmDialog> {
           ),
           const SizedBox(height: WaxSpace.s16),
           WaxTextField(
-            label: 'Type ${widget.confirmWord} to confirm',
+            label: context.waxL10n.consoleConfirmHint(widget.confirmWord),
             controller: _controller,
             semanticsId: widget.fieldSemanticsId,
             onChanged: (value) {
@@ -651,7 +652,7 @@ class _TypedConfirmDialogState extends State<_TypedConfirmDialog> {
       ),
       actions: <Widget>[
         WaxButton(
-          label: 'Cancel',
+          label: context.waxL10n.consoleCancel,
           kind: WaxButtonKind.text,
           semanticsId: widget.cancelSemanticsId,
           onPressed: () => Navigator.of(context).pop(false),

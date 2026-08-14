@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
@@ -108,8 +109,10 @@ class _PlayingIndicatorState extends State<PlayingIndicator>
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final color = widget.color ?? colors.accent;
+    final l10n = context.waxL10n;
     final label =
-        widget.semanticLabel ?? (widget.playing ? 'Playing' : 'Paused');
+        widget.semanticLabel ??
+        (widget.playing ? l10n.commonPlaying : l10n.commonPaused);
     return Semantics(
       label: label,
       child: SizedBox(
@@ -309,17 +312,18 @@ class DomainBadge extends StatelessWidget {
 
   final bool compact;
 
-  static String defaultLabel(WaxDomain domain) => switch (domain) {
-    WaxDomain.music => 'Music',
-    WaxDomain.podcasts => 'Podcast',
-    WaxDomain.audiobooks => 'Book',
-    WaxDomain.radio => 'Radio',
-  };
+  static String defaultLabel(WaxLocalizations l10n, WaxDomain domain) =>
+      switch (domain) {
+        WaxDomain.music => l10n.domainMusic,
+        WaxDomain.podcasts => l10n.domainPodcast,
+        WaxDomain.audiobooks => l10n.domainBook,
+        WaxDomain.radio => l10n.domainRadio,
+      };
 
   @override
   Widget build(BuildContext context) {
     final hue = WaxColors.of(context).domain(domain);
-    final text = label ?? defaultLabel(domain);
+    final text = label ?? defaultLabel(context.waxL10n, domain);
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? WaxSpace.s4 : WaxSpace.s8,

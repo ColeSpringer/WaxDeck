@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
-import '../format_bytes.dart';
 import '../home/home_shelves.dart';
 import '../music/music_controllers.dart';
 import '../shell/semantics_ids.dart';
@@ -137,7 +137,7 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
         children: [
           Text(
             'This removes ${plan.totalFiles} files, '
-            '${formatBytes(plan.totalBytes)}.',
+            '${context.l10n.formatBytes(plan.totalBytes)}.',
             key: const Key('item-delete-preview'),
           ),
           const SizedBox(height: WaxSpace.s8),

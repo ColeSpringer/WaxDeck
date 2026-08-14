@@ -683,7 +683,7 @@ class _ReviewRow extends StatelessWidget {
                 const SizedBox(width: WaxSpace.s8),
                 DomainBadge(
                   waxDomainOf(entry.mediaType),
-                  label: _originLabel(entry),
+                  label: _originLabel(context.waxL10n, entry),
                   compact: true,
                 ),
                 if (entry.status != 'pending') ...<Widget>[
@@ -701,9 +701,10 @@ class _ReviewRow extends StatelessWidget {
   /// Where the unit came from, in the badge that would otherwise say
   /// the media type twice: the queue is one domain deep at a time and
   /// "Upload" is the fact a reviewer is actually sorting by.
-  static String _originLabel(ReviewEntry entry) => switch (entry.origin) {
-    'upload' => 'Upload',
-    'acquisition' => 'Acquired',
-    _ => DomainBadge.defaultLabel(waxDomainOf(entry.mediaType)),
-  };
+  static String _originLabel(WaxLocalizations l10n, ReviewEntry entry) =>
+      switch (entry.origin) {
+        'upload' => 'Upload',
+        'acquisition' => 'Acquired',
+        _ => DomainBadge.defaultLabel(l10n, waxDomainOf(entry.mediaType)),
+      };
 }

@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
-import '../icons/wax_icon.dart';
 import 'artwork.dart';
 import 'controls.dart';
 import 'deck_bar.dart' show DeckBarActions;
@@ -75,13 +76,14 @@ class MiniPlayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.waxL10n;
     return Semantics(
       identifier: ids.surface,
       container: true,
       explicitChildNodes: true,
-      label: 'Mini player',
+      label: l10n.miniPlayerLabel,
       value: <String?>[
-        now.playing ? 'Playing' : 'Paused',
+        now.playing ? l10n.commonPlaying : l10n.commonPaused,
         now.title,
         now.subtitle,
       ].nonNulls.join(', '),
@@ -135,7 +137,7 @@ class MiniPlayer extends StatelessWidget {
                             ),
                           ),
                         ),
-                        ..._transport(colors),
+                        ..._transport(context, colors),
                       ],
                     ),
                   ),
@@ -190,35 +192,38 @@ class MiniPlayer extends StatelessWidget {
     ],
   );
 
-  List<Widget> _transport(WaxColors colors) => <Widget>[
-    WaxIconButton(
-      glyph: WaxIcons.previous,
-      label: 'Previous',
-      size: 18,
-      semanticsId: ids.previous,
-      onPressed: actions.onPrevious,
-    ),
-    WaxIconButton(
-      glyph: now.playing ? WaxIcons.pause : WaxIcons.play,
-      label: now.playing ? 'Pause' : 'Play',
-      size: 22,
-      active: true,
-      semanticsId: ids.play,
-      onPressed: actions.onPlayPause,
-    ),
-    WaxIconButton(
-      glyph: WaxIcons.next,
-      label: 'Next',
-      size: 18,
-      semanticsId: ids.next,
-      onPressed: actions.onNext,
-    ),
-    WaxIconButton(
-      glyph: WaxIcons.expand,
-      label: 'Back to the full window',
-      size: 16,
-      semanticsId: ids.restore,
-      onPressed: onRestore,
-    ),
-  ];
+  List<Widget> _transport(BuildContext context, WaxColors colors) {
+    final l10n = context.waxL10n;
+    return <Widget>[
+      WaxIconButton(
+        glyph: WaxIcons.previous,
+        label: l10n.commonPrevious,
+        size: 18,
+        semanticsId: ids.previous,
+        onPressed: actions.onPrevious,
+      ),
+      WaxIconButton(
+        glyph: now.playing ? WaxIcons.pause : WaxIcons.play,
+        label: now.playing ? l10n.commonPause : l10n.commonPlay,
+        size: 22,
+        active: true,
+        semanticsId: ids.play,
+        onPressed: actions.onPlayPause,
+      ),
+      WaxIconButton(
+        glyph: WaxIcons.next,
+        label: l10n.commonNext,
+        size: 18,
+        semanticsId: ids.next,
+        onPressed: actions.onNext,
+      ),
+      WaxIconButton(
+        glyph: WaxIcons.expand,
+        label: l10n.miniPlayerRestore,
+        size: 16,
+        semanticsId: ids.restore,
+        onPressed: onRestore,
+      ),
+    ];
+  }
 }

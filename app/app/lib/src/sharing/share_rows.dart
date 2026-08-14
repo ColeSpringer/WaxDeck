@@ -1,6 +1,7 @@
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 
 /// The share-link rows both listings draw: a listener auditing their own
@@ -33,19 +34,12 @@ class ShareRows extends StatelessWidget {
     _ => WaxIcons.music,
   };
 
-  static String _date(DateTime at) {
-    final local = at.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
-  }
-
   /// What a row says under its title: who minted it where that is not
   /// obvious, then what it opens, how much it has been used, and when it
   /// dies. That is the order somebody auditing links reads them in, and
   /// on the oversight listing the owner comes first because it is what
   /// turns a row into somebody's.
-  static String captionFor(Share share) {
+  static String captionFor(AppLocalizations l10n, Share share) {
     final expiresAt = share.expiresAt;
     final expired = expiresAt != null && expiresAt.isBefore(DateTime.now());
     final owner = share.owner;
@@ -56,9 +50,9 @@ class ShareRows extends StatelessWidget {
       if (expiresAt == null)
         'never expires'
       else if (expired)
-        'expired ${_date(expiresAt)}'
+        'expired ${l10n.formatDate(expiresAt)}'
       else
-        'expires ${_date(expiresAt)}',
+        'expires ${l10n.formatDate(expiresAt)}',
       if (share.allowDownload) 'download allowed',
     ].join(' · ');
   }
@@ -66,6 +60,7 @@ class ShareRows extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     return SliverPadding(
       padding: sizeClass.gutter,
       sliver: SliverList.builder(
@@ -75,7 +70,7 @@ class ShareRows extends StatelessWidget {
           return WaxOptionRow(
             glyph: glyphFor(share.targetKind),
             title: share.targetTitle,
-            subtitle: captionFor(share),
+            subtitle: captionFor(l10n, share),
             semanticsId: SemanticsIds.shareRow(share.pid),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,

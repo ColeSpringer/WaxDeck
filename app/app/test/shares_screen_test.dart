@@ -56,7 +56,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Prancing Pony Blues'), findsOneWidget);
-    expect(find.text('track · 7 plays · expires 2036-08-01'), findsOneWidget);
+    expect(find.text('track · 7 plays · expires Aug 1, 2036'), findsOneWidget);
     expect(find.text('Road Trip'), findsOneWidget);
     expect(find.text('playlist · 0 plays · never expires'), findsOneWidget);
   });
@@ -71,7 +71,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    expect(find.text('track · 7 plays · expired 2020-01-02'), findsOneWidget);
+    expect(find.text('track · 7 plays · expired Jan 2, 2020'), findsOneWidget);
   });
 
   testWidgets('a downloadable link says what it hands out', (tester) async {

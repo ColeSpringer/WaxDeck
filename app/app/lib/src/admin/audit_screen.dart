@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'admin_console.dart';
@@ -253,22 +254,12 @@ class _AuditRow extends StatelessWidget {
   final bool expanded;
   final VoidCallback onToggle;
 
-  /// Rough relative age, enough to scan the log by eye.
-  static String relativeTime(DateTime at, {DateTime? now}) {
-    final delta = (now ?? DateTime.now().toUtc()).difference(at.toUtc());
-    if (delta.inMinutes < 1) return 'just now';
-    if (delta.inHours < 1) return '${delta.inMinutes}m ago';
-    if (delta.inDays < 1) return '${delta.inHours}h ago';
-    if (delta.inDays < 30) return '${delta.inDays}d ago';
-    return '${delta.inDays ~/ 30}mo ago';
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final subtitle = StringBuffer(event.actorName ?? 'system');
     if (event.targetName != null) subtitle.write(', ${event.targetName}');
-    subtitle.write(', ${relativeTime(event.createdAt)}');
+    subtitle.write(', ${context.l10n.relativeCompact(event.createdAt)}');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[

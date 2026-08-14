@@ -39,6 +39,7 @@ export 'src/components/station_dial.dart';
 export 'src/components/view_data.dart';
 export 'src/components/visualizer.dart';
 export 'src/components/wordmark.dart';
+export 'src/l10n/wax_l10n.dart';
 export 'src/color/palette.dart';
 export 'src/color/palette_extractor.dart';
 export 'src/fonts/wax_fonts.dart';

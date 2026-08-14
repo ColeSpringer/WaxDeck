@@ -1,0 +1,645 @@
+{
+  "@@locale": "en",
+  "bannerDismiss": "Dismiss",
+  "@bannerDismiss": {
+    "description": "Accessible name of the close button on an inline banner."
+  },
+  "carModeLeave": "Leave car mode",
+  "@carModeLeave": {
+    "description": "Accessible name of the button that leaves the oversized driving layout."
+  },
+  "cardsDeselectItem": "Deselect {title}",
+  "@cardsDeselectItem": {
+    "description": "Accessible name of a selected row's checkbox. {title} is the item's own title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightjar"
+      }
+    }
+  },
+  "cardsMoreForItem": "More for {title}",
+  "@cardsMoreForItem": {
+    "description": "Accessible name of a row's overflow button. {title} is the item's own title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightjar"
+      }
+    }
+  },
+  "cardsPercentPlayed": "{percent, plural, =1{1 percent played} other{{percent} percent played}}",
+  "@cardsPercentPlayed": {
+    "description": "How far through an item is, spoken as part of a card's accessible name where the progress ring is the only drawn sign of it.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "40"
+      }
+    }
+  },
+  "cardsPlayItem": "Play {title}",
+  "@cardsPlayItem": {
+    "description": "Accessible name of the play button that appears over a card's artwork on hover. {title} is the item's own title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightjar"
+      }
+    }
+  },
+  "cardsSelectItem": "Select {title}",
+  "@cardsSelectItem": {
+    "description": "Accessible name of an unselected row's checkbox. {title} is the item's own title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightjar"
+      }
+    }
+  },
+  "cardsUnplayed": "Unplayed",
+  "@cardsUnplayed": {
+    "description": "Spoken form of the dot before a title that marks an item nobody has played yet."
+  },
+  "commonLiveChip": "LIVE",
+  "@commonLiveChip": {
+    "description": "Badge drawn over a radio stream's artwork, in capitals, saying the sound is live rather than a recording. Kept short: it sits in a pill a few characters wide."
+  },
+  "commonMore": "More",
+  "@commonMore": {
+    "description": "Accessible name of an overflow control that opens a menu of the actions there was no room to draw."
+  },
+  "commonNext": "Next",
+  "@commonNext": {
+    "description": "Transport button that skips to the next item in the queue."
+  },
+  "commonPause": "Pause",
+  "@commonPause": {
+    "description": "Transport button that pauses playback."
+  },
+  "commonPaused": "Paused",
+  "@commonPaused": {
+    "description": "State word a screen reader hears for a player that is not playing right now."
+  },
+  "commonPlay": "Play",
+  "@commonPlay": {
+    "description": "Transport button that starts or resumes playback."
+  },
+  "commonPlaying": "Playing",
+  "@commonPlaying": {
+    "description": "State word for the item that is playing right now, spoken by a player surface and drawn on the row of the item it names."
+  },
+  "commonPrevious": "Previous",
+  "@commonPrevious": {
+    "description": "Transport button that goes back to the previous item in the queue."
+  },
+  "commonStop": "Stop",
+  "@commonStop": {
+    "description": "Transport button for a live stream, which stops rather than pauses: a paused stream would only resume at the live edge."
+  },
+  "consoleCancel": "Cancel",
+  "@consoleCancel": {
+    "description": "Button that closes a type-to-confirm dialog without running the action it guards."
+  },
+  "consoleConfirmHint": "Type {word} to confirm",
+  "@consoleConfirmHint": {
+    "description": "Label of the field in a destructive-action dialog. {word} is what the caller asks to be typed back, usually the name of the thing being deleted.",
+    "placeholders": {
+      "word": {
+        "type": "String",
+        "example": "DELETE"
+      }
+    }
+  },
+  "consoleDetailsFor": "Details for {id}",
+  "@consoleDetailsFor": {
+    "description": "Accessible name of the button that opens one table row's detail sheet. {id} names the row.",
+    "placeholders": {
+      "id": {
+        "type": "String",
+        "example": "tr-01H8"
+      }
+    }
+  },
+  "consoleStat": "{label}, {value}",
+  "@consoleStat": {
+    "description": "A dashboard tile read as one node: what is being counted, then the count.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Tracks"
+      },
+      "value": {
+        "type": "String",
+        "example": "12,480"
+      }
+    }
+  },
+  "controlsMute": "Mute",
+  "@controlsMute": {
+    "description": "Button beside the volume slider that silences output."
+  },
+  "controlsSeekLabel": "Position",
+  "@controlsSeekLabel": {
+    "description": "Accessible name of the seek bar, which a screen reader reads as an adjustable slider."
+  },
+  "controlsSeekValue": "{position} of {duration}",
+  "@controlsSeekValue": {
+    "description": "Where the seek bar stands, spoken rather than drawn. Both halves arrive already spelled out in words, as in '2 minutes 41 seconds'.",
+    "placeholders": {
+      "position": {
+        "type": "String",
+        "example": "2 minutes 41 seconds"
+      },
+      "duration": {
+        "type": "String",
+        "example": "8 minutes 2 seconds"
+      }
+    }
+  },
+  "controlsStar": "Star",
+  "@controlsStar": {
+    "description": "Button that marks an item a favourite. Star is the mark itself, used as a verb."
+  },
+  "controlsUnmute": "Unmute",
+  "@controlsUnmute": {
+    "description": "Button beside the volume slider that restores output after it was silenced."
+  },
+  "controlsUnstar": "Unstar",
+  "@controlsUnstar": {
+    "description": "Button that takes an item back out of the favourites."
+  },
+  "deckBarCast": "Play on another device",
+  "@deckBarCast": {
+    "description": "Accessible name of the button that hands playback to a speaker or another browser."
+  },
+  "deckBarExpand": "Open the player",
+  "@deckBarExpand": {
+    "description": "Accessible name of the artwork in the now-playing bar, which opens the full player."
+  },
+  "deckBarForgetSong": "Forget this song",
+  "@deckBarForgetSong": {
+    "description": "Button on a radio stream that drops the song the station just announced from the keeps. Song, never favourite: the star beside it means pin this station."
+  },
+  "deckBarLabel": "Now playing bar",
+  "@deckBarLabel": {
+    "description": "Accessible name of the transport bar across the bottom of the window."
+  },
+  "deckBarLive": "Live",
+  "@deckBarLive": {
+    "description": "Word in the now-playing bar's spoken description saying the sound is a live stream. Spoken, so written as a word rather than in capitals."
+  },
+  "deckBarLyrics": "Lyrics",
+  "@deckBarLyrics": {
+    "description": "Accessible name of the button in the now-playing bar that opens the lyrics."
+  },
+  "deckBarNotNow": "Not now",
+  "@deckBarNotNow": {
+    "description": "Button that dismisses the offer to resume what was playing last, without resuming it."
+  },
+  "deckBarOfferTitle": "Pick up where you left off",
+  "@deckBarOfferTitle": {
+    "description": "Heading of the bar offering to resume the last thing that was playing."
+  },
+  "deckBarOnEndpoint": "on {endpoint}",
+  "@deckBarOnEndpoint": {
+    "description": "Tail of the now-playing bar's spoken description when the sound is coming out of another device. {endpoint} is that device's user-chosen name.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "deckBarPausedByBrowser": "Paused by the browser",
+  "@deckBarPausedByBrowser": {
+    "description": "Spoken state for playback the browser refused to start on its own, waiting for a tap."
+  },
+  "deckBarQueue": "Queue",
+  "@deckBarQueue": {
+    "description": "Accessible name of the button that opens what is playing next."
+  },
+  "deckBarRepeatAll": "Repeat all",
+  "@deckBarRepeatAll": {
+    "description": "State of the repeat control in the now-playing bar: the queue starts again at the end. Names the state it is in, not what pressing it does."
+  },
+  "deckBarRepeatOff": "Repeat off",
+  "@deckBarRepeatOff": {
+    "description": "State of the repeat control in the now-playing bar: playback stops at the end of the queue. Names the state it is in, not what pressing it does."
+  },
+  "deckBarRepeatOne": "Repeat one",
+  "@deckBarRepeatOne": {
+    "description": "State of the repeat control in the now-playing bar: the current item plays again. Names the state it is in, not what pressing it does."
+  },
+  "deckBarResume": "Resume",
+  "@deckBarResume": {
+    "description": "Button that picks playback back up where it stopped."
+  },
+  "deckBarSaveSong": "Save this song",
+  "@deckBarSaveSong": {
+    "description": "Button on a radio stream that keeps the song the station just announced. Song, never favourite: the star beside it means pin this station."
+  },
+  "deckBarShuffleOff": "Shuffle off",
+  "@deckBarShuffleOff": {
+    "description": "State of the shuffle control in the now-playing bar: the queue plays in order. Names the state it is in, not what pressing it does."
+  },
+  "deckBarShuffleOn": "Shuffle on",
+  "@deckBarShuffleOn": {
+    "description": "State of the shuffle control in the now-playing bar: the queue plays in a scrambled order. Names the state it is in, not what pressing it does."
+  },
+  "deckBarSkipBack": "Back {span}",
+  "@deckBarSkipBack": {
+    "description": "Button that jumps backwards in spoken-word playback. {span} arrives already spelled out, as in '30 seconds'.",
+    "placeholders": {
+      "span": {
+        "type": "String",
+        "example": "30 seconds"
+      }
+    }
+  },
+  "deckBarSkipForward": "Forward {span}",
+  "@deckBarSkipForward": {
+    "description": "Button that jumps forwards in spoken-word playback. {span} arrives already spelled out, as in '30 seconds'.",
+    "placeholders": {
+      "span": {
+        "type": "String",
+        "example": "30 seconds"
+      }
+    }
+  },
+  "deckBarSpeed": "{speed}x",
+  "@deckBarSpeed": {
+    "description": "The playback rate, as a chip in the now-playing bar. The x is the multiplier convention; {speed} arrives already written for this language, so a locale that groups or separates decimals differently is already handled.",
+    "placeholders": {
+      "speed": {
+        "type": "String",
+        "example": "1.50"
+      }
+    }
+  },
+  "deckBarTapToResume": "Tap to resume",
+  "@deckBarTapToResume": {
+    "description": "Label on the play button when the browser blocked playback and a press is what starts it."
+  },
+  "deckBarVolume": "Volume",
+  "@deckBarVolume": {
+    "description": "Accessible name of the output level slider."
+  },
+  "domainBook": "Book",
+  "@domainBook": {
+    "description": "Badge over artwork naming what kind of thing an item is: an audiobook."
+  },
+  "domainMusic": "Music",
+  "@domainMusic": {
+    "description": "Badge over artwork naming what kind of thing an item is: music."
+  },
+  "domainPodcast": "Podcast",
+  "@domainPodcast": {
+    "description": "Badge over artwork naming what kind of thing an item is: a podcast."
+  },
+  "domainRadio": "Radio",
+  "@domainRadio": {
+    "description": "Badge over artwork naming what kind of thing an item is: a radio station."
+  },
+  "durationHours": "{hours, plural, =1{1 hour} other{{hours} hours}}",
+  "@durationHours": {
+    "description": "A whole number of hours, spelled out for a screen reader. Every unit is named because this is the only positional feedback a screen-reader user gets.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "example": "8"
+      }
+    }
+  },
+  "durationHoursMinutes": "{hours} {minutes}",
+  "@durationHoursMinutes": {
+    "description": "Hours and minutes together, spelled out for a screen reader. Both halves arrive already worded ('8 hours', '2 minutes'); this decides how they join, so add a conjunction here if the language wants one.",
+    "placeholders": {
+      "hours": {
+        "type": "String",
+        "example": "8 hours"
+      },
+      "minutes": {
+        "type": "String",
+        "example": "2 minutes"
+      }
+    }
+  },
+  "durationMinutes": "{minutes, plural, =1{1 minute} other{{minutes} minutes}}",
+  "@durationMinutes": {
+    "description": "A whole number of minutes, spelled out for a screen reader.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "durationMinutesSeconds": "{minutes} {seconds}",
+  "@durationMinutesSeconds": {
+    "description": "Minutes and seconds together, spelled out for a screen reader. Both halves arrive already worded ('2 minutes', '41 seconds'); this decides how they join.",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "2 minutes"
+      },
+      "seconds": {
+        "type": "String",
+        "example": "41 seconds"
+      }
+    }
+  },
+  "durationSeconds": "{seconds, plural, =1{1 second} other{{seconds} seconds}}",
+  "@durationSeconds": {
+    "description": "A whole number of seconds, spelled out for a screen reader.",
+    "placeholders": {
+      "seconds": {
+        "type": "int",
+        "example": "41"
+      }
+    }
+  },
+  "fastScrollJumpTo": "Jump to {letter}",
+  "@fastScrollJumpTo": {
+    "description": "Accessible name of one letter on the alphabet rail beside a long list. {letter} is the letter itself, or # for everything that does not start with one.",
+    "placeholders": {
+      "letter": {
+        "type": "String",
+        "example": "M"
+      }
+    }
+  },
+  "fastScrollLabel": "Jump to a letter",
+  "@fastScrollLabel": {
+    "description": "Accessible name of the alphabet rail beside a long list, taken as a whole."
+  },
+  "inputsClear": "Clear {label}",
+  "@inputsClear": {
+    "description": "Accessible name of the button that empties a text field. {label} is the field's own label, as written on the field.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Name"
+      }
+    }
+  },
+  "inputsSearchHint": "Search",
+  "@inputsSearchHint": {
+    "description": "Placeholder text inside an empty search field."
+  },
+  "inputsSearchLabel": "Search",
+  "@inputsSearchLabel": {
+    "description": "Accessible name of a search field."
+  },
+  "lyricsFollowAlong": "Follow along",
+  "@lyricsFollowAlong": {
+    "description": "Button that puts the lyrics back in step with playback after the reader scrolled away from it."
+  },
+  "lyricsLabel": "Lyrics",
+  "@lyricsLabel": {
+    "description": "Accessible name of the lyrics pane."
+  },
+  "miniPlayerLabel": "Mini player",
+  "@miniPlayerLabel": {
+    "description": "Accessible name of the small always-on-top player window."
+  },
+  "miniPlayerRestore": "Back to the full window",
+  "@miniPlayerRestore": {
+    "description": "Button on the mini player that returns to the main window."
+  },
+  "navAccount": "Account",
+  "@navAccount": {
+    "description": "Accessible name of the control showing who is signed in, which also holds the destinations the chrome has no room to list."
+  },
+  "navCollapseSection": "Collapse {section}",
+  "@navCollapseSection": {
+    "description": "Button that folds a sidebar destination's sub-destinations away. {section} is that destination's own name.",
+    "placeholders": {
+      "section": {
+        "type": "String",
+        "example": "Library"
+      }
+    }
+  },
+  "navCollapseSidebar": "Collapse sidebar",
+  "@navCollapseSidebar": {
+    "description": "Button that narrows the sidebar to glyphs only."
+  },
+  "navExpandSection": "Expand {section}",
+  "@navExpandSection": {
+    "description": "Button that unfolds a sidebar destination's sub-destinations. {section} is that destination's own name.",
+    "placeholders": {
+      "section": {
+        "type": "String",
+        "example": "Library"
+      }
+    }
+  },
+  "navExpandSidebar": "Expand sidebar",
+  "@navExpandSidebar": {
+    "description": "Button that widens the narrowed sidebar back to labelled rows."
+  },
+  "navMain": "Main navigation",
+  "@navMain": {
+    "description": "Accessible name of the window's navigation chrome, taken as a whole."
+  },
+  "navSkipToContent": "Skip to content",
+  "@navSkipToContent": {
+    "description": "The first thing a keyboard reaches on the page: a link that jumps past the navigation to what the page is about."
+  },
+  "paletteClose": "Close",
+  "@paletteClose": {
+    "description": "Accessible name of the close button on the keyboard shortcut sheet."
+  },
+  "paletteEmptyMessage": "Try fewer words, or a different one.",
+  "@paletteEmptyMessage": {
+    "description": "What the command palette suggests when a query matches nothing."
+  },
+  "paletteEmptyTitle": "Nothing matches",
+  "@paletteEmptyTitle": {
+    "description": "Heading the command palette shows when a query matches nothing."
+  },
+  "paletteHint": "Search, or type a command",
+  "@paletteHint": {
+    "description": "Placeholder text in the command palette's field, which takes both a search query and a command name."
+  },
+  "paletteLabel": "Command palette",
+  "@paletteLabel": {
+    "description": "Accessible name of the command palette overlay as a whole."
+  },
+  "paletteShortcutRow": "{label}, {keys}",
+  "@paletteShortcutRow": {
+    "description": "One line of the keyboard shortcut sheet, read as a single node: what the shortcut does, then the keys that run it.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Open search"
+      },
+      "keys": {
+        "type": "String",
+        "example": "Ctrl K"
+      }
+    }
+  },
+  "paletteShortcutsTitle": "Keyboard shortcuts",
+  "@paletteShortcutsTitle": {
+    "description": "Title of the sheet listing every keyboard shortcut."
+  },
+  "panelClose": "Close panel",
+  "@panelClose": {
+    "description": "Accessible name of the close button on a side panel."
+  },
+  "playerCollapse": "Collapse player",
+  "@playerCollapse": {
+    "description": "Button that closes the full-window player and leaves the bar behind."
+  },
+  "playerRepeat": "Repeat",
+  "@playerRepeat": {
+    "description": "Button in the full player that turns repeat on. Names what pressing it does, not the state it is in."
+  },
+  "playerRepeatOne": "Repeat one",
+  "@playerRepeatOne": {
+    "description": "Button in the full player when repeat is set to the current item. Names what pressing it does, not the state it is in."
+  },
+  "playerShuffle": "Shuffle",
+  "@playerShuffle": {
+    "description": "Button in the full player that scrambles the queue's order. Names what pressing it does, not the state it is in."
+  },
+  "playerShuffleOff": "Shuffle off",
+  "@playerShuffleOff": {
+    "description": "Button in the full player that puts a scrambled queue back in order. Names what pressing it does, not the state it is in."
+  },
+  "playerSkipBackSeconds": "{seconds, plural, =1{Back 1 second} other{Back {seconds} seconds}}",
+  "@playerSkipBackSeconds": {
+    "description": "Button in the full player that jumps backwards in spoken-word playback by a fixed number of seconds.",
+    "placeholders": {
+      "seconds": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "playerSkipForwardSeconds": "{seconds, plural, =1{Forward 1 second} other{Forward {seconds} seconds}}",
+  "@playerSkipForwardSeconds": {
+    "description": "Button in the full player that jumps forwards in spoken-word playback by a fixed number of seconds.",
+    "placeholders": {
+      "seconds": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "scaffoldBack": "Back",
+  "@scaffoldBack": {
+    "description": "Accessible name of a screen's back button."
+  },
+  "settingsChoiceValue": "{label}, {value}",
+  "@settingsChoiceValue": {
+    "description": "A settings row that opens a menu, read as one node: what the setting is, then what it is set to. The e2e suite finds these rows by this name.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Skip back by"
+      },
+      "value": {
+        "type": "String",
+        "example": "45 seconds"
+      }
+    }
+  },
+  "spanHours": "{hours, plural, =1{1 hr} other{{hours} hr}}",
+  "@spanHours": {
+    "description": "How much time something takes, in hours, abbreviated for a caption or a table cell with room for a few characters. The spelled-out form a screen reader hears is durationHours.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "spanHoursMinutes": "{hours} {minutes}",
+  "@spanHoursMinutes": {
+    "description": "Hours and minutes together in the abbreviated form. Both halves arrive already worded ('1 hr', '20 min'); this decides how they join.",
+    "placeholders": {
+      "hours": {
+        "type": "String",
+        "example": "1 hr"
+      },
+      "minutes": {
+        "type": "String",
+        "example": "20 min"
+      }
+    }
+  },
+  "spanMinutes": "{minutes, plural, =1{1 min} other{{minutes} min}}",
+  "@spanMinutes": {
+    "description": "How much time something takes, in minutes, abbreviated for a caption or a table cell with room for a few characters.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "45"
+      }
+    }
+  },
+  "statesErrorTitle": "Something didn't load",
+  "@statesErrorTitle": {
+    "description": "Heading of the pane shown when a screen's data failed to arrive. No apologies and no error codes: the technical line has a channel of its own."
+  },
+  "statesSpoken": "{title}. {message}",
+  "@statesSpoken": {
+    "description": "An empty or failed pane read as one node, because the pane stops merging its children. Heading, then the sentence under it.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Something didn't load"
+      },
+      "message": {
+        "type": "String",
+        "example": "The server did not answer."
+      }
+    }
+  },
+  "statesTryAgain": "Try again",
+  "@statesTryAgain": {
+    "description": "Button that runs the request that just failed again."
+  },
+  "stationDialLabel": "Station dial",
+  "@stationDialLabel": {
+    "description": "Accessible name of the radio dial, which a screen reader reads as an adjustable slider over the stations."
+  },
+  "stationDialStation": "{name}, {index} of {count}",
+  "@stationDialStation": {
+    "description": "Where the radio dial stands: the station under the needle and its place in the row.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Nightjar FM"
+      },
+      "index": {
+        "type": "int",
+        "example": "3"
+      },
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "stationDialTuneIn": "Tune in",
+  "@stationDialTuneIn": {
+    "description": "Button that starts the radio station under the needle."
+  },
+  "visualizerLabel": "Visualizer",
+  "@visualizerLabel": {
+    "description": "Accessible name of the region drawing the track's shape, which is decoration rather than a control."
+  },
+  "visualizerPlatter": "Platter",
+  "@visualizerPlatter": {
+    "description": "One of the two pictures the visualizer can draw: the cover as a turning record inside a ring of the track's peaks."
+  },
+  "visualizerWaveform": "Waveform",
+  "@visualizerWaveform": {
+    "description": "One of the two pictures the visualizer can draw: the whole track's peaks, with the playhead sweeping across them."
+  }
+}

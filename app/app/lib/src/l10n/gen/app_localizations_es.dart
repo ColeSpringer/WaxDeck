@@ -11,14 +11,407 @@ class AppLocalizationsEs extends AppLocalizations {
   AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
+  String bytesB(int bytes) {
+    final intl.NumberFormat bytesNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String bytesString = bytesNumberFormat.format(bytes);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      bytes,
+      locale: localeName,
+      other: '$bytesString B',
+      one: '1 B',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String bytesGb(double gigabytes) {
+    final intl.NumberFormat gigabytesNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 1,
+        );
+    final String gigabytesString = gigabytesNumberFormat.format(gigabytes);
+
+    return '$gigabytesString GB';
+  }
+
+  @override
+  String bytesKb(int kilobytes) {
+    final intl.NumberFormat kilobytesNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String kilobytesString = kilobytesNumberFormat.format(kilobytes);
+
+    return '$kilobytesString KB';
+  }
+
+  @override
+  String bytesMb(double megabytes) {
+    final intl.NumberFormat megabytesNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 1,
+        );
+    final String megabytesString = megabytesNumberFormat.format(megabytes);
+
+    return '$megabytesString MB';
+  }
+
+  @override
   String get commonCancel => 'Cancelar';
 
   @override
   String get commonRetry => 'Reintentar';
 
   @override
+  String devicesMultiPartAudiobook(String endpoint) {
+    return 'Los audiolibros de varias partes todavía no se pueden reproducir en $endpoint. Reprodúcelo en este dispositivo.';
+  }
+
+  @override
+  String get devicesNothingToSend =>
+      'Aquí no hay nada reproduciéndose que enviar. Empieza algo primero.';
+
+  @override
+  String get errorCatalogBusy =>
+      'Otra tarea está usando los archivos de la biblioteca. Inténtalo de nuevo en un momento.';
+
+  @override
+  String get errorCatalogMaintenance =>
+      'La biblioteca está en mantenimiento. Inténtalo de nuevo en un momento.';
+
+  @override
+  String get errorConflict =>
+      'Otra cosa ha cambiado esto antes. Vuelve a mirarlo e inténtalo de nuevo.';
+
+  @override
+  String get errorDirectoryUnavailable =>
+      'El servicio de directorio no ha respondido. Inténtalo más tarde.';
+
+  @override
+  String get errorEndpointOffline =>
+      'Ese dispositivo no está conectado. Actualiza la lista de dispositivos.';
+
+  @override
+  String get errorFeatureUnavailable =>
+      'Este servidor no tiene activa la función que hace falta.';
+
+  @override
+  String get errorFeedUnreachable =>
+      'El servidor del feed no ha respondido, o lo que ha devuelto no es un feed.';
+
+  @override
+  String get errorFieldLocked =>
+      'Ese campo está bloqueado. Desbloquéalo, o guarda forzando el cambio.';
+
+  @override
+  String get errorForbidden => 'Tu cuenta no tiene permiso para hacer eso.';
+
+  @override
+  String get errorInternal =>
+      'El servidor ha encontrado un problema que no ha podido resolver.';
+
+  @override
+  String get errorInvalidRequest =>
+      'El servidor no ha podido procesar esa petición.';
+
+  @override
+  String get errorLocalChannelOffline =>
+      'WaxDeck ha perdido la conexión en directo con el servidor. Se reconectará solo; inténtalo de nuevo en un momento.';
+
+  @override
+  String get errorLocalCommandTimeout =>
+      'El servidor no ha respondido a ese comando a tiempo. Inténtalo de nuevo.';
+
+  @override
+  String get errorLocalUnregistered =>
+      'Este dispositivo todavía no está listo como reproductor. Inténtalo de nuevo en un momento.';
+
+  @override
+  String get errorMultiPartAudiobook =>
+      'Los audiolibros de varias partes todavía no se pueden reproducir en otro dispositivo. Reprodúcelo en este.';
+
+  @override
+  String get errorNetwork =>
+      'No se ha podido conectar con el servidor. Comprueba la conexión e inténtalo de nuevo.';
+
+  @override
+  String get errorNotFound => 'Eso ya no está aquí.';
+
+  @override
+  String get errorQuotaExceeded => 'Eso superaría el límite de almacenamiento.';
+
+  @override
+  String get errorRateLimited =>
+      'Demasiados intentos. Espera un momento e inténtalo de nuevo.';
+
+  @override
+  String get errorReadOnly =>
+      'La biblioteca está en modo de solo lectura, así que no se puede cambiar nada.';
+
+  @override
+  String get errorServiceUnreachable =>
+      'Un servicio externo necesario no ha respondido. Inténtalo más tarde.';
+
+  @override
+  String get errorSourceUnavailable =>
+      'Este servidor no tiene activa la fuente que hace falta.';
+
+  @override
+  String get errorStreamStale =>
+      'Este archivo ha cambiado en el servidor. Ábrelo otra vez para reproducirlo.';
+
+  @override
+  String get errorSyncReset =>
+      'Este dispositivo está demasiado desactualizado, así que se sincronizará desde cero.';
+
+  @override
+  String get errorTimeout =>
+      'El dispositivo no ha respondido a tiempo. Inténtalo de nuevo.';
+
+  @override
+  String get errorTranscodeLimited =>
+      'Se están convirtiendo demasiadas reproducciones a la vez. Inténtalo de nuevo en un momento.';
+
+  @override
+  String get errorTransportEmpty =>
+      'La respuesta del servidor ha llegado vacía.';
+
+  @override
+  String get errorTransportTimeout => 'El servidor no ha respondido a tiempo.';
+
+  @override
+  String get errorUnauthenticated => 'Vuelve a iniciar sesión para continuar.';
+
+  @override
   String get errorUnexpected => 'Algo ha salido mal.';
 
   @override
+  String get errorUnsupportedFormat =>
+      'Este servidor no acepta el formato de ese archivo.';
+
+  @override
+  String get errorWindowedTrack =>
+      'Esta pista es parte de un archivo más grande, que otro dispositivo todavía no puede reproducir. Reprodúcela en este.';
+
+  @override
+  String get healthCorruptAudio => 'Audio dañado';
+
+  @override
+  String healthFixRule(String rule) {
+    return 'Corregir $rule';
+  }
+
+  @override
+  String get healthGenreWhitelist => 'Género fuera del árbol canónico';
+
+  @override
+  String get healthLegacyTags => 'Solo etiquetas heredadas';
+
+  @override
+  String get healthMissingArt => 'Sin carátula';
+
+  @override
+  String get healthMissingAsin => 'Sin ASIN';
+
+  @override
+  String get healthMissingGenre => 'Sin género';
+
+  @override
+  String get healthMissingLyrics => 'Sin letra';
+
+  @override
+  String get healthMissingMbid => 'Sin identificador de MusicBrainz';
+
+  @override
+  String get healthMissingNarrator => 'Sin narrador';
+
+  @override
+  String get healthMissingYear => 'Sin año de publicación';
+
+  @override
+  String get healthPathMismatch =>
+      'La ruta del archivo no coincide con el perfil de organización';
+
+  @override
+  String get healthSmallArt => 'Carátula de baja resolución';
+
+  @override
+  String get healthWriteUnsynced =>
+      'Etiquetas del archivo desincronizadas del catálogo';
+
+  @override
   String get localeFontSample => 'Música, pódcasts y audiolibros.';
+
+  @override
+  String get notifBackupCompletedHelp =>
+      'Un archivo de copia de seguridad ha terminado de crearse.';
+
+  @override
+  String get notifBackupCompletedTitle => 'Copia de seguridad terminada';
+
+  @override
+  String get notifBackupFailedHelp =>
+      'Ha fallado un intento de copia de seguridad.';
+
+  @override
+  String get notifBackupFailedTitle => 'Copia de seguridad fallida';
+
+  @override
+  String get notifEpisodeDownloadedHelp =>
+      'Un episodio nuevo de un programa al que estás suscrito ha terminado de descargarse.';
+
+  @override
+  String get notifEpisodeDownloadedTitle => 'Episodio nuevo descargado';
+
+  @override
+  String get notifFeedDisabledHelp =>
+      'Un feed al que estás suscrito ha fallado repetidamente y se ha desactivado.';
+
+  @override
+  String get notifFeedDisabledTitle => 'Feed desactivado';
+
+  @override
+  String get notifImportCompletedHelp =>
+      'Una subida o adquisición se ha identificado con suficiente confianza para archivarse sola, sin revisión.';
+
+  @override
+  String get notifImportCompletedTitle => 'Archivado sin revisión';
+
+  @override
+  String get notifReviewReadyHelp =>
+      'Una subida o adquisición ha terminado de identificarse y espera en la cola de revisión.';
+
+  @override
+  String get notifReviewReadyTitle => 'Pendiente de revisión';
+
+  @override
+  String get notifSignupRequestedHelp =>
+      'Una solicitud de cuenta nueva espera aprobación.';
+
+  @override
+  String get notifSignupRequestedTitle => 'Solicitud de cuenta';
+
+  @override
+  String relDaysAgo(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'hace $days d',
+      one: 'hace 1 d',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String relDaysShort(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'hace $days d',
+      one: 'hace 1 d',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get relDueNow => 'ahora';
+
+  @override
+  String relHoursAgo(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'hace $hours h',
+      one: 'hace 1 h',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String relHoursShort(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'hace $hours h',
+      one: 'hace 1 h',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String relInDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'en $days d',
+      one: 'en 1 d',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String relInHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'en $hours h',
+      one: 'en 1 h',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String relInMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'en $minutes min',
+      one: 'en 1 min',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get relJustNow => 'ahora mismo';
+
+  @override
+  String relMinutesAgo(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'hace $minutes min',
+      one: 'hace 1 min',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String relMinutesShort(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'hace $minutes min',
+      one: 'hace 1 min',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String relMonthsShort(int months) {
+    String _temp0 = intl.Intl.pluralLogic(
+      months,
+      locale: localeName,
+      other: 'hace $months meses',
+      one: 'hace 1 mes',
+    );
+    return '$_temp0';
+  }
 }

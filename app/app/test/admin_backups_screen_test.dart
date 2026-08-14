@@ -1,3 +1,4 @@
+import 'localized_host.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -48,7 +49,7 @@ Future<void> _pump(
         repositoryProvider.overrideWithValue(repo),
         filePickerProvider.overrideWithValue(picker),
       ],
-      child: const MaterialApp(home: BackupsScreen()),
+      child: localizedHost(const BackupsScreen()),
     ),
   );
   await tester.pumpAndSettle();

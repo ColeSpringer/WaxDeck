@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../connect/connect_providers.dart';
 import '../health/health_controller.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../review/review_controller.dart';
 import '../shell/routes.dart';
@@ -163,6 +164,7 @@ class _StatusTiles extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final health = ref.watch(healthProvider).value;
     final review = ref.watch(reviewStatsProvider).value;
     final jobs = ref.watch(adminJobsProvider).value ?? const <Job>[];
@@ -235,13 +237,15 @@ class _StatusTiles extends ConsumerWidget {
             // When, not how big: a tile called "Last backup" is answering
             // "did one happen", and a size answers a question nobody
             // asked. The size is on the backups screen this doors into.
-            value: lastBackup == null ? 'None' : _ago(lastBackup.createdAt),
+            value: lastBackup == null
+                ? 'None'
+                : l10n.relativeSpaced(lastBackup.createdAt),
             caption: lastBackup == null
                 ? 'No archive yet'
                 // The backup schedule's own next run. Captioning this
                 // with the soonest run of any kind put "Next scan in
                 // 40 min" under the backup tile.
-                : _nextRunOf(schedules, 'backup') ?? 'Not scheduled',
+                : _nextRunOf(l10n, schedules, 'backup') ?? 'Not scheduled',
             glyph: WaxIcons.bookmark,
             semanticsId: SemanticsIds.adminTile('backups'),
             onTap: () => context.go(WaxRoute.backups),
@@ -279,31 +283,18 @@ class _StatusTiles extends ConsumerWidget {
 
   /// When one named schedule next runs, as a caption. A schedule that
   /// is off has no next run and answers null.
-  static String? _nextRunOf(List<Schedule> schedules, String kind) {
+  static String? _nextRunOf(
+    AppLocalizations l10n,
+    List<Schedule> schedules,
+    String kind,
+  ) {
     for (final schedule in schedules) {
       if (schedule.kind != kind) continue;
       final next = schedule.nextRunAt;
       if (!schedule.enabled || next == null) return null;
-      return 'Next ${_relative(next)}';
+      return 'Next ${l10n.relativeUntil(next)}';
     }
     return null;
-  }
-
-  static String _relative(DateTime at) {
-    final delta = at.difference(DateTime.now());
-    if (delta.isNegative) return 'due now';
-    if (delta.inHours < 1) return 'in ${delta.inMinutes} min';
-    if (delta.inHours < 24) return 'in ${delta.inHours} h';
-    return 'in ${delta.inDays} d';
-  }
-
-  /// How long ago, in the same shape as the forward version.
-  static String _ago(DateTime at) {
-    final delta = DateTime.now().difference(at);
-    if (delta.isNegative) return 'just now';
-    if (delta.inHours < 1) return '${delta.inMinutes} min ago';
-    if (delta.inHours < 24) return '${delta.inHours} h ago';
-    return '${delta.inDays} d ago';
   }
 }
 

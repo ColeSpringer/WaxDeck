@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -319,6 +320,7 @@ class _RequestsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final requests = ref.watch(signupRequestsProvider);
+    final l10n = context.l10n;
     return Semantics(
       identifier: SemanticsIds.signupRequests,
       container: true,
@@ -338,9 +340,9 @@ class _RequestsTab extends ConsumerWidget {
                 glyph: WaxIcons.addPerson,
                 title: user.username,
                 subtitle: user.displayName == null
-                    ? 'Requested ${_date(user.createdAt)}'
+                    ? 'Requested ${l10n.formatDate(user.createdAt)}'
                     : '${user.displayName}, requested '
-                          '${_date(user.createdAt)}',
+                          '${l10n.formatDate(user.createdAt)}',
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -372,13 +374,6 @@ class _RequestsTab extends ConsumerWidget {
         _ => const Center(child: CircularProgressIndicator()),
       },
     );
-  }
-
-  static String _date(DateTime at) {
-    final local = at.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
   }
 }
 

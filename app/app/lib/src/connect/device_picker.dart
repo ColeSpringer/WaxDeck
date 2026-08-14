@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -323,6 +324,7 @@ class _DevicePickerSheet extends ConsumerWidget {
     final repository = ref.read(repositoryProvider);
     final messenger = handles.messenger;
     final remoteController = ref.read(remoteSessionProvider.notifier);
+    final l10n = context.l10n;
     final pid = currentPid;
     // The face decides, never which sessions exist: both can be live.
     final sessionId = _here
@@ -338,10 +340,12 @@ class _DevicePickerSheet extends ConsumerWidget {
         );
       } else {
         if (pid == null) {
-          throw const WaxDeckApiException(
-            code: 'invalid-request',
-            message: 'Nothing is playing here to send. Start something first.',
-          );
+          // Said plainly rather than minted as an API failure: nothing
+          // was refused, because nothing was ever sent.
+          messenger
+            ..hideCurrentSnackBar()
+            ..showSnackBar(SnackBar(content: Text(l10n.devicesNothingToSend)));
+          return;
         }
         started = await repository.createPlaybackSession(
           endpointId: endpoint.id,
@@ -356,7 +360,7 @@ class _DevicePickerSheet extends ConsumerWidget {
         SnackBar(content: Text('Playing on ${endpoint.name}')),
       );
     } on WaxDeckApiException catch (e) {
-      _explain(messenger, e, endpoint: endpoint);
+      _explain(l10n, messenger, e, endpoint: endpoint);
     }
   }
 
@@ -387,6 +391,7 @@ class _DevicePickerSheet extends ConsumerWidget {
   ) async {
     final messenger = handles.messenger;
     final controller = ref.read(remoteSessionProvider.notifier);
+    final l10n = context.l10n;
     final name = remote.endpointName;
     Navigator.of(context).pop();
     final choice = await showDialog<_LeaveChoice>(
@@ -428,7 +433,7 @@ class _DevicePickerSheet extends ConsumerWidget {
           await controller.transferHere();
       }
     } on WaxDeckApiException catch (e) {
-      _explain(messenger, e);
+      _explain(l10n, messenger, e);
     }
   }
 
@@ -439,25 +444,33 @@ class _DevicePickerSheet extends ConsumerWidget {
 
   /// Says why a command was refused, in words that name a way out.
   ///
-  /// The server's message is the default and is usually the right one. The
-  /// exception is the refusal this app can do something about: a multi-part
-  /// audiobook cannot play on a cast device or a renderer, and the server
-  /// codes that refusal `feature-unavailable` precisely so a picker can
-  /// offer the alternative rather than render a dead end. The tracked
-  /// server-side fix is the real answer; until it lands, the UI still has
-  /// one.
+  /// [explainError] words every code, and this adds the one refinement
+  /// only the picker can make: a multi-part audiobook cannot play on a
+  /// cast device or a renderer, and naming the device it was sent to
+  /// turns a dead end into an offer.
+  ///
+  /// The refusal is keyed on the params the server now carries. The
+  /// phrase match beside it is the fallback for a server older than
+  /// those params; both die together when part-aware playback lands.
   static void _explain(
+    AppLocalizations l10n,
     ScaffoldMessengerState messenger,
     WaxDeckApiException error, {
     PlayerEndpoint? endpoint,
   }) {
     final multiPart =
         error.code == 'feature-unavailable' &&
-        error.message.contains('multi-part audiobook');
-    final message = multiPart
-        ? "Multi-part audiobooks can't play on ${endpoint?.name ?? 'cast devices'} "
-              'yet. Play it on this device instead.'
-        : error.message;
+        (error.params?['feature'] == 'multi-part-audiobook' ||
+            error.message.contains('multi-part audiobook'));
+    // Named where there is a device to name, and general on the
+    // leave-and-transfer path, which has none. Without the second arm a
+    // pre-params server's refusal - recognised only by the phrase - would
+    // fall through to the umbrella sentence and lose the way out.
+    final message = switch ((multiPart, endpoint)) {
+      (true, final target?) => l10n.devicesMultiPartAudiobook(target.name),
+      (true, null) => l10n.errorMultiPartAudiobook,
+      _ => explainError(l10n, error),
+    };
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));

@@ -218,6 +218,7 @@ class _ContinueShelf extends ConsumerWidget {
     final reading = continueListening(books, states);
     if (reading.isEmpty) return const SizedBox.shrink();
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.waxL10n;
     final tiles = <MediaTileData>[
       for (final book in reading)
         MediaTileData(
@@ -227,8 +228,8 @@ class _ContinueShelf extends ConsumerWidget {
           domain: WaxDomain.audiobooks,
           shape: ArtworkShape.portrait,
           progress: states[book.pid]?.fractionOf(book.durationMs),
-          trailingText: _left(states[book.pid], book.durationMs),
-          trailingSpoken: _leftSpoken(states[book.pid], book.durationMs),
+          trailingText: _left(l10n, states[book.pid], book.durationMs),
+          trailingSpoken: _leftSpoken(l10n, states[book.pid], book.durationMs),
           // Its own handle, not the grid card's. A half-heard book is on
           // this shelf *and* in the grid below, so one handle would name
           // two controls and leave a spec picking by document order
@@ -259,15 +260,23 @@ class _ContinueShelf extends ConsumerWidget {
   /// "6 hr left", the readout the layout asks the shelf for. A span
   /// rather than a timecode: a book with "7:50:12" left is being told a
   /// clock time.
-  static String? _left(PlayProgress? progress, int durationMs) {
+  static String? _left(
+    WaxLocalizations l10n,
+    PlayProgress? progress,
+    int durationMs,
+  ) {
     final remaining = progress?.remainingOf(durationMs);
-    return remaining == null ? null : '${formatSpan(remaining)} left';
+    return remaining == null ? null : '${l10n.formatSpan(remaining)} left';
   }
 
   /// The same, for the ear: "6 hours left" rather than "6 hr left".
-  static String? _leftSpoken(PlayProgress? progress, int durationMs) {
+  static String? _leftSpoken(
+    WaxLocalizations l10n,
+    PlayProgress? progress,
+    int durationMs,
+  ) {
     final remaining = progress?.remainingOf(durationMs);
-    return remaining == null ? null : '${spellDuration(remaining)} left';
+    return remaining == null ? null : '${l10n.spellDuration(remaining)} left';
   }
 }
 
@@ -282,6 +291,7 @@ class _BookGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.waxL10n;
     return SliverPadding(
       padding: sizeClass.gutter,
       sliver: SliverLayoutBuilder(
@@ -309,8 +319,14 @@ class _BookGrid extends ConsumerWidget {
                   domain: WaxDomain.audiobooks,
                   shape: ArtworkShape.portrait,
                   progress: state.fractionOf(book.durationMs),
-                  trailingText: _caption(state, book.durationMs, short: true),
+                  trailingText: _caption(
+                    l10n,
+                    state,
+                    book.durationMs,
+                    short: true,
+                  ),
                   trailingSpoken: _caption(
+                    l10n,
                     state,
                     book.durationMs,
                     short: false,
@@ -333,11 +349,13 @@ class _BookGrid extends ConsumerWidget {
   /// [short] draws it, abbreviated to what a cell has room for; the long
   /// form is what a screen reader hears.
   static String? _caption(
+    WaxLocalizations l10n,
     PlayProgress state,
     int durationMs, {
     required bool short,
   }) {
-    String span(Duration d) => short ? formatSpan(d) : spellDuration(d);
+    String span(Duration d) =>
+        short ? l10n.formatSpan(d) : l10n.spellDuration(d);
     if (state.finished) return 'Finished';
     final remaining = state.remainingOf(durationMs);
     if (state.inProgress && remaining != null) {

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
+import '../l10n/wax_l10n.dart';
 import '../theme/wax_layout.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
@@ -173,6 +174,7 @@ class _MediaCardState extends State<MediaCard> {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final motion = WaxMotion.of(context);
+    final l10n = context.waxL10n;
     final data = widget.data;
     final width = widget.width ?? WaxSizeClass.of(context).gridExtent;
     final captionsFade =
@@ -272,7 +274,7 @@ class _MediaCardState extends State<MediaCard> {
                   child: Center(
                     child: WaxIconButton(
                       glyph: WaxIcons.play,
-                      label: 'Play ${data.title}',
+                      label: l10n.cardsPlayItem(data.title),
                       size: 28,
                       color: colors.textPrimary,
                       onPressed: widget.onPlay,
@@ -289,7 +291,7 @@ class _MediaCardState extends State<MediaCard> {
       identifier: data.semanticsId,
       button: widget.onTap != null,
       label: <String?>[
-        if (data.unplayed) 'Unplayed',
+        if (data.unplayed) l10n.cardsUnplayed,
         data.badge,
         data.title,
         data.subtitle,
@@ -298,7 +300,7 @@ class _MediaCardState extends State<MediaCard> {
         // wins where the drawn one is abbreviated.
         data.trailingSpoken ?? data.trailingText,
         if (data.progress != null)
-          '${((data.progress ?? 0) * 100).round()} percent played',
+          l10n.cardsPercentPlayed(((data.progress ?? 0) * 100).round()),
       ].nonNulls.join(', '),
       excludeSemantics: true,
       onTap: widget.onTap,
@@ -524,6 +526,7 @@ class MediaListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final layout = WaxLayout.of(context);
+    final l10n = context.waxL10n;
 
     final title = Text(
       data.title,
@@ -572,8 +575,8 @@ class MediaListRow extends StatelessWidget {
       button: onTap != null,
       selected: selected,
       label: <String?>[
-        if (playing) 'Playing',
-        if (data.unplayed) 'Unplayed',
+        if (playing) l10n.commonPlaying,
+        if (data.unplayed) l10n.cardsUnplayed,
         data.title,
         data.subtitle,
         data.trailingSpoken ?? data.trailingText,
@@ -635,7 +638,7 @@ class MediaListRow extends StatelessWidget {
           ),
           if (data.starred)
             Padding(
-              padding: const EdgeInsets.only(right: WaxSpace.s8),
+              padding: const EdgeInsetsDirectional.only(end: WaxSpace.s8),
               child: WaxIcon(
                 WaxIcons.star,
                 size: 14,
@@ -645,7 +648,7 @@ class MediaListRow extends StatelessWidget {
             ),
           if (data.downloaded)
             Padding(
-              padding: const EdgeInsets.only(right: WaxSpace.s8),
+              padding: const EdgeInsetsDirectional.only(end: WaxSpace.s8),
               child: WaxIcon(
                 WaxIcons.downloads,
                 size: 14,
@@ -667,7 +670,9 @@ class MediaListRow extends StatelessWidget {
         if (onSelect != null)
           Semantics(
             identifier: selectSemanticsId,
-            label: selected ? 'Deselect ${data.title}' : 'Select ${data.title}',
+            label: selected
+                ? l10n.cardsDeselectItem(data.title)
+                : l10n.cardsSelectItem(data.title),
             child: Checkbox(
               value: selected,
               onChanged: (value) => onSelect!(value ?? false),
@@ -678,7 +683,7 @@ class MediaListRow extends StatelessWidget {
         if (onMore != null)
           WaxIconButton(
             glyph: WaxIcons.more,
-            label: 'More for ${data.title}',
+            label: l10n.cardsMoreForItem(data.title),
             size: 18,
             semanticsId: moreSemanticsId,
             onPressed: onMore,
@@ -759,7 +764,7 @@ class WaxOptionRow extends StatelessWidget {
     this.enabled = true,
     this.selected = false,
     this.active = false,
-    this.activeLabel = 'Playing',
+    this.activeLabel = houseActiveLabel,
     this.spokenSubtitle,
     this.semanticsId,
     super.key,
@@ -805,7 +810,17 @@ class WaxOptionRow extends StatelessWidget {
   /// What a screen reader hears before the title while [active]. Null for a
   /// highlight that is not about playback: the connection check's reachable
   /// addresses would otherwise all announce as playing.
+  ///
+  /// Defaults to [houseActiveLabel], which resolves to the design
+  /// system's own word once a BuildContext is in hand.
   final String? activeLabel;
+
+  /// Stands for "whatever this locale calls playing". It cannot be the
+  /// literal it replaced, because the word is not known until a
+  /// BuildContext resolves the table - and it cannot be null, because an
+  /// explicit null is the opt-out above and the two have to stay
+  /// tellable apart.
+  static const String houseActiveLabel = 'wax.optionRow.houseActiveLabel';
 
   /// What a screen reader hears instead of [subtitle], where the drawn
   /// line is abbreviated for the room it has.
@@ -817,6 +832,9 @@ class WaxOptionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final layout = WaxLayout.of(context);
+    final announced = activeLabel == houseActiveLabel
+        ? context.waxL10n.commonPlaying
+        : activeLabel;
     final tappable = enabled && onTap != null;
     final titleColor = !enabled
         ? colors.textDisabled
@@ -865,7 +883,7 @@ class WaxOptionRow extends StatelessWidget {
     );
 
     final announcement = <String?>[
-      if (active) activeLabel,
+      if (active) announced,
       title,
       spokenSubtitle ?? subtitle,
     ].nonNulls.join(', ');

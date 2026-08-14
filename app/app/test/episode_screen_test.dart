@@ -12,6 +12,7 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
 
@@ -36,7 +37,7 @@ Widget _host(FakeRepository repo, FakeEngine engine, Widget home) =>
         repositoryProvider.overrideWithValue(repo),
         audioEngineProvider.overrideWithValue(engine),
       ],
-      child: MaterialApp(home: home),
+      child: localizedHost(home),
     );
 
 void main() {

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -127,21 +128,12 @@ class _ListenLogRow extends StatelessWidget {
   final int index;
   final ListenLogEntry entry;
 
-  static String _stamp(DateTime at) {
-    final local = at.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day $hour:$minute';
-  }
-
   @override
   Widget build(BuildContext context) {
     final details = <String>[
       ?entry.artist,
       entry.client,
-      _stamp(entry.startedAt),
+      context.l10n.formatStamp(entry.startedAt),
     ];
     return MediaListRow(
       key: Key('listen-log-row-$index'),

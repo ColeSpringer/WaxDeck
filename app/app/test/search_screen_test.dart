@@ -126,7 +126,7 @@ void main() {
     await _pump(tester, repository, initialQuery: 'night');
     expect(find.text('Nightjar'), findsOneWidget);
 
-    await tester.tap(find.bySemanticsLabel('Clear search'));
+    await tester.tap(find.bySemanticsLabel('Clear Search'));
     // No debounce wait: a quarter second of stale results after a clear
     // reads as a stuck screen.
     await tester.pump();

@@ -150,6 +150,7 @@ class _Header extends ConsumerWidget {
       title: book.title,
       subtitle: book.subtitle,
       metadata: _facts(
+        context.waxL10n,
         book,
         positionMs: positionMs,
         finished: progress.finished,
@@ -183,12 +184,13 @@ class _Header extends ConsumerWidget {
   /// "12 hr 40 min · 38 percent · 7 hr 50 min left", or the plain length
   /// where nothing has been heard.
   static String _facts(
+    WaxLocalizations l10n,
     BookDetail book, {
     required int positionMs,
     required bool finished,
   }) {
     final total = Duration(milliseconds: book.durationMs);
-    final parts = <String>[spellDuration(total)];
+    final parts = <String>[l10n.spellDuration(total)];
     if (finished) {
       parts.add('Finished');
     } else if (positionMs > 0 && book.durationMs > 0) {
@@ -199,7 +201,7 @@ class _Header extends ConsumerWidget {
       parts.add('$percent percent');
       final left = book.durationMs - positionMs;
       if (left > 0) {
-        parts.add('${spellDuration(Duration(milliseconds: left))} left');
+        parts.add('${l10n.spellDuration(Duration(milliseconds: left))} left');
       }
     }
     if (book.parts.length > 1) {

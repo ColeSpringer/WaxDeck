@@ -4,10 +4,12 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'client_prefs.dart';
 import 'integrations_controller.dart';
+import 'notify_labels.dart';
 
 /// Scrobbling connections: Last.fm through the browser authorization
 /// flow, ListenBrainz through a token dialog.
@@ -794,6 +796,7 @@ class _EventChecklist extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final catalog = ref.watch(notifyEventCatalogProvider);
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return switch (catalog) {
       AsyncData(:final value) => Builder(
         builder: (context) {
@@ -826,11 +829,11 @@ class _EventChecklist extends ConsumerWidget {
             children.add(
               WaxSettingRow(
                 key: ValueKey('notify-event-${event.name}'),
-                title: event.name,
-                help: event.description,
+                title: notifyEventTitle(l10n, event),
+                help: notifyEventHelp(l10n, event),
                 control: WaxSwitch(
                   value: selected.contains(event.name),
-                  label: event.name,
+                  label: notifyEventTitle(l10n, event),
                   onChanged: (checked) {
                     final next = {...selected};
                     if (checked) {

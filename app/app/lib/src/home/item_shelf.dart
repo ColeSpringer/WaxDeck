@@ -97,6 +97,7 @@ class ItemShelf extends ConsumerWidget {
     }
     final progress = state?.progress ?? PlayProgressView.empty;
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.waxL10n;
     final tiles = <MediaTileData>[
       for (final item in items)
         MediaTileData(
@@ -109,10 +110,10 @@ class ItemShelf extends ConsumerWidget {
               ? progress[item.pid].fractionOf(item.durationMs)
               : null,
           trailingText: withProgress
-              ? _left(progress, item, short: true)
+              ? _left(l10n, progress, item, short: true)
               : null,
           trailingSpoken: withProgress
-              ? _left(progress, item, short: false)
+              ? _left(l10n, progress, item, short: false)
               : null,
           // Scoped by shelf, because the shelves overlap by construction:
           // a fresh unplayed track is on Recently added and on Never
@@ -158,13 +159,17 @@ class ItemShelf extends ConsumerWidget {
 
   /// "12 min left", and the spelled form a screen reader hears.
   static String? _left(
+    WaxLocalizations l10n,
     PlayProgressView progress,
     ItemSummary item, {
     required bool short,
   }) {
     final remaining = progress[item.pid].remainingOf(item.durationMs);
     if (remaining == null) return null;
-    return '${short ? formatSpan(remaining) : spellDuration(remaining)} left';
+    final span = short
+        ? l10n.formatSpan(remaining)
+        : l10n.spellDuration(remaining);
+    return '$span left';
   }
 }
 

@@ -177,7 +177,7 @@ class _Header extends ConsumerWidget {
     return EntityHeader(
       title: playlist.name,
       subtitle: playlistOwnerLine(playlist),
-      metadata: _facts(view),
+      metadata: _facts(context.waxL10n, view),
       artwork: waxArtwork(ref.watch(artworkStoreProvider), playlist.artUrl),
       actions: <Widget>[
         WaxButton(
@@ -198,12 +198,12 @@ class _Header extends ConsumerWidget {
   }
 
   /// "Smart playlist · 42 items · 2 hr 41 min".
-  static String _facts(PlaylistView view) {
+  static String _facts(WaxLocalizations l10n, PlaylistView view) {
     final entries = view.entries;
     final parts = <String>[
       view.playlist.isSmart ? 'Smart playlist' : 'Manual playlist',
       entries.length == 1 ? '1 item' : '${entries.length} items',
-      if (view.duration > Duration.zero) formatSpan(view.duration),
+      if (view.duration > Duration.zero) l10n.formatSpan(view.duration),
     ];
     return parts.join(' · ');
   }

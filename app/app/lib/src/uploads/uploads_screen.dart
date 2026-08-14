@@ -4,7 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
-import '../format_bytes.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -256,6 +256,7 @@ class _QuotaHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final cap = quota.quotaBytes;
     final fraction = cap == null || cap <= 0
         ? null
@@ -281,8 +282,9 @@ class _QuotaHeader extends StatelessWidget {
             const SizedBox(height: WaxSpace.s8),
             Text(
               cap == null
-                  ? formatBytes(quota.bytesInUse)
-                  : '${formatBytes(quota.bytesInUse)} of ${formatBytes(cap)}',
+                  ? l10n.formatBytes(quota.bytesInUse)
+                  : '${l10n.formatBytes(quota.bytesInUse)} of '
+                        '${l10n.formatBytes(cap)}',
               style: WaxType.titleEntity.copyWith(
                 color: fraction != null && fraction >= 1
                     ? colors.error
@@ -342,6 +344,7 @@ class _UploadRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final duplicate = upload.duplicate;
     final reviewEntryId = upload.reviewEntryId;
     final receiving = upload.state == 'receiving';
@@ -418,7 +421,7 @@ class _UploadRow extends StatelessWidget {
                 upload.sizeBytes == 0
                     ? 'Receiving'
                     : '${upload.receivedBytes * 100 ~/ upload.sizeBytes}% of '
-                          '${formatBytes(upload.sizeBytes)} received',
+                          '${l10n.formatBytes(upload.sizeBytes)} received',
                 style: WaxType.caption.copyWith(color: colors.textSecondary),
               ),
             ],

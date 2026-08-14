@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../player/session_registry.dart';
 import '../providers.dart';
@@ -18,13 +19,12 @@ import 'episode_actions.dart';
 import 'podcasts_controller.dart';
 import 'show_screen.dart';
 
-String formatCueTimestamp(int ms) {
-  final d = Duration(milliseconds: ms);
-  final h = d.inHours;
-  final m = d.inMinutes.remainder(60);
-  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-  return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$s' : '$m:$s';
-}
+/// A cue's offset into its episode, as a readout: `4:05`, `1:02:41`.
+///
+/// The design system's own timecode, taking the milliseconds every cue
+/// carries. Its own name because that is what the call sites read as -
+/// a cue points at a moment, not at a length.
+String formatCueTimestamp(int ms) => formatTimecode(Duration(milliseconds: ms));
 
 /// Seeks the live player to [ms] when [pid] is the episode currently loaded;
 /// otherwise reports the offset in a SnackBar. [label] names what is being
@@ -219,7 +219,7 @@ class _EpisodeBody extends ConsumerWidget {
               ],
               const SizedBox(height: WaxSpace.s16),
               Text(
-                formatEpisodeMeta(episode),
+                formatEpisodeMeta(context.l10n, episode),
                 style: WaxType.monoData.copyWith(color: colors.textTertiary),
               ),
               const SizedBox(height: WaxSpace.s32),
@@ -289,7 +289,7 @@ class _Hero extends ConsumerWidget {
                   ),
                   const SizedBox(height: WaxSpace.s8),
                   Text(
-                    formatEpisodeMeta(episode),
+                    formatEpisodeMeta(context.l10n, episode),
                     style: WaxType.caption.copyWith(
                       color: colors.textSecondary,
                     ),
@@ -462,12 +462,9 @@ class _CueRow extends StatelessWidget {
   }
 }
 
-String formatEpisodeMeta(EpisodeSummary episode) {
-  final local = episode.publishedAt.toLocal();
-  final month = local.month.toString().padLeft(2, '0');
-  final day = local.day.toString().padLeft(2, '0');
+String formatEpisodeMeta(AppLocalizations l10n, EpisodeSummary episode) {
   return <String>[
-    '${local.year}-$month-$day',
+    l10n.formatDate(episode.publishedAt),
     if (episode.durationMs > 0) formatEpisodeDuration(episode.durationMs),
     if (episode.season != null && episode.episodeNumber != null)
       'S${episode.season} E${episode.episodeNumber}'
