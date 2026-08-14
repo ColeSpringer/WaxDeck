@@ -372,16 +372,10 @@ class _LibraryBody extends ConsumerWidget {
           children: <Widget>[
             for (final dimension in MusicDimension.values)
               WaxSettingRow(
-                title: dimension.label,
-                // The row already names the index, so the line under it
-                // does not: naming it again meant lower-casing an
-                // English noun (an English rule) and dropping it into a
-                // translated sentence, where it read as a hole. The
-                // picker's accessible name still takes it, because five
-                // controls in one group need telling apart - and there
-                // it is a name beside a word rather than a sentence
-                // built around one. `MusicDimension.label` is English
-                // until the library slice takes it.
+                title: dimension.titleOf(l10n),
+                // The row already names the index, so the line under
+                // it does not. The picker's accessible name still takes
+                // it: five controls in one group need telling apart.
                 help: l10n.settingsBrowseOrderHelp,
                 control: WaxChoice<FacetSort>(
                   value:
@@ -389,7 +383,9 @@ class _LibraryBody extends ConsumerWidget {
                       defaultBrowseSort(dimension),
                   options: FacetSort.values,
                   labelFor: (sort) => browseSortLabel(l10n, sort),
-                  label: l10n.settingsBrowseOrderChoiceLabel(dimension.label),
+                  label: l10n.settingsBrowseOrderChoiceLabel(
+                    dimension.titleOf(l10n),
+                  ),
                   semanticsId: SemanticsIds.setting(
                     'browse-sort-${dimension.segment}',
                   ),

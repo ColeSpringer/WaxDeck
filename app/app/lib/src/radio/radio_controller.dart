@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../player/autoplay_gate.dart';
 import '../player/session_registry.dart';
 import '../providers.dart';
@@ -131,23 +132,16 @@ class RadioFavorites extends Notifier<List<String>> {
   /// Whether the dial has room for another pin.
   bool get full => state.length >= limit;
 
-  /// Pins or unpins. A pin goes on the end, so the dial's order is the
-  /// order stations were pinned in and does not shuffle under a thumb.
-  ///
-  /// Answers null when the pin landed, or the message to show when it did
-  /// not: a full dial, or the server's refusal. Returned rather than thrown
-  /// because the callers are a glyph and a menu item, neither a place an
-  /// unhandled rejection can be seen.
-  ///
-  /// Optimistic, because a star that waits for a round trip reads as a
-  /// dropped tap; a refused write puts the old list back.
-  Future<String?> toggle(String pid) async {
+  /// Pins or unpins, on the end, so the dial does not shuffle under a
+  /// thumb. Answers why a pin did not land as a value: a controller has
+  /// no table to word one with. A refused write puts the old list back.
+  Future<RadioPinRefusal?> toggle(String pid) async {
     final before = state;
     final pinned = state.contains(pid);
     if (!pinned && full) {
       // Said, not swallowed: dropping the pin and writing the unchanged
       // list back is a tap that reports success and does nothing.
-      return 'The dial holds $limit stations. Unpin one to make room.';
+      return RadioDialFull(limit);
     }
     state = pinned
         ? <String>[
@@ -160,10 +154,37 @@ class RadioFavorites extends Notifier<List<String>> {
       return null;
     } on WaxDeckApiException catch (e) {
       if (ref.mounted) state = before;
-      return e.message;
+      return RadioPinRejected(e);
     }
   }
 }
+
+/// Why a pin did not land.
+sealed class RadioPinRefusal {
+  const RadioPinRefusal();
+}
+
+/// The favourites strip is at its cap.
+class RadioDialFull extends RadioPinRefusal {
+  const RadioDialFull(this.limit);
+
+  final int limit;
+}
+
+/// The server would not take the write.
+class RadioPinRejected extends RadioPinRefusal {
+  const RadioPinRejected(this.error);
+
+  final Object error;
+}
+
+/// A refusal as a sentence. Beside the type it words, because the dial
+/// and the player's radio face both draw it.
+String radioPinRefusalMessage(AppLocalizations l10n, RadioPinRefusal refusal) =>
+    switch (refusal) {
+      RadioDialFull(:final limit) => l10n.radioDialFull(limit),
+      RadioPinRejected(:final error) => explainError(l10n, error),
+    };
 
 final radioFavoritesProvider = NotifierProvider<RadioFavorites, List<String>>(
   RadioFavorites.new,

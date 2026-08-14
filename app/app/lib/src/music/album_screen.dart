@@ -48,7 +48,12 @@ class AlbumScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(musicItemsProvider(_listing));
     final tracks = albumOrder(state.value?.items ?? const <ItemSummary>[]);
-    final facts = AlbumFacts.of(tracks, fallbackTitle: label);
+    final facts = AlbumFacts.of(
+      context.l10n,
+      context.waxL10n,
+      tracks,
+      fallbackTitle: label,
+    );
 
     return CommandScope(
       // The header's two buttons, named after this album. The runs read
@@ -58,14 +63,14 @@ class AlbumScreen extends ConsumerWidget {
         if (tracks.isNotEmpty) ...<WaxCommand>[
           WaxCommand(
             id: 'album-play',
-            label: 'Play ${facts.title}',
+            label: context.l10n.musicCommandPlay(facts.title),
             section: WaxCommandSection.playback,
             glyph: WaxIcons.play,
             run: (context, ref) => _playLive(context, ref),
           ),
           WaxCommand(
             id: 'album-shuffle',
-            label: 'Shuffle ${facts.title}',
+            label: context.l10n.musicCommandShuffle(facts.title),
             section: WaxCommandSection.playback,
             glyph: WaxIcons.shuffle,
             run: (context, ref) => _playLive(context, ref, shuffle: true),
@@ -83,7 +88,12 @@ class AlbumScreen extends ConsumerWidget {
       context,
       ref,
       pid: pid,
-      facts: AlbumFacts.of(tracks, fallbackTitle: label),
+      facts: AlbumFacts.of(
+        context.l10n,
+        context.waxL10n,
+        tracks,
+        fallbackTitle: label,
+      ),
       tracks: tracks,
       shuffle: shuffle,
     );
@@ -110,11 +120,11 @@ class AlbumScreen extends ConsumerWidget {
           child: _Header(pid: pid, facts: facts, tracks: tracks),
         ),
         switch (state) {
-          AsyncData() when tracks.isEmpty => const SliverFillRemaining(
+          AsyncData() when tracks.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'Nothing in this album',
-              message: 'The tracks that were here have moved or been removed.',
+              title: context.l10n.musicAlbumEmptyTitle,
+              message: context.l10n.musicAlbumEmptyMessage,
               glyph: WaxIcons.albums,
             ),
           ),
@@ -127,10 +137,8 @@ class AlbumScreen extends ConsumerWidget {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load this album',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: context.l10n.musicAlbumLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
             ),
           ),
@@ -171,6 +179,7 @@ class _AlbumIdentity extends ConsumerWidget {
     if (album == null || !album.hasIdentity) return const SizedBox.shrink();
     final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         sizeClass.gutter.horizontal / 2,
@@ -185,9 +194,12 @@ class _AlbumIdentity extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const SectionHeader(title: 'Release', overline: 'This edition'),
-            for (final field in albumIdentityFields)
-              if (albumIdentityValue(album, field.name) case final value
+            SectionHeader(
+              title: l10n.musicAlbumReleaseTitle,
+              overline: l10n.musicAlbumReleaseOverline,
+            ),
+            for (final field in AlbumIdentityField.values)
+              if (albumIdentityValue(album, field) case final value
                   when value.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: WaxSpace.s8),
@@ -197,7 +209,7 @@ class _AlbumIdentity extends ConsumerWidget {
                       SizedBox(
                         width: 140,
                         child: Text(
-                          field.label,
+                          field.labelOf(l10n),
                           style: WaxType.caption.copyWith(
                             color: colors.textTertiary,
                           ),
@@ -281,13 +293,13 @@ class _Header extends ConsumerWidget {
           .source(ref.watch(repositoryProvider).artUrlFor(pid)),
       actions: <Widget>[
         WaxButton(
-          label: 'Play',
+          label: context.l10n.musicPlay,
           icon: WaxIcons.play,
           onPressed: tracks.isEmpty ? null : play,
           semanticsId: SemanticsIds.entityPlay,
         ),
         WaxButton(
-          label: 'Shuffle',
+          label: context.l10n.musicShuffle,
           kind: WaxButtonKind.tonal,
           icon: WaxIcons.shuffle,
           onPressed: tracks.isEmpty ? null : () => play(shuffle: true),
@@ -309,7 +321,7 @@ class _Header extends ConsumerWidget {
             if (isAdmin)
               WaxMenuItem<String>(
                 value: 'edit',
-                label: 'Edit album details',
+                label: context.l10n.musicAlbumEditDetails,
                 glyph: WaxIcons.edit,
                 semanticsId: SemanticsIds.albumEditDetails,
               ),
@@ -402,7 +414,7 @@ class _TrackList extends ConsumerWidget {
                 WaxSpace.s4,
               ),
               child: Text(
-                'DISC $disc',
+                context.l10n.musicAlbumDiscHeading(disc),
                 style: WaxType.overline.copyWith(color: colors.textTertiary),
               ),
             ),

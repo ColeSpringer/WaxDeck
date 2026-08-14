@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
@@ -10,17 +11,22 @@ import 'podcasts_controller.dart';
 
 /// How far back "older" reaches.
 enum MarkOlderPreset {
-  month('month', 'Older than a month', Duration(days: 30)),
-  week('week', 'Older than a week', Duration(days: 7)),
-  everything('all', 'Every episode', null);
+  month('month', Duration(days: 30)),
+  week('week', Duration(days: 7)),
+  everything('all', null);
 
-  const MarkOlderPreset(this.name, this.label, this.age);
+  const MarkOlderPreset(this.name, this.age);
 
   final String name;
-  final String label;
 
   /// How old an episode has to be. Null takes the whole backlog.
   final Duration? age;
+
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    MarkOlderPreset.month => l10n.podcastMarkOlderMonth,
+    MarkOlderPreset.week => l10n.podcastMarkOlderWeek,
+    MarkOlderPreset.everything => l10n.podcastMarkOlderAll,
+  };
 
   /// The newest publication time this preset admits, against [now].
   DateTime? cutoff(DateTime now) => age == null ? null : now.subtract(age!);
@@ -111,6 +117,9 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
     });
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    // Read beside them, and for the same reason: this loop outlives the
+    // frame that started it, so nothing here reaches for a context.
+    final l10n = context.l10n;
     // The container rather than `ref`: this loop outlives the dialog
     // whenever the visitor stops it or walks away, and what it has
     // already written has to reach the screens underneath either way.
@@ -135,7 +144,9 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('Could not read the backlog: ${e.message}')),
+          SnackBar(
+            content: Text(l10n.podcastBacklogReadError(explainError(l10n, e))),
+          ),
         );
       return;
     }
@@ -146,7 +157,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
         final end = (at + _batch).clamp(0, episodes.length);
         final outcomes = await Future.wait(<Future<String?>>[
           for (final episode in episodes.sublist(at, end))
-            _checkpoint(repository, episode),
+            _checkpoint(l10n, repository, episode),
         ]);
         for (final outcome in outcomes) {
           if (outcome == null) {
@@ -193,7 +204,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('Stopped after $done: $failure')),
+          SnackBar(content: Text(l10n.podcastMarkOlderStopped(done, failure))),
         );
       return;
     }
@@ -201,18 +212,15 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(
-            '$done ${done == 1 ? 'episode' : 'episodes'} marked as played',
-          ),
-        ),
+        SnackBar(content: Text(l10n.podcastMarkedPlayedTotal(done))),
       );
   }
 
-  /// One checkpoint: null when it landed, the server's message when it
-  /// did not. Failures are values rather than throws so one refusal
-  /// inside a batch cannot take its siblings' outcomes with it.
+  /// One checkpoint: null when it landed, a sentence when it did not.
+  /// Failures are values rather than throws so one refusal inside a
+  /// batch cannot take its siblings' outcomes with it.
   Future<String?> _checkpoint(
+    AppLocalizations l10n,
     WaxDeckRepository repository,
     EpisodeSummary episode,
   ) async {
@@ -220,23 +228,22 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
       await repository.putPlayState(episode.pid, episode.durationMs);
       return null;
     } on WaxDeckApiException catch (e) {
-      return e.message;
+      return explainError(l10n, e);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return AlertDialog(
-      title: const Text('Mark older episodes as played'),
+      title: Text(l10n.podcastMarkOlderPlayed),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'Clears the unplayed dots on a backlog. Your positions on '
-            'episodes you actually started are overwritten, and nothing is '
-            'deleted.',
+            l10n.podcastMarkOlderBody,
             style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
           ),
           const SizedBox(height: WaxSpace.s16),
@@ -251,7 +258,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
               for (final preset in MarkOlderPreset.values)
                 WaxRadioOption<MarkOlderPreset>(
                   value: preset,
-                  label: preset.label,
+                  label: preset.labelOf(l10n),
                   semanticsId: SemanticsIds.markOlderPreset(preset.name),
                 ),
             ],
@@ -266,7 +273,9 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
             ),
             const SizedBox(height: WaxSpace.s8),
             Text(
-              _total == 0 ? 'Reading the backlog...' : '$_done of $_total',
+              _total == 0
+                  ? l10n.podcastReadingBacklog
+                  : l10n.podcastMarkOlderProgress(_done, _total),
               style: WaxType.monoData.copyWith(color: colors.textTertiary),
             ),
           ],
@@ -274,7 +283,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
       ),
       actions: <Widget>[
         WaxButton(
-          label: _running ? 'Stop' : 'Cancel',
+          label: _running ? l10n.podcastStop : l10n.commonCancel,
           kind: WaxButtonKind.text,
           onPressed: () {
             _cancelled = true;
@@ -282,7 +291,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
           },
         ),
         WaxButton(
-          label: 'Mark played',
+          label: l10n.podcastMarkPlayed,
           semanticsId: SemanticsIds.markOlderConfirm,
           onPressed: _running ? null : _run,
         ),

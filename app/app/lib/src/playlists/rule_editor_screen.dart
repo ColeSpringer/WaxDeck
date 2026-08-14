@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -15,20 +16,23 @@ import 'rule_vocabulary.dart';
 /// because the wire's `not` wraps an `all` or an `any`, and a rule using
 /// one used to open read-only for want of a surface.
 enum _GroupMode {
-  all('all', 'All of', negated: false, isAny: false),
-  any('any', 'Any of', negated: false, isAny: true),
-  none('none', 'None of', negated: true, isAny: true),
-  notAll('not-all', 'Not all of', negated: true, isAny: false);
+  all('all', negated: false, isAny: false),
+  any('any', negated: false, isAny: true),
+  none('none', negated: true, isAny: true),
+  notAll('not-all', negated: true, isAny: false);
 
-  const _GroupMode(
-    this.name,
-    this.label, {
-    required this.negated,
-    required this.isAny,
-  });
+  const _GroupMode(this.name, {required this.negated, required this.isAny});
 
   final String name;
-  final String label;
+
+  /// The same four words the rule summary's lead chip draws, so a mode
+  /// chosen here and the chip it produces cannot say different things.
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    _GroupMode.all => l10n.playlistRuleAllOf,
+    _GroupMode.any => l10n.playlistRuleAnyOf,
+    _GroupMode.none => l10n.playlistRuleNoneOf,
+    _GroupMode.notAll => l10n.playlistRuleNotAllOf,
+  };
 
   /// Whether the group is wrapped in a `not` on the wire.
   final bool negated;
@@ -308,6 +312,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     setState(() => _busy = true);
     final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       final rule = _draftRule();
       final editing = widget.editing;
@@ -330,9 +335,11 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         if (mounted) router.pop(next);
       }
     } on WaxDeckApiException catch (e) {
+      // A rule somebody just wrote, so the server's own refusal: it
+      // names the field or the shape it would not take.
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -344,16 +351,17 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   Widget build(BuildContext context) {
     final vocabulary = ref.watch(ruleFieldsProvider);
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final name = widget.editing?.name ?? widget.createName!;
     final twoPane = sizeClass.hasSidebar && !_unsupported;
 
     return WaxScaffold(
-      title: 'Rules: $name',
+      title: l10n.playlistRuleEditorTitle(name),
       largeTitle: false,
       onBack: () => context.leave(fallback: WaxRoute.playlists),
       actions: <Widget>[
         WaxButton(
-          label: 'Save',
+          label: l10n.commonSave,
           semanticsId: SemanticsIds.ruleSave,
           onPressed: _busy || _unsupported || _limitInvalid
               ? null
@@ -367,14 +375,11 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         // Before the vocabulary is asked for: no answer to that
         // question would make this rule drawable.
         if (_unsupported)
-          const SliverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'This rule opens read-only',
-              message:
-                  'It uses something this editor cannot draw yet, so it '
-                  'is shown rather than edited. Nothing here will change '
-                  'it.',
+              title: l10n.playlistRuleReadOnlyTitle,
+              message: l10n.playlistRuleReadOnlyMessage,
               glyph: WaxIcons.info,
             ),
           )
@@ -403,10 +408,8 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             AsyncError(:final error) => SliverFillRemaining(
               hasScrollBody: false,
               child: ErrorState(
-                title: 'Could not load the rule vocabulary',
-                message: error is WaxDeckApiException
-                    ? error.message
-                    : 'The server did not answer.',
+                title: l10n.playlistRuleVocabularyError,
+                message: context.explain(error),
                 onRetry: () => ref.invalidate(ruleFieldsProvider),
               ),
             ),
@@ -456,6 +459,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     _Handles handles,
   ) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final index = handles.groups++;
     return _Card(
       child: Column(
@@ -469,7 +473,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                   semanticsId: SemanticsIds.ruleGroupMode(index),
                   chips: <WaxFilterChip>[
                     for (final mode in _GroupMode.values)
-                      WaxFilterChip(name: mode.name, label: mode.label),
+                      WaxFilterChip(name: mode.name, label: mode.labelOf(l10n)),
                   ],
                   onSelect: (name) {
                     group.mode = _GroupMode.byName(name);
@@ -480,7 +484,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
               if (parent != null)
                 WaxIconButton(
                   glyph: WaxIcons.close,
-                  label: 'Remove group',
+                  label: l10n.playlistRuleRemoveGroup,
                   size: 16,
                   semanticsId: SemanticsIds.ruleGroupRemove(index),
                   onPressed: () {
@@ -505,8 +509,8 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
               padding: const EdgeInsets.only(top: WaxSpace.s8),
               child: Text(
                 group.mode.isAny
-                    ? 'An empty group matches nothing.'
-                    : 'An empty group matches everything.',
+                    ? l10n.playlistRuleEmptyAny
+                    : l10n.playlistRuleEmptyAll,
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ),
@@ -515,7 +519,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             child: Row(
               children: <Widget>[
                 WaxButton(
-                  label: 'Condition',
+                  label: l10n.playlistRuleAddCondition,
                   kind: WaxButtonKind.text,
                   icon: WaxIcons.add,
                   // Nothing to add a condition about, so nothing to press.
@@ -529,7 +533,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                       : () => _addCondition(group, vocabulary),
                 ),
                 WaxButton(
-                  label: 'Group',
+                  label: l10n.playlistRuleAddGroup,
                   kind: WaxButtonKind.text,
                   icon: WaxIcons.add,
                   semanticsId: index == 0 ? SemanticsIds.ruleAddGroup : null,
@@ -553,6 +557,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     _DraftNode parent,
     _Handles handles,
   ) {
+    final l10n = context.l10n;
     final index = handles.conditions++;
     final fields = <String>[
       for (final f in vocabulary.fields) f.name,
@@ -584,15 +589,18 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
           width: 200,
           child: _Picker<String>(
             semanticsId: SemanticsIds.ruleField(index),
-            label: 'Field',
+            label: l10n.playlistRuleFieldPicker,
             value: condition.field,
             entries: <DropdownMenuEntry<String>>[
               for (final field in fields)
                 DropdownMenuEntry<String>(
                   value: field,
                   label: counts[field] == null
-                      ? ruleFieldLabel(field)
-                      : '${ruleFieldLabel(field)} (${counts[field]})',
+                      ? ruleFieldLabel(l10n, field)
+                      : l10n.playlistRuleFieldWithCount(
+                          ruleFieldLabel(l10n, field),
+                          counts[field]!,
+                        ),
                 ),
             ],
             onSelected: (field) {
@@ -608,11 +616,14 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
           width: 160,
           child: _Picker<String>(
             semanticsId: SemanticsIds.ruleOp(index),
-            label: 'Is',
+            label: l10n.playlistRuleOpPicker,
             value: condition.op,
             entries: <DropdownMenuEntry<String>>[
               for (final op in ops)
-                DropdownMenuEntry<String>(value: op, label: ruleOpLabel(op)),
+                DropdownMenuEntry<String>(
+                  value: op,
+                  label: ruleOpLabel(l10n, op),
+                ),
             ],
             onSelected: (op) {
               // A relative value is a day count, an absolute one a
@@ -630,7 +641,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         _valueEditor(vocabulary, condition, parent, index),
         WaxIconButton(
           glyph: WaxIcons.close,
-          label: 'Remove condition',
+          label: l10n.playlistRuleRemoveCondition,
           size: 16,
           semanticsId: SemanticsIds.ruleConditionRemove(index),
           onPressed: () {
@@ -650,6 +661,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     int index,
   ) {
     if (ruleUnaryOps.contains(condition.op)) return const SizedBox.shrink();
+    final l10n = context.l10n;
     final kind = ruleFieldKind(vocabulary, condition.field);
     switch (kind) {
       case 'boolean':
@@ -660,11 +672,17 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
           width: 140,
           child: _Picker<String>(
             semanticsId: SemanticsIds.ruleValue(index),
-            label: 'Value',
+            label: l10n.playlistRuleValuePicker,
             value: condition.value,
-            entries: const <DropdownMenuEntry<String>>[
-              DropdownMenuEntry<String>(value: 'true', label: 'yes'),
-              DropdownMenuEntry<String>(value: 'false', label: 'no'),
+            entries: <DropdownMenuEntry<String>>[
+              DropdownMenuEntry<String>(
+                value: 'true',
+                label: l10n.playlistRuleYes,
+              ),
+              DropdownMenuEntry<String>(
+                value: 'false',
+                label: l10n.playlistRuleNo,
+              ),
             ],
             onSelected: (value) {
               condition.value = value;
@@ -680,11 +698,14 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
           width: 160,
           child: _Picker<String>(
             semanticsId: SemanticsIds.ruleValue(index),
-            label: 'Value',
+            label: l10n.playlistRuleValuePicker,
             value: condition.value,
             entries: <DropdownMenuEntry<String>>[
               for (final kind in kinds)
-                DropdownMenuEntry<String>(value: kind, label: kind),
+                DropdownMenuEntry<String>(
+                  value: kind,
+                  label: l10n.playlistRuleMediaType(kind),
+                ),
             ],
             onSelected: (value) {
               condition.value = value;
@@ -704,7 +725,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         ];
         if (lists.isEmpty) {
           return Text(
-            'No playlists to choose',
+            l10n.playlistRuleNoPlaylists,
             style: WaxType.caption.copyWith(
               color: WaxColors.of(context).textSecondary,
             ),
@@ -725,7 +746,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
           width: 200,
           child: _Picker<String>(
             semanticsId: SemanticsIds.ruleValue(index),
-            label: 'Value',
+            label: l10n.playlistRuleValuePicker,
             value: condition.value,
             entries: <DropdownMenuEntry<String>>[
               for (final pl in lists)
@@ -733,7 +754,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
               if (!known)
                 DropdownMenuEntry<String>(
                   value: condition.value,
-                  label: 'Unavailable list',
+                  label: l10n.playlistRuleUnavailableList,
                 ),
             ],
             onSelected: (value) {
@@ -745,7 +766,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
       case 'date' when ruleRelativeOps.contains(condition.op):
         return _RangeOrSingle(
           low: _valueField(condition, parent, index, low: true, number: true),
-          suffix: 'days',
+          suffix: l10n.playlistRuleDaysSuffix,
         );
       case 'date' when condition.op == 'inTheRange':
         return _RangeOrSingle(
@@ -824,12 +845,13 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   /// The order the members come out in, where the rule is allowed one.
   Widget _sortsCard(RuleFields vocabulary) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     if (_sortsBlocked) {
       return _Card(
         child: Text(
           _limitMode == 'random'
-              ? 'A random limit draws its own order.'
-              : 'A pinned budget draws its own order.',
+              ? l10n.playlistRuleRandomOrder
+              : l10n.playlistRulePinnedOrder,
           style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
         ),
       );
@@ -843,7 +865,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text(
-            'Order by',
+            l10n.playlistRuleOrderBy,
             style: WaxType.overline.copyWith(color: colors.textTertiary),
           ),
           for (var i = 0; i < _sorts.length; i++)
@@ -854,7 +876,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                   Expanded(
                     child: _Picker<String>(
                       semanticsId: SemanticsIds.ruleSortField(i),
-                      label: 'Field',
+                      label: l10n.playlistRuleFieldPicker,
                       // Corrected rather than drawn over: a sort on a
                       // field this vocabulary no longer offers would
                       // otherwise show an order the save does not send.
@@ -863,7 +885,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                         for (final field in sortable)
                           DropdownMenuEntry<String>(
                             value: field,
-                            label: ruleFieldLabel(field),
+                            label: ruleFieldLabel(l10n, field),
                           ),
                       ],
                       onSelected: (field) {
@@ -874,7 +896,9 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                   ),
                   const SizedBox(width: WaxSpace.s8),
                   WaxButton(
-                    label: _sorts[i].desc ? 'Highest first' : 'Lowest first',
+                    label: _sorts[i].desc
+                        ? l10n.playlistRuleHighestFirst
+                        : l10n.playlistRuleLowestFirst,
                     kind: WaxButtonKind.text,
                     semanticsId: SemanticsIds.ruleSortDirection(i),
                     onPressed: () {
@@ -884,7 +908,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                   ),
                   WaxIconButton(
                     glyph: WaxIcons.close,
-                    label: 'Remove sort',
+                    label: l10n.playlistRuleRemoveSort,
                     size: 16,
                     semanticsId: SemanticsIds.ruleSortRemove(i),
                     onPressed: () {
@@ -900,7 +924,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             Align(
               alignment: Alignment.centerLeft,
               child: WaxButton(
-                label: 'Sort key',
+                label: l10n.playlistRuleAddSort,
                 kind: WaxButtonKind.text,
                 icon: WaxIcons.add,
                 semanticsId: SemanticsIds.ruleAddSort,
@@ -928,12 +952,13 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   /// How much of what matches actually joins the list.
   Widget _limitCard() {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text(
-            'Limit',
+            l10n.playlistRuleLimitHeading,
             style: WaxType.overline.copyWith(color: colors.textTertiary),
           ),
           const SizedBox(height: WaxSpace.s8),
@@ -946,21 +971,24 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                 width: 180,
                 child: _Picker<String>(
                   semanticsId: SemanticsIds.ruleLimitMode,
-                  label: 'Take',
+                  label: l10n.playlistRuleLimitTake,
                   value: _limitMode,
-                  entries: const <DropdownMenuEntry<String>>[
-                    DropdownMenuEntry<String>(value: '', label: 'by count'),
+                  entries: <DropdownMenuEntry<String>>[
+                    DropdownMenuEntry<String>(
+                      value: '',
+                      label: l10n.playlistRuleLimitByCount,
+                    ),
                     DropdownMenuEntry<String>(
                       value: 'random',
-                      label: 'at random',
+                      label: l10n.playlistRuleLimitAtRandom,
                     ),
                     DropdownMenuEntry<String>(
                       value: 'minutes',
-                      label: 'by minutes',
+                      label: l10n.playlistRuleLimitByMinutes,
                     ),
                     DropdownMenuEntry<String>(
                       value: 'megabytes',
-                      label: 'by size',
+                      label: l10n.playlistRuleLimitBySize,
                     ),
                   ],
                   onSelected: (mode) {
@@ -980,14 +1008,16 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                 child: _RuleValueField(
                   controller: _limit,
                   number: true,
-                  hint: _limitMode.isEmpty ? 'no limit' : 'required',
-                  label: ruleLimitUnit(_limitMode),
+                  hint: _limitMode.isEmpty
+                      ? l10n.playlistRuleLimitNoLimit
+                      : l10n.playlistRuleLimitRequired,
+                  label: ruleLimitUnit(l10n, _limitMode),
                   semanticsId: SemanticsIds.ruleLimitValue,
                   onChanged: (_) => _changed(),
                 ),
               ),
               Text(
-                ruleLimitUnit(_limitMode),
+                ruleLimitUnit(l10n, _limitMode),
                 style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
               ),
             ],
@@ -995,13 +1025,11 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
           if (_limitMode.isNotEmpty)
             WaxSettingRow(
               key: const Key(SemanticsIds.ruleLimitSeed),
-              title: 'Keep the same selection each time',
-              help:
-                  'Pins which tracks the budget picks, so the list is '
-                  'the same on the next rebuild',
+              title: l10n.playlistRuleSeedTitle,
+              help: l10n.playlistRuleSeedHelp,
               control: WaxSwitch(
                 value: _limitSeed != 0,
-                label: 'Keep the same selection each time',
+                label: l10n.playlistRuleSeedTitle,
                 semanticsId: SemanticsIds.ruleLimitSeed,
                 onChanged: (pinned) {
                   setState(() {
@@ -1068,6 +1096,7 @@ class _PreviewPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final items = preview?.items ?? const <ItemSummary>[];
     return Padding(
       padding: padding,
@@ -1079,24 +1108,24 @@ class _PreviewPane extends StatelessWidget {
               identifier: SemanticsIds.rulePreviewTotal,
               liveRegion: true,
               child: Text(
-                matchLabel(preview),
+                matchLabel(l10n, preview),
                 style: WaxType.headline.copyWith(color: colors.textPrimary),
               ),
             )
           else
             Text(
-              'First matches',
+              l10n.playlistRuleFirstMatches,
               style: WaxType.overline.copyWith(color: colors.textTertiary),
             ),
           const SizedBox(height: WaxSpace.s8),
           if (preview == null)
             Text(
-              'Working it out…',
+              l10n.playlistRuleWorking,
               style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
             )
           else if (items.isEmpty)
             Text(
-              'Nothing in the library answers this yet.',
+              l10n.playlistRuleNoMatches,
               style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
             )
           else
@@ -1144,7 +1173,7 @@ class _MatchBar extends StatelessWidget {
             identifier: SemanticsIds.rulePreviewTotal,
             liveRegion: true,
             child: Text(
-              matchLabel(preview),
+              matchLabel(context.l10n, preview),
               style: WaxType.titleItem.copyWith(color: colors.textPrimary),
             ),
           ),
@@ -1155,9 +1184,10 @@ class _MatchBar extends StatelessWidget {
 }
 
 /// "Matches 214 items", or that the answer is still being worked out.
-String matchLabel(PlaylistPreview? preview) => preview == null
-    ? 'Preview pending'
-    : 'Matches ${preview.total} ${preview.total == 1 ? 'item' : 'items'}';
+String matchLabel(AppLocalizations l10n, PlaylistPreview? preview) =>
+    preview == null
+    ? l10n.playlistRulePreviewPending
+    : l10n.playlistRuleMatches(preview.total);
 
 /// The editor's card surface.
 class _Card extends StatelessWidget {
@@ -1201,7 +1231,10 @@ class _Picker<T> extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     identifier: semanticsId,
     child: DropdownMenu<T>(
-      key: Key(semanticsId),
+      // The locale is part of the key: DropdownMenu rewrites its own
+      // field only when `initialSelection` changes, so new entry labels
+      // leave the closed field reading the old language.
+      key: Key('$semanticsId-${context.l10n.localeName}'),
       initialSelection: value,
       label: Text(label),
       expandedInsets: EdgeInsets.zero,
@@ -1229,10 +1262,11 @@ class _DateButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final current = DateTime.tryParse(value);
+    final l10n = context.l10n;
     return WaxButton(
       label: current == null
-          ? 'Pick a date'
-          : current.toLocal().toString().split(' ').first,
+          ? l10n.playlistRulePickDate
+          : l10n.formatDate(current),
       kind: WaxButtonKind.tonal,
       icon: WaxIcons.recent,
       semanticsId: semanticsId,
@@ -1268,7 +1302,7 @@ class _RangeOrSingle extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
             child: Text(
-              'and',
+              context.l10n.playlistRuleAnd,
               style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
             ),
           ),
@@ -1293,7 +1327,7 @@ class _RuleValueField extends StatefulWidget {
     super.key,
     this.initial = '',
     this.controller,
-    this.label = 'Value',
+    this.label,
     this.hint,
     this.number = false,
     this.semanticsId,
@@ -1306,7 +1340,10 @@ class _RuleValueField extends StatefulWidget {
   /// Supplied where the caller owns the text (the limit).
   final TextEditingController? controller;
 
-  final String label;
+  /// Null takes the general word for a condition's value; the limit
+  /// field passes the unit it counts instead.
+  final String? label;
+
   final String? hint;
   final bool number;
   final String? semanticsId;
@@ -1332,7 +1369,7 @@ class _RuleValueFieldState extends State<_RuleValueField> {
 
   @override
   Widget build(BuildContext context) => WaxTextField(
-    label: widget.label,
+    label: widget.label ?? context.l10n.playlistRuleValuePicker,
     hint: widget.hint,
     controller: _controller,
     textInputAction: TextInputAction.done,

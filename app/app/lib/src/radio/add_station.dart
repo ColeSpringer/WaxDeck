@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'radio_controller.dart';
@@ -42,6 +43,7 @@ Future<String?> addDirectoryStation(
   RadioDirectoryEntry entry,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
   try {
     await ref
         .read(radioStationsProvider.notifier)
@@ -55,10 +57,14 @@ Future<String?> addDirectoryStation(
     // the message is uncovered by the time it matters.
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('Added ${entry.name}')));
+      ..showSnackBar(
+        SnackBar(content: Text(l10n.radioAddedStation(entry.name))),
+      );
     return null;
   } on WaxDeckApiException catch (e) {
-    return e.message;
+    // The server's own words: a duplicate stream URL names the station
+    // it clashes with, and the table's sentence would not.
+    return explainRefusal(l10n, e);
   }
 }
 
@@ -68,11 +74,17 @@ Future<String?> addDirectoryStation(
 ///
 /// Public because the directory is drawn in two places, this dialog's
 /// result list and search's Radio chip, and should read the same in both.
-String? describeDirectoryEntry(RadioDirectoryEntry entry) {
+String? describeDirectoryEntry(
+  AppLocalizations l10n,
+  RadioDirectoryEntry entry,
+) {
   final parts = <String>[
     if (entry.country != null) entry.country!,
     if (entry.bitrateKbps != null && entry.bitrateKbps! > 0)
-      '${entry.codec ?? 'stream'} ${entry.bitrateKbps} kbps',
+      l10n.radioDirectoryBitrate(
+        entry.codec ?? l10n.radioDirectoryStream,
+        entry.bitrateKbps!,
+      ),
     if (entry.tags != null && entry.tags!.isNotEmpty)
       entry.tags!.split(',').take(3).join(', '),
   ];
@@ -143,6 +155,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
   Future<void> _runSearch() async {
     final query = _search.text.trim();
     if (query.length < 2 || _busy) return;
+    final l10n = context.l10n;
     setState(() {
       _busy = true;
       _error = null;
@@ -157,8 +170,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
         // The way out manual entry leaves open, said with the failure that
         // implies it rather than beside every message this slot shows.
         setState(
-          () =>
-              _error = '${e.message} Paste a stream URL instead with "By URL".',
+          () => _error = l10n.radioSearchFailedHint(explainError(l10n, e)),
         );
       }
     } finally {
@@ -169,8 +181,9 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
   Future<void> _save() async {
     if (_busy) return;
     final url = _url.text.trim();
+    final l10n = context.l10n;
     if (url.isEmpty) {
-      setState(() => _error = 'A station needs a stream URL.');
+      setState(() => _error = l10n.radioNeedsUrl);
       return;
     }
     // The one required answer is the URL; a blank name takes the stream's
@@ -185,7 +198,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
     final typed = _name.text.trim();
     if (_editing && typed.isEmpty) {
       setState(() {
-        _error = 'A station needs a name.';
+        _error = l10n.radioNeedsName;
         _details = true;
       });
       return;
@@ -226,11 +239,10 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
       // screen underneath.
       if (mounted) navigator.pop();
     } on WaxDeckApiException catch (e) {
-      // Inline, not a snackbar: this dialog stays open on a refusal, and a
-      // snackbar would render behind it. A duplicate stream URL is the
-      // refusal a listener hits most, so it is the one that must be
-      // readable.
-      if (mounted) setState(() => _error = e.message);
+      // Inline, not a snackbar: this dialog stays open on a refusal,
+      // and a snackbar would render behind it. The server's words,
+      // which name the station a duplicate URL clashes with.
+      if (mounted) setState(() => _error = explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -259,8 +271,9 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return AlertDialog(
-      title: Text(_editing ? 'Edit station' : 'Add station'),
+      title: Text(_editing ? l10n.radioEditStation : l10n.radioAddStation),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
@@ -272,29 +285,32 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
               // already exists has nothing to look up.
               if (!_editing)
                 WaxSegmented(
-                  label: 'How to add',
-                  segments: const <WaxSegment>[
-                    WaxSegment(name: 'search', label: 'Search'),
-                    WaxSegment(name: 'url', label: 'By URL'),
+                  label: l10n.radioHowToAdd,
+                  segments: <WaxSegment>[
+                    WaxSegment(name: 'search', label: l10n.radioAddSearch),
+                    WaxSegment(name: 'url', label: l10n.radioAddByUrl),
                   ],
                   selected: _manual ? 'url' : 'search',
                   onSelect: (name) => setState(() => _manual = name == 'url'),
                 ),
               const SizedBox(height: WaxSpace.s12),
-              if (!_manual) ..._directory(colors) else ..._form(colors),
+              if (!_manual)
+                ..._directory(l10n, colors)
+              else
+                ..._form(l10n, colors),
             ],
           ),
         ),
       ),
       actions: <Widget>[
         WaxButton(
-          label: 'Cancel',
+          label: l10n.commonCancel,
           kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
         ),
         if (_manual)
           WaxButton(
-            label: _editing ? 'Save changes' : 'Add',
+            label: _editing ? l10n.radioSaveChanges : l10n.radioAddConfirm,
             kind: WaxButtonKind.filled,
             semanticsId: SemanticsIds.radioAddConfirm,
             onPressed: _busy ? null : () => unawaited(_save()),
@@ -304,9 +320,9 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
   }
 
   /// Directory search with its results.
-  List<Widget> _directory(WaxColors colors) => <Widget>[
+  List<Widget> _directory(AppLocalizations l10n, WaxColors colors) => <Widget>[
     WaxTextField(
-      label: 'Station name',
+      label: l10n.radioStationName,
       controller: _search,
       glyph: WaxIcons.search,
       autofocus: true,
@@ -316,7 +332,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
     ),
     const SizedBox(height: WaxSpace.s8),
     WaxButton(
-      label: 'Search directory',
+      label: l10n.radioSearchDirectory,
       kind: WaxButtonKind.tonal,
       icon: WaxIcons.search,
       semanticsId: SemanticsIds.radioSearchRun,
@@ -334,9 +350,9 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
       ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 280),
         child: _results!.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.all(WaxSpace.s12),
-                child: Text('No matches'),
+            ? Padding(
+                padding: const EdgeInsets.all(WaxSpace.s12),
+                child: Text(l10n.radioNoMatches),
               )
             : ListView.builder(
                 shrinkWrap: true,
@@ -345,7 +361,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
                   final entry = _results![index];
                   return WaxOptionRow(
                     title: entry.name,
-                    subtitle: describeDirectoryEntry(entry),
+                    subtitle: describeDirectoryEntry(l10n, entry),
                     glyph: WaxIcons.radio,
                     semanticsId: SemanticsIds.radioAddDirectory(index),
                     onTap: _busy
@@ -368,11 +384,11 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
   /// The disclosure opens by default when editing, because then those
   /// fields hold a station's existing values and collapsing them would
   /// be hiding data rather than deferring a question.
-  List<Widget> _form(WaxColors colors) => <Widget>[
+  List<Widget> _form(AppLocalizations l10n, WaxColors colors) => <Widget>[
     WaxTextField(
-      label: 'Stream URL',
+      label: l10n.radioStreamUrl,
       controller: _url,
-      hint: 'https://example.com/stream',
+      hint: l10n.radioStreamUrlHint,
       autofocus: !_editing,
       textInputAction: TextInputAction.done,
       onSubmitted: (_) => unawaited(_save()),
@@ -382,7 +398,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
     Align(
       alignment: Alignment.centerLeft,
       child: WaxButton(
-        label: _details ? 'Fewer options' : 'Name, website, and logo',
+        label: _details ? l10n.radioFewerOptions : l10n.radioMoreOptions,
         kind: WaxButtonKind.text,
         // Matching every other disclosure in the app (the audit rows, the
         // podcast folders, the queue's history): open shows the caret
@@ -395,20 +411,20 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
     if (_details) ...<Widget>[
       const SizedBox(height: WaxSpace.s8),
       WaxTextField(
-        label: 'Station name',
+        label: l10n.radioStationName,
         controller: _name,
-        hint: 'Taken from the stream address when left blank',
+        hint: l10n.radioNameHint,
         semanticsId: SemanticsIds.radioNameField,
       ),
       const SizedBox(height: WaxSpace.s8),
       WaxTextField(
-        label: 'Website (optional)',
+        label: l10n.radioWebsiteOptional,
         controller: _homepage,
         semanticsId: SemanticsIds.radioHomepageField,
       ),
       const SizedBox(height: WaxSpace.s8),
       WaxTextField(
-        label: 'Logo URL (optional)',
+        label: l10n.radioLogoOptional,
         controller: _logo,
         semanticsId: SemanticsIds.radioLogoField,
       ),
@@ -424,15 +440,9 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
   ];
 }
 
-/// The name a pasted stream takes when nobody typed one.
-///
-/// The stream's host, which is what the listener would call it anyway
-/// ("somafm.com"), minus a `www.` that says nothing. Deliberately the
-/// whole host rather than a guess at the registrable part: without a
-/// public-suffix list "bbc.co.uk" would come back as "co.uk", and a
-/// station named after the wrong half of its own address is worse than
-/// one named after all of it. It is a placeholder either way - the
-/// station is editable the moment it exists.
+/// The name a pasted stream takes when nobody typed one: its whole host
+/// minus `www.`. The last resort is untranslated on purpose - a
+/// station's name is stored and read by everyone on the server.
 String stationNameFromUrl(String url) {
   final host = Uri.tryParse(url.trim())?.host ?? '';
   final trimmed = host.startsWith('www.') ? host.substring(4) : host;

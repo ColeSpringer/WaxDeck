@@ -17,8 +17,6 @@ enum MusicDimension {
   artists(
     segment: 'artists',
     wireName: 'artist',
-    label: 'Artists',
-    singular: 'artist',
     glyph: WaxIcons.artists,
     entityPrefix: 'ar-',
     shape: ArtworkShape.circle,
@@ -26,39 +24,21 @@ enum MusicDimension {
   albums(
     segment: 'albums',
     wireName: 'album',
-    label: 'Albums',
-    singular: 'album',
     glyph: WaxIcons.albums,
     entityPrefix: 'al-',
   ),
   releaseGroups(
     segment: 'release-groups',
     wireName: 'release-group',
-    label: 'Release groups',
-    singular: 'release group',
     glyph: WaxIcons.albums,
     entityPrefix: 'rg-',
   ),
-  genres(
-    segment: 'genres',
-    wireName: 'genre',
-    label: 'Genres',
-    singular: 'genre',
-    glyph: WaxIcons.filter,
-  ),
-  years(
-    segment: 'years',
-    wireName: 'year',
-    label: 'Years',
-    singular: 'year',
-    glyph: WaxIcons.recent,
-  );
+  genres(segment: 'genres', wireName: 'genre', glyph: WaxIcons.filter),
+  years(segment: 'years', wireName: 'year', glyph: WaxIcons.recent);
 
   const MusicDimension({
     required this.segment,
     required this.wireName,
-    required this.label,
-    required this.singular,
     required this.glyph,
     this.entityPrefix,
     this.shape = ArtworkShape.square,
@@ -71,12 +51,11 @@ enum MusicDimension {
   /// filters by. The two are the same string by contract.
   final String wireName;
 
-  final String label;
-
-  /// For a drilled bucket's empty state ("nothing in this genre").
-  final String singular;
-
   final WaxGlyph glyph;
+
+  /// What this dimension is called, as a heading. Selected on `name`
+  /// rather than `wireName`, which is not an identifier.
+  String titleOf(AppLocalizations l10n) => l10n.musicDimensionTitle(name);
 
   /// The API type prefix a bucket's `entityPid` carries, for the
   /// dimensions whose buckets are catalog entities. The contract spells

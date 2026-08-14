@@ -46,7 +46,7 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 - [8-8-2026] We should also have the addition button in the music section. Currently, its the only section that does not have it. Can be kind of like the home add surface but more music specific?
 
-- [8-8-2026] (Web) We can make the cover art a little bigger. Little small and there is plenty of dead space.
+- [8-8-2026] (Web) We can make the cover art a little bigger (in full screen playing screen). Little small and there is plenty of dead space.
 
 - [8-8-2026] Uploads only accept file selections. Not useful when trying to upload albums or entire music collections. Also need to make sure that the upload surface is up to standard security practices.
 

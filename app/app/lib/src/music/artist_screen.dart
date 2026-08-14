@@ -18,12 +18,9 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'music_controllers.dart';
 
-/// What the queue an artist screen builds is a window over.
-///
-/// One builder for all three entry points - Play, Shuffle, and a tapped
-/// row - because they queue the same scope and a source that differed
-/// between them would mean the same artist refilled from one button and
-/// stopped at the cap from another.
+/// What the queue an artist screen builds is a window over. One builder
+/// for the three entry points, and [name] is the artist's own name or
+/// empty - a stored label, never the screen's localized fallback.
 QueueSource artistSource(String pid, String name, MusicItemsState? state) =>
     QueueSource(
       kind: QueueSourceKind.artist,
@@ -59,13 +56,15 @@ class ArtistScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(musicItemsProvider(_listing));
+    final l10n = context.l10n;
     // Everything the bucket holds, books included: it counted them, and
     // a screen that showed fewer than the count promised would be the
     // one thing faceted browse cannot do. An author whose whole
     // catalogue is audiobooks gets their books here rather than an empty
     // page under their own name.
     final items = state.value?.items ?? const <ItemSummary>[];
-    final name = items.firstOrNull?.artist ?? label ?? 'Artist';
+    final artist = items.firstOrNull?.artist ?? label;
+    final name = artist ?? l10n.musicArtistUnknownName;
 
     return WaxScaffold(
       title: name,
@@ -78,16 +77,17 @@ class ArtistScreen extends ConsumerWidget {
           child: _Header(
             pid: pid,
             name: name,
+            sourceName: artist ?? '',
             items: items,
             state: state.value,
           ),
         ),
         switch (state) {
-          AsyncData() when items.isEmpty => const SliverFillRemaining(
+          AsyncData() when items.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'Nothing by this artist',
-              message: 'The items that were here have moved or been removed.',
+              title: l10n.musicArtistEmptyTitle,
+              message: l10n.musicArtistEmptyMessage,
               glyph: WaxIcons.artists,
             ),
           ),
@@ -95,6 +95,7 @@ class ArtistScreen extends ConsumerWidget {
             child: _Body(
               pid: pid,
               name: name,
+              sourceName: artist ?? '',
               items: items,
               state: state.value,
             ),
@@ -102,10 +103,8 @@ class ArtistScreen extends ConsumerWidget {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load this artist',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.musicArtistLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
             ),
           ),
@@ -123,12 +122,17 @@ class _Header extends ConsumerWidget {
   const _Header({
     required this.pid,
     required this.name,
+    required this.sourceName,
     required this.items,
     required this.state,
   });
 
   final String pid;
   final String name;
+
+  /// The artist's own name, or empty. What the queue records.
+  final String sourceName;
+
   final List<ItemSummary> items;
   final MusicItemsState? state;
 
@@ -144,18 +148,19 @@ class _Header extends ConsumerWidget {
           .play(
             tracks,
             shuffle: shuffle,
-            source: artistSource(pid, name, loaded),
+            source: artistSource(pid, sourceName, loaded),
           );
       context.push(WaxRoute.nowPlaying);
     }
 
+    final l10n = context.l10n;
     return EntityHeader(
       title: name,
       metadata: [
-        '${items.length}${(loaded?.hasMore ?? false) ? '+' : ''} '
-            '${items.length == 1 ? 'item' : 'items'}',
-        if (albums.isNotEmpty)
-          '${albums.length} ${albums.length == 1 ? 'release' : 'releases'}',
+        (loaded?.hasMore ?? false)
+            ? l10n.musicArtistItemCountAtLeast(items.length)
+            : l10n.musicArtistItemCount(items.length),
+        if (albums.isNotEmpty) l10n.musicArtistReleaseCount(albums.length),
       ].join(' · '),
       shape: ArtworkShape.circle,
       artwork: ref
@@ -163,19 +168,19 @@ class _Header extends ConsumerWidget {
           .source(ref.watch(repositoryProvider).artUrlFor(pid)),
       actions: <Widget>[
         WaxButton(
-          label: 'Play',
+          label: l10n.musicPlay,
           icon: WaxIcons.play,
           onPressed: tracks.isEmpty ? null : play,
           semanticsId: SemanticsIds.entityPlay,
         ),
         WaxButton(
-          label: 'Shuffle',
+          label: l10n.musicShuffle,
           kind: WaxButtonKind.tonal,
           icon: WaxIcons.shuffle,
           onPressed: tracks.isEmpty ? null : () => play(shuffle: true),
           semanticsId: SemanticsIds.entityShuffle,
         ),
-        EntityStarRatingRow(pid: pid, label: context.l10n.libraryKindArtist),
+        EntityStarRatingRow(pid: pid, label: l10n.libraryKindArtist),
         WaxMenuButton<String>(
           semanticsId: SemanticsIds.entityOverflow,
           items: <WaxMenuItem<String>>[
@@ -215,11 +220,12 @@ class _AppearsOn extends ConsumerWidget {
 
     final store = ref.watch(artworkStoreProvider);
     final repository = ref.watch(repositoryProvider);
+    final l10n = context.l10n;
     final tiles = <MediaTileData>[
       for (final album in albums)
         MediaTileData(
           title: album.label,
-          subtitle: '${album.count} ${album.count == 1 ? 'track' : 'tracks'}',
+          subtitle: l10n.musicTrackCount(album.count),
           artwork: store.source(repository.artUrlFor(album.entityPid!)),
           semanticsId: SemanticsIds.entityAlbum(album.entityPid!),
         ),
@@ -230,7 +236,7 @@ class _AppearsOn extends ConsumerWidget {
       children: <Widget>[
         const SizedBox(height: WaxSpace.s16),
         ShelfRow(
-          title: 'Appears on',
+          title: l10n.musicArtistAppearsOn,
           items: tiles,
           onTapItem: (tile) {
             // Positional, for the reason the Releases shelf above is:
@@ -262,12 +268,17 @@ class _Body extends ConsumerWidget {
   const _Body({
     required this.pid,
     required this.name,
+    required this.sourceName,
     required this.items,
     required this.state,
   });
 
   final String pid;
   final String name;
+
+  /// The artist's own name, or empty. What the queue records.
+  final String sourceName;
+
   final List<ItemSummary> items;
   final MusicItemsState? state;
 
@@ -277,14 +288,13 @@ class _Body extends ConsumerWidget {
     final albums = albumsOf(items);
     final store = ref.watch(artworkStoreProvider);
     final repository = ref.watch(repositoryProvider);
+    final l10n = context.l10n;
     final top = items.take(_topTracks).toList();
     final tiles = <MediaTileData>[
       for (final album in albums)
         MediaTileData(
           title: album.title,
-          subtitle:
-              '${album.tracks.length} '
-              '${album.tracks.length == 1 ? 'track' : 'tracks'}',
+          subtitle: l10n.musicTrackCount(album.tracks.length),
           artwork: album.pid == null
               ? null
               : store.source(repository.artUrlFor(album.pid!)),
@@ -300,7 +310,7 @@ class _Body extends ConsumerWidget {
         if (albums.isNotEmpty) ...<Widget>[
           const SizedBox(height: WaxSpace.s16),
           ShelfRow(
-            title: 'Releases',
+            title: l10n.musicArtistReleases,
             items: tiles,
             onTapItem: (tile) {
               // By position, never by title: two releases that share one
@@ -338,8 +348,12 @@ class _Body extends ConsumerWidget {
             // An author's bucket holds books; naming the section for
             // tracks it does not have would be the wrong word on the one
             // screen that has to be right about what it holds.
-            title: playableOf(items).isEmpty ? 'Audiobooks' : 'Tracks',
-            actionLabel: items.length > top.length ? 'Show all' : null,
+            title: playableOf(items).isEmpty
+                ? l10n.musicArtistAudiobooksSection
+                : l10n.musicArtistTracksSection,
+            actionLabel: items.length > top.length
+                ? l10n.musicArtistShowAll
+                : null,
             // Pushed rather than gone to, like a release: `go` rebuilds
             // the artists-index ancestry, which throws away a search
             // that pushed this artist. The location stays declared, so
@@ -390,7 +404,7 @@ class _Body extends ConsumerWidget {
         .play(
           tracks,
           startIndex: tracks.indexOf(items[index]),
-          source: artistSource(pid, name, state),
+          source: artistSource(pid, sourceName, state),
         );
     context.push(WaxRoute.nowPlaying);
   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'playlist_create.dart';
@@ -64,6 +65,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
     setState(() => _busy = true);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await ref.read(playlistsProvider.notifier).appendTo(playlist, <String>[
         widget.item.pid,
@@ -75,13 +77,15 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text('Added "${widget.item.title}" to ${playlist.name}'),
+            content: Text(
+              l10n.playlistAddedTo(widget.item.title, playlist.name),
+            ),
           ),
         );
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -91,10 +95,11 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
     if (_busy) return;
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final name = await promptPlaylistName(
       context,
-      title: 'New playlist',
-      confirmLabel: 'Create',
+      title: l10n.playlistsNew,
+      confirmLabel: l10n.playlistCreateAction,
     );
     if (name == null || name.isEmpty || !mounted) return;
     // Held across the create so a second confirm posts nothing.
@@ -111,12 +116,15 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('Added "${widget.item.title}" to $name')),
+          SnackBar(
+            content: Text(l10n.playlistAddedTo(widget.item.title, name)),
+          ),
         );
     } on WaxDeckApiException catch (e) {
+      // A name somebody just typed, so the server's own refusal.
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -125,6 +133,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final playlists = ref.watch(playlistsProvider);
     // Only the lists this caller can append to: a smart playlist's
     // membership is its rule, and somebody else's is theirs.
@@ -142,7 +151,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
               child: Text(
-                'Add to playlist',
+                l10n.playlistAddToTitle,
                 style: WaxType.headline.copyWith(color: colors.textPrimary),
               ),
             ),
@@ -156,8 +165,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
                   WaxSpace.s8,
                 ),
                 child: Text(
-                  'No manual playlists yet. Make one below and this goes '
-                  'straight into it.',
+                  l10n.playlistNoManualLists,
                   style: WaxType.bodySmall.copyWith(
                     color: colors.textSecondary,
                   ),
@@ -174,7 +182,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
                       title: playlist.name,
                       // Said, not only ticked: a check mark is a fact
                       // only sighted people get.
-                      subtitle: held ? 'Already in this list' : null,
+                      subtitle: held ? l10n.playlistAlreadyIn : null,
                       glyph: WaxIcons.playlists,
                       selected: held,
                       semanticsId: SemanticsIds.addToPlaylistTarget(
@@ -197,7 +205,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
               AsyncError() => Padding(
                 padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
                 child: Text(
-                  'Could not load your playlists.',
+                  l10n.playlistsLoadErrorSentence,
                   style: WaxType.bodySmall.copyWith(color: colors.error),
                 ),
               ),
@@ -208,7 +216,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
             },
             const SizedBox(height: WaxSpace.s8),
             WaxOptionRow(
-              title: 'New playlist',
+              title: l10n.playlistsNew,
               glyph: WaxIcons.add,
               semanticsId: SemanticsIds.addToPlaylistNew,
               onTap: _busy ? null : () => unawaited(_createAndAdd()),

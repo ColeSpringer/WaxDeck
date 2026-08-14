@@ -208,7 +208,9 @@ void main() {
     expect(repo.subscribeCalls.single.sourceType, 'youtube');
   });
 
-  testWidgets('a failed subscribe surfaces the server message', (tester) async {
+  testWidgets('a failed subscribe says why and keeps the dialog', (
+    tester,
+  ) async {
     final repo = FakeRepository()
       ..subscribeError = const WaxDeckApiException(
         code: 'feed-unreachable',
@@ -228,7 +230,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('feed unreachable: connection refused'), findsOneWidget);
+    // The code's sentence: the server's says "connection refused",
+    // which names nothing the listener typed.
+    expect(
+      find.text(
+        "The feed's own server did not answer, or did not answer with a "
+        'feed.',
+      ),
+      findsOneWidget,
+    );
     // The dialog stays open for another attempt.
     expect(find.byKey(const Key('podcast-url-field')), findsOneWidget);
   });

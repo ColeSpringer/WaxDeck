@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
 import '../home/pin_action.dart';
+import '../l10n/l10n.dart';
 import '../player/download_action.dart';
 import '../player/item_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
@@ -46,9 +47,10 @@ class BookScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(bookDetailProvider(pid));
     final book = detail.value;
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: book?.title ?? 'Audiobook',
+      title: book?.title ?? l10n.bookFallbackTitle,
       largeTitle: false,
       // Pops where something pushed this - a search hit, a shelf on
       // home - and goes to the hub where nothing did, so the arrow and
@@ -73,10 +75,8 @@ class BookScreen extends ConsumerWidget {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load this book',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.bookLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(bookDetailProvider(pid)),
             ),
           ),
@@ -145,11 +145,13 @@ class _Header extends ConsumerWidget {
     // says "Play". An explicit position overrides the session's own
     // finished guard, so this is where it is made.
     final playFromMs = progress.finished ? 0 : positionMs;
+    final l10n = context.l10n;
 
     return EntityHeader(
       title: book.title,
       subtitle: book.subtitle,
       metadata: _facts(
+        l10n,
         context.waxL10n,
         book,
         positionMs: positionMs,
@@ -158,12 +160,12 @@ class _Header extends ConsumerWidget {
       shape: ArtworkShape.portrait,
       domain: WaxDomain.audiobooks,
       artwork: ref.watch(artworkStoreProvider).source(book.artUrl),
-      description: _people(book),
+      description: _people(l10n, book),
       actions: <Widget>[
         WaxButton(
           // The verb says where it will put you, and the chapter name is
           // the part that makes it a promise rather than a guess.
-          label: started ? _resumeLabel(resume) : 'Play',
+          label: started ? _resumeLabel(l10n, resume) : l10n.bookPlay,
           icon: WaxIcons.play,
           semanticsId: SemanticsIds.bookResume,
           onPressed: () => playBook(context, ref, book, positionMs: playFromMs),
@@ -172,7 +174,7 @@ class _Header extends ConsumerWidget {
         DownloadAction(
           pid: book.pid,
           artUrl: book.artUrl,
-          label: 'Download for offline',
+          label: l10n.bookDownloadOffline,
           semanticsId: SemanticsIds.bookDownload,
         ),
         _SettingsButton(book: book),
@@ -184,37 +186,40 @@ class _Header extends ConsumerWidget {
   /// "12 hr 40 min · 38 percent · 7 hr 50 min left", or the plain length
   /// where nothing has been heard.
   static String _facts(
-    WaxLocalizations l10n,
+    AppLocalizations l10n,
+    WaxLocalizations wax,
     BookDetail book, {
     required int positionMs,
     required bool finished,
   }) {
     final total = Duration(milliseconds: book.durationMs);
-    final parts = <String>[l10n.spellDuration(total)];
+    final parts = <String>[wax.spellDuration(total)];
     if (finished) {
-      parts.add('Finished');
+      parts.add(l10n.booksFinished);
     } else if (positionMs > 0 && book.durationMs > 0) {
       final percent = (positionMs / book.durationMs * 100).round().clamp(
         0,
         100,
       );
-      parts.add('$percent percent');
+      parts.add(l10n.bookPercent(percent));
       final left = book.durationMs - positionMs;
       if (left > 0) {
-        parts.add('${l10n.spellDuration(Duration(milliseconds: left))} left');
+        parts.add(
+          l10n.booksTimeLeft(wax.spellDuration(Duration(milliseconds: left))),
+        );
       }
     }
     if (book.parts.length > 1) {
-      parts.add('${book.parts.length} parts');
+      parts.add(l10n.bookPartsCount(book.parts.length));
     }
     return parts.join(' · ');
   }
 
   /// Authors and narrators, as the header's own lines.
-  static String? _people(BookDetail book) {
+  static String? _people(AppLocalizations l10n, BookDetail book) {
     final lines = <String>[
-      if (book.authors.isNotEmpty) 'By ${book.authors.join(', ')}',
-      if (book.narrators.isNotEmpty) 'Read by ${book.narrators.join(', ')}',
+      if (book.authors.isNotEmpty) l10n.bookByAuthors(book.authors.join(', ')),
+      if (book.narrators.isNotEmpty) l10n.bookReadBy(book.narrators.join(', ')),
     ];
     return lines.isEmpty ? null : lines.join('\n');
   }
@@ -223,9 +228,9 @@ class _Header extends ConsumerWidget {
   /// plain "Resume" where it did not - a book with no chapter marks, or a
   /// screen whose resume read has not landed and is drawing the batch
   /// play state's position instead.
-  static String _resumeLabel(BookResume? resume) {
+  static String _resumeLabel(AppLocalizations l10n, BookResume? resume) {
     final chapter = resume?.chapter?.title;
-    return chapter == null ? 'Resume' : 'Resume $chapter';
+    return chapter == null ? l10n.bookResume : l10n.bookResumeChapter(chapter);
   }
 }
 
@@ -240,7 +245,9 @@ class _SeriesLink extends ConsumerWidget {
     final series = book.series!;
     final sequence = book.seriesSequence;
     return WaxButton(
-      label: sequence == null ? series : 'Book $sequence of $series',
+      label: sequence == null
+          ? series
+          : context.l10n.bookSeriesSequence(sequence, series),
       kind: WaxButtonKind.text,
       // A series is not a location: the catalog has no series dimension
       // to drill, so this narrows the hub to the author instead, which
@@ -268,7 +275,7 @@ class _SettingsButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => WaxIconButton(
     glyph: WaxIcons.speed,
-    label: 'Playback settings',
+    label: context.l10n.bookPlaybackSettings,
     semanticsId: SemanticsIds.bookSettingsOpen,
     onPressed: () => showModalBottomSheet<void>(
       context: context,
@@ -319,6 +326,7 @@ class _Chapters extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (book.chapters.isEmpty) return const SizedBox.shrink();
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final resume = ref.watch(bookResumeProvider(book.pid)).value;
     final positionMs =
         resume?.positionMs ?? _progressOf(ref, book.pid).positionMs;
@@ -332,15 +340,15 @@ class _Chapters extends ConsumerWidget {
         children: <Widget>[
           SizedBox(height: WaxLayout.of(context).sectionGap),
           SectionHeader(
-            title: 'Chapters',
-            overline: '${book.chapters.length} in this book',
+            title: l10n.bookChaptersTitle,
+            overline: l10n.bookChaptersOverline(book.chapters.length),
           ),
           for (var i = 0; i < book.chapters.length; i++)
             MediaListRow(
               data: MediaTileData(
                 title:
                     book.chapters[i].title ??
-                    'Chapter ${book.chapters[i].index + 1}',
+                    l10n.bookChapterFallback(book.chapters[i].index + 1),
                 trailingText: _chapterLength(book, i),
                 semanticsId: SemanticsIds.chapter(book.chapters[i].index),
               ),
@@ -412,8 +420,7 @@ class _PartsNote extends StatelessWidget {
       child: Semantics(
         identifier: SemanticsIds.bookPartsNote,
         child: Text(
-          'This book is ${book.parts.length} files, played as one '
-          'timeline. Positions and chapters span all of them.',
+          context.l10n.bookPartsNote(book.parts.length),
           style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
         ),
       ),
@@ -430,15 +437,21 @@ class _Edition extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final rows = <({String label, String value})>[
-      if (book.publisher != null) (label: 'Publisher', value: book.publisher!),
-      if (book.edition != null) (label: 'Edition', value: book.edition!),
-      if (book.isbn != null) (label: 'ISBN', value: book.isbn!),
-      if (book.asin != null) (label: 'ASIN', value: book.asin!),
+      if (book.publisher != null)
+        (label: l10n.bookFieldPublisher, value: book.publisher!),
+      if (book.edition != null)
+        (label: l10n.bookFieldEdition, value: book.edition!),
+      if (book.isbn != null) (label: l10n.bookFieldIsbn, value: book.isbn!),
+      if (book.asin != null) (label: l10n.bookFieldAsin, value: book.asin!),
       if (book.abridged != null)
-        (label: 'Abridged', value: book.abridged! ? 'Yes' : 'No'),
+        (
+          label: l10n.bookFieldAbridged,
+          value: book.abridged! ? l10n.bookYes : l10n.bookNo,
+        ),
       if (book.parts.length > 1)
-        (label: 'Files', value: '${book.parts.length}'),
+        (label: l10n.bookFieldFiles, value: '${book.parts.length}'),
     ];
     if (rows.isEmpty) return const SizedBox.shrink();
     final colors = WaxColors.of(context);
@@ -456,7 +469,7 @@ class _Edition extends StatelessWidget {
           key: const Key(SemanticsIds.bookEdition),
           tilePadding: EdgeInsets.zero,
           title: Text(
-            'About this edition',
+            l10n.bookEditionTitle,
             style: WaxType.headline.copyWith(color: colors.textPrimary),
           ),
           children: <Widget>[
@@ -488,9 +501,10 @@ class _BookOverflow extends ConsumerWidget {
             ?.roles
             .contains('admin') ??
         false;
+    final l10n = context.l10n;
     return WaxMenuButton<_BookAction>(
       glyph: WaxIcons.more,
-      label: 'More',
+      label: l10n.bookMore,
       semanticsId: SemanticsIds.bookOverflow,
       items: <WaxMenuItem<_BookAction>>[
         pinMenuItem<_BookAction>(
@@ -501,37 +515,37 @@ class _BookOverflow extends ConsumerWidget {
         ),
         WaxMenuItem<_BookAction>(
           value: _BookAction.markFinished,
-          label: 'Mark finished',
+          label: l10n.bookMarkFinished,
           glyph: WaxIcons.check,
           semanticsId: SemanticsIds.bookMarkFinished,
         ),
         WaxMenuItem<_BookAction>(
           value: _BookAction.startOver,
-          label: 'Start over',
+          label: l10n.bookStartOver,
           glyph: WaxIcons.refresh,
           semanticsId: SemanticsIds.bookStartOver,
         ),
-        const WaxMenuItem<_BookAction>(
+        WaxMenuItem<_BookAction>(
           value: _BookAction.share,
-          label: 'Share link',
+          label: l10n.bookShareLink,
           glyph: WaxIcons.share,
         ),
         if (isAdmin) ...<WaxMenuItem<_BookAction>>[
-          const WaxMenuItem<_BookAction>(
+          WaxMenuItem<_BookAction>(
             value: _BookAction.editMetadata,
-            label: 'Edit metadata',
+            label: l10n.bookEditMetadata,
             glyph: WaxIcons.edit,
           ),
           if (_canMerge)
-            const WaxMenuItem<_BookAction>(
+            WaxMenuItem<_BookAction>(
               value: _BookAction.merge,
-              label: 'Merge into one chaptered file',
+              label: l10n.bookMerge,
               glyph: WaxIcons.sort,
             ),
           if (_canSplit)
-            const WaxMenuItem<_BookAction>(
+            WaxMenuItem<_BookAction>(
               value: _BookAction.split,
-              label: 'Split at chapters',
+              label: l10n.bookSplit,
               glyph: WaxIcons.sort,
             ),
         ],
@@ -541,15 +555,21 @@ class _BookOverflow extends ConsumerWidget {
   }
 
   void _run(BuildContext context, WidgetRef ref, _BookAction action) {
+    final l10n = context.l10n;
     switch (action) {
       case _BookAction.pin:
         unawaited(togglePin(context, ref, book.pid, label: book.title));
       case _BookAction.markFinished:
         unawaited(
-          _writePosition(context, ref, book.durationMs, 'Marked finished'),
+          _writePosition(
+            context,
+            ref,
+            book.durationMs,
+            l10n.bookMarkedFinished,
+          ),
         );
       case _BookAction.startOver:
-        unawaited(_writePosition(context, ref, 0, 'Back to the beginning'));
+        unawaited(_writePosition(context, ref, 0, l10n.bookBackToBeginning));
       case _BookAction.share:
         unawaited(showShareLinkDialog(context, pid: book.pid));
       case _BookAction.editMetadata:
@@ -586,6 +606,7 @@ class _BookOverflow extends ConsumerWidget {
     String message,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     // The container rather than `ref`, and captured here rather than read
     // inside the toast: the undo outlives the row that offered it. A
     // `WidgetRef` is dead the moment its element is disposed, so a book
@@ -603,7 +624,7 @@ class _BookOverflow extends ConsumerWidget {
           SnackBar(
             content: Text(message),
             action: SnackBarAction(
-              label: 'Undo',
+              label: l10n.bookUndo,
               onPressed: () => unawaited(_undo(container, repository, before)),
             ),
           ),
@@ -611,7 +632,7 @@ class _BookOverflow extends ConsumerWidget {
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
@@ -683,6 +704,7 @@ class _BookOverflow extends ConsumerWidget {
   ) async {
     final messenger = ScaffoldMessenger.of(context);
     final router = GoRouter.of(context);
+    final l10n = context.l10n;
     // The container, captured first: this runs unawaited from a menu, so
     // `ref` may be dead by the time the request lands.
     final container = ProviderScope.containerOf(context, listen: false);
@@ -693,17 +715,20 @@ class _BookOverflow extends ConsumerWidget {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: const Text('Queued. Follow it in Tasks.'),
+            content: Text(l10n.bookToolQueued),
             action: SnackBarAction(
-              label: 'Tasks',
+              label: l10n.bookToolTasks,
               onPressed: () => router.push<void>(WaxRoute.tasks),
             ),
           ),
         );
     } on WaxDeckApiException catch (e) {
+      // The server's words: these refuse on what the book is, and the
+      // table's `conflict` sentence would invite a retry that can never
+      // succeed.
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
     }
   }
 }
@@ -756,6 +781,7 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final l10n = context.l10n;
     try {
       await ref
           .read(repositoryProvider)
@@ -775,7 +801,7 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -784,6 +810,7 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Padding(
       padding: EdgeInsets.only(
         left: WaxSpace.s16,
@@ -796,44 +823,46 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'Playback settings',
+            l10n.bookPlaybackSettings,
             style: WaxType.headline.copyWith(color: colors.textPrimary),
           ),
           const SizedBox(height: WaxSpace.s8),
           Text(
-            'Speed ${_speed.toStringAsFixed(2)}x',
+            // The same formatter every other rate readout goes through,
+            // so the decimal separator is the locale's.
+            l10n.bookSettingsSpeed(l10n.formatSpeed(_speed)),
             style: WaxType.monoData.copyWith(color: colors.textSecondary),
           ),
           Semantics(
             identifier: SemanticsIds.bookSettingsSpeed,
-            label: 'Playback speed',
+            label: l10n.bookSettingsSpeedLabel,
             child: Slider(
               key: const Key(SemanticsIds.bookSettingsSpeed),
               value: _speed,
               min: 0.5,
               max: 3.5,
               divisions: 60,
-              label: _speed.toStringAsFixed(2),
+              label: l10n.formatSpeed(_speed),
               onChanged: (v) => setState(() => _speed = v),
             ),
           ),
           WaxSettingRow(
             key: const Key('book-settings-boost'),
-            title: 'Voice boost',
-            help: 'Lifts speech over a noisy room',
+            title: l10n.bookVoiceBoost,
+            help: l10n.bookVoiceBoostHelp,
             control: WaxSwitch(
               value: _voiceBoost,
-              label: 'Voice boost',
+              label: l10n.bookVoiceBoost,
               onChanged: (v) => setState(() => _voiceBoost = v),
             ),
           ),
           WaxSettingRow(
             key: const Key('book-settings-trim'),
-            title: 'Trim silence',
-            help: 'Shortens the pauses between sentences',
+            title: l10n.bookTrimSilence,
+            help: l10n.bookTrimSilenceHelp,
             control: WaxSwitch(
               value: _trimSilence,
-              label: 'Trim silence',
+              label: l10n.bookTrimSilence,
               onChanged: (v) => setState(() => _trimSilence = v),
             ),
           ),
@@ -841,7 +870,7 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
           Align(
             alignment: Alignment.centerRight,
             child: WaxButton(
-              label: 'Save',
+              label: l10n.commonSave,
               semanticsId: SemanticsIds.bookSettingsSave,
               onPressed: _busy ? null : _save,
             ),

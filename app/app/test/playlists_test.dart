@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/playlists/add_to_playlist_sheet.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
@@ -1101,9 +1103,19 @@ void main() {
   });
 
   group('rule summaries', () {
+    // The date symbols come with it: nothing here loads the global
+    // Material delegate that normally supplies them.
+    late AppLocalizations l10n;
+
+    setUpAll(() async {
+      await initializeDateFormatting();
+      l10n = await AppLocalizations.delegate.load(const Locale('en'));
+    });
+
     test('read as phrases rather than as field names', () {
       expect(
         describeRule(
+          l10n,
           const SmartRule(
             root: RuleNode.all([
               RuleNode.condition(
@@ -1121,7 +1133,9 @@ void main() {
         [
           'Album artist is not Various',
           'Starred is yes',
-          'By play count, highest first',
+          // The field's own label: lower-casing a noun mid-phrase is
+          // an English rule, and the chip is a label.
+          'By Play count, highest first',
           '25 at random',
         ],
       );
@@ -1130,19 +1144,21 @@ void main() {
     test('a date value reads as a day, not as an instant', () {
       expect(
         describeCondition(
+          l10n,
           const RuleNode.condition(
             field: 'addedAt',
             op: 'after',
             value: '2026-01-15T00:00:00.000Z',
           ),
         ),
-        startsWith('Added at is after 2026-01-1'),
+        startsWith('Added at is after Jan 1'),
       );
     });
 
     test('a tag key keeps the word its owner typed', () {
       expect(
         describeCondition(
+          l10n,
           const RuleNode.condition(
             field: 'tag.mood',
             op: 'contains',
@@ -1156,6 +1172,7 @@ void main() {
     test('a negated group leads with what it excludes', () {
       expect(
         describeRule(
+          l10n,
           const SmartRule(
             root: RuleNode(
               type: 'not',
@@ -1181,6 +1198,7 @@ void main() {
     test('a negation over one condition says so rather than heading it', () {
       expect(
         describeRule(
+          l10n,
           const SmartRule(
             root: RuleNode(
               type: 'not',
@@ -1197,6 +1215,7 @@ void main() {
     test('a shape the chip row cannot draw says so instead of lying', () {
       expect(
         describeRule(
+          l10n,
           const SmartRule(
             root: RuleNode.all([
               RuleNode.any([
@@ -1217,6 +1236,7 @@ void main() {
       );
       expect(
         describeCondition(
+          l10n,
           node,
           playlistName: (pid) => pid == 'pl-archive' ? 'Archive' : null,
         ),
@@ -1224,7 +1244,7 @@ void main() {
       );
       // A rule pointing at a list this reader cannot see still has to
       // say something true.
-      expect(describeCondition(node), 'Playlist is not pl-archive');
+      expect(describeCondition(l10n, node), 'Playlist is not pl-archive');
     });
   });
 }

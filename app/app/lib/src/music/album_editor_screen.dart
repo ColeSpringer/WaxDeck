@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -66,17 +67,17 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
   /// State, and false the moment it becomes a widget of its own, which is
   /// the obvious next refactor for a form this size.
   void _adoptStored(AlbumDetail album) {
-    for (final field in albumIdentityFields) {
-      final controller = _controllers[field.name];
+    for (final field in AlbumIdentityField.values) {
+      final controller = _controllers[field.wire];
       if (controller == null) continue;
-      final stored = albumIdentityValue(album, field.name);
+      final stored = albumIdentityValue(album, field);
       if (controller.text == stored) {
-        _seeded[field.name] = stored;
+        _seeded[field.wire] = stored;
         continue;
       }
       // Typed in since it was seeded: that edit outranks a refetch.
-      if (controller.text != _seeded[field.name]) continue;
-      _seeded[field.name] = stored;
+      if (controller.text != _seeded[field.wire]) continue;
+      _seeded[field.wire] = stored;
       controller.text = stored;
     }
   }
@@ -86,11 +87,11 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
   /// lock five of them on a one-word change.
   Map<String, String> _changed(AlbumDetail album) {
     final changed = <String, String>{};
-    for (final field in albumIdentityFields) {
-      final controller = _controllers[field.name];
+    for (final field in AlbumIdentityField.values) {
+      final controller = _controllers[field.wire];
       if (controller == null) continue;
-      final stored = albumIdentityValue(album, field.name);
-      if (controller.text != stored) changed[field.name] = controller.text;
+      final stored = albumIdentityValue(album, field);
+      if (controller.text != stored) changed[field.wire] = controller.text;
     }
     return changed;
   }
@@ -111,20 +112,18 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
             ?.roles
             .contains('admin') ??
         false;
+    final l10n = context.l10n;
     if (!isAdmin) {
       return WaxScaffold(
-        title: 'Album',
+        title: l10n.musicAlbumTitle,
         largeTitle: false,
         onBack: () => context.leave(fallback: WaxRoute.music),
         slivers: <Widget>[
-          const SliverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'Only administrators can edit a release',
-              message:
-                  'Barcodes, labels, and catalog numbers are shared by '
-                  'everyone who can see this album, so the server keeps '
-                  'them to administrators.',
+              title: l10n.musicAlbumEditorForbiddenTitle,
+              message: l10n.musicAlbumEditorForbiddenMessage,
               glyph: WaxIcons.edit,
             ),
           ),
@@ -136,7 +135,7 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
       if (next.value case final album?) _adoptStored(album);
     });
     return WaxScaffold(
-      title: async.value?.title ?? 'Album',
+      title: async.value?.title ?? l10n.musicAlbumTitle,
       largeTitle: false,
       onBack: () => context.leave(fallback: WaxRoute.music),
       slivers: <Widget>[
@@ -145,10 +144,8 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load this album',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.musicAlbumLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(albumDetailProvider(widget.pid)),
             ),
           ),
@@ -162,6 +159,7 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
   }
 
   Widget _body(AlbumDetail album) {
+    final l10n = context.l10n;
     final curation = ref.watch(albumCurationProvider(widget.pid)).value ?? {};
     final changed = _changed(album);
     return Semantics(
@@ -174,51 +172,51 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const SectionHeader(
-                title: 'Release identity',
-                overline: 'What this edition is',
+              SectionHeader(
+                title: l10n.musicAlbumEditorSectionTitle,
+                overline: l10n.musicAlbumEditorSectionOverline,
               ),
-              for (final field in albumIdentityFields) ...<Widget>[
+              for (final field in AlbumIdentityField.values) ...<Widget>[
                 _FieldRow(
                   field: field,
                   controller: _controllerFor(
-                    field.name,
-                    albumIdentityValue(album, field.name),
+                    field.wire,
+                    albumIdentityValue(album, field),
                   ),
-                  curated: curation[field.name],
-                  dirty: changed.containsKey(field.name),
+                  curated: curation[field.wire],
+                  dirty: changed.containsKey(field.wire),
                 ),
                 const SizedBox(height: WaxSpace.s12),
               ],
               const SizedBox(height: WaxSpace.s16),
+              // The item editor's own switches, down to the semantics
+              // identifiers, so they read its keys. Only the write-back
+              // help differs.
               WaxSettingRow(
-                title: 'Write tags to files',
-                help:
-                    'Also rewrite the matching tags in every track on this '
-                    'release. Media has no tag form and stays here.',
+                title: l10n.metadataWriteBackTitle,
+                help: l10n.musicAlbumEditorWriteBackHelp,
                 control: WaxSwitch(
-                  label: 'Write tags to files',
+                  label: l10n.metadataWriteBackTitle,
                   value: _writeBack,
                   semanticsId: SemanticsIds.metadataWriteback,
                   onChanged: (v) => setState(() => _writeBack = v),
                 ),
               ),
               WaxSettingRow(
-                title: 'Lock edited fields',
-                help:
-                    'Keep scans and enrichment from overwriting what you type',
+                title: l10n.metadataLockTitle,
+                help: l10n.metadataLockHelp,
                 control: WaxSwitch(
-                  label: 'Lock edited fields',
+                  label: l10n.metadataLockTitle,
                   value: _lock,
                   semanticsId: SemanticsIds.metadataLock,
                   onChanged: (v) => setState(() => _lock = v),
                 ),
               ),
               WaxSettingRow(
-                title: 'Force',
-                help: 'Overwrite fields that are already locked',
+                title: l10n.metadataForceTitle,
+                help: l10n.metadataForceHelp,
                 control: WaxSwitch(
-                  label: 'Force',
+                  label: l10n.metadataForceTitle,
                   value: _force,
                   semanticsId: SemanticsIds.metadataForce,
                   onChanged: (v) => setState(() => _force = v),
@@ -227,9 +225,8 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
               const SizedBox(height: WaxSpace.s16),
               WaxButton(
                 label: changed.isEmpty
-                    ? 'Save'
-                    : 'Save ${changed.length} '
-                          '${changed.length == 1 ? 'change' : 'changes'}',
+                    ? l10n.commonSave
+                    : l10n.musicAlbumEditorSaveChanges(changed.length),
                 icon: WaxIcons.check,
                 semanticsId: SemanticsIds.metadataSave,
                 onPressed: changed.isEmpty || _busy
@@ -248,6 +245,7 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     final messenger = ref.read(shellMessengerProvider.notifier);
+    final l10n = context.l10n;
     try {
       await ref
           .read(repositoryProvider)
@@ -273,15 +271,16 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
       ref
         ..invalidate(albumDetailProvider(widget.pid))
         ..invalidate(albumCurationProvider(widget.pid));
-      messenger.show('Saved');
+      messenger.show(l10n.musicAlbumEditorSaved);
     } on WaxDeckApiException catch (e) {
-      // The two refusals worth naming: a locked field wants Force, and a
-      // barcode or country the normalizer would not take says so itself,
-      // because a scan can store a value this endpoint refuses.
-      final hint = e.statusCode == 409
-          ? ' Check "Force" to overwrite locked fields.'
-          : '';
-      messenger.show('${e.message}.$hint');
+      // A locked field keeps the server's sentence, which names the
+      // field, and gains the half the server cannot know: the switch on
+      // this page that overrides it.
+      messenger.show(
+        e.code == 'field-locked'
+            ? '${e.message}. ${l10n.metadataFieldLockedHint}'
+            : explainRefusal(l10n, e),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -296,7 +295,7 @@ class _FieldRow extends StatelessWidget {
     required this.dirty,
   });
 
-  final ({String name, String label, String help}) field;
+  final AlbumIdentityField field;
   final TextEditingController controller;
 
   /// The curation row, when a user has already set this field. Its lock
@@ -308,16 +307,17 @@ class _FieldRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final row = curated;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: <Widget>[
         Expanded(
           child: WaxTextField(
-            label: field.label,
-            hint: field.help,
+            label: field.labelOf(l10n),
+            hint: field.helpOf(l10n),
             controller: controller,
-            semanticsId: SemanticsIds.metadataField(field.name),
+            semanticsId: SemanticsIds.metadataField(field.wire),
           ),
         ),
         const SizedBox(width: WaxSpace.s8),
@@ -326,7 +326,7 @@ class _FieldRow extends StatelessWidget {
           child: Row(
             children: <Widget>[
               CodecChip(
-                row == null ? 'From tags' : row.source,
+                row == null ? l10n.musicAlbumEditorFromTags : row.source,
                 emphasis: dirty,
               ),
               // Read-only: the lock is set by the save below (through
@@ -340,7 +340,9 @@ class _FieldRow extends StatelessWidget {
                     size: 16,
                     color: colors.accent,
                     active: true,
-                    semanticLabel: '${field.label} is locked',
+                    semanticLabel: l10n.musicAlbumEditorFieldLocked(
+                      field.labelOf(l10n),
+                    ),
                   ),
                 ),
             ],

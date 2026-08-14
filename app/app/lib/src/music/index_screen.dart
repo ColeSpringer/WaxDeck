@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../home/pin_action.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../search/search_chrome.dart';
@@ -182,7 +183,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
       child: Stack(
         children: <Widget>[
           WaxScaffold(
-            title: dimension.label,
+            title: dimension.titleOf(context.l10n),
             onBack: () => context.go(WaxRoute.music),
             largeTitle: false,
             controller: _scroll,
@@ -210,10 +211,8 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
                   AsyncError(:final error) => SliverFillRemaining(
                     hasScrollBody: false,
                     child: ErrorState(
-                      title: 'Could not load ${dimension.label.toLowerCase()}',
-                      message: error is WaxDeckApiException
-                          ? error.message
-                          : 'The server did not answer.',
+                      title: context.l10n.musicIndexLoadError(dimension.name),
+                      message: context.explain(error),
                       onRetry: () => ref.invalidate(musicIndexProvider(key)),
                     ),
                   ),
@@ -260,10 +259,8 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: EmptyState(
-          title: 'No ${dimension.label.toLowerCase()} yet',
-          message:
-              'Add music to your library and its '
-              '${dimension.singular}s show up here.',
+          title: context.l10n.musicIndexEmptyTitle(dimension.name),
+          message: context.l10n.musicIndexEmptyMessage(dimension.name),
           glyph: dimension.glyph,
         ),
       );
@@ -326,7 +323,7 @@ class _StartOfIndex extends StatelessWidget {
               WaxIcon(WaxIcons.expand, size: 16, color: colors.textTertiary),
               const SizedBox(width: WaxSpace.s8),
               Text(
-                'Start of ${dimension.label.toLowerCase()}',
+                context.l10n.musicIndexStartOf(dimension.name),
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ],
@@ -369,8 +366,11 @@ class _Toolbar extends StatelessWidget {
                 // "of the ones loaded" is what a keyset list can honestly
                 // say: the page after this one may hold more.
                 hasMore
-                    ? '$loaded+ ${dimension.label.toLowerCase()}'
-                    : '$loaded ${dimension.label.toLowerCase()}',
+                    ? context.l10n.musicIndexCountAtLeast(
+                        dimension.name,
+                        loaded,
+                      )
+                    : context.l10n.musicIndexCount(dimension.name, loaded),
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ),
@@ -382,15 +382,17 @@ class _Toolbar extends StatelessWidget {
           Flexible(
             child: FilterChipRow(
               chips: <WaxFilterChip>[
+                // The settings picker's vocabulary: two spellings meant
+                // the order somebody set arrived called something else.
                 WaxFilterChip(
                   name: FacetSort.label.wireName,
-                  label: 'A to Z',
+                  label: browseSortLabel(context.l10n, FacetSort.label),
                   glyph: WaxIcons.sort,
                   semanticsId: SemanticsIds.indexSort,
                 ),
-                const WaxFilterChip(
-                  name: 'count',
-                  label: 'Most items',
+                WaxFilterChip(
+                  name: FacetSort.count.wireName,
+                  label: browseSortLabel(context.l10n, FacetSort.count),
                   glyph: WaxIcons.stats,
                 ),
               ],
@@ -445,7 +447,7 @@ class _BucketRow extends ConsumerWidget {
       child: MediaListRow(
         data: MediaTileData(
           title: bucket.label,
-          subtitle: bucket.count == 1 ? '1 track' : '${bucket.count} tracks',
+          subtitle: context.l10n.musicTrackCount(bucket.count),
           artwork: artwork,
           shape: dimension.shape,
           semanticsId: SemanticsIds.indexBucket(index),

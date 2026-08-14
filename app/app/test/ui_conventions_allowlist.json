@@ -38,12 +38,6 @@
   "lib/src/auto/media_session_feed.dart": {
     "hardcoded-copy": 1
   },
-  "lib/src/books/book_screen.dart": {
-    "hardcoded-copy": 38
-  },
-  "lib/src/books/books_screen.dart": {
-    "hardcoded-copy": 12
-  },
   "lib/src/connect/connect_bus.dart": {
     "hardcoded-copy": 5
   },
@@ -95,33 +89,6 @@
   "lib/src/home/pinned_shelf.dart": {
     "hardcoded-copy": 8
   },
-  "lib/src/library/item_delete.dart": {
-    "hardcoded-copy": 13
-  },
-  "lib/src/music/album_detail.dart": {
-    "hardcoded-copy": 10
-  },
-  "lib/src/music/album_editor_screen.dart": {
-    "hardcoded-copy": 21
-  },
-  "lib/src/music/album_screen.dart": {
-    "hardcoded-copy": 12
-  },
-  "lib/src/music/artist_screen.dart": {
-    "hardcoded-copy": 11
-  },
-  "lib/src/music/index_screen.dart": {
-    "hardcoded-copy": 9
-  },
-  "lib/src/music/listing_screen.dart": {
-    "hardcoded-copy": 9
-  },
-  "lib/src/music/music_controllers.dart": {
-    "hardcoded-copy": 5
-  },
-  "lib/src/music/music_hub_screen.dart": {
-    "hardcoded-copy": 12
-  },
   "lib/src/notifications/notifications_bell.dart": {
     "hardcoded-copy": 4
   },
@@ -131,56 +98,8 @@
   "lib/src/player/sleep_timer.dart": {
     "hardcoded-copy": 1
   },
-  "lib/src/playlists/add_to_playlist_sheet.dart": {
-    "hardcoded-copy": 9
-  },
-  "lib/src/playlists/playlist_create.dart": {
-    "hardcoded-copy": 14
-  },
-  "lib/src/playlists/playlist_import.dart": {
-    "hardcoded-copy": 15
-  },
-  "lib/src/playlists/playlist_screen.dart": {
-    "hardcoded-copy": 46
-  },
-  "lib/src/playlists/playlists_screen.dart": {
-    "hardcoded-copy": 9
-  },
-  "lib/src/playlists/rule_editor_screen.dart": {
-    "hardcoded-copy": 45
-  },
-  "lib/src/podcasts/credits.dart": {
-    "hardcoded-copy": 1
-  },
-  "lib/src/podcasts/episode_screen.dart": {
-    "hardcoded-copy": 23
-  },
-  "lib/src/podcasts/mark_older_played_dialog.dart": {
-    "hardcoded-copy": 10
-  },
-  "lib/src/podcasts/podcasts_screen.dart": {
-    "hardcoded-copy": 30
-  },
-  "lib/src/podcasts/show_screen.dart": {
-    "hardcoded-copy": 45
-  },
-  "lib/src/podcasts/subscription_settings_sheet.dart": {
-    "hardcoded-copy": 16
-  },
   "lib/src/prototype/editing_prototype_screen.dart": {
     "hardcoded-copy": 8
-  },
-  "lib/src/radio/add_station.dart": {
-    "hardcoded-copy": 20
-  },
-  "lib/src/radio/radio_saved_menu.dart": {
-    "hardcoded-copy": 10
-  },
-  "lib/src/radio/radio_saved_screen.dart": {
-    "hardcoded-copy": 8
-  },
-  "lib/src/radio/radio_screen.dart": {
-    "hardcoded-copy": 20
   },
   "lib/src/review/review_entry_screen.dart": {
     "hardcoded-copy": 36

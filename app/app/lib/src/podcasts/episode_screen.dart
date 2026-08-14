@@ -26,16 +26,20 @@ import 'show_screen.dart';
 /// a cue points at a moment, not at a length.
 String formatCueTimestamp(int ms) => formatTimecode(Duration(milliseconds: ms));
 
-/// Seeks the live player to [ms] when [pid] is the episode currently loaded;
-/// otherwise reports the offset in a SnackBar. [label] names what is being
-/// pointed at ("Clip", "Cue"). Loosely coupled on purpose: the timestamp
-/// stays useful even when this episode is not the one playing.
+/// What a timestamp points at. The names are `podcastCueStartsAt`'s
+/// select cases, so the sentence is worded per kind rather than built
+/// around the word.
+enum PodcastCue { chapter, clip, cue }
+
+/// Seeks the live player to [ms] when [pid] is the episode loaded, and
+/// reports the offset otherwise: the timestamp stays useful when this
+/// episode is not the one playing.
 void seekLiveOrReport(
   BuildContext context,
   WidgetRef ref,
   String pid,
   int ms,
-  String label,
+  PodcastCue kind,
 ) {
   final session = ref.read(currentSessionRegistryProvider).current;
   if (session != null && session.item.pid == pid) {
@@ -45,7 +49,11 @@ void seekLiveOrReport(
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
-      SnackBar(content: Text('$label starts at ${formatCueTimestamp(ms)}')),
+      SnackBar(
+        content: Text(
+          context.l10n.podcastCueStartsAt(kind.name, formatCueTimestamp(ms)),
+        ),
+      ),
     );
 }
 
@@ -65,9 +73,10 @@ class EpisodeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(episodeDetailProvider(pid));
     final episode = detail.value;
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: episode?.title ?? 'Episode',
+      title: episode?.title ?? l10n.podcastEpisodeFallbackTitle,
       largeTitle: false,
       // Pops when something pushed this and goes to the show it belongs
       // to when nothing did, so the arrow and the system gesture agree
@@ -86,10 +95,8 @@ class EpisodeScreen extends ConsumerWidget {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load the episode',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.podcastEpisodeLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(episodeDetailProvider(pid)),
             ),
           ),
@@ -118,6 +125,7 @@ class _EpisodeBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final progress = PlayProgressView(
       ref.watch(playProgressProvider(_progressKey)).value ?? const {},
     )[episode.pid];
@@ -145,7 +153,7 @@ class _EpisodeBody extends ConsumerWidget {
                 const SizedBox(height: WaxSpace.s24),
                 Semantics(
                   identifier: SemanticsIds.episodeSection('notes'),
-                  child: const SectionHeader(title: 'Notes'),
+                  child: SectionHeader(title: l10n.podcastSectionNotes),
                 ),
                 CollapsibleNotes(
                   html: episode.descriptionHtml!,
@@ -156,18 +164,20 @@ class _EpisodeBody extends ConsumerWidget {
                 const SizedBox(height: WaxSpace.s24),
                 Semantics(
                   identifier: SemanticsIds.episodeSection('chapters'),
-                  child: const SectionHeader(title: 'Chapters'),
+                  child: SectionHeader(title: l10n.podcastSectionChapters),
                 ),
                 for (final chapter in episode.chapters)
                   _CueRow(
                     stamp: formatCueTimestamp(chapter.startMs),
-                    text: chapter.title ?? 'Chapter ${chapter.index + 1}',
+                    text:
+                        chapter.title ??
+                        l10n.podcastChapterFallback(chapter.index + 1),
                     onTap: () => seekLiveOrReport(
                       context,
                       ref,
                       episode.pid,
                       chapter.startMs,
-                      'Chapter',
+                      PodcastCue.chapter,
                     ),
                   ),
               ],
@@ -175,18 +185,18 @@ class _EpisodeBody extends ConsumerWidget {
                 const SizedBox(height: WaxSpace.s24),
                 Semantics(
                   identifier: SemanticsIds.episodeSection('soundbites'),
-                  child: const SectionHeader(title: 'Highlights'),
+                  child: SectionHeader(title: l10n.podcastSectionHighlights),
                 ),
                 for (final (i, bite) in episode.soundbites.indexed)
                   _CueRow(
                     stamp: formatCueTimestamp(bite.startMs),
-                    text: bite.title ?? 'Highlight ${i + 1}',
+                    text: bite.title ?? l10n.podcastHighlightFallback(i + 1),
                     onTap: () => seekLiveOrReport(
                       context,
                       ref,
                       episode.pid,
                       bite.startMs,
-                      'Clip',
+                      PodcastCue.clip,
                     ),
                   ),
               ],
@@ -194,7 +204,7 @@ class _EpisodeBody extends ConsumerWidget {
                 const SizedBox(height: WaxSpace.s24),
                 Semantics(
                   identifier: SemanticsIds.episodeSection('people'),
-                  child: const SectionHeader(title: 'People'),
+                  child: SectionHeader(title: l10n.podcastSectionPeople),
                 ),
                 PodcastCredits(
                   persons: episode.persons,
@@ -210,7 +220,7 @@ class _EpisodeBody extends ConsumerWidget {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: WaxButton(
-                    label: 'Open the episode page',
+                    label: l10n.podcastOpenEpisodePage,
                     kind: WaxButtonKind.text,
                     onPressed: () =>
                         ref.read(urlOpenerProvider).open(episode.link!),
@@ -219,7 +229,7 @@ class _EpisodeBody extends ConsumerWidget {
               ],
               const SizedBox(height: WaxSpace.s16),
               Text(
-                formatEpisodeMeta(context.l10n, episode),
+                formatEpisodeMeta(l10n, episode),
                 style: WaxType.monoData.copyWith(color: colors.textTertiary),
               ),
               const SizedBox(height: WaxSpace.s32),
@@ -269,7 +279,7 @@ class _Hero extends ConsumerWidget {
                 children: <Widget>[
                   if (episode.artist != null)
                     WaxTappable(
-                      label: 'Go to ${episode.artist}',
+                      label: context.l10n.podcastGoToShow(episode.artist!),
                       // The show is a real location, so its name here is
                       // the way back to it rather than a caption.
                       onPressed: () => context.go(WaxRoute.show(show)),
@@ -323,6 +333,7 @@ class _ActionBar extends ConsumerWidget {
     final actions = EpisodeActions(ref: ref, showPid: showPid);
     final playable = EpisodeActions.playable(episode);
     final resuming = progress.inProgress;
+    final l10n = context.l10n;
 
     return Wrap(
       spacing: WaxSpace.s8,
@@ -332,9 +343,11 @@ class _ActionBar extends ConsumerWidget {
         WaxButton(
           label: playable
               ? (resuming
-                    ? 'Resume ${formatCueTimestamp(progress.positionMs)}'
-                    : 'Play')
-              : 'Fetch to play',
+                    ? l10n.podcastResume(
+                        formatCueTimestamp(progress.positionMs),
+                      )
+                    : l10n.podcastPlay)
+              : l10n.podcastFetchToPlay,
           icon: playable ? WaxIcons.play : WaxIcons.downloads,
           semanticsId: SemanticsIds.episodePlay,
           onPressed: () => unawaited(
@@ -342,7 +355,7 @@ class _ActionBar extends ConsumerWidget {
           ),
         ),
         WaxButton(
-          label: 'Add to queue',
+          label: l10n.podcastAddToQueue,
           kind: WaxButtonKind.tonal,
           icon: WaxIcons.addToQueue,
           semanticsId: SemanticsIds.episodeQueue,
@@ -350,7 +363,7 @@ class _ActionBar extends ConsumerWidget {
         ),
         if (episode.downloaded)
           WaxButton(
-            label: 'Remove download',
+            label: l10n.podcastRemoveDownload,
             kind: WaxButtonKind.tonal,
             icon: WaxIcons.offline,
             semanticsId: SemanticsIds.episodeRemove(episode.pid),
@@ -359,16 +372,16 @@ class _ActionBar extends ConsumerWidget {
           )
         else if (episode.fetchState == null || episode.fetchState == 'failed')
           WaxButton(
-            label: 'Download',
+            label: l10n.podcastDownload,
             kind: WaxButtonKind.tonal,
             icon: WaxIcons.downloads,
             semanticsId: SemanticsIds.episodeFetch(episode.pid),
             onPressed: () => unawaited(actions.fetch(context, episode.pid)),
           )
         else
-          const CodecChip('Queued for download'),
+          CodecChip(l10n.podcastQueuedForDownload),
         WaxButton(
-          label: progress.played ? 'Played' : 'Mark played',
+          label: progress.played ? l10n.podcastPlayed : l10n.podcastMarkPlayed,
           kind: WaxButtonKind.tonal,
           icon: WaxIcons.check,
           semanticsId: SemanticsIds.episodeMarkPlayed,
@@ -379,7 +392,7 @@ class _ActionBar extends ConsumerWidget {
                 ),
         ),
         WaxButton(
-          label: 'Share',
+          label: l10n.podcastShare,
           kind: WaxButtonKind.tonal,
           icon: WaxIcons.share,
           semanticsId: SemanticsIds.episodeShare,
@@ -396,7 +409,7 @@ class _ActionBar extends ConsumerWidget {
           ),
         ),
         if (episode.fetchError != null)
-          CodecChip('Last fetch failed: ${episode.fetchError}'),
+          CodecChip(l10n.podcastFetchFailed(episode.fetchError!)),
       ],
     );
   }
@@ -431,7 +444,7 @@ class _CueRow extends StatelessWidget {
     final colors = WaxColors.of(context);
     return WaxTappable(
       semanticsId: semanticsId,
-      label: '$text, $stamp',
+      label: context.l10n.podcastCueSpoken(text, stamp),
       onPressed: onTap,
       child: InkWell(
         onTap: onTap,
@@ -465,14 +478,16 @@ class _CueRow extends StatelessWidget {
 String formatEpisodeMeta(AppLocalizations l10n, EpisodeSummary episode) {
   return <String>[
     l10n.formatDate(episode.publishedAt),
-    if (episode.durationMs > 0) formatEpisodeDuration(episode.durationMs),
+    if (episode.durationMs > 0) formatEpisodeDuration(l10n, episode.durationMs),
     if (episode.season != null && episode.episodeNumber != null)
-      'S${episode.season} E${episode.episodeNumber}'
+      l10n.podcastSeasonEpisode(episode.season!, episode.episodeNumber!)
     else if (episode.episodeNumber != null)
-      'E${episode.episodeNumber}',
+      l10n.podcastEpisodeNumber(episode.episodeNumber!),
+    // The feed's own word for what kind of episode this is (trailer,
+    // bonus), drawn as it was published rather than translated.
     if (episode.episodeType != null && episode.episodeType != 'full')
       episode.episodeType!,
-    if (episode.explicit) 'Explicit',
+    if (episode.explicit) l10n.podcastExplicit,
   ].join(' · ');
 }
 
@@ -511,13 +526,14 @@ class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Semantics(
       identifier: SemanticsIds.transcriptOpen,
       child: ExpansionTile(
         key: const Key(SemanticsIds.transcriptOpen),
         tilePadding: EdgeInsets.zero,
         title: Text(
-          'Transcript',
+          l10n.podcastTranscript,
           style: WaxType.headline.copyWith(
             color: WaxColors.of(context).textPrimary,
           ),
@@ -533,8 +549,8 @@ class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
                   padding: const EdgeInsets.all(WaxSpace.s8),
                   child: Text(
                     error is WaxDeckApiException
-                        ? error.message
-                        : 'Could not load the transcript',
+                        ? explainError(l10n, error)
+                        : l10n.podcastTranscriptError,
                   ),
                 );
               }
@@ -553,13 +569,16 @@ class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
                       stamp: formatCueTimestamp(cue.startMs),
                       text: cue.speaker == null
                           ? cue.text
-                          : '${cue.speaker}: ${cue.text}',
+                          : l10n.podcastTranscriptSpeaker(
+                              cue.speaker!,
+                              cue.text,
+                            ),
                       onTap: () => seekLiveOrReport(
                         context,
                         ref,
                         widget.pid,
                         cue.startMs,
-                        'Cue',
+                        PodcastCue.cue,
                       ),
                     ),
                 ],

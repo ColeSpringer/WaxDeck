@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../home/pin_action.dart';
+import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
@@ -59,10 +60,11 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
   String _title(List<ItemSummary> items) {
     final given = widget.label;
     if (given != null && given.isNotEmpty) return given;
+    final l10n = context.l10n;
     final dimension = widget.dimension;
-    if (dimension == null) return 'Tracks';
+    if (dimension == null) return l10n.musicTracksTitle;
     if (widget.segment == musicUnknownSegment) {
-      return 'No ${dimension.singular}';
+      return l10n.musicBucketUnknownTitle(dimension.name);
     }
     if (dimension == MusicDimension.years) return widget.segment;
     final first = items.firstOrNull;
@@ -73,8 +75,24 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       MusicDimension.albums || MusicDimension.releaseGroups => first?.album,
       _ => null,
     };
-    return derived ??
-        dimension.singular[0].toUpperCase() + dimension.singular.substring(1);
+    return derived ?? l10n.musicDimensionSingularTitle(dimension.name);
+  }
+
+  /// The bucket's own name, and nothing else: a source label is stored
+  /// with the queue, so the title's localized fallbacks must not reach
+  /// it. Empty where the bucket has no name to give.
+  String _sourceName(List<ItemSummary> items) {
+    final given = widget.label;
+    if (given != null && given.isNotEmpty) return given;
+    final dimension = widget.dimension;
+    if (dimension == MusicDimension.years) return widget.segment;
+    final first = items.firstOrNull;
+    return switch (dimension) {
+          MusicDimension.artists => first?.artist,
+          MusicDimension.albums || MusicDimension.releaseGroups => first?.album,
+          _ => null,
+        } ??
+        '';
   }
 
   /// What the queue this screen builds is a window over.
@@ -94,7 +112,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         MusicDimension.genres => QueueSourceKind.genre,
         MusicDimension.years => QueueSourceKind.year,
       },
-      label: _title(items),
+      label: _sourceName(items),
       pid: widget.segment,
       rolling: page.hasMore,
       cursor: page.nextCursor ?? '',
@@ -173,6 +191,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
   /// seeds from a random page and walks that permutation as it goes.
   Future<void> _shuffle() async {
     final dimension = widget.dimension;
+    final l10n = context.l10n;
     final repository = ref.read(repositoryProvider);
     final ItemPage page;
     try {
@@ -195,7 +214,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       // A shuffle that fetched nothing has to say so: the button is
       // fire-and-forget, so an unreported failure is a control that does
       // nothing at all.
-      if (mounted) _report(error.message);
+      if (mounted) _report(explainError(l10n, error));
       return;
     }
     if (!mounted) return;
@@ -207,7 +226,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
           item,
     ];
     if (playable.isEmpty) {
-      _report('Nothing here plays in sequence.');
+      _report(l10n.musicShuffleNothingPlayable);
       return;
     }
     ref
@@ -218,7 +237,8 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
           source: dimension == null
               ? QueueSource(
                   kind: QueueSourceKind.library,
-                  label: 'All music',
+                  // The kind is the whole name; the queue screen words it.
+                  label: '',
                   rolling: page.hasMore,
                   cursor: page.nextCursor ?? '',
                   seed: page.seed,
@@ -272,8 +292,8 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
             WaxIconButton(
               glyph: WaxIcons.shuffle,
               label: dimension == null
-                  ? 'Shuffle all music'
-                  : 'Shuffle ${_title(items)}',
+                  ? context.l10n.musicShuffleAllLabel
+                  : context.l10n.musicShuffleLabel(_title(items)),
               onPressed: () => unawaited(_shuffle()),
               semanticsId: SemanticsIds.listingShuffle,
             ),
@@ -285,10 +305,8 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
             AsyncError(:final error) => SliverFillRemaining(
               hasScrollBody: false,
               child: ErrorState(
-                title: 'Could not load this list',
-                message: error is WaxDeckApiException
-                    ? error.message
-                    : 'The server did not answer.',
+                title: context.l10n.musicListingLoadError,
+                message: context.explain(error),
                 onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
               ),
             ),
@@ -304,16 +322,17 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
 
   Widget _list(MusicItemsState state) {
     final dimension = widget.dimension;
+    final l10n = context.l10n;
     if (state.items.isEmpty) {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: EmptyState(
           title: dimension == null
-              ? 'No music yet'
-              : 'Nothing in this ${dimension.singular}',
+              ? l10n.musicEmptyTitle
+              : l10n.musicListingBucketEmptyTitle(dimension.name),
           message: dimension == null
-              ? 'Add music to your library and it shows up here.'
-              : 'The items that were here have moved or been removed.',
+              ? l10n.musicEmptyMessage
+              : l10n.musicListingBucketEmptyMessage,
           glyph: WaxIcons.music,
         ),
       );

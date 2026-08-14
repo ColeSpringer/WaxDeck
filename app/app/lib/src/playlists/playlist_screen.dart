@@ -11,6 +11,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../home/pin_action.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
@@ -64,9 +65,10 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
   Widget build(BuildContext context) {
     final detail = ref.watch(playlistDetailProvider(pid));
     final view = detail.value;
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: view?.playlist.name ?? 'Playlist',
+      title: view?.playlist.name ?? l10n.playlistFallbackTitle,
       largeTitle: false,
       // Pops where something pushed this, goes to the listing where
       // nothing did.
@@ -83,9 +85,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           child: _conflict == null
               ? const SizedBox.shrink()
               : WaxBanner(
-                  message:
-                      '$_conflict Nothing was changed; this is the list '
-                      'as it stands.',
+                  message: l10n.playlistConflictBanner(_conflict!),
                   tone: WaxBannerTone.caution,
                   semanticsId: SemanticsIds.playlistConflict,
                   onDismiss: () => setState(() => _conflict = null),
@@ -98,10 +98,8 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load this playlist',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.playlistLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(playlistDetailProvider(pid)),
             ),
           ),
@@ -118,6 +116,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
   List<Widget> _body(BuildContext context, PlaylistView view) {
     final playlist = view.playlist;
     final entries = view.entries;
+    final l10n = context.l10n;
     return <Widget>[
       SliverToBoxAdapter(child: _Header(view: view)),
       SliverToBoxAdapter(child: _StatusChips(view: view)),
@@ -125,14 +124,14 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
       if (entries.isEmpty)
         SliverToBoxAdapter(
           child: EmptyState(
-            title: playlist.isSmart ? 'Nothing matches yet' : 'Nothing in here',
+            title: playlist.isSmart
+                ? l10n.playlistSmartEmptyTitle
+                : l10n.playlistEmptyTitle,
             message: playlist.isSmart
-                ? 'No item in the library answers these rules. Loosen one '
-                      'and the list fills itself.'
+                ? l10n.playlistSmartEmptyMessage
                 : view.isEditable
-                ? 'Search above to add the first track, or use "Add to '
-                      'playlist" from anywhere something is playing.'
-                : 'The owner has not put anything in this list yet.',
+                ? l10n.playlistEditableEmptyMessage
+                : l10n.playlistForeignEmptyMessage,
             glyph: WaxIcons.playlists,
           ),
         )
@@ -174,20 +173,21 @@ class _Header extends ConsumerWidget {
       context.push(WaxRoute.nowPlaying);
     }
 
+    final l10n = context.l10n;
     return EntityHeader(
       title: playlist.name,
-      subtitle: playlistOwnerLine(playlist),
-      metadata: _facts(context.waxL10n, view),
+      subtitle: playlistOwnerLine(l10n, playlist),
+      metadata: _facts(l10n, context.waxL10n, view),
       artwork: waxArtwork(ref.watch(artworkStoreProvider), playlist.artUrl),
       actions: <Widget>[
         WaxButton(
-          label: 'Play',
+          label: l10n.playlistPlay,
           icon: WaxIcons.play,
           onPressed: entries.isEmpty ? null : play,
           semanticsId: SemanticsIds.entityPlay,
         ),
         WaxButton(
-          label: 'Shuffle',
+          label: l10n.playlistShuffle,
           kind: WaxButtonKind.tonal,
           icon: WaxIcons.shuffle,
           onPressed: entries.isEmpty ? null : () => play(shuffle: true),
@@ -197,22 +197,29 @@ class _Header extends ConsumerWidget {
     );
   }
 
-  /// "Smart playlist · 42 items · 2 hr 41 min".
-  static String _facts(WaxLocalizations l10n, PlaylistView view) {
+  /// "Smart playlist · 42 items · 2 hr 41 min". Two tables: the app's
+  /// for its own words, the design system's for the span.
+  static String _facts(
+    AppLocalizations l10n,
+    WaxLocalizations wax,
+    PlaylistView view,
+  ) {
     final entries = view.entries;
     final parts = <String>[
-      view.playlist.isSmart ? 'Smart playlist' : 'Manual playlist',
-      entries.length == 1 ? '1 item' : '${entries.length} items',
-      if (view.duration > Duration.zero) l10n.formatSpan(view.duration),
+      view.playlist.isSmart
+          ? l10n.playlistFactsSmart
+          : l10n.playlistFactsManual,
+      l10n.playlistItemCount(entries.length),
+      if (view.duration > Duration.zero) wax.formatSpan(view.duration),
     ];
     return parts.join(' · ');
   }
 }
 
 /// Whose list this is, as the header's second line.
-String? playlistOwnerLine(Playlist playlist) {
-  if (!playlist.isOwner) return 'Shared by ${playlist.ownerName}';
-  return playlist.isShared ? 'Shared with everyone' : null;
+String? playlistOwnerLine(AppLocalizations l10n, Playlist playlist) {
+  if (!playlist.isOwner) return l10n.playlistSharedBy(playlist.ownerName);
+  return playlist.isShared ? l10n.playlistSharedWithEveryone : null;
 }
 
 /// How this list is kept: a smart list's rules, and nothing for a
@@ -228,11 +235,13 @@ class _StatusChips extends ConsumerWidget {
     if (rule == null) return const SizedBox.shrink();
     final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     // A rule naming another playlist reads as that list's name; the
     // provider is already loaded here, and a pid the caller cannot
     // resolve falls back to itself.
     final known = ref.watch(playlistsProvider).value ?? const <Playlist>[];
     final chips = describeRule(
+      l10n,
       rule,
       playlistName: (pid) {
         for (final pl in known) {
@@ -250,7 +259,7 @@ class _StatusChips extends ConsumerWidget {
         for (final chip in chips) CodecChip(chip),
         if (editable)
           WaxButton(
-            label: 'Edit rules',
+            label: l10n.playlistEditRules,
             kind: WaxButtonKind.text,
             icon: WaxIcons.edit,
             semanticsId: SemanticsIds.playlistEditRule,
@@ -272,12 +281,12 @@ class _StatusChips extends ConsumerWidget {
             identifier: SemanticsIds.playlistRuleSummary,
             container: true,
             explicitChildNodes: true,
-            label: 'Rules: ${chips.join(', ')}',
+            label: l10n.playlistRulesSpoken(chips.join(', ')),
             child: summary,
           ),
           const SizedBox(height: WaxSpace.s8),
           Text(
-            'Evaluated live, every time this list is opened.',
+            l10n.playlistRulesLive,
             style: WaxType.caption.copyWith(color: colors.textTertiary),
           ),
         ],
@@ -377,6 +386,7 @@ class _AddRowState extends ConsumerState<_AddRow> {
     _generation++;
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await ref.read(playlistDetailProvider(widget.pid).notifier).append(
         <String>[hit.pid],
@@ -389,11 +399,11 @@ class _AddRowState extends ConsumerState<_AddRow> {
       });
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Added "${hit.title}"')));
+        ..showSnackBar(SnackBar(content: Text(l10n.playlistAdded(hit.title))));
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -403,6 +413,7 @@ class _AddRowState extends ConsumerState<_AddRow> {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         sizeClass.gutter.horizontal / 2,
@@ -414,8 +425,8 @@ class _AddRowState extends ConsumerState<_AddRow> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           WaxTextField(
-            label: 'Add to this playlist',
-            hint: 'Search the library',
+            label: l10n.playlistAddLabel,
+            hint: l10n.playlistAddHint,
             glyph: WaxIcons.add,
             controller: _controller,
             onChanged: _onChanged,
@@ -430,8 +441,7 @@ class _AddRowState extends ConsumerState<_AddRow> {
                 top: WaxSpace.s8,
               ),
               child: Text(
-                'Nothing here to add. Artists and albums are not members '
-                'of a playlist; their tracks are.',
+                l10n.playlistAddNothing,
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ),
@@ -467,6 +477,11 @@ class _ReorderableEntries extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
     final entries = view.entries;
+    final l10n = context.l10n;
+    // Hoisted: the labels do not vary by row, and a reorderable list
+    // rebuilds every visible one on every drag frame.
+    final moveUp = CustomSemanticsAction(label: l10n.playlistMoveUp);
+    final moveDown = CustomSemanticsAction(label: l10n.playlistMoveDown);
     return SliverLayoutBuilder(
       builder: (context, constraints) => SliverReorderableList(
         itemCount: entries.length,
@@ -493,10 +508,10 @@ class _ReorderableEntries extends ConsumerWidget {
             // a drag is not a path for everyone.
             customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
               if (index > 0)
-                const CustomSemanticsAction(label: 'Move up'): () =>
+                moveUp: () =>
                     unawaited(_move(context, ref, from: index, to: index - 1)),
               if (index < entries.length - 1)
-                const CustomSemanticsAction(label: 'Move down'): () =>
+                moveDown: () =>
                     unawaited(_move(context, ref, from: index, to: index + 1)),
             },
             child: _EntryRow(
@@ -508,7 +523,7 @@ class _ReorderableEntries extends ConsumerWidget {
                 index: index,
                 child: Semantics(
                   identifier: SemanticsIds.playlistEntryDrag(index),
-                  label: 'Drag to reorder',
+                  label: l10n.playlistDragToReorder,
                   child: Padding(
                     padding: const EdgeInsets.all(WaxSpace.s8),
                     child: WaxIcon(
@@ -541,6 +556,7 @@ class _ReorderableEntries extends ConsumerWidget {
     final moved = pids.removeAt(from);
     pids.insert(to, moved);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await ref.read(playlistDetailProvider(pid).notifier).reorder(pids);
     } on WaxDeckApiException catch (e) {
@@ -548,12 +564,12 @@ class _ReorderableEntries extends ConsumerWidget {
       // race gets the banner; anything else is a one-off failure.
       ref.invalidate(playlistDetailProvider(pid));
       if (e.code == 'conflict') {
-        onConflict(e.message);
+        onConflict(explainRefusal(l10n, e));
         return;
       }
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
@@ -563,13 +579,14 @@ class _ReorderableEntries extends ConsumerWidget {
     final position = view.entries[index].position;
     if (position == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await ref.read(playlistDetailProvider(pid).notifier).removeAt(position);
     } on WaxDeckApiException catch (e) {
       ref.invalidate(playlistDetailProvider(pid));
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 }
@@ -641,7 +658,7 @@ class _EntryRow extends ConsumerWidget {
           if (onRemove != null)
             WaxIconButton(
               glyph: WaxIcons.close,
-              label: 'Remove from playlist',
+              label: context.l10n.playlistEntryRemove,
               size: 16,
               onPressed: onRemove,
               semanticsId: SemanticsIds.playlistEntryRemove(index),
@@ -735,9 +752,10 @@ class _Overflow extends ConsumerWidget {
     final playlist = view.playlist;
     final isOwner = playlist.isOwner;
     final hasPicker = ref.watch(filePickerProvider) != null;
+    final l10n = context.l10n;
     return WaxMenuButton<_PlaylistAction>(
       glyph: WaxIcons.more,
-      label: 'More',
+      label: l10n.playlistMore,
       semanticsId: SemanticsIds.playlistOverflow,
       items: <WaxMenuItem<_PlaylistAction>>[
         pinMenuItem<_PlaylistAction>(
@@ -749,20 +767,22 @@ class _Overflow extends ConsumerWidget {
         if (isOwner) ...<WaxMenuItem<_PlaylistAction>>[
           WaxMenuItem<_PlaylistAction>(
             value: _PlaylistAction.rename,
-            label: 'Rename',
+            label: l10n.playlistRename,
             glyph: WaxIcons.edit,
             semanticsId: SemanticsIds.playlistRename,
           ),
           WaxMenuItem<_PlaylistAction>(
             value: _PlaylistAction.visibility,
-            label: playlist.isShared ? 'Make private' : 'Share with everyone',
+            label: playlist.isShared
+                ? l10n.playlistMakePrivate
+                : l10n.playlistShareWithEveryone,
             glyph: WaxIcons.share,
             semanticsId: SemanticsIds.playlistVisibility,
           ),
         ],
         WaxMenuItem<_PlaylistAction>(
           value: _PlaylistAction.shareLink,
-          label: 'Share link',
+          label: l10n.playlistShareLink,
           glyph: WaxIcons.share,
           semanticsId: SemanticsIds.playlistShareLink,
         ),
@@ -771,7 +791,7 @@ class _Overflow extends ConsumerWidget {
         if (isOwner && hasPicker)
           WaxMenuItem<_PlaylistAction>(
             value: _PlaylistAction.setCover,
-            label: 'Set cover',
+            label: l10n.playlistSetCover,
             glyph: WaxIcons.albums,
             semanticsId: SemanticsIds.playlistSetCover,
           ),
@@ -780,26 +800,26 @@ class _Overflow extends ConsumerWidget {
         if (isOwner && playlist.artUrl != null)
           WaxMenuItem<_PlaylistAction>(
             value: _PlaylistAction.resetCover,
-            label: 'Reset cover',
+            label: l10n.playlistResetCover,
             glyph: WaxIcons.refresh,
             semanticsId: SemanticsIds.playlistResetCover,
           ),
         WaxMenuItem<_PlaylistAction>(
           value: _PlaylistAction.exportM3u,
-          label: 'Export M3U',
+          label: l10n.playlistExportM3u,
           glyph: WaxIcons.downloads,
           semanticsId: SemanticsIds.playlistExportM3u,
         ),
         WaxMenuItem<_PlaylistAction>(
           value: _PlaylistAction.exportPortable,
-          label: 'Export portable',
+          label: l10n.playlistExportPortable,
           glyph: WaxIcons.share,
           semanticsId: SemanticsIds.playlistExportPortable,
         ),
         if (isOwner)
           WaxMenuItem<_PlaylistAction>(
             value: _PlaylistAction.delete,
-            label: 'Delete',
+            label: l10n.playlistDelete,
             glyph: WaxIcons.delete,
             destructive: true,
             semanticsId: SemanticsIds.playlistDelete,
@@ -841,23 +861,29 @@ class _Overflow extends ConsumerWidget {
     // Captured before the prompt: reading one off this context after it
     // is a use across the gap.
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final name = await promptPlaylistName(
       context,
-      title: 'Rename playlist',
-      confirmLabel: 'Rename',
+      title: l10n.playlistRenameTitle,
+      confirmLabel: l10n.playlistRename,
       initial: view.playlist.name,
     );
     if (name == null || name.isEmpty || name == view.playlist.name) return;
     await _guard(
       messenger,
+      l10n,
       () => ref
           .read(playlistDetailProvider(view.playlist.pid).notifier)
           .edit(name: name),
+      // A name somebody just typed: the server's refusal names what was
+      // wrong with it, and the table's sentence would not.
+      refusal: true,
     );
   }
 
   Future<void> _setVisibility(BuildContext context, WidgetRef ref) => _guard(
     ScaffoldMessenger.of(context),
+    context.l10n,
     () => ref
         .read(playlistDetailProvider(view.playlist.pid).notifier)
         .edit(visibility: view.playlist.isShared ? 'private' : 'shared'),
@@ -867,6 +893,7 @@ class _Overflow extends ConsumerWidget {
   /// file-save surface and the clipboard reaches every M3U player.
   Future<void> _exportM3u(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final String content;
     try {
       content = await ref
@@ -875,14 +902,14 @@ class _Overflow extends ConsumerWidget {
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
       return;
     }
     if (!context.mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Export M3U'),
+        title: Text(l10n.playlistExportM3u),
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
@@ -896,12 +923,12 @@ class _Overflow extends ConsumerWidget {
         ),
         actions: <Widget>[
           WaxButton(
-            label: 'Close',
+            label: l10n.commonClose,
             kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(context).pop(),
           ),
           WaxButton(
-            label: 'Copy',
+            label: l10n.playlistExportCopy,
             semanticsId: SemanticsIds.playlistExportCopy,
             onPressed: () async {
               final navigator = Navigator.of(context);
@@ -911,9 +938,7 @@ class _Overflow extends ConsumerWidget {
               if (navigator.mounted) navigator.pop();
               messenger
                 ..hideCurrentSnackBar()
-                ..showSnackBar(
-                  const SnackBar(content: Text('Playlist copied as M3U')),
-                );
+                ..showSnackBar(SnackBar(content: Text(l10n.playlistCopiedM3u)));
             },
           ),
         ],
@@ -924,6 +949,7 @@ class _Overflow extends ConsumerWidget {
   /// Copies the portable refs, for importing on another server.
   Future<void> _exportPortable(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final PortablePlaylist portable;
     try {
       portable = await ref
@@ -932,13 +958,13 @@ class _Overflow extends ConsumerWidget {
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
       return;
     }
     await Clipboard.setData(ClipboardData(text: portableJson(portable)));
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('Portable playlist copied')));
+      ..showSnackBar(SnackBar(content: Text(l10n.playlistCopiedPortable)));
   }
 
   /// What the picker offers; the server decides what it accepts.
@@ -951,12 +977,13 @@ class _Overflow extends ConsumerWidget {
     if (picker == null) return;
     final pid = view.playlist.pid;
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     // Picking and reading are inside the guard: a permission error or a
     // file that vanished throws from the platform, not from the API.
     try {
       final file = await picker.pickFile(
         extensions: _coverExtensions,
-        label: 'Cover image',
+        label: l10n.playlistCoverImage,
       );
       final openRead = file?.openRead;
       if (file == null || openRead == null) return;
@@ -970,12 +997,12 @@ class _Overflow extends ConsumerWidget {
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     } on Exception catch (e) {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('Could not read that image: $e')),
+          SnackBar(content: Text(l10n.playlistCoverUnreadable('$e'))),
         );
     }
   }
@@ -985,38 +1012,35 @@ class _Overflow extends ConsumerWidget {
   Future<void> _resetCover(BuildContext context, WidgetRef ref) async {
     final pid = view.playlist.pid;
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await ref.read(playlistDetailProvider(pid).notifier).resetCover();
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('Back to the cover made from members')),
-        );
+        ..showSnackBar(SnackBar(content: Text(l10n.playlistCoverReset)));
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final router = GoRouter.of(context);
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete this playlist?'),
-        content: const Text(
-          'It goes for everyone it is shared with. The items in it are '
-          'never touched.',
-        ),
+        title: Text(l10n.playlistDeleteTitle),
+        content: Text(l10n.playlistDeleteBody),
         actions: <Widget>[
           WaxButton(
-            label: 'Cancel',
+            label: l10n.commonCancel,
             kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(context).pop(false),
           ),
           WaxButton(
-            label: 'Delete',
+            label: l10n.playlistDelete,
             semanticsId: SemanticsIds.playlistDeleteConfirm,
             onPressed: () => Navigator.of(context).pop(true),
           ),
@@ -1030,17 +1054,27 @@ class _Overflow extends ConsumerWidget {
     if (context.mounted) router.leave(fallback: WaxRoute.playlists);
   }
 
-  /// Runs an edit and says what the server said when it refused.
+  /// Runs an edit and says why it failed. [refusal] for a write
+  /// carrying something just typed, where the server's own sentence
+  /// names the value it would not take.
   static Future<void> _guard(
     ScaffoldMessengerState messenger,
-    Future<void> Function() edit,
-  ) async {
+    AppLocalizations l10n,
+    Future<void> Function() edit, {
+    bool refusal = false,
+  }) async {
     try {
       await edit();
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              refusal ? explainRefusal(l10n, e) : explainError(l10n, e),
+            ),
+          ),
+        );
     }
   }
 }

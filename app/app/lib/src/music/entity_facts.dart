@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 
 /// Full detail for one item, for the screens that want the technical
@@ -48,8 +50,14 @@ class AlbumFacts {
 
   /// Derives the header from the tracks themselves: there is no album
   /// endpoint to ask, and the rows carry everything a header shows.
-  factory AlbumFacts.of(List<ItemSummary> tracks, {String? fallbackTitle}) {
-    final title = tracks.firstOrNull?.album ?? fallbackTitle ?? 'Album';
+  factory AlbumFacts.of(
+    AppLocalizations l10n,
+    WaxLocalizations wax,
+    List<ItemSummary> tracks, {
+    String? fallbackTitle,
+  }) {
+    final title =
+        tracks.firstOrNull?.album ?? fallbackTitle ?? l10n.musicAlbumTitle;
     // A compilation has an artist per track and no one artist of its
     // own; saying the first track's name would be a small lie, so it
     // says what it is instead.
@@ -65,11 +73,11 @@ class AlbumFacts {
       artist: switch (artists.length) {
         0 => null,
         1 => artists.first,
-        _ => 'Various artists',
+        _ => l10n.musicVariousArtists,
       },
       caption: [
-        '${tracks.length} ${tracks.length == 1 ? 'track' : 'tracks'}',
-        if (total > Duration.zero) formatRunningTime(total),
+        l10n.musicTrackCount(tracks.length),
+        if (total > Duration.zero) formatRunningTime(wax, total),
       ].join(' · '),
     );
   }
@@ -79,12 +87,18 @@ class AlbumFacts {
   final String caption;
 }
 
-/// A duration as a listener talks about an album's length.
-String formatRunningTime(Duration d) {
+/// A duration as a listener talks about an album's length. The design
+/// system's span words, elided a sleeve's way rather than a control's:
+/// `formatSpan` says "1 min" for nothing and collapses past ten hours.
+String formatRunningTime(WaxLocalizations l10n, Duration d) {
   final hours = d.inHours;
   final minutes = d.inMinutes.remainder(60);
-  if (hours == 0) return '$minutes min';
-  return minutes == 0 ? '$hours hr' : '$hours hr $minutes min';
+  if (hours == 0) return l10n.spanMinutes(minutes);
+  if (minutes == 0) return l10n.spanHours(hours);
+  return l10n.spanHoursMinutes(
+    l10n.spanHours(hours),
+    l10n.spanMinutes(minutes),
+  );
 }
 
 /// "FLAC 44.1 kHz", the one line that says what this release actually

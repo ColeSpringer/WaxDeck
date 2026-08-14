@@ -1,6 +1,8 @@
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
+
 /// Renders `<podcast:person>` credits as a titled list of names with their
 /// roles. A person carrying an [FeedPerson.href] opens it on tap; a portrait
 /// [FeedPerson.img] shows as an avatar, falling back to an initial.
@@ -21,7 +23,7 @@ class PodcastCredits extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(title: 'Credits'),
+        SectionHeader(title: context.l10n.podcastCredits),
         for (final person in persons)
           Builder(
             builder: (context) {

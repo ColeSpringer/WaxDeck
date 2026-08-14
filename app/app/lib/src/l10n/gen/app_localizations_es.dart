@@ -1547,6 +1547,244 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get bookBackToBeginning => 'De vuelta al principio';
+
+  @override
+  String bookByAuthors(String names) {
+    return 'De $names';
+  }
+
+  @override
+  String bookChapterFallback(int number) {
+    return 'Capítulo $number';
+  }
+
+  @override
+  String bookChaptersOverline(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count en este libro',
+      one: '1 en este libro',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get bookChaptersTitle => 'Capítulos';
+
+  @override
+  String get bookDownloadOffline => 'Descargar para escuchar sin conexión';
+
+  @override
+  String get bookEditMetadata => 'Editar los metadatos';
+
+  @override
+  String get bookEditionTitle => 'Sobre esta edición';
+
+  @override
+  String get bookFallbackTitle => 'Audiolibro';
+
+  @override
+  String get bookFieldAbridged => 'Abreviado';
+
+  @override
+  String get bookFieldAsin => 'ASIN';
+
+  @override
+  String get bookFieldEdition => 'Edición';
+
+  @override
+  String get bookFieldFiles => 'Archivos';
+
+  @override
+  String get bookFieldIsbn => 'ISBN';
+
+  @override
+  String get bookFieldPublisher => 'Editorial';
+
+  @override
+  String get bookLoadError => 'No se ha podido cargar este libro';
+
+  @override
+  String get bookMarkFinished => 'Marcar como terminado';
+
+  @override
+  String get bookMarkedFinished => 'Marcado como terminado';
+
+  @override
+  String get bookMerge => 'Unir en un solo archivo con capítulos';
+
+  @override
+  String get bookMore => 'Más';
+
+  @override
+  String get bookNo => 'No';
+
+  @override
+  String bookPartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count partes',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String bookPartsNote(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Este libro son $count archivos, reproducidos como una sola línea de tiempo. Las posiciones y los capítulos abarcan todos.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String bookPercent(int percent) {
+    return '$percent por ciento';
+  }
+
+  @override
+  String get bookPlay => 'Reproducir';
+
+  @override
+  String get bookPlaybackSettings => 'Ajustes de reproducción';
+
+  @override
+  String bookReadBy(String names) {
+    return 'Narrado por $names';
+  }
+
+  @override
+  String get bookResume => 'Reanudar';
+
+  @override
+  String bookResumeChapter(String chapter) {
+    return 'Reanudar en $chapter';
+  }
+
+  @override
+  String bookSeriesSequence(String number, String series) {
+    return 'Libro $number de $series';
+  }
+
+  @override
+  String bookSettingsSpeed(String speed) {
+    return 'Velocidad: $speed';
+  }
+
+  @override
+  String get bookSettingsSpeedLabel => 'Velocidad de reproducción';
+
+  @override
+  String get bookShareLink => 'Compartir un enlace';
+
+  @override
+  String get bookSplit => 'Dividir por capítulos';
+
+  @override
+  String get bookStartOver => 'Empezar de nuevo';
+
+  @override
+  String get bookToolQueued => 'En cola. Puedes seguirla en Tareas.';
+
+  @override
+  String get bookToolTasks => 'Tareas';
+
+  @override
+  String get bookTrimSilence => 'Recortar los silencios';
+
+  @override
+  String get bookTrimSilenceHelp => 'Acorta las pausas entre frases';
+
+  @override
+  String get bookUndo => 'Deshacer';
+
+  @override
+  String get bookVoiceBoost => 'Realce de voz';
+
+  @override
+  String get bookVoiceBoostHelp =>
+      'Hace que la voz destaque en un sitio ruidoso';
+
+  @override
+  String get bookYes => 'Sí';
+
+  @override
+  String booksAuthorChip(String name, int count) {
+    return '$name ($count)';
+  }
+
+  @override
+  String get booksContinueOverline => 'A medias';
+
+  @override
+  String get booksContinueTitle => 'Seguir escuchando';
+
+  @override
+  String get booksEmptyMessage =>
+      'Los libros van apareciendo aquí según los escanea la biblioteca. Apunta una biblioteca a tu carpeta de audiolibros y llegarán con sus capítulos.';
+
+  @override
+  String get booksEmptyTitle => 'Todavía no hay audiolibros';
+
+  @override
+  String get booksFilterAll => 'Todos';
+
+  @override
+  String booksFilterEmptyMessage(String filter) {
+    String _temp0 = intl.Intl.selectLogic(filter, {
+      'unfinished': 'Aquí no hay ningún libro sin terminar.',
+      'finished': 'Aquí no hay ningún libro terminado.',
+      'other': 'Aquí no coincide ningún libro.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get booksFilterFinished => 'Terminados';
+
+  @override
+  String get booksFilterUnfinished => 'Sin terminar';
+
+  @override
+  String get booksFinished => 'Terminado';
+
+  @override
+  String get booksLoadError => 'No se han podido cargar tus libros';
+
+  @override
+  String get booksMore => 'Más';
+
+  @override
+  String get booksNothingMatches => 'No coincide nada';
+
+  @override
+  String get booksShowAll => 'Ver todos los libros';
+
+  @override
+  String booksSortRow(String sort) {
+    String _temp0 = intl.Intl.selectLogic(sort, {
+      'recent': 'Ordenar por lo añadido recientemente',
+      'title': 'Ordenar por título',
+      'author': 'Ordenar por autor',
+      'other': 'Ordenar por $sort',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String booksTimeLeft(String time) {
+    return 'Quedan $time';
+  }
+
+  @override
+  String get booksTitle => 'Audiolibros';
+
+  @override
   String bytesB(int bytes) {
     final intl.NumberFormat bytesNumberFormat =
         intl.NumberFormat.decimalPatternDigits(
@@ -2255,6 +2493,67 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryBrowseSortMostFirst => 'Más primero';
 
   @override
+  String get libraryDeleteAction => 'Eliminar';
+
+  @override
+  String get libraryDeleteFilesLabel => 'Eliminar archivos';
+
+  @override
+  String get libraryDeleteFilesMenu => 'Eliminar archivos...';
+
+  @override
+  String get libraryDeleteModePermanent => 'Eliminar permanentemente';
+
+  @override
+  String get libraryDeleteModePermanentHelp => 'Se pierden para siempre';
+
+  @override
+  String get libraryDeleteModeTrash => 'Mover a la papelera';
+
+  @override
+  String get libraryDeleteModeTrashHelp =>
+      'Se pueden restaurar desde la pantalla de la papelera';
+
+  @override
+  String get libraryDeleteMore => 'Más';
+
+  @override
+  String libraryDeletePermanentDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se han eliminado $count archivos para siempre',
+      one: 'Se ha eliminado 1 archivo para siempre',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String libraryDeletePreview(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Esto elimina $count archivos, $size.',
+      one: 'Esto elimina 1 archivo, $size.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get libraryDeleteTitle => '¿Eliminar los archivos?';
+
+  @override
+  String libraryDeleteTrashDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se han movido $count archivos a la papelera',
+      one: 'Se ha movido 1 archivo a la papelera',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get libraryKindAlbum => 'álbum';
 
   @override
@@ -2481,6 +2780,467 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get metadataWriteBackWarning =>
       'Se ha guardado, pero algunos archivos han conservado sus etiquetas antiguas.';
+
+  @override
+  String musicAlbumDiscHeading(int disc) {
+    return 'DISCO $disc';
+  }
+
+  @override
+  String get musicAlbumEditDetails => 'Editar los detalles del álbum';
+
+  @override
+  String musicAlbumEditorFieldLocked(String field) {
+    return '$field está bloqueado';
+  }
+
+  @override
+  String get musicAlbumEditorForbiddenMessage =>
+      'Los códigos de barras, los sellos y los números de catálogo los comparte todo el que puede ver este álbum, así que el servidor los reserva a los administradores.';
+
+  @override
+  String get musicAlbumEditorForbiddenTitle =>
+      'Solo los administradores pueden editar una edición';
+
+  @override
+  String get musicAlbumEditorFromTags => 'De las etiquetas';
+
+  @override
+  String musicAlbumEditorSaveChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Guardar $count cambios',
+      one: 'Guardar 1 cambio',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicAlbumEditorSaved => 'Guardado';
+
+  @override
+  String get musicAlbumEditorSectionOverline => 'Qué es esta edición';
+
+  @override
+  String get musicAlbumEditorSectionTitle => 'Identidad de la edición';
+
+  @override
+  String get musicAlbumEditorWriteBackHelp =>
+      'Reescribe también las etiquetas correspondientes en todas las pistas de esta edición. El soporte no tiene forma de etiqueta y se queda aquí.';
+
+  @override
+  String get musicAlbumEmptyMessage =>
+      'Las pistas que había aquí se han movido o se han eliminado.';
+
+  @override
+  String get musicAlbumEmptyTitle => 'No hay nada en este álbum';
+
+  @override
+  String get musicAlbumLoadError => 'No se ha podido cargar este álbum';
+
+  @override
+  String get musicAlbumReleaseOverline => 'Esta edición';
+
+  @override
+  String get musicAlbumReleaseTitle => 'Edición';
+
+  @override
+  String get musicAlbumTitle => 'Álbum';
+
+  @override
+  String get musicAllMusicSource => 'Toda la música';
+
+  @override
+  String get musicArtistAppearsOn => 'Aparece en';
+
+  @override
+  String get musicArtistAudiobooksSection => 'Audiolibros';
+
+  @override
+  String get musicArtistEmptyMessage =>
+      'Los elementos que había aquí se han movido o se han eliminado.';
+
+  @override
+  String get musicArtistEmptyTitle => 'No hay nada de este artista';
+
+  @override
+  String musicArtistItemCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos',
+      one: '1 elemento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String musicArtistItemCountAtLeast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ elementos',
+      one: '1+ elemento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicArtistLoadError => 'No se ha podido cargar este artista';
+
+  @override
+  String musicArtistReleaseCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ediciones',
+      one: '1 edición',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicArtistReleases => 'Ediciones';
+
+  @override
+  String get musicArtistShowAll => 'Ver todo';
+
+  @override
+  String get musicArtistTracksSection => 'Pistas';
+
+  @override
+  String get musicArtistUnknownName => 'Artista';
+
+  @override
+  String musicBucketUnknownTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Sin artista',
+      'albums': 'Sin álbum',
+      'releaseGroups': 'Sin grupo de lanzamiento',
+      'genres': 'Sin género',
+      'years': 'Sin año',
+      'other': 'Desconocido',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicCommandPlay(String name) {
+    return 'Reproducir $name';
+  }
+
+  @override
+  String musicCommandShuffle(String name) {
+    return 'Reproducir $name en orden aleatorio';
+  }
+
+  @override
+  String musicDimensionSingularTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Artista',
+      'albums': 'Álbum',
+      'releaseGroups': 'Grupo de lanzamiento',
+      'genres': 'Género',
+      'years': 'Año',
+      'other': 'Música',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicDimensionTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Artistas',
+      'albums': 'Álbumes',
+      'releaseGroups': 'Grupos de lanzamiento',
+      'genres': 'Géneros',
+      'years': 'Años',
+      'other': 'Música',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get musicEmptyMessage =>
+      'Añade música a tu biblioteca y aparecerá aquí.';
+
+  @override
+  String get musicEmptyTitle => 'Todavía no hay música';
+
+  @override
+  String get musicFieldBarcode => 'Código de barras';
+
+  @override
+  String get musicFieldBarcodeHelp =>
+      'UPC o EAN, normalizado a dígitos al guardar';
+
+  @override
+  String get musicFieldCatalogNumber => 'Número de catálogo';
+
+  @override
+  String get musicFieldCatalogNumberHelp =>
+      'El número que el sello da a esta edición';
+
+  @override
+  String get musicFieldCountry => 'País';
+
+  @override
+  String get musicFieldCountryHelp =>
+      'Código de dos letras (GB), un alias alfa-3 o UK, o XW/XE';
+
+  @override
+  String get musicFieldLabel => 'Sello';
+
+  @override
+  String get musicFieldLabelHelp => 'El sello que la publicó';
+
+  @override
+  String get musicFieldMedia => 'Soporte';
+
+  @override
+  String get musicFieldMediaHelp =>
+      'En qué se editó: CD, 2xVinyl, Digital Media';
+
+  @override
+  String get musicHubAddToLibrary => 'Añadir a la biblioteca';
+
+  @override
+  String get musicHubEmptyMessage =>
+      'Apunta una biblioteca a tu música o suelta archivos aquí. Estas estanterías se llenan solas según crece la colección y vas escuchando.';
+
+  @override
+  String musicHubTileSpoken(String name, String count) {
+    return '$name, $count';
+  }
+
+  @override
+  String musicIndexCount(String dimension, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count artistas',
+      one: '1 artista',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count álbumes',
+      one: '1 álbum',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count grupos de lanzamiento',
+      one: '1 grupo de lanzamiento',
+    );
+    String _temp3 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count géneros',
+      one: '1 género',
+    );
+    String _temp4 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count años',
+      one: '1 año',
+    );
+    String _temp5 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count entradas',
+      one: '1 entrada',
+    );
+    String _temp6 = intl.Intl.selectLogic(dimension, {
+      'artists': '$_temp0',
+      'albums': '$_temp1',
+      'releaseGroups': '$_temp2',
+      'genres': '$_temp3',
+      'years': '$_temp4',
+      'other': '$_temp5',
+    });
+    return '$_temp6';
+  }
+
+  @override
+  String musicIndexCountAtLeast(String dimension, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ artistas',
+      one: '1+ artista',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ álbumes',
+      one: '1+ álbum',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ grupos de lanzamiento',
+      one: '1+ grupo de lanzamiento',
+    );
+    String _temp3 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ géneros',
+      one: '1+ género',
+    );
+    String _temp4 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ años',
+      one: '1+ año',
+    );
+    String _temp5 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ entradas',
+      one: '1+ entrada',
+    );
+    String _temp6 = intl.Intl.selectLogic(dimension, {
+      'artists': '$_temp0',
+      'albums': '$_temp1',
+      'releaseGroups': '$_temp2',
+      'genres': '$_temp3',
+      'years': '$_temp4',
+      'other': '$_temp5',
+    });
+    return '$_temp6';
+  }
+
+  @override
+  String musicIndexEmptyMessage(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Añade música a tu biblioteca y sus artistas aparecerán aquí.',
+      'albums': 'Añade música a tu biblioteca y sus álbumes aparecerán aquí.',
+      'releaseGroups':
+          'Añade música a tu biblioteca y sus grupos de lanzamiento aparecerán aquí.',
+      'genres': 'Añade música a tu biblioteca y sus géneros aparecerán aquí.',
+      'years': 'Añade música a tu biblioteca y sus años aparecerán aquí.',
+      'other': 'Añade música a tu biblioteca y aparecerá aquí.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicIndexEmptyTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Todavía no hay artistas',
+      'albums': 'Todavía no hay álbumes',
+      'releaseGroups': 'Todavía no hay grupos de lanzamiento',
+      'genres': 'Todavía no hay géneros',
+      'years': 'Todavía no hay años',
+      'other': 'Todavía no hay nada',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicIndexLoadError(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'No se han podido cargar los artistas',
+      'albums': 'No se han podido cargar los álbumes',
+      'releaseGroups': 'No se han podido cargar los grupos de lanzamiento',
+      'genres': 'No se han podido cargar los géneros',
+      'years': 'No se han podido cargar los años',
+      'other': 'No se ha podido cargar este índice',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicIndexStartOf(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Principio de los artistas',
+      'albums': 'Principio de los álbumes',
+      'releaseGroups': 'Principio de los grupos de lanzamiento',
+      'genres': 'Principio de los géneros',
+      'years': 'Principio de los años',
+      'other': 'Principio de la lista',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get musicListingBucketEmptyMessage =>
+      'Los elementos que había aquí se han movido o se han eliminado.';
+
+  @override
+  String musicListingBucketEmptyTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'No hay nada de este artista',
+      'albums': 'No hay nada en este álbum',
+      'releaseGroups': 'No hay nada en este grupo de lanzamiento',
+      'genres': 'No hay nada en este género',
+      'years': 'No hay nada de este año',
+      'other': 'Aquí no hay nada',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get musicListingLoadError => 'No se ha podido cargar esta lista';
+
+  @override
+  String get musicPlay => 'Reproducir';
+
+  @override
+  String get musicShelfMostPlayedOverline => 'A lo que vuelves';
+
+  @override
+  String get musicShelfMostPlayedTitle => 'Lo más reproducido';
+
+  @override
+  String get musicShelfRecentOverline => 'Nuevo en la colección';
+
+  @override
+  String get musicShelfRecentTitle => 'Añadido recientemente';
+
+  @override
+  String get musicShelfStarredOverline => 'Guardado a propósito';
+
+  @override
+  String get musicShelfStarredTitle => 'Favoritos';
+
+  @override
+  String get musicShuffle => 'Aleatorio';
+
+  @override
+  String get musicShuffleAllLabel =>
+      'Reproducir toda la música en orden aleatorio';
+
+  @override
+  String musicShuffleLabel(String name) {
+    return 'Reproducir $name en orden aleatorio';
+  }
+
+  @override
+  String get musicShuffleNothingPlayable =>
+      'Aquí no hay nada que se reproduzca en secuencia.';
+
+  @override
+  String get musicTitle => 'Música';
+
+  @override
+  String musicTrackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pistas',
+      one: '1 pista',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicTracksTitle => 'Pistas';
+
+  @override
+  String get musicVariousArtists => 'Varios artistas';
 
   @override
   String get notifBackupCompletedHelp =>
@@ -2840,7 +3600,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String playerTimerLeft(String time) {
-    return 'Queda $time';
+    return 'Quedan $time';
   }
 
   @override
@@ -2917,6 +3677,1394 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerVolume => 'Volumen';
 
   @override
+  String get playlistAddHint => 'Buscar en la biblioteca';
+
+  @override
+  String get playlistAddLabel => 'Añadir a esta lista';
+
+  @override
+  String get playlistAddNothing =>
+      'Aquí no hay nada que añadir. Los artistas y los álbumes no son miembros de una lista; sus pistas sí.';
+
+  @override
+  String get playlistAddToTitle => 'Añadir a la lista';
+
+  @override
+  String playlistAdded(String title) {
+    return 'Se ha añadido \"$title\"';
+  }
+
+  @override
+  String playlistAddedTo(String title, String playlist) {
+    return 'Se ha añadido \"$title\" a $playlist';
+  }
+
+  @override
+  String get playlistAlreadyIn => 'Ya está en esta lista';
+
+  @override
+  String playlistConflictBanner(String reason) {
+    return '$reason No se ha cambiado nada; esta es la lista tal como está.';
+  }
+
+  @override
+  String get playlistCopiedM3u => 'Lista copiada como M3U';
+
+  @override
+  String get playlistCopiedPortable => 'Lista portátil copiada';
+
+  @override
+  String get playlistCoverImage => 'Imagen de portada';
+
+  @override
+  String get playlistCoverReset =>
+      'Se ha vuelto a la portada hecha con los miembros';
+
+  @override
+  String playlistCoverUnreadable(String reason) {
+    return 'No se ha podido leer esa imagen: $reason';
+  }
+
+  @override
+  String get playlistCreateAction => 'Crear';
+
+  @override
+  String get playlistCreateNext => 'Siguiente';
+
+  @override
+  String get playlistDelete => 'Eliminar';
+
+  @override
+  String get playlistDeleteBody =>
+      'Desaparece para todo el mundo con quien esté compartida. Los elementos que contiene no se tocan.';
+
+  @override
+  String get playlistDeleteTitle => '¿Eliminar esta lista de reproducción?';
+
+  @override
+  String get playlistDragToReorder => 'Arrastra para reordenar';
+
+  @override
+  String get playlistEditRules => 'Editar las reglas';
+
+  @override
+  String get playlistEditableEmptyMessage =>
+      'Busca arriba para añadir la primera pista, o usa \"Añadir a una lista\" desde cualquier sitio donde esté sonando algo.';
+
+  @override
+  String get playlistEmptyTitle => 'Aquí no hay nada';
+
+  @override
+  String get playlistEntryRemove => 'Quitar de la lista';
+
+  @override
+  String get playlistExportCopy => 'Copiar';
+
+  @override
+  String get playlistExportM3u => 'Exportar como M3U';
+
+  @override
+  String get playlistExportPortable => 'Exportar en formato portátil';
+
+  @override
+  String get playlistFactsManual => 'Lista manual';
+
+  @override
+  String get playlistFactsSmart => 'Lista inteligente';
+
+  @override
+  String get playlistFallbackTitle => 'Lista de reproducción';
+
+  @override
+  String get playlistForeignEmptyMessage =>
+      'Quien la creó todavía no ha puesto nada en esta lista.';
+
+  @override
+  String get playlistImportComplete => 'Importación completada';
+
+  @override
+  String playlistImportCreated(String name, int resolved, int requested) {
+    return 'Se ha creado \"$name\" con $resolved de $requested entradas.';
+  }
+
+  @override
+  String get playlistImportHintExport => 'Pega aquí la lista exportada';
+
+  @override
+  String get playlistImportHintM3u => 'Pega aquí el archivo de la lista';
+
+  @override
+  String get playlistImportHintPortable =>
+      'Pega lo que copió Exportar en formato portátil';
+
+  @override
+  String get playlistImportHintText => 'Una pista por línea: artista - título';
+
+  @override
+  String get playlistImportMenu => 'Importar una lista';
+
+  @override
+  String get playlistImportMissingHeading => 'No están en la biblioteca:';
+
+  @override
+  String playlistImportMissingRow(String artist, String title) {
+    return '$artist - $title';
+  }
+
+  @override
+  String get playlistImportNeedsName =>
+      'Una importación de M3U necesita un nombre para la lista.';
+
+  @override
+  String get playlistImportNoEntries =>
+      'La lista portátil no lleva ninguna entrada';
+
+  @override
+  String get playlistImportNoMatches =>
+      'Ninguna entrada ha coincidido con la biblioteca, así que no se ha creado ninguna lista.';
+
+  @override
+  String get playlistImportNotJson => 'Esto no es el JSON portátil copiado';
+
+  @override
+  String get playlistImportNotPortable =>
+      'Esto no es una lista portátil (se esperaba un nombre y una lista refs)';
+
+  @override
+  String get playlistImportNothing => 'No se ha importado nada';
+
+  @override
+  String get playlistImportPasteFirst => 'Primero pega la lista.';
+
+  @override
+  String playlistImportPayloadLabel(String source) {
+    return 'Exportación de $source';
+  }
+
+  @override
+  String get playlistImportRun => 'Importar';
+
+  @override
+  String get playlistImportSourceAppleMusic => 'Apple Music';
+
+  @override
+  String get playlistImportSourceCsv => 'CSV genérico';
+
+  @override
+  String get playlistImportSourceM3u => 'Archivo M3U';
+
+  @override
+  String get playlistImportSourcePortable => 'JSON portátil';
+
+  @override
+  String get playlistImportSourceSpotify => 'CSV de Spotify';
+
+  @override
+  String get playlistImportSourceText => 'Lista de texto';
+
+  @override
+  String get playlistImportSourceYtMusic => 'CSV de YouTube Music';
+
+  @override
+  String playlistImportTitle(String source) {
+    return 'Importar desde $source';
+  }
+
+  @override
+  String playlistImportedAll(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '\"$name\" importada con $count elementos',
+      one: '\"$name\" importada con 1 elemento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playlistImportedPartial(String name, int matched, int unmatched) {
+    return '\"$name\" importada: $matched con coincidencia, $unmatched sin coincidencia en la biblioteca';
+  }
+
+  @override
+  String playlistItemCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos',
+      one: '1 elemento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistKindManual => 'Manual';
+
+  @override
+  String get playlistKindManualHelp =>
+      'Una lista manual guarda lo que pones en ella, en el orden en que lo pones.';
+
+  @override
+  String get playlistKindSmartHelp =>
+      'Una lista inteligente se mantiene sola: a continuación escribes las reglas y las evalúa cada vez que se abre.';
+
+  @override
+  String get playlistLoadError =>
+      'No se ha podido cargar esta lista de reproducción';
+
+  @override
+  String get playlistMakePrivate => 'Hacerla privada';
+
+  @override
+  String get playlistMore => 'Más';
+
+  @override
+  String get playlistMoveDown => 'Bajar';
+
+  @override
+  String get playlistMoveUp => 'Subir';
+
+  @override
+  String get playlistNameLabel => 'Nombre de la lista';
+
+  @override
+  String get playlistNameOptional => 'Nombre de la lista (opcional)';
+
+  @override
+  String get playlistNameRequired =>
+      'Una lista de reproducción necesita un nombre.';
+
+  @override
+  String get playlistNoManualLists =>
+      'Todavía no hay listas manuales. Crea una abajo y esto entrará directamente en ella.';
+
+  @override
+  String get playlistPlay => 'Reproducir';
+
+  @override
+  String get playlistRename => 'Cambiar el nombre';
+
+  @override
+  String get playlistRenameTitle => 'Cambiar el nombre de la lista';
+
+  @override
+  String get playlistResetCover => 'Restablecer la portada';
+
+  @override
+  String get playlistRuleAddCondition => 'Condición';
+
+  @override
+  String get playlistRuleAddGroup => 'Grupo';
+
+  @override
+  String get playlistRuleAddSort => 'Criterio de orden';
+
+  @override
+  String get playlistRuleAllOf => 'Todas';
+
+  @override
+  String get playlistRuleAnd => 'y';
+
+  @override
+  String get playlistRuleAnyOf => 'Cualquiera';
+
+  @override
+  String playlistRuleCondition(String field, String op, String value) {
+    return '$field $op $value';
+  }
+
+  @override
+  String playlistRuleConditionRange(
+    String field,
+    String op,
+    String low,
+    String high,
+  ) {
+    return '$field $op $low y $high';
+  }
+
+  @override
+  String playlistRuleConditionRelative(String field, String op, String days) {
+    return '$field $op $days';
+  }
+
+  @override
+  String playlistRuleConditionUnary(String field, String op) {
+    return '$field $op';
+  }
+
+  @override
+  String playlistRuleDayCount(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days días',
+      one: '1 día',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistRuleDaysSuffix => 'días';
+
+  @override
+  String playlistRuleEditorTitle(String name) {
+    return 'Reglas: $name';
+  }
+
+  @override
+  String get playlistRuleEmptyAll => 'Un grupo vacío coincide con todo.';
+
+  @override
+  String get playlistRuleEmptyAny => 'Un grupo vacío no coincide con nada.';
+
+  @override
+  String get playlistRuleEverything => 'Todo';
+
+  @override
+  String get playlistRuleFieldAddedAt => 'Fecha de incorporación';
+
+  @override
+  String get playlistRuleFieldAlbum => 'Álbum';
+
+  @override
+  String get playlistRuleFieldAlbumArtist => 'Artista del álbum';
+
+  @override
+  String get playlistRuleFieldAlbumBarcode => 'Código de barras del álbum';
+
+  @override
+  String get playlistRuleFieldAlbumCatalogNumber =>
+      'Número de catálogo del álbum';
+
+  @override
+  String get playlistRuleFieldAlbumCountry => 'País del álbum';
+
+  @override
+  String get playlistRuleFieldAlbumLabel => 'Sello del álbum';
+
+  @override
+  String get playlistRuleFieldAlbumMedia => 'Soporte del álbum';
+
+  @override
+  String get playlistRuleFieldArtist => 'Artista';
+
+  @override
+  String get playlistRuleFieldCodec => 'Códec';
+
+  @override
+  String get playlistRuleFieldContainer => 'Contenedor';
+
+  @override
+  String get playlistRuleFieldDiscNumber => 'Número de disco';
+
+  @override
+  String get playlistRuleFieldDurationMs => 'Duración en ms';
+
+  @override
+  String get playlistRuleFieldFinished => 'Terminado';
+
+  @override
+  String get playlistRuleFieldGenre => 'Género';
+
+  @override
+  String get playlistRuleFieldLastPlayedAt => 'Última reproducción';
+
+  @override
+  String get playlistRuleFieldMediaType => 'Tipo de medio';
+
+  @override
+  String get playlistRuleFieldPath => 'Ruta';
+
+  @override
+  String get playlistRuleFieldPicker => 'Campo';
+
+  @override
+  String get playlistRuleFieldPlayCount => 'Número de reproducciones';
+
+  @override
+  String get playlistRuleFieldPlayed => 'Reproducido';
+
+  @override
+  String get playlistRuleFieldPlaylist => 'Lista de reproducción';
+
+  @override
+  String get playlistRuleFieldPodcast => 'Pódcast';
+
+  @override
+  String get playlistRuleFieldPublishedAt => 'Fecha de publicación';
+
+  @override
+  String get playlistRuleFieldRating => 'Valoración';
+
+  @override
+  String get playlistRuleFieldSeason => 'Temporada';
+
+  @override
+  String get playlistRuleFieldSource => 'Origen';
+
+  @override
+  String get playlistRuleFieldStarred => 'Favorito';
+
+  @override
+  String get playlistRuleFieldStarredAt => 'Fecha de marcado como favorito';
+
+  @override
+  String get playlistRuleFieldState => 'Estado';
+
+  @override
+  String get playlistRuleFieldTitle => 'Título';
+
+  @override
+  String get playlistRuleFieldTrackNumber => 'Número de pista';
+
+  @override
+  String get playlistRuleFieldUpdatedAt => 'Fecha de actualización';
+
+  @override
+  String playlistRuleFieldWithCount(String field, int count) {
+    return '$field ($count)';
+  }
+
+  @override
+  String get playlistRuleFieldYear => 'Año';
+
+  @override
+  String get playlistRuleFirstMatches => 'Primeras coincidencias';
+
+  @override
+  String get playlistRuleHighestFirst => 'De mayor a menor';
+
+  @override
+  String get playlistRuleLimitAtRandom => 'al azar';
+
+  @override
+  String get playlistRuleLimitByCount => 'por número';
+
+  @override
+  String get playlistRuleLimitByMinutes => 'por minutos';
+
+  @override
+  String get playlistRuleLimitBySize => 'por tamaño';
+
+  @override
+  String playlistRuleLimitCount(int count) {
+    return 'Límite de $count';
+  }
+
+  @override
+  String get playlistRuleLimitHeading => 'Límite';
+
+  @override
+  String playlistRuleLimitMegabytes(int count) {
+    return 'Hasta $count MB';
+  }
+
+  @override
+  String playlistRuleLimitMinutes(int count) {
+    return 'Hasta $count minutos';
+  }
+
+  @override
+  String get playlistRuleLimitNoLimit => 'sin límite';
+
+  @override
+  String playlistRuleLimitRandom(int count) {
+    return '$count al azar';
+  }
+
+  @override
+  String get playlistRuleLimitRequired => 'obligatorio';
+
+  @override
+  String get playlistRuleLimitTake => 'Tomar';
+
+  @override
+  String get playlistRuleLowestFirst => 'De menor a mayor';
+
+  @override
+  String playlistRuleMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Coincide con $count elementos',
+      one: 'Coincide con 1 elemento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playlistRuleMediaType(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'music': 'música',
+      'podcast': 'pódcast',
+      'audiobook': 'audiolibro',
+      'other': '$kind',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistRuleNested => 'Condiciones anidadas';
+
+  @override
+  String get playlistRuleNo => 'no';
+
+  @override
+  String get playlistRuleNoMatches =>
+      'Todavía no hay nada en la biblioteca que responda a esto.';
+
+  @override
+  String get playlistRuleNoPlaylists => 'No hay listas que elegir';
+
+  @override
+  String get playlistRuleNoneOf => 'Ninguna';
+
+  @override
+  String get playlistRuleNot => 'No';
+
+  @override
+  String get playlistRuleNotAllOf => 'No todas';
+
+  @override
+  String playlistRuleNotPhrase(String phrase) {
+    return 'No: $phrase';
+  }
+
+  @override
+  String get playlistRuleNothing => 'Nada';
+
+  @override
+  String get playlistRuleOpAfter => 'es posterior a';
+
+  @override
+  String get playlistRuleOpBefore => 'es anterior a';
+
+  @override
+  String get playlistRuleOpContains => 'contiene';
+
+  @override
+  String get playlistRuleOpEndsWith => 'termina en';
+
+  @override
+  String get playlistRuleOpGt => 'es más de';
+
+  @override
+  String get playlistRuleOpGte => 'es como mínimo';
+
+  @override
+  String get playlistRuleOpInTheLast => 'es en los últimos';
+
+  @override
+  String get playlistRuleOpInTheRange => 'está entre';
+
+  @override
+  String get playlistRuleOpIs => 'es';
+
+  @override
+  String get playlistRuleOpIsMissing => 'no tiene valor';
+
+  @override
+  String get playlistRuleOpIsNot => 'no es';
+
+  @override
+  String get playlistRuleOpIsPresent => 'tiene valor';
+
+  @override
+  String get playlistRuleOpLt => 'es menos de';
+
+  @override
+  String get playlistRuleOpLte => 'es como máximo';
+
+  @override
+  String get playlistRuleOpNotInTheLast => 'no es en los últimos';
+
+  @override
+  String get playlistRuleOpPicker => 'Comparación';
+
+  @override
+  String get playlistRuleOpStartsWith => 'empieza por';
+
+  @override
+  String get playlistRuleOrderBy => 'Ordenar por';
+
+  @override
+  String get playlistRulePickDate => 'Elegir una fecha';
+
+  @override
+  String get playlistRulePinnedOrder =>
+      'Un presupuesto fijado establece su propio orden.';
+
+  @override
+  String get playlistRulePreviewPending => 'Vista previa pendiente';
+
+  @override
+  String get playlistRuleRandomOrder =>
+      'Un límite aleatorio establece su propio orden.';
+
+  @override
+  String get playlistRuleReadOnlyMessage =>
+      'Usa algo que este editor todavía no sabe dibujar, así que se muestra en lugar de editarse. Nada de lo que hay aquí la cambiará.';
+
+  @override
+  String get playlistRuleReadOnlyTitle =>
+      'Esta regla se abre en modo de solo lectura';
+
+  @override
+  String get playlistRuleRemoveCondition => 'Quitar la condición';
+
+  @override
+  String get playlistRuleRemoveGroup => 'Quitar el grupo';
+
+  @override
+  String get playlistRuleRemoveSort => 'Quitar el orden';
+
+  @override
+  String get playlistRuleSeedHelp =>
+      'Fija qué pistas elige el presupuesto, para que la lista sea la misma en la siguiente reconstrucción';
+
+  @override
+  String get playlistRuleSeedTitle => 'Mantener la misma selección cada vez';
+
+  @override
+  String playlistRuleSortBy(String field) {
+    return 'Por $field';
+  }
+
+  @override
+  String playlistRuleSortByDesc(String field) {
+    return 'Por $field, de mayor a menor';
+  }
+
+  @override
+  String playlistRuleTagField(String key) {
+    return 'Etiqueta: $key';
+  }
+
+  @override
+  String get playlistRuleUnavailableList => 'Lista no disponible';
+
+  @override
+  String get playlistRuleUnitItems => 'elementos';
+
+  @override
+  String get playlistRuleUnitMegabytes => 'MB';
+
+  @override
+  String get playlistRuleUnitMinutes => 'minutos';
+
+  @override
+  String get playlistRuleValuePicker => 'Valor';
+
+  @override
+  String get playlistRuleVocabularyError =>
+      'No se ha podido cargar el vocabulario de reglas';
+
+  @override
+  String get playlistRuleWorking => 'Calculando…';
+
+  @override
+  String get playlistRuleYes => 'sí';
+
+  @override
+  String get playlistRulesLive =>
+      'Se evalúan en el momento, cada vez que se abre esta lista.';
+
+  @override
+  String playlistRulesSpoken(String rules) {
+    return 'Reglas: $rules';
+  }
+
+  @override
+  String get playlistSetCover => 'Poner una portada';
+
+  @override
+  String get playlistShareLink => 'Compartir un enlace';
+
+  @override
+  String get playlistShareWithEveryone => 'Compartir con todo el mundo';
+
+  @override
+  String playlistSharedBy(String name) {
+    return 'Compartida por $name';
+  }
+
+  @override
+  String get playlistSharedByYou => 'Compartida por ti';
+
+  @override
+  String get playlistSharedHelp =>
+      'Cualquiera en este servidor puede verla y reproducirla';
+
+  @override
+  String get playlistSharedWithEveryone => 'Compartida con todo el mundo';
+
+  @override
+  String get playlistShuffle => 'Aleatorio';
+
+  @override
+  String get playlistSmart => 'Inteligente';
+
+  @override
+  String get playlistSmartEmptyMessage =>
+      'Ningún elemento de la biblioteca responde a estas reglas. Suaviza una y la lista se llenará sola.';
+
+  @override
+  String get playlistSmartEmptyTitle => 'Todavía no coincide nada';
+
+  @override
+  String get playlistsEmptyMessage =>
+      'Crea una, o añade una pista a una lista nueva desde cualquier sitio donde esté sonando. Una lista inteligente se escribe sola a partir de reglas y se mantiene al día según crece la biblioteca.';
+
+  @override
+  String get playlistsEmptyTitle => 'Todavía no hay listas de reproducción';
+
+  @override
+  String get playlistsLoadError =>
+      'No se han podido cargar tus listas de reproducción';
+
+  @override
+  String get playlistsLoadErrorSentence =>
+      'No se han podido cargar tus listas de reproducción.';
+
+  @override
+  String get playlistsNew => 'Nueva lista de reproducción';
+
+  @override
+  String get playlistsSectionShared => 'Compartidas con el servidor';
+
+  @override
+  String get playlistsSectionYours => 'Tuyas';
+
+  @override
+  String get playlistsTitle => 'Listas de reproducción';
+
+  @override
+  String get podcastAddSubscription => 'Añadir una suscripción';
+
+  @override
+  String get podcastAddToQueue => 'Añadir a la cola';
+
+  @override
+  String get podcastAddedToQueue => 'Añadido a la cola';
+
+  @override
+  String get podcastAutoDownload =>
+      'Descargar automáticamente los episodios nuevos';
+
+  @override
+  String get podcastAutoDownloadHelp =>
+      'Guarda en este dispositivo lo que va llegando según se actualiza el feed';
+
+  @override
+  String podcastBacklogReadError(String reason) {
+    return 'No se ha podido leer el historial pendiente. $reason';
+  }
+
+  @override
+  String podcastChapterFallback(int number) {
+    return 'Capítulo $number';
+  }
+
+  @override
+  String get podcastCheckForNew => 'Buscar episodios nuevos';
+
+  @override
+  String get podcastClearSelection => 'Borrar';
+
+  @override
+  String get podcastCredits => 'Créditos';
+
+  @override
+  String podcastCueSpoken(String text, String stamp) {
+    return '$text, $stamp';
+  }
+
+  @override
+  String podcastCueStartsAt(String kind, String stamp) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'chapter': 'El capítulo empieza en $stamp',
+      'clip': 'El fragmento empieza en $stamp',
+      'cue': 'La línea empieza en $stamp',
+      'other': 'Empieza en $stamp',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String podcastDirectoryEpisodes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count episodios',
+      one: '1 episodio',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastDownload => 'Descargar';
+
+  @override
+  String get podcastDownloadFailed => 'La descarga ha fallado';
+
+  @override
+  String podcastDurationHoursMinutes(int hours, int minutes) {
+    return '$hours h $minutes min';
+  }
+
+  @override
+  String podcastDurationMinutes(int minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String podcastEpisodeCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count episodios',
+      one: '1 episodio',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String podcastEpisodeDetails(String title) {
+    return 'Detalles de $title';
+  }
+
+  @override
+  String get podcastEpisodeFallbackTitle => 'Episodio';
+
+  @override
+  String get podcastEpisodeLoadError => 'No se ha podido cargar el episodio';
+
+  @override
+  String podcastEpisodeNumber(int episode) {
+    return 'E$episode';
+  }
+
+  @override
+  String get podcastEpisodesLoadError =>
+      'No se han podido cargar los episodios';
+
+  @override
+  String get podcastExcludeHelp =>
+      'Separado por comas. Prevalece cuando ambos coinciden.';
+
+  @override
+  String get podcastExcludeLabel => 'Nunca los títulos que contengan';
+
+  @override
+  String get podcastExplicit => 'Contenido explícito';
+
+  @override
+  String get podcastFeedUrlLabel => 'URL del feed o del canal';
+
+  @override
+  String podcastFetchEpisode(String title) {
+    return 'Descargar $title en el servidor';
+  }
+
+  @override
+  String podcastFetchFailed(String reason) {
+    return 'La última descarga ha fallado: $reason';
+  }
+
+  @override
+  String get podcastFetchToPlay => 'Descargar para reproducir';
+
+  @override
+  String get podcastFetchingBeforePlay =>
+      'Este feed no ha indicado audio para transmitir, así que el servidor lo está descargando. Se reproducirá en cuanto llegue.';
+
+  @override
+  String get podcastFetchingToServer => 'Descargando en el servidor';
+
+  @override
+  String podcastFileUnreadable(String reason) {
+    return 'No se ha podido leer ese archivo: $reason';
+  }
+
+  @override
+  String get podcastFilterActiveHelp =>
+      'Se compara solo con los títulos de los episodios, y solo con lo que va llegando: editar esto nunca vuelve a evaluar el historial pendiente ni elimina nada ya descargado.';
+
+  @override
+  String get podcastFilterAll => 'Todos';
+
+  @override
+  String get podcastFilterDownloaded => 'Descargados';
+
+  @override
+  String get podcastFilterInactiveHelp =>
+      'Activa la descarga automática para que esto tenga algún efecto.';
+
+  @override
+  String get podcastFilterUnplayed => 'Sin reproducir';
+
+  @override
+  String podcastFolderSpoken(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count programas',
+      one: '1 programa',
+    );
+    return '$name, $_temp0';
+  }
+
+  @override
+  String get podcastFollow => 'Seguir';
+
+  @override
+  String get podcastFollowing => 'Siguiendo';
+
+  @override
+  String podcastGoToShow(String name) {
+    return 'Ir a $name';
+  }
+
+  @override
+  String podcastHighlightFallback(int number) {
+    return 'Fragmento $number';
+  }
+
+  @override
+  String get podcastIncludeHelp =>
+      'Separado por comas. Si se deja vacío, se toman todos los episodios.';
+
+  @override
+  String get podcastIncludeLabel => 'Solo los títulos que contengan';
+
+  @override
+  String get podcastKeepFiles => 'Conservar los archivos';
+
+  @override
+  String get podcastLatestOverline => 'Nuevos';
+
+  @override
+  String podcastLatestPublished(String date) {
+    return 'Último: $date';
+  }
+
+  @override
+  String get podcastLatestTitle => 'Últimos episodios';
+
+  @override
+  String get podcastLoadMore => 'Cargar más episodios';
+
+  @override
+  String get podcastLoadingMore => 'Cargando...';
+
+  @override
+  String get podcastMarkOlderAll => 'Todos los episodios';
+
+  @override
+  String get podcastMarkOlderBody =>
+      'Borra los puntos de sin reproducir de un historial pendiente. Tus posiciones en los episodios que sí empezaste se sobrescriben, y no se elimina nada.';
+
+  @override
+  String get podcastMarkOlderMonth => 'De hace más de un mes';
+
+  @override
+  String get podcastMarkOlderPlayed =>
+      'Marcar los episodios antiguos como reproducidos';
+
+  @override
+  String podcastMarkOlderProgress(int done, int total) {
+    return '$done de $total';
+  }
+
+  @override
+  String podcastMarkOlderStopped(int count, String reason) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se ha parado tras $count. $reason',
+      one: 'Se ha parado tras 1. $reason',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastMarkOlderWeek => 'De hace más de una semana';
+
+  @override
+  String get podcastMarkPlayed => 'Marcar como reproducido';
+
+  @override
+  String get podcastMarkedAsPlayed => 'Marcado como reproducido';
+
+  @override
+  String podcastMarkedPlayedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count marcados como reproducidos',
+      one: '1 marcado como reproducido',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String podcastMarkedPlayedTotal(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count episodios marcados como reproducidos',
+      one: '1 episodio marcado como reproducido',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastMore => 'Más';
+
+  @override
+  String podcastNewEpisodes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count episodios nuevos',
+      one: '1 episodio nuevo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String podcastNoAudioCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count no tenían audio en el feed',
+      one: '1 no tenía audio en el feed',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastNoAudioInFeed => 'No hay audio en el feed';
+
+  @override
+  String get podcastNoAudioToQueue =>
+      'Este feed no ha indicado audio para ese episodio, así que no hay nada que poner en cola.';
+
+  @override
+  String podcastNoDurationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count no tenían duración que terminar',
+      one: '1 no tenía duración que terminar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastNoDurationToFinish =>
+      'Este feed no ha declarado ninguna duración, así que no hay una posición que signifique terminado. Descargar el episodio le da una.';
+
+  @override
+  String get podcastNoEpisodes => 'Todavía no hay episodios';
+
+  @override
+  String get podcastNoEpisodesMessage =>
+      'Este feed no ha publicado nada que este servidor pueda ver.';
+
+  @override
+  String get podcastNoNewEpisodes => 'No hay episodios nuevos';
+
+  @override
+  String get podcastNothingMatches => 'No coincide nada';
+
+  @override
+  String get podcastNothingMatchesMessage =>
+      'Amplía el filtro, o borra la búsqueda, para ver el resto.';
+
+  @override
+  String get podcastNothingMatchesYet => 'Todavía no coincide nada';
+
+  @override
+  String get podcastNothingMatchesYetMessage =>
+      'El filtro se aplica a los episodios cargados hasta ahora, y este programa tiene más.';
+
+  @override
+  String get podcastOpenEpisodePage => 'Abrir la página del episodio';
+
+  @override
+  String get podcastOpmlCopied => 'Suscripciones copiadas como OPML';
+
+  @override
+  String get podcastOpmlCopy => 'Copiar';
+
+  @override
+  String get podcastOpmlExport => 'Exportar como OPML';
+
+  @override
+  String get podcastOpmlImport => 'Importar OPML';
+
+  @override
+  String get podcastOpmlImported => 'Suscripciones importadas';
+
+  @override
+  String get podcastOpmlPickerLabel => 'OPML';
+
+  @override
+  String get podcastOtherShows => 'Otros programas';
+
+  @override
+  String get podcastPlay => 'Reproducir';
+
+  @override
+  String get podcastPlayed => 'Reproducido';
+
+  @override
+  String podcastQueuedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count añadidos a la cola',
+      one: '1 añadido a la cola',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastQueuedForDownload => 'En cola para descargar';
+
+  @override
+  String podcastQueuedForDownloadCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count en cola para descargar',
+      one: '1 en cola para descargar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String podcastQueuedWithFailure(int count, String reason) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count en cola. $reason',
+      one: '1 en cola. $reason',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastReadingBacklog => 'Leyendo el historial pendiente...';
+
+  @override
+  String get podcastRefreshPaused =>
+      'La actualización programada está en pausa para este feed tras varios fallos seguidos. Buscar episodios nuevos la vuelve a activar.';
+
+  @override
+  String get podcastRemoveDownload => 'Quitar la descarga';
+
+  @override
+  String podcastRemoveEpisode(String title) {
+    return 'Quitar $title del servidor';
+  }
+
+  @override
+  String get podcastRemoveFiles => 'Eliminar los archivos';
+
+  @override
+  String get podcastRemovedFromServer =>
+      'Quitado del servidor; tu progreso se conserva';
+
+  @override
+  String podcastResume(String stamp) {
+    return 'Reanudar en $stamp';
+  }
+
+  @override
+  String get podcastRetentionHelp =>
+      'Si se deja vacío se usa el valor predeterminado del servidor; 0 los conserva todos';
+
+  @override
+  String get podcastRetentionLabel => 'Episodios que conservar';
+
+  @override
+  String get podcastSearchShow => 'Buscar en este programa';
+
+  @override
+  String podcastSeasonChip(int season) {
+    return 'Temporada $season';
+  }
+
+  @override
+  String podcastSeasonEpisode(int season, int episode) {
+    return 'T$season E$episode';
+  }
+
+  @override
+  String get podcastSectionChapters => 'Capítulos';
+
+  @override
+  String get podcastSectionHighlights => 'Fragmentos destacados';
+
+  @override
+  String get podcastSectionNotes => 'Notas';
+
+  @override
+  String get podcastSectionPeople => 'Personas';
+
+  @override
+  String podcastSelectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count seleccionados',
+      one: '1 seleccionado',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastSettingsOverline => 'Este programa';
+
+  @override
+  String podcastSettingsSpeed(String speed) {
+    return 'Velocidad: $speed';
+  }
+
+  @override
+  String get podcastSettingsSpeedLabel => 'Velocidad de reproducción';
+
+  @override
+  String get podcastSettingsTitle => 'Ajustes de la suscripción';
+
+  @override
+  String get podcastShare => 'Compartir';
+
+  @override
+  String get podcastShowFallbackTitle => 'Programa';
+
+  @override
+  String get podcastShowLessNotes => 'Ver menos';
+
+  @override
+  String get podcastShowLoadError => 'No se ha podido cargar el programa';
+
+  @override
+  String get podcastShowMore => 'Más opciones para este programa';
+
+  @override
+  String get podcastShowMoreNotes => 'Ver más';
+
+  @override
+  String get podcastSkipIntro => 'Saltar la intro (segundos)';
+
+  @override
+  String get podcastSkipOutro => 'Saltar el cierre (segundos)';
+
+  @override
+  String podcastSortRow(String sort) {
+    String _temp0 = intl.Intl.selectLogic(sort, {
+      'recent': 'Ordenar por lo más reciente',
+      'title': 'Ordenar por título',
+      'added': 'Ordenar por fecha de incorporación',
+      'other': 'Ordenar por $sort',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastSourceLabel => 'Fuente';
+
+  @override
+  String get podcastSourceRss => 'RSS';
+
+  @override
+  String get podcastSourceYouTube => 'YouTube';
+
+  @override
+  String get podcastStop => 'Parar';
+
+  @override
+  String get podcastSubscribeAction => 'Suscribirse';
+
+  @override
+  String get podcastSupportShow => 'Apoyar este programa';
+
+  @override
+  String podcastTimeLeft(String time) {
+    return 'Quedan $time';
+  }
+
+  @override
+  String get podcastTranscript => 'Transcripción';
+
+  @override
+  String get podcastTranscriptError =>
+      'No se ha podido cargar la transcripción';
+
+  @override
+  String podcastTranscriptSpeaker(String speaker, String text) {
+    return '$speaker: $text';
+  }
+
+  @override
+  String get podcastTrimSilence => 'Recortar los silencios';
+
+  @override
+  String get podcastTrimSilenceHelp =>
+      'Necesita que el episodio esté descargado: los silencios se calculan a partir del audio que guarda este servidor';
+
+  @override
+  String get podcastUnfollowBody =>
+      'Hay episodios descargados en el servidor. ¿Quieres eliminar también esos archivos? Los archivos eliminados van a la papelera, y tu progreso de escucha se conserva en cualquier caso. Si otra persona está suscrita a este programa, los archivos se quedan igualmente.';
+
+  @override
+  String get podcastUnfollowTitle => 'Dejar de seguir';
+
+  @override
+  String podcastUnplayedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sin reproducir',
+      one: '1 sin reproducir',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastUpNextOverline => 'A medio escuchar';
+
+  @override
+  String get podcastUpNextTitle => 'A continuación';
+
+  @override
+  String get podcastVoiceBoost => 'Realce de voz';
+
+  @override
+  String get podcastVoiceBoostHelp =>
+      'Hace que la voz destaque en un sitio ruidoso';
+
+  @override
+  String get podcastsEmptyAction => 'Añadir un programa';
+
+  @override
+  String get podcastsEmptyMessage =>
+      'Sigue un programa y sus episodios nuevos aparecerán aquí según los publique el feed.';
+
+  @override
+  String get podcastsEmptyTitle => 'Todavía no hay programas';
+
+  @override
+  String get podcastsLoadError => 'No se han podido cargar tus programas';
+
+  @override
+  String get podcastsTitle => 'Pódcasts';
+
+  @override
   String queueAddedMany(int count) {
     return 'Se han añadido $count pistas a la cola';
   }
@@ -2977,6 +5125,9 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get queuePlayingFromLibrary => 'Reproduciendo de tu biblioteca';
+
+  @override
   String queuePreviously(int count) {
     return 'ANTERIORES ($count)';
   }
@@ -3031,6 +5182,225 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get queueUndo => 'Deshacer';
+
+  @override
+  String get radioAddByUrl => 'Por URL';
+
+  @override
+  String get radioAddConfirm => 'Añadir';
+
+  @override
+  String get radioAddSearch => 'Buscar';
+
+  @override
+  String get radioAddStation => 'Añadir una emisora';
+
+  @override
+  String radioAddedStation(String name) {
+    return 'Se ha añadido $name';
+  }
+
+  @override
+  String radioCouldNotStop(String name) {
+    return 'No se ha podido detener $name';
+  }
+
+  @override
+  String radioCouldNotTune(String name) {
+    return 'No se ha podido sintonizar $name';
+  }
+
+  @override
+  String radioDialFull(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'El dial admite $count emisoras. Quita una para hacer sitio.',
+      one: 'El dial admite 1 emisora. Quita una para hacer sitio.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String radioDirectoryBitrate(String codec, int bitrate) {
+    return '$codec $bitrate kbps';
+  }
+
+  @override
+  String get radioDirectoryStream => 'stream';
+
+  @override
+  String get radioEditStation => 'Editar la emisora';
+
+  @override
+  String get radioEmptyAction => 'Añadir una emisora';
+
+  @override
+  String get radioEmptyMessage =>
+      'Busca en el directorio para añadir la primera, o pega la URL de un stream si ya tienes una.';
+
+  @override
+  String get radioEmptyTitle => 'Todavía no hay emisoras';
+
+  @override
+  String get radioFewerOptions => 'Menos opciones';
+
+  @override
+  String get radioHowToAdd => 'Cómo añadirla';
+
+  @override
+  String get radioLoadError => 'No se han podido cargar las emisoras';
+
+  @override
+  String get radioLogoOptional => 'URL del logotipo (opcional)';
+
+  @override
+  String get radioMoreOptions => 'Nombre, sitio web y logotipo';
+
+  @override
+  String get radioNameHint =>
+      'Se toma de la dirección del stream si se deja en blanco';
+
+  @override
+  String get radioNeedsName => 'Una emisora necesita un nombre.';
+
+  @override
+  String get radioNeedsUrl => 'Una emisora necesita la URL de un stream.';
+
+  @override
+  String get radioNoMatches => 'Sin coincidencias';
+
+  @override
+  String radioPin(String name) {
+    return 'Fijar $name en el dial';
+  }
+
+  @override
+  String get radioPlaying => 'En antena';
+
+  @override
+  String get radioRemoveStation => 'Quitar la emisora';
+
+  @override
+  String get radioSaveChanges => 'Guardar los cambios';
+
+  @override
+  String get radioSavedAcquire => 'Conseguirla desde una URL';
+
+  @override
+  String get radioSavedAcquireHelp =>
+      'Descarga una copia que hayas encontrado; llegará a revisión';
+
+  @override
+  String get radioSavedDoorSubtitle =>
+      'Canciones que oíste en antena y quieres buscar';
+
+  @override
+  String get radioSavedEmptyMessage =>
+      'Toca el corazón mientras suena una emisora y la canción que anunció aparecerá aquí, con una forma de buscarla.';
+
+  @override
+  String get radioSavedEmptyTitle => 'Todavía no hay nada guardado';
+
+  @override
+  String radioSavedFind(String title) {
+    return 'Buscar \"$title\" en la biblioteca';
+  }
+
+  @override
+  String radioSavedForget(String title) {
+    return 'Olvidar \"$title\"';
+  }
+
+  @override
+  String radioSavedHeardOn(String station) {
+    return 'Escuchada en $station';
+  }
+
+  @override
+  String get radioSavedIdentify =>
+      'Identificar una entrada de revisión como esta canción';
+
+  @override
+  String get radioSavedIdentifyHelp =>
+      'Pasa su nombre a la búsqueda de una entrada pendiente';
+
+  @override
+  String get radioSavedIdentifyOverline =>
+      'Pistas sueltas pendientes en la cola de revisión';
+
+  @override
+  String radioSavedIdentifyTitle(String title) {
+    return 'Identificar como \"$title\"';
+  }
+
+  @override
+  String get radioSavedInLibrary => 'Ya está en tu biblioteca';
+
+  @override
+  String get radioSavedLoadError =>
+      'No se han podido cargar tus canciones guardadas';
+
+  @override
+  String get radioSavedNoPending =>
+      'No hay pistas sueltas pendientes a las que dar nombre. Consigue primero la canción desde una URL y aparecerá aquí mientras espera revisión.';
+
+  @override
+  String get radioSavedReviewError =>
+      'No se ha podido cargar la cola de revisión.';
+
+  @override
+  String get radioSavedTitle => 'Guardado de la radio';
+
+  @override
+  String get radioSavedUntitled => 'Sin título';
+
+  @override
+  String radioSavedWays(String title) {
+    return 'Formas de conseguir \"$title\"';
+  }
+
+  @override
+  String get radioSearchDirectory => 'Buscar en el directorio';
+
+  @override
+  String radioSearchFailedHint(String reason) {
+    return '$reason Pega en su lugar la URL de un stream con \"Por URL\".';
+  }
+
+  @override
+  String radioStationMore(String name) {
+    return 'Más opciones para $name';
+  }
+
+  @override
+  String get radioStationName => 'Nombre de la emisora';
+
+  @override
+  String get radioStationWebsite => 'Sitio web de la emisora';
+
+  @override
+  String get radioStreamUrl => 'URL del stream';
+
+  @override
+  String get radioStreamUrlHint => 'https://example.com/stream';
+
+  @override
+  String get radioTitle => 'Radio';
+
+  @override
+  String get radioTuningIn => 'Sintonizando';
+
+  @override
+  String radioUnpin(String name) {
+    return 'Quitar $name del dial';
+  }
+
+  @override
+  String get radioVolume => 'Volumen';
+
+  @override
+  String get radioWebsiteOptional => 'Sitio web (opcional)';
 
   @override
   String relDaysAgo(int days) {

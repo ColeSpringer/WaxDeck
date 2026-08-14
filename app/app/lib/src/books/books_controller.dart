@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 
@@ -14,30 +15,29 @@ final bookDetailProvider = FutureProvider.autoDispose
 enum BookSort {
   /// What the catalog added most recently, which is where a listener
   /// looks for the book they just imported.
-  recent('Recently added'),
-  title('Title'),
-  author('Author');
-
-  const BookSort(this.label);
-
-  final String label;
+  recent,
+  title,
+  author;
 
   /// The enum's own `name` is the wire value the menu reports back, so a
-  /// miss is a programming error rather than input.
+  /// miss is a programming error rather than input. What each order is
+  /// called is copy, and lives in the row that draws it.
   static BookSort byName(String name) => values.asNameMap()[name] ?? recent;
 }
 
 /// Which books the grid shows.
 enum BookFilter {
-  all('All'),
-  unfinished('Unfinished'),
-  finished('Finished');
-
-  const BookFilter(this.label);
-
-  final String label;
+  all,
+  unfinished,
+  finished;
 
   static BookFilter byName(String name) => values.asNameMap()[name] ?? all;
+
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    BookFilter.all => l10n.booksFilterAll,
+    BookFilter.unfinished => l10n.booksFilterUnfinished,
+    BookFilter.finished => l10n.booksFilterFinished,
+  };
 }
 
 /// What the hub is showing, and in what order.

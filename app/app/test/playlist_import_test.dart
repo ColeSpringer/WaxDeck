@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/playlists/playlist_import.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
@@ -283,8 +284,17 @@ void main() {
   });
 
   group('the portable parser', () {
+    // The table comes in as an argument: what it refuses with is copy,
+    // and this is not widget code.
+    late AppLocalizations l10n;
+
+    setUpAll(() async {
+      l10n = await AppLocalizations.delegate.load(const Locale('en'));
+    });
+
     test('keeps every ref the export carried', () {
       final (name, refs) = parsePortablePlaylistJson(
+        l10n,
         '{"name":"Mix","refs":[{"kind":"track","title":"One"},'
         '{"kind":"track","title":"Two","isrc":"X"}]}',
       );
@@ -295,7 +305,7 @@ void main() {
 
     test('refuses an export with nothing in it', () {
       expect(
-        () => parsePortablePlaylistJson('{"name":"Empty","refs":[]}'),
+        () => parsePortablePlaylistJson(l10n, '{"name":"Empty","refs":[]}'),
         throwsA(isA<FormatException>()),
       );
     });

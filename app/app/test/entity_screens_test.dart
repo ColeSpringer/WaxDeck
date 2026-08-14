@@ -585,13 +585,18 @@ void main() {
       expect(codecChipLabel(detail()), isEmpty);
     });
 
-    test('a running time reads the way an album sleeve does', () {
-      expect(formatRunningTime(const Duration(minutes: 41)), '41 min');
-      expect(formatRunningTime(const Duration(hours: 1)), '1 hr');
+    test('a running time reads the way an album sleeve does', () async {
+      final wax = await WaxLocalizations.delegate.load(const Locale('en'));
+      expect(formatRunningTime(wax, const Duration(minutes: 41)), '41 min');
+      expect(formatRunningTime(wax, const Duration(hours: 1)), '1 hr');
       expect(
-        formatRunningTime(const Duration(hours: 1, minutes: 12)),
+        formatRunningTime(wax, const Duration(hours: 1, minutes: 12)),
         '1 hr 12 min',
       );
+      // The design system's own words, elided the sleeve's way: the
+      // control's span would say "1 min" here and collapse past ten.
+      expect(formatRunningTime(wax, Duration.zero), '0 min');
+      expect(formatRunningTime(wax, const Duration(hours: 12)), '12 hr');
     });
   });
 }

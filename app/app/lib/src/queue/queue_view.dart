@@ -19,15 +19,16 @@ import 'queue_item.dart';
 import 'queue_state.dart';
 import 'session_history.dart';
 
-/// Where a queue came from, as a sentence.
-///
-/// Null where naming the source would say nothing: one item tapped on
-/// its own is its own provenance, and a queue that predates the field
-/// has none to give.
+/// Where a queue came from, as a sentence. Null where naming it would
+/// say nothing: one item tapped on its own is its own provenance.
 String? queueProvenance(AppLocalizations l10n, QueueSource source) {
-  if (source.label.isEmpty) return null;
   return switch (source.kind) {
     QueueSourceKind.single || QueueSourceKind.unknown => null,
+    // Worded from the kind rather than the label: the whole library has
+    // no name of its own, and the label is stored with the queue, so it
+    // outlives the language it was built in.
+    QueueSourceKind.library => l10n.queuePlayingFromLibrary,
+    _ when source.label.isEmpty => null,
     _ => l10n.queuePlayingFrom(source.label),
   };
 }

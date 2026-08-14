@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../search/search_chrome.dart';
 import '../settings/client_prefs.dart';
@@ -34,13 +35,14 @@ class PlaylistsScreen extends ConsumerWidget {
         if (!pl.isOwner) pl,
     ];
     final split = mine.isNotEmpty && shared.isNotEmpty;
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: 'Playlists',
+      title: l10n.playlistsTitle,
       actions: <Widget>[
         WaxIconButton(
           glyph: WaxIcons.add,
-          label: 'New playlist',
+          label: l10n.playlistsNew,
           semanticsId: SemanticsIds.playlistAdd,
           onPressed: () => unawaited(showCreatePlaylistDialog(context)),
         ),
@@ -52,13 +54,10 @@ class PlaylistsScreen extends ConsumerWidget {
           AsyncData() when all.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'No playlists yet',
-              message:
-                  'Make one, or add a track to a new list from anywhere '
-                  'it is playing. A smart playlist writes itself from '
-                  'rules and keeps up as the library grows.',
+              title: l10n.playlistsEmptyTitle,
+              message: l10n.playlistsEmptyMessage,
               glyph: WaxIcons.playlists,
-              actionLabel: 'New playlist',
+              actionLabel: l10n.playlistsNew,
               onAction: () => unawaited(showCreatePlaylistDialog(context)),
             ),
           ),
@@ -66,10 +65,8 @@ class PlaylistsScreen extends ConsumerWidget {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load your playlists',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.playlistsLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(playlistsProvider),
             ),
           ),
@@ -100,18 +97,21 @@ class _Sections extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     return SliverPadding(
       padding: sizeClass.gutter,
       sliver: SliverMainAxisGroup(
         slivers: <Widget>[
           if (split)
-            const SliverToBoxAdapter(child: SectionHeader(title: 'Yours')),
+            SliverToBoxAdapter(
+              child: SectionHeader(title: l10n.playlistsSectionYours),
+            ),
           if (mine.isNotEmpty) _PlaylistGrid(playlists: mine),
           if (split)
-            const SliverToBoxAdapter(
+            SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.only(top: WaxSpace.s24),
-                child: SectionHeader(title: 'Shared with the server'),
+                padding: const EdgeInsets.only(top: WaxSpace.s24),
+                child: SectionHeader(title: l10n.playlistsSectionShared),
               ),
             ),
           if (shared.isNotEmpty) _PlaylistGrid(playlists: shared),
@@ -130,6 +130,7 @@ class _PlaylistGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.l10n;
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         final grid = MediaCard.gridFor(
@@ -149,10 +150,10 @@ class _PlaylistGrid extends ConsumerWidget {
             return MediaCard(
               data: MediaTileData(
                 title: playlist.name,
-                subtitle: playlistByline(playlist),
-                trailingText: playlistSize(playlist),
+                subtitle: playlistByline(l10n, playlist),
+                trailingText: playlistSize(l10n, playlist),
                 artwork: waxArtwork(store, playlist.artUrl),
-                badge: playlist.isSmart ? 'Smart' : null,
+                badge: playlist.isSmart ? l10n.playlistSmart : null,
                 semanticsId: SemanticsIds.playlist(playlist.pid),
               ),
               width: grid.width,
@@ -168,15 +169,16 @@ class _PlaylistGrid extends ConsumerWidget {
 
 /// Whose playlist this is, where that is not the person looking. Null on
 /// your own, where it would be a column of noise.
-String? playlistByline(Playlist playlist) {
-  if (playlist.isOwner) return playlist.isShared ? 'Shared by you' : null;
-  return 'Shared by ${playlist.ownerName}';
+String? playlistByline(AppLocalizations l10n, Playlist playlist) {
+  if (playlist.isOwner) {
+    return playlist.isShared ? l10n.playlistSharedByYou : null;
+  }
+  return l10n.playlistSharedBy(playlist.ownerName);
 }
 
 /// How much is in a playlist. A smart list's count is omitted from list
 /// pages, so its card carries no number rather than a wrong one.
-String? playlistSize(Playlist playlist) {
+String? playlistSize(AppLocalizations l10n, Playlist playlist) {
   final count = playlist.itemCount;
-  if (count == null) return null;
-  return count == 1 ? '1 item' : '$count items';
+  return count == null ? null : l10n.playlistItemCount(count);
 }

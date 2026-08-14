@@ -5,29 +5,48 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import 'playlists_controller.dart';
 
 /// Where a pasted playlist comes from. M3U rides its own endpoint; the
 /// others go through the export-import endpoint and its resolve ladder.
 enum PlaylistImportSource {
-  m3u('m3u', 'M3U file', 'Paste the playlist file here'),
-  spotify('spotify', 'Spotify CSV', 'Paste the exported playlist here'),
-  applemusic('applemusic', 'Apple Music', 'Paste the exported playlist here'),
-  ytmusic('ytmusic', 'YouTube Music CSV', 'Paste the exported playlist here'),
-  csv('csv', 'Generic CSV', 'Paste the exported playlist here'),
-  text('text', 'Text list', 'One track a line: artist - title'),
-  portable('portable', 'Portable JSON', 'Paste what Export portable copied');
+  m3u('m3u'),
+  spotify('spotify'),
+  applemusic('applemusic'),
+  ytmusic('ytmusic'),
+  csv('csv'),
+  text('text'),
+  portable('portable');
 
-  const PlaylistImportSource(this.wire, this.label, this.hint);
+  const PlaylistImportSource(this.wire);
 
   /// The `source` value the import endpoint takes.
   final String wire;
-  final String label;
+
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    PlaylistImportSource.m3u => l10n.playlistImportSourceM3u,
+    PlaylistImportSource.spotify => l10n.playlistImportSourceSpotify,
+    PlaylistImportSource.applemusic => l10n.playlistImportSourceAppleMusic,
+    PlaylistImportSource.ytmusic => l10n.playlistImportSourceYtMusic,
+    PlaylistImportSource.csv => l10n.playlistImportSourceCsv,
+    PlaylistImportSource.text => l10n.playlistImportSourceText,
+    PlaylistImportSource.portable => l10n.playlistImportSourcePortable,
+  };
 
   /// What the paste box says it wants; the shapes differ too much for
-  /// one sentence to cover them.
-  final String hint;
+  /// one sentence to cover them. The four service exports share one,
+  /// because for those it is the same sentence.
+  String hintOf(AppLocalizations l10n) => switch (this) {
+    PlaylistImportSource.m3u => l10n.playlistImportHintM3u,
+    PlaylistImportSource.spotify ||
+    PlaylistImportSource.applemusic ||
+    PlaylistImportSource.ytmusic ||
+    PlaylistImportSource.csv => l10n.playlistImportHintExport,
+    PlaylistImportSource.text => l10n.playlistImportHintText,
+    PlaylistImportSource.portable => l10n.playlistImportHintPortable,
+  };
 
   /// Only M3U insists on a name: the rest carry one.
   bool get needsName => this == PlaylistImportSource.m3u;
@@ -42,13 +61,13 @@ class PlaylistImportMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) => WaxMenuButton<PlaylistImportSource>(
     glyph: WaxIcons.downloads,
-    label: 'Import playlist',
+    label: context.l10n.playlistImportMenu,
     semanticsId: SemanticsIds.playlistImport,
     items: <WaxMenuItem<PlaylistImportSource>>[
       for (final source in PlaylistImportSource.values)
         WaxMenuItem<PlaylistImportSource>(
           value: source,
-          label: source.label,
+          label: source.labelOf(context.l10n),
           semanticsId: SemanticsIds.playlistImportSource(source.wire),
         ),
     ],
@@ -61,20 +80,21 @@ class PlaylistImportMenu extends StatelessWidget {
   );
 }
 
-/// Parses the JSON that "Export portable" copied on another server
-/// back into refs. The shape mirrors the exporter exactly; anything
-/// else throws [FormatException] for the dialog to show.
-(String?, List<PortableRef>) parsePortablePlaylistJson(String text) {
+/// Parses the JSON that "Export portable" copied on another server back
+/// into refs. Anything else throws [FormatException] for the dialog to
+/// show, which is why the table comes in as an argument.
+(String?, List<PortableRef>) parsePortablePlaylistJson(
+  AppLocalizations l10n,
+  String text,
+) {
   final Object? decoded;
   try {
     decoded = jsonDecode(text);
   } on FormatException {
-    throw const FormatException('This is not the copied portable JSON');
+    throw FormatException(l10n.playlistImportNotJson);
   }
   if (decoded is! Map<String, Object?> || decoded['refs'] is! List) {
-    throw const FormatException(
-      'This is not a portable playlist (expected a name and a refs list)',
-    );
+    throw FormatException(l10n.playlistImportNotPortable);
   }
   final refs = <PortableRef>[];
   for (final entry in decoded['refs'] as List) {
@@ -114,7 +134,7 @@ class PlaylistImportMenu extends StatelessWidget {
     );
   }
   if (refs.isEmpty) {
-    throw const FormatException('The portable playlist carries no entries');
+    throw FormatException(l10n.playlistImportNoEntries);
   }
   final name = decoded['name'];
   return (name is String && name.isNotEmpty ? name : null, refs);
@@ -156,12 +176,13 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
     if (_busy) return;
     final name = _name.text.trim();
     final payload = _payload.text;
+    final l10n = context.l10n;
     if (payload.trim().isEmpty) {
-      setState(() => _error = 'Paste the playlist first.');
+      setState(() => _error = l10n.playlistImportPasteFirst);
       return;
     }
     if (_source.needsName && name.isEmpty) {
-      setState(() => _error = 'An M3U import needs a name for the playlist.');
+      setState(() => _error = l10n.playlistImportNeedsName);
       return;
     }
     setState(() {
@@ -187,11 +208,15 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
             SnackBar(
               content: Text(
                 result.unmatched == 0
-                    ? 'Imported "${result.playlist.name}" with '
-                          '${result.matched} items'
-                    : 'Imported "${result.playlist.name}": '
-                          '${result.matched} matched, ${result.unmatched} '
-                          'not in the library',
+                    ? l10n.playlistImportedAll(
+                        result.playlist.name,
+                        result.matched,
+                      )
+                    : l10n.playlistImportedPartial(
+                        result.playlist.name,
+                        result.matched,
+                        result.unmatched,
+                      ),
               ),
             ),
           );
@@ -202,7 +227,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
       List<PortableRef>? refs;
       if (_source == PlaylistImportSource.portable) {
         try {
-          (exportedName, refs) = parsePortablePlaylistJson(payload);
+          (exportedName, refs) = parsePortablePlaylistJson(l10n, payload);
         } on FormatException catch (e) {
           setState(() {
             _error = e.message;
@@ -228,7 +253,8 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
         builder: (_) => _ImportReportDialog(result: result),
       );
     } on WaxDeckApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      // What was pasted is what was refused, so the server's own words.
+      if (mounted) setState(() => _error = explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -237,8 +263,10 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    final source = _source.labelOf(l10n);
     return AlertDialog(
-      title: Text('Import from ${_source.label}'),
+      title: Text(l10n.playlistImportTitle(source)),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -248,8 +276,8 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
             children: <Widget>[
               WaxTextField(
                 label: _source.needsName
-                    ? 'Playlist name'
-                    : 'Playlist name (optional)',
+                    ? l10n.playlistNameLabel
+                    : l10n.playlistNameOptional,
                 controller: _name,
                 autofocus: _source.needsName,
                 semanticsId: SemanticsIds.playlistImportName,
@@ -259,14 +287,14 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
               // the house field has no multiline shape.
               Semantics(
                 identifier: SemanticsIds.playlistImportPayload,
-                label: '${_source.label} export',
+                label: l10n.playlistImportPayloadLabel(source),
                 child: TextField(
                   controller: _payload,
                   autofocus: !_source.needsName,
                   maxLines: 8,
                   style: WaxType.monoData.copyWith(color: colors.textPrimary),
                   decoration: InputDecoration(
-                    hintText: _source.hint,
+                    hintText: _source.hintOf(l10n),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -285,12 +313,12 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
       ),
       actions: <Widget>[
         WaxButton(
-          label: 'Cancel',
+          label: l10n.commonCancel,
           kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
         ),
         WaxButton(
-          label: 'Import',
+          label: l10n.playlistImportRun,
           semanticsId: SemanticsIds.playlistImportRun,
           onPressed: _busy ? null : () => unawaited(_import()),
         ),
@@ -309,11 +337,14 @@ class _ImportReportDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final made = result.playlistPid != null;
     return AlertDialog(
       title: Semantics(
         identifier: SemanticsIds.playlistImportReport,
-        child: Text(made ? 'Import complete' : 'Nothing imported'),
+        child: Text(
+          made ? l10n.playlistImportComplete : l10n.playlistImportNothing,
+        ),
       ),
       content: SizedBox(
         width: 480,
@@ -323,16 +354,18 @@ class _ImportReportDialog extends StatelessWidget {
           children: <Widget>[
             Text(
               made
-                  ? 'Created "${result.name}" with ${result.resolved} of '
-                        '${result.requested} entries.'
-                  : 'No entries matched the library, so no playlist '
-                        'was created.',
+                  ? l10n.playlistImportCreated(
+                      result.name,
+                      result.resolved,
+                      result.requested,
+                    )
+                  : l10n.playlistImportNoMatches,
               style: WaxType.body.copyWith(color: colors.textPrimary),
             ),
             if (result.missing.isNotEmpty) ...<Widget>[
               const SizedBox(height: WaxSpace.s12),
               Text(
-                'Not in the library:',
+                l10n.playlistImportMissingHeading,
                 style: WaxType.overline.copyWith(color: colors.textTertiary),
               ),
               const SizedBox(height: WaxSpace.s4),
@@ -350,7 +383,10 @@ class _ImportReportDialog extends StatelessWidget {
                           child: Text(
                             miss.artist == null
                                 ? miss.title
-                                : '${miss.artist} - ${miss.title}',
+                                : l10n.playlistImportMissingRow(
+                                    miss.artist!,
+                                    miss.title,
+                                  ),
                             style: WaxType.bodySmall.copyWith(
                               color: colors.textSecondary,
                             ),
@@ -365,7 +401,10 @@ class _ImportReportDialog extends StatelessWidget {
         ),
       ),
       actions: <Widget>[
-        WaxButton(label: 'Close', onPressed: () => Navigator.of(context).pop()),
+        WaxButton(
+          label: l10n.commonClose,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ],
     );
   }

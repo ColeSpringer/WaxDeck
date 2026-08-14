@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'playlists_controller.dart';
@@ -68,7 +69,7 @@ class _NamePromptDialogState extends State<_NamePromptDialog> {
     content: SizedBox(
       width: 360,
       child: WaxTextField(
-        label: 'Playlist name',
+        label: context.l10n.playlistNameLabel,
         controller: _controller,
         autofocus: true,
         textInputAction: TextInputAction.done,
@@ -78,7 +79,7 @@ class _NamePromptDialogState extends State<_NamePromptDialog> {
     ),
     actions: <Widget>[
       WaxButton(
-        label: 'Cancel',
+        label: context.l10n.commonCancel,
         kind: WaxButtonKind.text,
         onPressed: () => Navigator.of(context).pop(),
       ),
@@ -115,8 +116,9 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
   Future<void> _create() async {
     if (_busy) return;
     final name = _name.text.trim();
+    final l10n = context.l10n;
     if (name.isEmpty) {
-      setState(() => _error = 'A playlist needs a name.');
+      setState(() => _error = l10n.playlistNameRequired);
       return;
     }
     final navigator = Navigator.of(context);
@@ -147,7 +149,9 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
       navigator.pop();
       router.go(WaxRoute.playlist(created.pid));
     } on WaxDeckApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      // The server's own words: a name it refused is a value somebody
+      // just typed, and only it knows what was wrong with it.
+      if (mounted) setState(() => _error = explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -156,8 +160,9 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return AlertDialog(
-      title: const Text('New playlist'),
+      title: Text(l10n.playlistsNew),
       content: SizedBox(
         width: 400,
         child: Column(
@@ -165,7 +170,7 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             WaxTextField(
-              label: 'Playlist name',
+              label: l10n.playlistNameLabel,
               controller: _name,
               autofocus: true,
               textInputAction: TextInputAction.done,
@@ -179,12 +184,12 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
               chips: <WaxFilterChip>[
                 WaxFilterChip(
                   name: 'static',
-                  label: 'Manual',
+                  label: l10n.playlistKindManual,
                   semanticsId: SemanticsIds.playlistCreateKind('static'),
                 ),
                 WaxFilterChip(
                   name: 'smart',
-                  label: 'Smart',
+                  label: l10n.playlistSmart,
                   semanticsId: SemanticsIds.playlistCreateKind('smart'),
                 ),
               ],
@@ -193,19 +198,17 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
             const SizedBox(height: WaxSpace.s4),
             Text(
               _kind == 'smart'
-                  ? 'A smart playlist keeps itself: you write the rules '
-                        'next and it evaluates them every time it is opened.'
-                  : 'A manual playlist holds what you put in it, in the '
-                        'order you put it.',
+                  ? l10n.playlistKindSmartHelp
+                  : l10n.playlistKindManualHelp,
               style: WaxType.caption.copyWith(color: colors.textTertiary),
             ),
             WaxSettingRow(
               key: const Key(SemanticsIds.playlistCreateShared),
-              title: 'Shared with everyone',
-              help: 'Anyone on this server can see and play it',
+              title: l10n.playlistSharedWithEveryone,
+              help: l10n.playlistSharedHelp,
               control: WaxSwitch(
                 value: _shared,
-                label: 'Shared with everyone',
+                label: l10n.playlistSharedWithEveryone,
                 semanticsId: SemanticsIds.playlistCreateShared,
                 onChanged: (v) => setState(() => _shared = v),
               ),
@@ -220,12 +223,14 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
       ),
       actions: <Widget>[
         WaxButton(
-          label: 'Cancel',
+          label: l10n.commonCancel,
           kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
         ),
         WaxButton(
-          label: _kind == 'smart' ? 'Next' : 'Create',
+          label: _kind == 'smart'
+              ? l10n.playlistCreateNext
+              : l10n.playlistCreateAction,
           semanticsId: SemanticsIds.playlistCreateConfirm,
           onPressed: _busy ? null : () => unawaited(_create()),
         ),

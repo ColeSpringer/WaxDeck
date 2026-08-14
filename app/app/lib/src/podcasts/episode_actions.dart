@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
@@ -79,24 +80,23 @@ class EpisodeActions {
   /// Appends the episode to whatever is playing.
   void enqueue(BuildContext context, EpisodeSummary episode) {
     if (!playable(episode)) {
-      _report(
-        context,
-        'This feed named no audio for that episode, so there is nothing '
-        'to queue.',
-      );
+      _report(context, context.l10n.podcastNoAudioToQueue);
       return;
     }
     ref.read(nowPlayingProvider.notifier).enqueue(<ItemSummary>[episode]);
-    _report(context, 'Added to the queue');
+    _report(context, context.l10n.podcastAddedToQueue);
   }
 
   /// Queues a server-side fetch.
   Future<void> fetch(BuildContext context, String pid) async {
+    // Read before the await, like every other table this class needs:
+    // the request outlives the frame that asked for it.
+    final l10n = context.l10n;
     try {
       await _fetch(pid);
-      if (context.mounted) _report(context, 'Fetching to server');
+      if (context.mounted) _report(context, l10n.podcastFetchingToServer);
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(context, e.message);
+      if (context.mounted) _report(context, explainError(l10n, e));
     }
   }
 
@@ -108,21 +108,19 @@ class EpisodeActions {
     BuildContext context,
     EpisodeSummary episode,
   ) async {
+    final l10n = context.l10n;
     try {
       await _fetch(episode.pid);
       if (context.mounted) {
-        _report(
-          context,
-          'This feed named no audio to stream, so the server is fetching '
-          'it. It plays once that lands.',
-        );
+        _report(context, l10n.podcastFetchingBeforePlay);
       }
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(context, e.message);
+      if (context.mounted) _report(context, explainError(l10n, e));
     }
   }
 
   Future<void> removeDownload(BuildContext context, String pid) async {
+    final l10n = context.l10n;
     try {
       if (showPid != null) {
         await ref
@@ -133,10 +131,10 @@ class EpisodeActions {
       }
       ref.invalidate(episodeDetailProvider(pid));
       if (context.mounted) {
-        _report(context, 'Removed from server; your progress is kept');
+        _report(context, l10n.podcastRemovedFromServer);
       }
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(context, e.message);
+      if (context.mounted) _report(context, explainError(l10n, e));
     }
   }
 
@@ -148,6 +146,7 @@ class EpisodeActions {
     EpisodeSummary episode,
     String progressKey,
   ) async {
+    final l10n = context.l10n;
     try {
       final done = await ref
           .read(playProgressProvider(progressKey).notifier)
@@ -155,13 +154,10 @@ class EpisodeActions {
       if (!context.mounted) return;
       _report(
         context,
-        done
-            ? 'Marked as played'
-            : 'This feed declared no duration, so there is no position that '
-                  'means finished. Fetching the episode gives it one.',
+        done ? l10n.podcastMarkedAsPlayed : l10n.podcastNoDurationToFinish,
       );
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(context, e.message);
+      if (context.mounted) _report(context, explainError(l10n, e));
     }
   }
 

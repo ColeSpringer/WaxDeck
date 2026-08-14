@@ -161,7 +161,9 @@ void main() {
       repository,
     );
 
-    await tester.tap(find.text('Most items'));
+    // The settings picker's own words for this FacetSort: one order, one
+    // name, so a stored default and the chip that arrives selected agree.
+    await tester.tap(find.text('Most first'));
     await tester.pumpAndSettle();
 
     // A separate listing with a cursor space of its own - the server
@@ -318,9 +320,12 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
     await tester.pumpAndSettle();
 
-    // The button is fire-and-forget, so a failure it swallowed would be
-    // a control that does nothing at all.
-    expect(find.text('the catalog is busy'), findsOneWidget);
+    // The button is fire-and-forget, so a swallowed failure would be a
+    // control that does nothing.
+    expect(
+      find.text('The server ran into a problem it could not handle.'),
+      findsOneWidget,
+    );
     expect(container.read(queueControllerProvider).isEmpty, isTrue);
   });
 

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import 'podcasts_controller.dart';
 
@@ -105,6 +106,7 @@ class _SubscriptionSettingsSheetState
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final l10n = context.l10n;
     final include = _splitTerms(_include.text);
     final exclude = _splitTerms(_exclude.text);
     final settings = SubscriptionSettings(
@@ -136,9 +138,11 @@ class _SubscriptionSettingsSheetState
       // underneath with it.
       if (mounted) navigator.pop();
     } on WaxDeckApiException catch (e) {
+      // The fields carry values somebody just typed, so a refusal of one
+      // keeps the server's own words about it.
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -147,6 +151,7 @@ class _SubscriptionSettingsSheetState
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Padding(
       padding: EdgeInsets.only(
         left: WaxSpace.s16,
@@ -159,46 +164,47 @@ class _SubscriptionSettingsSheetState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const SectionHeader(
-              title: 'Subscription settings',
-              overline: 'This show',
+            SectionHeader(
+              title: l10n.podcastSettingsTitle,
+              overline: l10n.podcastSettingsOverline,
             ),
             Text(
-              'Speed ${_speed.toStringAsFixed(2)}x',
+              // Through the same formatter every other rate readout
+              // goes through, so the decimal separator is the locale's
+              // and the trailing zeros go.
+              l10n.podcastSettingsSpeed(l10n.formatSpeed(_speed)),
               style: WaxType.label.copyWith(color: colors.textSecondary),
             ),
             Semantics(
               identifier: SemanticsIds.podcastSettingsSpeed,
-              label: 'Playback speed',
+              label: l10n.podcastSettingsSpeedLabel,
               child: Slider(
                 key: const Key(SemanticsIds.podcastSettingsSpeed),
                 value: _speed,
                 min: 0.5,
                 max: 3.5,
                 divisions: 60,
-                label: _speed.toStringAsFixed(2),
+                label: l10n.formatSpeed(_speed),
                 onChanged: (v) => setState(() => _speed = v),
               ),
             ),
             WaxSettingRow(
               key: const Key('podcast-settings-trim'),
-              title: 'Trim silence',
-              help:
-                  'Needs the episode fetched: silence is mapped from the '
-                  'audio this server holds',
+              title: l10n.podcastTrimSilence,
+              help: l10n.podcastTrimSilenceHelp,
               control: WaxSwitch(
                 value: _trimSilence,
-                label: 'Trim silence',
+                label: l10n.podcastTrimSilence,
                 onChanged: (v) => setState(() => _trimSilence = v),
               ),
             ),
             WaxSettingRow(
               key: const Key('podcast-settings-boost'),
-              title: 'Voice boost',
-              help: 'Lifts speech over a noisy room',
+              title: l10n.podcastVoiceBoost,
+              help: l10n.podcastVoiceBoostHelp,
               control: WaxSwitch(
                 value: _voiceBoost,
-                label: 'Voice boost',
+                label: l10n.podcastVoiceBoost,
                 onChanged: (v) => setState(() => _voiceBoost = v),
               ),
             ),
@@ -209,8 +215,8 @@ class _SubscriptionSettingsSheetState
                     key: const Key('podcast-settings-skip-intro'),
                     controller: _skipIntro,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Skip intro (seconds)',
+                    decoration: InputDecoration(
+                      labelText: l10n.podcastSkipIntro,
                     ),
                   ),
                 ),
@@ -220,8 +226,8 @@ class _SubscriptionSettingsSheetState
                     key: const Key('podcast-settings-skip-outro'),
                     controller: _skipOutro,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Skip outro (seconds)',
+                    decoration: InputDecoration(
+                      labelText: l10n.podcastSkipOutro,
                     ),
                   ),
                 ),
@@ -230,11 +236,11 @@ class _SubscriptionSettingsSheetState
             const SizedBox(height: WaxSpace.s16),
             WaxSettingRow(
               key: const Key('podcast-settings-autodownload'),
-              title: 'Auto-download new episodes',
-              help: 'Keeps arrivals on this device as the feed refreshes',
+              title: l10n.podcastAutoDownload,
+              help: l10n.podcastAutoDownloadHelp,
               control: WaxSwitch(
                 value: _autoDownload,
-                label: 'Auto-download new episodes',
+                label: l10n.podcastAutoDownload,
                 onChanged: (v) => setState(() => _autoDownload = v),
               ),
             ),
@@ -243,10 +249,8 @@ class _SubscriptionSettingsSheetState
             // sitting there looking active with the switch off.
             Text(
               _autoDownload
-                  ? 'Matched against episode titles only, and against new '
-                        'arrivals only: editing this never re-evaluates the '
-                        'backlog or removes anything already fetched.'
-                  : 'Turn auto-download on for these to do anything.',
+                  ? l10n.podcastFilterActiveHelp
+                  : l10n.podcastFilterInactiveHelp,
               style: WaxType.caption.copyWith(color: colors.textTertiary),
             ),
             const SizedBox(height: WaxSpace.s8),
@@ -257,9 +261,9 @@ class _SubscriptionSettingsSheetState
                 key: const Key(SemanticsIds.podcastSettingsInclude),
                 controller: _include,
                 enabled: _autoDownload,
-                decoration: const InputDecoration(
-                  labelText: 'Only titles containing',
-                  helperText: 'Comma separated. Empty takes every episode.',
+                decoration: InputDecoration(
+                  labelText: l10n.podcastIncludeLabel,
+                  helperText: l10n.podcastIncludeHelp,
                 ),
               ),
             ),
@@ -271,9 +275,9 @@ class _SubscriptionSettingsSheetState
                 key: const Key(SemanticsIds.podcastSettingsExclude),
                 controller: _exclude,
                 enabled: _autoDownload,
-                decoration: const InputDecoration(
-                  labelText: 'Never titles containing',
-                  helperText: 'Comma separated. Wins where both match.',
+                decoration: InputDecoration(
+                  labelText: l10n.podcastExcludeLabel,
+                  helperText: l10n.podcastExcludeHelp,
                 ),
               ),
             ),
@@ -285,9 +289,9 @@ class _SubscriptionSettingsSheetState
                 key: const Key(SemanticsIds.podcastSettingsRetention),
                 controller: _retention,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Episodes to keep',
-                  helperText: 'Empty uses the server default; 0 keeps all',
+                decoration: InputDecoration(
+                  labelText: l10n.podcastRetentionLabel,
+                  helperText: l10n.podcastRetentionHelp,
                 ),
               ),
             ),
@@ -295,7 +299,7 @@ class _SubscriptionSettingsSheetState
             Align(
               alignment: Alignment.centerRight,
               child: WaxButton(
-                label: 'Save',
+                label: l10n.commonSave,
                 semanticsId: SemanticsIds.podcastSettingsSave,
                 onPressed: _busy ? null : _save,
               ),

@@ -330,13 +330,16 @@ class _FavoriteButton extends ConsumerWidget {
   /// put one, so it goes where the hub's does.
   Future<void> _pin(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final refusal = await ref
         .read(radioFavoritesProvider.notifier)
         .toggle(station.pid);
     if (refusal == null) return;
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(refusal)));
+      ..showSnackBar(
+        SnackBar(content: Text(radioPinRefusalMessage(l10n, refusal))),
+      );
   }
 }
 

@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
@@ -48,13 +49,14 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
   }
 
   Future<void> _remove(RadioSavedSong song) async {
+    final l10n = context.l10n;
     try {
       await ref.read(radioSavedProvider.notifier).remove(song.pid);
     } on WaxDeckApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
@@ -62,22 +64,21 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
   Widget build(BuildContext context) {
     final saved = ref.watch(radioSavedProvider);
     final rows = saved.value?.songs ?? const <RadioSavedSong>[];
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: 'Saved from the radio',
+      title: l10n.radioSavedTitle,
       largeTitle: false,
       controller: _scroll,
       semanticsId: SemanticsIds.radioSaved,
       onBack: () => context.leave(fallback: WaxRoute.radio),
       slivers: <Widget>[
         switch (saved) {
-          AsyncData() when rows.isEmpty => const SliverFillRemaining(
+          AsyncData() when rows.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'Nothing saved yet',
-              message:
-                  'Tap the heart while a station is playing and the song it '
-                  'named turns up here, with a way to search for it.',
+              title: l10n.radioSavedEmptyTitle,
+              message: l10n.radioSavedEmptyMessage,
               glyph: WaxIcons.heart,
             ),
           ),
@@ -85,10 +86,8 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load your saved songs',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.radioSavedLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(radioSavedProvider),
             ),
           ),
@@ -120,17 +119,19 @@ class _SavedList extends ConsumerWidget {
   /// subtitle rather than the trailing slot, which is unclipped and
   /// reserved for a timecode - a caption of this length there pushes the
   /// row's own controls off the end of it.
-  static String _caption(RadioSavedSong song) => <String>[
-    if (song.artist != null) song.artist!,
-    song.stationName,
-    if (song.inLibraryPid != null) 'In your library now',
-  ].join(' · ');
+  static String _caption(AppLocalizations l10n, RadioSavedSong song) =>
+      <String>[
+        if (song.artist != null) song.artist!,
+        song.stationName,
+        if (song.inLibraryPid != null) l10n.radioSavedInLibrary,
+      ].join(' · ');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final store = ref.watch(artworkStoreProvider);
     final repository = ref.watch(repositoryProvider);
+    final l10n = context.l10n;
     return SliverPadding(
       padding: sizeClass.gutter,
       sliver: SliverList.builder(
@@ -152,7 +153,7 @@ class _SavedList extends ConsumerWidget {
           return MediaListRow(
             data: MediaTileData(
               title: title,
-              subtitle: _caption(song),
+              subtitle: _caption(l10n, song),
               // The snapshot taken when the heart was tapped, or the
               // monogram - which is the ordinary state rather than a
               // loading one, since most announcements have no cover on
@@ -170,19 +171,19 @@ class _SavedList extends ConsumerWidget {
             actions: <Widget>[
               WaxIconButton(
                 glyph: WaxIcons.search,
-                label: 'Find "$title" in the library',
+                label: l10n.radioSavedFind(title),
                 semanticsId: SemanticsIds.radioSavedFind(song.pid),
                 onPressed: () => context.go(WaxRoute.searchFor(query)),
               ),
               WaxIconButton(
                 glyph: WaxIcons.more,
-                label: 'Ways to get "$title"',
+                label: l10n.radioSavedWays(title),
                 semanticsId: SemanticsIds.radioSavedMore(song.pid),
                 onPressed: () => showRadioSavedMenu(context, ref, song),
               ),
               WaxIconButton(
                 glyph: WaxIcons.close,
-                label: 'Forget "$title"',
+                label: l10n.radioSavedForget(title),
                 semanticsId: SemanticsIds.radioSavedRemove(song.pid),
                 onPressed: () => onRemove(song),
               ),

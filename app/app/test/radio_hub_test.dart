@@ -276,10 +276,13 @@ void main() {
     await tester.tap(_byId(SemanticsIds.radioFavorite('rs-1')));
     await tester.pumpAndSettle();
 
-    // The star goes back, and says why: the discarded future turned a
-    // refused write into a zone error with nothing shown.
+    // The star goes back, and says why - worded from the code, since a
+    // pid is this client's doing rather than something anybody typed.
     expect(container.read(radioFavoritesProvider), isEmpty);
-    expect(find.text('not a station pid'), findsOneWidget);
+    expect(
+      find.text('That request was not something the server could act on.'),
+      findsOneWidget,
+    );
   });
 
   // PUT replaces the whole document and the server takes the last writer,

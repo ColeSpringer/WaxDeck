@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../home/pin_action.dart';
+import '../l10n/l10n.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../radio/add_station.dart';
 import '../radio/radio_screen.dart';
@@ -344,7 +345,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           itemCount: value!.length,
           itemBuilder: (context, index) => WaxOptionRow(
             title: value[index].name,
-            subtitle: describeDirectoryEntry(value[index]),
+            subtitle: describeDirectoryEntry(context.l10n, value[index]),
             glyph: WaxIcons.radio,
             semanticsId: SemanticsIds.searchHit('radio', index),
             trailing: WaxButton(
@@ -646,7 +647,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           itemCount: value!.length,
           itemBuilder: (context, index) => WaxOptionRow(
             title: value[index].name,
-            subtitle: describePodcastDirectoryEntry(value[index]),
+            subtitle: describePodcastDirectoryEntry(context.l10n, value[index]),
             glyph: WaxIcons.podcasts,
             semanticsId: SemanticsIds.searchHit('podcastDirectory', index),
             trailing: WaxButton(

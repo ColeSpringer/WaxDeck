@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 
 /// Whether a failed read is worth trying again.
@@ -47,46 +48,47 @@ final albumCurationProvider = FutureProvider.autoDispose
     }, retry: _retryUnlessRefused);
 
 /// The five edition columns, in the order the editor and the header both
-/// present them, with the label each carries and the wire name the entity
-/// edit takes.
-///
-/// One list, because the read surface and the write surface have to agree
-/// about what an album's identity *is*: a field drawn on the header and
-/// missing from the editor is a value nobody can correct.
-const albumIdentityFields = <({String name, String label, String help})>[
-  (
-    name: 'barcode',
-    label: 'Barcode',
-    help: 'UPC or EAN, normalized to digits on save',
-  ),
-  (name: 'label', label: 'Label', help: 'The issuing label'),
-  (
-    name: 'catalog_number',
-    label: 'Catalog number',
-    help: "The label's number for this release",
-  ),
-  (
-    name: 'media',
-    label: 'Media',
-    help: 'What it was pressed on - CD, 2xVinyl, Digital Media',
-  ),
-  (
-    name: 'country',
-    label: 'Country',
-    help: 'Two-letter code (GB), an alpha-3 or UK alias, or XW/XE',
-  ),
-];
+/// present them. One enumeration, because a field drawn on the header
+/// and missing from the editor is a value nobody can correct.
+enum AlbumIdentityField {
+  barcode('barcode'),
+  label('label'),
+  catalogNumber('catalog_number'),
+  media('media'),
+  country('country');
+
+  const AlbumIdentityField(this.wire);
+
+  /// The field name the entity-edit endpoint takes.
+  final String wire;
+
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    AlbumIdentityField.barcode => l10n.musicFieldBarcode,
+    AlbumIdentityField.label => l10n.musicFieldLabel,
+    AlbumIdentityField.catalogNumber => l10n.musicFieldCatalogNumber,
+    AlbumIdentityField.media => l10n.musicFieldMedia,
+    AlbumIdentityField.country => l10n.musicFieldCountry,
+  };
+
+  String helpOf(AppLocalizations l10n) => switch (this) {
+    AlbumIdentityField.barcode => l10n.musicFieldBarcodeHelp,
+    AlbumIdentityField.label => l10n.musicFieldLabelHelp,
+    AlbumIdentityField.catalogNumber => l10n.musicFieldCatalogNumberHelp,
+    AlbumIdentityField.media => l10n.musicFieldMediaHelp,
+    AlbumIdentityField.country => l10n.musicFieldCountryHelp,
+  };
+}
 
 /// This album's stored value for one identity field.
 ///
 /// Displayed verbatim, never re-validated here: a scan stores the tag as
 /// written and an edit normalizes, so the two disagree by policy and the
 /// screen showing "US & Europe" is showing the truth.
-String albumIdentityValue(AlbumDetail album, String field) => switch (field) {
-  'barcode' => album.barcode ?? '',
-  'label' => album.label ?? '',
-  'catalog_number' => album.catalogNumber ?? '',
-  'media' => album.media ?? '',
-  'country' => album.country ?? '',
-  _ => '',
-};
+String albumIdentityValue(AlbumDetail album, AlbumIdentityField field) =>
+    switch (field) {
+      AlbumIdentityField.barcode => album.barcode ?? '',
+      AlbumIdentityField.label => album.label ?? '',
+      AlbumIdentityField.catalogNumber => album.catalogNumber ?? '',
+      AlbumIdentityField.media => album.media ?? '',
+      AlbumIdentityField.country => album.country ?? '',
+    };

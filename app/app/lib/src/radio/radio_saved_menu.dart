@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -21,6 +22,7 @@ Future<void> showRadioSavedMenu(
   RadioSavedSong song,
 ) async {
   final colors = WaxColors.of(context);
+  final l10n = context.l10n;
   final choice = await showModalBottomSheet<String>(
     context: context,
     backgroundColor: colors.surface2,
@@ -39,18 +41,18 @@ Future<void> showRadioSavedMenu(
           children: <Widget>[
             SectionHeader(
               title: song.title ?? song.nowPlaying,
-              overline: 'Heard on ${song.stationName}',
+              overline: l10n.radioSavedHeardOn(song.stationName),
             ),
             WaxOptionRow(
-              title: 'Get it from a URL',
-              subtitle: 'Download a copy you found; it lands in review',
+              title: l10n.radioSavedAcquire,
+              subtitle: l10n.radioSavedAcquireHelp,
               glyph: WaxIcons.downloads,
               semanticsId: SemanticsIds.radioSavedAcquire,
               onTap: () => Navigator.of(sheetContext).pop('acquire'),
             ),
             WaxOptionRow(
-              title: 'Identify a review entry as it',
-              subtitle: "Hand its name to a pending entry's search",
+              title: l10n.radioSavedIdentify,
+              subtitle: l10n.radioSavedIdentifyHelp,
               glyph: WaxIcons.search,
               semanticsId: SemanticsIds.radioSavedIdentify,
               onTap: () => Navigator.of(sheetContext).pop('identify'),
@@ -131,6 +133,7 @@ class _RadioSavedIdentifySheetState
     final navigator = Navigator.of(context);
     final router = GoRouter.of(context);
     final messenger = ref.read(shellMessengerProvider.notifier);
+    final l10n = context.l10n;
     final song = widget.song;
     try {
       // Both halves or neither, the list's own rule: half a parsed pair
@@ -154,7 +157,7 @@ class _RadioSavedIdentifySheetState
       // land and the decision is made.
       unawaited(router.push<void>(WaxRoute.reviewEntry(entry.id)));
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -162,6 +165,7 @@ class _RadioSavedIdentifySheetState
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final entries = _entries;
     final song = widget.song;
     return SafeArea(
@@ -177,14 +181,16 @@ class _RadioSavedIdentifySheetState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             SectionHeader(
-              title: 'Identify as "${song.title ?? song.nowPlaying}"',
-              overline: 'Pending single tracks in the review queue',
+              title: l10n.radioSavedIdentifyTitle(
+                song.title ?? song.nowPlaying,
+              ),
+              overline: l10n.radioSavedIdentifyOverline,
             ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
                 child: Text(
-                  'Could not load the review queue.',
+                  l10n.radioSavedReviewError,
                   style: WaxType.bodySmall.copyWith(color: colors.error),
                 ),
               )
@@ -197,9 +203,7 @@ class _RadioSavedIdentifySheetState
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
                 child: Text(
-                  'No pending single tracks to name. Get the song from a '
-                  'URL first and it turns up here while it waits for '
-                  'review.',
+                  l10n.radioSavedNoPending,
                   style: WaxType.bodySmall.copyWith(
                     color: colors.textSecondary,
                   ),
@@ -213,7 +217,7 @@ class _RadioSavedIdentifySheetState
                   itemBuilder: (context, index) {
                     final entry = entries[index];
                     return WaxOptionRow(
-                      title: entry.title ?? 'Untitled',
+                      title: entry.title ?? l10n.radioSavedUntitled,
                       subtitle: entry.artist,
                       glyph: WaxIcons.music,
                       semanticsId: SemanticsIds.radioSavedIdentifyEntry(

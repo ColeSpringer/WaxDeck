@@ -99,7 +99,14 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
     expect(find.text('Could not load your books'), findsOneWidget);
-    expect(find.text('network unreachable'), findsOneWidget);
+    // The code's sentence rather than the transport's diagnostic.
+    expect(
+      find.text(
+        'Could not reach the server. Check the connection and try '
+        'again.',
+      ),
+      findsOneWidget,
+    );
   });
 
   group('order', () {

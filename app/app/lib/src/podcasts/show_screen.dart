@@ -23,24 +23,31 @@ import 'podcasts_controller.dart';
 import 'show_notes.dart';
 import 'subscription_settings_sheet.dart';
 
-String formatEpisodeDuration(int durationMs) {
+/// How long an episode runs, for a row's trailing column: "2h 30m".
+/// Narrower than the design system's span, which spells its units out.
+String formatEpisodeDuration(AppLocalizations l10n, int durationMs) {
   final d = Duration(milliseconds: durationMs);
   final h = d.inHours;
   final m = d.inMinutes.remainder(60);
-  if (h > 0) return '${h}h ${m}m';
-  return '${m}m';
+  if (h > 0) return l10n.podcastDurationHoursMinutes(h, m);
+  return l10n.podcastDurationMinutes(m);
 }
 
 /// Which episodes the list is showing.
 enum EpisodeFilterChoice {
-  all('all', 'All'),
-  unplayed('unplayed', 'Unplayed'),
-  downloaded('downloaded', 'Downloaded');
+  all('all'),
+  unplayed('unplayed'),
+  downloaded('downloaded');
 
-  const EpisodeFilterChoice(this.name, this.label);
+  const EpisodeFilterChoice(this.name);
 
   final String name;
-  final String label;
+
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    EpisodeFilterChoice.all => l10n.podcastFilterAll,
+    EpisodeFilterChoice.unplayed => l10n.podcastFilterUnplayed,
+    EpisodeFilterChoice.downloaded => l10n.podcastFilterDownloaded,
+  };
 }
 
 /// One podcast show: what it is, what it does automatically, and its
@@ -89,7 +96,8 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     }
     final view = PlayProgressView(positions);
     final visible = _visible(loaded, view);
-    final title = detail.value?.show.title ?? 'Show';
+    final l10n = context.l10n;
+    final title = detail.value?.show.title ?? l10n.podcastShowFallbackTitle;
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -110,7 +118,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
           if (detail.value?.subscribed ?? false)
             WaxIconButton(
               glyph: WaxIcons.settings,
-              label: 'Subscription settings',
+              label: l10n.podcastSettingsTitle,
               semanticsId: SemanticsIds.podcastSettingsOpen,
               onPressed: () => _openSettings(context),
             ),
@@ -125,10 +133,8 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
             AsyncError(:final error) => SliverFillRemaining(
               hasScrollBody: false,
               child: ErrorState(
-                title: 'Could not load the show',
-                message: error is WaxDeckApiException
-                    ? error.message
-                    : 'The server did not answer.',
+                title: l10n.podcastShowLoadError,
+                message: context.explain(error),
                 onRetry: () =>
                     ref.invalidate(podcastDetailProvider(widget.pid)),
               ),
@@ -172,6 +178,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
 
   Widget _toolbar(List<EpisodeSummary> loaded) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final seasons = <int>{
       for (final episode in loaded)
         if (episode.season != null) episode.season!,
@@ -185,8 +192,8 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           SearchField(
-            label: 'Search this show',
-            hint: 'Search this show',
+            label: l10n.podcastSearchShow,
+            hint: l10n.podcastSearchShow,
             semanticsId: SemanticsIds.showEpisodeSearch,
             onChanged: (value) => setState(() => _query = value),
           ),
@@ -196,7 +203,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
               for (final choice in EpisodeFilterChoice.values)
                 WaxFilterChip(
                   name: choice.name,
-                  label: choice.label,
+                  label: choice.labelOf(l10n),
                   semanticsId: SemanticsIds.showEpisodeFilter(choice.name),
                 ),
               // Seasons join the same row rather than getting a control
@@ -205,7 +212,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
               for (final season in seasons)
                 WaxFilterChip(
                   name: 'season-$season',
-                  label: 'Season $season',
+                  label: l10n.podcastSeasonChip(season),
                   semanticsId: SemanticsIds.showEpisodeFilter('season-$season'),
                 ),
             ],
@@ -238,6 +245,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
       for (final episode in loaded)
         if (_selected.contains(episode.pid)) episode,
     ];
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.only(top: WaxSpace.s12),
       child: Wrap(
@@ -246,20 +254,20 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: <Widget>[
           Text(
-            '${chosen.length} selected',
+            l10n.podcastSelectedCount(chosen.length),
             style: WaxType.label.copyWith(
               color: WaxColors.of(context).textSecondary,
             ),
           ),
           WaxButton(
-            label: 'Add to queue',
+            label: l10n.podcastAddToQueue,
             kind: WaxButtonKind.tonal,
             icon: WaxIcons.addToQueue,
             semanticsId: SemanticsIds.selectionQueue,
             onPressed: chosen.isEmpty ? null : () => _queueSelected(chosen),
           ),
           WaxButton(
-            label: 'Download',
+            label: l10n.podcastDownload,
             kind: WaxButtonKind.tonal,
             icon: WaxIcons.downloads,
             semanticsId: SemanticsIds.selectionDownload,
@@ -268,7 +276,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
                 : () => unawaited(_fetchSelected(chosen)),
           ),
           WaxButton(
-            label: 'Mark played',
+            label: l10n.podcastMarkPlayed,
             kind: WaxButtonKind.tonal,
             icon: WaxIcons.check,
             semanticsId: SemanticsIds.selectionMarkPlayed,
@@ -277,7 +285,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
                 : () => unawaited(_markSelectedPlayed(chosen)),
           ),
           WaxButton(
-            label: 'Clear',
+            label: l10n.podcastClearSelection,
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.selectionClear,
             onPressed: () => setState(_selected.clear),
@@ -293,14 +301,13 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     PlayProgressView progress,
   ) {
     final loadingMore = episodes.value?.loadingMore ?? false;
+    final l10n = context.l10n;
     return switch (episodes) {
       AsyncError(:final error) => SliverFillRemaining(
         hasScrollBody: false,
         child: ErrorState(
-          title: 'Could not load the episodes',
-          message: error is WaxDeckApiException
-              ? error.message
-              : 'The server did not answer.',
+          title: l10n.podcastEpisodesLoadError,
+          message: context.explain(error),
           onRetry: () => ref.invalidate(episodesProvider(widget.pid)),
         ),
       ),
@@ -312,12 +319,12 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
       AsyncData(:final value) when visible.isEmpty && (value.hasMore) =>
         SliverToBoxAdapter(
           child: EmptyState(
-            title: 'Nothing matches yet',
-            message:
-                'The filter runs over the episodes loaded so far, and this '
-                'show has more.',
+            title: l10n.podcastNothingMatchesYet,
+            message: l10n.podcastNothingMatchesYetMessage,
             glyph: WaxIcons.podcasts,
-            actionLabel: loadingMore ? 'Loading...' : 'Load more episodes',
+            actionLabel: loadingMore
+                ? l10n.podcastLoadingMore
+                : l10n.podcastLoadMore,
             onAction: loadingMore
                 ? null
                 : () => ref
@@ -328,11 +335,11 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
       AsyncData() when visible.isEmpty => SliverToBoxAdapter(
         child: EmptyState(
           title: _query.isNotEmpty || _filter != EpisodeFilterChoice.all
-              ? 'Nothing matches'
-              : 'No episodes yet',
+              ? l10n.podcastNothingMatches
+              : l10n.podcastNoEpisodes,
           message: _query.isNotEmpty || _filter != EpisodeFilterChoice.all
-              ? 'Widen the filter, or clear the search, to see the rest.'
-              : 'This feed has published nothing this server can see.',
+              ? l10n.podcastNothingMatchesMessage
+              : l10n.podcastNoEpisodesMessage,
           glyph: WaxIcons.podcasts,
         ),
       ),
@@ -408,6 +415,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     if (playable.isNotEmpty) {
       ref.read(nowPlayingProvider.notifier).enqueue(playable);
     }
+    final l10n = context.l10n;
     setState(_selected.clear);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -415,10 +423,10 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         SnackBar(
           content: Text(
             <String>[
-              if (playable.isNotEmpty) '${playable.length} added to the queue',
+              if (playable.isNotEmpty) l10n.podcastQueuedCount(playable.length),
               // An episode whose feed named no audio cannot play, so
               // queueing it would drop an entry that dies on arrival.
-              if (refused > 0) '$refused had no audio in the feed',
+              if (refused > 0) l10n.podcastNoAudioCount(refused),
             ].join('; '),
           ),
         ),
@@ -427,6 +435,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
 
   Future<void> _fetchSelected(List<EpisodeSummary> chosen) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final notifier = ref.read(episodesProvider(widget.pid).notifier);
     var queued = 0;
     String? failure;
@@ -439,7 +448,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         // One refusal does not abandon the rest: a batch is a list of
         // independent requests, and stopping on the first would leave
         // the selection half done with nothing said about which half.
-        failure ??= e.message;
+        failure ??= explainError(l10n, e);
       }
     }
     if (!mounted) return;
@@ -450,8 +459,8 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         SnackBar(
           content: Text(
             failure == null
-                ? '$queued queued for download'
-                : '$queued queued; $failure',
+                ? l10n.podcastQueuedForDownloadCount(queued)
+                : l10n.podcastQueuedWithFailure(queued, failure),
           ),
         ),
       );
@@ -459,6 +468,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
 
   Future<void> _markSelectedPlayed(List<EpisodeSummary> chosen) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final repository = ref.read(repositoryProvider);
     var marked = 0;
     var skipped = 0;
@@ -474,7 +484,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         await repository.putPlayState(episode.pid, episode.durationMs);
         marked++;
       } on WaxDeckApiException catch (e) {
-        failure ??= e.message;
+        failure ??= explainError(l10n, e);
       }
     }
     if (marked > 0) {
@@ -494,8 +504,8 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
           content: Text(
             failure ??
                 <String>[
-                  '$marked marked played',
-                  if (skipped > 0) '$skipped had no duration to finish',
+                  l10n.podcastMarkedPlayedCount(marked),
+                  if (skipped > 0) l10n.podcastNoDurationCount(skipped),
                 ].join('; '),
           ),
         ),
@@ -514,9 +524,10 @@ class _ShowOverflow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(podcastDetailProvider(pid)).value;
     final subscribed = detail?.subscribed ?? false;
+    final l10n = context.l10n;
     return WaxMenuButton<String>(
       glyph: WaxIcons.more,
-      label: 'More for this show',
+      label: l10n.podcastShowMore,
       semanticsId: SemanticsIds.showOverflow,
       items: <WaxMenuItem<String>>[
         // Offered to a subscriber, because the resolver answers pinned
@@ -533,15 +544,15 @@ class _ShowOverflow extends ConsumerWidget {
             value: 'pin',
             semanticsId: SemanticsIds.showPin,
           ),
-        const WaxMenuItem<String>(
+        WaxMenuItem<String>(
           value: 'refresh',
-          label: 'Check for new episodes',
+          label: l10n.podcastCheckForNew,
           glyph: WaxIcons.refresh,
         ),
         if (subscribed)
-          const WaxMenuItem<String>(
+          WaxMenuItem<String>(
             value: 'mark-older',
-            label: 'Mark older episodes as played',
+            label: l10n.podcastMarkOlderPlayed,
             glyph: WaxIcons.check,
             semanticsId: SemanticsIds.markOlderPlayed,
           ),
@@ -549,9 +560,10 @@ class _ShowOverflow extends ConsumerWidget {
       onSelected: (choice) {
         switch (choice) {
           case 'pin':
-            unawaited(
-              togglePin(context, ref, pid, label: detail?.show.title ?? 'show'),
-            );
+            // Null rather than a stand-in word: the confirmation is
+            // still English, so a translated fragment would read as
+            // half a sentence.
+            unawaited(togglePin(context, ref, pid, label: detail?.show.title));
           case 'refresh':
             unawaited(_refresh(context, ref));
           case 'mark-older':
@@ -568,6 +580,7 @@ class _ShowOverflow extends ConsumerWidget {
 
   Future<void> _refresh(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       final result = await ref.read(repositoryProvider).refreshPodcast(pid);
       ref.invalidate(episodesProvider(pid));
@@ -583,16 +596,15 @@ class _ShowOverflow extends ConsumerWidget {
           SnackBar(
             content: Text(
               result.newEpisodes == 0
-                  ? 'No new episodes'
-                  : '${result.newEpisodes} new '
-                        '${result.newEpisodes == 1 ? 'episode' : 'episodes'}',
+                  ? l10n.podcastNoNewEpisodes
+                  : l10n.podcastNewEpisodes(result.newEpisodes),
             ),
           ),
         );
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 }
@@ -608,6 +620,8 @@ class _ShowHeader extends ConsumerWidget {
     final show = detail.show;
     final notifier = ref.read(podcastDetailProvider(pid).notifier);
 
+    final l10n = context.l10n;
+
     Future<void> guarded(Future<void> Function() action) async {
       final messenger = ScaffoldMessenger.of(context);
       try {
@@ -615,12 +629,11 @@ class _ShowHeader extends ConsumerWidget {
       } on WaxDeckApiException catch (e) {
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(e.message)));
+          ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
       }
     }
 
     final count = show.episodeCount;
-    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -629,16 +642,18 @@ class _ShowHeader extends ConsumerWidget {
           subtitle: show.author,
           domain: WaxDomain.podcasts,
           metadata: <String>[
-            if (count != null) '$count ${count == 1 ? 'episode' : 'episodes'}',
+            if (count != null) l10n.podcastEpisodeCount(count),
             if (show.lastPublishedAt != null)
-              'Latest ${l10n.formatDate(show.lastPublishedAt!)}',
-            if (show.explicit) 'Explicit',
+              l10n.podcastLatestPublished(
+                l10n.formatDate(show.lastPublishedAt!),
+              ),
+            if (show.explicit) l10n.podcastExplicit,
           ].join(' · '),
           artwork: ref.watch(artworkStoreProvider).source(show.artUrl),
           actions: <Widget>[
             if (detail.subscribed)
               WaxButton(
-                label: 'Following',
+                label: l10n.podcastFollowing,
                 kind: WaxButtonKind.tonal,
                 icon: WaxIcons.check,
                 semanticsId: SemanticsIds.podcastUnsubscribe,
@@ -646,7 +661,7 @@ class _ShowHeader extends ConsumerWidget {
               )
             else
               WaxButton(
-                label: 'Follow',
+                label: l10n.podcastFollow,
                 icon: WaxIcons.add,
                 semanticsId: SemanticsIds.podcastSubscribe,
                 onPressed: () => unawaited(guarded(notifier.subscribe)),
@@ -655,7 +670,7 @@ class _ShowHeader extends ConsumerWidget {
               WaxButton(
                 label: show.funding!.message?.isNotEmpty ?? false
                     ? show.funding!.message!
-                    : 'Support this show',
+                    : l10n.podcastSupportShow,
                 kind: WaxButtonKind.text,
                 icon: WaxIcons.star,
                 onPressed: () =>
@@ -671,11 +686,9 @@ class _ShowHeader extends ConsumerWidget {
               WaxSizeClass.of(context).gutter.horizontal / 2,
               0,
             ),
-            child: const WaxBanner(
+            child: WaxBanner(
               tone: WaxBannerTone.caution,
-              message:
-                  'Scheduled refresh is paused for this feed after repeated '
-                  'failures. Checking for new episodes turns it back on.',
+              message: l10n.podcastRefreshPaused,
             ),
           ),
         if (show.descriptionHtml != null && show.descriptionHtml!.isNotEmpty)
@@ -717,25 +730,21 @@ class _ShowHeader extends ConsumerWidget {
       await guarded(notifier.unsubscribe);
       return;
     }
+    final l10n = context.l10n;
     final removeFiles = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Unfollow'),
-        content: const Text(
-          'Some episodes are downloaded on the server. Remove those '
-          'files too? Removed files go to the trash, and your listening '
-          'progress is kept either way. If someone else subscribes to '
-          'this show, the files stay regardless.',
-        ),
+        title: Text(l10n.podcastUnfollowTitle),
+        content: Text(l10n.podcastUnfollowBody),
         actions: <Widget>[
           WaxButton(
-            label: 'Keep files',
+            label: l10n.podcastKeepFiles,
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.unsubscribeKeepFiles,
             onPressed: () => Navigator.of(dialogContext).pop(false),
           ),
           WaxButton(
-            label: 'Remove files',
+            label: l10n.podcastRemoveFiles,
             kind: WaxButtonKind.destructive,
             semanticsId: SemanticsIds.unsubscribeRemoveFiles,
             onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -788,7 +797,9 @@ class _CollapsibleNotesState extends ConsumerState<CollapsibleNotes> {
           ),
         ),
         WaxButton(
-          label: _open ? 'Show less' : 'Show more',
+          label: _open
+              ? context.l10n.podcastShowLessNotes
+              : context.l10n.podcastShowMoreNotes,
           kind: WaxButtonKind.text,
           onPressed: () => setState(() => _open = !_open),
         ),
@@ -818,27 +829,28 @@ class _EpisodeRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final actions = EpisodeActions(ref: ref, showPid: showPid);
+    final l10n = context.l10n;
     final remaining = episode.durationMs - progress.positionMs;
     final trailing = progress.inProgress && remaining > 0
-        ? '${formatEpisodeDuration(remaining)} left'
-        : formatEpisodeDuration(episode.durationMs);
+        ? l10n.podcastTimeLeft(formatEpisodeDuration(l10n, remaining))
+        : formatEpisodeDuration(l10n, episode.durationMs);
 
     final facts = <String>[
       if (episode.season != null && episode.episodeNumber != null)
-        'S${episode.season} E${episode.episodeNumber}'
+        l10n.podcastSeasonEpisode(episode.season!, episode.episodeNumber!)
       else if (episode.episodeNumber != null)
-        'E${episode.episodeNumber}',
-      if (episode.explicit) 'Explicit',
+        l10n.podcastEpisodeNumber(episode.episodeNumber!),
+      if (episode.explicit) l10n.podcastExplicit,
       if (episode.fetchState == 'failed')
-        'Download failed'
+        l10n.podcastDownloadFailed
       else if (episode.fetchState != null && !episode.downloaded)
-        'Queued for download'
+        l10n.podcastQueuedForDownload
       // Said on the row rather than left to the tap: an episode this
       // server holds no bytes for still plays, relayed from the feed's
       // own host, and the one that cannot play at all is the one whose
       // feed named no audio.
       else if (!episode.downloaded && !episode.hasEnclosure)
-        'No audio in the feed',
+        l10n.podcastNoAudioInFeed,
     ];
 
     return MediaListRow(
@@ -852,7 +864,7 @@ class _EpisodeRow extends ConsumerWidget {
         unplayed: !progress.played && progress.positionMs == 0,
         semanticsId: SemanticsIds.episode(episode.pid),
       ),
-      leadingText: context.l10n.formatMonthDay(episode.publishedAt),
+      leadingText: l10n.formatMonthDay(episode.publishedAt),
       onSelect: selecting ? onSelect : null,
       selectSemanticsId: SemanticsIds.episodeSelect(episode.pid),
       selected: selected,
@@ -861,7 +873,7 @@ class _EpisodeRow extends ConsumerWidget {
             (episode.fetchState == null || episode.fetchState == 'failed'))
           WaxIconButton(
             glyph: WaxIcons.downloads,
-            label: 'Fetch ${episode.title} to the server',
+            label: l10n.podcastFetchEpisode(episode.title),
             size: 18,
             semanticsId: SemanticsIds.episodeFetch(episode.pid),
             onPressed: () => unawaited(actions.fetch(context, episode.pid)),
@@ -869,7 +881,7 @@ class _EpisodeRow extends ConsumerWidget {
         if (episode.downloaded)
           WaxIconButton(
             glyph: WaxIcons.offline,
-            label: 'Remove ${episode.title} from the server',
+            label: l10n.podcastRemoveEpisode(episode.title),
             size: 18,
             semanticsId: SemanticsIds.episodeRemove(episode.pid),
             onPressed: () =>
@@ -877,7 +889,7 @@ class _EpisodeRow extends ConsumerWidget {
           ),
         WaxIconButton(
           glyph: WaxIcons.info,
-          label: 'Details for ${episode.title}',
+          label: l10n.podcastEpisodeDetails(episode.title),
           size: 18,
           semanticsId: SemanticsIds.episodeInfo(episode.pid),
           // Gone to, not pushed: the episode is declared beneath this

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 
 /// The caller's podcast subscriptions, first page. The subscription list
@@ -49,12 +50,15 @@ final subscriptionsProvider =
 /// What a directory match says under its name: who makes it, what it is
 /// about, and how much of it there is, which is how a listener picks
 /// between six shows sharing a word in their titles.
-String? describePodcastDirectoryEntry(PodcastDirectoryEntry entry) {
+String? describePodcastDirectoryEntry(
+  AppLocalizations l10n,
+  PodcastDirectoryEntry entry,
+) {
   final parts = <String>[
     if (entry.author != null && entry.author!.isNotEmpty) entry.author!,
     if (entry.genre != null && entry.genre!.isNotEmpty) entry.genre!,
     if (entry.episodeCount != null && entry.episodeCount! > 0)
-      '${entry.episodeCount} ${entry.episodeCount == 1 ? 'episode' : 'episodes'}',
+      l10n.podcastDirectoryEpisodes(entry.episodeCount!),
   ];
   return parts.isEmpty ? null : parts.join(' · ');
 }
@@ -62,14 +66,15 @@ String? describePodcastDirectoryEntry(PodcastDirectoryEntry entry) {
 /// How the hub orders the subscription grid.
 enum SubscriptionSort {
   /// Newest episode first: what a listener opening the app wants.
-  recent('recent', 'Recent'),
-  title('title', 'Title'),
-  added('added', 'Added');
+  recent('recent'),
+  title('title'),
+  added('added');
 
-  const SubscriptionSort(this.name, this.label);
+  const SubscriptionSort(this.name);
 
+  /// The wire-ish handle the menu row selects on. What each order is
+  /// called is copy, and lives in the row that draws it.
   final String name;
-  final String label;
 }
 
 /// The chosen order. Screen-local state rather than a stored preference:

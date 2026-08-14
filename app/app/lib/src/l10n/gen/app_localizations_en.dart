@@ -1516,6 +1516,243 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get bookBackToBeginning => 'Back to the beginning';
+
+  @override
+  String bookByAuthors(String names) {
+    return 'By $names';
+  }
+
+  @override
+  String bookChapterFallback(int number) {
+    return 'Chapter $number';
+  }
+
+  @override
+  String bookChaptersOverline(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count in this book',
+      one: '1 in this book',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get bookChaptersTitle => 'Chapters';
+
+  @override
+  String get bookDownloadOffline => 'Download for offline';
+
+  @override
+  String get bookEditMetadata => 'Edit metadata';
+
+  @override
+  String get bookEditionTitle => 'About this edition';
+
+  @override
+  String get bookFallbackTitle => 'Audiobook';
+
+  @override
+  String get bookFieldAbridged => 'Abridged';
+
+  @override
+  String get bookFieldAsin => 'ASIN';
+
+  @override
+  String get bookFieldEdition => 'Edition';
+
+  @override
+  String get bookFieldFiles => 'Files';
+
+  @override
+  String get bookFieldIsbn => 'ISBN';
+
+  @override
+  String get bookFieldPublisher => 'Publisher';
+
+  @override
+  String get bookLoadError => 'Could not load this book';
+
+  @override
+  String get bookMarkFinished => 'Mark finished';
+
+  @override
+  String get bookMarkedFinished => 'Marked finished';
+
+  @override
+  String get bookMerge => 'Merge into one chaptered file';
+
+  @override
+  String get bookMore => 'More';
+
+  @override
+  String get bookNo => 'No';
+
+  @override
+  String bookPartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count parts',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String bookPartsNote(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'This book is $count files, played as one timeline. Positions and chapters span all of them.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String bookPercent(int percent) {
+    return '$percent percent';
+  }
+
+  @override
+  String get bookPlay => 'Play';
+
+  @override
+  String get bookPlaybackSettings => 'Playback settings';
+
+  @override
+  String bookReadBy(String names) {
+    return 'Read by $names';
+  }
+
+  @override
+  String get bookResume => 'Resume';
+
+  @override
+  String bookResumeChapter(String chapter) {
+    return 'Resume $chapter';
+  }
+
+  @override
+  String bookSeriesSequence(String number, String series) {
+    return 'Book $number of $series';
+  }
+
+  @override
+  String bookSettingsSpeed(String speed) {
+    return 'Speed $speed';
+  }
+
+  @override
+  String get bookSettingsSpeedLabel => 'Playback speed';
+
+  @override
+  String get bookShareLink => 'Share link';
+
+  @override
+  String get bookSplit => 'Split at chapters';
+
+  @override
+  String get bookStartOver => 'Start over';
+
+  @override
+  String get bookToolQueued => 'Queued. Follow it in Tasks.';
+
+  @override
+  String get bookToolTasks => 'Tasks';
+
+  @override
+  String get bookTrimSilence => 'Trim silence';
+
+  @override
+  String get bookTrimSilenceHelp => 'Shortens the pauses between sentences';
+
+  @override
+  String get bookUndo => 'Undo';
+
+  @override
+  String get bookVoiceBoost => 'Voice boost';
+
+  @override
+  String get bookVoiceBoostHelp => 'Lifts speech over a noisy room';
+
+  @override
+  String get bookYes => 'Yes';
+
+  @override
+  String booksAuthorChip(String name, int count) {
+    return '$name ($count)';
+  }
+
+  @override
+  String get booksContinueOverline => 'Part way through';
+
+  @override
+  String get booksContinueTitle => 'Continue listening';
+
+  @override
+  String get booksEmptyMessage =>
+      'Books turn up here as the library scans them. Point a library at your audiobook folder and they arrive with their chapters.';
+
+  @override
+  String get booksEmptyTitle => 'No audiobooks yet';
+
+  @override
+  String get booksFilterAll => 'All';
+
+  @override
+  String booksFilterEmptyMessage(String filter) {
+    String _temp0 = intl.Intl.selectLogic(filter, {
+      'unfinished': 'No book here is unfinished.',
+      'finished': 'No book here is finished.',
+      'other': 'No book here matches.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get booksFilterFinished => 'Finished';
+
+  @override
+  String get booksFilterUnfinished => 'Unfinished';
+
+  @override
+  String get booksFinished => 'Finished';
+
+  @override
+  String get booksLoadError => 'Could not load your books';
+
+  @override
+  String get booksMore => 'More';
+
+  @override
+  String get booksNothingMatches => 'Nothing matches';
+
+  @override
+  String get booksShowAll => 'Show all books';
+
+  @override
+  String booksSortRow(String sort) {
+    String _temp0 = intl.Intl.selectLogic(sort, {
+      'recent': 'Sort by recently added',
+      'title': 'Sort by title',
+      'author': 'Sort by author',
+      'other': 'Sort by $sort',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String booksTimeLeft(String time) {
+    return '$time left';
+  }
+
+  @override
+  String get booksTitle => 'Audiobooks';
+
+  @override
   String bytesB(int bytes) {
     final intl.NumberFormat bytesNumberFormat =
         intl.NumberFormat.decimalPatternDigits(
@@ -2215,6 +2452,66 @@ class AppLocalizationsEn extends AppLocalizations {
   String get libraryBrowseSortMostFirst => 'Most first';
 
   @override
+  String get libraryDeleteAction => 'Delete';
+
+  @override
+  String get libraryDeleteFilesLabel => 'Delete files';
+
+  @override
+  String get libraryDeleteFilesMenu => 'Delete files...';
+
+  @override
+  String get libraryDeleteModePermanent => 'Delete permanently';
+
+  @override
+  String get libraryDeleteModePermanentHelp => 'Gone for good';
+
+  @override
+  String get libraryDeleteModeTrash => 'Move to trash';
+
+  @override
+  String get libraryDeleteModeTrashHelp => 'Restorable from the trash screen';
+
+  @override
+  String get libraryDeleteMore => 'More';
+
+  @override
+  String libraryDeletePermanentDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Deleted $count files for good',
+      one: 'Deleted 1 file for good',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String libraryDeletePreview(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'This removes $count files, $size.',
+      one: 'This removes 1 file, $size.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get libraryDeleteTitle => 'Delete files?';
+
+  @override
+  String libraryDeleteTrashDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Moved $count files to the trash',
+      one: 'Moved 1 file to the trash',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get libraryKindAlbum => 'album';
 
   @override
@@ -2439,6 +2736,465 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get metadataWriteBackWarning =>
       'Saved, but some files kept their old tags.';
+
+  @override
+  String musicAlbumDiscHeading(int disc) {
+    return 'DISC $disc';
+  }
+
+  @override
+  String get musicAlbumEditDetails => 'Edit album details';
+
+  @override
+  String musicAlbumEditorFieldLocked(String field) {
+    return '$field is locked';
+  }
+
+  @override
+  String get musicAlbumEditorForbiddenMessage =>
+      'Barcodes, labels, and catalog numbers are shared by everyone who can see this album, so the server keeps them to administrators.';
+
+  @override
+  String get musicAlbumEditorForbiddenTitle =>
+      'Only administrators can edit a release';
+
+  @override
+  String get musicAlbumEditorFromTags => 'From tags';
+
+  @override
+  String musicAlbumEditorSaveChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Save $count changes',
+      one: 'Save 1 change',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicAlbumEditorSaved => 'Saved';
+
+  @override
+  String get musicAlbumEditorSectionOverline => 'What this edition is';
+
+  @override
+  String get musicAlbumEditorSectionTitle => 'Release identity';
+
+  @override
+  String get musicAlbumEditorWriteBackHelp =>
+      'Also rewrite the matching tags in every track on this release. Media has no tag form and stays here.';
+
+  @override
+  String get musicAlbumEmptyMessage =>
+      'The tracks that were here have moved or been removed.';
+
+  @override
+  String get musicAlbumEmptyTitle => 'Nothing in this album';
+
+  @override
+  String get musicAlbumLoadError => 'Could not load this album';
+
+  @override
+  String get musicAlbumReleaseOverline => 'This edition';
+
+  @override
+  String get musicAlbumReleaseTitle => 'Release';
+
+  @override
+  String get musicAlbumTitle => 'Album';
+
+  @override
+  String get musicAllMusicSource => 'All music';
+
+  @override
+  String get musicArtistAppearsOn => 'Appears on';
+
+  @override
+  String get musicArtistAudiobooksSection => 'Audiobooks';
+
+  @override
+  String get musicArtistEmptyMessage =>
+      'The items that were here have moved or been removed.';
+
+  @override
+  String get musicArtistEmptyTitle => 'Nothing by this artist';
+
+  @override
+  String musicArtistItemCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String musicArtistItemCountAtLeast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ items',
+      one: '1+ item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicArtistLoadError => 'Could not load this artist';
+
+  @override
+  String musicArtistReleaseCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count releases',
+      one: '1 release',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicArtistReleases => 'Releases';
+
+  @override
+  String get musicArtistShowAll => 'Show all';
+
+  @override
+  String get musicArtistTracksSection => 'Tracks';
+
+  @override
+  String get musicArtistUnknownName => 'Artist';
+
+  @override
+  String musicBucketUnknownTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'No artist',
+      'albums': 'No album',
+      'releaseGroups': 'No release group',
+      'genres': 'No genre',
+      'years': 'No year',
+      'other': 'Unknown',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicCommandPlay(String name) {
+    return 'Play $name';
+  }
+
+  @override
+  String musicCommandShuffle(String name) {
+    return 'Shuffle $name';
+  }
+
+  @override
+  String musicDimensionSingularTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Artist',
+      'albums': 'Album',
+      'releaseGroups': 'Release group',
+      'genres': 'Genre',
+      'years': 'Year',
+      'other': 'Music',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicDimensionTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Artists',
+      'albums': 'Albums',
+      'releaseGroups': 'Release groups',
+      'genres': 'Genres',
+      'years': 'Years',
+      'other': 'Music',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get musicEmptyMessage =>
+      'Add music to your library and it shows up here.';
+
+  @override
+  String get musicEmptyTitle => 'No music yet';
+
+  @override
+  String get musicFieldBarcode => 'Barcode';
+
+  @override
+  String get musicFieldBarcodeHelp =>
+      'UPC or EAN, normalized to digits on save';
+
+  @override
+  String get musicFieldCatalogNumber => 'Catalog number';
+
+  @override
+  String get musicFieldCatalogNumberHelp =>
+      'The label\'s number for this release';
+
+  @override
+  String get musicFieldCountry => 'Country';
+
+  @override
+  String get musicFieldCountryHelp =>
+      'Two-letter code (GB), an alpha-3 or UK alias, or XW/XE';
+
+  @override
+  String get musicFieldLabel => 'Label';
+
+  @override
+  String get musicFieldLabelHelp => 'The issuing label';
+
+  @override
+  String get musicFieldMedia => 'Media';
+
+  @override
+  String get musicFieldMediaHelp =>
+      'What it was pressed on - CD, 2xVinyl, Digital Media';
+
+  @override
+  String get musicHubAddToLibrary => 'Add to library';
+
+  @override
+  String get musicHubEmptyMessage =>
+      'Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.';
+
+  @override
+  String musicHubTileSpoken(String name, String count) {
+    return '$name, $count';
+  }
+
+  @override
+  String musicIndexCount(String dimension, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count artists',
+      one: '1 artist',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count albums',
+      one: '1 album',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count release groups',
+      one: '1 release group',
+    );
+    String _temp3 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count genres',
+      one: '1 genre',
+    );
+    String _temp4 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count years',
+      one: '1 year',
+    );
+    String _temp5 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count entries',
+      one: '1 entry',
+    );
+    String _temp6 = intl.Intl.selectLogic(dimension, {
+      'artists': '$_temp0',
+      'albums': '$_temp1',
+      'releaseGroups': '$_temp2',
+      'genres': '$_temp3',
+      'years': '$_temp4',
+      'other': '$_temp5',
+    });
+    return '$_temp6';
+  }
+
+  @override
+  String musicIndexCountAtLeast(String dimension, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ artists',
+      one: '1+ artist',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ albums',
+      one: '1+ album',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ release groups',
+      one: '1+ release group',
+    );
+    String _temp3 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ genres',
+      one: '1+ genre',
+    );
+    String _temp4 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ years',
+      one: '1+ year',
+    );
+    String _temp5 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ entries',
+      one: '1+ entry',
+    );
+    String _temp6 = intl.Intl.selectLogic(dimension, {
+      'artists': '$_temp0',
+      'albums': '$_temp1',
+      'releaseGroups': '$_temp2',
+      'genres': '$_temp3',
+      'years': '$_temp4',
+      'other': '$_temp5',
+    });
+    return '$_temp6';
+  }
+
+  @override
+  String musicIndexEmptyMessage(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Add music to your library and its artists show up here.',
+      'albums': 'Add music to your library and its albums show up here.',
+      'releaseGroups':
+          'Add music to your library and its release groups show up here.',
+      'genres': 'Add music to your library and its genres show up here.',
+      'years': 'Add music to your library and its years show up here.',
+      'other': 'Add music to your library and it shows up here.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicIndexEmptyTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'No artists yet',
+      'albums': 'No albums yet',
+      'releaseGroups': 'No release groups yet',
+      'genres': 'No genres yet',
+      'years': 'No years yet',
+      'other': 'Nothing here yet',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicIndexLoadError(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Could not load artists',
+      'albums': 'Could not load albums',
+      'releaseGroups': 'Could not load release groups',
+      'genres': 'Could not load genres',
+      'years': 'Could not load years',
+      'other': 'Could not load this index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String musicIndexStartOf(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Start of artists',
+      'albums': 'Start of albums',
+      'releaseGroups': 'Start of release groups',
+      'genres': 'Start of genres',
+      'years': 'Start of years',
+      'other': 'Start of the list',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get musicListingBucketEmptyMessage =>
+      'The items that were here have moved or been removed.';
+
+  @override
+  String musicListingBucketEmptyTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'artists': 'Nothing in this artist',
+      'albums': 'Nothing in this album',
+      'releaseGroups': 'Nothing in this release group',
+      'genres': 'Nothing in this genre',
+      'years': 'Nothing in this year',
+      'other': 'Nothing here',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get musicListingLoadError => 'Could not load this list';
+
+  @override
+  String get musicPlay => 'Play';
+
+  @override
+  String get musicShelfMostPlayedOverline => 'What you come back to';
+
+  @override
+  String get musicShelfMostPlayedTitle => 'Most played';
+
+  @override
+  String get musicShelfRecentOverline => 'New to the collection';
+
+  @override
+  String get musicShelfRecentTitle => 'Recently added';
+
+  @override
+  String get musicShelfStarredOverline => 'Kept on purpose';
+
+  @override
+  String get musicShelfStarredTitle => 'Starred';
+
+  @override
+  String get musicShuffle => 'Shuffle';
+
+  @override
+  String get musicShuffleAllLabel => 'Shuffle all music';
+
+  @override
+  String musicShuffleLabel(String name) {
+    return 'Shuffle $name';
+  }
+
+  @override
+  String get musicShuffleNothingPlayable => 'Nothing here plays in sequence.';
+
+  @override
+  String get musicTitle => 'Music';
+
+  @override
+  String musicTrackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tracks',
+      one: '1 track',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicTracksTitle => 'Tracks';
+
+  @override
+  String get musicVariousArtists => 'Various artists';
 
   @override
   String get notifBackupCompletedHelp => 'A backup archive finished building.';
@@ -2872,6 +3628,1377 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerVolume => 'Volume';
 
   @override
+  String get playlistAddHint => 'Search the library';
+
+  @override
+  String get playlistAddLabel => 'Add to this playlist';
+
+  @override
+  String get playlistAddNothing =>
+      'Nothing here to add. Artists and albums are not members of a playlist; their tracks are.';
+
+  @override
+  String get playlistAddToTitle => 'Add to playlist';
+
+  @override
+  String playlistAdded(String title) {
+    return 'Added \"$title\"';
+  }
+
+  @override
+  String playlistAddedTo(String title, String playlist) {
+    return 'Added \"$title\" to $playlist';
+  }
+
+  @override
+  String get playlistAlreadyIn => 'Already in this list';
+
+  @override
+  String playlistConflictBanner(String reason) {
+    return '$reason Nothing was changed; this is the list as it stands.';
+  }
+
+  @override
+  String get playlistCopiedM3u => 'Playlist copied as M3U';
+
+  @override
+  String get playlistCopiedPortable => 'Portable playlist copied';
+
+  @override
+  String get playlistCoverImage => 'Cover image';
+
+  @override
+  String get playlistCoverReset => 'Back to the cover made from members';
+
+  @override
+  String playlistCoverUnreadable(String reason) {
+    return 'Could not read that image: $reason';
+  }
+
+  @override
+  String get playlistCreateAction => 'Create';
+
+  @override
+  String get playlistCreateNext => 'Next';
+
+  @override
+  String get playlistDelete => 'Delete';
+
+  @override
+  String get playlistDeleteBody =>
+      'It goes for everyone it is shared with. The items in it are never touched.';
+
+  @override
+  String get playlistDeleteTitle => 'Delete this playlist?';
+
+  @override
+  String get playlistDragToReorder => 'Drag to reorder';
+
+  @override
+  String get playlistEditRules => 'Edit rules';
+
+  @override
+  String get playlistEditableEmptyMessage =>
+      'Search above to add the first track, or use \"Add to playlist\" from anywhere something is playing.';
+
+  @override
+  String get playlistEmptyTitle => 'Nothing in here';
+
+  @override
+  String get playlistEntryRemove => 'Remove from playlist';
+
+  @override
+  String get playlistExportCopy => 'Copy';
+
+  @override
+  String get playlistExportM3u => 'Export M3U';
+
+  @override
+  String get playlistExportPortable => 'Export portable';
+
+  @override
+  String get playlistFactsManual => 'Manual playlist';
+
+  @override
+  String get playlistFactsSmart => 'Smart playlist';
+
+  @override
+  String get playlistFallbackTitle => 'Playlist';
+
+  @override
+  String get playlistForeignEmptyMessage =>
+      'The owner has not put anything in this list yet.';
+
+  @override
+  String get playlistImportComplete => 'Import complete';
+
+  @override
+  String playlistImportCreated(String name, int resolved, int requested) {
+    return 'Created \"$name\" with $resolved of $requested entries.';
+  }
+
+  @override
+  String get playlistImportHintExport => 'Paste the exported playlist here';
+
+  @override
+  String get playlistImportHintM3u => 'Paste the playlist file here';
+
+  @override
+  String get playlistImportHintPortable => 'Paste what Export portable copied';
+
+  @override
+  String get playlistImportHintText => 'One track a line: artist - title';
+
+  @override
+  String get playlistImportMenu => 'Import playlist';
+
+  @override
+  String get playlistImportMissingHeading => 'Not in the library:';
+
+  @override
+  String playlistImportMissingRow(String artist, String title) {
+    return '$artist - $title';
+  }
+
+  @override
+  String get playlistImportNeedsName =>
+      'An M3U import needs a name for the playlist.';
+
+  @override
+  String get playlistImportNoEntries =>
+      'The portable playlist carries no entries';
+
+  @override
+  String get playlistImportNoMatches =>
+      'No entries matched the library, so no playlist was created.';
+
+  @override
+  String get playlistImportNotJson => 'This is not the copied portable JSON';
+
+  @override
+  String get playlistImportNotPortable =>
+      'This is not a portable playlist (expected a name and a refs list)';
+
+  @override
+  String get playlistImportNothing => 'Nothing imported';
+
+  @override
+  String get playlistImportPasteFirst => 'Paste the playlist first.';
+
+  @override
+  String playlistImportPayloadLabel(String source) {
+    return '$source export';
+  }
+
+  @override
+  String get playlistImportRun => 'Import';
+
+  @override
+  String get playlistImportSourceAppleMusic => 'Apple Music';
+
+  @override
+  String get playlistImportSourceCsv => 'Generic CSV';
+
+  @override
+  String get playlistImportSourceM3u => 'M3U file';
+
+  @override
+  String get playlistImportSourcePortable => 'Portable JSON';
+
+  @override
+  String get playlistImportSourceSpotify => 'Spotify CSV';
+
+  @override
+  String get playlistImportSourceText => 'Text list';
+
+  @override
+  String get playlistImportSourceYtMusic => 'YouTube Music CSV';
+
+  @override
+  String playlistImportTitle(String source) {
+    return 'Import from $source';
+  }
+
+  @override
+  String playlistImportedAll(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Imported \"$name\" with $count items',
+      one: 'Imported \"$name\" with 1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playlistImportedPartial(String name, int matched, int unmatched) {
+    return 'Imported \"$name\": $matched matched, $unmatched not in the library';
+  }
+
+  @override
+  String playlistItemCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistKindManual => 'Manual';
+
+  @override
+  String get playlistKindManualHelp =>
+      'A manual playlist holds what you put in it, in the order you put it.';
+
+  @override
+  String get playlistKindSmartHelp =>
+      'A smart playlist keeps itself: you write the rules next and it evaluates them every time it is opened.';
+
+  @override
+  String get playlistLoadError => 'Could not load this playlist';
+
+  @override
+  String get playlistMakePrivate => 'Make private';
+
+  @override
+  String get playlistMore => 'More';
+
+  @override
+  String get playlistMoveDown => 'Move down';
+
+  @override
+  String get playlistMoveUp => 'Move up';
+
+  @override
+  String get playlistNameLabel => 'Playlist name';
+
+  @override
+  String get playlistNameOptional => 'Playlist name (optional)';
+
+  @override
+  String get playlistNameRequired => 'A playlist needs a name.';
+
+  @override
+  String get playlistNoManualLists =>
+      'No manual playlists yet. Make one below and this goes straight into it.';
+
+  @override
+  String get playlistPlay => 'Play';
+
+  @override
+  String get playlistRename => 'Rename';
+
+  @override
+  String get playlistRenameTitle => 'Rename playlist';
+
+  @override
+  String get playlistResetCover => 'Reset cover';
+
+  @override
+  String get playlistRuleAddCondition => 'Condition';
+
+  @override
+  String get playlistRuleAddGroup => 'Group';
+
+  @override
+  String get playlistRuleAddSort => 'Sort key';
+
+  @override
+  String get playlistRuleAllOf => 'All of';
+
+  @override
+  String get playlistRuleAnd => 'and';
+
+  @override
+  String get playlistRuleAnyOf => 'Any of';
+
+  @override
+  String playlistRuleCondition(String field, String op, String value) {
+    return '$field $op $value';
+  }
+
+  @override
+  String playlistRuleConditionRange(
+    String field,
+    String op,
+    String low,
+    String high,
+  ) {
+    return '$field $op $low and $high';
+  }
+
+  @override
+  String playlistRuleConditionRelative(String field, String op, String days) {
+    return '$field $op $days';
+  }
+
+  @override
+  String playlistRuleConditionUnary(String field, String op) {
+    return '$field $op';
+  }
+
+  @override
+  String playlistRuleDayCount(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: '1 day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistRuleDaysSuffix => 'days';
+
+  @override
+  String playlistRuleEditorTitle(String name) {
+    return 'Rules: $name';
+  }
+
+  @override
+  String get playlistRuleEmptyAll => 'An empty group matches everything.';
+
+  @override
+  String get playlistRuleEmptyAny => 'An empty group matches nothing.';
+
+  @override
+  String get playlistRuleEverything => 'Everything';
+
+  @override
+  String get playlistRuleFieldAddedAt => 'Added at';
+
+  @override
+  String get playlistRuleFieldAlbum => 'Album';
+
+  @override
+  String get playlistRuleFieldAlbumArtist => 'Album artist';
+
+  @override
+  String get playlistRuleFieldAlbumBarcode => 'Album barcode';
+
+  @override
+  String get playlistRuleFieldAlbumCatalogNumber => 'Album catalog number';
+
+  @override
+  String get playlistRuleFieldAlbumCountry => 'Album country';
+
+  @override
+  String get playlistRuleFieldAlbumLabel => 'Album label';
+
+  @override
+  String get playlistRuleFieldAlbumMedia => 'Album media';
+
+  @override
+  String get playlistRuleFieldArtist => 'Artist';
+
+  @override
+  String get playlistRuleFieldCodec => 'Codec';
+
+  @override
+  String get playlistRuleFieldContainer => 'Container';
+
+  @override
+  String get playlistRuleFieldDiscNumber => 'Disc number';
+
+  @override
+  String get playlistRuleFieldDurationMs => 'Duration ms';
+
+  @override
+  String get playlistRuleFieldFinished => 'Finished';
+
+  @override
+  String get playlistRuleFieldGenre => 'Genre';
+
+  @override
+  String get playlistRuleFieldLastPlayedAt => 'Last played at';
+
+  @override
+  String get playlistRuleFieldMediaType => 'Media type';
+
+  @override
+  String get playlistRuleFieldPath => 'Path';
+
+  @override
+  String get playlistRuleFieldPicker => 'Field';
+
+  @override
+  String get playlistRuleFieldPlayCount => 'Play count';
+
+  @override
+  String get playlistRuleFieldPlayed => 'Played';
+
+  @override
+  String get playlistRuleFieldPlaylist => 'Playlist';
+
+  @override
+  String get playlistRuleFieldPodcast => 'Podcast';
+
+  @override
+  String get playlistRuleFieldPublishedAt => 'Published at';
+
+  @override
+  String get playlistRuleFieldRating => 'Rating';
+
+  @override
+  String get playlistRuleFieldSeason => 'Season';
+
+  @override
+  String get playlistRuleFieldSource => 'Source';
+
+  @override
+  String get playlistRuleFieldStarred => 'Starred';
+
+  @override
+  String get playlistRuleFieldStarredAt => 'Starred at';
+
+  @override
+  String get playlistRuleFieldState => 'State';
+
+  @override
+  String get playlistRuleFieldTitle => 'Title';
+
+  @override
+  String get playlistRuleFieldTrackNumber => 'Track number';
+
+  @override
+  String get playlistRuleFieldUpdatedAt => 'Updated at';
+
+  @override
+  String playlistRuleFieldWithCount(String field, int count) {
+    return '$field ($count)';
+  }
+
+  @override
+  String get playlistRuleFieldYear => 'Year';
+
+  @override
+  String get playlistRuleFirstMatches => 'First matches';
+
+  @override
+  String get playlistRuleHighestFirst => 'Highest first';
+
+  @override
+  String get playlistRuleLimitAtRandom => 'at random';
+
+  @override
+  String get playlistRuleLimitByCount => 'by count';
+
+  @override
+  String get playlistRuleLimitByMinutes => 'by minutes';
+
+  @override
+  String get playlistRuleLimitBySize => 'by size';
+
+  @override
+  String playlistRuleLimitCount(int count) {
+    return 'Limit $count';
+  }
+
+  @override
+  String get playlistRuleLimitHeading => 'Limit';
+
+  @override
+  String playlistRuleLimitMegabytes(int count) {
+    return 'Up to $count MB';
+  }
+
+  @override
+  String playlistRuleLimitMinutes(int count) {
+    return 'Up to $count minutes';
+  }
+
+  @override
+  String get playlistRuleLimitNoLimit => 'no limit';
+
+  @override
+  String playlistRuleLimitRandom(int count) {
+    return '$count at random';
+  }
+
+  @override
+  String get playlistRuleLimitRequired => 'required';
+
+  @override
+  String get playlistRuleLimitTake => 'Take';
+
+  @override
+  String get playlistRuleLowestFirst => 'Lowest first';
+
+  @override
+  String playlistRuleMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Matches $count items',
+      one: 'Matches 1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playlistRuleMediaType(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'music': 'music',
+      'podcast': 'podcast',
+      'audiobook': 'audiobook',
+      'other': '$kind',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistRuleNested => 'Nested conditions';
+
+  @override
+  String get playlistRuleNo => 'no';
+
+  @override
+  String get playlistRuleNoMatches =>
+      'Nothing in the library answers this yet.';
+
+  @override
+  String get playlistRuleNoPlaylists => 'No playlists to choose';
+
+  @override
+  String get playlistRuleNoneOf => 'None of';
+
+  @override
+  String get playlistRuleNot => 'Not';
+
+  @override
+  String get playlistRuleNotAllOf => 'Not all of';
+
+  @override
+  String playlistRuleNotPhrase(String phrase) {
+    return 'Not $phrase';
+  }
+
+  @override
+  String get playlistRuleNothing => 'Nothing';
+
+  @override
+  String get playlistRuleOpAfter => 'is after';
+
+  @override
+  String get playlistRuleOpBefore => 'is before';
+
+  @override
+  String get playlistRuleOpContains => 'contains';
+
+  @override
+  String get playlistRuleOpEndsWith => 'ends with';
+
+  @override
+  String get playlistRuleOpGt => 'is more than';
+
+  @override
+  String get playlistRuleOpGte => 'is at least';
+
+  @override
+  String get playlistRuleOpInTheLast => 'is in the last';
+
+  @override
+  String get playlistRuleOpInTheRange => 'is between';
+
+  @override
+  String get playlistRuleOpIs => 'is';
+
+  @override
+  String get playlistRuleOpIsMissing => 'is not set';
+
+  @override
+  String get playlistRuleOpIsNot => 'is not';
+
+  @override
+  String get playlistRuleOpIsPresent => 'is set';
+
+  @override
+  String get playlistRuleOpLt => 'is less than';
+
+  @override
+  String get playlistRuleOpLte => 'is at most';
+
+  @override
+  String get playlistRuleOpNotInTheLast => 'is not in the last';
+
+  @override
+  String get playlistRuleOpPicker => 'Is';
+
+  @override
+  String get playlistRuleOpStartsWith => 'starts with';
+
+  @override
+  String get playlistRuleOrderBy => 'Order by';
+
+  @override
+  String get playlistRulePickDate => 'Pick a date';
+
+  @override
+  String get playlistRulePinnedOrder => 'A pinned budget draws its own order.';
+
+  @override
+  String get playlistRulePreviewPending => 'Preview pending';
+
+  @override
+  String get playlistRuleRandomOrder => 'A random limit draws its own order.';
+
+  @override
+  String get playlistRuleReadOnlyMessage =>
+      'It uses something this editor cannot draw yet, so it is shown rather than edited. Nothing here will change it.';
+
+  @override
+  String get playlistRuleReadOnlyTitle => 'This rule opens read-only';
+
+  @override
+  String get playlistRuleRemoveCondition => 'Remove condition';
+
+  @override
+  String get playlistRuleRemoveGroup => 'Remove group';
+
+  @override
+  String get playlistRuleRemoveSort => 'Remove sort';
+
+  @override
+  String get playlistRuleSeedHelp =>
+      'Pins which tracks the budget picks, so the list is the same on the next rebuild';
+
+  @override
+  String get playlistRuleSeedTitle => 'Keep the same selection each time';
+
+  @override
+  String playlistRuleSortBy(String field) {
+    return 'By $field';
+  }
+
+  @override
+  String playlistRuleSortByDesc(String field) {
+    return 'By $field, highest first';
+  }
+
+  @override
+  String playlistRuleTagField(String key) {
+    return 'Tag: $key';
+  }
+
+  @override
+  String get playlistRuleUnavailableList => 'Unavailable list';
+
+  @override
+  String get playlistRuleUnitItems => 'items';
+
+  @override
+  String get playlistRuleUnitMegabytes => 'MB';
+
+  @override
+  String get playlistRuleUnitMinutes => 'minutes';
+
+  @override
+  String get playlistRuleValuePicker => 'Value';
+
+  @override
+  String get playlistRuleVocabularyError =>
+      'Could not load the rule vocabulary';
+
+  @override
+  String get playlistRuleWorking => 'Working it out…';
+
+  @override
+  String get playlistRuleYes => 'yes';
+
+  @override
+  String get playlistRulesLive =>
+      'Evaluated live, every time this list is opened.';
+
+  @override
+  String playlistRulesSpoken(String rules) {
+    return 'Rules: $rules';
+  }
+
+  @override
+  String get playlistSetCover => 'Set cover';
+
+  @override
+  String get playlistShareLink => 'Share link';
+
+  @override
+  String get playlistShareWithEveryone => 'Share with everyone';
+
+  @override
+  String playlistSharedBy(String name) {
+    return 'Shared by $name';
+  }
+
+  @override
+  String get playlistSharedByYou => 'Shared by you';
+
+  @override
+  String get playlistSharedHelp => 'Anyone on this server can see and play it';
+
+  @override
+  String get playlistSharedWithEveryone => 'Shared with everyone';
+
+  @override
+  String get playlistShuffle => 'Shuffle';
+
+  @override
+  String get playlistSmart => 'Smart';
+
+  @override
+  String get playlistSmartEmptyMessage =>
+      'No item in the library answers these rules. Loosen one and the list fills itself.';
+
+  @override
+  String get playlistSmartEmptyTitle => 'Nothing matches yet';
+
+  @override
+  String get playlistsEmptyMessage =>
+      'Make one, or add a track to a new list from anywhere it is playing. A smart playlist writes itself from rules and keeps up as the library grows.';
+
+  @override
+  String get playlistsEmptyTitle => 'No playlists yet';
+
+  @override
+  String get playlistsLoadError => 'Could not load your playlists';
+
+  @override
+  String get playlistsLoadErrorSentence => 'Could not load your playlists.';
+
+  @override
+  String get playlistsNew => 'New playlist';
+
+  @override
+  String get playlistsSectionShared => 'Shared with the server';
+
+  @override
+  String get playlistsSectionYours => 'Yours';
+
+  @override
+  String get playlistsTitle => 'Playlists';
+
+  @override
+  String get podcastAddSubscription => 'Add subscription';
+
+  @override
+  String get podcastAddToQueue => 'Add to queue';
+
+  @override
+  String get podcastAddedToQueue => 'Added to the queue';
+
+  @override
+  String get podcastAutoDownload => 'Auto-download new episodes';
+
+  @override
+  String get podcastAutoDownloadHelp =>
+      'Keeps arrivals on this device as the feed refreshes';
+
+  @override
+  String podcastBacklogReadError(String reason) {
+    return 'Could not read the backlog. $reason';
+  }
+
+  @override
+  String podcastChapterFallback(int number) {
+    return 'Chapter $number';
+  }
+
+  @override
+  String get podcastCheckForNew => 'Check for new episodes';
+
+  @override
+  String get podcastClearSelection => 'Clear';
+
+  @override
+  String get podcastCredits => 'Credits';
+
+  @override
+  String podcastCueSpoken(String text, String stamp) {
+    return '$text, $stamp';
+  }
+
+  @override
+  String podcastCueStartsAt(String kind, String stamp) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'chapter': 'Chapter starts at $stamp',
+      'clip': 'Clip starts at $stamp',
+      'cue': 'Cue starts at $stamp',
+      'other': 'Starts at $stamp',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String podcastDirectoryEpisodes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count episodes',
+      one: '1 episode',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastDownload => 'Download';
+
+  @override
+  String get podcastDownloadFailed => 'Download failed';
+
+  @override
+  String podcastDurationHoursMinutes(int hours, int minutes) {
+    return '${hours}h ${minutes}m';
+  }
+
+  @override
+  String podcastDurationMinutes(int minutes) {
+    return '${minutes}m';
+  }
+
+  @override
+  String podcastEpisodeCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count episodes',
+      one: '1 episode',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String podcastEpisodeDetails(String title) {
+    return 'Details for $title';
+  }
+
+  @override
+  String get podcastEpisodeFallbackTitle => 'Episode';
+
+  @override
+  String get podcastEpisodeLoadError => 'Could not load the episode';
+
+  @override
+  String podcastEpisodeNumber(int episode) {
+    return 'E$episode';
+  }
+
+  @override
+  String get podcastEpisodesLoadError => 'Could not load the episodes';
+
+  @override
+  String get podcastExcludeHelp => 'Comma separated. Wins where both match.';
+
+  @override
+  String get podcastExcludeLabel => 'Never titles containing';
+
+  @override
+  String get podcastExplicit => 'Explicit';
+
+  @override
+  String get podcastFeedUrlLabel => 'Feed or channel URL';
+
+  @override
+  String podcastFetchEpisode(String title) {
+    return 'Fetch $title to the server';
+  }
+
+  @override
+  String podcastFetchFailed(String reason) {
+    return 'Last fetch failed: $reason';
+  }
+
+  @override
+  String get podcastFetchToPlay => 'Fetch to play';
+
+  @override
+  String get podcastFetchingBeforePlay =>
+      'This feed named no audio to stream, so the server is fetching it. It plays once that lands.';
+
+  @override
+  String get podcastFetchingToServer => 'Fetching to server';
+
+  @override
+  String podcastFileUnreadable(String reason) {
+    return 'Could not read that file: $reason';
+  }
+
+  @override
+  String get podcastFilterActiveHelp =>
+      'Matched against episode titles only, and against new arrivals only: editing this never re-evaluates the backlog or removes anything already fetched.';
+
+  @override
+  String get podcastFilterAll => 'All';
+
+  @override
+  String get podcastFilterDownloaded => 'Downloaded';
+
+  @override
+  String get podcastFilterInactiveHelp =>
+      'Turn auto-download on for these to do anything.';
+
+  @override
+  String get podcastFilterUnplayed => 'Unplayed';
+
+  @override
+  String podcastFolderSpoken(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count shows',
+      one: '1 show',
+    );
+    return '$name, $_temp0';
+  }
+
+  @override
+  String get podcastFollow => 'Follow';
+
+  @override
+  String get podcastFollowing => 'Following';
+
+  @override
+  String podcastGoToShow(String name) {
+    return 'Go to $name';
+  }
+
+  @override
+  String podcastHighlightFallback(int number) {
+    return 'Highlight $number';
+  }
+
+  @override
+  String get podcastIncludeHelp =>
+      'Comma separated. Empty takes every episode.';
+
+  @override
+  String get podcastIncludeLabel => 'Only titles containing';
+
+  @override
+  String get podcastKeepFiles => 'Keep files';
+
+  @override
+  String get podcastLatestOverline => 'New';
+
+  @override
+  String podcastLatestPublished(String date) {
+    return 'Latest $date';
+  }
+
+  @override
+  String get podcastLatestTitle => 'Latest episodes';
+
+  @override
+  String get podcastLoadMore => 'Load more episodes';
+
+  @override
+  String get podcastLoadingMore => 'Loading...';
+
+  @override
+  String get podcastMarkOlderAll => 'Every episode';
+
+  @override
+  String get podcastMarkOlderBody =>
+      'Clears the unplayed dots on a backlog. Your positions on episodes you actually started are overwritten, and nothing is deleted.';
+
+  @override
+  String get podcastMarkOlderMonth => 'Older than a month';
+
+  @override
+  String get podcastMarkOlderPlayed => 'Mark older episodes as played';
+
+  @override
+  String podcastMarkOlderProgress(int done, int total) {
+    return '$done of $total';
+  }
+
+  @override
+  String podcastMarkOlderStopped(int count, String reason) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Stopped after $count. $reason',
+      one: 'Stopped after 1. $reason',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastMarkOlderWeek => 'Older than a week';
+
+  @override
+  String get podcastMarkPlayed => 'Mark played';
+
+  @override
+  String get podcastMarkedAsPlayed => 'Marked as played';
+
+  @override
+  String podcastMarkedPlayedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count marked played',
+      one: '1 marked played',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String podcastMarkedPlayedTotal(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count episodes marked as played',
+      one: '1 episode marked as played',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastMore => 'More';
+
+  @override
+  String podcastNewEpisodes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count new episodes',
+      one: '1 new episode',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String podcastNoAudioCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count had no audio in the feed',
+      one: '1 had no audio in the feed',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastNoAudioInFeed => 'No audio in the feed';
+
+  @override
+  String get podcastNoAudioToQueue =>
+      'This feed named no audio for that episode, so there is nothing to queue.';
+
+  @override
+  String podcastNoDurationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count had no duration to finish',
+      one: '1 had no duration to finish',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastNoDurationToFinish =>
+      'This feed declared no duration, so there is no position that means finished. Fetching the episode gives it one.';
+
+  @override
+  String get podcastNoEpisodes => 'No episodes yet';
+
+  @override
+  String get podcastNoEpisodesMessage =>
+      'This feed has published nothing this server can see.';
+
+  @override
+  String get podcastNoNewEpisodes => 'No new episodes';
+
+  @override
+  String get podcastNothingMatches => 'Nothing matches';
+
+  @override
+  String get podcastNothingMatchesMessage =>
+      'Widen the filter, or clear the search, to see the rest.';
+
+  @override
+  String get podcastNothingMatchesYet => 'Nothing matches yet';
+
+  @override
+  String get podcastNothingMatchesYetMessage =>
+      'The filter runs over the episodes loaded so far, and this show has more.';
+
+  @override
+  String get podcastOpenEpisodePage => 'Open the episode page';
+
+  @override
+  String get podcastOpmlCopied => 'Subscriptions copied as OPML';
+
+  @override
+  String get podcastOpmlCopy => 'Copy';
+
+  @override
+  String get podcastOpmlExport => 'Export OPML';
+
+  @override
+  String get podcastOpmlImport => 'Import OPML';
+
+  @override
+  String get podcastOpmlImported => 'Subscriptions imported';
+
+  @override
+  String get podcastOpmlPickerLabel => 'OPML';
+
+  @override
+  String get podcastOtherShows => 'Other shows';
+
+  @override
+  String get podcastPlay => 'Play';
+
+  @override
+  String get podcastPlayed => 'Played';
+
+  @override
+  String podcastQueuedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count added to the queue',
+      one: '1 added to the queue',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastQueuedForDownload => 'Queued for download';
+
+  @override
+  String podcastQueuedForDownloadCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count queued for download',
+      one: '1 queued for download',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String podcastQueuedWithFailure(int count, String reason) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count queued. $reason',
+      one: '1 queued. $reason',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastReadingBacklog => 'Reading the backlog...';
+
+  @override
+  String get podcastRefreshPaused =>
+      'Scheduled refresh is paused for this feed after repeated failures. Checking for new episodes turns it back on.';
+
+  @override
+  String get podcastRemoveDownload => 'Remove download';
+
+  @override
+  String podcastRemoveEpisode(String title) {
+    return 'Remove $title from the server';
+  }
+
+  @override
+  String get podcastRemoveFiles => 'Remove files';
+
+  @override
+  String get podcastRemovedFromServer =>
+      'Removed from server; your progress is kept';
+
+  @override
+  String podcastResume(String stamp) {
+    return 'Resume $stamp';
+  }
+
+  @override
+  String get podcastRetentionHelp =>
+      'Empty uses the server default; 0 keeps all';
+
+  @override
+  String get podcastRetentionLabel => 'Episodes to keep';
+
+  @override
+  String get podcastSearchShow => 'Search this show';
+
+  @override
+  String podcastSeasonChip(int season) {
+    return 'Season $season';
+  }
+
+  @override
+  String podcastSeasonEpisode(int season, int episode) {
+    return 'S$season E$episode';
+  }
+
+  @override
+  String get podcastSectionChapters => 'Chapters';
+
+  @override
+  String get podcastSectionHighlights => 'Highlights';
+
+  @override
+  String get podcastSectionNotes => 'Notes';
+
+  @override
+  String get podcastSectionPeople => 'People';
+
+  @override
+  String podcastSelectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count selected',
+      one: '1 selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastSettingsOverline => 'This show';
+
+  @override
+  String podcastSettingsSpeed(String speed) {
+    return 'Speed $speed';
+  }
+
+  @override
+  String get podcastSettingsSpeedLabel => 'Playback speed';
+
+  @override
+  String get podcastSettingsTitle => 'Subscription settings';
+
+  @override
+  String get podcastShare => 'Share';
+
+  @override
+  String get podcastShowFallbackTitle => 'Show';
+
+  @override
+  String get podcastShowLessNotes => 'Show less';
+
+  @override
+  String get podcastShowLoadError => 'Could not load the show';
+
+  @override
+  String get podcastShowMore => 'More for this show';
+
+  @override
+  String get podcastShowMoreNotes => 'Show more';
+
+  @override
+  String get podcastSkipIntro => 'Skip intro (seconds)';
+
+  @override
+  String get podcastSkipOutro => 'Skip outro (seconds)';
+
+  @override
+  String podcastSortRow(String sort) {
+    String _temp0 = intl.Intl.selectLogic(sort, {
+      'recent': 'Sort by recent',
+      'title': 'Sort by title',
+      'added': 'Sort by added',
+      'other': 'Sort by $sort',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastSourceLabel => 'Source';
+
+  @override
+  String get podcastSourceRss => 'RSS';
+
+  @override
+  String get podcastSourceYouTube => 'YouTube';
+
+  @override
+  String get podcastStop => 'Stop';
+
+  @override
+  String get podcastSubscribeAction => 'Subscribe';
+
+  @override
+  String get podcastSupportShow => 'Support this show';
+
+  @override
+  String podcastTimeLeft(String time) {
+    return '$time left';
+  }
+
+  @override
+  String get podcastTranscript => 'Transcript';
+
+  @override
+  String get podcastTranscriptError => 'Could not load the transcript';
+
+  @override
+  String podcastTranscriptSpeaker(String speaker, String text) {
+    return '$speaker: $text';
+  }
+
+  @override
+  String get podcastTrimSilence => 'Trim silence';
+
+  @override
+  String get podcastTrimSilenceHelp =>
+      'Needs the episode fetched: silence is mapped from the audio this server holds';
+
+  @override
+  String get podcastUnfollowBody =>
+      'Some episodes are downloaded on the server. Remove those files too? Removed files go to the trash, and your listening progress is kept either way. If someone else subscribes to this show, the files stay regardless.';
+
+  @override
+  String get podcastUnfollowTitle => 'Unfollow';
+
+  @override
+  String podcastUnplayedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count unplayed',
+      one: '1 unplayed',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastUpNextOverline => 'Half heard';
+
+  @override
+  String get podcastUpNextTitle => 'Up next';
+
+  @override
+  String get podcastVoiceBoost => 'Voice boost';
+
+  @override
+  String get podcastVoiceBoostHelp => 'Lifts speech over a noisy room';
+
+  @override
+  String get podcastsEmptyAction => 'Add a show';
+
+  @override
+  String get podcastsEmptyMessage =>
+      'Follow a show and its new episodes turn up here as the feed publishes them.';
+
+  @override
+  String get podcastsEmptyTitle => 'No shows yet';
+
+  @override
+  String get podcastsLoadError => 'Could not load your shows';
+
+  @override
+  String get podcastsTitle => 'Podcasts';
+
+  @override
   String queueAddedMany(int count) {
     return 'Added $count tracks to the queue';
   }
@@ -2932,6 +5059,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get queuePlayingFromLibrary => 'Playing from your library';
+
+  @override
   String queuePreviously(int count) {
     return 'PREVIOUSLY ($count)';
   }
@@ -2986,6 +5116,221 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queueUndo => 'Undo';
+
+  @override
+  String get radioAddByUrl => 'By URL';
+
+  @override
+  String get radioAddConfirm => 'Add';
+
+  @override
+  String get radioAddSearch => 'Search';
+
+  @override
+  String get radioAddStation => 'Add station';
+
+  @override
+  String radioAddedStation(String name) {
+    return 'Added $name';
+  }
+
+  @override
+  String radioCouldNotStop(String name) {
+    return 'Could not stop $name';
+  }
+
+  @override
+  String radioCouldNotTune(String name) {
+    return 'Could not tune $name';
+  }
+
+  @override
+  String radioDialFull(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'The dial holds $count stations. Unpin one to make room.',
+      one: 'The dial holds 1 station. Unpin one to make room.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String radioDirectoryBitrate(String codec, int bitrate) {
+    return '$codec $bitrate kbps';
+  }
+
+  @override
+  String get radioDirectoryStream => 'stream';
+
+  @override
+  String get radioEditStation => 'Edit station';
+
+  @override
+  String get radioEmptyAction => 'Add a station';
+
+  @override
+  String get radioEmptyMessage =>
+      'Search the directory to add your first, or paste a stream URL if you already have one.';
+
+  @override
+  String get radioEmptyTitle => 'No stations yet';
+
+  @override
+  String get radioFewerOptions => 'Fewer options';
+
+  @override
+  String get radioHowToAdd => 'How to add';
+
+  @override
+  String get radioLoadError => 'Could not load stations';
+
+  @override
+  String get radioLogoOptional => 'Logo URL (optional)';
+
+  @override
+  String get radioMoreOptions => 'Name, website, and logo';
+
+  @override
+  String get radioNameHint => 'Taken from the stream address when left blank';
+
+  @override
+  String get radioNeedsName => 'A station needs a name.';
+
+  @override
+  String get radioNeedsUrl => 'A station needs a stream URL.';
+
+  @override
+  String get radioNoMatches => 'No matches';
+
+  @override
+  String radioPin(String name) {
+    return 'Pin $name to the dial';
+  }
+
+  @override
+  String get radioPlaying => 'Playing';
+
+  @override
+  String get radioRemoveStation => 'Remove station';
+
+  @override
+  String get radioSaveChanges => 'Save changes';
+
+  @override
+  String get radioSavedAcquire => 'Get it from a URL';
+
+  @override
+  String get radioSavedAcquireHelp =>
+      'Download a copy you found; it lands in review';
+
+  @override
+  String get radioSavedDoorSubtitle =>
+      'Songs you caught on air and mean to hunt down';
+
+  @override
+  String get radioSavedEmptyMessage =>
+      'Tap the heart while a station is playing and the song it named turns up here, with a way to search for it.';
+
+  @override
+  String get radioSavedEmptyTitle => 'Nothing saved yet';
+
+  @override
+  String radioSavedFind(String title) {
+    return 'Find \"$title\" in the library';
+  }
+
+  @override
+  String radioSavedForget(String title) {
+    return 'Forget \"$title\"';
+  }
+
+  @override
+  String radioSavedHeardOn(String station) {
+    return 'Heard on $station';
+  }
+
+  @override
+  String get radioSavedIdentify => 'Identify a review entry as it';
+
+  @override
+  String get radioSavedIdentifyHelp =>
+      'Hand its name to a pending entry\'s search';
+
+  @override
+  String get radioSavedIdentifyOverline =>
+      'Pending single tracks in the review queue';
+
+  @override
+  String radioSavedIdentifyTitle(String title) {
+    return 'Identify as \"$title\"';
+  }
+
+  @override
+  String get radioSavedInLibrary => 'In your library now';
+
+  @override
+  String get radioSavedLoadError => 'Could not load your saved songs';
+
+  @override
+  String get radioSavedNoPending =>
+      'No pending single tracks to name. Get the song from a URL first and it turns up here while it waits for review.';
+
+  @override
+  String get radioSavedReviewError => 'Could not load the review queue.';
+
+  @override
+  String get radioSavedTitle => 'Saved from the radio';
+
+  @override
+  String get radioSavedUntitled => 'Untitled';
+
+  @override
+  String radioSavedWays(String title) {
+    return 'Ways to get \"$title\"';
+  }
+
+  @override
+  String get radioSearchDirectory => 'Search directory';
+
+  @override
+  String radioSearchFailedHint(String reason) {
+    return '$reason Paste a stream URL instead with \"By URL\".';
+  }
+
+  @override
+  String radioStationMore(String name) {
+    return 'More for $name';
+  }
+
+  @override
+  String get radioStationName => 'Station name';
+
+  @override
+  String get radioStationWebsite => 'Station website';
+
+  @override
+  String get radioStreamUrl => 'Stream URL';
+
+  @override
+  String get radioStreamUrlHint => 'https://example.com/stream';
+
+  @override
+  String get radioTitle => 'Radio';
+
+  @override
+  String get radioTuningIn => 'Tuning in';
+
+  @override
+  String radioUnpin(String name) {
+    return 'Unpin $name from the dial';
+  }
+
+  @override
+  String get radioVolume => 'Volume';
+
+  @override
+  String get radioWebsiteOptional => 'Website (optional)';
 
   @override
   String relDaysAgo(int days) {

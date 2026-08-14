@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
@@ -56,9 +57,10 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
     }
     final progress = PlayProgressView(states);
     final shown = arrangeBooks(loaded, view, progress);
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: 'Audiobooks',
+      title: l10n.booksTitle,
       semanticsId: SemanticsIds.booksHub,
       controller: _scroll,
       actions: <Widget>[
@@ -73,14 +75,11 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
         if (loaded.isNotEmpty)
           SliverToBoxAdapter(child: _Filters(books: loaded)),
         switch (state) {
-          AsyncData() when loaded.isEmpty => const SliverFillRemaining(
+          AsyncData() when loaded.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'No audiobooks yet',
-              message:
-                  'Books turn up here as the library scans them. Point a '
-                  'library at your audiobook folder and they arrive with '
-                  'their chapters.',
+              title: l10n.booksEmptyTitle,
+              message: l10n.booksEmptyMessage,
               glyph: WaxIcons.audiobooks,
             ),
           ),
@@ -90,10 +89,13 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           AsyncData() when shown.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'Nothing matches',
-              message: 'No book here is ${view.filter.label.toLowerCase()}.',
+              title: l10n.booksNothingMatches,
+              // The whole sentence per chip rather than the chip's own
+              // word lower-cased into a frame: the casing was an English
+              // rule, and the frame is the language's business.
+              message: l10n.booksFilterEmptyMessage(view.filter.name),
               glyph: WaxIcons.filter,
-              actionLabel: 'Show all books',
+              actionLabel: l10n.booksShowAll,
               onAction: () =>
                   ref.read(bookViewProvider.notifier).filterBy(BookFilter.all),
             ),
@@ -102,10 +104,8 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load your books',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.booksLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(booksProvider),
             ),
           ),
@@ -127,15 +127,16 @@ class _HubOverflow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(bookViewProvider);
+    final l10n = context.l10n;
     return WaxMenuButton<String>(
       glyph: WaxIcons.more,
-      label: 'More',
+      label: l10n.booksMore,
       semanticsId: SemanticsIds.booksHubOverflow,
       items: <WaxMenuItem<String>>[
         for (final sort in BookSort.values)
           WaxMenuItem<String>(
             value: sort.name,
-            label: 'Sort by ${sort.label.toLowerCase()}',
+            label: l10n.booksSortRow(sort.name),
             selected: sort == view.sort,
             semanticsId: SemanticsIds.bookSort(sort.name),
           ),
@@ -159,6 +160,7 @@ class _Filters extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(bookViewProvider);
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final authors = bookAuthors(books);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -170,7 +172,7 @@ class _Filters extends ConsumerWidget {
             for (final filter in BookFilter.values)
               WaxFilterChip(
                 name: filter.name,
-                label: filter.label,
+                label: filter.labelOf(l10n),
                 semanticsId: SemanticsIds.bookFinishedFilter(filter.name),
               ),
           ],
@@ -193,7 +195,7 @@ class _Filters extends ConsumerWidget {
               for (final author in authors)
                 WaxFilterChip(
                   name: author.name,
-                  label: '${author.name} (${author.count})',
+                  label: l10n.booksAuthorChip(author.name, author.count),
                   semanticsId: SemanticsIds.bookAuthorFilter(author.name),
                 ),
             ],
@@ -218,7 +220,8 @@ class _ContinueShelf extends ConsumerWidget {
     final reading = continueListening(books, states);
     if (reading.isEmpty) return const SizedBox.shrink();
     final store = ref.watch(artworkStoreProvider);
-    final l10n = context.waxL10n;
+    final l10n = context.l10n;
+    final wax = context.waxL10n;
     final tiles = <MediaTileData>[
       for (final book in reading)
         MediaTileData(
@@ -228,8 +231,20 @@ class _ContinueShelf extends ConsumerWidget {
           domain: WaxDomain.audiobooks,
           shape: ArtworkShape.portrait,
           progress: states[book.pid]?.fractionOf(book.durationMs),
-          trailingText: _left(l10n, states[book.pid], book.durationMs),
-          trailingSpoken: _leftSpoken(l10n, states[book.pid], book.durationMs),
+          trailingText: _left(
+            l10n,
+            wax,
+            states[book.pid],
+            book.durationMs,
+            short: true,
+          ),
+          trailingSpoken: _left(
+            l10n,
+            wax,
+            states[book.pid],
+            book.durationMs,
+            short: false,
+          ),
           // Its own handle, not the grid card's. A half-heard book is on
           // this shelf *and* in the grid below, so one handle would name
           // two controls and leave a spec picking by document order
@@ -241,8 +256,8 @@ class _ContinueShelf extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(top: WaxSpace.s8, bottom: WaxSpace.s16),
       child: ShelfRow(
-        title: 'Continue listening',
-        overline: 'Part way through',
+        title: l10n.booksContinueTitle,
+        overline: l10n.booksContinueOverline,
         items: tiles,
         // By position rather than by title: a tile carries no value
         // equality, and two editions of one book share a name.
@@ -257,26 +272,21 @@ class _ContinueShelf extends ConsumerWidget {
     );
   }
 
-  /// "6 hr left", the readout the layout asks the shelf for. A span
-  /// rather than a timecode: a book with "7:50:12" left is being told a
-  /// clock time.
+  /// "6 hr left". A span rather than a timecode, which would read as a
+  /// clock time. [short] draws it; the long form is what a screen reader
+  /// hears.
   static String? _left(
-    WaxLocalizations l10n,
+    AppLocalizations l10n,
+    WaxLocalizations wax,
     PlayProgress? progress,
-    int durationMs,
-  ) {
+    int durationMs, {
+    required bool short,
+  }) {
     final remaining = progress?.remainingOf(durationMs);
-    return remaining == null ? null : '${l10n.formatSpan(remaining)} left';
-  }
-
-  /// The same, for the ear: "6 hours left" rather than "6 hr left".
-  static String? _leftSpoken(
-    WaxLocalizations l10n,
-    PlayProgress? progress,
-    int durationMs,
-  ) {
-    final remaining = progress?.remainingOf(durationMs);
-    return remaining == null ? null : '${l10n.spellDuration(remaining)} left';
+    if (remaining == null) return null;
+    return l10n.booksTimeLeft(
+      short ? wax.formatSpan(remaining) : wax.spellDuration(remaining),
+    );
   }
 }
 
@@ -291,7 +301,8 @@ class _BookGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final store = ref.watch(artworkStoreProvider);
-    final l10n = context.waxL10n;
+    final l10n = context.l10n;
+    final wax = context.waxL10n;
     return SliverPadding(
       padding: sizeClass.gutter,
       sliver: SliverLayoutBuilder(
@@ -321,12 +332,14 @@ class _BookGrid extends ConsumerWidget {
                   progress: state.fractionOf(book.durationMs),
                   trailingText: _caption(
                     l10n,
+                    wax,
                     state,
                     book.durationMs,
                     short: true,
                   ),
                   trailingSpoken: _caption(
                     l10n,
+                    wax,
                     state,
                     book.durationMs,
                     short: false,
@@ -349,17 +362,17 @@ class _BookGrid extends ConsumerWidget {
   /// [short] draws it, abbreviated to what a cell has room for; the long
   /// form is what a screen reader hears.
   static String? _caption(
-    WaxLocalizations l10n,
+    AppLocalizations l10n,
+    WaxLocalizations wax,
     PlayProgress state,
     int durationMs, {
     required bool short,
   }) {
-    String span(Duration d) =>
-        short ? l10n.formatSpan(d) : l10n.spellDuration(d);
-    if (state.finished) return 'Finished';
+    String span(Duration d) => short ? wax.formatSpan(d) : wax.spellDuration(d);
+    if (state.finished) return l10n.booksFinished;
     final remaining = state.remainingOf(durationMs);
     if (state.inProgress && remaining != null) {
-      return '${span(remaining)} left';
+      return l10n.booksTimeLeft(span(remaining));
     }
     return durationMs > 0 ? span(Duration(milliseconds: durationMs)) : null;
   }

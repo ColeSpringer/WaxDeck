@@ -35,6 +35,9 @@ Future<void> confirmDeleteItem(
   VoidCallback? onDeleted,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
+  // Read beside the messenger, for the same reason: both are wanted
+  // after an await, and a context is not read across one.
+  final l10n = context.l10n;
   // The container rather than `ref`, for the same reason the mark-older
   // dialog holds one: the deletion happens whether or not the screen
   // that offered it is still mounted when the server answers, and the
@@ -63,8 +66,8 @@ Future<void> confirmDeleteItem(
       SnackBar(
         content: Text(
           result.mode == 'permanent'
-              ? 'Deleted ${result.totalFiles} files for good'
-              : 'Moved ${result.totalFiles} files to the trash',
+              ? l10n.libraryDeletePermanentDone(result.totalFiles)
+              : l10n.libraryDeleteTrashDone(result.totalFiles),
         ),
       ),
     );
@@ -72,7 +75,7 @@ Future<void> confirmDeleteItem(
   } on WaxDeckApiException catch (e) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(e.message)));
+      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
   }
 }
 
@@ -91,20 +94,21 @@ class ItemDeleteAction extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (!canDeleteItems(ref)) return const SizedBox.shrink();
+    final l10n = context.l10n;
     return Semantics(
       identifier: SemanticsIds.itemDelete,
-      label: 'Delete files',
+      label: l10n.libraryDeleteFilesLabel,
       button: true,
       child: PopupMenuButton<String>(
         key: const Key(SemanticsIds.itemDelete),
-        tooltip: 'More',
+        tooltip: l10n.libraryDeleteMore,
         onSelected: (_) =>
             confirmDeleteItem(context, pid: pid, onDeleted: onDeleted),
         itemBuilder: (context) => [
-          const PopupMenuItem(
-            key: Key('item-delete-open'),
+          PopupMenuItem(
+            key: const Key('item-delete-open'),
             value: 'delete',
-            child: Text('Delete files...'),
+            child: Text(l10n.libraryDeleteFilesMenu),
           ),
         ],
       ),
@@ -128,16 +132,19 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
   @override
   Widget build(BuildContext context) {
     final plan = widget.plan;
+    final l10n = context.l10n;
     return AlertDialog(
       key: const Key('item-delete-dialog'),
-      title: const Text('Delete files?'),
+      title: Text(l10n.libraryDeleteTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'This removes ${plan.totalFiles} files, '
-            '${context.l10n.formatBytes(plan.totalBytes)}.',
+            l10n.libraryDeletePreview(
+              plan.totalFiles,
+              l10n.formatBytes(plan.totalBytes),
+            ),
             key: const Key('item-delete-preview'),
           ),
           const SizedBox(height: WaxSpace.s8),
@@ -147,14 +154,14 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
             options: <WaxRadioOption<String>>[
               WaxRadioOption<String>(
                 value: 'trash',
-                label: 'Move to trash',
-                help: 'Restorable from the trash screen',
+                label: l10n.libraryDeleteModeTrash,
+                help: l10n.libraryDeleteModeTrashHelp,
                 semanticsId: SemanticsIds.itemDeleteMode('trash'),
               ),
               WaxRadioOption<String>(
                 value: 'permanent',
-                label: 'Delete permanently',
-                help: 'Gone for good',
+                label: l10n.libraryDeleteModePermanent,
+                help: l10n.libraryDeleteModePermanentHelp,
                 semanticsId: SemanticsIds.itemDeleteMode('permanent'),
               ),
             ],
@@ -164,7 +171,7 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.commonCancel),
         ),
         Semantics(
           identifier: SemanticsIds.itemDeleteConfirm,
@@ -175,7 +182,7 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: () => Navigator.of(context).pop(_mode),
-            child: const Text('Delete'),
+            child: Text(l10n.libraryDeleteAction),
           ),
         ),
       ],

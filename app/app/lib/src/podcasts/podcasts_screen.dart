@@ -9,6 +9,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
@@ -29,13 +30,14 @@ class PodcastsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final subscriptions = ref.watch(subscriptionsProvider);
     final sort = ref.watch(subscriptionSortProvider);
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: 'Podcasts',
+      title: l10n.podcastsTitle,
       actions: <Widget>[
         WaxIconButton(
           glyph: WaxIcons.add,
-          label: 'Add subscription',
+          label: l10n.podcastAddSubscription,
           semanticsId: SemanticsIds.podcastAdd,
           onPressed: () => showDialog<void>(
             context: context,
@@ -52,12 +54,10 @@ class PodcastsScreen extends ConsumerWidget {
           AsyncData(:final value) when value.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'No shows yet',
-              message:
-                  'Follow a show and its new episodes turn up here as the '
-                  'feed publishes them.',
+              title: l10n.podcastsEmptyTitle,
+              message: l10n.podcastsEmptyMessage,
               glyph: WaxIcons.podcasts,
-              actionLabel: 'Add a show',
+              actionLabel: l10n.podcastsEmptyAction,
               onAction: () => showDialog<void>(
                 context: context,
                 builder: (_) => const SubscribeDialog(),
@@ -70,10 +70,8 @@ class PodcastsScreen extends ConsumerWidget {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load your shows',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.podcastsLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(subscriptionsProvider),
             ),
           ),
@@ -97,30 +95,33 @@ class _HubOverflow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sort = ref.watch(subscriptionSortProvider);
     final picker = ref.watch(filePickerProvider);
+    final l10n = context.l10n;
     return WaxMenuButton<String>(
       glyph: WaxIcons.more,
-      label: 'More',
+      label: l10n.podcastMore,
       semanticsId: SemanticsIds.podcastOverflow,
       items: <WaxMenuItem<String>>[
         for (final choice in SubscriptionSort.values)
           WaxMenuItem<String>(
             value: 'sort:${choice.name}',
-            label: 'Sort by ${choice.label.toLowerCase()}',
+            // The whole row rather than a lower-cased noun dropped into
+            // a frame: the frame's shape is the language's business.
+            label: l10n.podcastSortRow(choice.name),
             selected: choice == sort,
             semanticsId: SemanticsIds.podcastSort(choice.name),
           ),
-        const WaxMenuItem<String>(
+        WaxMenuItem<String>(
           value: 'export',
-          label: 'Export OPML',
+          label: l10n.podcastOpmlExport,
           semanticsId: SemanticsIds.podcastOpmlExport,
         ),
         // Hidden without a picker, the contract every pick affordance in
         // this app follows: a platform with no file dialog would
         // otherwise offer an import that cannot open one.
         if (picker != null)
-          const WaxMenuItem<String>(
+          WaxMenuItem<String>(
             value: 'import',
-            label: 'Import OPML',
+            label: l10n.podcastOpmlImport,
             semanticsId: SemanticsIds.podcastOpmlImport,
           ),
       ],
@@ -151,20 +152,21 @@ class _HubOverflow extends ConsumerWidget {
   /// clipboard pastes into every other podcast client's import box.
   static Future<void> _exportOpml(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final String opml;
     try {
       opml = await ref.read(repositoryProvider).exportOpml();
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
       return;
     }
     if (!context.mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Export OPML'),
+        title: Text(l10n.podcastOpmlExport),
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
@@ -177,19 +179,17 @@ class _HubOverflow extends ConsumerWidget {
         ),
         actions: <Widget>[
           WaxButton(
-            label: 'Close',
+            label: l10n.commonClose,
             kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(context).pop(),
           ),
           WaxButton(
-            label: 'Copy',
+            label: l10n.podcastOpmlCopy,
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: opml));
               messenger
                 ..hideCurrentSnackBar()
-                ..showSnackBar(
-                  const SnackBar(content: Text('Subscriptions copied as OPML')),
-                );
+                ..showSnackBar(SnackBar(content: Text(l10n.podcastOpmlCopied)));
             },
           ),
         ],
@@ -203,10 +203,11 @@ class _HubOverflow extends ConsumerWidget {
     final picker = ref.read(filePickerProvider);
     if (picker == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       final file = await picker.pickFile(
         extensions: _opmlExtensions,
-        label: 'OPML',
+        label: l10n.podcastOpmlPickerLabel,
       );
       final openRead = file?.openRead;
       if (file == null || openRead == null) return;
@@ -219,15 +220,18 @@ class _HubOverflow extends ConsumerWidget {
           .importOpml(utf8.decode(bytes.takeBytes(), allowMalformed: true));
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Subscriptions imported')));
+        ..showSnackBar(SnackBar(content: Text(l10n.podcastOpmlImported)));
     } on WaxDeckApiException catch (e) {
+      // What was pasted in is what was refused, so the server's words.
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
     } on Exception catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Could not read that file: $e')));
+        ..showSnackBar(
+          SnackBar(content: Text(l10n.podcastFileUnreadable('$e'))),
+        );
     }
   }
 }
@@ -243,6 +247,7 @@ class _UpNextShelf extends ConsumerWidget {
         ref.watch(upNextEpisodesProvider).value ?? const <ShelfEpisode>[];
     if (rows.isEmpty) return const SizedBox.shrink();
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.l10n;
     final tiles = <MediaTileData>[
       for (final row in rows)
         MediaTileData(
@@ -251,7 +256,7 @@ class _UpNextShelf extends ConsumerWidget {
           artwork: store.source(row.episode.artUrl),
           domain: WaxDomain.podcasts,
           progress: row.progress.fractionOf(row.episode.durationMs),
-          trailingText: _remaining(row),
+          trailingText: _remaining(l10n, row),
           downloaded: row.episode.downloaded,
           // Its own handle, not the row identifier the Latest list and
           // the show's own list use. The same episode can be drawn by
@@ -266,8 +271,8 @@ class _UpNextShelf extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(top: WaxSpace.s8, bottom: WaxSpace.s16),
       child: ShelfRow(
-        title: 'Up next',
-        overline: 'Half heard',
+        title: l10n.podcastUpNextTitle,
+        overline: l10n.podcastUpNextOverline,
         items: tiles,
         // By position, not by title: two shows can publish an episode
         // under one name, and a tile carries no value equality, so this
@@ -281,10 +286,10 @@ class _UpNextShelf extends ConsumerWidget {
     );
   }
 
-  static String? _remaining(ShelfEpisode row) {
+  static String? _remaining(AppLocalizations l10n, ShelfEpisode row) {
     final left = row.episode.durationMs - row.progress.positionMs;
     if (left <= 0) return null;
-    return '${formatTimecode(Duration(milliseconds: left))} left';
+    return l10n.podcastTimeLeft(formatTimecode(Duration(milliseconds: left)));
   }
 
   /// Resumes where the listener stopped, through the same verb every
@@ -366,9 +371,7 @@ class _FolderGroupState extends State<_FolderGroup> {
           if (widget.expandable)
             WaxTappable(
               semanticsId: SemanticsIds.podcastFolder(widget.name),
-              label:
-                  '${widget.name}, $count '
-                  '${count == 1 ? 'show' : 'shows'}',
+              label: context.l10n.podcastFolderSpoken(widget.name, count),
               selected: _open,
               onPressed: () => setState(() => _open = !_open),
               // WaxTappable adds semantics, focus, and a ring, and no
@@ -405,7 +408,7 @@ class _FolderGroupState extends State<_FolderGroup> {
               ),
             )
           else
-            const SectionHeader(title: 'Other shows'),
+            SectionHeader(title: context.l10n.podcastOtherShows),
           if (_open || !widget.expandable)
             _ShowGridBox(subscriptions: widget.subscriptions),
         ],
@@ -507,8 +510,8 @@ class _ShowTile extends ConsumerWidget {
         // for. The episode count is the fallback for a server that
         // predates the field, and for a show with nothing waiting.
         trailingText: switch ((unplayed, count)) {
-          (final int n, _) when n > 0 => '$n unplayed',
-          (_, final int n) => '$n ${n == 1 ? 'episode' : 'episodes'}',
+          (final int n, _) when n > 0 => context.l10n.podcastUnplayedCount(n),
+          (_, final int n) => context.l10n.podcastEpisodeCount(n),
           _ => null,
         },
         unplayed: (unplayed ?? 0) > 0,
@@ -533,13 +536,17 @@ class _LatestEpisodes extends ConsumerWidget {
     if (latest.isEmpty) return const SizedBox(height: WaxSpace.s32);
     final sizeClass = WaxSizeClass.of(context);
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.l10n;
     return Padding(
       padding: sizeClass.gutter,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: WaxSpace.s16),
-          const SectionHeader(title: 'Latest episodes', overline: 'New'),
+          SectionHeader(
+            title: l10n.podcastLatestTitle,
+            overline: l10n.podcastLatestOverline,
+          ),
           for (final row in latest)
             MediaListRow(
               data: MediaTileData(
@@ -557,7 +564,7 @@ class _LatestEpisodes extends ConsumerWidget {
               actions: <Widget>[
                 WaxIconButton(
                   glyph: WaxIcons.info,
-                  label: 'Details for ${row.episode.title}',
+                  label: l10n.podcastEpisodeDetails(row.episode.title),
                   size: 18,
                   semanticsId: SemanticsIds.episodeInfo(row.episode.pid),
                   // Pushed: the episode's declared parent is its show,
@@ -614,15 +621,18 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final l10n = context.l10n;
     try {
       await ref
           .read(subscriptionsProvider.notifier)
           .subscribe(url: url, sourceType: _sourceType);
       navigator.pop();
     } on WaxDeckApiException catch (e) {
+      // The URL was just typed, so the server's own words about it:
+      // "the feed's own server did not answer" names the address.
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -630,8 +640,9 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return AlertDialog(
-      title: const Text('Add subscription'),
+      title: Text(l10n.podcastAddSubscription),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
@@ -641,16 +652,16 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
           TextField(
             key: const Key('podcast-url-field'),
             controller: _urlController,
-            decoration: const InputDecoration(labelText: 'Feed or channel URL'),
+            decoration: InputDecoration(labelText: l10n.podcastFeedUrlLabel),
             keyboardType: TextInputType.url,
             autofocus: true,
           ),
           const SizedBox(height: WaxSpace.s12),
           WaxSegmented(
-            label: 'Source',
-            segments: const <WaxSegment>[
-              WaxSegment(name: 'rss', label: 'RSS'),
-              WaxSegment(name: 'youtube', label: 'YouTube'),
+            label: l10n.podcastSourceLabel,
+            segments: <WaxSegment>[
+              WaxSegment(name: 'rss', label: l10n.podcastSourceRss),
+              WaxSegment(name: 'youtube', label: l10n.podcastSourceYouTube),
             ],
             selected: _sourceType,
             onSelect: (name) => setState(() => _sourceType = name),
@@ -659,12 +670,12 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
       ),
       actions: <Widget>[
         WaxButton(
-          label: 'Cancel',
+          label: l10n.commonCancel,
           kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
         ),
         WaxButton(
-          label: 'Subscribe',
+          label: l10n.podcastSubscribeAction,
           semanticsId: SemanticsIds.podcastSubscribeConfirm,
           onPressed: _busy ? null : _subscribe,
         ),

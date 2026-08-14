@@ -6,6 +6,7 @@ import '../auth/auth_controller.dart';
 import '../home/home_shelves.dart';
 import '../home/item_shelf.dart';
 import '../home/mix_shelf.dart';
+import '../l10n/l10n.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
 import '../shell/routes.dart';
@@ -34,30 +35,30 @@ class _HubTile {
   /// and nothing else rather than a number invented for symmetry.
   final MusicDimension? dimension;
 
-  factory _HubTile.forDimension(MusicDimension dimension) => _HubTile(
+  factory _HubTile.forDimension(
+    AppLocalizations l10n,
+    MusicDimension dimension,
+  ) => _HubTile(
     name: dimension.segment,
-    label: dimension.label,
+    label: dimension.titleOf(l10n),
     glyph: dimension.glyph,
     location: WaxRoute.musicIndex(dimension),
     dimension: dimension,
   );
 }
 
-/// The ways in, in the order 6.3 lists them.
-///
-/// A dimension's tile takes its label, glyph, and location from the
-/// dimension rather than repeating them: a renamed segment would
-/// otherwise leave six tiles pointing at locations the table no longer
-/// declares, and nothing here would notice.
-final _tiles = <_HubTile>[
+/// The ways in, in the order 6.3 lists them. A dimension's tile takes
+/// everything from the dimension, so a renamed segment cannot leave
+/// tiles pointing at locations the table no longer declares.
+List<_HubTile> _tiles(AppLocalizations l10n) => <_HubTile>[
   for (final dimension in <MusicDimension>[
     MusicDimension.artists,
     MusicDimension.albums,
   ])
-    _HubTile.forDimension(dimension),
+    _HubTile.forDimension(l10n, dimension),
   _HubTile(
     name: 'tracks',
-    label: 'Tracks',
+    label: l10n.musicTracksTitle,
     glyph: WaxIcons.music,
     location: WaxRoute.musicTracks,
   ),
@@ -65,10 +66,10 @@ final _tiles = <_HubTile>[
     MusicDimension.genres,
     MusicDimension.years,
   ])
-    _HubTile.forDimension(dimension),
+    _HubTile.forDimension(l10n, dimension),
   _HubTile(
     name: 'playlists',
-    label: 'Playlists',
+    label: l10n.playlistsTitle,
     glyph: WaxIcons.playlists,
     location: WaxRoute.playlists,
   ),
@@ -87,9 +88,11 @@ class MusicHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
+    final tiles = _tiles(l10n);
 
     return WaxScaffold(
-      title: 'Music',
+      title: l10n.musicTitle,
       actions: const <Widget>[SearchAction(), AccountAction()],
       slivers: <Widget>[
         // Compact browses through a tile grid, two to a row. Anything
@@ -105,8 +108,8 @@ class MusicHubScreen extends ConsumerWidget {
                 crossAxisSpacing: WaxSpace.s12,
                 mainAxisExtent: _IndexTile.extentFor(context),
               ),
-              itemCount: _tiles.length,
-              itemBuilder: (context, index) => _IndexTile(tile: _tiles[index]),
+              itemCount: tiles.length,
+              itemBuilder: (context, index) => _IndexTile(tile: tiles[index]),
             ),
           )
         else
@@ -118,7 +121,7 @@ class MusicHubScreen extends ConsumerWidget {
                 spacing: WaxSpace.s8,
                 runSpacing: WaxSpace.s8,
                 children: <Widget>[
-                  for (final tile in _tiles) _IndexChip(tile: tile),
+                  for (final tile in tiles) _IndexChip(tile: tile),
                 ],
               ),
             ),
@@ -126,21 +129,21 @@ class MusicHubScreen extends ConsumerWidget {
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s24)),
         ItemShelf(
           shelf: 'music-recent',
-          title: 'Recently added',
-          overline: 'New to the collection',
+          title: l10n.musicShelfRecentTitle,
+          overline: l10n.musicShelfRecentOverline,
           provider: musicRecentlyAddedShelfProvider,
           allLocation: WaxRoute.musicTracks,
         ),
         ItemShelf(
           shelf: 'music-most-played',
-          title: 'Most played',
-          overline: 'What you come back to',
+          title: l10n.musicShelfMostPlayedTitle,
+          overline: l10n.musicShelfMostPlayedOverline,
           provider: musicMostPlayedShelfProvider,
         ),
         ItemShelf(
           shelf: 'music-starred',
-          title: 'Starred',
-          overline: 'Kept on purpose',
+          title: l10n.musicShelfStarredTitle,
+          overline: l10n.musicShelfStarredOverline,
           provider: musicStarredShelfProvider,
         ),
         const MixShelf(),
@@ -184,16 +187,14 @@ class _AllEmptyInvitation extends ConsumerWidget {
     // The same gate home's add wears: the upload right, and a server to
     // hand the files to.
     final offerAdd = canUpload && !offline;
+    final l10n = context.l10n;
     return SliverFillRemaining(
       hasScrollBody: false,
       child: EmptyState(
-        title: 'No music yet',
-        message:
-            'Point a library at your music or drop files in. These '
-            'shelves fill themselves as the collection grows and you '
-            'listen.',
+        title: l10n.musicEmptyTitle,
+        message: l10n.musicHubEmptyMessage,
         glyph: WaxIcons.music,
-        actionLabel: offerAdd ? 'Add to library' : null,
+        actionLabel: offerAdd ? l10n.musicHubAddToLibrary : null,
         onAction: offerAdd ? () => showAddToLibrarySheet(context, ref) : null,
       ),
     );
@@ -217,7 +218,9 @@ class _IndexChip extends ConsumerWidget {
 
     return WaxTappable(
       semanticsId: SemanticsIds.musicTile(tile.name),
-      label: count == null ? tile.label : '${tile.label}, ${count.label}',
+      label: count == null
+          ? tile.label
+          : context.l10n.musicHubTileSpoken(tile.label, count.label),
       onPressed: () => context.go(tile.location),
       borderRadius: WaxRadius.pill,
       child: Material(
@@ -296,7 +299,9 @@ class _IndexTile extends ConsumerWidget {
 
     return WaxTappable(
       semanticsId: SemanticsIds.musicTile(tile.name),
-      label: count == null ? tile.label : '${tile.label}, ${count.label}',
+      label: count == null
+          ? tile.label
+          : context.l10n.musicHubTileSpoken(tile.label, count.label),
       onPressed: () => context.go(tile.location),
       borderRadius: WaxRadius.card,
       child: Material(

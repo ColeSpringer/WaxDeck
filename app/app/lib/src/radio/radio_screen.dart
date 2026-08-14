@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../player/output_volume.dart';
 import '../providers.dart';
@@ -31,14 +32,15 @@ class RadioScreen extends ConsumerWidget {
     final stations = ref.watch(radioStationsProvider);
     final playback = ref.watch(radioPlaybackProvider);
     final dial = ref.watch(radioDialProvider);
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: 'Radio',
+      title: l10n.radioTitle,
       semanticsId: SemanticsIds.radioHub,
       actions: <Widget>[
         WaxIconButton(
           glyph: WaxIcons.add,
-          label: 'Add station',
+          label: l10n.radioAddStation,
           semanticsId: SemanticsIds.radioAdd,
           onPressed: () => unawaited(showAddStationDialog(context)),
         ),
@@ -63,12 +65,10 @@ class RadioScreen extends ConsumerWidget {
           AsyncData(:final value) when value.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'No stations yet',
-              message:
-                  'Search the directory to add your first, or paste a stream '
-                  'URL if you already have one.',
+              title: l10n.radioEmptyTitle,
+              message: l10n.radioEmptyMessage,
               glyph: WaxIcons.radio,
-              actionLabel: 'Add a station',
+              actionLabel: l10n.radioEmptyAction,
               onAction: () => unawaited(showAddStationDialog(context)),
             ),
           ),
@@ -79,10 +79,8 @@ class RadioScreen extends ConsumerWidget {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load stations',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.radioLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(radioStationsProvider),
             ),
           ),
@@ -112,8 +110,8 @@ class _SavedSongsDoor extends StatelessWidget {
       ).gutter.copyWith(top: WaxSpace.s8, bottom: WaxSpace.s8),
       child: WaxOptionRow(
         glyph: WaxIcons.heart,
-        title: 'Saved from the radio',
-        subtitle: 'Songs you caught on air and mean to hunt down',
+        title: context.l10n.radioSavedTitle,
+        subtitle: context.l10n.radioSavedDoorSubtitle,
         semanticsId: SemanticsIds.radioSavedOpen,
         onTap: () => context.go(WaxRoute.radioSaved),
       ),
@@ -197,7 +195,7 @@ class _StationVolume extends ConsumerWidget {
           value: ref.watch(outputVolumeProvider),
           onChanged: (level) => unawaited(volume.set(level)),
           onMute: () => unawaited(volume.toggleMute()),
-          label: 'Volume',
+          label: context.l10n.radioVolume,
           glyph: WaxIcons.volume,
           mutedGlyph: WaxIcons.volumeMuted,
           trackWidth: 160,
@@ -283,6 +281,7 @@ class _StationTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return Stack(
       children: <Widget>[
         MediaCard(
@@ -291,8 +290,8 @@ class _StationTile extends ConsumerWidget {
             // What is on, when this is the station that is on: the ICY
             // line is the reason to look at a station tile at all.
             subtitle: starting
-                ? 'Tuning in'
-                : (playing ? (nowPlaying ?? 'Playing') : null),
+                ? l10n.radioTuningIn
+                : (playing ? (nowPlaying ?? l10n.radioPlaying) : null),
             artwork: artwork,
             domain: WaxDomain.radio,
             shape: ArtworkShape.circle,
@@ -313,8 +312,8 @@ class _StationTile extends ConsumerWidget {
               WaxIconButton(
                 glyph: WaxIcons.star,
                 label: pinned
-                    ? 'Unpin ${station.name} from the dial'
-                    : 'Pin ${station.name} to the dial',
+                    ? l10n.radioUnpin(station.name)
+                    : l10n.radioPin(station.name),
                 size: 16,
                 active: pinned,
                 semanticsId: SemanticsIds.radioFavorite(station.pid),
@@ -322,22 +321,22 @@ class _StationTile extends ConsumerWidget {
               ),
               WaxMenuButton<String>(
                 glyph: WaxIcons.more,
-                label: 'More for ${station.name}',
+                label: l10n.radioStationMore(station.name),
                 semanticsId: SemanticsIds.radioMenu(station.pid),
                 items: <WaxMenuItem<String>>[
                   WaxMenuItem<String>(
                     value: 'edit',
-                    label: 'Edit station',
+                    label: l10n.radioEditStation,
                     semanticsId: SemanticsIds.radioEdit(station.pid),
                   ),
                   if (station.homepageUrl != null)
-                    const WaxMenuItem<String>(
+                    WaxMenuItem<String>(
                       value: 'homepage',
-                      label: 'Station website',
+                      label: l10n.radioStationWebsite,
                     ),
                   WaxMenuItem<String>(
                     value: 'delete',
-                    label: 'Remove station',
+                    label: l10n.radioRemoveStation,
                     semanticsId: SemanticsIds.radioDelete(station.pid),
                   ),
                 ],
@@ -356,13 +355,16 @@ class _StationTile extends ConsumerWidget {
   /// a star that silently springs back.
   Future<void> _pin(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final refusal = await ref
         .read(radioFavoritesProvider.notifier)
         .toggle(station.pid);
     if (refusal == null) return;
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(refusal)));
+      ..showSnackBar(
+        SnackBar(content: Text(radioPinRefusalMessage(l10n, refusal))),
+      );
   }
 
   Future<void> _menu(BuildContext context, WidgetRef ref, String choice) async {
@@ -378,6 +380,7 @@ class _StationTile extends ConsumerWidget {
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final favorites = ref.read(radioFavoritesProvider.notifier);
     final playbackController = ref.read(radioPlaybackProvider.notifier);
     final wasPlaying = playing;
@@ -387,7 +390,7 @@ class _StationTile extends ConsumerWidget {
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
       return;
     }
     // A pin outlives the station it names: the dial draws nothing, but the
@@ -398,7 +401,9 @@ class _StationTile extends ConsumerWidget {
     if (refusal == null) return;
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(refusal)));
+      ..showSnackBar(
+        SnackBar(content: Text(radioPinRefusalMessage(l10n, refusal))),
+      );
   }
 }
 
@@ -426,6 +431,7 @@ Future<void> _tune(
     return tuneStation(context, ref, station);
   }
   final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
   try {
     await ref.read(radioPlaybackProvider.notifier).stop();
   } on Exception catch (e) {
@@ -435,8 +441,8 @@ Future<void> _tune(
         SnackBar(
           content: Text(
             e is WaxDeckApiException
-                ? e.message
-                : 'Could not stop ${station.name}',
+                ? explainError(l10n, e)
+                : l10n.radioCouldNotStop(station.name),
           ),
         ),
       );
@@ -451,6 +457,7 @@ Future<void> tuneStation(
   RadioStation station,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
   try {
     await ref.read(radioPlaybackProvider.notifier).play(station);
   } on Exception catch (e) {
@@ -460,8 +467,8 @@ Future<void> tuneStation(
         SnackBar(
           content: Text(
             e is WaxDeckApiException
-                ? e.message
-                : 'Could not tune ${station.name}',
+                ? explainError(l10n, e)
+                : l10n.radioCouldNotTune(station.name),
           ),
         ),
       );

@@ -2655,6 +2655,366 @@ abstract class AppLocalizations {
   /// **'{file} could not be read'**
   String artworkUnreadable(String file);
 
+  /// Snackbar after putting a book's position back at zero.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to the beginning'**
+  String get bookBackToBeginning;
+
+  /// Who wrote a book, under its title. {names} is the authors joined by commas.
+  ///
+  /// In en, this message translates to:
+  /// **'By {names}'**
+  String bookByAuthors(String names);
+
+  /// Stands in for a chapter mark the file numbered but did not title.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter {number}'**
+  String bookChapterFallback(int number);
+
+  /// Overline above a book's chapters, counting them.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 in this book} other{{count} in this book}}'**
+  String bookChaptersOverline(int count);
+
+  /// Heading over a book's chapter list.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get bookChaptersTitle;
+
+  /// Control keeping a book's audio on this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Download for offline'**
+  String get bookDownloadOffline;
+
+  /// Row in a book's overflow opening the metadata editor. Administrators only.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit metadata'**
+  String get bookEditMetadata;
+
+  /// Heading over a book's technical rows, behind an expander.
+  ///
+  /// In en, this message translates to:
+  /// **'About this edition'**
+  String get bookEditionTitle;
+
+  /// Title of a book screen opened cold, before the book it names has loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobook'**
+  String get bookFallbackTitle;
+
+  /// Whether an edition is shortened from the full text.
+  ///
+  /// In en, this message translates to:
+  /// **'Abridged'**
+  String get bookFieldAbridged;
+
+  /// A book's Amazon identifier. The identifier's name, the same everywhere.
+  ///
+  /// In en, this message translates to:
+  /// **'ASIN'**
+  String get bookFieldAsin;
+
+  /// Which edition of a book this is.
+  ///
+  /// In en, this message translates to:
+  /// **'Edition'**
+  String get bookFieldEdition;
+
+  /// How many files a book is made of.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get bookFieldFiles;
+
+  /// A book's ISBN. The standard's name, the same everywhere.
+  ///
+  /// In en, this message translates to:
+  /// **'ISBN'**
+  String get bookFieldIsbn;
+
+  /// Who published an edition of a book.
+  ///
+  /// In en, this message translates to:
+  /// **'Publisher'**
+  String get bookFieldPublisher;
+
+  /// Title of the error state when one book could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this book'**
+  String get bookLoadError;
+
+  /// Row in a book's overflow recording it as heard to the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark finished'**
+  String get bookMarkFinished;
+
+  /// Snackbar after recording a book as heard to the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Marked finished'**
+  String get bookMarkedFinished;
+
+  /// Row in a book's overflow turning several files into one with chapter marks. Administrators only.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge into one chaptered file'**
+  String get bookMerge;
+
+  /// Accessible name of a book's overflow menu.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get bookMore;
+
+  /// The other value of a yes-or-no row in a book's edition details.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get bookNo;
+
+  /// How many files a book is, in the line under its title. Only said where there is more than one.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, other{{count} parts}}'**
+  String bookPartsCount(int count);
+
+  /// Footnote on a book made of several files, so a listener who wonders why has the answer where they are looking.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, other{This book is {count} files, played as one timeline. Positions and chapters span all of them.}}'**
+  String bookPartsNote(int count);
+
+  /// How far through a book the listener is, in the line under its title.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent} percent'**
+  String bookPercent(int percent);
+
+  /// Button on a book that has not been started, or has been finished and starts again.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get bookPlay;
+
+  /// The per-book playback settings: the control that opens them, and the heading of the sheet they open.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback settings'**
+  String get bookPlaybackSettings;
+
+  /// Who narrated a book, under its title. {names} is the narrators joined by commas.
+  ///
+  /// In en, this message translates to:
+  /// **'Read by {names}'**
+  String bookReadBy(String names);
+
+  /// Button picking a book up where it was left, on a book whose chapters the resume point could not name.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get bookResume;
+
+  /// The same button naming the chapter the listener stopped in, which is what makes it a promise rather than a guess.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume {chapter}'**
+  String bookResumeChapter(String chapter);
+
+  /// Where a book sits in its series, as a link to the rest of it.
+  ///
+  /// In en, this message translates to:
+  /// **'Book {number} of {series}'**
+  String bookSeriesSequence(String number, String series);
+
+  /// The playback rate this book is set to. {speed} arrives already worded, with its multiplier sign.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed {speed}'**
+  String bookSettingsSpeed(String speed);
+
+  /// Accessible name of the speed slider on the per-book settings sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed'**
+  String get bookSettingsSpeedLabel;
+
+  /// Row in a book's overflow minting a link somebody outside the server can open.
+  ///
+  /// In en, this message translates to:
+  /// **'Share link'**
+  String get bookShareLink;
+
+  /// Row in a book's overflow cutting one file into a file per chapter. Administrators only.
+  ///
+  /// In en, this message translates to:
+  /// **'Split at chapters'**
+  String get bookSplit;
+
+  /// Row in a book's overflow putting the listener back at the beginning.
+  ///
+  /// In en, this message translates to:
+  /// **'Start over'**
+  String get bookStartOver;
+
+  /// Snackbar after starting a merge or a split, which run as background tasks. The capitalised word is the name of the screen that lists them.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued. Follow it in Tasks.'**
+  String get bookToolQueued;
+
+  /// Action on the queued-tool snackbar, opening the screen that lists background tasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get bookToolTasks;
+
+  /// Switch shortening the gaps in a book's narration.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim silence'**
+  String get bookTrimSilence;
+
+  /// Help under the trim-silence switch on a book.
+  ///
+  /// In en, this message translates to:
+  /// **'Shortens the pauses between sentences'**
+  String get bookTrimSilenceHelp;
+
+  /// Action on the position snackbars, putting back where the listener was.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get bookUndo;
+
+  /// Switch lifting the narrator above the rest of the audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice boost'**
+  String get bookVoiceBoost;
+
+  /// Help under the voice-boost switch on a book.
+  ///
+  /// In en, this message translates to:
+  /// **'Lifts speech over a noisy room'**
+  String get bookVoiceBoostHelp;
+
+  /// The value of a yes-or-no row in a book's edition details.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes'**
+  String get bookYes;
+
+  /// Chip narrowing the hub to one author, with how many books they have on the shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} ({count})'**
+  String booksAuthorChip(String name, int count);
+
+  /// Overline above the continue-listening shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Part way through'**
+  String get booksContinueOverline;
+
+  /// Shelf on the audiobook hub holding the books part way through.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue listening'**
+  String get booksContinueTitle;
+
+  /// Message under the empty state of the audiobook hub.
+  ///
+  /// In en, this message translates to:
+  /// **'Books turn up here as the library scans them. Point a library at your audiobook folder and they arrive with their chapters.'**
+  String get booksEmptyMessage;
+
+  /// Empty state of the audiobook hub.
+  ///
+  /// In en, this message translates to:
+  /// **'No audiobooks yet'**
+  String get booksEmptyTitle;
+
+  /// Chip showing every book.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get booksFilterAll;
+
+  /// Why the book grid came up empty, named after the chip that narrowed it.
+  ///
+  /// In en, this message translates to:
+  /// **'{filter, select, unfinished{No book here is unfinished.} finished{No book here is finished.} other{No book here matches.}}'**
+  String booksFilterEmptyMessage(String filter);
+
+  /// Chip narrowing the hub to the books listened to the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished'**
+  String get booksFilterFinished;
+
+  /// Chip narrowing the hub to the books not listened to the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Unfinished'**
+  String get booksFilterUnfinished;
+
+  /// Said under a book's cover, and in the line under its title, when it has been heard to the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished'**
+  String get booksFinished;
+
+  /// Title of the error state when the audiobooks could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your books'**
+  String get booksLoadError;
+
+  /// Accessible name of the audiobook hub's overflow menu.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get booksMore;
+
+  /// Empty state where the chips left no book standing, which is different from an empty library.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing matches'**
+  String get booksNothingMatches;
+
+  /// Button clearing the finished filter from the empty state it produced.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all books'**
+  String get booksShowAll;
+
+  /// Row in the hub overflow choosing what order the books are in.
+  ///
+  /// In en, this message translates to:
+  /// **'{sort, select, recent{Sort by recently added} title{Sort by title} author{Sort by author} other{Sort by {sort}}}'**
+  String booksSortRow(String sort);
+
+  /// How much of a book is unheard, under its cover. {time} arrives already worded as a span.
+  ///
+  /// In en, this message translates to:
+  /// **'{time} left'**
+  String booksTimeLeft(String time);
+
+  /// The audiobook domain's front door, named on its own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobooks'**
+  String get booksTitle;
+
   /// A file size under a kilobyte, drawn as bytes. B is the unit abbreviation; translate it only where the language uses another.
   ///
   /// In en, this message translates to:
@@ -3693,6 +4053,78 @@ abstract class AppLocalizations {
   /// **'Most first'**
   String get libraryBrowseSortMostFirst;
 
+  /// Confirming button of the dialog that deletes an item's files.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get libraryDeleteAction;
+
+  /// Accessible name of the overflow control offering to delete an item's files.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete files'**
+  String get libraryDeleteFilesLabel;
+
+  /// Row in an item's overflow menu that opens the delete dialog. The ellipsis says a dialog follows.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete files...'**
+  String get libraryDeleteFilesMenu;
+
+  /// Option deleting the files outright rather than trashing them.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete permanently'**
+  String get libraryDeleteModePermanent;
+
+  /// Help under the permanent-deletion option.
+  ///
+  /// In en, this message translates to:
+  /// **'Gone for good'**
+  String get libraryDeleteModePermanentHelp;
+
+  /// Option moving the files to the trash instead of deleting them.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to trash'**
+  String get libraryDeleteModeTrash;
+
+  /// Help under the move-to-trash option, saying where the files can be recovered.
+  ///
+  /// In en, this message translates to:
+  /// **'Restorable from the trash screen'**
+  String get libraryDeleteModeTrashHelp;
+
+  /// Tooltip of the overflow menu on an item screen.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get libraryDeleteMore;
+
+  /// Snackbar after a permanent deletion, counting the files that went.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Deleted 1 file for good} other{Deleted {count} files for good}}'**
+  String libraryDeletePermanentDone(int count);
+
+  /// What the dry run found, shown in the delete dialog before anything moves. {size} is the total on disk, already formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{This removes 1 file, {size}.} other{This removes {count} files, {size}.}}'**
+  String libraryDeletePreview(int count, String size);
+
+  /// Title of the dialog confirming that an item's files are deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete files?'**
+  String get libraryDeleteTitle;
+
+  /// Snackbar after trashing an item's files, counting them.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Moved 1 file to the trash} other{Moved {count} files to the trash}}'**
+  String libraryDeleteTrashDone(int count);
+
   /// The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case.
   ///
   /// In en, this message translates to:
@@ -4052,6 +4484,450 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved, but some files kept their old tags.'**
   String get metadataWriteBackWarning;
+
+  /// Heading separating the sides of a multi-disc release. Upper case, as an overline.
+  ///
+  /// In en, this message translates to:
+  /// **'DISC {disc}'**
+  String musicAlbumDiscHeading(int disc);
+
+  /// Row in an album's overflow menu that opens the release editor. Administrators only.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit album details'**
+  String get musicAlbumEditDetails;
+
+  /// Accessible name of the lock mark beside an album-editor field. {field} is that field's label.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} is locked'**
+  String musicAlbumEditorFieldLocked(String field);
+
+  /// Why the album editor is closed to an ordinary account.
+  ///
+  /// In en, this message translates to:
+  /// **'Barcodes, labels, and catalog numbers are shared by everyone who can see this album, so the server keeps them to administrators.'**
+  String get musicAlbumEditorForbiddenMessage;
+
+  /// Empty state shown where the album editor would be, to an account that may not write it.
+  ///
+  /// In en, this message translates to:
+  /// **'Only administrators can edit a release'**
+  String get musicAlbumEditorForbiddenTitle;
+
+  /// Chip beside an album-editor field whose value came from the files' own tags rather than from somebody typing it.
+  ///
+  /// In en, this message translates to:
+  /// **'From tags'**
+  String get musicAlbumEditorFromTags;
+
+  /// Save button on the album editor, counting the fields that differ from what is stored.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Save 1 change} other{Save {count} changes}}'**
+  String musicAlbumEditorSaveChanges(int count);
+
+  /// Snackbar after the album editor's write landed.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved'**
+  String get musicAlbumEditorSaved;
+
+  /// Overline above the album editor's fields.
+  ///
+  /// In en, this message translates to:
+  /// **'What this edition is'**
+  String get musicAlbumEditorSectionOverline;
+
+  /// Heading over the album editor's five fields.
+  ///
+  /// In en, this message translates to:
+  /// **'Release identity'**
+  String get musicAlbumEditorSectionTitle;
+
+  /// Help under the write-tags switch on the album editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Also rewrite the matching tags in every track on this release. Media has no tag form and stays here.'**
+  String get musicAlbumEditorWriteBackHelp;
+
+  /// Message under the empty state of an album, saying why it is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'The tracks that were here have moved or been removed.'**
+  String get musicAlbumEmptyMessage;
+
+  /// Empty state of an album whose tracks have all gone.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in this album'**
+  String get musicAlbumEmptyTitle;
+
+  /// Title of the error state when an album could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this album'**
+  String get musicAlbumLoadError;
+
+  /// Overline above the release-identity block on an album screen.
+  ///
+  /// In en, this message translates to:
+  /// **'This edition'**
+  String get musicAlbumReleaseOverline;
+
+  /// Heading over the block naming what edition an album is: its barcode, label, catalog number.
+  ///
+  /// In en, this message translates to:
+  /// **'Release'**
+  String get musicAlbumReleaseTitle;
+
+  /// Title of the album editor before the album it edits has loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get musicAlbumTitle;
+
+  /// What the player calls a queue shuffled from the whole music library.
+  ///
+  /// In en, this message translates to:
+  /// **'All music'**
+  String get musicAllMusicSource;
+
+  /// Shelf on an artist's screen holding the releases they are credited on without heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Appears on'**
+  String get musicArtistAppearsOn;
+
+  /// Heading over an author's books, drawn instead of the tracks heading where a bucket holds no tracks at all.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobooks'**
+  String get musicArtistAudiobooksSection;
+
+  /// Message under the empty state of an artist's screen, saying why it is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'The items that were here have moved or been removed.'**
+  String get musicArtistEmptyMessage;
+
+  /// Empty state of an artist whose items have all gone.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing by this artist'**
+  String get musicArtistEmptyTitle;
+
+  /// How much an artist's bucket holds, in the line under their name. Items rather than tracks, because a bucket holds whatever carried the artist, audiobooks included.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 item} other{{count} items}}'**
+  String musicArtistItemCount(int count);
+
+  /// The same count where the listing runs past the page that was read, so the number is a floor rather than a total.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1+ item} other{{count}+ items}}'**
+  String musicArtistItemCountAtLeast(int count);
+
+  /// Title of the error state when an artist's items could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this artist'**
+  String get musicArtistLoadError;
+
+  /// How many releases an artist heads, in the line under their name.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 release} other{{count} releases}}'**
+  String musicArtistReleaseCount(int count);
+
+  /// Shelf on an artist's screen holding the releases they head.
+  ///
+  /// In en, this message translates to:
+  /// **'Releases'**
+  String get musicArtistReleases;
+
+  /// Action beside an artist's track heading, opening the full listing where the screen shows only the first few.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all'**
+  String get musicArtistShowAll;
+
+  /// Heading over the first few of an artist's tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracks'**
+  String get musicArtistTracksSection;
+
+  /// Title of an artist's screen opened cold, before the tracks that name them have loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get musicArtistUnknownName;
+
+  /// Title of the bucket holding what a dimension is absent from: the tracks with no artist tagged, the albums with no year.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{No artist} albums{No album} releaseGroups{No release group} genres{No genre} years{No year} other{Unknown}}'**
+  String musicBucketUnknownTitle(String dimension);
+
+  /// Command-palette row that plays the album on screen. {name} is the album's title.
+  ///
+  /// In en, this message translates to:
+  /// **'Play {name}'**
+  String musicCommandPlay(String name);
+
+  /// Command-palette row that plays the album on screen in random order. {name} is the album's title.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle {name}'**
+  String musicCommandShuffle(String name);
+
+  /// One bucket of a dimension, as the title of its listing, when nothing in the list names it: the artist of an artist's tracks, the genre of a genre's.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{Artist} albums{Album} releaseGroups{Release group} genres{Genre} years{Year} other{Music}}'**
+  String musicDimensionSingularTitle(String dimension);
+
+  /// What each way of browsing the music library is called, as a heading: the hub tile and the title of the index it opens.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{Artists} albums{Albums} releaseGroups{Release groups} genres{Genres} years{Years} other{Music}}'**
+  String musicDimensionTitle(String dimension);
+
+  /// Message under the empty state of the tracks listing, saying what fills it.
+  ///
+  /// In en, this message translates to:
+  /// **'Add music to your library and it shows up here.'**
+  String get musicEmptyMessage;
+
+  /// Empty state of the music library, on the hub and on the tracks listing.
+  ///
+  /// In en, this message translates to:
+  /// **'No music yet'**
+  String get musicEmptyTitle;
+
+  /// An album's barcode, on the release editor and on the album screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Barcode'**
+  String get musicFieldBarcode;
+
+  /// Hint under the barcode field in the release editor.
+  ///
+  /// In en, this message translates to:
+  /// **'UPC or EAN, normalized to digits on save'**
+  String get musicFieldBarcodeHelp;
+
+  /// The label's own number for a release, on the release editor and on the album screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Catalog number'**
+  String get musicFieldCatalogNumber;
+
+  /// Hint under the catalog-number field in the release editor.
+  ///
+  /// In en, this message translates to:
+  /// **'The label\'s number for this release'**
+  String get musicFieldCatalogNumberHelp;
+
+  /// Where a release was issued, on the release editor and on the album screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Country'**
+  String get musicFieldCountry;
+
+  /// Hint under the country field in the release editor. The codes themselves are standards and stay as they are.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-letter code (GB), an alpha-3 or UK alias, or XW/XE'**
+  String get musicFieldCountryHelp;
+
+  /// The record label that issued an album, on the release editor and on the album screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get musicFieldLabel;
+
+  /// Hint under the label field in the release editor.
+  ///
+  /// In en, this message translates to:
+  /// **'The issuing label'**
+  String get musicFieldLabelHelp;
+
+  /// What a release was pressed on, on the release editor and on the album screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Media'**
+  String get musicFieldMedia;
+
+  /// Hint under the media field in the release editor. The three examples are the values MusicBrainz uses and stay as they are.
+  ///
+  /// In en, this message translates to:
+  /// **'What it was pressed on - CD, 2xVinyl, Digital Media'**
+  String get musicFieldMediaHelp;
+
+  /// Button on the music hub's first-run invitation, opening the sheet that adds files.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to library'**
+  String get musicHubAddToLibrary;
+
+  /// First-run invitation on the music hub, drawn when every shelf has answered and none of them holds anything.
+  ///
+  /// In en, this message translates to:
+  /// **'Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.'**
+  String get musicHubEmptyMessage;
+
+  /// One hub tile read as a whole for a screen reader: what it opens, then how much is behind it.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}, {count}'**
+  String musicHubTileSpoken(String name, String count);
+
+  /// Caption over an index saying how much of it is loaded, when the whole dimension is loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{{count, plural, =1{1 artist} other{{count} artists}}} albums{{count, plural, =1{1 album} other{{count} albums}}} releaseGroups{{count, plural, =1{1 release group} other{{count} release groups}}} genres{{count, plural, =1{1 genre} other{{count} genres}}} years{{count, plural, =1{1 year} other{{count} years}}} other{{count, plural, =1{1 entry} other{{count} entries}}}}'**
+  String musicIndexCount(String dimension, int count);
+
+  /// The same caption where the index runs past the page that was read, so the number is a floor rather than a total.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{{count, plural, =1{1+ artist} other{{count}+ artists}}} albums{{count, plural, =1{1+ album} other{{count}+ albums}}} releaseGroups{{count, plural, =1{1+ release group} other{{count}+ release groups}}} genres{{count, plural, =1{1+ genre} other{{count}+ genres}}} years{{count, plural, =1{1+ year} other{{count}+ years}}} other{{count, plural, =1{1+ entry} other{{count}+ entries}}}}'**
+  String musicIndexCountAtLeast(String dimension, int count);
+
+  /// Empty state of a dimension's index, saying what fills it.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{Add music to your library and its artists show up here.} albums{Add music to your library and its albums show up here.} releaseGroups{Add music to your library and its release groups show up here.} genres{Add music to your library and its genres show up here.} years{Add music to your library and its years show up here.} other{Add music to your library and it shows up here.}}'**
+  String musicIndexEmptyMessage(String dimension);
+
+  /// Empty state of a dimension's index, on a library that holds nothing yet.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{No artists yet} albums{No albums yet} releaseGroups{No release groups yet} genres{No genres yet} years{No years yet} other{Nothing here yet}}'**
+  String musicIndexEmptyTitle(String dimension);
+
+  /// Title of the error state when one dimension's index could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{Could not load artists} albums{Could not load albums} releaseGroups{Could not load release groups} genres{Could not load genres} years{Could not load years} other{Could not load this index}}'**
+  String musicIndexLoadError(String dimension);
+
+  /// The row at the top of an index that was re-anchored on a letter, offering the way back to the head of the list.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{Start of artists} albums{Start of albums} releaseGroups{Start of release groups} genres{Start of genres} years{Start of years} other{Start of the list}}'**
+  String musicIndexStartOf(String dimension);
+
+  /// Message under the empty state of a drilled bucket, saying why it is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'The items that were here have moved or been removed.'**
+  String get musicListingBucketEmptyMessage;
+
+  /// Empty state of a drilled bucket whose items have all gone.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, artists{Nothing in this artist} albums{Nothing in this album} releaseGroups{Nothing in this release group} genres{Nothing in this genre} years{Nothing in this year} other{Nothing here}}'**
+  String musicListingBucketEmptyTitle(String dimension);
+
+  /// Title of the error state when a track listing could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this list'**
+  String get musicListingLoadError;
+
+  /// Button on an album's or an artist's header that plays it from the start.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get musicPlay;
+
+  /// Overline above the most-played shelf on the music hub.
+  ///
+  /// In en, this message translates to:
+  /// **'What you come back to'**
+  String get musicShelfMostPlayedOverline;
+
+  /// Shelf on the music hub holding what has been played most.
+  ///
+  /// In en, this message translates to:
+  /// **'Most played'**
+  String get musicShelfMostPlayedTitle;
+
+  /// Overline above the recently-added shelf on the music hub.
+  ///
+  /// In en, this message translates to:
+  /// **'New to the collection'**
+  String get musicShelfRecentOverline;
+
+  /// Shelf on the music hub holding what arrived in the library most recently.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently added'**
+  String get musicShelfRecentTitle;
+
+  /// Overline above the starred shelf on the music hub.
+  ///
+  /// In en, this message translates to:
+  /// **'Kept on purpose'**
+  String get musicShelfStarredOverline;
+
+  /// Shelf on the music hub holding what the listener starred.
+  ///
+  /// In en, this message translates to:
+  /// **'Starred'**
+  String get musicShelfStarredTitle;
+
+  /// Button on an album's or an artist's header that plays it in random order.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle'**
+  String get musicShuffle;
+
+  /// Accessible name of the shuffle control over the listing of every track in the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle all music'**
+  String get musicShuffleAllLabel;
+
+  /// Accessible name of the shuffle control over one bucket's listing. {name} is what the listing is called.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle {name}'**
+  String musicShuffleLabel(String name);
+
+  /// Snackbar after asking to shuffle a list holding only audiobooks, which open on their own screen instead of joining a queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing here plays in sequence.'**
+  String get musicShuffleNothingPlayable;
+
+  /// Title of the music hub, the front door to the music library.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get musicTitle;
+
+  /// How many tracks a bucket, a release, or an album tile holds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 track} other{{count} tracks}}'**
+  String musicTrackCount(int count);
+
+  /// The listing of every track in the library, named on the hub tile that opens it and as its own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracks'**
+  String get musicTracksTitle;
+
+  /// Stands in for an album's artist where its tracks name more than one, which is what a compilation is.
+  ///
+  /// In en, this message translates to:
+  /// **'Various artists'**
+  String get musicVariousArtists;
 
   /// What the `backup-completed` notification is about, drawn under its switch.
   ///
@@ -4761,6 +5637,2153 @@ abstract class AppLocalizations {
   /// **'Volume'**
   String get playerVolume;
 
+  /// Hint in the add field on a playlist screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the library'**
+  String get playlistAddHint;
+
+  /// Field on a playlist screen that searches the library so a hit can be appended.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to this playlist'**
+  String get playlistAddLabel;
+
+  /// Said under the add field when a search answered with nothing a playlist can hold.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing here to add. Artists and albums are not members of a playlist; their tracks are.'**
+  String get playlistAddNothing;
+
+  /// Title of the sheet picking which playlist an item joins.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to playlist'**
+  String get playlistAddToTitle;
+
+  /// Snackbar after appending one item to the open playlist. {title} is that item's title.
+  ///
+  /// In en, this message translates to:
+  /// **'Added \"{title}\"'**
+  String playlistAdded(String title);
+
+  /// Snackbar after adding an item to a playlist chosen from the sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Added \"{title}\" to {playlist}'**
+  String playlistAddedTo(String title, String playlist);
+
+  /// Under a row in the add-to-playlist sheet whose playlist already holds the item. Said rather than only ticked.
+  ///
+  /// In en, this message translates to:
+  /// **'Already in this list'**
+  String get playlistAlreadyIn;
+
+  /// Banner after a reorder the server refused. {reason} is the server's own sentence, which is the only thing that knows which of three refusals it was.
+  ///
+  /// In en, this message translates to:
+  /// **'{reason} Nothing was changed; this is the list as it stands.'**
+  String playlistConflictBanner(String reason);
+
+  /// Snackbar after the M3U reached the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist copied as M3U'**
+  String get playlistCopiedM3u;
+
+  /// Snackbar after the portable export reached the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Portable playlist copied'**
+  String get playlistCopiedPortable;
+
+  /// What the file picker calls the image it is asking for as a playlist cover.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover image'**
+  String get playlistCoverImage;
+
+  /// Snackbar after dropping an uploaded playlist cover.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to the cover made from members'**
+  String get playlistCoverReset;
+
+  /// Snackbar when the picked cover could not be read off the device. {reason} is the platform's own diagnostic and stays in English.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read that image: {reason}'**
+  String playlistCoverUnreadable(String reason);
+
+  /// Confirming button that makes the playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get playlistCreateAction;
+
+  /// Confirming button of the create dialog when the smart kind is chosen, which opens the rule editor rather than creating anything.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get playlistCreateNext;
+
+  /// Row in a playlist's overflow menu, and the confirming button of the dialog it opens.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get playlistDelete;
+
+  /// Body of the delete-playlist dialog, saying what goes and what does not.
+  ///
+  /// In en, this message translates to:
+  /// **'It goes for everyone it is shared with. The items in it are never touched.'**
+  String get playlistDeleteBody;
+
+  /// Title of the dialog confirming a playlist is deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this playlist?'**
+  String get playlistDeleteTitle;
+
+  /// Accessible name of the drag handle on a playlist row.
+  ///
+  /// In en, this message translates to:
+  /// **'Drag to reorder'**
+  String get playlistDragToReorder;
+
+  /// Button beside a smart playlist's rule chips, opening the rule editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit rules'**
+  String get playlistEditRules;
+
+  /// Message under the empty state of a manual playlist this account may edit. The quoted phrase names the sheet, so it matches that sheet's own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Search above to add the first track, or use \"Add to playlist\" from anywhere something is playing.'**
+  String get playlistEditableEmptyMessage;
+
+  /// Empty state of a manual playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in here'**
+  String get playlistEmptyTitle;
+
+  /// Accessible name of the control dropping one row from a playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from playlist'**
+  String get playlistEntryRemove;
+
+  /// Button copying the M3U on screen to the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get playlistExportCopy;
+
+  /// Row in a playlist's overflow menu offering it as an M3U file, and the title of the dialog that shows it.
+  ///
+  /// In en, this message translates to:
+  /// **'Export M3U'**
+  String get playlistExportM3u;
+
+  /// Row in a playlist's overflow menu copying the playlist in the form another WaxDeck server can import.
+  ///
+  /// In en, this message translates to:
+  /// **'Export portable'**
+  String get playlistExportPortable;
+
+  /// First fact in the line under a manual playlist's title.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual playlist'**
+  String get playlistFactsManual;
+
+  /// First fact in the line under a smart playlist's title.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart playlist'**
+  String get playlistFactsSmart;
+
+  /// Title of a playlist screen opened cold, before the playlist it names has loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist'**
+  String get playlistFallbackTitle;
+
+  /// Message under the empty state of somebody else's playlist, which this account cannot fill.
+  ///
+  /// In en, this message translates to:
+  /// **'The owner has not put anything in this list yet.'**
+  String get playlistForeignEmptyMessage;
+
+  /// Title of the report after an import that made a playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Import complete'**
+  String get playlistImportComplete;
+
+  /// Body of the import report, counting what resolved out of what was pasted.
+  ///
+  /// In en, this message translates to:
+  /// **'Created \"{name}\" with {resolved} of {requested} entries.'**
+  String playlistImportCreated(String name, int resolved, int requested);
+
+  /// What the paste box wants for an import from another music service.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the exported playlist here'**
+  String get playlistImportHintExport;
+
+  /// What the paste box wants for an M3U import.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the playlist file here'**
+  String get playlistImportHintM3u;
+
+  /// What the paste box wants for a portable import. The quoted action is the menu row on the other server, so it matches that row's own words.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste what Export portable copied'**
+  String get playlistImportHintPortable;
+
+  /// What the paste box wants for a plain text import.
+  ///
+  /// In en, this message translates to:
+  /// **'One track a line: artist - title'**
+  String get playlistImportHintText;
+
+  /// Accessible name of the menu offering the places a playlist can be imported from.
+  ///
+  /// In en, this message translates to:
+  /// **'Import playlist'**
+  String get playlistImportMenu;
+
+  /// Heading over the import report's list of entries that found no match.
+  ///
+  /// In en, this message translates to:
+  /// **'Not in the library:'**
+  String get playlistImportMissingHeading;
+
+  /// One unmatched entry in the import report, where the export named an artist.
+  ///
+  /// In en, this message translates to:
+  /// **'{artist} - {title}'**
+  String playlistImportMissingRow(String artist, String title);
+
+  /// Refusal when an M3U import is confirmed with no name, which is the one source that carries none.
+  ///
+  /// In en, this message translates to:
+  /// **'An M3U import needs a name for the playlist.'**
+  String get playlistImportNeedsName;
+
+  /// Refusal when the pasted portable playlist is the right shape but empty.
+  ///
+  /// In en, this message translates to:
+  /// **'The portable playlist carries no entries'**
+  String get playlistImportNoEntries;
+
+  /// Body of the import report when nothing resolved.
+  ///
+  /// In en, this message translates to:
+  /// **'No entries matched the library, so no playlist was created.'**
+  String get playlistImportNoMatches;
+
+  /// Refusal when the pasted portable import is not JSON at all.
+  ///
+  /// In en, this message translates to:
+  /// **'This is not the copied portable JSON'**
+  String get playlistImportNotJson;
+
+  /// Refusal when the pasted JSON parses but is not the shape the exporter writes. The word in the parenthesis is a key of that JSON and stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'This is not a portable playlist (expected a name and a refs list)'**
+  String get playlistImportNotPortable;
+
+  /// Title of the report after an import where nothing resolved, so no playlist was made.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing imported'**
+  String get playlistImportNothing;
+
+  /// Refusal when the import dialog is confirmed with an empty paste box.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the playlist first.'**
+  String get playlistImportPasteFirst;
+
+  /// Accessible name of the paste box. {source} is the import source's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'{source} export'**
+  String playlistImportPayloadLabel(String source);
+
+  /// Confirming button of the import dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get playlistImportRun;
+
+  /// Import source: an Apple Music export. The product name stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Music'**
+  String get playlistImportSourceAppleMusic;
+
+  /// Import source: any comma-separated export the resolver can read.
+  ///
+  /// In en, this message translates to:
+  /// **'Generic CSV'**
+  String get playlistImportSourceCsv;
+
+  /// Import source: the plain playlist file format. M3U is the format's name and stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'M3U file'**
+  String get playlistImportSourceM3u;
+
+  /// Import source: what another WaxDeck server's portable export copied.
+  ///
+  /// In en, this message translates to:
+  /// **'Portable JSON'**
+  String get playlistImportSourcePortable;
+
+  /// Import source: a Spotify export. The product name stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'Spotify CSV'**
+  String get playlistImportSourceSpotify;
+
+  /// Import source: plain lines of text.
+  ///
+  /// In en, this message translates to:
+  /// **'Text list'**
+  String get playlistImportSourceText;
+
+  /// Import source: a YouTube Music export. The product name stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'YouTube Music CSV'**
+  String get playlistImportSourceYtMusic;
+
+  /// Title of the paste dialog. {source} is the import source's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Import from {source}'**
+  String playlistImportTitle(String source);
+
+  /// Snackbar after an M3U import where every line found a match in the library.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Imported \"{name}\" with 1 item} other{Imported \"{name}\" with {count} items}}'**
+  String playlistImportedAll(String name, int count);
+
+  /// Snackbar after an M3U import where some lines found no match.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported \"{name}\": {matched} matched, {unmatched} not in the library'**
+  String playlistImportedPartial(String name, int matched, int unmatched);
+
+  /// How much a playlist holds: on its card, in the line under its title, and in the rule editor's match count.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 item} other{{count} items}}'**
+  String playlistItemCount(int count);
+
+  /// Chip picking a playlist that holds what is put in it, as opposed to a smart one.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual'**
+  String get playlistKindManual;
+
+  /// Line under the kind chips when the manual kind is chosen.
+  ///
+  /// In en, this message translates to:
+  /// **'A manual playlist holds what you put in it, in the order you put it.'**
+  String get playlistKindManualHelp;
+
+  /// Line under the kind chips when the smart kind is chosen.
+  ///
+  /// In en, this message translates to:
+  /// **'A smart playlist keeps itself: you write the rules next and it evaluates them every time it is opened.'**
+  String get playlistKindSmartHelp;
+
+  /// Title of the error state when one playlist could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this playlist'**
+  String get playlistLoadError;
+
+  /// Row in a shared playlist's overflow menu, taking it back from the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Make private'**
+  String get playlistMakePrivate;
+
+  /// Accessible name of a playlist's overflow menu.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get playlistMore;
+
+  /// Screen-reader action moving a playlist row one place later.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get playlistMoveDown;
+
+  /// Screen-reader action moving a playlist row one place earlier. The drag handle is not a path for everyone.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get playlistMoveUp;
+
+  /// Field taking the name of a playlist being made, renamed, or imported.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist name'**
+  String get playlistNameLabel;
+
+  /// The same field on an import whose export already carries a name.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist name (optional)'**
+  String get playlistNameOptional;
+
+  /// Refusal under the name field when the create dialog is confirmed with it empty.
+  ///
+  /// In en, this message translates to:
+  /// **'A playlist needs a name.'**
+  String get playlistNameRequired;
+
+  /// Said in the add-to-playlist sheet when the account owns no list an item could join.
+  ///
+  /// In en, this message translates to:
+  /// **'No manual playlists yet. Make one below and this goes straight into it.'**
+  String get playlistNoManualLists;
+
+  /// Button on a playlist's header that plays it from the start.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get playlistPlay;
+
+  /// Row in a playlist's overflow menu, and the confirming button of the dialog it opens.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get playlistRename;
+
+  /// Title of the dialog renaming a playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename playlist'**
+  String get playlistRenameTitle;
+
+  /// Row in a playlist's overflow menu that drops an uploaded cover and goes back to the one made from its members.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset cover'**
+  String get playlistResetCover;
+
+  /// Button adding one condition to a group. Reads after a plus glyph.
+  ///
+  /// In en, this message translates to:
+  /// **'Condition'**
+  String get playlistRuleAddCondition;
+
+  /// Button adding a nested group to a group. Reads after a plus glyph.
+  ///
+  /// In en, this message translates to:
+  /// **'Group'**
+  String get playlistRuleAddGroup;
+
+  /// Button adding a sort key. Reads after a plus glyph.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort key'**
+  String get playlistRuleAddSort;
+
+  /// A group of smart-rule conditions that all have to hold.
+  ///
+  /// In en, this message translates to:
+  /// **'All of'**
+  String get playlistRuleAllOf;
+
+  /// Between the two fields of a range condition in the editor.
+  ///
+  /// In en, this message translates to:
+  /// **'and'**
+  String get playlistRuleAnd;
+
+  /// A group of smart-rule conditions of which one is enough.
+  ///
+  /// In en, this message translates to:
+  /// **'Any of'**
+  String get playlistRuleAnyOf;
+
+  /// A smart-rule condition as a phrase: "Genre is Rock".
+  ///
+  /// In en, this message translates to:
+  /// **'{field} {op} {value}'**
+  String playlistRuleCondition(String field, String op, String value);
+
+  /// A smart-rule condition between two values: "Year is between 1990 and 1999".
+  ///
+  /// In en, this message translates to:
+  /// **'{field} {op} {low} and {high}'**
+  String playlistRuleConditionRange(
+    String field,
+    String op,
+    String low,
+    String high,
+  );
+
+  /// A smart-rule condition counting back from now: "Added at is in the last 90 days". {days} arrives already worded.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} {op} {days}'**
+  String playlistRuleConditionRelative(String field, String op, String days);
+
+  /// A smart-rule condition whose operator takes no value: "Genre is set".
+  ///
+  /// In en, this message translates to:
+  /// **'{field} {op}'**
+  String playlistRuleConditionUnary(String field, String op);
+
+  /// The number of days a relative smart-rule condition looks back over.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{1 day} other{{days} days}}'**
+  String playlistRuleDayCount(int days);
+
+  /// Unit after the number in a relative condition's editor.
+  ///
+  /// In en, this message translates to:
+  /// **'days'**
+  String get playlistRuleDaysSuffix;
+
+  /// Title of the rule editor. {name} is the playlist being written.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules: {name}'**
+  String playlistRuleEditorTitle(String name);
+
+  /// Said inside an all-of group with no conditions in it.
+  ///
+  /// In en, this message translates to:
+  /// **'An empty group matches everything.'**
+  String get playlistRuleEmptyAll;
+
+  /// Said inside an any-of group with no conditions in it.
+  ///
+  /// In en, this message translates to:
+  /// **'An empty group matches nothing.'**
+  String get playlistRuleEmptyAny;
+
+  /// Chip for a smart rule whose empty group matches the whole library.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything'**
+  String get playlistRuleEverything;
+
+  /// Smart-rule field: when an item entered the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Added at'**
+  String get playlistRuleFieldAddedAt;
+
+  /// Smart-rule field: an item's album, series, or show.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get playlistRuleFieldAlbum;
+
+  /// Smart-rule field: the artist a release is filed under, which differs from the track artist on a compilation.
+  ///
+  /// In en, this message translates to:
+  /// **'Album artist'**
+  String get playlistRuleFieldAlbumArtist;
+
+  /// Smart-rule field: the release's barcode.
+  ///
+  /// In en, this message translates to:
+  /// **'Album barcode'**
+  String get playlistRuleFieldAlbumBarcode;
+
+  /// Smart-rule field: the label's own number for the release.
+  ///
+  /// In en, this message translates to:
+  /// **'Album catalog number'**
+  String get playlistRuleFieldAlbumCatalogNumber;
+
+  /// Smart-rule field: where the release was issued.
+  ///
+  /// In en, this message translates to:
+  /// **'Album country'**
+  String get playlistRuleFieldAlbumCountry;
+
+  /// Smart-rule field: the record label that issued the release.
+  ///
+  /// In en, this message translates to:
+  /// **'Album label'**
+  String get playlistRuleFieldAlbumLabel;
+
+  /// Smart-rule field: what the release was pressed on.
+  ///
+  /// In en, this message translates to:
+  /// **'Album media'**
+  String get playlistRuleFieldAlbumMedia;
+
+  /// Smart-rule field: an item's artist, author, or show.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get playlistRuleFieldArtist;
+
+  /// Smart-rule field: the audio codec a file is encoded with.
+  ///
+  /// In en, this message translates to:
+  /// **'Codec'**
+  String get playlistRuleFieldCodec;
+
+  /// Smart-rule field: the file format holding the audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Container'**
+  String get playlistRuleFieldContainer;
+
+  /// Smart-rule field: which disc of a release a track sits on.
+  ///
+  /// In en, this message translates to:
+  /// **'Disc number'**
+  String get playlistRuleFieldDiscNumber;
+
+  /// Smart-rule field: how long an item runs, in milliseconds, which is the unit the rule takes.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration ms'**
+  String get playlistRuleFieldDurationMs;
+
+  /// Smart-rule field: whether the item was listened to the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished'**
+  String get playlistRuleFieldFinished;
+
+  /// Smart-rule field: an item's genre.
+  ///
+  /// In en, this message translates to:
+  /// **'Genre'**
+  String get playlistRuleFieldGenre;
+
+  /// Smart-rule field: when this account last played the item.
+  ///
+  /// In en, this message translates to:
+  /// **'Last played at'**
+  String get playlistRuleFieldLastPlayedAt;
+
+  /// Smart-rule field: whether an item is music, a podcast, or an audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'Media type'**
+  String get playlistRuleFieldMediaType;
+
+  /// Smart-rule field: an item's path on disk.
+  ///
+  /// In en, this message translates to:
+  /// **'Path'**
+  String get playlistRuleFieldPath;
+
+  /// Picker choosing what a condition or a sort key looks at.
+  ///
+  /// In en, this message translates to:
+  /// **'Field'**
+  String get playlistRuleFieldPicker;
+
+  /// Smart-rule field: how many times this account finished the item.
+  ///
+  /// In en, this message translates to:
+  /// **'Play count'**
+  String get playlistRuleFieldPlayCount;
+
+  /// Smart-rule field: whether the item reached the played threshold.
+  ///
+  /// In en, this message translates to:
+  /// **'Played'**
+  String get playlistRuleFieldPlayed;
+
+  /// Smart-rule field: whether the item sits in a given playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist'**
+  String get playlistRuleFieldPlaylist;
+
+  /// Smart-rule field: the show an episode belongs to.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcast'**
+  String get playlistRuleFieldPodcast;
+
+  /// Smart-rule field: when an episode was published.
+  ///
+  /// In en, this message translates to:
+  /// **'Published at'**
+  String get playlistRuleFieldPublishedAt;
+
+  /// Smart-rule field: this account's rating, from 0 to 100.
+  ///
+  /// In en, this message translates to:
+  /// **'Rating'**
+  String get playlistRuleFieldRating;
+
+  /// Smart-rule field: an episode's season number.
+  ///
+  /// In en, this message translates to:
+  /// **'Season'**
+  String get playlistRuleFieldSeason;
+
+  /// Smart-rule field: where an item came from - a local file, a feed, manual entry.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get playlistRuleFieldSource;
+
+  /// Smart-rule field: whether this account starred the item.
+  ///
+  /// In en, this message translates to:
+  /// **'Starred'**
+  String get playlistRuleFieldStarred;
+
+  /// Smart-rule field: when the star was set.
+  ///
+  /// In en, this message translates to:
+  /// **'Starred at'**
+  String get playlistRuleFieldStarredAt;
+
+  /// Smart-rule field: whether an item is present, archived, remote, or missing.
+  ///
+  /// In en, this message translates to:
+  /// **'State'**
+  String get playlistRuleFieldState;
+
+  /// Smart-rule field: an item's title.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get playlistRuleFieldTitle;
+
+  /// Smart-rule field: a track's number on its release.
+  ///
+  /// In en, this message translates to:
+  /// **'Track number'**
+  String get playlistRuleFieldTrackNumber;
+
+  /// Smart-rule field: when an item last changed.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated at'**
+  String get playlistRuleFieldUpdatedAt;
+
+  /// A custom tag in the field picker, with how many items carry it.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} ({count})'**
+  String playlistRuleFieldWithCount(String field, int count);
+
+  /// Smart-rule field: an item's release or publication year.
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get playlistRuleFieldYear;
+
+  /// Heading over the preview list on a phone, where the count sits in the bar instead.
+  ///
+  /// In en, this message translates to:
+  /// **'First matches'**
+  String get playlistRuleFirstMatches;
+
+  /// Button showing a sort key runs downward, and flipping it.
+  ///
+  /// In en, this message translates to:
+  /// **'Highest first'**
+  String get playlistRuleHighestFirst;
+
+  /// Limit mode: draw a random sample of what matches.
+  ///
+  /// In en, this message translates to:
+  /// **'at random'**
+  String get playlistRuleLimitAtRandom;
+
+  /// Limit mode: a plain cap on how many members join.
+  ///
+  /// In en, this message translates to:
+  /// **'by count'**
+  String get playlistRuleLimitByCount;
+
+  /// Limit mode: take members until the running time is used up.
+  ///
+  /// In en, this message translates to:
+  /// **'by minutes'**
+  String get playlistRuleLimitByMinutes;
+
+  /// Limit mode: take members until the size on disk is used up.
+  ///
+  /// In en, this message translates to:
+  /// **'by size'**
+  String get playlistRuleLimitBySize;
+
+  /// Chip for a smart rule bounded by a plain member count.
+  ///
+  /// In en, this message translates to:
+  /// **'Limit {count}'**
+  String playlistRuleLimitCount(int count);
+
+  /// Heading over the rule editor's limit controls.
+  ///
+  /// In en, this message translates to:
+  /// **'Limit'**
+  String get playlistRuleLimitHeading;
+
+  /// Chip for a smart rule bounded by size on disk.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to {count} MB'**
+  String playlistRuleLimitMegabytes(int count);
+
+  /// Chip for a smart rule bounded by running time.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to {count} minutes'**
+  String playlistRuleLimitMinutes(int count);
+
+  /// Hint in the limit field when leaving it blank means every match joins.
+  ///
+  /// In en, this message translates to:
+  /// **'no limit'**
+  String get playlistRuleLimitNoLimit;
+
+  /// Chip for a smart rule that draws a random sample.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} at random'**
+  String playlistRuleLimitRandom(int count);
+
+  /// Hint in the limit field for a mode that will not save without a number.
+  ///
+  /// In en, this message translates to:
+  /// **'required'**
+  String get playlistRuleLimitRequired;
+
+  /// Picker choosing how a smart list is bounded: by count, at random, by minutes, by size.
+  ///
+  /// In en, this message translates to:
+  /// **'Take'**
+  String get playlistRuleLimitTake;
+
+  /// Button showing a sort key runs upward, and flipping it.
+  ///
+  /// In en, this message translates to:
+  /// **'Lowest first'**
+  String get playlistRuleLowestFirst;
+
+  /// How much the draft rule matches right now.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Matches 1 item} other{Matches {count} items}}'**
+  String playlistRuleMatches(int count);
+
+  /// The media types a condition can test for. A kind this client does not know draws as the server's own word.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, music{music} podcast{podcast} audiobook{audiobook} other{{kind}}}'**
+  String playlistRuleMediaType(String kind);
+
+  /// Chip standing in for a rule shape too deep to summarise in a row of chips.
+  ///
+  /// In en, this message translates to:
+  /// **'Nested conditions'**
+  String get playlistRuleNested;
+
+  /// How a smart rule draws the value false.
+  ///
+  /// In en, this message translates to:
+  /// **'no'**
+  String get playlistRuleNo;
+
+  /// Said in the preview when the draft rule matches nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in the library answers this yet.'**
+  String get playlistRuleNoMatches;
+
+  /// Said where the playlist picker would be, when the account can see no manual list a rule could point at.
+  ///
+  /// In en, this message translates to:
+  /// **'No playlists to choose'**
+  String get playlistRuleNoPlaylists;
+
+  /// A group of smart-rule conditions none of which may hold.
+  ///
+  /// In en, this message translates to:
+  /// **'None of'**
+  String get playlistRuleNoneOf;
+
+  /// Chip inverting the single condition beside it, where a group word would read as a heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Not'**
+  String get playlistRuleNot;
+
+  /// A group of smart-rule conditions that must not all hold at once.
+  ///
+  /// In en, this message translates to:
+  /// **'Not all of'**
+  String get playlistRuleNotAllOf;
+
+  /// An inverted condition drawn as one chip. {phrase} is the condition read as a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'Not {phrase}'**
+  String playlistRuleNotPhrase(String phrase);
+
+  /// Chip for a smart rule whose empty group matches nothing at all.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing'**
+  String get playlistRuleNothing;
+
+  /// Smart-rule operator: later than a date.
+  ///
+  /// In en, this message translates to:
+  /// **'is after'**
+  String get playlistRuleOpAfter;
+
+  /// Smart-rule operator: earlier than a date.
+  ///
+  /// In en, this message translates to:
+  /// **'is before'**
+  String get playlistRuleOpBefore;
+
+  /// Smart-rule operator: the value appears somewhere in the field.
+  ///
+  /// In en, this message translates to:
+  /// **'contains'**
+  String get playlistRuleOpContains;
+
+  /// Smart-rule operator: the field ends with the value.
+  ///
+  /// In en, this message translates to:
+  /// **'ends with'**
+  String get playlistRuleOpEndsWith;
+
+  /// Smart-rule operator: strictly greater.
+  ///
+  /// In en, this message translates to:
+  /// **'is more than'**
+  String get playlistRuleOpGt;
+
+  /// Smart-rule operator: greater or equal.
+  ///
+  /// In en, this message translates to:
+  /// **'is at least'**
+  String get playlistRuleOpGte;
+
+  /// Smart-rule operator: within a number of days back from now, which the condition then names.
+  ///
+  /// In en, this message translates to:
+  /// **'is in the last'**
+  String get playlistRuleOpInTheLast;
+
+  /// Smart-rule operator: between two values, which the condition then names.
+  ///
+  /// In en, this message translates to:
+  /// **'is between'**
+  String get playlistRuleOpInTheRange;
+
+  /// Smart-rule operator: exact equality. Reads mid-sentence, after the field's name.
+  ///
+  /// In en, this message translates to:
+  /// **'is'**
+  String get playlistRuleOpIs;
+
+  /// Smart-rule operator: the field has no value. Takes no value of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'is not set'**
+  String get playlistRuleOpIsMissing;
+
+  /// Smart-rule operator: not equal.
+  ///
+  /// In en, this message translates to:
+  /// **'is not'**
+  String get playlistRuleOpIsNot;
+
+  /// Smart-rule operator: the field has any value at all. Takes no value of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'is set'**
+  String get playlistRuleOpIsPresent;
+
+  /// Smart-rule operator: strictly less.
+  ///
+  /// In en, this message translates to:
+  /// **'is less than'**
+  String get playlistRuleOpLt;
+
+  /// Smart-rule operator: less or equal.
+  ///
+  /// In en, this message translates to:
+  /// **'is at most'**
+  String get playlistRuleOpLte;
+
+  /// Smart-rule operator: outside a number of days back from now.
+  ///
+  /// In en, this message translates to:
+  /// **'is not in the last'**
+  String get playlistRuleOpNotInTheLast;
+
+  /// Picker choosing how a condition compares. Labelled for the commonest operator in English; another language may prefer the general word.
+  ///
+  /// In en, this message translates to:
+  /// **'Is'**
+  String get playlistRuleOpPicker;
+
+  /// Smart-rule operator: the field begins with the value.
+  ///
+  /// In en, this message translates to:
+  /// **'starts with'**
+  String get playlistRuleOpStartsWith;
+
+  /// Heading over the rule editor's sort keys.
+  ///
+  /// In en, this message translates to:
+  /// **'Order by'**
+  String get playlistRuleOrderBy;
+
+  /// Button opening the date picker for a condition with no date set yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a date'**
+  String get playlistRulePickDate;
+
+  /// Said where the sort card would be, when a pinned budget already decides the order.
+  ///
+  /// In en, this message translates to:
+  /// **'A pinned budget draws its own order.'**
+  String get playlistRulePinnedOrder;
+
+  /// The match count before the first preview has come back.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview pending'**
+  String get playlistRulePreviewPending;
+
+  /// Said where the sort card would be, when the limit already decides the order.
+  ///
+  /// In en, this message translates to:
+  /// **'A random limit draws its own order.'**
+  String get playlistRuleRandomOrder;
+
+  /// Why the rule editor opened read-only.
+  ///
+  /// In en, this message translates to:
+  /// **'It uses something this editor cannot draw yet, so it is shown rather than edited. Nothing here will change it.'**
+  String get playlistRuleReadOnlyMessage;
+
+  /// Shown instead of the rule editor for a rule shape it cannot draw.
+  ///
+  /// In en, this message translates to:
+  /// **'This rule opens read-only'**
+  String get playlistRuleReadOnlyTitle;
+
+  /// Accessible name of the control dropping one condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove condition'**
+  String get playlistRuleRemoveCondition;
+
+  /// Accessible name of the control dropping a group of conditions.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove group'**
+  String get playlistRuleRemoveGroup;
+
+  /// Accessible name of the control dropping one sort key.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove sort'**
+  String get playlistRuleRemoveSort;
+
+  /// Help under the pinned-selection switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Pins which tracks the budget picks, so the list is the same on the next rebuild'**
+  String get playlistRuleSeedHelp;
+
+  /// Switch pinning which members a random or budget draw picks.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the same selection each time'**
+  String get playlistRuleSeedTitle;
+
+  /// Chip naming the order a smart list comes out in. {field} is a rule field's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'By {field}'**
+  String playlistRuleSortBy(String field);
+
+  /// The same chip where the order runs downward.
+  ///
+  /// In en, this message translates to:
+  /// **'By {field}, highest first'**
+  String playlistRuleSortByDesc(String field);
+
+  /// A smart-rule field naming a custom tag. {key} is the tag's own key, typed by whoever made it, and stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag: {key}'**
+  String playlistRuleTagField(String key);
+
+  /// Picker entry for a playlist a rule points at that this account can no longer see. Kept rather than repointed, so a save persists what was there.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable list'**
+  String get playlistRuleUnavailableList;
+
+  /// What the number beside a smart-rule limit counts, where the limit is a plain member cap.
+  ///
+  /// In en, this message translates to:
+  /// **'items'**
+  String get playlistRuleUnitItems;
+
+  /// What the number beside a smart-rule limit counts, where the limit is a size on disk. The unit symbol is international.
+  ///
+  /// In en, this message translates to:
+  /// **'MB'**
+  String get playlistRuleUnitMegabytes;
+
+  /// What the number beside a smart-rule limit counts, where the limit is a running time.
+  ///
+  /// In en, this message translates to:
+  /// **'minutes'**
+  String get playlistRuleUnitMinutes;
+
+  /// The control holding what a condition compares against.
+  ///
+  /// In en, this message translates to:
+  /// **'Value'**
+  String get playlistRuleValuePicker;
+
+  /// Title of the error state when the list of fields a rule may test could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the rule vocabulary'**
+  String get playlistRuleVocabularyError;
+
+  /// Said in the preview while the server is answering what the draft rule matches.
+  ///
+  /// In en, this message translates to:
+  /// **'Working it out…'**
+  String get playlistRuleWorking;
+
+  /// How a smart rule draws the value true. Lower case: it stands where a value stands, after an operator.
+  ///
+  /// In en, this message translates to:
+  /// **'yes'**
+  String get playlistRuleYes;
+
+  /// Line under a smart playlist's rule chips, saying the membership is not stored.
+  ///
+  /// In en, this message translates to:
+  /// **'Evaluated live, every time this list is opened.'**
+  String get playlistRulesLive;
+
+  /// The rule chips read as one thing for a screen reader. {rules} is the chips joined by commas.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules: {rules}'**
+  String playlistRulesSpoken(String rules);
+
+  /// Row in a playlist's overflow menu that uploads an image as its cover.
+  ///
+  /// In en, this message translates to:
+  /// **'Set cover'**
+  String get playlistSetCover;
+
+  /// Row in a playlist's overflow menu that mints a link somebody outside the server can open.
+  ///
+  /// In en, this message translates to:
+  /// **'Share link'**
+  String get playlistShareLink;
+
+  /// Row in a private playlist's overflow menu, offering it to the whole server.
+  ///
+  /// In en, this message translates to:
+  /// **'Share with everyone'**
+  String get playlistShareWithEveryone;
+
+  /// Byline on a card for somebody else's shared playlist. {name} is that person's display name.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared by {name}'**
+  String playlistSharedBy(String name);
+
+  /// Byline on a card for a playlist this account owns and shared with everyone.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared by you'**
+  String get playlistSharedByYou;
+
+  /// Help under the shared switch on the create dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone on this server can see and play it'**
+  String get playlistSharedHelp;
+
+  /// Switch on the create dialog offering the playlist to the whole server, and the header line saying a playlist is.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared with everyone'**
+  String get playlistSharedWithEveryone;
+
+  /// Button on a playlist's header that plays it in random order.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle'**
+  String get playlistShuffle;
+
+  /// A playlist that writes itself from rules: the badge on its card and the chip that picks that kind when making one.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart'**
+  String get playlistSmart;
+
+  /// Message under the empty state of a smart playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'No item in the library answers these rules. Loosen one and the list fills itself.'**
+  String get playlistSmartEmptyMessage;
+
+  /// Empty state of a smart playlist whose rules match nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing matches yet'**
+  String get playlistSmartEmptyTitle;
+
+  /// Message under the empty state of the playlists screen, saying the two ways to fill it.
+  ///
+  /// In en, this message translates to:
+  /// **'Make one, or add a track to a new list from anywhere it is playing. A smart playlist writes itself from rules and keeps up as the library grows.'**
+  String get playlistsEmptyMessage;
+
+  /// Empty state of the playlists screen.
+  ///
+  /// In en, this message translates to:
+  /// **'No playlists yet'**
+  String get playlistsEmptyTitle;
+
+  /// Title of the error state when the playlists could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your playlists'**
+  String get playlistsLoadError;
+
+  /// The same failure as a sentence in the add-to-playlist sheet, which has no room for an error state and says it in a line.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your playlists.'**
+  String get playlistsLoadErrorSentence;
+
+  /// Action that makes a playlist: the toolbar button, the empty state's button, and the row at the foot of the add-to-playlist sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'New playlist'**
+  String get playlistsNew;
+
+  /// Heading over the playlists other people shared with everyone.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared with the server'**
+  String get playlistsSectionShared;
+
+  /// Heading over the playlists this account owns. Only drawn where there are shared ones too.
+  ///
+  /// In en, this message translates to:
+  /// **'Yours'**
+  String get playlistsSectionYours;
+
+  /// The screen holding every playlist, named on its own title and on the music hub tile that opens it.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlists'**
+  String get playlistsTitle;
+
+  /// Toolbar action opening the dialog that follows a new show, and that dialog's own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Add subscription'**
+  String get podcastAddSubscription;
+
+  /// Action appending episodes to what is playing rather than interrupting it.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to queue'**
+  String get podcastAddToQueue;
+
+  /// Snackbar after appending one episode to what is playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to the queue'**
+  String get podcastAddedToQueue;
+
+  /// Switch fetching arrivals without being asked.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-download new episodes'**
+  String get podcastAutoDownload;
+
+  /// Help under the auto-download switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeps arrivals on this device as the feed refreshes'**
+  String get podcastAutoDownloadHelp;
+
+  /// Snackbar when the walk over a show's episodes failed before anything was written. {reason} is a whole translated sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the backlog. {reason}'**
+  String podcastBacklogReadError(String reason);
+
+  /// Stands in for a chapter the feed named but did not title.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter {number}'**
+  String podcastChapterFallback(int number);
+
+  /// Row in a show's overflow asking the server to read the feed again.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for new episodes'**
+  String get podcastCheckForNew;
+
+  /// Action dropping a batch selection without doing anything to it.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get podcastClearSelection;
+
+  /// Heading over the people a show's feed credits.
+  ///
+  /// In en, this message translates to:
+  /// **'Credits'**
+  String get podcastCredits;
+
+  /// A chapter, highlight, or transcript line read as one thing for a screen reader: what it says, then when.
+  ///
+  /// In en, this message translates to:
+  /// **'{text}, {stamp}'**
+  String podcastCueSpoken(String text, String stamp);
+
+  /// Snackbar when a timestamp is tapped for an episode that is not the one playing, so there is nothing to seek.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, chapter{Chapter starts at {stamp}} clip{Clip starts at {stamp}} cue{Cue starts at {stamp}} other{Starts at {stamp}}}'**
+  String podcastCueStartsAt(String kind, String stamp);
+
+  /// How many episodes a directory match has, under its name in search.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 episode} other{{count} episodes}}'**
+  String podcastDirectoryEpisodes(int count);
+
+  /// Action asking the server to fetch the chosen episodes.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get podcastDownload;
+
+  /// Fact on an episode row whose server-side fetch did not land.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed'**
+  String get podcastDownloadFailed;
+
+  /// How long an episode runs, abbreviated hard for a row's trailing column.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours}h {minutes}m'**
+  String podcastDurationHoursMinutes(int hours, int minutes);
+
+  /// The same, for an episode under an hour.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes}m'**
+  String podcastDurationMinutes(int minutes);
+
+  /// How many episodes a show has, on its card and in the line under its title.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 episode} other{{count} episodes}}'**
+  String podcastEpisodeCount(int count);
+
+  /// Accessible name of the control opening one episode's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Details for {title}'**
+  String podcastEpisodeDetails(String title);
+
+  /// Title of an episode screen opened cold, before the episode it names has loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Episode'**
+  String get podcastEpisodeFallbackTitle;
+
+  /// Title of the error state when one episode could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the episode'**
+  String get podcastEpisodeLoadError;
+
+  /// An episode's number, where its feed numbers no seasons.
+  ///
+  /// In en, this message translates to:
+  /// **'E{episode}'**
+  String podcastEpisodeNumber(int episode);
+
+  /// Title of the error state when a show's episode list could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the episodes'**
+  String get podcastEpisodesLoadError;
+
+  /// Help under the exclude field, saying it beats the include one.
+  ///
+  /// In en, this message translates to:
+  /// **'Comma separated. Wins where both match.'**
+  String get podcastExcludeHelp;
+
+  /// Field keeping auto-download away from the episodes whose title matches.
+  ///
+  /// In en, this message translates to:
+  /// **'Never titles containing'**
+  String get podcastExcludeLabel;
+
+  /// Marks a show or an episode the feed flagged as explicit.
+  ///
+  /// In en, this message translates to:
+  /// **'Explicit'**
+  String get podcastExplicit;
+
+  /// Field taking the address of a show to follow.
+  ///
+  /// In en, this message translates to:
+  /// **'Feed or channel URL'**
+  String get podcastFeedUrlLabel;
+
+  /// Accessible name of the control asking the server to hold one episode's bytes.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch {title} to the server'**
+  String podcastFetchEpisode(String title);
+
+  /// Chip on an episode whose server-side fetch failed. {reason} is the server's own diagnostic.
+  ///
+  /// In en, this message translates to:
+  /// **'Last fetch failed: {reason}'**
+  String podcastFetchFailed(String reason);
+
+  /// Play button on an episode whose feed named no audio, so the server has to hold it first.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch to play'**
+  String get podcastFetchToPlay;
+
+  /// Snackbar after pressing play on an episode that has to be fetched first.
+  ///
+  /// In en, this message translates to:
+  /// **'This feed named no audio to stream, so the server is fetching it. It plays once that lands.'**
+  String get podcastFetchingBeforePlay;
+
+  /// Snackbar after asking the server to hold one episode's bytes.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching to server'**
+  String get podcastFetchingToServer;
+
+  /// Snackbar when the picked OPML could not be read off the device. {reason} is the platform's own diagnostic and stays in English.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read that file: {reason}'**
+  String podcastFileUnreadable(String reason);
+
+  /// What the auto-download filter does, with the switch on.
+  ///
+  /// In en, this message translates to:
+  /// **'Matched against episode titles only, and against new arrivals only: editing this never re-evaluates the backlog or removes anything already fetched.'**
+  String get podcastFilterActiveHelp;
+
+  /// Chip showing every episode of a show.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get podcastFilterAll;
+
+  /// Chip narrowing a show to the episodes this server holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get podcastFilterDownloaded;
+
+  /// Said in place of the filter help with the switch off.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn auto-download on for these to do anything.'**
+  String get podcastFilterInactiveHelp;
+
+  /// Chip narrowing a show to the episodes never started.
+  ///
+  /// In en, this message translates to:
+  /// **'Unplayed'**
+  String get podcastFilterUnplayed;
+
+  /// A collapsible folder of shows read as one thing for a screen reader.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}, {count, plural, =1{1 show} other{{count} shows}}'**
+  String podcastFolderSpoken(String name, int count);
+
+  /// Button on a show's header that follows it.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow'**
+  String get podcastFollow;
+
+  /// Button on a show's header saying it is followed, and unfollowing it.
+  ///
+  /// In en, this message translates to:
+  /// **'Following'**
+  String get podcastFollowing;
+
+  /// Accessible name of the show's name above an episode's title, which is the way back to it.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to {name}'**
+  String podcastGoToShow(String name);
+
+  /// Stands in for a highlight the feed marked but did not title.
+  ///
+  /// In en, this message translates to:
+  /// **'Highlight {number}'**
+  String podcastHighlightFallback(int number);
+
+  /// Help under the include field. The separator is a comma in every language, since the terms are typed as one line.
+  ///
+  /// In en, this message translates to:
+  /// **'Comma separated. Empty takes every episode.'**
+  String get podcastIncludeHelp;
+
+  /// Field narrowing auto-download to the episodes whose title matches.
+  ///
+  /// In en, this message translates to:
+  /// **'Only titles containing'**
+  String get podcastIncludeLabel;
+
+  /// Unfollows the show and leaves the downloads alone.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep files'**
+  String get podcastKeepFiles;
+
+  /// Overline above the latest-episodes section.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get podcastLatestOverline;
+
+  /// When a show last published, in the line under its title.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest {date}'**
+  String podcastLatestPublished(String date);
+
+  /// Section on the podcast hub holding the newest episodes across every followed show.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest episodes'**
+  String get podcastLatestTitle;
+
+  /// Button fetching the next page of a show's episodes, for a filter that scrolling cannot reach.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more episodes'**
+  String get podcastLoadMore;
+
+  /// The load-more button while a page is on its way.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading...'**
+  String get podcastLoadingMore;
+
+  /// How far back the mark-older dialog reaches: the whole backlog.
+  ///
+  /// In en, this message translates to:
+  /// **'Every episode'**
+  String get podcastMarkOlderAll;
+
+  /// What the mark-older dialog does, said before it is run.
+  ///
+  /// In en, this message translates to:
+  /// **'Clears the unplayed dots on a backlog. Your positions on episodes you actually started are overwritten, and nothing is deleted.'**
+  String get podcastMarkOlderBody;
+
+  /// How far back the mark-older dialog reaches: a month.
+  ///
+  /// In en, this message translates to:
+  /// **'Older than a month'**
+  String get podcastMarkOlderMonth;
+
+  /// Row in a show's overflow clearing a backlog's unplayed dots, and the title of the dialog it opens.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark older episodes as played'**
+  String get podcastMarkOlderPlayed;
+
+  /// How far a mark-older run has got.
+  ///
+  /// In en, this message translates to:
+  /// **'{done} of {total}'**
+  String podcastMarkOlderProgress(int done, int total);
+
+  /// Snackbar when a mark-older run was refused partway, counting what landed first. {reason} is a whole translated sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Stopped after 1. {reason}} other{Stopped after {count}. {reason}}}'**
+  String podcastMarkOlderStopped(int count, String reason);
+
+  /// How far back the mark-older dialog reaches: a week.
+  ///
+  /// In en, this message translates to:
+  /// **'Older than a week'**
+  String get podcastMarkOlderWeek;
+
+  /// Action recording episodes as listened to the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark played'**
+  String get podcastMarkPlayed;
+
+  /// Snackbar after recording one episode as finished.
+  ///
+  /// In en, this message translates to:
+  /// **'Marked as played'**
+  String get podcastMarkedAsPlayed;
+
+  /// Half of the snackbar after marking a batch played.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 marked played} other{{count} marked played}}'**
+  String podcastMarkedPlayedCount(int count);
+
+  /// Snackbar after a mark-older run finished.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 episode marked as played} other{{count} episodes marked as played}}'**
+  String podcastMarkedPlayedTotal(int count);
+
+  /// Accessible name of the podcast hub's overflow menu.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get podcastMore;
+
+  /// Snackbar after a feed check that found something.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 new episode} other{{count} new episodes}}'**
+  String podcastNewEpisodes(int count);
+
+  /// Half of the snackbar after queueing a batch, counting what could not go in.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 had no audio in the feed} other{{count} had no audio in the feed}}'**
+  String podcastNoAudioCount(int count);
+
+  /// Fact on an episode row whose feed named no audio to stream, so it has to be fetched before it plays.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio in the feed'**
+  String get podcastNoAudioInFeed;
+
+  /// Snackbar refusing to queue an episode with no audio behind it.
+  ///
+  /// In en, this message translates to:
+  /// **'This feed named no audio for that episode, so there is nothing to queue.'**
+  String get podcastNoAudioToQueue;
+
+  /// Half of the snackbar after marking a batch played, counting the episodes whose feed declared no length.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 had no duration to finish} other{{count} had no duration to finish}}'**
+  String podcastNoDurationCount(int count);
+
+  /// Snackbar explaining why an episode cannot be marked played: played is derived from the position reached.
+  ///
+  /// In en, this message translates to:
+  /// **'This feed declared no duration, so there is no position that means finished. Fetching the episode gives it one.'**
+  String get podcastNoDurationToFinish;
+
+  /// Empty state of a show whose feed has published nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No episodes yet'**
+  String get podcastNoEpisodes;
+
+  /// Message under the no-episodes state.
+  ///
+  /// In en, this message translates to:
+  /// **'This feed has published nothing this server can see.'**
+  String get podcastNoEpisodesMessage;
+
+  /// Snackbar after a feed check that found nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No new episodes'**
+  String get podcastNoNewEpisodes;
+
+  /// Empty state where a filter or a search left nothing standing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing matches'**
+  String get podcastNothingMatches;
+
+  /// Message under the nothing-matches state.
+  ///
+  /// In en, this message translates to:
+  /// **'Widen the filter, or clear the search, to see the rest.'**
+  String get podcastNothingMatchesMessage;
+
+  /// Empty state where the filter matched nothing among the episodes loaded, and the show has more.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing matches yet'**
+  String get podcastNothingMatchesYet;
+
+  /// Why a filter can come up empty on a show with a long back catalogue.
+  ///
+  /// In en, this message translates to:
+  /// **'The filter runs over the episodes loaded so far, and this show has more.'**
+  String get podcastNothingMatchesYetMessage;
+
+  /// Button opening the web page a feed named for one episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the episode page'**
+  String get podcastOpenEpisodePage;
+
+  /// Snackbar after the OPML reached the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscriptions copied as OPML'**
+  String get podcastOpmlCopied;
+
+  /// Button copying the OPML on screen to the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get podcastOpmlCopy;
+
+  /// Row in the hub overflow offering the subscriptions as an OPML document, and the title of the dialog that shows it. OPML is the format's name and stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'Export OPML'**
+  String get podcastOpmlExport;
+
+  /// Row in the hub overflow reading subscriptions out of an OPML file.
+  ///
+  /// In en, this message translates to:
+  /// **'Import OPML'**
+  String get podcastOpmlImport;
+
+  /// Snackbar after an OPML import landed.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscriptions imported'**
+  String get podcastOpmlImported;
+
+  /// What the file picker calls the document it is asking for. The format's name, the same everywhere.
+  ///
+  /// In en, this message translates to:
+  /// **'OPML'**
+  String get podcastOpmlPickerLabel;
+
+  /// Heading over the shows that declare no folder, drawn only where some do.
+  ///
+  /// In en, this message translates to:
+  /// **'Other shows'**
+  String get podcastOtherShows;
+
+  /// Play button on an episode that has not been started.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get podcastPlay;
+
+  /// The mark-played button on an episode already finished, which is a statement rather than an action.
+  ///
+  /// In en, this message translates to:
+  /// **'Played'**
+  String get podcastPlayed;
+
+  /// Half of the snackbar after queueing a batch, counting what went in.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 added to the queue} other{{count} added to the queue}}'**
+  String podcastQueuedCount(int count);
+
+  /// Fact on an episode row the server has been asked to fetch.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued for download'**
+  String get podcastQueuedForDownload;
+
+  /// Snackbar after asking the server to fetch a batch of episodes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 queued for download} other{{count} queued for download}}'**
+  String podcastQueuedForDownloadCount(int count);
+
+  /// The same, where one of the batch was refused. {reason} is a whole translated sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 queued. {reason}} other{{count} queued. {reason}}}'**
+  String podcastQueuedWithFailure(int count, String reason);
+
+  /// Shown under an indeterminate bar while the episodes to mark are still being counted.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading the backlog...'**
+  String get podcastReadingBacklog;
+
+  /// Banner on a show whose feed the server has stopped polling.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled refresh is paused for this feed after repeated failures. Checking for new episodes turns it back on.'**
+  String get podcastRefreshPaused;
+
+  /// Button dropping one episode's downloaded bytes from the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove download'**
+  String get podcastRemoveDownload;
+
+  /// Accessible name of the control dropping one episode's downloaded bytes.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {title} from the server'**
+  String podcastRemoveEpisode(String title);
+
+  /// Unfollows the show and trashes what was downloaded for it.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove files'**
+  String get podcastRemoveFiles;
+
+  /// Snackbar after dropping one episode's downloaded bytes.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from server; your progress is kept'**
+  String get podcastRemovedFromServer;
+
+  /// Play button on an episode that was started, naming where it stopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume {stamp}'**
+  String podcastResume(String stamp);
+
+  /// Help under the retention field.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty uses the server default; 0 keeps all'**
+  String get podcastRetentionHelp;
+
+  /// Field bounding how many of a show's downloads the server holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Episodes to keep'**
+  String get podcastRetentionLabel;
+
+  /// Field narrowing a show's loaded episodes to the ones whose title matches.
+  ///
+  /// In en, this message translates to:
+  /// **'Search this show'**
+  String get podcastSearchShow;
+
+  /// Chip narrowing a show to one season. Only offered where the feed numbers them.
+  ///
+  /// In en, this message translates to:
+  /// **'Season {season}'**
+  String podcastSeasonChip(int season);
+
+  /// Where an episode sits in a show, abbreviated: season then episode. The letters are initials of those two words.
+  ///
+  /// In en, this message translates to:
+  /// **'S{season} E{episode}'**
+  String podcastSeasonEpisode(int season, int episode);
+
+  /// Heading over an episode's chapter marks.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get podcastSectionChapters;
+
+  /// Heading over the moments a feed marked as worth hearing.
+  ///
+  /// In en, this message translates to:
+  /// **'Highlights'**
+  String get podcastSectionHighlights;
+
+  /// Heading over what the feed wrote about an episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes'**
+  String get podcastSectionNotes;
+
+  /// Heading over the people an episode's feed credits.
+  ///
+  /// In en, this message translates to:
+  /// **'People'**
+  String get podcastSectionPeople;
+
+  /// How many episodes a batch selection holds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 selected} other{{count} selected}}'**
+  String podcastSelectedCount(int count);
+
+  /// Overline above the per-show settings sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'This show'**
+  String get podcastSettingsOverline;
+
+  /// The playback rate this show is set to. {speed} arrives already worded, with its multiplier sign.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed {speed}'**
+  String podcastSettingsSpeed(String speed);
+
+  /// Accessible name of the speed slider on the per-show settings sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed'**
+  String get podcastSettingsSpeedLabel;
+
+  /// The per-show settings: the control that opens them, and the heading of the sheet they open.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription settings'**
+  String get podcastSettingsTitle;
+
+  /// Button minting a link to an episode, optionally starting where the listener is.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get podcastShare;
+
+  /// Title of a show screen opened cold, before the show it names has loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Show'**
+  String get podcastShowFallbackTitle;
+
+  /// Collapses a show's or an episode's notes.
+  ///
+  /// In en, this message translates to:
+  /// **'Show less'**
+  String get podcastShowLessNotes;
+
+  /// Title of the error state when a show could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the show'**
+  String get podcastShowLoadError;
+
+  /// Accessible name of a show's overflow menu.
+  ///
+  /// In en, this message translates to:
+  /// **'More for this show'**
+  String get podcastShowMore;
+
+  /// Expands a show's or an episode's notes past the height they are clamped to.
+  ///
+  /// In en, this message translates to:
+  /// **'Show more'**
+  String get podcastShowMoreNotes;
+
+  /// Field taking how much of the start of every episode to skip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip intro (seconds)'**
+  String get podcastSkipIntro;
+
+  /// Field taking how much of the end of every episode to skip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip outro (seconds)'**
+  String get podcastSkipOutro;
+
+  /// Row in the hub overflow choosing what order the shows are in.
+  ///
+  /// In en, this message translates to:
+  /// **'{sort, select, recent{Sort by recent} title{Sort by title} added{Sort by added} other{Sort by {sort}}}'**
+  String podcastSortRow(String sort);
+
+  /// Segmented control choosing what kind of address was typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get podcastSourceLabel;
+
+  /// Source kind: an ordinary podcast feed. The format's name, the same everywhere.
+  ///
+  /// In en, this message translates to:
+  /// **'RSS'**
+  String get podcastSourceRss;
+
+  /// Source kind: a YouTube channel. The product name stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'YouTube'**
+  String get podcastSourceYouTube;
+
+  /// Stops a mark-older run partway. Whatever landed stays.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get podcastStop;
+
+  /// Confirming button of the add-subscription dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe'**
+  String get podcastSubscribeAction;
+
+  /// Button opening a show's funding link, where the feed named one but wrote no message of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Support this show'**
+  String get podcastSupportShow;
+
+  /// How much of a half-heard episode is unplayed. {time} is a timecode.
+  ///
+  /// In en, this message translates to:
+  /// **'{time} left'**
+  String podcastTimeLeft(String time);
+
+  /// Heading over an episode's transcript, which loads when it is opened.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript'**
+  String get podcastTranscript;
+
+  /// Said in place of a transcript that could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the transcript'**
+  String get podcastTranscriptError;
+
+  /// One transcript line whose cue named who was talking.
+  ///
+  /// In en, this message translates to:
+  /// **'{speaker}: {text}'**
+  String podcastTranscriptSpeaker(String speaker, String text);
+
+  /// Switch shortening the gaps in an episode's audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim silence'**
+  String get podcastTrimSilence;
+
+  /// Help under the trim-silence switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs the episode fetched: silence is mapped from the audio this server holds'**
+  String get podcastTrimSilenceHelp;
+
+  /// Body of the unfollow dialog, saying what goes and what stays.
+  ///
+  /// In en, this message translates to:
+  /// **'Some episodes are downloaded on the server. Remove those files too? Removed files go to the trash, and your listening progress is kept either way. If someone else subscribes to this show, the files stay regardless.'**
+  String get podcastUnfollowBody;
+
+  /// Title of the dialog asking what to do with the downloaded files when a show is unfollowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unfollow'**
+  String get podcastUnfollowTitle;
+
+  /// What is waiting in a show, on its card. Always more than zero where it is drawn.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 unplayed} other{{count} unplayed}}'**
+  String podcastUnplayedCount(int count);
+
+  /// Overline above the up-next shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Half heard'**
+  String get podcastUpNextOverline;
+
+  /// Shelf on the podcast hub holding episodes that were started and not finished.
+  ///
+  /// In en, this message translates to:
+  /// **'Up next'**
+  String get podcastUpNextTitle;
+
+  /// Switch lifting speech above the rest of an episode's audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice boost'**
+  String get podcastVoiceBoost;
+
+  /// Help under the voice-boost switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Lifts speech over a noisy room'**
+  String get podcastVoiceBoostHelp;
+
+  /// Button on the podcast hub's empty state.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a show'**
+  String get podcastsEmptyAction;
+
+  /// Message under the empty state of the podcast hub.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow a show and its new episodes turn up here as the feed publishes them.'**
+  String get podcastsEmptyMessage;
+
+  /// Empty state of the podcast hub.
+  ///
+  /// In en, this message translates to:
+  /// **'No shows yet'**
+  String get podcastsEmptyTitle;
+
+  /// Title of the error state when the subscriptions could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your shows'**
+  String get podcastsLoadError;
+
+  /// The podcast domain's front door, named on its own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcasts'**
+  String get podcastsTitle;
+
   /// Message after several tracks were dropped onto the queue at once. Never drawn for one, which names the track instead.
   ///
   /// In en, this message translates to:
@@ -4863,6 +7886,12 @@ abstract class AppLocalizations {
   /// **'Playing from {source}'**
   String queuePlayingFrom(String source);
 
+  /// Where a queue shuffled from the whole library came from. Worded from the kind rather than a stored label, which the whole library has none of.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing from your library'**
+  String get queuePlayingFromLibrary;
+
   /// Heading over the tracks already played in this queue, with how many. Upper case as a typographic style; write it the way small headings are written in this language.
   ///
   /// In en, this message translates to:
@@ -4946,6 +7975,354 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Undo'**
   String get queueUndo;
+
+  /// Segment adding a station by pasting its stream address.
+  ///
+  /// In en, this message translates to:
+  /// **'By URL'**
+  String get radioAddByUrl;
+
+  /// Confirming button of the station form when adding a new station.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get radioAddConfirm;
+
+  /// Segment adding a station by looking it up in the directory.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get radioAddSearch;
+
+  /// Toolbar action opening the dialog that adds a station, and that dialog's own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Add station'**
+  String get radioAddStation;
+
+  /// Snackbar after adding a station from the directory.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {name}'**
+  String radioAddedStation(String name);
+
+  /// Snackbar when stopping a station failed for a reason the contract does not name - the engine refusing, say.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not stop {name}'**
+  String radioCouldNotStop(String name);
+
+  /// Snackbar when a station's stream would not open, which is the engine's failure rather than the server's.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not tune {name}'**
+  String radioCouldNotTune(String name);
+
+  /// Refusal when the favourites strip is at its cap and another pin was asked for.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{The dial holds 1 station. Unpin one to make room.} other{The dial holds {count} stations. Unpin one to make room.}}'**
+  String radioDialFull(int count);
+
+  /// What a directory match sounds like: its codec and its bitrate. The unit is international.
+  ///
+  /// In en, this message translates to:
+  /// **'{codec} {bitrate} kbps'**
+  String radioDirectoryBitrate(String codec, int bitrate);
+
+  /// Stands in for a directory match's codec where the directory named none. Lower case: it reads mid-line, before the bitrate.
+  ///
+  /// In en, this message translates to:
+  /// **'stream'**
+  String get radioDirectoryStream;
+
+  /// Row in a station's menu opening its form, and that form's own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit station'**
+  String get radioEditStation;
+
+  /// Button on the radio dial's empty state.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a station'**
+  String get radioEmptyAction;
+
+  /// Message under the empty state of the radio dial, naming the two ways in.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the directory to add your first, or paste a stream URL if you already have one.'**
+  String get radioEmptyMessage;
+
+  /// Empty state of the radio dial.
+  ///
+  /// In en, this message translates to:
+  /// **'No stations yet'**
+  String get radioEmptyTitle;
+
+  /// Collapses the optional fields of the station form.
+  ///
+  /// In en, this message translates to:
+  /// **'Fewer options'**
+  String get radioFewerOptions;
+
+  /// Segmented control choosing between searching the directory and pasting an address.
+  ///
+  /// In en, this message translates to:
+  /// **'How to add'**
+  String get radioHowToAdd;
+
+  /// Title of the error state when the stations could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load stations'**
+  String get radioLoadError;
+
+  /// Field taking the address of a station's logo.
+  ///
+  /// In en, this message translates to:
+  /// **'Logo URL (optional)'**
+  String get radioLogoOptional;
+
+  /// Expands the optional fields of the station form, naming what is behind it.
+  ///
+  /// In en, this message translates to:
+  /// **'Name, website, and logo'**
+  String get radioMoreOptions;
+
+  /// Hint under the station-name field on the add form.
+  ///
+  /// In en, this message translates to:
+  /// **'Taken from the stream address when left blank'**
+  String get radioNameHint;
+
+  /// Refusal when an existing station's name is cleared, where there is no address to fall back to a name from.
+  ///
+  /// In en, this message translates to:
+  /// **'A station needs a name.'**
+  String get radioNeedsName;
+
+  /// Refusal when the station form is confirmed with no address in it.
+  ///
+  /// In en, this message translates to:
+  /// **'A station needs a stream URL.'**
+  String get radioNeedsUrl;
+
+  /// Said where the directory results would be when the lookup found nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No matches'**
+  String get radioNoMatches;
+
+  /// Accessible name of the star that puts a station on the favourites strip.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin {name} to the dial'**
+  String radioPin(String name);
+
+  /// Under a station's name while it is on, where the stream announces no track.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing'**
+  String get radioPlaying;
+
+  /// Row in a station's menu deleting it from the dial.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove station'**
+  String get radioRemoveStation;
+
+  /// Confirming button of the station form when editing an existing station.
+  ///
+  /// In en, this message translates to:
+  /// **'Save changes'**
+  String get radioSaveChanges;
+
+  /// Row in a saved song's menu handing it to the add-from-URL flow.
+  ///
+  /// In en, this message translates to:
+  /// **'Get it from a URL'**
+  String get radioSavedAcquire;
+
+  /// Under the get-from-a-URL row.
+  ///
+  /// In en, this message translates to:
+  /// **'Download a copy you found; it lands in review'**
+  String get radioSavedAcquireHelp;
+
+  /// Under the row on the dial that opens the saved songs.
+  ///
+  /// In en, this message translates to:
+  /// **'Songs you caught on air and mean to hunt down'**
+  String get radioSavedDoorSubtitle;
+
+  /// Message under the empty state of the saved songs, saying how one gets there.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the heart while a station is playing and the song it named turns up here, with a way to search for it.'**
+  String get radioSavedEmptyMessage;
+
+  /// Empty state of the songs caught on air.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing saved yet'**
+  String get radioSavedEmptyTitle;
+
+  /// Accessible name of the control searching the library for a saved song.
+  ///
+  /// In en, this message translates to:
+  /// **'Find \"{title}\" in the library'**
+  String radioSavedFind(String title);
+
+  /// Accessible name of the control crossing a saved song off the list.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget \"{title}\"'**
+  String radioSavedForget(String title);
+
+  /// Overline above a saved song's menu, naming where it was caught.
+  ///
+  /// In en, this message translates to:
+  /// **'Heard on {station}'**
+  String radioSavedHeardOn(String station);
+
+  /// Row in a saved song's menu handing its name to a pending review entry.
+  ///
+  /// In en, this message translates to:
+  /// **'Identify a review entry as it'**
+  String get radioSavedIdentify;
+
+  /// Under the identify-a-review-entry row.
+  ///
+  /// In en, this message translates to:
+  /// **'Hand its name to a pending entry\'s search'**
+  String get radioSavedIdentifyHelp;
+
+  /// Overline above the identify sheet, saying what it lists and why only those.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending single tracks in the review queue'**
+  String get radioSavedIdentifyOverline;
+
+  /// Heading of the sheet picking which pending review entry a saved song names.
+  ///
+  /// In en, this message translates to:
+  /// **'Identify as \"{title}\"'**
+  String radioSavedIdentifyTitle(String title);
+
+  /// Said under a saved song the library has since acquired, which is the ending the list exists to reach.
+  ///
+  /// In en, this message translates to:
+  /// **'In your library now'**
+  String get radioSavedInLibrary;
+
+  /// Title of the error state when the saved songs could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your saved songs'**
+  String get radioSavedLoadError;
+
+  /// Said in the identify sheet when the review queue holds nothing a radio song could name.
+  ///
+  /// In en, this message translates to:
+  /// **'No pending single tracks to name. Get the song from a URL first and it turns up here while it waits for review.'**
+  String get radioSavedNoPending;
+
+  /// Said in the identify sheet when the review queue could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the review queue.'**
+  String get radioSavedReviewError;
+
+  /// The songs caught on air: the row that opens them on the dial, and their screen's own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved from the radio'**
+  String get radioSavedTitle;
+
+  /// Stands in for a review entry the scan could not name.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled'**
+  String get radioSavedUntitled;
+
+  /// Accessible name of the control opening the menu of ways to acquire a saved song.
+  ///
+  /// In en, this message translates to:
+  /// **'Ways to get \"{title}\"'**
+  String radioSavedWays(String title);
+
+  /// Button running the directory lookup.
+  ///
+  /// In en, this message translates to:
+  /// **'Search directory'**
+  String get radioSearchDirectory;
+
+  /// Said when the directory search failed, naming the way out that manual entry leaves open. The quoted phrase is the other segment of the control above, so it matches that segment's own words.
+  ///
+  /// In en, this message translates to:
+  /// **'{reason} Paste a stream URL instead with \"By URL\".'**
+  String radioSearchFailedHint(String reason);
+
+  /// Accessible name of one station's overflow menu.
+  ///
+  /// In en, this message translates to:
+  /// **'More for {name}'**
+  String radioStationMore(String name);
+
+  /// Field taking what a station is called, and the one the directory search looks up.
+  ///
+  /// In en, this message translates to:
+  /// **'Station name'**
+  String get radioStationName;
+
+  /// Row in a station's menu opening the site its feed named.
+  ///
+  /// In en, this message translates to:
+  /// **'Station website'**
+  String get radioStationWebsite;
+
+  /// Field taking a station's stream address.
+  ///
+  /// In en, this message translates to:
+  /// **'Stream URL'**
+  String get radioStreamUrl;
+
+  /// Example address in the stream-URL field. An address rather than words, so it stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'https://example.com/stream'**
+  String get radioStreamUrlHint;
+
+  /// The radio dial, named on its own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio'**
+  String get radioTitle;
+
+  /// Under a station's name while its stream is opening.
+  ///
+  /// In en, this message translates to:
+  /// **'Tuning in'**
+  String get radioTuningIn;
+
+  /// Accessible name of the star that takes a station off the favourites strip.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin {name} from the dial'**
+  String radioUnpin(String name);
+
+  /// Accessible name of the level slider for the station that is on.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume'**
+  String get radioVolume;
+
+  /// Field taking a station's own site.
+  ///
+  /// In en, this message translates to:
+  /// **'Website (optional)'**
+  String get radioWebsiteOptional;
 
   /// How long ago something happened, in days, on a dashboard tile with room for a few words.
   ///
