@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../queue/queue_state.dart';
@@ -20,11 +21,17 @@ class TrackListScreen extends ConsumerWidget {
     required this.basis,
     required this.items,
     required this.idPrefix,
+    this.sourceLabel = '',
   });
 
   final String title;
   final MixBasis basis;
   final List<ItemSummary> items;
+
+  /// The mix's own name, which the queue stores, and empty for a seeded
+  /// one, whose provenance the queue words from the kind. Never a
+  /// translated frame; see [TrackListArgs].
+  final String sourceLabel;
 
   /// Scope for this screen's Semantics identifiers - the rows and the
   /// basis readout alike. A mix and a similar-tracks answer are both
@@ -35,6 +42,7 @@ class TrackListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.l10n;
     return WaxScaffold(
       title: title,
       largeTitle: false,
@@ -59,7 +67,7 @@ class TrackListScreen extends ConsumerWidget {
               alignment: Alignment.centerLeft,
               child: Semantics(
                 identifier: SemanticsIds.mixBasis(idPrefix),
-                label: 'Answered by the ${basis.wireName} engine',
+                label: l10n.discoveryBasisSpoken(basis.wireName),
                 excludeSemantics: true,
                 child: CodecChip(
                   basis.wireName,
@@ -70,12 +78,12 @@ class TrackListScreen extends ConsumerWidget {
           ),
         ),
         if (items.isEmpty)
-          const SliverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               glyph: WaxIcons.music,
-              title: 'Nothing found',
-              message: 'This answer came back empty. Try another track.',
+              title: l10n.discoveryEmptyTitle,
+              message: l10n.discoveryEmptyMessage,
             ),
           )
         else
@@ -106,7 +114,7 @@ class TrackListScreen extends ConsumerWidget {
                         items,
                         source: QueueSource(
                           kind: QueueSourceKind.mix,
-                          label: title,
+                          label: sourceLabel,
                         ),
                         startIndex: index,
                       );

@@ -1,10 +1,12 @@
+import 'localized_host.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/podcasts/show_notes.dart';
 
 Widget _host(String html, {void Function(String url)? onOpenLink}) =>
-    MaterialApp(
-      home: Scaffold(
+    localizedHost(
+      Scaffold(
         body: SingleChildScrollView(
           child: ShowNotesView(html: html, onOpenLink: onOpenLink),
         ),

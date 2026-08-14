@@ -204,7 +204,7 @@
   },
   "deckBarOnEndpoint": "on {endpoint}",
   "@deckBarOnEndpoint": {
-    "description": "Tail of the now-playing bar's spoken description when the sound is coming out of another device. {endpoint} is that device's user-chosen name.",
+    "description": "Where the sound is coming out, when that is another device: the tail of the now-playing bar's spoken description, and its second line where there is nothing else to say there. {endpoint} is that device's user-chosen name.",
     "placeholders": {
       "endpoint": {
         "type": "String",
@@ -275,6 +275,20 @@
       "speed": {
         "type": "String",
         "example": "1.50"
+      }
+    }
+  },
+  "deckBarSubtitleOnEndpoint": "{subtitle} on {endpoint}",
+  "@deckBarSubtitleOnEndpoint": {
+    "description": "The deck bar's second line while playback is on another device: what is playing, then where. {subtitle} is usually the artist; {endpoint} is that device's user-chosen name.",
+    "placeholders": {
+      "subtitle": {
+        "type": "String",
+        "example": "Beach House"
+      },
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
       }
     }
   },

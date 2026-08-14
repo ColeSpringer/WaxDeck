@@ -20,11 +20,11 @@ import 'uploads_controller.dart';
 class UploadsScreen extends ConsumerWidget {
   const UploadsScreen({super.key});
 
-  Future<void> _retry(WidgetRef ref, String id) async {
+  Future<void> _retry(AppLocalizations l10n, WidgetRef ref, String id) async {
     try {
       await ref.read(uploadsProvider.notifier).retry(id);
     } on WaxDeckApiException catch (e) {
-      ref.read(shellMessengerProvider.notifier).show(e.message);
+      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, e));
     }
   }
 
@@ -33,14 +33,13 @@ class UploadsScreen extends ConsumerWidget {
     WidgetRef ref,
     UploadSession upload,
   ) async {
+    final l10n = context.l10n;
     final confirmed = await showTypedConfirm(
       context,
-      title: 'Discard upload?',
-      message:
-          '"${upload.fileName}" and its staged bytes are removed, and the '
-          'space they hold against your quota is released.',
-      confirmWord: 'discard',
-      confirmLabel: 'Discard',
+      title: l10n.uploadsDiscardTitle,
+      message: l10n.uploadsDiscardBody(upload.fileName),
+      confirmWord: l10n.uploadsDiscardWord,
+      confirmLabel: l10n.uploadsDiscardConfirm,
       fieldSemanticsId: SemanticsIds.confirmField,
       confirmSemanticsId: SemanticsIds.confirmAccept,
       cancelSemanticsId: SemanticsIds.confirmCancel,
@@ -49,7 +48,7 @@ class UploadsScreen extends ConsumerWidget {
     try {
       await ref.read(uploadsProvider.notifier).discard(upload.id);
     } on WaxDeckApiException catch (e) {
-      ref.read(shellMessengerProvider.notifier).show(e.message);
+      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, e));
     }
   }
 
@@ -60,27 +59,29 @@ class UploadsScreen extends ConsumerWidget {
     final picker = ref.watch(filePickerProvider);
     final canUpload =
         ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
+    final l10n = context.l10n;
     // Around the whole screen: the copy says anywhere on this page, and
     // a zone inside the scroll would refuse a drop over the bar.
     return AudioDropArea(
       enabled: canUpload,
+      hint: l10n.uploadsDropHint,
       onDropped: (files) => uploadPickedFiles(context, ref, files),
       child: WaxScaffold(
-        title: 'Uploads',
+        title: l10n.uploadsTitle,
         largeTitle: false,
         semanticsId: SemanticsIds.uploadsScreen,
         actions: <Widget>[
           if (picker != null && canUpload)
             WaxIconButton(
               glyph: WaxIcons.add,
-              label: 'Upload files',
+              label: l10n.uploadsPick,
               semanticsId: SemanticsIds.uploadPick,
               onPressed: () => pickAndUpload(context, ref, picker),
             ),
           if (canUpload)
             WaxIconButton(
               glyph: WaxIcons.downloads,
-              label: 'Add from URL',
+              label: l10n.uploadsFromUrl,
               semanticsId: SemanticsIds.uploadFromUrl,
               onPressed: () => acquireFromUrl(context, ref),
             ),
@@ -92,10 +93,8 @@ class UploadsScreen extends ConsumerWidget {
           child: switch (uploads) {
             AsyncData(:final value) => _body(context, ref, value, canUpload),
             AsyncError(:final error) => ErrorState(
-              title: 'Could not load uploads',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.uploadsLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(uploadsProvider),
             ),
             _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -112,6 +111,7 @@ class UploadsScreen extends ConsumerWidget {
     bool canUpload,
   ) {
     final quota = state.quota;
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -120,25 +120,25 @@ class UploadsScreen extends ConsumerWidget {
         if (state.uploads.isEmpty)
           EmptyState(
             glyph: WaxIcons.add,
-            title: 'No uploads yet',
+            title: l10n.uploadsEmptyTitle,
             message: canUpload
-                ? 'Pick files from the bar above, or drop them anywhere on '
-                      'this page.'
-                : 'This account cannot upload. Ask an administrator for the '
-                      'permission.',
+                ? l10n.uploadsEmptyMessage
+                : l10n.uploadsEmptyNoPermission,
           )
         else ...<Widget>[
           for (final group in _grouped(state))
             _BatchGroup(
               group: group,
               failed: state.failed,
-              onRetry: (id) => _retry(ref, id),
+              onRetry: (id) => _retry(l10n, ref, id),
               onDiscard: (upload) => _discard(context, ref, upload),
             ),
           if (state.hasMore) ...<Widget>[
             const SizedBox(height: WaxSpace.s16),
             WaxButton(
-              label: state.loadingMore ? 'Loading' : 'Load more',
+              label: state.loadingMore
+                  ? l10n.commonLoading
+                  : l10n.uploadsLoadMore,
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.expand,
               semanticsId: SemanticsIds.uploadsMore,
@@ -223,8 +223,7 @@ class _BatchGroup extends StatelessWidget {
                     ),
                     const SizedBox(width: WaxSpace.s8),
                     Text(
-                      'Uploaded together, ${group.uploads.length} '
-                      '${group.uploads.length == 1 ? 'file' : 'files'}',
+                      context.l10n.uploadsBatch(group.uploads.length),
                       style: WaxType.overline.copyWith(
                         color: colors.textSecondary,
                       ),
@@ -276,15 +275,17 @@ class _QuotaHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Waiting to be imported',
+              l10n.uploadsQuotaOverline,
               style: WaxType.overline.copyWith(color: colors.textSecondary),
             ),
             const SizedBox(height: WaxSpace.s8),
             Text(
               cap == null
                   ? l10n.formatBytes(quota.bytesInUse)
-                  : '${l10n.formatBytes(quota.bytesInUse)} of '
-                        '${l10n.formatBytes(cap)}',
+                  : l10n.uploadsQuotaOf(
+                      l10n.formatBytes(quota.bytesInUse),
+                      l10n.formatBytes(cap),
+                    ),
               style: WaxType.titleEntity.copyWith(
                 color: fraction != null && fraction >= 1
                     ? colors.error
@@ -308,11 +309,8 @@ class _QuotaHeader extends StatelessWidget {
             const SizedBox(height: WaxSpace.s8),
             Text(
               cap == null
-                  ? 'Staged files are held until they are imported or '
-                        'discarded.'
-                  : 'This is what may sit staged at once, not what you may '
-                        'contribute: importing a session frees the space it '
-                        'held.',
+                  ? l10n.uploadsQuotaHelpUncapped
+                  : l10n.uploadsQuotaHelp,
               style: WaxType.caption.copyWith(color: colors.textTertiary),
             ),
           ],
@@ -335,11 +333,12 @@ class _UploadRow extends StatelessWidget {
   final VoidCallback onRetry;
   final VoidCallback onDiscard;
 
-  static String _duplicateKind(String kind) => switch (kind) {
-    'content' => 'exact copy',
-    'fingerprint' => 'same recording',
-    _ => 'name match',
-  };
+  static String _duplicateKind(AppLocalizations l10n, String kind) =>
+      switch (kind) {
+        'content' => l10n.uploadsDuplicateContent,
+        'fingerprint' => l10n.uploadsDuplicateFingerprint,
+        _ => l10n.uploadsDuplicateName,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -380,7 +379,7 @@ class _UploadRow extends StatelessWidget {
                 const SizedBox(width: WaxSpace.s8),
                 if (failed)
                   Text(
-                    'Transfer failed',
+                    l10n.uploadsTransferFailed,
                     style: WaxType.label.copyWith(color: colors.error),
                   )
                 else
@@ -388,7 +387,7 @@ class _UploadRow extends StatelessWidget {
                 if (failed)
                   WaxIconButton(
                     glyph: WaxIcons.refresh,
-                    label: 'Retry upload',
+                    label: l10n.uploadsRetry,
                     size: 16,
                     semanticsId: SemanticsIds.uploadRetry(upload.id),
                     onPressed: onRetry,
@@ -396,7 +395,7 @@ class _UploadRow extends StatelessWidget {
                 if (discardable)
                   WaxIconButton(
                     glyph: WaxIcons.delete,
-                    label: 'Discard upload',
+                    label: l10n.uploadsDiscardRow,
                     size: 16,
                     semanticsId: SemanticsIds.uploadDelete(upload.id),
                     onPressed: onDiscard,
@@ -419,9 +418,11 @@ class _UploadRow extends StatelessWidget {
               const SizedBox(height: WaxSpace.s4),
               Text(
                 upload.sizeBytes == 0
-                    ? 'Receiving'
-                    : '${upload.receivedBytes * 100 ~/ upload.sizeBytes}% of '
-                          '${l10n.formatBytes(upload.sizeBytes)} received',
+                    ? l10n.uploadsReceiving
+                    : l10n.uploadsReceivedOf(
+                        upload.receivedBytes * 100 ~/ upload.sizeBytes,
+                        l10n.formatBytes(upload.sizeBytes),
+                      ),
                 style: WaxType.caption.copyWith(color: colors.textSecondary),
               ),
             ],
@@ -432,10 +433,19 @@ class _UploadRow extends StatelessWidget {
                 container: true,
                 child: WaxBanner(
                   tone: WaxBannerTone.caution,
-                  message:
-                      'Duplicate (${_duplicateKind(duplicate.kind)}): '
-                      '${duplicate.title ?? duplicate.itemPid}'
-                      '${duplicate.artist == null ? '' : ' by ${duplicate.artist}'}',
+                  message: l10n.uploadsDuplicate(
+                    _duplicateKind(l10n, duplicate.kind),
+                    // The artist names the duplicate even where the
+                    // title is missing, which is when the alternative
+                    // is a bare pid.
+                    switch ((duplicate.title, duplicate.artist)) {
+                      (_, final artist?) => l10n.uploadsDuplicateBy(
+                        duplicate.title ?? duplicate.itemPid,
+                        artist,
+                      ),
+                      _ => duplicate.title ?? duplicate.itemPid,
+                    },
+                  ),
                 ),
               ),
             ],
@@ -444,7 +454,7 @@ class _UploadRow extends StatelessWidget {
               Align(
                 alignment: Alignment.centerRight,
                 child: WaxButton(
-                  label: 'Open review entry',
+                  label: l10n.uploadsOpenReview,
                   kind: WaxButtonKind.text,
                   semanticsId: SemanticsIds.uploadReview(upload.id),
                   // Pushed: an entry is declared under the review queue,

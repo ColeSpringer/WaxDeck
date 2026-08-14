@@ -49,6 +49,7 @@
   "deckBarSkipBack": "Retroceder {span}",
   "deckBarSkipForward": "Avanzar {span}",
   "deckBarSpeed": "{speed}x",
+  "deckBarSubtitleOnEndpoint": "{subtitle} en {endpoint}",
   "deckBarTapToResume": "Toca para reanudar",
   "deckBarVolume": "Volumen",
   "domainBook": "Libro",

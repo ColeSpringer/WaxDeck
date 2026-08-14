@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../player/playback_session.dart';
@@ -121,7 +122,6 @@ final miniWindowProvider =
 /// platform probe a moment after launch.
 final WaxCommand miniWindowCommand = WaxCommand(
   id: 'mini-window',
-  label: 'Mini player window',
   section: WaxCommandSection.view,
   glyph: WaxIcons.collapse,
   activators: const <ShortcutActivator>[
@@ -232,7 +232,7 @@ class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
                   playing: playing || station.starting,
                 )
               : NowPlayingData(
-                  title: item?.title ?? 'Nothing playing',
+                  title: item?.title ?? context.l10n.playerNothingPlaying,
                   subtitle: item?.artist,
                   artwork: waxArtwork(
                     ref.watch(artworkStoreProvider),

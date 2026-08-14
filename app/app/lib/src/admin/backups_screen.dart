@@ -37,6 +37,7 @@ class BackupsScreen extends ConsumerWidget {
     final file = await picker.pickFile(
       extensions: const {'zip'},
       label: context.l10n.adminBackupArchiveLabel,
+      anyLabel: context.l10n.uploadsFileTypeAny,
     );
     if (file == null || !context.mounted) return;
     await _importArchive(context, ref, file);

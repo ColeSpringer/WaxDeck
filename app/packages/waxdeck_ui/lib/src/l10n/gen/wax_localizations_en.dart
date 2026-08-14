@@ -187,6 +187,11 @@ class WaxLocalizationsEn extends WaxLocalizations {
   }
 
   @override
+  String deckBarSubtitleOnEndpoint(String subtitle, String endpoint) {
+    return '$subtitle on $endpoint';
+  }
+
+  @override
   String get deckBarTapToResume => 'Tap to resume';
 
   @override

@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../discovery/discovery_actions.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
@@ -25,6 +26,7 @@ class MixShelf extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final state = ref.watch(mixCardsProvider);
     if (!state.hasValue) {
       // The same rule ItemShelf follows: loading shows the shelf's
@@ -34,10 +36,10 @@ class MixShelf extends ConsumerWidget {
       if (state.hasError) {
         return const SliverToBoxAdapter(child: SizedBox.shrink());
       }
-      return const SliverToBoxAdapter(
+      return SliverToBoxAdapter(
         child: DelayedShelfSkeleton(
-          title: 'Made for you',
-          overline: 'Mixes from what you play',
+          title: l10n.homeMixesTitle,
+          overline: l10n.homeMixesOverline,
         ),
       );
     }
@@ -49,8 +51,8 @@ class MixShelf extends ConsumerWidget {
     final tiles = <MediaTileData>[
       for (var i = 0; i < cards.length; i++)
         MediaTileData(
-          title: cards[i].title,
-          subtitle: 'Instant mix',
+          title: cards[i].titleOf(l10n),
+          subtitle: l10n.discoveryInstantMixTitle,
           artwork: waxArtwork(store, cards[i].artUrl),
           domain: WaxDomain.music,
           semanticsId: SemanticsIds.homeMix(i),
@@ -66,8 +68,8 @@ class MixShelf extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.only(bottom: WaxSpace.s24),
           child: ShelfRow(
-            title: 'Made for you',
-            overline: 'Mixes from what you play',
+            title: l10n.homeMixesTitle,
+            overline: l10n.homeMixesOverline,
             items: tiles,
             onTapItem: (tile) {
               final at = tiles.indexOf(tile);
@@ -94,6 +96,8 @@ Future<void> playMixCard(
 ) async {
   final router = GoRouter.of(context);
   final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
+  final title = card.titleOf(l10n);
   final playback = ref.read(nowPlayingProvider.notifier);
   try {
     final mix = await ref
@@ -107,9 +111,7 @@ Future<void> playMixCard(
     if (mix.items.isEmpty) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('No mix available for ${card.title}')),
-        );
+        ..showSnackBar(SnackBar(content: Text(l10n.homeMixEmpty(title))));
       return;
     }
     // A mix takes a moment to build, and the tap that asked for it is a
@@ -120,14 +122,18 @@ Future<void> playMixCard(
     // destination the visitor walked to meanwhile.
     playback.play(
       mix.items,
-      source: QueueSource(kind: QueueSourceKind.mix, label: card.title),
+      // A stored name or none at all, never the card's sentence: the
+      // label is stored with the queue and outlives the language it was
+      // built in, and a seeded mix has no name to store.
+      source: QueueSource(kind: QueueSourceKind.mix, label: card.queueLabel),
     );
     if (!context.mounted) return;
     unawaited(
       router.push<void>(
         WaxRoute.tracks,
         extra: TrackListArgs(
-          title: card.title,
+          title: title,
+          sourceLabel: card.queueLabel,
           basis: mix.basis,
           items: mix.items,
           idPrefix: 'mix',
@@ -138,6 +144,6 @@ Future<void> playMixCard(
   } on WaxDeckApiException catch (e) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(e.message)));
+      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
   }
 }

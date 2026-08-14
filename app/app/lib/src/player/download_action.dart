@@ -23,8 +23,8 @@ class DownloadAction extends ConsumerStatefulWidget {
   const DownloadAction({
     required this.pid,
     required this.semanticsId,
+    required this.label,
     this.artUrl,
-    this.label = 'Download',
     super.key,
   });
 
@@ -35,8 +35,9 @@ class DownloadAction extends ConsumerStatefulWidget {
 
   final String semanticsId;
 
-  /// What the control is called before anything is on disk. "Download"
-  /// on a track; a book says what it is downloading.
+  /// What the control is called before anything is on disk; a book says
+  /// what it is downloading. Required, because a defaulted sentence is
+  /// one language every caller who forgets it draws in all of them.
   final String label;
 
   @override

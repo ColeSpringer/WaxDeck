@@ -7,10 +7,10 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'share_card_export.dart';
-import 'stats_controller.dart' show formatListenTime;
 
 /// The platform's way of keeping a finished card.
 final shareCardExporterProvider = Provider<ShareCardExporter>(
@@ -19,14 +19,24 @@ final shareCardExporterProvider = Provider<ShareCardExporter>(
 
 /// The two shapes a recap card is cut to, both 1080 wide.
 enum ShareCardFormat {
-  story('Story', 'For a full-screen story', Size(1080, 1920)),
-  square('Square', 'For a post or a message', Size(1080, 1080));
+  story(Size(1080, 1920)),
+  square(Size(1080, 1080));
 
-  const ShareCardFormat(this.label, this.blurb, this.size);
+  const ShareCardFormat(this.size);
 
-  final String label;
-  final String blurb;
   final Size size;
+
+  /// What the shape is called on its button.
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    ShareCardFormat.story => l10n.statsCardFormatStory,
+    ShareCardFormat.square => l10n.statsCardFormatSquare,
+  };
+
+  /// What it is for, under the preview.
+  String blurbOf(AppLocalizations l10n) => switch (this) {
+    ShareCardFormat.story => l10n.statsCardFormatStoryBlurb,
+    ShareCardFormat.square => l10n.statsCardFormatSquareBlurb,
+  };
 
   /// How many top artists the card has room for.
   int get artistCount => this == ShareCardFormat.story ? 5 : 3;
@@ -44,28 +54,32 @@ class ShareCardData {
   });
 
   /// Everything a personal recap puts on a card.
-  factory ShareCardData.personal(YearInReview recap) => ShareCardData(
-    year: recap.year,
-    headline: formatListenTime(recap.totalMs),
-    headlineLabel: 'listened',
-    facts: <(String, String)>[
-      ('${recap.sessions}', 'sessions'),
-      ('${recap.distinctItems}', 'different things'),
-      ('${recap.longestStreakDays}', 'day streak'),
-    ],
-    artists: <ShareCardArtist>[
-      for (final entry in recap.topArtists)
-        (name: entry.name, artUrl: entry.artUrl),
-    ],
-  );
+  factory ShareCardData.personal(AppLocalizations l10n, YearInReview recap) =>
+      ShareCardData(
+        year: recap.year,
+        headline: l10n.formatListenTime(recap.totalMs),
+        headlineLabel: l10n.statsListened,
+        facts: <(String, String)>[
+          ('${recap.sessions}', l10n.statsSessions),
+          ('${recap.distinctItems}', l10n.statsCardFactDifferentThings),
+          ('${recap.longestStreakDays}', l10n.statsCardFactDayStreak),
+        ],
+        artists: <ShareCardArtist>[
+          for (final entry in recap.topArtists)
+            (name: entry.name, artUrl: entry.artUrl),
+        ],
+      );
 
-  factory ShareCardData.server(ServerYearInReview recap) => ShareCardData(
+  factory ShareCardData.server(
+    AppLocalizations l10n,
+    ServerYearInReview recap,
+  ) => ShareCardData(
     year: recap.year,
-    headline: formatListenTime(recap.totalMs),
-    headlineLabel: 'listened together',
+    headline: l10n.formatListenTime(recap.totalMs),
+    headlineLabel: l10n.statsYearListenedTogether,
     facts: <(String, String)>[
-      ('${recap.participants}', 'listeners'),
-      ('${recap.sessions}', 'sessions'),
+      ('${recap.participants}', l10n.statsCardFactListeners),
+      ('${recap.sessions}', l10n.statsSessions),
     ],
     artists: <ShareCardArtist>[
       for (final entry in recap.topArtists)
@@ -201,7 +215,25 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
   /// - 49 pixels - so this is the smallest rung that cannot look soft.
   static const _coverPx = 128;
 
+  /// What a refused export says: the platform's own account where it
+  /// gave one - it names the directory or permission, which no sentence
+  /// here can - and the table's otherwise.
+  static String _failureMessage(
+    AppLocalizations l10n,
+    ShareCardFailure kind,
+    String? detail,
+  ) =>
+      detail ??
+      switch (kind) {
+        ShareCardFailure.writeFailed => l10n.statsCardExportFailed,
+        ShareCardFailure.shareRefused => l10n.statsCardShareRefused,
+        ShareCardFailure.shareUnsupported => l10n.statsCardShareUnsupported,
+        ShareCardFailure.saveUnsupported => l10n.statsCardSaveUnsupported,
+        ShareCardFailure.noDestination => l10n.statsCardNoDestination,
+      };
+
   Future<void> _export(ShareCardFormat format) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final exporter = ref.read(shareCardExporterProvider);
     setState(() => _rendering = format);
@@ -216,24 +248,28 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
       if (!mounted) return;
       final png = await _renderPng(format);
       if (png == null) {
-        messenger.show('The card could not be drawn');
+        messenger.show(l10n.statsCardDrawFailed);
         return;
       }
       final outcome = await exporter.export(
         png: png,
         fileName: 'waxdeck-${widget.data.year}-${format.name}.png',
-        subject: 'My ${widget.data.year} in review',
+        subject: l10n.statsCardSubject(widget.data.year),
       );
       messenger.show(switch (outcome) {
-        ShareCardShared() => 'Card shared',
-        ShareCardSaved(:final where) => 'Saved to $where',
-        ShareCardFailed(:final reason) => reason,
+        ShareCardShared() => l10n.statsCardShared,
+        ShareCardSaved(:final where) => l10n.statsCardSaved(where),
+        ShareCardFailed(:final kind, :final detail) => _failureMessage(
+          l10n,
+          kind,
+          detail,
+        ),
       });
     } on Object {
       // A raster that would not encode, a platform directory that does
       // not exist: this is a button, and it has to say so rather than
       // going quiet and un-busying.
-      messenger.show('The card could not be exported');
+      messenger.show(l10n.statsCardExportFailed);
     } finally {
       if (mounted) setState(() => _rendering = null);
     }
@@ -261,6 +297,7 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final exporter = ref.watch(shareCardExporterProvider);
     return SafeArea(
       child: SingleChildScrollView(
@@ -275,15 +312,13 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const SectionHeader(
-                title: 'Share cards',
-                overline: 'Your year, cut to shape',
+              SectionHeader(
+                title: l10n.statsCardTitle,
+                overline: l10n.statsCardOverline,
               ),
               if (!exporter.canExport)
-                const WaxBanner(
-                  message:
-                      'This build cannot keep an image, so the cards are '
-                      'preview only.',
+                WaxBanner(
+                  message: l10n.statsCardNoExport,
                   tone: WaxBannerTone.caution,
                 ),
               // A scrolled Row, not a ListView: the export captures a
@@ -313,8 +348,7 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
               ),
               const SizedBox(height: WaxSpace.s8),
               Text(
-                'Cards are drawn here and never sent anywhere: what happens '
-                'next is up to you.',
+                l10n.statsCardPrivacy,
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ],
@@ -367,7 +401,7 @@ class _Preview extends StatelessWidget {
           Center(
             child: Semantics(
               identifier: SemanticsIds.shareCardPreview(format.name),
-              label: '${format.label} card, ${format.blurb.toLowerCase()}',
+              label: context.l10n.statsCardPreviewSpoken(format.name),
               excludeSemantics: true,
               child: ClipRRect(
                 borderRadius: WaxRadius.card,
@@ -393,14 +427,16 @@ class _Preview extends StatelessWidget {
           ),
           const SizedBox(height: WaxSpace.s8),
           WaxButton(
-            label: busy ? 'Drawing' : format.label,
+            label: busy
+                ? context.l10n.statsCardDrawing
+                : format.labelOf(context.l10n),
             kind: WaxButtonKind.tonal,
             expand: true,
             semanticsId: SemanticsIds.shareCardExport(format.name),
             onPressed: busy ? null : onExport,
           ),
           Text(
-            format.blurb,
+            format.blurbOf(context.l10n),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -599,7 +635,7 @@ class YearShareCard extends StatelessWidget {
                 if (data.artists.isNotEmpty) ...<Widget>[
                   SizedBox(height: _blockGap),
                   Text(
-                    'MOST PLAYED',
+                    context.l10n.statsCardMostPlayed,
                     style: WaxType.overline.copyWith(
                       fontSize: _s(0.022),
                       color: colors.textTertiary,

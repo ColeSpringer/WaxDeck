@@ -2,6 +2,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import 'auth_controller.dart';
 
@@ -35,6 +36,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   }
 
   Future<void> _submit() async {
+    final l10n = context.l10n;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() {
       _submitting = true;
@@ -54,7 +56,8 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = e.message;
+        // A refusal of what was just typed keeps the server's words.
+        _error = explainRefusal(l10n, e);
       });
     }
   }
@@ -62,6 +65,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -77,7 +81,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   const WaxBrandBlock(),
                   const SizedBox(height: WaxSpace.s16),
                   Text(
-                    'Create the first administrator account',
+                    l10n.authFirstAdmin,
                     style: WaxType.body.copyWith(color: colors.textPrimary),
                     textAlign: TextAlign.center,
                   ),
@@ -88,13 +92,13 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                       key: const Key(SemanticsIds.setupUsername),
                       controller: _username,
                       autofillHints: const [AutofillHints.username],
-                      decoration: const InputDecoration(
-                        labelText: 'Username',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.authUsername,
+                        border: const OutlineInputBorder(),
                       ),
                       validator: (value) =>
                           (value == null || value.trim().isEmpty)
-                          ? 'Enter a username'
+                          ? l10n.authEnterUsername
                           : null,
                     ),
                   ),
@@ -106,12 +110,12 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                       controller: _password,
                       obscureText: true,
                       autofillHints: const [AutofillHints.newPassword],
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.authPassword,
+                        border: const OutlineInputBorder(),
                       ),
                       validator: (value) => (value == null || value.length < 8)
-                          ? 'Use at least 8 characters'
+                          ? l10n.authPasswordTooShort
                           : null,
                     ),
                   ),
@@ -122,12 +126,12 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                       key: const Key(SemanticsIds.setupConfirm),
                       controller: _confirm,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Confirm password',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.authConfirmPassword,
+                        border: const OutlineInputBorder(),
                       ),
                       validator: (value) => (value != _password.text)
-                          ? 'Passwords do not match'
+                          ? l10n.authPasswordsDiffer
                           : null,
                       onFieldSubmitted: (_) => _submit(),
                     ),
@@ -138,9 +142,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                     child: TextFormField(
                       key: const Key(SemanticsIds.setupDisplayName),
                       controller: _displayName,
-                      decoration: const InputDecoration(
-                        labelText: 'Display name (optional)',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.authDisplayName,
+                        border: const OutlineInputBorder(),
                       ),
                       onFieldSubmitted: (_) => _submit(),
                     ),
@@ -169,7 +173,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Create account'),
+                          : Text(l10n.authCreateAccount),
                     ),
                   ),
                 ],

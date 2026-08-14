@@ -244,12 +244,18 @@ class TrackListArgs {
     required this.basis,
     required this.items,
     required this.idPrefix,
+    this.sourceLabel = '',
   });
 
   final String title;
   final MixBasis basis;
   final List<ItemSummary> items;
   final String idPrefix;
+
+  /// What the queue records this list as: its own name, not [title],
+  /// since a stored label outlives the language it was built in. Empty
+  /// where the answer is not the thing it was computed from.
+  final String sourceLabel;
 }
 
 /// The account an admin opened, plus whether this is an approval of a

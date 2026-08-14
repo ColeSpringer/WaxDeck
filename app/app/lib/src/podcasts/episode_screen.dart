@@ -478,7 +478,7 @@ class _CueRow extends StatelessWidget {
 String formatEpisodeMeta(AppLocalizations l10n, EpisodeSummary episode) {
   return <String>[
     l10n.formatDate(episode.publishedAt),
-    if (episode.durationMs > 0) formatEpisodeDuration(l10n, episode.durationMs),
+    if (episode.durationMs > 0) l10n.formatListenTime(episode.durationMs),
     if (episode.season != null && episode.episodeNumber != null)
       l10n.podcastSeasonEpisode(episode.season!, episode.episodeNumber!)
     else if (episode.episodeNumber != null)

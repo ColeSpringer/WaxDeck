@@ -102,6 +102,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
     final file = await picker.pickFile(
       extensions: kArtworkExtensions,
       label: context.l10n.artworkPickLabel,
+      anyLabel: context.l10n.uploadsFileTypeAny,
     );
     if (file == null) return;
     await _upload(slot, file);

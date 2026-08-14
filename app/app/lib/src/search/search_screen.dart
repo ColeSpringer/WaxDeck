@@ -171,9 +171,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final ownField =
         !WaxSizeClass.of(context).hasSidebar ||
         ref.watch(sidebarCollapsedProvider);
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: 'Search',
+      title: l10n.searchTitle,
       largeTitle: false,
       onBack: () => context.go(WaxRoute.home),
       slivers: <Widget>[
@@ -190,7 +191,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     controller: _field,
                     focusNode: _focus,
                     autofocus: true,
-                    hint: 'Artists, albums, shows, books',
+                    hint: l10n.searchFieldHint,
                     onChanged: _onChanged,
                     onSubmitted: _onSubmitted,
                     semanticsId: SemanticsIds.searchField,
@@ -203,7 +204,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     for (final value in SearchScope.values)
                       WaxFilterChip(
                         name: value.name,
-                        label: value.label,
+                        label: value.labelOf(l10n),
                         semanticsId: SemanticsIds.searchFilter(value.name),
                       ),
                   ],
@@ -255,14 +256,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         stations,
         directory,
       ),
-      AsyncValue(hasError: true, :final error) => <Widget>[
+      // Typed rather than the `:final error` shorthand: `hasError` is
+      // `error != null`, so binding it as an Object is exact and the
+      // sentence below needs no null check.
+      AsyncValue(hasError: true, error: final Object error) => <Widget>[
         ...stations,
         SliverToBoxAdapter(
           child: ErrorState(
-            title: 'Could not search',
-            message: error is WaxDeckApiException
-                ? error.message
-                : 'The server did not answer.',
+            title: context.l10n.searchFailedTitle,
+            message: context.explain(error),
             onRetry: () => ref.invalidate(searchResultsProvider),
           ),
         ),
@@ -296,15 +298,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// from it, so a station added here is a station the dial will draw with
   /// its logo through the proxy.
   List<Widget> _directory(String query) {
+    final l10n = context.l10n;
     if (query.length < 2) {
-      return const <Widget>[
+      return <Widget>[
         SliverFillRemaining(
           hasScrollBody: false,
           child: EmptyState(
-            title: 'Search the station directory',
-            message:
-                'Type a station name to look it up in the public directory, '
-                'then add it to this server.',
+            title: l10n.searchDirectoryPromptTitle,
+            message: l10n.searchDirectoryPromptMessage,
             glyph: WaxIcons.radio,
           ),
         ),
@@ -323,8 +324,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'No stations for "$query"',
-              message: 'The directory lists nothing under that name.',
+              title: l10n.searchNoStationsTitle(query),
+              message: l10n.searchNoStationsMessage,
               glyph: WaxIcons.radio,
             ),
           ),
@@ -336,8 +337,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),
             sliver: SliverToBoxAdapter(
               child: SectionHeader(
-                overline: 'Directory',
-                title: 'Stations to add',
+                overline: l10n.searchDirectoryOverline,
+                title: l10n.searchStationsToAdd,
               ),
             ),
           ),
@@ -349,7 +350,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             glyph: WaxIcons.radio,
             semanticsId: SemanticsIds.searchHit('radio', index),
             trailing: WaxButton(
-              label: 'Add station',
+              label: l10n.searchAddStation,
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.add,
               semanticsId: SemanticsIds.radioSearchAdd(index),
@@ -375,27 +376,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s16),
           sliver: SliverToBoxAdapter(
             child: WaxBanner(
-              message:
-                  'Could not reach the directory, so only your own stations '
-                  'are listed. Adding a station by its stream URL still works.',
+              message: l10n.searchDirectoryDegraded,
               tone: WaxBannerTone.caution,
-              actionLabel: 'Retry',
+              actionLabel: l10n.commonRetry,
               onAction: () => ref.invalidate(radioDirectoryResultsProvider),
             ),
           ),
         ),
       ],
-      AsyncValue(hasError: true, :final error) => <Widget>[
+      AsyncValue(hasError: true, error: final Object error) => <Widget>[
         SliverFillRemaining(
           hasScrollBody: false,
           child: ErrorState(
-            title: 'Could not reach the directory',
-            message: error is WaxDeckApiException
-                ? error.message
-                : 'The station directory did not answer.',
+            title: l10n.searchDirectoryErrorTitle,
+            message: context.explain(error),
             // The way out the directory-unavailable mapping implies:
             // adding a station by URL works with no directory at all.
-            detail: 'Adding a station by its stream URL still works.',
+            detail: l10n.searchDirectoryErrorDetail,
             onRetry: () => ref.invalidate(radioDirectoryResultsProvider),
           ),
         ),
@@ -422,7 +419,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       SliverPadding(
         padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),
         sliver: SliverToBoxAdapter(
-          child: SectionHeader(overline: 'Library', title: 'Your stations'),
+          child: SectionHeader(
+            overline: context.l10n.searchLibraryOverline,
+            title: context.l10n.searchYourStations,
+          ),
         ),
       ),
       SliverList.builder(
@@ -453,12 +453,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   List<Widget> _recents() {
     final recents = ref.watch(recentSearchesProvider);
     if (recents.isEmpty) {
-      return const <Widget>[
+      return <Widget>[
         SliverFillRemaining(
           hasScrollBody: false,
           child: EmptyState(
-            title: 'Search your library',
-            message: 'Try searching for an artist, show, or book.',
+            title: context.l10n.searchEmptyTitle,
+            message: context.l10n.searchEmptyMessage,
             glyph: WaxIcons.search,
           ),
         ),
@@ -468,7 +468,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       SliverPadding(
         padding: WaxSizeClass.of(context).gutter,
         sliver: SliverToBoxAdapter(
-          child: SectionHeader(overline: 'Recent', title: 'Recent searches'),
+          child: SectionHeader(
+            overline: context.l10n.searchRecentOverline,
+            title: context.l10n.searchRecentTitle,
+          ),
         ),
       ),
       SliverList.builder(
@@ -490,7 +493,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             // so a screen reader finds two.
             WaxIconButton(
               glyph: WaxIcons.close,
-              label: 'Forget ${recents[index]}',
+              label: context.l10n.searchForget(recents[index]),
               size: 16,
               semanticsId: SemanticsIds.searchRecentRemove(index),
               onPressed: () => ref
@@ -524,9 +527,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),
           sliver: SliverToBoxAdapter(
             child: SectionHeader(
-              title: kind.label,
+              title: kind.labelOf(context.l10n),
               actionLabel: hits.length > searchGroupPreview && !expanded
-                  ? 'Show all'
+                  ? context.l10n.searchShowAll
                   : null,
               semanticsId: SemanticsIds.searchShowAll(kind.name),
               onAction: () => setState(() => _expanded.add(kind)),
@@ -585,8 +588,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         SliverFillRemaining(
           hasScrollBody: false,
           child: EmptyState(
-            title: 'Nothing for "${ref.read(searchQueryProvider)}"',
-            message: 'Check the spelling or try fewer words.',
+            title: context.l10n.searchNothingTitle(
+              ref.read(searchQueryProvider),
+            ),
+            message: context.l10n.searchNothingMessage,
             glyph: WaxIcons.search,
           ),
         ),
@@ -602,8 +607,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             child: Semantics(
               identifier: SemanticsIds.searchTruncated,
               child: Text(
-                'There are more matches than fit here. Refine your search to '
-                'narrow them down.',
+                context.l10n.searchTruncated,
                 style: WaxType.caption.copyWith(
                   color: WaxColors.of(context).textTertiary,
                 ),
@@ -633,8 +637,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),
       sliver: SliverToBoxAdapter(
         child: SectionHeader(
-          overline: 'Directory',
-          title: 'Shows to subscribe to',
+          overline: context.l10n.searchDirectoryOverline,
+          title: context.l10n.searchShowsToSubscribe,
         ),
       ),
     );
@@ -651,7 +655,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             glyph: WaxIcons.podcasts,
             semanticsId: SemanticsIds.searchHit('podcastDirectory', index),
             trailing: WaxButton(
-              label: 'Subscribe',
+              label: context.l10n.searchSubscribe,
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.add,
               semanticsId: SemanticsIds.podcastSearchSubscribe(index),
@@ -669,11 +673,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s16),
           sliver: SliverToBoxAdapter(
             child: WaxBanner(
-              message:
-                  'The podcast directory did not answer, so only your own '
-                  'episodes are listed. Subscribing by feed URL still works.',
+              message: context.l10n.searchPodcastDirectoryDegraded,
               tone: WaxBannerTone.caution,
-              actionLabel: 'Retry',
+              actionLabel: context.l10n.commonRetry,
               onAction: () => ref.invalidate(podcastDirectoryResultsProvider),
             ),
           ),
@@ -692,6 +694,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// is no modal to put it in.
   Future<void> _subscribeShow(PodcastDirectoryEntry entry) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     String message;
     try {
       // A directory match is always an RSS feed, so no source kind is
@@ -702,9 +705,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       await ref
           .read(subscriptionsProvider.notifier)
           .subscribe(url: entry.feedUrl);
-      message = 'Subscribed to ${entry.name}.';
+      message = l10n.searchSubscribed(entry.name);
     } on WaxDeckApiException catch (e) {
-      message = e.message;
+      // The feed URL came off the directory rather than out of a field,
+      // so nothing anybody typed is what was refused: the table's own
+      // sentence is the right one.
+      message = explainError(l10n, e);
     }
     if (!mounted) return;
     messenger

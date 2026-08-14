@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -37,6 +38,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   }
 
   Future<void> _submit() async {
+    final l10n = context.l10n;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() {
       _submitting = true;
@@ -68,7 +70,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = e.message;
+        // A refusal of what was just typed keeps the server's words.
+        _error = explainRefusal(l10n, e);
       });
     }
   }
@@ -76,8 +79,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('Request an account')),
+      appBar: AppBar(title: Text(l10n.authRequestAccount)),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(WaxSpace.s24),
@@ -93,23 +97,22 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         const WaxIcon(WaxIcons.hourglass, size: 48),
                         const SizedBox(height: WaxSpace.s16),
                         Text(
-                          'Request received',
+                          l10n.authRequestReceived,
                           style: WaxType.titleEntity.copyWith(
                             color: colors.textPrimary,
                           ),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: WaxSpace.s8),
-                        const Text(
-                          'An administrator has to approve your account '
-                          'before you can sign in.',
+                        Text(
+                          l10n.authRequestPending,
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: WaxSpace.s24),
                         OutlinedButton(
                           onPressed: () =>
                               context.leave(fallback: WaxRoute.login),
-                          child: const Text('Back to sign-in'),
+                          child: Text(l10n.authBackToSignIn),
                         ),
                       ],
                     ),
@@ -126,13 +129,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             key: const Key(SemanticsIds.signupUsername),
                             controller: _username,
                             autofillHints: const [AutofillHints.newUsername],
-                            decoration: const InputDecoration(
-                              labelText: 'Username',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: l10n.authUsername,
+                              border: const OutlineInputBorder(),
                             ),
                             validator: (value) =>
                                 (value == null || value.trim().isEmpty)
-                                ? 'Choose a username'
+                                ? l10n.authChooseUsername
                                 : null,
                           ),
                         ),
@@ -144,13 +147,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             controller: _password,
                             obscureText: true,
                             autofillHints: const [AutofillHints.newPassword],
-                            decoration: const InputDecoration(
-                              labelText: 'Password',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: l10n.authPassword,
+                              border: const OutlineInputBorder(),
                             ),
                             validator: (value) =>
                                 (value == null || value.isEmpty)
-                                ? 'Choose a password'
+                                ? l10n.authChoosePassword
                                 : null,
                           ),
                         ),
@@ -158,9 +161,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         TextFormField(
                           key: const Key('signup-display-name'),
                           controller: _displayName,
-                          decoration: const InputDecoration(
-                            labelText: 'Display name (optional)',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: l10n.authDisplayName,
+                            border: const OutlineInputBorder(),
                           ),
                         ),
                         const SizedBox(height: WaxSpace.s16),
@@ -169,12 +172,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           child: TextFormField(
                             key: const Key(SemanticsIds.signupInviteToken),
                             controller: _inviteToken,
-                            decoration: const InputDecoration(
-                              labelText: 'Invite token (optional)',
-                              helperText:
-                                  'With a valid invite the account works '
-                                  'right away',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: l10n.authInviteToken,
+                              helperText: l10n.authInviteHelp,
+                              border: const OutlineInputBorder(),
                             ),
                             onFieldSubmitted: (_) => _submit(),
                           ),
@@ -205,7 +206,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Text('Request account'),
+                                : Text(l10n.authRequestSubmit),
                           ),
                         ),
                       ],

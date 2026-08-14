@@ -1,5 +1,81 @@
 {
   "@@locale": "en",
+  "aboutDefectsSubtitle": "Errors the app caught on its own, newest first, with a way to copy them into a bug report.",
+  "@aboutDefectsSubtitle": {
+    "description": "Second line of the row opening the defect log."
+  },
+  "aboutDiagnosticsTitle": "Diagnostics",
+  "@aboutDiagnosticsTitle": {
+    "description": "Heading over the way into the defect log."
+  },
+  "aboutLicenses": "Open-source licenses",
+  "@aboutLicenses": {
+    "description": "Row opening the bundled licence texts."
+  },
+  "aboutLicensesSubtitle": "WaxDeck is GPL-3.0-only. This page also lists the bundled type and icon notices.",
+  "@aboutLicensesSubtitle": {
+    "description": "Second line of the licences row. GPL-3.0-only is a licence identifier and stays as it is."
+  },
+  "aboutLicensingTitle": "Licensing",
+  "@aboutLicensingTitle": {
+    "description": "Heading over the licence notices."
+  },
+  "aboutRowTitle": "About WaxDeck",
+  "@aboutRowTitle": {
+    "description": "Row in settings opening the About page. WaxDeck is the product name and stays."
+  },
+  "aboutRowVersion": "Version {app}",
+  "@aboutRowVersion": {
+    "description": "Second line of the About row before the server has answered, so only this build's version is known.",
+    "placeholders": {
+      "app": {
+        "type": "String",
+        "example": "1.0.0"
+      }
+    }
+  },
+  "aboutRowVersions": "App {app}, server {server}",
+  "@aboutRowVersions": {
+    "description": "Second line of the About row: this build's version and the one it is talking to.",
+    "placeholders": {
+      "app": {
+        "type": "String",
+        "example": "1.0.0"
+      },
+      "server": {
+        "type": "String",
+        "example": "1.0.2"
+      }
+    }
+  },
+  "aboutServerUnreachable": "unreachable",
+  "@aboutServerUnreachable": {
+    "description": "Stands in for the server's version when it did not answer. Lower case: it sits where a version number would."
+  },
+  "aboutTagline": "A player, library manager, and metadata completer for music, podcasts, and audiobooks.",
+  "@aboutTagline": {
+    "description": "One sentence saying what WaxDeck is, under the wordmark on the About page."
+  },
+  "aboutTitle": "About",
+  "@aboutTitle": {
+    "description": "Title of the About page."
+  },
+  "aboutVersionApi": "API",
+  "@aboutVersionApi": {
+    "description": "Label of the contract version the server answers on. API is a technical term and stays in most languages."
+  },
+  "aboutVersionApp": "App",
+  "@aboutVersionApp": {
+    "description": "Label of this build's own version number."
+  },
+  "aboutVersionServer": "Server",
+  "@aboutVersionServer": {
+    "description": "Label of the version of the server this build is talking to."
+  },
+  "aboutVersionsTitle": "Versions",
+  "@aboutVersionsTitle": {
+    "description": "Heading over the version numbers a bug report is asked for."
+  },
   "adminAuditEmptyMessage": "Administrative actions are recorded here as they happen.",
   "@adminAuditEmptyMessage": {
     "description": "Empty state of the audit log, saying what will fill it."
@@ -2078,6 +2154,208 @@
       }
     }
   },
+  "authBackToSignIn": "Back to sign-in",
+  "@authBackToSignIn": {
+    "description": "Returns from the sign-up screen to the sign-in screen."
+  },
+  "authChoosePassword": "Choose a password",
+  "@authChoosePassword": {
+    "description": "Said under the password field on the sign-up screen when it is empty."
+  },
+  "authChooseUsername": "Choose a username",
+  "@authChooseUsername": {
+    "description": "Said under the username field on the sign-up screen when it is empty. Choosing, because the account does not exist yet."
+  },
+  "authConfirmPassword": "Confirm password",
+  "@authConfirmPassword": {
+    "description": "The second password field on the first-run screen, which has to match the first."
+  },
+  "authContinueWith": "Continue with {provider}",
+  "@authContinueWith": {
+    "description": "A single-sign-on button. {provider} is the identity provider's own name, configured on the server.",
+    "placeholders": {
+      "provider": {
+        "type": "String",
+        "example": "Authelia"
+      }
+    }
+  },
+  "authCreateAccount": "Create account",
+  "@authCreateAccount": {
+    "description": "The first-run screen's confirming button."
+  },
+  "authDisplayName": "Display name (optional)",
+  "@authDisplayName": {
+    "description": "The field for the name other people see, which need not be the account name."
+  },
+  "authEnterPassword": "Enter a password",
+  "@authEnterPassword": {
+    "description": "Said under the password field on the sign-in screen when it is empty."
+  },
+  "authEnterUsername": "Enter a username",
+  "@authEnterUsername": {
+    "description": "Said under the username field on the sign-in screen when it is empty."
+  },
+  "authFirstAdmin": "Create the first administrator account",
+  "@authFirstAdmin": {
+    "description": "What the first-run screen is for: a fresh server has no accounts at all."
+  },
+  "authHaveInvite": "Have an invite?",
+  "@authHaveInvite": {
+    "description": "The link to the sign-up screen on a server that only takes invited accounts."
+  },
+  "authInviteHelp": "With a valid invite the account works right away",
+  "@authInviteHelp": {
+    "description": "Help under the invite field."
+  },
+  "authInviteToken": "Invite token (optional)",
+  "@authInviteToken": {
+    "description": "The field for an invite code, which skips the wait for approval."
+  },
+  "authLogIn": "Log in",
+  "@authLogIn": {
+    "description": "The sign-in screen's confirming button."
+  },
+  "authOr": "or",
+  "@authOr": {
+    "description": "Between the password form and the single-sign-on buttons. Lower case: it is a divider, not a heading."
+  },
+  "authPassword": "Password",
+  "@authPassword": {
+    "description": "The password field on the sign-in and first-run screens."
+  },
+  "authPasswordTooShort": "Use at least 8 characters",
+  "@authPasswordTooShort": {
+    "description": "Said under the password field on the first-run screen when it is too short."
+  },
+  "authPasswordsDiffer": "Passwords do not match",
+  "@authPasswordsDiffer": {
+    "description": "Said under the confirm-password field when the two do not match."
+  },
+  "authRequestAccount": "Request an account",
+  "@authRequestAccount": {
+    "description": "The link to the sign-up screen, and that screen's own title."
+  },
+  "authRequestPending": "An administrator has to approve your account before you can sign in.",
+  "@authRequestPending": {
+    "description": "Shown after a sign-up that needs approving."
+  },
+  "authRequestReceived": "Request received",
+  "@authRequestReceived": {
+    "description": "Shown after a sign-up that needs approving."
+  },
+  "authRequestSubmit": "Request account",
+  "@authRequestSubmit": {
+    "description": "The sign-up screen's confirming button."
+  },
+  "authSignInRejected": "That username and password do not go together.",
+  "@authSignInRejected": {
+    "description": "Under the sign-in form when the server rejected the credentials just typed."
+  },
+  "authSsoFailed": "Single sign-on did not go through. Try again.",
+  "@authSsoFailed": {
+    "description": "Under the sign-in form when a single-sign-on round trip came back refused, whether the provider is unconfigured or the code was stale."
+  },
+  "authTagline": "Music, podcasts, and audiobooks",
+  "@authTagline": {
+    "description": "Under the wordmark on the sign-in screen, saying what this is for."
+  },
+  "authTimedOut": "Sign-in timed out; try again",
+  "@authTimedOut": {
+    "description": "Said on the sign-in screen when the server did not answer in time."
+  },
+  "authUsername": "Username",
+  "@authUsername": {
+    "description": "The account-name field on the sign-in, sign-up and first-run screens."
+  },
+  "bellClear": "Clear",
+  "@bellClear": {
+    "description": "Last row of the open bell, emptying the list."
+  },
+  "bellDownloadFinished": "A download finished.",
+  "@bellDownloadFinished": {
+    "description": "What a bell row says when this device finished keeping something offline."
+  },
+  "bellEmpty": "Nothing has happened yet.",
+  "@bellEmpty": {
+    "description": "Drawn in the open bell when this session has seen nothing. Empty is a legitimate state, not a broken bell."
+  },
+  "bellEpisodeDownloaded": "A new episode finished downloading.",
+  "@bellEpisodeDownloaded": {
+    "description": "What a bell row says when a subscribed show gained an episode on this server."
+  },
+  "bellFeedDisabled": "A show kept failing to refresh and was disabled.",
+  "@bellFeedDisabled": {
+    "description": "What a bell row says when a subscribed feed was switched off."
+  },
+  "bellImportCompleted": "An upload was added to the library.",
+  "@bellImportCompleted": {
+    "description": "What a bell row says when an upload was filed. Deliberately not identified: the same marker covers the path where nothing was matched."
+  },
+  "bellReviewChanged": "The review queue changed.",
+  "@bellReviewChanged": {
+    "description": "What a bell row says. Generic because the marker it comes from carries no detail; the surface it opens has it."
+  },
+  "bellRow": "{surface}: {what}",
+  "@bellRow": {
+    "description": "One row of the bell: which surface moved, then what happened there.",
+    "placeholders": {
+      "surface": {
+        "type": "String",
+        "example": "Uploads"
+      },
+      "what": {
+        "type": "String",
+        "example": "An upload changed."
+      }
+    }
+  },
+  "bellSurfaceDownloads": "Downloads",
+  "@bellSurfaceDownloads": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceImports": "Imports",
+  "@bellSurfaceImports": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfacePodcasts": "Podcasts",
+  "@bellSurfacePodcasts": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceReview": "Review queue",
+  "@bellSurfaceReview": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceTasks": "Background tasks",
+  "@bellSurfaceTasks": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceUploads": "Uploads",
+  "@bellSurfaceUploads": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellTaskChanged": "A background task changed.",
+  "@bellTaskChanged": {
+    "description": "What a bell row says. Generic because the marker carries no detail."
+  },
+  "bellTitle": "Notifications",
+  "@bellTitle": {
+    "description": "Accessible name of the bell in the top app bar with nothing unread."
+  },
+  "bellUnread": "{count, plural, =1{Notifications, 1 unread} other{Notifications, {count} unread}}",
+  "@bellUnread": {
+    "description": "Accessible name of the bell when rows have arrived since it was last opened.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "bellUploadChanged": "An upload changed.",
+  "@bellUploadChanged": {
+    "description": "What a bell row says. Generic because the marker carries no detail."
+  },
   "bookBackToBeginning": "Back to the beginning",
   "@bookBackToBeginning": {
     "description": "Snackbar after putting a book's position back at zero."
@@ -2488,6 +2766,38 @@
   "@commonSave": {
     "description": "Button that commits an edit. Used across dialogs."
   },
+  "defectsClear": "Clear",
+  "@defectsClear": {
+    "description": "Empties the defect log."
+  },
+  "defectsClearSpoken": "Clear the defect log",
+  "@defectsClearSpoken": {
+    "description": "What the Clear button is called for a screen reader."
+  },
+  "defectsCopied": "Defect log copied",
+  "@defectsCopied": {
+    "description": "Snackbar confirming the whole log is on the clipboard."
+  },
+  "defectsCopy": "Copy",
+  "@defectsCopy": {
+    "description": "Puts the whole defect log on the clipboard."
+  },
+  "defectsCopySpoken": "Copy the defect log",
+  "@defectsCopySpoken": {
+    "description": "What the Copy button is called for a screen reader, where the surrounding heading is not in earshot."
+  },
+  "defectsEmptyMessage": "Errors the app catches on its own turn up here, so a bug report can carry them. An empty list is the good outcome.",
+  "@defectsEmptyMessage": {
+    "description": "Empty state of the defect log."
+  },
+  "defectsEmptyTitle": "Nothing has gone wrong",
+  "@defectsEmptyTitle": {
+    "description": "Empty state of the defect log."
+  },
+  "defectsTitle": "Defect log",
+  "@defectsTitle": {
+    "description": "The list of errors the app caught: its own title, and the row on the About page that opens it."
+  },
   "devicesBaseConfigured": "Configured address",
   "@devicesBaseConfigured": {
     "description": "Says a cast address was set by the server's operator rather than found."
@@ -2698,6 +3008,126 @@
       }
     }
   },
+  "discoveryAdventurous": "Adventurous",
+  "@discoveryAdventurous": {
+    "description": "The high end of the instant-mix slider: range further from the seed."
+  },
+  "discoveryAdventurousness": "Adventurousness",
+  "@discoveryAdventurousness": {
+    "description": "Accessible name of the instant-mix slider, whose two ends are the Familiar and Adventurous labels beside it."
+  },
+  "discoveryBasisSpoken": "Answered by the {engine} engine",
+  "@discoveryBasisSpoken": {
+    "description": "Read aloud for the chip naming which engine answered a mix. {engine} is a wire word the contract defines, drawn untranslated beside this.",
+    "placeholders": {
+      "engine": {
+        "type": "String",
+        "example": "sonic"
+      }
+    }
+  },
+  "discoveryEmptyMessage": "This answer came back empty. Try another track.",
+  "@discoveryEmptyMessage": {
+    "description": "Empty state of a mix or similar-tracks list."
+  },
+  "discoveryEmptyTitle": "Nothing found",
+  "@discoveryEmptyTitle": {
+    "description": "Empty state of a mix or similar-tracks list that came back with no tracks."
+  },
+  "discoveryFamiliar": "Familiar",
+  "@discoveryFamiliar": {
+    "description": "The low end of the instant-mix slider: stay close to the seed."
+  },
+  "discoveryInstantMixFrom": "From \"{title}\"",
+  "@discoveryInstantMixFrom": {
+    "description": "Under the instant-mix sheet's heading, naming the track the mix is seeded from.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      }
+    }
+  },
+  "discoveryInstantMixTitle": "Instant mix",
+  "@discoveryInstantMixTitle": {
+    "description": "The sheet that builds a mix around one track, the list it produces, and what a mix card on home calls itself."
+  },
+  "discoveryMixAction": "Mix",
+  "@discoveryMixAction": {
+    "description": "Confirming button of the instant-mix sheet. A verb."
+  },
+  "discoveryMixEmpty": "No mix available for this track",
+  "@discoveryMixEmpty": {
+    "description": "Snackbar when the server built a mix with nothing in it."
+  },
+  "discoverySimilarTitle": "Similar to {title}",
+  "@discoverySimilarTitle": {
+    "description": "Title of the list of tracks the server finds similar to one seed. {title} is the seed track's own name.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      }
+    }
+  },
+  "downloadsCancel": "Cancel {title}",
+  "@downloadsCancel": {
+    "description": "Accessible name of the control that stops one transfer. {title} is what is being downloaded.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
+  },
+  "downloadsCannotPause": "This transfer cannot be paused; cancel it instead",
+  "@downloadsCannotPause": {
+    "description": "Snackbar when the server behind a transfer does not support resuming it."
+  },
+  "downloadsChecking": "Checking downloads against the server",
+  "@downloadsChecking": {
+    "description": "Snackbar while the re-download sweep runs."
+  },
+  "downloadsChip": "{medium} {size}",
+  "@downloadsChip": {
+    "description": "How much one medium takes up: what it is, then how much. {size} is a formatted size.",
+    "placeholders": {
+      "medium": {
+        "type": "String",
+        "example": "Music"
+      },
+      "size": {
+        "type": "String",
+        "example": "640 MB"
+      }
+    }
+  },
+  "downloadsClearAll": "Clear all",
+  "@downloadsClearAll": {
+    "description": "Removes every download from this device."
+  },
+  "downloadsClearBody": "This frees {size}. Nothing leaves the library: everything here plays again with the server reachable.",
+  "@downloadsClearBody": {
+    "description": "Body of the clear-downloads dialog. {size} is a formatted size.",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "1.5 GB"
+      }
+    }
+  },
+  "downloadsClearConfirm": "Remove all",
+  "@downloadsClearConfirm": {
+    "description": "Confirming button of the clear-downloads dialog."
+  },
+  "downloadsClearKeep": "Keep them",
+  "@downloadsClearKeep": {
+    "description": "Dismissing button of the clear-downloads dialog."
+  },
+  "downloadsClearTitle": "Remove every download?",
+  "@downloadsClearTitle": {
+    "description": "Title of the dialog confirming that every download goes."
+  },
   "downloadsDownloaded": "Downloaded",
   "@downloadsDownloaded": {
     "description": "Accessible name of the download control once the file is on this device."
@@ -2705,6 +3135,114 @@
   "downloadsDownloading": "Downloading",
   "@downloadsDownloading": {
     "description": "Accessible name of the download control while the transfer is running."
+  },
+  "downloadsEmptyMessage": "Download a book, an album, or an episode and it plays here with the server unreachable. Its cover comes with it.",
+  "@downloadsEmptyMessage": {
+    "description": "Empty state of the downloads screen."
+  },
+  "downloadsEmptyTitle": "Nothing downloaded",
+  "@downloadsEmptyTitle": {
+    "description": "Empty state of the downloads screen."
+  },
+  "downloadsGroupItems": "{count, plural, =1{1 item} other{{count} items}}",
+  "@downloadsGroupItems": {
+    "description": "Overline over one medium's downloads, saying how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "downloadsInFlight": "{count, plural, =1{1 in flight} other{{count} in flight}}",
+  "@downloadsInFlight": {
+    "description": "Overline over the running downloads, saying how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "downloadsLoadError": "Could not read your downloads",
+  "@downloadsLoadError": {
+    "description": "Title of the error state when the on-device download store would not answer."
+  },
+  "downloadsMediumBooks": "Audiobooks",
+  "@downloadsMediumBooks": {
+    "description": "What a group of downloaded audiobooks is called."
+  },
+  "downloadsMediumMusic": "Music",
+  "@downloadsMediumMusic": {
+    "description": "What a group of downloaded music is called."
+  },
+  "downloadsMediumPodcasts": "Podcasts",
+  "@downloadsMediumPodcasts": {
+    "description": "What a group of downloaded episodes is called."
+  },
+  "downloadsNoneFinished": "No finished episodes to remove",
+  "@downloadsNoneFinished": {
+    "description": "Snackbar when the remove-finished sweep found nothing."
+  },
+  "downloadsOverflow": "More",
+  "@downloadsOverflow": {
+    "description": "Tooltip of the menu holding the sweeps that act on every download."
+  },
+  "downloadsPause": "Pause {title}",
+  "@downloadsPause": {
+    "description": "Accessible name of the control that parks one transfer.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
+  },
+  "downloadsRefreshStale": "Re-download stale",
+  "@downloadsRefreshStale": {
+    "description": "Menu row checking every download against the server and fetching what changed."
+  },
+  "downloadsRemove": "Remove {title}",
+  "@downloadsRemove": {
+    "description": "Accessible name of the control that deletes one download from this device.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
+  },
+  "downloadsRemoveFinished": "Remove finished episodes",
+  "@downloadsRemoveFinished": {
+    "description": "Menu row deleting every downloaded episode that was played to the end."
+  },
+  "downloadsRemovedEpisodes": "{count, plural, =1{Removed 1 episode} other{Removed {count} episodes}}",
+  "@downloadsRemovedEpisodes": {
+    "description": "Snackbar after the remove-finished sweep.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
+      }
+    }
+  },
+  "downloadsResume": "Resume {title}",
+  "@downloadsResume": {
+    "description": "Accessible name of the control that restarts one paused transfer.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
+  },
+  "downloadsTitle": "Downloads",
+  "@downloadsTitle": {
+    "description": "Title of the screen managing what this device keeps offline."
+  },
+  "downloadsTransferring": "Transferring",
+  "@downloadsTransferring": {
+    "description": "Heading over the downloads running right now."
   },
   "durationDays": "{days, plural, =1{1 day} other{{days} days}}",
   "@durationDays": {
@@ -2729,6 +3267,40 @@
         "optionalParameters": {
           "decimalDigits": 0
         }
+      }
+    }
+  },
+  "durationHoursMinutesShort": "{hours}h {minutes}m",
+  "@durationHoursMinutesShort": {
+    "description": "A listening total an hour or more long, in the tightest form a stat tile can hold. Unit letters, not words - keep whatever the language abbreviates hours and minutes to.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "example": "2"
+      },
+      "minutes": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "durationMinutesShort": "{minutes}m",
+  "@durationMinutesShort": {
+    "description": "A listening total under an hour, in the tightest form a stat tile can hold.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "durationSecondsShort": "{seconds}s",
+  "@durationSecondsShort": {
+    "description": "A listening total under a minute, in the tightest form a stat tile can hold.",
+    "placeholders": {
+      "seconds": {
+        "type": "int",
+        "example": "45"
       }
     }
   },
@@ -3285,6 +3857,230 @@
   "healthWriteUnsynced": "File tags out of sync with the catalog",
   "@healthWriteUnsynced": {
     "description": "Name of the health rule `write-unsynced`."
+  },
+  "homeAddAction": "Add to library",
+  "@homeAddAction": {
+    "description": "Opens the sheet that adds audio to the library. Both the top-right button on home and the action on its first-run empty state."
+  },
+  "homeContinueOverline": "Where you left off",
+  "@homeContinueOverline": {
+    "description": "Overline above the Continue listening shelf."
+  },
+  "homeContinueTitle": "Continue listening",
+  "@homeContinueTitle": {
+    "description": "Shelf of items with a saved position."
+  },
+  "homeDownloadedOverline": "Plays with no network",
+  "@homeDownloadedOverline": {
+    "description": "Overline above the On this device shelf."
+  },
+  "homeDownloadedTitle": "On this device",
+  "@homeDownloadedTitle": {
+    "description": "Shelf of downloaded items, the only one home draws with no server to ask."
+  },
+  "homeEmptyMessage": "Point a library at your music, follow a show, or drop files in. Everything you add turns up on these shelves.",
+  "@homeEmptyMessage": {
+    "description": "Empty state of home, naming the three ways a library gets filled."
+  },
+  "homeEmptyTitle": "Nothing here yet",
+  "@homeEmptyTitle": {
+    "description": "Empty state of home on a server whose library holds nothing."
+  },
+  "homeEpisodesOverline": "From the shows you follow",
+  "@homeEpisodesOverline": {
+    "description": "Overline above the New episodes shelf."
+  },
+  "homeEpisodesTitle": "New episodes",
+  "@homeEpisodesTitle": {
+    "description": "Shelf of the newest episodes across the shows the listener follows."
+  },
+  "homeLibraryLoadError": "Could not reach the library",
+  "@homeLibraryLoadError": {
+    "description": "Title of the error state when home's probe of the library failed."
+  },
+  "homeMixEmpty": "No mix available for {title}",
+  "@homeMixEmpty": {
+    "description": "Snackbar when a mix card was tapped and the server answered with no tracks. {title} is the card's own name.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Shoegaze"
+      }
+    }
+  },
+  "homeMixMoreLike": "More like {artist}",
+  "@homeMixMoreLike": {
+    "description": "Card for a mix seeded by one artist. {artist} is that artist's own name.",
+    "placeholders": {
+      "artist": {
+        "type": "String",
+        "example": "Beach House"
+      }
+    }
+  },
+  "homeMixesOverline": "Mixes from what you play",
+  "@homeMixesOverline": {
+    "description": "Overline above the Made for you shelf."
+  },
+  "homeMixesTitle": "Made for you",
+  "@homeMixesTitle": {
+    "description": "Shelf of mixes built from what this listener plays."
+  },
+  "homeMostPlayedOverline": "What you come back to",
+  "@homeMostPlayedOverline": {
+    "description": "Overline above the Most played shelf."
+  },
+  "homeMostPlayedTitle": "Most played",
+  "@homeMostPlayedTitle": {
+    "description": "Shelf of the items with the highest play counts."
+  },
+  "homeNeverPlayedOverline": "In your library, still sealed",
+  "@homeNeverPlayedOverline": {
+    "description": "Overline above the Never played shelf. The image is a record still in its shrink wrap."
+  },
+  "homeNeverPlayedTitle": "Never played",
+  "@homeNeverPlayedTitle": {
+    "description": "Shelf of items in the library that have never been played."
+  },
+  "homeOfflineMessage": "Offline. The shelves come back when the server does; what this device holds still plays.",
+  "@homeOfflineMessage": {
+    "description": "Banner across home with no server to ask."
+  },
+  "homePinAction": "Pin to Home",
+  "@homePinAction": {
+    "description": "Menu row on an entity screen that pins it to the home shelf. Home is the landing screen, named here the way the navigation names it."
+  },
+  "homePinNotSaved": "That pin was not saved.",
+  "@homePinNotSaved": {
+    "description": "Said when a pin failed for a reason the error table has no sentence for."
+  },
+  "homePinSheetPin": "{what, select, album{Pin album to Home} artist{Pin artist to Home} book{Pin book to Home} other{Pin to Home}}",
+  "@homePinSheetPin": {
+    "description": "Row in the pin sheet, which can offer more than one target at once, so each says what it is about. {what} is the kind of thing: album, artist or book.",
+    "placeholders": {
+      "what": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "homePinSheetUnpin": "{what, select, album{Unpin album from Home} artist{Unpin artist from Home} book{Unpin book from Home} other{Unpin from Home}}",
+  "@homePinSheetUnpin": {
+    "description": "Row in the pin sheet for a target that is already pinned. {what} is the kind of thing: album, artist or book.",
+    "placeholders": {
+      "what": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "homePinShelfFull": "Home holds {limit} pins. Unpin something to make room.",
+  "@homePinShelfFull": {
+    "description": "Said when a pin was refused because the shelf is at its cap.",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "64"
+      }
+    }
+  },
+  "homePinnedCaption": "{kind} · {artist}",
+  "@homePinnedCaption": {
+    "description": "Line under a pinned card: what the thing is, then whose it is. Only drawn when the artist is known.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "Album"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Beach House"
+      }
+    }
+  },
+  "homePinnedKindAlbum": "Album",
+  "@homePinnedKindAlbum": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindArtist": "Artist",
+  "@homePinnedKindArtist": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindBook": "Book",
+  "@homePinnedKindBook": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindPlaylist": "Playlist",
+  "@homePinnedKindPlaylist": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindPodcast": "Podcast",
+  "@homePinnedKindPodcast": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindReleaseGroup": "Release group",
+  "@homePinnedKindReleaseGroup": {
+    "description": "What a pinned card is, on the line under its title. A release group is one album across all its editions."
+  },
+  "homePinnedOverline": "What you keep",
+  "@homePinnedOverline": {
+    "description": "Overline above the Pinned shelf."
+  },
+  "homePinnedTitle": "Pinned",
+  "@homePinnedTitle": {
+    "description": "Shelf of what this listener pinned to home."
+  },
+  "homeRecentOverline": "New to the library",
+  "@homeRecentOverline": {
+    "description": "Overline above the Recently added shelf."
+  },
+  "homeRecentTitle": "Recently added",
+  "@homeRecentTitle": {
+    "description": "Shelf of what the library gained most recently."
+  },
+  "homeRediscoverOverline": "Marked, and not heard in months",
+  "@homeRediscoverOverline": {
+    "description": "Overline above the Rediscover shelf. Marked means starred or otherwise singled out."
+  },
+  "homeRediscoverTitle": "Rediscover",
+  "@homeRediscoverTitle": {
+    "description": "Shelf of items the listener marked and has not played in months."
+  },
+  "homeShelfRemaining": "{span} left",
+  "@homeShelfRemaining": {
+    "description": "How much of a half-finished item is left, under its card on home. {span} arrives already worded as a duration.",
+    "placeholders": {
+      "span": {
+        "type": "String",
+        "example": "12 min"
+      }
+    }
+  },
+  "homeShelfRetry": "Try again",
+  "@homeShelfRetry": {
+    "description": "Action beside a shelf's heading when that one shelf failed to load."
+  },
+  "homeShelfShowAll": "Show all",
+  "@homeShelfShowAll": {
+    "description": "Action beside a shelf's heading that opens the surface listing all of it."
+  },
+  "homeTitle": "Home",
+  "@homeTitle": {
+    "description": "Title of the landing screen, and what the pin affordances call it."
+  },
+  "homeUnpinAction": "Unpin from Home",
+  "@homeUnpinAction": {
+    "description": "Menu row that takes an entity off the home shelf."
+  },
+  "homeUnpinned": "Unpinned {name}",
+  "@homeUnpinned": {
+    "description": "Snackbar confirming an unpin made from the shelf, where the card vanishing is the only other sign. {name} is the thing's own title.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
   },
   "libraryBrowseSortAtoZ": "A to Z",
   "@libraryBrowseSortAtoZ": {
@@ -4165,6 +4961,114 @@
   "@notifSignupRequestedTitle": {
     "description": "Switch label for the `signup-requested` notification."
   },
+  "organizeApply": "Apply",
+  "@organizeApply": {
+    "description": "Runs the move. Both the confirming button and the button that opens the confirmation."
+  },
+  "organizeColumnFrom": "Now at",
+  "@organizeColumnFrom": {
+    "description": "Column of the dry-run table: where a file is today."
+  },
+  "organizeColumnTo": "Moves to",
+  "@organizeColumnTo": {
+    "description": "Column of the dry-run table: where the profile would put it."
+  },
+  "organizeConfirmMessage": "Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.",
+  "@organizeConfirmMessage": {
+    "description": "Body of the typed confirmation before files are moved."
+  },
+  "organizeConfirmTitle": "Apply organize profile?",
+  "@organizeConfirmTitle": {
+    "description": "Title of the typed confirmation before files are moved."
+  },
+  "organizeEmptyMessage": "Profiles are part of the server configuration. Add one there and it appears here.",
+  "@organizeEmptyMessage": {
+    "description": "Empty state of the organize screen."
+  },
+  "organizeEmptyTitle": "No organize profiles",
+  "@organizeEmptyTitle": {
+    "description": "Empty state where the server configuration defines no profiles."
+  },
+  "organizeFailed": "Failed",
+  "@organizeFailed": {
+    "description": "How many files a finished run could not move."
+  },
+  "organizeHint": "Preview shows where the selected profile would move files before anything happens.",
+  "@organizeHint": {
+    "description": "Drawn where the plan or the report goes, before either exists."
+  },
+  "organizeLoadError": "Could not load organize profiles",
+  "@organizeLoadError": {
+    "description": "Title of the error state when the profile list would not load."
+  },
+  "organizeMoved": "Moved",
+  "@organizeMoved": {
+    "description": "How many files a finished run moved."
+  },
+  "organizeNothingMessage": "This profile would move nothing.",
+  "@organizeNothingMessage": {
+    "description": "Empty state of a dry run that would move nothing."
+  },
+  "organizeNothingTitle": "Everything is already in place",
+  "@organizeNothingTitle": {
+    "description": "Empty state of a dry run that would move nothing."
+  },
+  "organizePlannedMoves": "{count, plural, =1{1 planned move} other{{count} planned moves}}",
+  "@organizePlannedMoves": {
+    "description": "Heading over the dry run, saying how many files it would move.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "412"
+      }
+    }
+  },
+  "organizePreview": "Preview",
+  "@organizePreview": {
+    "description": "Shows where the chosen profile would move files, without moving any."
+  },
+  "organizeProfileLabel": "Organize profile",
+  "@organizeProfileLabel": {
+    "description": "Accessible name of the profile picker."
+  },
+  "organizeProfileOverline": "The naming scheme to move into",
+  "@organizeProfileOverline": {
+    "description": "Overline over the profile picker."
+  },
+  "organizeProfileTitle": "Profile",
+  "@organizeProfileTitle": {
+    "description": "Heading over the profile picker."
+  },
+  "organizeResultTitle": "Result",
+  "@organizeResultTitle": {
+    "description": "Heading over what a finished run actually did."
+  },
+  "organizeShowingFirst": "Showing the first {shown} of {total}",
+  "@organizeShowingFirst": {
+    "description": "Caption on the dry-run table when the server capped how many moves it listed.",
+    "placeholders": {
+      "shown": {
+        "type": "int",
+        "example": "100"
+      },
+      "total": {
+        "type": "int",
+        "example": "412"
+      }
+    }
+  },
+  "organizeSkipped": "Skipped",
+  "@organizeSkipped": {
+    "description": "How many files a finished run left where they were."
+  },
+  "organizeTagWrite": "Tags are rewritten too",
+  "@organizeTagWrite": {
+    "description": "Overline over the dry run for a profile that edits the files as well as moving them."
+  },
+  "organizeTitle": "Organize files",
+  "@organizeTitle": {
+    "description": "Title of the screen that rewrites the library's on-disk layout."
+  },
   "playerAddLyrics": "Add lyrics",
   "@playerAddLyrics": {
     "description": "Button that opens the metadata editor to write lyrics."
@@ -4292,6 +5196,10 @@
   "playerDeleteFiles": "Delete files...",
   "@playerDeleteFiles": {
     "description": "Menu item that deletes the playing item's files. The trailing dots say a confirmation follows."
+  },
+  "playerDownload": "Download",
+  "@playerDownload": {
+    "description": "Action on the player that keeps the playing item on this device."
   },
   "playerEditStation": "Edit station",
   "@playerEditStation": {
@@ -5900,27 +6808,6 @@
   "@podcastDownloadFailed": {
     "description": "Fact on an episode row whose server-side fetch did not land."
   },
-  "podcastDurationHoursMinutes": "{hours}h {minutes}m",
-  "@podcastDurationHoursMinutes": {
-    "description": "How long an episode runs, abbreviated hard for a row's trailing column.",
-    "placeholders": {
-      "hours": {
-        "type": "int"
-      },
-      "minutes": {
-        "type": "int"
-      }
-    }
-  },
-  "podcastDurationMinutes": "{minutes}m",
-  "@podcastDurationMinutes": {
-    "description": "The same, for an episode under an hour.",
-    "placeholders": {
-      "minutes": {
-        "type": "int"
-      }
-    }
-  },
   "podcastEpisodeCount": "{count, plural, =1{1 episode} other{{count} episodes}}",
   "@podcastEpisodeCount": {
     "description": "How many episodes a show has, on its card and in the line under its title.",
@@ -6613,6 +7500,38 @@
   "@podcastsTitle": {
     "description": "The podcast domain's front door, named on its own title."
   },
+  "prototypeApply": "Apply proposal",
+  "@prototypeApply": {
+    "description": "Context-menu row on the editing prototype."
+  },
+  "prototypeColumnArtist": "Artist",
+  "@prototypeColumnArtist": {
+    "description": "Column heading on the editing prototype."
+  },
+  "prototypeColumnCurrent": "Current title",
+  "@prototypeColumnCurrent": {
+    "description": "Column heading on the editing prototype."
+  },
+  "prototypeColumnMatch": "Match",
+  "@prototypeColumnMatch": {
+    "description": "Column heading on the editing prototype, over a similarity percentage."
+  },
+  "prototypeColumnProposed": "Proposed title",
+  "@prototypeColumnProposed": {
+    "description": "Column heading on the editing prototype."
+  },
+  "prototypeCopyProposed": "Copy proposed title",
+  "@prototypeCopyProposed": {
+    "description": "Context-menu row on the editing prototype."
+  },
+  "prototypeRowActions": "Row actions",
+  "@prototypeRowActions": {
+    "description": "Tooltip of the per-row menu on the editing prototype."
+  },
+  "prototypeTitle": "Editing prototype",
+  "@prototypeTitle": {
+    "description": "Title of the evidence screen that exercises text selection, context menus and live fields. Reachable at a fixed location; not a product surface."
+  },
   "queueAddedMany": "Added {count} tracks to the queue",
   "@queueAddedMany": {
     "description": "Message after several tracks were dropped onto the queue at once. Never drawn for one, which names the track instead.",
@@ -6708,6 +7627,10 @@
   "queuePlayingFromLibrary": "Playing from your library",
   "@queuePlayingFromLibrary": {
     "description": "Where a queue shuffled from the whole library came from. Worded from the kind rather than a stored label, which the whole library has none of."
+  },
+  "queuePlayingFromMix": "Playing from a mix",
+  "@queuePlayingFromMix": {
+    "description": "Where the queue came from, for a mix with no seed of its own to name."
   },
   "queuePreviously": "PREVIOUSLY ({count})",
   "@queuePreviously": {
@@ -7214,6 +8137,652 @@
         "example": "4"
       }
     }
+  },
+  "reviewActionApprove": "Approve",
+  "@reviewActionApprove": {
+    "description": "Takes the selected candidate as the match. On the entry's decision bar and on the bulk bar."
+  },
+  "reviewActionAsIs": "Keep as is",
+  "@reviewActionAsIs": {
+    "description": "Files the entry with the tags it already has, matching nothing."
+  },
+  "reviewActionDiscard": "Discard",
+  "@reviewActionDiscard": {
+    "description": "Throws an uploaded entry away. Offered only for uploads, where there is a staged file to remove."
+  },
+  "reviewActionRevert": "Revert",
+  "@reviewActionRevert": {
+    "description": "Undoes a decision that was already applied."
+  },
+  "reviewActionSkip": "Skip",
+  "@reviewActionSkip": {
+    "description": "Leaves the entry undecided and moves on."
+  },
+  "reviewActionUnofficial": "Mark unofficial",
+  "@reviewActionUnofficial": {
+    "description": "Files the entry as a release no catalogue lists: a bootleg, a rip, a demo."
+  },
+  "reviewCandidateLine": "{percent}% {title}, {artist}",
+  "@reviewCandidateLine": {
+    "description": "The best candidate on a queue row: how close it is, then what it is. Spanish puts a space before the percent sign.",
+    "placeholders": {
+      "percent": {
+        "type": "String",
+        "example": "94"
+      },
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewCandidateLineYear": "{percent}% {title}, {artist} ({year})",
+  "@reviewCandidateLineYear": {
+    "description": "The best candidate on a queue row, where the release has a year.",
+    "placeholders": {
+      "percent": {
+        "type": "String",
+        "example": "94"
+      },
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      },
+      "year": {
+        "type": "String",
+        "example": "2019"
+      }
+    }
+  },
+  "reviewCandidateSpoken": "{title} by {artist}",
+  "@reviewCandidateSpoken": {
+    "description": "A candidate tile read as a whole for a screen reader.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewCandidateTitleLine": "{title}, {artist}",
+  "@reviewCandidateTitleLine": {
+    "description": "A candidate tile's own line: what the release is called, then whose it is.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewCandidatesTitle": "Candidates",
+  "@reviewCandidatesTitle": {
+    "description": "Heading over the ranked releases the sources offered for this entry."
+  },
+  "reviewDecidedCount": "{count, plural, =1{Decided 1 entry} other{Decided {count} entries}}",
+  "@reviewDecidedCount": {
+    "description": "Snackbar after a bulk decision where every entry took it.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "8"
+      }
+    }
+  },
+  "reviewDecidedSomeFailed": "{count, plural, =1{Decided 1 entry, {failed} failed} other{Decided {count} entries, {failed} failed}}",
+  "@reviewDecidedSomeFailed": {
+    "description": "Snackbar after a bulk decision some entries refused. {count} is how many took it and {failed} how many did not.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "6"
+      },
+      "failed": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "reviewDecidedStatus": "Decided: {status}",
+  "@reviewDecidedStatus": {
+    "description": "On the decision bar of an entry that has already been decided. {status} is already worded by the caller.",
+    "placeholders": {
+      "status": {
+        "type": "String",
+        "example": "applied"
+      }
+    }
+  },
+  "reviewDiffCurrent": "Current",
+  "@reviewDiffCurrent": {
+    "description": "Column heading over what the files say now."
+  },
+  "reviewDiffExtra": "Extra file, no counterpart",
+  "@reviewDiffExtra": {
+    "description": "A local file the chosen candidate has no track for."
+  },
+  "reviewDiffMissing": "Missing locally",
+  "@reviewDiffMissing": {
+    "description": "A candidate track with no local file to match it."
+  },
+  "reviewDiffProposed": "Proposed",
+  "@reviewDiffProposed": {
+    "description": "Column heading over what the chosen candidate would make them say."
+  },
+  "reviewDiffUnmatched": "Unmatched",
+  "@reviewDiffUnmatched": {
+    "description": "A local file no candidate track was paired with."
+  },
+  "reviewEditMetadata": "Edit metadata",
+  "@reviewEditMetadata": {
+    "description": "Menu row opening the metadata editor on one track."
+  },
+  "reviewEmptyMessage": "Uploads and rematches land here when the match needs a decision.",
+  "@reviewEmptyMessage": {
+    "description": "Empty state of the review queue, saying what fills it."
+  },
+  "reviewEmptyTitle": "Nothing waiting for review",
+  "@reviewEmptyTitle": {
+    "description": "Empty state of the review queue."
+  },
+  "reviewEntryLine": "{title} by {artist}",
+  "@reviewEntryLine": {
+    "description": "A queue row's name where the files name an artist.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewEntryLoadError": "Could not load the entry",
+  "@reviewEntryLoadError": {
+    "description": "Title of the error state when one review entry would not load."
+  },
+  "reviewEntryTitle": "Review entry",
+  "@reviewEntryTitle": {
+    "description": "Title of one review entry drawn as a page of its own."
+  },
+  "reviewFieldAlbum": "Album",
+  "@reviewFieldAlbum": {
+    "description": "Re-identify field: the album to search for."
+  },
+  "reviewFieldArtist": "Artist",
+  "@reviewFieldArtist": {
+    "description": "Re-identify field: the artist to search for."
+  },
+  "reviewFieldTitle": "Track title",
+  "@reviewFieldTitle": {
+    "description": "Re-identify field: the track title to search for. Only drawn where the entry is a single file, since the server ignores it otherwise."
+  },
+  "reviewFilterAutoApplied": "Auto-applied",
+  "@reviewFilterAutoApplied": {
+    "description": "Filter chip: entries the server matched confidently and applied without asking."
+  },
+  "reviewFilterCount": "{label} ({count})",
+  "@reviewFilterCount": {
+    "description": "A filter chip with how many entries it holds. {label} is the chip's own word.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Pending"
+      },
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "reviewFilterDecided": "Decided",
+  "@reviewFilterDecided": {
+    "description": "Filter chip: every entry that is no longer pending."
+  },
+  "reviewFilterPending": "Pending",
+  "@reviewFilterPending": {
+    "description": "Filter chip: entries nobody has decided yet."
+  },
+  "reviewHeaderFacts": "{count, plural, =1{1 track, {origin}} other{{count} tracks, {origin}}}",
+  "@reviewHeaderFacts": {
+    "description": "Under an entry's title: how many files it holds and where it came from. {origin} is already worded by the caller.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "9"
+      },
+      "origin": {
+        "type": "String",
+        "example": "upload"
+      }
+    }
+  },
+  "reviewHeaderFactsBy": "{count, plural, =1{1 track, {origin} by {who}} other{{count} tracks, {origin} by {who}}}",
+  "@reviewHeaderFactsBy": {
+    "description": "The same line where the entry was uploaded by a named account. {origin} is already worded by the caller; {who} is a username.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "9"
+      },
+      "origin": {
+        "type": "String",
+        "example": "upload"
+      },
+      "who": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "reviewIdentifying": "Identifying",
+  "@reviewIdentifying": {
+    "description": "Beside a spinner on a queue row whose candidate lookup is still running."
+  },
+  "reviewIdentifyingLong": "Identifying: candidate lookup is still running",
+  "@reviewIdentifyingLong": {
+    "description": "Beside a spinner on the entry itself, where there is room to say what is happening."
+  },
+  "reviewLoadError": "Could not load the review queue",
+  "@reviewLoadError": {
+    "description": "Title of the error state when the queue would not load."
+  },
+  "reviewLoadMoreFailed": "Could not load more; scroll to retry",
+  "@reviewLoadMoreFailed": {
+    "description": "Snackbar when the next page of the queue failed. The rows already loaded stay, so nothing else would report it."
+  },
+  "reviewMatchingAuto": "Auto-apply confident matches",
+  "@reviewMatchingAuto": {
+    "description": "Matching mode: the server decides for itself where it is sure, and only asks otherwise."
+  },
+  "reviewMatchingMenu": "Matching mode",
+  "@reviewMatchingMenu": {
+    "description": "Tooltip of the menu that sets how hard a library tries to match what it imports."
+  },
+  "reviewMatchingOff": "Never match this library",
+  "@reviewMatchingOff": {
+    "description": "Matching mode: files are filed with the tags they arrive with."
+  },
+  "reviewMatchingReview": "Review everything",
+  "@reviewMatchingReview": {
+    "description": "Matching mode: every import waits on a person."
+  },
+  "reviewMatchingRow": "{library}: {mode}",
+  "@reviewMatchingRow": {
+    "description": "One row of the matching-mode menu: which library, then which mode.",
+    "placeholders": {
+      "library": {
+        "type": "String",
+        "example": "Main"
+      },
+      "mode": {
+        "type": "String",
+        "example": "Review everything"
+      }
+    }
+  },
+  "reviewNoCandidatesMessage": "Nothing in the sources matched what these files claim. Keep them as they are, or skip and try again later.",
+  "@reviewNoCandidatesMessage": {
+    "description": "Empty state where the sources matched nothing."
+  },
+  "reviewNoCandidatesTitle": "No candidates found",
+  "@reviewNoCandidatesTitle": {
+    "description": "Empty state where the sources were searched and matched nothing."
+  },
+  "reviewOriginAcquisition": "Acquired",
+  "@reviewOriginAcquisition": {
+    "description": "Badge on a queue row: this entry came in through a download the server ran."
+  },
+  "reviewOriginUpload": "Upload",
+  "@reviewOriginUpload": {
+    "description": "Badge on a queue row: this entry came in through the upload screen."
+  },
+  "reviewPaneClose": "Close the entry",
+  "@reviewPaneClose": {
+    "description": "Closes the entry pane beside the queue, leaving the queue on screen."
+  },
+  "reviewRowBest": "{count, plural, =1{1 track, {best}} other{{count} tracks, {best}}}",
+  "@reviewRowBest": {
+    "description": "A queue row's second line with its best candidate. {best} is already worded.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "9"
+      },
+      "best": {
+        "type": "String",
+        "example": "94% Long Exposure, Field Notes (2019)"
+      }
+    }
+  },
+  "reviewRowNoCandidates": "{count, plural, =1{1 track, no candidates} other{{count} tracks, no candidates}}",
+  "@reviewRowNoCandidates": {
+    "description": "A queue row's second line where nothing matched.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "9"
+      }
+    }
+  },
+  "reviewSearchAgain": "Search again",
+  "@reviewSearchAgain": {
+    "description": "Re-runs identification with what is in the fields. Empty fields clear the stored override and run the plain derivation."
+  },
+  "reviewSearchStored": "Looked up instead of what the files claim. Nothing here is written to the files.",
+  "@reviewSearchStored": {
+    "description": "Above the re-identify fields when they hold what was last searched for."
+  },
+  "reviewSearchSuggested": "Suggested from the source title. Looked up instead of what the files claim; nothing here is written to the files.",
+  "@reviewSearchSuggested": {
+    "description": "Above the re-identify fields when they opened on a guess parsed from the source title."
+  },
+  "reviewSearchToggle": "Search for something else",
+  "@reviewSearchToggle": {
+    "description": "Opens the fields that re-run identification against typed names instead of the files' own tags."
+  },
+  "reviewSelectEnter": "Select entries",
+  "@reviewSelectEnter": {
+    "description": "Turns on multi-select so several entries can be decided at once."
+  },
+  "reviewSelectLeave": "Leave selection",
+  "@reviewSelectLeave": {
+    "description": "Turns multi-select back off."
+  },
+  "reviewSelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@reviewSelectedCount": {
+    "description": "How many entries the bulk bar is about to act on.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "8"
+      }
+    }
+  },
+  "reviewSkippedDecided": "This submission asked to be taken as delivered, so nothing was searched.",
+  "@reviewSkippedDecided": {
+    "description": "Empty state for a skipped identification that has already been decided."
+  },
+  "reviewSkippedPending": "This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own - keep the files as they are, or skip.",
+  "@reviewSkippedPending": {
+    "description": "Empty state for a skipped identification that is still pending, so it needs telling what to do."
+  },
+  "reviewSkippedTitle": "Identification was skipped",
+  "@reviewSkippedTitle": {
+    "description": "Empty state where nothing was searched for because the submission asked to be taken as delivered."
+  },
+  "reviewStatusApplied": "Applied",
+  "@reviewStatusApplied": {
+    "description": "Review lifecycle state: a person approved a match and it was written."
+  },
+  "reviewStatusAsIs": "Kept as it was",
+  "@reviewStatusAsIs": {
+    "description": "Review lifecycle state: the unit's own metadata was accepted unchanged."
+  },
+  "reviewStatusAutoApplied": "Applied automatically",
+  "@reviewStatusAutoApplied": {
+    "description": "Review lifecycle state: the engine was confident enough to decide on its own."
+  },
+  "reviewStatusDiscarded": "Discarded",
+  "@reviewStatusDiscarded": {
+    "description": "Review lifecycle state: the staged files were thrown away rather than filed."
+  },
+  "reviewStatusPending": "Pending",
+  "@reviewStatusPending": {
+    "description": "Review lifecycle state: waiting for somebody to decide."
+  },
+  "reviewStatusReverted": "Reverted",
+  "@reviewStatusReverted": {
+    "description": "Review lifecycle state: an applied match was undone and the earlier metadata restored."
+  },
+  "reviewStatusSkipped": "Skipped",
+  "@reviewStatusSkipped": {
+    "description": "Review lifecycle state: dismissed without a decision."
+  },
+  "reviewStatusUnofficial": "No canonical release",
+  "@reviewStatusUnofficial": {
+    "description": "Review lifecycle state: kept as it was, and marked as having nothing official to match against."
+  },
+  "reviewTitle": "Review queue",
+  "@reviewTitle": {
+    "description": "Title of the screen listing imports waiting on a decision."
+  },
+  "reviewTrackMenu": "Track actions",
+  "@reviewTrackMenu": {
+    "description": "Tooltip of the menu holding what can be done with one track in the comparison."
+  },
+  "reviewTrackNumbered": "{number}. {title}",
+  "@reviewTrackNumbered": {
+    "description": "One track in the comparison, where its number is known.",
+    "placeholders": {
+      "number": {
+        "type": "String",
+        "example": "3"
+      },
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      }
+    }
+  },
+  "reviewTrackWithArtist": "{track} ({artist})",
+  "@reviewTrackWithArtist": {
+    "description": "One track in the comparison, where it names its own artist. {track} is already worded, with its number if it has one.",
+    "placeholders": {
+      "track": {
+        "type": "String",
+        "example": "3. Nightswimming"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewTracksTitle": "Tracks",
+  "@reviewTracksTitle": {
+    "description": "Heading over the file-by-file comparison between the entry and the chosen candidate."
+  },
+  "reviewUntitled": "Untitled",
+  "@reviewUntitled": {
+    "description": "Stands in for an entry's name when the files carry none."
+  },
+  "searchAction": "Search",
+  "@searchAction": {
+    "description": "App-bar button that opens the search screen. A verb."
+  },
+  "searchAddStation": "Add station",
+  "@searchAddStation": {
+    "description": "Button on a directory result that adds that station to this server."
+  },
+  "searchDirectoryDegraded": "Could not reach the directory, so only your own stations are listed. Adding a station by its stream URL still works.",
+  "@searchDirectoryDegraded": {
+    "description": "Banner under the stations this server already has, when the public directory could not be reached."
+  },
+  "searchDirectoryErrorDetail": "Adding a station by its stream URL still works.",
+  "@searchDirectoryErrorDetail": {
+    "description": "The way out offered beside the station-directory error: a stream URL needs no directory."
+  },
+  "searchDirectoryErrorTitle": "Could not reach the directory",
+  "@searchDirectoryErrorTitle": {
+    "description": "Title of the error state when the station directory would not answer and there are no local stations to fall back on."
+  },
+  "searchDirectoryOverline": "Directory",
+  "@searchDirectoryOverline": {
+    "description": "Overline marking the results that come from a public directory rather than from this server."
+  },
+  "searchDirectoryPromptMessage": "Type a station name to look it up in the public directory, then add it to this server.",
+  "@searchDirectoryPromptMessage": {
+    "description": "Empty state under the Radio chip, saying what typing will do."
+  },
+  "searchDirectoryPromptTitle": "Search the station directory",
+  "@searchDirectoryPromptTitle": {
+    "description": "Empty state under the Radio chip before enough has been typed to look anything up."
+  },
+  "searchEmptyMessage": "Try searching for an artist, show, or book.",
+  "@searchEmptyMessage": {
+    "description": "Empty state of the search screen with nothing typed."
+  },
+  "searchEmptyTitle": "Search your library",
+  "@searchEmptyTitle": {
+    "description": "Empty state of the search screen with nothing typed and no recent searches."
+  },
+  "searchFailedTitle": "Could not search",
+  "@searchFailedTitle": {
+    "description": "Title of the error state when the library search itself failed."
+  },
+  "searchFieldHint": "Artists, albums, shows, books",
+  "@searchFieldHint": {
+    "description": "Placeholder in the search field, naming what can be found. Drawn on the search screen and in the sidebar header alike."
+  },
+  "searchForget": "Forget {query}",
+  "@searchForget": {
+    "description": "Accessible name of the control that drops one query from the recent list. {query} is that query.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "beach house"
+      }
+    }
+  },
+  "searchKindAlbums": "Albums",
+  "@searchKindAlbums": {
+    "description": "Heading over the albums a search matched."
+  },
+  "searchKindArtists": "Artists",
+  "@searchKindArtists": {
+    "description": "Heading over the artists a search matched."
+  },
+  "searchKindBooks": "Audiobooks",
+  "@searchKindBooks": {
+    "description": "Heading over the audiobooks a search matched."
+  },
+  "searchKindEpisodes": "Episodes",
+  "@searchKindEpisodes": {
+    "description": "Heading over the podcast episodes a search matched."
+  },
+  "searchKindTracks": "Tracks",
+  "@searchKindTracks": {
+    "description": "Heading over the tracks a search matched."
+  },
+  "searchLibraryOverline": "Library",
+  "@searchLibraryOverline": {
+    "description": "Overline marking the results that are already on this server."
+  },
+  "searchNoStationsMessage": "The directory lists nothing under that name.",
+  "@searchNoStationsMessage": {
+    "description": "Empty state when the station directory matched nothing."
+  },
+  "searchNoStationsTitle": "No stations for \"{query}\"",
+  "@searchNoStationsTitle": {
+    "description": "Empty state when the station directory matched nothing. {query} is what was typed.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "jazz fm"
+      }
+    }
+  },
+  "searchNothingMessage": "Check the spelling or try fewer words.",
+  "@searchNothingMessage": {
+    "description": "Empty state when a library search matched nothing."
+  },
+  "searchNothingTitle": "Nothing for \"{query}\"",
+  "@searchNothingTitle": {
+    "description": "Empty state when a library search matched nothing at all. {query} is what was typed.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "beach house"
+      }
+    }
+  },
+  "searchPodcastDirectoryDegraded": "The podcast directory did not answer, so only your own episodes are listed. Subscribing by feed URL still works.",
+  "@searchPodcastDirectoryDegraded": {
+    "description": "Banner beside the library's own episodes when the public podcast directory could not be reached."
+  },
+  "searchRecentOverline": "Recent",
+  "@searchRecentOverline": {
+    "description": "Overline above the list of queries this listener ran before."
+  },
+  "searchRecentTitle": "Recent searches",
+  "@searchRecentTitle": {
+    "description": "Heading over the queries this listener ran before."
+  },
+  "searchScopeAll": "All",
+  "@searchScopeAll": {
+    "description": "Filter chip that narrows results to nothing: every kind is shown."
+  },
+  "searchScopeBooks": "Audiobooks",
+  "@searchScopeBooks": {
+    "description": "Filter chip narrowing search results to audiobooks."
+  },
+  "searchScopeMusic": "Music",
+  "@searchScopeMusic": {
+    "description": "Filter chip narrowing search results to artists, albums and tracks."
+  },
+  "searchScopePodcasts": "Podcasts",
+  "@searchScopePodcasts": {
+    "description": "Filter chip narrowing search results to episodes, plus shows from the public directory."
+  },
+  "searchScopeRadio": "Radio",
+  "@searchScopeRadio": {
+    "description": "Filter chip that searches the public station directory instead of the library."
+  },
+  "searchShowAll": "Show all",
+  "@searchShowAll": {
+    "description": "Action beside a result group's heading that expands it past the first few hits."
+  },
+  "searchShowsToSubscribe": "Shows to subscribe to",
+  "@searchShowsToSubscribe": {
+    "description": "Heading over podcast directory results this server is not subscribed to."
+  },
+  "searchStationsToAdd": "Stations to add",
+  "@searchStationsToAdd": {
+    "description": "Heading over directory stations this server does not have yet."
+  },
+  "searchSubscribe": "Subscribe",
+  "@searchSubscribe": {
+    "description": "Button on a podcast directory result that subscribes this server to that show."
+  },
+  "searchSubscribed": "Subscribed to {name}.",
+  "@searchSubscribed": {
+    "description": "Snackbar confirming a subscription made from a directory result. {name} is the show's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Song Exploder"
+      }
+    }
+  },
+  "searchTitle": "Search",
+  "@searchTitle": {
+    "description": "Title of the search screen."
+  },
+  "searchTruncated": "There are more matches than fit here. Refine your search to narrow them down.",
+  "@searchTruncated": {
+    "description": "Note under the results when the server capped how many it answered with."
+  },
+  "searchYourStations": "Your stations",
+  "@searchYourStations": {
+    "description": "Heading over the radio stations this server already has."
   },
   "settingsAboutKeywords": "version, licenses, open source, build, defects, errors, diagnostics, log, crash",
   "@settingsAboutKeywords": {
@@ -8592,6 +10161,430 @@
   "@settingsVisualizerIdleTitle": {
     "description": "Name of the \"Open the visualizer when idle\" setting, drawn on its own row and in settings search."
   },
+  "sharingAllowDownload": "Allow download",
+  "@sharingAllowDownload": {
+    "description": "The switch letting the shared page offer the original file, and its accessible name."
+  },
+  "sharingAllowDownloadHelp": "The page offers the original file, not just playback",
+  "@sharingAllowDownloadHelp": {
+    "description": "Help under the allow-download switch."
+  },
+  "sharingCopyLink": "Copy link",
+  "@sharingCopyLink": {
+    "description": "Accessible name of the control that copies one share link."
+  },
+  "sharingCreate": "Create link",
+  "@sharingCreate": {
+    "description": "Confirming button of the share dialog."
+  },
+  "sharingDialogBody": "Anyone with the link can play this. It goes on your clipboard as soon as it is made.",
+  "@sharingDialogBody": {
+    "description": "Body of the share dialog, saying what a link is and where it goes."
+  },
+  "sharingDialogTitle": "Share link",
+  "@sharingDialogTitle": {
+    "description": "Title of the dialog that mints a public link."
+  },
+  "sharingDownloadAllowed": "download allowed",
+  "@sharingDownloadAllowed": {
+    "description": "In a share row's caption, for a link that offers the original file. Lower case: the caption is a line of facts."
+  },
+  "sharingEmptyMessage": "Share a track, an episode, a book, or a playlist and the link turns up here, with how often it has been played and a way to switch it off.",
+  "@sharingEmptyMessage": {
+    "description": "Empty state of the share-links screen."
+  },
+  "sharingEmptyTitle": "No share links yet",
+  "@sharingEmptyTitle": {
+    "description": "Empty state of the share-links screen."
+  },
+  "sharingExpiredOn": "expired {date}",
+  "@sharingExpiredOn": {
+    "description": "In a share row's caption, for a link past its expiry. Lower case: the caption is a line of facts. {date} is already formatted.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Aug 12, 2026"
+      }
+    }
+  },
+  "sharingExpires": "Expires",
+  "@sharingExpires": {
+    "description": "The row choosing when a link stops working, and the accessible name of its picker."
+  },
+  "sharingExpiresHelp": "When the link stops working",
+  "@sharingExpiresHelp": {
+    "description": "Help under the expiry picker."
+  },
+  "sharingExpiresOn": "expires {date}",
+  "@sharingExpiresOn": {
+    "description": "In a share row's caption, for a link that still works. Lower case: the caption is a line of facts.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Aug 12, 2026"
+      }
+    }
+  },
+  "sharingExpiryDay": "1 day",
+  "@sharingExpiryDay": {
+    "description": "Expiry choice: the link lasts a day."
+  },
+  "sharingExpiryMonth": "30 days",
+  "@sharingExpiryMonth": {
+    "description": "Expiry choice: the link lasts thirty days."
+  },
+  "sharingExpiryNever": "Never",
+  "@sharingExpiryNever": {
+    "description": "Expiry choice: the link keeps working until it is revoked."
+  },
+  "sharingExpiryWeek": "1 week",
+  "@sharingExpiryWeek": {
+    "description": "Expiry choice: the link lasts a week."
+  },
+  "sharingKind": "{kind, select, track{Track} album{Album} playlist{Playlist} book{Audiobook} episode{Episode} other{{kind}}}",
+  "@sharingKind": {
+    "description": "What a share link opens, in the caption under its title. The vocabulary is open, so an unknown kind falls back to the server's own word.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "track"
+      }
+    }
+  },
+  "sharingLinkCopied": "Link copied",
+  "@sharingLinkCopied": {
+    "description": "Snackbar confirming a share link is on the clipboard."
+  },
+  "sharingLinkRevoked": "Link revoked",
+  "@sharingLinkRevoked": {
+    "description": "Snackbar confirming a share link has been switched off."
+  },
+  "sharingLoadError": "Could not load your share links",
+  "@sharingLoadError": {
+    "description": "Title of the error state on the share-links screen."
+  },
+  "sharingNeverExpires": "never expires",
+  "@sharingNeverExpires": {
+    "description": "In a share row's caption, for a link with no expiry. Lower case: the caption is a comma-separated line of facts."
+  },
+  "sharingPlays": "{count, plural, =1{1 play} other{{count} plays}}",
+  "@sharingPlays": {
+    "description": "How often a shared link has been used, in the line under it.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "7"
+      }
+    }
+  },
+  "sharingRevokeLink": "Revoke link",
+  "@sharingRevokeLink": {
+    "description": "Accessible name of the control that switches one share link off."
+  },
+  "sharingStartAt": "Start at {time}",
+  "@sharingStartAt": {
+    "description": "The switch making the link open where playback is now. {time} is a timecode.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "12:04"
+      }
+    }
+  },
+  "sharingStartAtHelp": "The link opens where you are now",
+  "@sharingStartAtHelp": {
+    "description": "Help under the start-at-position switch."
+  },
+  "sharingStartAtLabel": "Start at this position",
+  "@sharingStartAtLabel": {
+    "description": "Accessible name of the start-at-position switch, which its own row already puts a time on."
+  },
+  "sharingTitle": "Share links",
+  "@sharingTitle": {
+    "description": "Title of the screen listing the links this account has minted."
+  },
+  "shellClientOutdated": "WaxDeck was updated. Reload to get the new version.",
+  "@shellClientOutdated": {
+    "description": "Banner when the app itself is behind what the server serves, on a build that can reload itself."
+  },
+  "shellCommandCarMode": "Open car mode",
+  "@shellCommandCarMode": {
+    "description": "Command name: the large-target layout meant for a car."
+  },
+  "shellCommandCast": "Play on another device",
+  "@shellCommandCast": {
+    "description": "Command name: open the device picker."
+  },
+  "shellCommandCreatePlaylist": "Create playlist",
+  "@shellCommandCreatePlaylist": {
+    "description": "Command name."
+  },
+  "shellCommandLyrics": "Show lyrics",
+  "@shellCommandLyrics": {
+    "description": "Command name."
+  },
+  "shellCommandMiniWindow": "Mini player window",
+  "@shellCommandMiniWindow": {
+    "description": "Command name: shrink the desktop window to the mini player."
+  },
+  "shellCommandMute": "Mute or unmute",
+  "@shellCommandMute": {
+    "description": "Command name."
+  },
+  "shellCommandNext": "Next track",
+  "@shellCommandNext": {
+    "description": "Command name: step forward in the queue."
+  },
+  "shellCommandPalette": "Open the command palette",
+  "@shellCommandPalette": {
+    "description": "Command name for the palette itself. It is taught by the shortcut sheet but never listed inside the palette."
+  },
+  "shellCommandPlayPause": "Play or pause",
+  "@shellCommandPlayPause": {
+    "description": "Command name. A verb: every command in this list is one."
+  },
+  "shellCommandPlayer": "Open the player",
+  "@shellCommandPlayer": {
+    "description": "Command name."
+  },
+  "shellCommandPrevious": "Previous track",
+  "@shellCommandPrevious": {
+    "description": "Command name: step back in the queue."
+  },
+  "shellCommandQueue": "Show the queue",
+  "@shellCommandQueue": {
+    "description": "Command name."
+  },
+  "shellCommandRepeat": "Change repeat",
+  "@shellCommandRepeat": {
+    "description": "Command name: step through the repeat modes."
+  },
+  "shellCommandScanLibrary": "Scan library",
+  "@shellCommandScanLibrary": {
+    "description": "Command name, offered to administrators only: start a library scan."
+  },
+  "shellCommandSearch": "Search",
+  "@shellCommandSearch": {
+    "description": "Command name: go to the search screen."
+  },
+  "shellCommandSectionApp": "Everywhere",
+  "@shellCommandSectionApp": {
+    "description": "Heading grouping the commands that work on any screen, in the keyboard-shortcut sheet."
+  },
+  "shellCommandSectionPlayback": "Playback",
+  "@shellCommandSectionPlayback": {
+    "description": "Heading grouping the playback commands in the keyboard-shortcut sheet."
+  },
+  "shellCommandSectionView": "Views",
+  "@shellCommandSectionView": {
+    "description": "Heading grouping the commands that open a surface, in the keyboard-shortcut sheet."
+  },
+  "shellCommandSeekBack": "Skip back 10 seconds",
+  "@shellCommandSeekBack": {
+    "description": "Command name: nudge the playhead back."
+  },
+  "shellCommandSeekForward": "Skip ahead 10 seconds",
+  "@shellCommandSeekForward": {
+    "description": "Command name: nudge the playhead forward. The interval is fixed for the keyboard and is not the spoken-word skip setting."
+  },
+  "shellCommandShortcuts": "Keyboard shortcuts",
+  "@shellCommandShortcuts": {
+    "description": "Command name: open the sheet listing every command and its keys."
+  },
+  "shellCommandShuffle": "Shuffle the queue",
+  "@shellCommandShuffle": {
+    "description": "Command name."
+  },
+  "shellCommandVisualizer": "Open the visualizer",
+  "@shellCommandVisualizer": {
+    "description": "Command name."
+  },
+  "shellCommandVolumeDown": "Volume down",
+  "@shellCommandVolumeDown": {
+    "description": "Command name."
+  },
+  "shellCommandVolumeUp": "Volume up",
+  "@shellCommandVolumeUp": {
+    "description": "Command name."
+  },
+  "shellNavAdmin": "Admin console",
+  "@shellNavAdmin": {
+    "description": "Navigation entry for the administration console."
+  },
+  "shellNavAlbums": "Albums",
+  "@shellNavAlbums": {
+    "description": "Navigation entry for the album index, under Music."
+  },
+  "shellNavArtists": "Artists",
+  "@shellNavArtists": {
+    "description": "Navigation entry for the artist index, under Music."
+  },
+  "shellNavBooks": "Books",
+  "@shellNavBooks": {
+    "description": "Navigation entry for the audiobook domain. Deliberately shorter than the hub's own title: five of these share a phone's width."
+  },
+  "shellNavCuration": "Curation",
+  "@shellNavCuration": {
+    "description": "Sidebar group holding the entries that maintain the library rather than listen to it: uploads, the review queue, tasks, the admin console."
+  },
+  "shellNavDownloads": "Downloads",
+  "@shellNavDownloads": {
+    "description": "Navigation entry for the download manager."
+  },
+  "shellNavGenres": "Genres",
+  "@shellNavGenres": {
+    "description": "Navigation entry for the genre index, under Music."
+  },
+  "shellNavHome": "Home",
+  "@shellNavHome": {
+    "description": "Navigation entry for the landing screen."
+  },
+  "shellNavMusic": "Music",
+  "@shellNavMusic": {
+    "description": "Navigation entry for the music domain."
+  },
+  "shellNavPlaylists": "Playlists",
+  "@shellNavPlaylists": {
+    "description": "Navigation entry for playlists, under Music. Kept short: it shares a sidebar column with six others."
+  },
+  "shellNavPodcasts": "Podcasts",
+  "@shellNavPodcasts": {
+    "description": "Navigation entry for the podcast domain."
+  },
+  "shellNavRadio": "Radio",
+  "@shellNavRadio": {
+    "description": "Navigation entry for the radio domain."
+  },
+  "shellNavReview": "Review queue",
+  "@shellNavReview": {
+    "description": "Navigation entry for the queue of imports waiting on an administrator's decision."
+  },
+  "shellNavSettings": "Settings",
+  "@shellNavSettings": {
+    "description": "Navigation entry for the settings screens."
+  },
+  "shellNavStats": "Listening stats",
+  "@shellNavStats": {
+    "description": "Navigation entry for the listening statistics screen."
+  },
+  "shellNavTasks": "Tasks",
+  "@shellNavTasks": {
+    "description": "Navigation entry for the background-task screen."
+  },
+  "shellNavTracks": "Tracks",
+  "@shellNavTracks": {
+    "description": "Navigation entry for the track listing, under Music."
+  },
+  "shellNavUploads": "Uploads",
+  "@shellNavUploads": {
+    "description": "Navigation entry for the upload screen."
+  },
+  "shellNavYears": "Years",
+  "@shellNavYears": {
+    "description": "Navigation entry for the year index, under Music."
+  },
+  "shellNotFoundAction": "Go home",
+  "@shellNotFoundAction": {
+    "description": "Button on the not-found screen that returns to the landing screen."
+  },
+  "shellNotFoundBody": "That page does not exist.",
+  "@shellNotFoundBody": {
+    "description": "Body of the screen shown for a location the app has no route for."
+  },
+  "shellNotFoundTitle": "Not found",
+  "@shellNotFoundTitle": {
+    "description": "Title bar of the screen shown for a location the app has no route for."
+  },
+  "shellPaletteAllSettings": "All settings",
+  "@shellPaletteAllSettings": {
+    "description": "Palette row opening the settings screen, offered when more settings matched than the palette lists."
+  },
+  "shellPaletteCurationDetail": "Curation",
+  "@shellPaletteCurationDetail": {
+    "description": "The second line of a palette row that is an administrative destination. The same word as the sidebar group they live in."
+  },
+  "shellPaletteEmpty": "Nothing to run",
+  "@shellPaletteEmpty": {
+    "description": "Empty state of the command palette with nothing typed."
+  },
+  "shellPaletteGoToDetail": "Go to",
+  "@shellPaletteGoToDetail": {
+    "description": "The second line of a palette row that is a destination, saying what kind of row it is."
+  },
+  "shellPaletteGroupActions": "Actions",
+  "@shellPaletteGroupActions": {
+    "description": "Command palette group holding the things the app can be told to do."
+  },
+  "shellPaletteGroupAdmin": "Admin areas",
+  "@shellPaletteGroupAdmin": {
+    "description": "Command palette group holding the administrative destinations."
+  },
+  "shellPaletteGroupPlaces": "Go to",
+  "@shellPaletteGroupPlaces": {
+    "description": "Command palette group holding destinations and search hits."
+  },
+  "shellPaletteGroupSettings": "Settings",
+  "@shellPaletteGroupSettings": {
+    "description": "Command palette group holding matching settings."
+  },
+  "shellPaletteNoMatch": "Nothing matches \"{query}\"",
+  "@shellPaletteNoMatch": {
+    "description": "Empty state of the command palette when what was typed matched nothing. {query} is what was typed.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "shuffle"
+      }
+    }
+  },
+  "shellPaletteSearchAll": "Search the library for \"{query}\"",
+  "@shellPaletteSearchAll": {
+    "description": "Palette row that hands what was typed to the full search screen. {query} is what was typed.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "beach house"
+      }
+    }
+  },
+  "shellPaletteSearchAllDetail": "Everything that matches",
+  "@shellPaletteSearchAllDetail": {
+    "description": "The second line of the palette row that opens the full search screen."
+  },
+  "shellPaletteSettingsMore": "{count, plural, =1{1 match for \"{query}\"} other{{count} matches for \"{query}\"}}",
+  "@shellPaletteSettingsMore": {
+    "description": "The second line of the All settings palette row, saying how many settings matched. {query} is what was typed.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "7"
+      },
+      "query": {
+        "type": "String",
+        "example": "volume"
+      }
+    }
+  },
+  "shellPaletteStationDetail": "Radio station",
+  "@shellPaletteStationDetail": {
+    "description": "The second line of a palette row that is a radio station."
+  },
+  "shellReconnecting": "Reconnecting to the server. Anything already playing keeps playing.",
+  "@shellReconnecting": {
+    "description": "Banner across the shell while the live connection is being re-established."
+  },
+  "shellReload": "Reload",
+  "@shellReload": {
+    "description": "Action on the update banner, offered only where the page can reload itself."
+  },
+  "shellServerOutdated": "The server was updated. Restart WaxDeck to catch up.",
+  "@shellServerOutdated": {
+    "description": "Banner when the server moved on and this build cannot reload itself."
+  },
+  "shellSignOut": "Sign out",
+  "@shellSignOut": {
+    "description": "The one verb in the account menu."
+  },
   "speedMultiplier": "{speed}x",
   "@speedMultiplier": {
     "description": "A playback rate as a picker option. The x is the multiplier convention; {speed} arrives already written for this language, so a locale that separates decimals differently is already handled.",
@@ -8601,6 +10594,488 @@
         "example": "1.5"
       }
     }
+  },
+  "statsBucketDay": "Day",
+  "@statsBucketDay": {
+    "description": "Chart grouping: one bar per day."
+  },
+  "statsBucketDayInline": "day",
+  "@statsBucketDayInline": {
+    "description": "The day grouping named inside a sentence rather than on its own chip, which is why it is a second key and not the chip's label lowercased."
+  },
+  "statsBucketMonth": "Month",
+  "@statsBucketMonth": {
+    "description": "Chart grouping: one bar per month."
+  },
+  "statsBucketMonthInline": "month",
+  "@statsBucketMonthInline": {
+    "description": "The month grouping named inside a sentence; see statsBucketDayInline."
+  },
+  "statsBucketWeek": "Week",
+  "@statsBucketWeek": {
+    "description": "Chart grouping: one bar per week."
+  },
+  "statsBucketWeekInline": "week",
+  "@statsBucketWeekInline": {
+    "description": "The week grouping named inside a sentence; see statsBucketDayInline."
+  },
+  "statsCardDrawFailed": "The card could not be drawn",
+  "@statsCardDrawFailed": {
+    "description": "Said when rendering the card produced nothing."
+  },
+  "statsCardDrawing": "Drawing",
+  "@statsCardDrawing": {
+    "description": "On the export button while the card is being rendered."
+  },
+  "statsCardExportFailed": "The card could not be exported",
+  "@statsCardExportFailed": {
+    "description": "Said when the finished card could not be handed to the platform."
+  },
+  "statsCardFactDayStreak": "day streak",
+  "@statsCardFactDayStreak": {
+    "description": "Caption on the card under the longest run of consecutive listening days. Lower case: it sits under a figure."
+  },
+  "statsCardFactDifferentThings": "different things",
+  "@statsCardFactDifferentThings": {
+    "description": "Caption on the card under how many separate items were played. Lower case: it sits under a figure."
+  },
+  "statsCardFactListeners": "listeners",
+  "@statsCardFactListeners": {
+    "description": "Caption on the server card under how many accounts it covers. Lower case: it sits under a figure."
+  },
+  "statsCardFormatSquare": "Square",
+  "@statsCardFormatSquare": {
+    "description": "The square card shape, meant for a feed post or a message."
+  },
+  "statsCardFormatSquareBlurb": "For a post or a message",
+  "@statsCardFormatSquareBlurb": {
+    "description": "Under the square card, saying what it is for."
+  },
+  "statsCardFormatStory": "Story",
+  "@statsCardFormatStory": {
+    "description": "The tall card shape, meant for a full-screen story post."
+  },
+  "statsCardFormatStoryBlurb": "For a full-screen story",
+  "@statsCardFormatStoryBlurb": {
+    "description": "Under the tall card, saying what it is for."
+  },
+  "statsCardMostPlayed": "MOST PLAYED",
+  "@statsCardMostPlayed": {
+    "description": "Heading on the card over its list of artists. Drawn in capitals; translate it in capitals too where the language has them."
+  },
+  "statsCardNoDestination": "There is nowhere to save images here",
+  "@statsCardNoDestination": {
+    "description": "Snackbar when the desktop reports neither a downloads folder nor a documents folder to write a share card into."
+  },
+  "statsCardNoExport": "This build cannot keep an image, so the cards are preview only.",
+  "@statsCardNoExport": {
+    "description": "Banner on a platform with nowhere to save or share a picture."
+  },
+  "statsCardOverline": "Your year, cut to shape",
+  "@statsCardOverline": {
+    "description": "Overline of the share-card sheet."
+  },
+  "statsCardPreviewSpoken": "{format, select, story{Story card, for a full-screen story} square{Square card, for a post or a message} other{Share card}}",
+  "@statsCardPreviewSpoken": {
+    "description": "A card preview read as a whole: which shape it is and what it is for. One sentence per shape rather than a name and a blurb joined, because only English can lower-case the second half into the first.",
+    "placeholders": {
+      "format": {
+        "type": "String",
+        "example": "story"
+      }
+    }
+  },
+  "statsCardPrivacy": "Cards are drawn here and never sent anywhere: what happens next is up to you.",
+  "@statsCardPrivacy": {
+    "description": "Under the card previews, saying the drawing is local."
+  },
+  "statsCardSaveUnsupported": "This build cannot save images",
+  "@statsCardSaveUnsupported": {
+    "description": "Snackbar on a platform with nowhere at all to keep a rendered share card."
+  },
+  "statsCardSaved": "Saved to {where}",
+  "@statsCardSaved": {
+    "description": "Said when the card was written to a file. {where} is the path the platform chose.",
+    "placeholders": {
+      "where": {
+        "type": "String",
+        "example": "Downloads"
+      }
+    }
+  },
+  "statsCardShareRefused": "The share sheet refused the image",
+  "@statsCardShareRefused": {
+    "description": "Snackbar when the platform's share sheet declined a finished share card and said nothing about why."
+  },
+  "statsCardShareUnsupported": "This build cannot share images",
+  "@statsCardShareUnsupported": {
+    "description": "Snackbar when the platform side of the share channel is older than this app and has no image support."
+  },
+  "statsCardShared": "Card shared",
+  "@statsCardShared": {
+    "description": "Said when the platform took the card to share."
+  },
+  "statsCardSubject": "My {year} in review",
+  "@statsCardSubject": {
+    "description": "The subject line the platform's share sheet opens with.",
+    "placeholders": {
+      "year": {
+        "type": "int",
+        "example": "2026"
+      }
+    }
+  },
+  "statsCardTitle": "Share cards",
+  "@statsCardTitle": {
+    "description": "Heading of the sheet that draws the recap as an image."
+  },
+  "statsChartEmptySummary": "No listening in this range.",
+  "@statsChartEmptySummary": {
+    "description": "Read aloud in place of the chart when there is nothing to draw."
+  },
+  "statsChartSummary": "Listening by {unit}, {bars, plural, =1{1 bar} other{{bars} bars}} from {first} to {last}. The most was {peak} on {peakDay}.",
+  "@statsChartSummary": {
+    "description": "The whole chart read aloud, rather than every bar: how it is grouped, how far it reaches, and where the peak is. {unit} is the grouping word inside a sentence (day, week, month), {peak} is a duration and the three dates are already formatted.",
+    "placeholders": {
+      "unit": {
+        "type": "String",
+        "example": "day"
+      },
+      "bars": {
+        "type": "int",
+        "example": "30"
+      },
+      "first": {
+        "type": "String",
+        "example": "07/14"
+      },
+      "last": {
+        "type": "String",
+        "example": "08/12"
+      },
+      "peak": {
+        "type": "String",
+        "example": "2h 6m"
+      },
+      "peakDay": {
+        "type": "String",
+        "example": "07/29"
+      }
+    }
+  },
+  "statsDoorListenLog": "Listen log",
+  "@statsDoorListenLog": {
+    "description": "The list of every recorded session: the row on the stats screen that opens it, and its own title."
+  },
+  "statsDoorListenLogSubtitle": "Every recorded listen session",
+  "@statsDoorListenLogSubtitle": {
+    "description": "Second line of the row opening the listen log."
+  },
+  "statsDoorYearInReview": "Year in review",
+  "@statsDoorYearInReview": {
+    "description": "The year's recap: the row on the stats screen that opens it, and its own title."
+  },
+  "statsDoorYearInReviewSubtitle": "Your listening year, wrapped up",
+  "@statsDoorYearInReviewSubtitle": {
+    "description": "Second line of the row opening the year's recap."
+  },
+  "statsEmptyMessage": "Pick a longer range, or go and play something.",
+  "@statsEmptyMessage": {
+    "description": "Empty state of the listening chart."
+  },
+  "statsEmptyTitle": "Nothing played in this range",
+  "@statsEmptyTitle": {
+    "description": "Empty state of the listening chart."
+  },
+  "statsGroupBy": "Group by",
+  "@statsGroupBy": {
+    "description": "Accessible name of the picker that sets how wide a chart bar is."
+  },
+  "statsHeatmapOverline": "Every day",
+  "@statsHeatmapOverline": {
+    "description": "Overline over the calendar of the year's listening."
+  },
+  "statsHeatmapSummary": "A calendar of {year}: {days, plural, =1{listening on 1 day} other{listening on {days} days}}. {current, plural, =1{Current streak 1 day} other{Current streak {current} days}}, longest {longest}.",
+  "@statsHeatmapSummary": {
+    "description": "The whole calendar read aloud, rather than 365 cells.",
+    "placeholders": {
+      "year": {
+        "type": "int",
+        "example": "2026"
+      },
+      "days": {
+        "type": "int",
+        "example": "180"
+      },
+      "current": {
+        "type": "int",
+        "example": "4"
+      },
+      "longest": {
+        "type": "int",
+        "example": "21"
+      }
+    }
+  },
+  "statsHeatmapTitle": "This year",
+  "@statsHeatmapTitle": {
+    "description": "Heading over the calendar of the year's listening."
+  },
+  "statsKindAlbums": "Albums",
+  "@statsKindAlbums": {
+    "description": "Chip choosing which ranked list to show."
+  },
+  "statsKindArtists": "Artists",
+  "@statsKindArtists": {
+    "description": "Chip choosing which ranked list to show."
+  },
+  "statsKindGenres": "Genres",
+  "@statsKindGenres": {
+    "description": "Chip choosing which ranked list to show."
+  },
+  "statsKindShows": "Shows",
+  "@statsKindShows": {
+    "description": "Chip choosing which ranked list to show."
+  },
+  "statsListened": "listened",
+  "@statsListened": {
+    "description": "Caption under the total listening time. Lower case: it sits under a figure and reads as one phrase with it."
+  },
+  "statsLoadError": "Could not load your listening stats",
+  "@statsLoadError": {
+    "description": "Title of the error state on the stats screen."
+  },
+  "statsLogAllClients": "All clients",
+  "@statsLogAllClients": {
+    "description": "The listen log's client filter with nothing chosen: every reporting device."
+  },
+  "statsLogEmptyMessage": "Every session a client finishes lands here, whichever device reported it.",
+  "@statsLogEmptyMessage": {
+    "description": "Empty state of the listen log."
+  },
+  "statsLogEmptyTitle": "No listens recorded yet",
+  "@statsLogEmptyTitle": {
+    "description": "Empty state of the listen log."
+  },
+  "statsLogFinished": "Finished",
+  "@statsLogFinished": {
+    "description": "Badge on a session that ran to the end."
+  },
+  "statsLogFinishedSpoken": "{time}, finished",
+  "@statsLogFinishedSpoken": {
+    "description": "A finished session read aloud: how long it ran, then that it completed. {time} is already worded as a duration.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "42m"
+      }
+    }
+  },
+  "statsLogLoadError": "Could not load the listen log",
+  "@statsLogLoadError": {
+    "description": "Title of the error state on the listen log."
+  },
+  "statsLogRemovedItem": "Removed item",
+  "@statsLogRemovedItem": {
+    "description": "Stands in for a session's name when the item it was about has been deleted since. The session still happened."
+  },
+  "statsLogReportedBy": "Reported by",
+  "@statsLogReportedBy": {
+    "description": "Accessible name of the listen log's client filter."
+  },
+  "statsPlays": "{count, plural, =1{1 play} other{{count} plays}}",
+  "@statsPlays": {
+    "description": "How many times a ranked entry was played, under its name.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "statsRange30d": "30 days",
+  "@statsRange30d": {
+    "description": "Range chip: the last month."
+  },
+  "statsRange365d": "A year",
+  "@statsRange365d": {
+    "description": "Range chip: the last year."
+  },
+  "statsRange7d": "7 days",
+  "@statsRange7d": {
+    "description": "Range chip: the last week."
+  },
+  "statsRange90d": "90 days",
+  "@statsRange90d": {
+    "description": "Range chip: the last three months."
+  },
+  "statsRangeAll": "All time",
+  "@statsRangeAll": {
+    "description": "Range chip: every session on record."
+  },
+  "statsRecapLoadError": "Could not load the recap",
+  "@statsRecapLoadError": {
+    "description": "Title over the failure of one year-in-review panel, which retries in place."
+  },
+  "statsSessions": "sessions",
+  "@statsSessions": {
+    "description": "Caption under how many listening sessions were recorded. Lower case: it sits under a figure."
+  },
+  "statsStreaks": "{current, plural, =1{Current streak: 1 day} other{Current streak: {current} days}} · {longest, plural, =1{Longest: 1 day} other{Longest: {longest} days}}",
+  "@statsStreaks": {
+    "description": "Under the calendar: how many days in a row this listener has played something, now and at their best.",
+    "placeholders": {
+      "current": {
+        "type": "int",
+        "example": "4"
+      },
+      "longest": {
+        "type": "int",
+        "example": "21"
+      }
+    }
+  },
+  "statsTimeSaved": "time saved",
+  "@statsTimeSaved": {
+    "description": "Caption under how much time playing faster and trimming silence saved. Lower case: it sits under a figure."
+  },
+  "statsTitle": "Listening stats",
+  "@statsTitle": {
+    "description": "Title of the screen showing what this listener has played."
+  },
+  "statsTopEmptyMessage": "{kind, select, artists{A longer range, or an artist you have actually played.} albums{A longer range, or an album you have actually played.} genres{A longer range, or a genre you have actually played.} shows{A longer range, or a show you have actually played.} other{A longer range, or something you have actually played.}}",
+  "@statsTopEmptyMessage": {
+    "description": "Empty state of a ranked list, naming what it lists. Whole sentences per kind rather than a noun in a frame, because the article follows the noun's gender.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "statsTopEmptyTitle": "Nothing here for this range",
+  "@statsTopEmptyTitle": {
+    "description": "Empty state of a ranked list."
+  },
+  "statsTopOverline": "In this range",
+  "@statsTopOverline": {
+    "description": "Overline over the ranked lists, saying they follow the range chips above."
+  },
+  "statsTopTitle": "Top",
+  "@statsTopTitle": {
+    "description": "Heading over the ranked lists of what was played most."
+  },
+  "statsYearChartEmpty": "No listening recorded in {year}.",
+  "@statsYearChartEmpty": {
+    "description": "Read aloud in place of the recap's chart when the year holds nothing.",
+    "placeholders": {
+      "year": {
+        "type": "int",
+        "example": "2026"
+      }
+    }
+  },
+  "statsYearChartSummary": "Listening month by month through {year}. The most was {peak} in {month}.",
+  "@statsYearChartSummary": {
+    "description": "The recap's chart read aloud: the year it covers and where the peak fell. {peak} is a duration, {month} the month's own short label.",
+    "placeholders": {
+      "year": {
+        "type": "int",
+        "example": "2026"
+      },
+      "peak": {
+        "type": "String",
+        "example": "12h 4m"
+      },
+      "month": {
+        "type": "String",
+        "example": "J"
+      }
+    }
+  },
+  "statsYearDistinct": "different things played",
+  "@statsYearDistinct": {
+    "description": "Caption under how many separate items were played at least once. Lower case: it sits under a figure."
+  },
+  "statsYearListenedTogether": "listened together",
+  "@statsYearListenedTogether": {
+    "description": "Caption under the server-wide listening total. Lower case: it sits under a figure."
+  },
+  "statsYearLongestStreak": "longest streak",
+  "@statsYearLongestStreak": {
+    "description": "Caption under the longest run of consecutive days with listening. Lower case: it sits under a figure."
+  },
+  "statsYearMakeCard": "Make a share card",
+  "@statsYearMakeCard": {
+    "description": "Opens the sheet that draws the recap as a shareable image."
+  },
+  "statsYearMonthByMonth": "Month by month",
+  "@statsYearMonthByMonth": {
+    "description": "Heading over the recap's year-long bar chart."
+  },
+  "statsYearMonthFallback": "month {month}",
+  "@statsYearMonthFallback": {
+    "description": "Stands in for a month's label where the chart has none. {month} is its number.",
+    "placeholders": {
+      "month": {
+        "type": "int",
+        "example": "7"
+      }
+    }
+  },
+  "statsYearNewInLibrary": "new in the library",
+  "@statsYearNewInLibrary": {
+    "description": "Caption under how much the library gained that year. Lower case: it sits under a figure."
+  },
+  "statsYearNext": "Next year",
+  "@statsYearNext": {
+    "description": "Steps the recap forward one year."
+  },
+  "statsYearNothingPlayed": "Nothing played this year",
+  "@statsYearNothingPlayed": {
+    "description": "Drawn in place of a recap for a year with no sessions in it."
+  },
+  "statsYearParticipants": "listeners counted in",
+  "@statsYearParticipants": {
+    "description": "Caption under how many accounts the server-wide recap covers. Lower case: it sits under a figure."
+  },
+  "statsYearPersonal": "My year",
+  "@statsYearPersonal": {
+    "description": "Chip showing the recap of what this listener played."
+  },
+  "statsYearPrev": "Previous year",
+  "@statsYearPrev": {
+    "description": "Steps the recap back one year."
+  },
+  "statsYearServer": "Whole server",
+  "@statsYearServer": {
+    "description": "Chip showing the recap of what everyone on this server played."
+  },
+  "statsYearStreakDays": "{days, plural, =1{1 day} other{{days} days}}",
+  "@statsYearStreakDays": {
+    "description": "The longest-streak figure itself, in days.",
+    "placeholders": {
+      "days": {
+        "type": "int",
+        "example": "21"
+      }
+    }
+  },
+  "statsYearTopArtists": "Top artists",
+  "@statsYearTopArtists": {
+    "description": "Heading over the recap's five most-played artists."
+  },
+  "statsYearTopGenres": "Top genres",
+  "@statsYearTopGenres": {
+    "description": "Heading over the recap's five most-played genres."
+  },
+  "statsYearTopShows": "Top shows",
+  "@statsYearTopShows": {
+    "description": "Heading over the recap's five most-played podcasts."
+  },
+  "statsYearTopTracks": "Top tracks",
+  "@statsYearTopTracks": {
+    "description": "Heading over the recap's five most-played tracks."
   },
   "toolsClearFinished": "Clear finished",
   "@toolsClearFinished": {
@@ -8763,5 +11238,325 @@
   "toolsTitle": "Tool tasks",
   "@toolsTitle": {
     "description": "Title of the screen following long-running library work: merges, splits, downloads, imports."
+  },
+  "uploadsAcquireQueued": "Downloading. It will appear in the review queue when ready.",
+  "@uploadsAcquireQueued": {
+    "description": "Snackbar after asking the server to download from a URL."
+  },
+  "uploadsAcquireTasks": "Tasks",
+  "@uploadsAcquireTasks": {
+    "description": "Action on the downloading snackbar, opening the background-task screen."
+  },
+  "uploadsAddOverline": "Both routes land in the review queue",
+  "@uploadsAddOverline": {
+    "description": "Overline of the add sheet, saying nothing is filed without a decision."
+  },
+  "uploadsAddTitle": "Add to the library",
+  "@uploadsAddTitle": {
+    "description": "Heading of the sheet offering the ways audio gets in."
+  },
+  "uploadsBatch": "{count, plural, =1{Uploaded together, 1 file} other{Uploaded together, {count} files}}",
+  "@uploadsBatch": {
+    "description": "Header over the files of one batch upload.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uploadsDiscardBody": "\"{fileName}\" and its staged bytes are removed, and the space they hold against your quota is released.",
+  "@uploadsDiscardBody": {
+    "description": "Body of the discard confirmation. {fileName} is the file's own name.",
+    "placeholders": {
+      "fileName": {
+        "type": "String",
+        "example": "01 - Nightswimming.flac"
+      }
+    }
+  },
+  "uploadsDiscardConfirm": "Discard",
+  "@uploadsDiscardConfirm": {
+    "description": "Confirming button of the discard dialog."
+  },
+  "uploadsDiscardRow": "Discard upload",
+  "@uploadsDiscardRow": {
+    "description": "Accessible name of the control that throws one staged upload away."
+  },
+  "uploadsDiscardTitle": "Discard upload?",
+  "@uploadsDiscardTitle": {
+    "description": "Title of the typed confirmation before a staged upload is thrown away."
+  },
+  "uploadsDiscardWord": "discard",
+  "@uploadsDiscardWord": {
+    "description": "The word somebody types to confirm a discard. Lower case, one word, and what the field is checked against - keep it short and easy to type."
+  },
+  "uploadsDownload": "Download",
+  "@uploadsDownload": {
+    "description": "Confirming button of the add-from-URL dialog."
+  },
+  "uploadsDropHint": "Drop audio files to upload",
+  "@uploadsDropHint": {
+    "description": "Overlay caption while audio is dragged over a page-sized drop zone, on Home and on the uploads screen."
+  },
+  "uploadsDuplicate": "Duplicate ({kind}): {what}",
+  "@uploadsDuplicate": {
+    "description": "Banner on an upload the server matched against something already in the library. {kind} says how it matched; {what} names what it matched.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "exact copy"
+      },
+      "what": {
+        "type": "String",
+        "example": "Nightswimming by Field Notes"
+      }
+    }
+  },
+  "uploadsDuplicateBy": "{title} by {artist}",
+  "@uploadsDuplicateBy": {
+    "description": "What a duplicate matched, where the match names an artist.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "uploadsDuplicateContent": "exact copy",
+  "@uploadsDuplicateContent": {
+    "description": "How a duplicate matched: the bytes are the same file. Lower case: it sits in brackets inside a sentence."
+  },
+  "uploadsDuplicateFingerprint": "same recording",
+  "@uploadsDuplicateFingerprint": {
+    "description": "How a duplicate matched: a different file of the same audio. Lower case: it sits in brackets."
+  },
+  "uploadsDuplicateName": "name match",
+  "@uploadsDuplicateName": {
+    "description": "How a duplicate matched: only the name is the same. Lower case: it sits in brackets."
+  },
+  "uploadsEmptyMessage": "Pick files from the bar above, or drop them anywhere on this page.",
+  "@uploadsEmptyMessage": {
+    "description": "Empty state of the uploads screen for an account that may upload."
+  },
+  "uploadsEmptyNoPermission": "This account cannot upload. Ask an administrator for the permission.",
+  "@uploadsEmptyNoPermission": {
+    "description": "Empty state of the uploads screen for an account without the upload right."
+  },
+  "uploadsEmptyTitle": "No uploads yet",
+  "@uploadsEmptyTitle": {
+    "description": "Empty state of the uploads screen."
+  },
+  "uploadsFileFailed": "{name}: {reason}",
+  "@uploadsFileFailed": {
+    "description": "One file's failure inside a multi-file upload, which keeps going: the file's own name and the worded reason.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "01 Teardrop.flac"
+      },
+      "reason": {
+        "type": "String",
+        "example": "You are out of space."
+      }
+    }
+  },
+  "uploadsFileTypeAny": "All files",
+  "@uploadsFileTypeAny": {
+    "description": "What the file picker calls the group that accepts anything, which is what keeps a file in a custom accepted-format set reachable."
+  },
+  "uploadsFileTypeAudio": "Audio",
+  "@uploadsFileTypeAudio": {
+    "description": "What the file picker calls the group of audio formats it accepts."
+  },
+  "uploadsFormat": "Download format",
+  "@uploadsFormat": {
+    "description": "Accessible name of the picker choosing what a URL download is converted to."
+  },
+  "uploadsFormatBest": "Best quality (recommended)",
+  "@uploadsFormatBest": {
+    "description": "Download format: keep the source's own audio without re-encoding it. The other choices are codec names and are not translated."
+  },
+  "uploadsFromUrl": "Add from URL",
+  "@uploadsFromUrl": {
+    "description": "Opens the dialog that has the server download from a source URL. The bar button, the sheet row, and the dialog's own title."
+  },
+  "uploadsFromUrlSubtitle": "A video, a playlist, or a channel",
+  "@uploadsFromUrlSubtitle": {
+    "description": "Second line of the add-from-URL row, naming what a source URL may point at."
+  },
+  "uploadsGroupingAlbum": "One album",
+  "@uploadsGroupingAlbum": {
+    "description": "Grouping choice: every file is part of one release."
+  },
+  "uploadsGroupingAlbumHelp": "Review all files as one release",
+  "@uploadsGroupingAlbumHelp": {
+    "description": "Help under the one-album grouping choice."
+  },
+  "uploadsGroupingAuto": "Auto-detect",
+  "@uploadsGroupingAuto": {
+    "description": "Grouping choice: let the server decide from the tags and folders."
+  },
+  "uploadsGroupingAutoHelp": "Group into albums by their tags and folders",
+  "@uploadsGroupingAutoHelp": {
+    "description": "Help under the auto-detect grouping choice."
+  },
+  "uploadsGroupingTitle": "How should these files be grouped?",
+  "@uploadsGroupingTitle": {
+    "description": "Heading over the grouping choice for a multi-file upload."
+  },
+  "uploadsGroupingTracks": "Separate tracks",
+  "@uploadsGroupingTracks": {
+    "description": "Grouping choice: every file stands on its own."
+  },
+  "uploadsGroupingTracksHelp": "Review every file on its own",
+  "@uploadsGroupingTracksHelp": {
+    "description": "Help under the separate-tracks grouping choice."
+  },
+  "uploadsIdentifyMusic": "Identify against MusicBrainz",
+  "@uploadsIdentifyMusic": {
+    "description": "The switch that matches music against the MusicBrainz catalogue before filing it. MusicBrainz is a service name and stays."
+  },
+  "uploadsIdentifyMusicHelp": "Matches it, then waits for your decision. Off adds it with the tags it has",
+  "@uploadsIdentifyMusicHelp": {
+    "description": "Help under the identify switch for music."
+  },
+  "uploadsIdentifyOther": "Review before adding",
+  "@uploadsIdentifyOther": {
+    "description": "The same switch for a podcast or a book, where there is no catalogue to match against, so all it decides is whether the submission waits."
+  },
+  "uploadsIdentifyOtherHelp": "Waits for your decision. Off adds it with the tags it has",
+  "@uploadsIdentifyOtherHelp": {
+    "description": "Help under the review-before-adding switch."
+  },
+  "uploadsLoadError": "Could not load uploads",
+  "@uploadsLoadError": {
+    "description": "Title of the error state on the uploads screen."
+  },
+  "uploadsLoadMore": "Load more",
+  "@uploadsLoadMore": {
+    "description": "Fetches the next page of uploads."
+  },
+  "uploadsMediaBook": "Audiobook",
+  "@uploadsMediaBook": {
+    "description": "Medium choice on the upload dialogs."
+  },
+  "uploadsMediaMusic": "Music",
+  "@uploadsMediaMusic": {
+    "description": "Medium choice on the upload dialogs."
+  },
+  "uploadsMediaPodcast": "Podcast",
+  "@uploadsMediaPodcast": {
+    "description": "Medium choice on the upload dialogs."
+  },
+  "uploadsOpenReview": "Open review entry",
+  "@uploadsOpenReview": {
+    "description": "Opens the review queue on the entry this upload made."
+  },
+  "uploadsPick": "Upload files",
+  "@uploadsPick": {
+    "description": "Opens the file picker. The bar button on the uploads screen and a row in the add sheet."
+  },
+  "uploadsPickFolder": "Upload a folder",
+  "@uploadsPickFolder": {
+    "description": "Opens the folder picker, whose hierarchy rides along as a grouping hint."
+  },
+  "uploadsPickFolderSubtitle": "An album or a collection, hierarchy and all",
+  "@uploadsPickFolderSubtitle": {
+    "description": "Second line of the upload-folder row."
+  },
+  "uploadsPickSubtitle": "One track, or a set you pick yourself",
+  "@uploadsPickSubtitle": {
+    "description": "Second line of the upload-files row in the add sheet."
+  },
+  "uploadsQuotaHelp": "This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.",
+  "@uploadsQuotaHelp": {
+    "description": "Under the staging figure, saying what the cap is a cap on."
+  },
+  "uploadsQuotaHelpUncapped": "Staged files are held until they are imported or discarded.",
+  "@uploadsQuotaHelpUncapped": {
+    "description": "Under the staging figure on a server with no cap."
+  },
+  "uploadsQuotaOf": "{used} of {cap}",
+  "@uploadsQuotaOf": {
+    "description": "How much of the staging cap is in use. Both are formatted sizes.",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "240 MB"
+      },
+      "cap": {
+        "type": "String",
+        "example": "2.0 GB"
+      }
+    }
+  },
+  "uploadsQuotaOverline": "Waiting to be imported",
+  "@uploadsQuotaOverline": {
+    "description": "Overline over how much is staged against the cap. The cap is on what may sit staged, not on what may be contributed."
+  },
+  "uploadsReceivedOf": "{percent}% of {size} received",
+  "@uploadsReceivedOf": {
+    "description": "How far one upload has got. {size} is a formatted size; Spanish puts a space before the percent sign.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "42"
+      },
+      "size": {
+        "type": "String",
+        "example": "48.2 MB"
+      }
+    }
+  },
+  "uploadsReceiving": "Receiving",
+  "@uploadsReceiving": {
+    "description": "Under an upload row while bytes are arriving and the total size is not known."
+  },
+  "uploadsRetry": "Retry upload",
+  "@uploadsRetry": {
+    "description": "Accessible name of the control that sends a failed upload again."
+  },
+  "uploadsSourceUrl": "Source URL",
+  "@uploadsSourceUrl": {
+    "description": "The field taking the address the server downloads from."
+  },
+  "uploadsSourceUrlHint": "A single video, or a playlist or channel",
+  "@uploadsSourceUrlHint": {
+    "description": "Placeholder in the source-URL field."
+  },
+  "uploadsTitle": "Uploads",
+  "@uploadsTitle": {
+    "description": "Title of the screen listing what has been sent to the server and not yet imported."
+  },
+  "uploadsTransferFailed": "Transfer failed",
+  "@uploadsTransferFailed": {
+    "description": "Drawn where an upload row's state chip goes when the bytes did not arrive."
+  },
+  "uploadsUpload": "Upload",
+  "@uploadsUpload": {
+    "description": "Confirming button of the dialog asking what is being uploaded."
+  },
+  "uploadsWhatMany": "What are these {count} files?",
+  "@uploadsWhatMany": {
+    "description": "Title of the dialog asking what several files are.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uploadsWhatOne": "What are you uploading?",
+  "@uploadsWhatOne": {
+    "description": "Title of the dialog asking what one file is."
+  },
+  "uploadsWhatThisIs": "What this is",
+  "@uploadsWhatThisIs": {
+    "description": "Accessible name of the picker choosing which medium is being added."
   }
 }

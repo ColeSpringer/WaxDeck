@@ -185,6 +185,7 @@ class _Header extends ConsumerWidget {
           semanticsId: SemanticsIds.entityOverflow,
           items: <WaxMenuItem<String>>[
             pinMenuItem<String>(
+              context,
               ref,
               pid,
               value: 'pin',

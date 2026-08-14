@@ -515,6 +515,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
       DownloadAction(
         pid: _item.pid,
         artUrl: _item.artUrl,
+        label: l10n.playerDownload,
         semanticsId: SemanticsIds.downloadButton,
       ),
       WaxMenuButton<_PlayerMenuAction>(

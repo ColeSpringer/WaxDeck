@@ -148,39 +148,14 @@ class SettingEntry {
   final bool desktopOnly;
 }
 
-/// The search words for one setting, out of the one comma-separated
-/// string the translator works on.
-///
-/// Kept as they were written: [_fold] is what makes a query reach them,
-/// so a keyword that came back capitalized or accented is still one
-/// anybody can type their way to. The spaces translators put after their
-/// commas go, and a trailing comma does not mint an empty word.
+/// The search words for one setting, out of the comma-separated string
+/// the translator works on. Kept as written, since [foldForSearch] is
+/// what makes a query reach them; spaces and a trailing comma go.
 List<String> _words(String commaSeparated) => commaSeparated
     .split(',')
     .map((word) => word.trim())
     .where((word) => word.isNotEmpty)
     .toList(growable: false);
-
-/// Case and Latin diacritics folded away, so a query matches what
-/// somebody types rather than what their keyboard makes hard.
-///
-/// "podcast" has to find "pódcast", and "reproduccion" "Reproducción":
-/// the accent belongs to the language and the typed form belongs to
-/// whoever is in a hurry, and a settings search that answers only the
-/// accented spelling is one a Spanish reader gives up on. `ñ` folds to
-/// `n` with the rest, which over-matches ("ano" finds "año") and never
-/// under-matches - the trade a filter wants and a dictionary would not.
-String _fold(String text) {
-  const accented = 'àáâãäåçèéêëìíîïñòóôõöùúûüýÿ';
-  const plain = 'aaaaaaceeeeiiiinooooouuuuyy';
-  final lower = text.toLowerCase();
-  final folded = StringBuffer();
-  for (var i = 0; i < lower.length; i++) {
-    final at = accented.indexOf(lower[i]);
-    folded.write(at < 0 ? lower[i] : plain[at]);
-  }
-  return folded.toString();
-}
 
 /// Every leaf setting this build ships.
 ///
@@ -520,7 +495,7 @@ List<SettingEntry> searchSettings(
   required bool isNative,
   required bool isDesktop,
 }) {
-  final needle = _fold(query.trim());
+  final needle = foldForSearch(query.trim());
   if (needle.isEmpty) return const <SettingEntry>[];
   final starts = <SettingEntry>[];
   final contains = <SettingEntry>[];
@@ -530,13 +505,13 @@ List<SettingEntry> searchSettings(
     if (entry.section.adminOnly && !isAdmin) continue;
     if (entry.nativeOnly && !isNative) continue;
     if (entry.desktopOnly && !isDesktop) continue;
-    final title = _fold(entry.title);
+    final title = foldForSearch(entry.title);
     if (title.startsWith(needle)) {
       starts.add(entry);
     } else if (title.contains(needle)) {
       contains.add(entry);
-    } else if (entry.keywords.any((k) => _fold(k).contains(needle)) ||
-        _fold(entry.section.titleOf(l10n)).contains(needle)) {
+    } else if (entry.keywords.any((k) => foldForSearch(k).contains(needle)) ||
+        foldForSearch(entry.section.titleOf(l10n)).contains(needle)) {
       byKeyword.add(entry);
     }
   }

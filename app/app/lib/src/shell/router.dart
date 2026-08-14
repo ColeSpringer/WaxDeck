@@ -35,6 +35,7 @@ import '../downloads/downloads_screen.dart';
 import '../health/diagnostics_screen.dart';
 import '../health/health_screen.dart';
 import '../home/home_screen.dart';
+import '../l10n/l10n.dart';
 import '../metadata/metadata_screen.dart';
 import '../music/album_editor_screen.dart';
 import '../music/album_screen.dart';
@@ -313,6 +314,7 @@ Widget _trackList(BuildContext context, GoRouterState state) {
   final args = state.extra! as TrackListArgs;
   return TrackListScreen(
     title: args.title,
+    sourceLabel: args.sourceLabel,
     basis: args.basis,
     items: args.items,
     idPrefix: args.idPrefix,
@@ -822,16 +824,16 @@ class _NotFoundScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Not found')),
+      appBar: AppBar(title: Text(context.l10n.shellNotFoundTitle)),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('That page does not exist.'),
+            Text(context.l10n.shellNotFoundBody),
             const SizedBox(height: WaxSpace.s12),
             FilledButton(
               onPressed: () => context.go(WaxRoute.home),
-              child: const Text('Go home'),
+              child: Text(context.l10n.shellNotFoundAction),
             ),
           ],
         ),

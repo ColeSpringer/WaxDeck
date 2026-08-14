@@ -135,6 +135,18 @@ void main() {
       expect(found("ratingLabel: (n) => 'stars',"), hasLength(1));
       expect(found("emptyMessage: 'nothing here',"), hasLength(1));
       expect(found("messenger.show('started'),"), hasLength(1));
+      // A field's copy arrives under a name ending in Text, not Label.
+      expect(found("labelText: 'Username',"), hasLength(1));
+      expect(found("helperText: 'At least 8 characters',"), hasLength(1));
+      // The names that end in Text and carry no words hold no literal,
+      // so they need no exception of their own.
+      expect(found('obscureText: true,'), isEmpty);
+    });
+
+    test('a debug label is not copy', () {
+      expect(found("FocusNode(debugLabel: 'wax-field')"), isEmpty);
+      // Only that name. A field labelled for a reader still counts.
+      expect(found("label: 'Search'"), hasLength(1));
     });
 
     test('a literal being matched against is not copy', () {
@@ -376,19 +388,18 @@ class _CopyRule extends _Rule {
   _CopyRule()
     : super(
         name: 'hardcoded-copy',
-        // Matched by what the name ends in rather than by a list of
-        // whole names: `starLabel`, `remainingLabel` and `activeLabel`
-        // carry sentences no less than `label` does, and a hand-kept
-        // list is a list somebody adds a name beside. The four spelled
-        // out in full are the ones whose suffix says nothing.
+        // Matched by suffix, not by whole names, which somebody would
+        // add one beside. `Text` is a suffix like the rest: it catches
+        // the field parameters a form's copy arrives through.
         pattern: RegExp(
           r'\b(?:Selectable)?Text\(\s*|'
           // The shell messenger takes its sentence positionally.
           r'\.show\(\s*|'
-          r'\b\w*(?:[Ll]abel|[Tt]itle|[Oo]verline|[Cc]aption|[Hh]elp'
+          // `debugLabel` names a diagnostic-tree node no reader sees.
+          r'\b(?!debugLabel\b)\w*(?:[Ll]abel|[Tt]itle|[Oo]verline|[Cc]aption|[Hh]elp'
           r'|[Hh]int|[Tt]ooltip|[Mm]essage|[Bb]lurb|[Dd]etail'
-          r'|[Tt]agline|[Ss]ubject)\s*:\s*|'
-          r'\b(?:text|errorText|confirmWord|semanticLabel)\s*:\s*',
+          r'|[Tt]agline|[Ss]ubject|[Tt]ext)\s*:\s*|'
+          r'\b(?:confirmWord|semanticLabel)\s*:\s*',
         ),
         fix:
             'move it to an ARB key and read it through context.l10n '

@@ -99,6 +99,96 @@ abstract class AppLocalizations {
     Locale('es'),
   ];
 
+  /// Second line of the row opening the defect log.
+  ///
+  /// In en, this message translates to:
+  /// **'Errors the app caught on its own, newest first, with a way to copy them into a bug report.'**
+  String get aboutDefectsSubtitle;
+
+  /// Heading over the way into the defect log.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get aboutDiagnosticsTitle;
+
+  /// Row opening the bundled licence texts.
+  ///
+  /// In en, this message translates to:
+  /// **'Open-source licenses'**
+  String get aboutLicenses;
+
+  /// Second line of the licences row. GPL-3.0-only is a licence identifier and stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'WaxDeck is GPL-3.0-only. This page also lists the bundled type and icon notices.'**
+  String get aboutLicensesSubtitle;
+
+  /// Heading over the licence notices.
+  ///
+  /// In en, this message translates to:
+  /// **'Licensing'**
+  String get aboutLicensingTitle;
+
+  /// Row in settings opening the About page. WaxDeck is the product name and stays.
+  ///
+  /// In en, this message translates to:
+  /// **'About WaxDeck'**
+  String get aboutRowTitle;
+
+  /// Second line of the About row before the server has answered, so only this build's version is known.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {app}'**
+  String aboutRowVersion(String app);
+
+  /// Second line of the About row: this build's version and the one it is talking to.
+  ///
+  /// In en, this message translates to:
+  /// **'App {app}, server {server}'**
+  String aboutRowVersions(String app, String server);
+
+  /// Stands in for the server's version when it did not answer. Lower case: it sits where a version number would.
+  ///
+  /// In en, this message translates to:
+  /// **'unreachable'**
+  String get aboutServerUnreachable;
+
+  /// One sentence saying what WaxDeck is, under the wordmark on the About page.
+  ///
+  /// In en, this message translates to:
+  /// **'A player, library manager, and metadata completer for music, podcasts, and audiobooks.'**
+  String get aboutTagline;
+
+  /// Title of the About page.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get aboutTitle;
+
+  /// Label of the contract version the server answers on. API is a technical term and stays in most languages.
+  ///
+  /// In en, this message translates to:
+  /// **'API'**
+  String get aboutVersionApi;
+
+  /// Label of this build's own version number.
+  ///
+  /// In en, this message translates to:
+  /// **'App'**
+  String get aboutVersionApp;
+
+  /// Label of the version of the server this build is talking to.
+  ///
+  /// In en, this message translates to:
+  /// **'Server'**
+  String get aboutVersionServer;
+
+  /// Heading over the version numbers a bug report is asked for.
+  ///
+  /// In en, this message translates to:
+  /// **'Versions'**
+  String get aboutVersionsTitle;
+
   /// Empty state of the audit log, saying what will fill it.
   ///
   /// In en, this message translates to:
@@ -2655,6 +2745,276 @@ abstract class AppLocalizations {
   /// **'{file} could not be read'**
   String artworkUnreadable(String file);
 
+  /// Returns from the sign-up screen to the sign-in screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to sign-in'**
+  String get authBackToSignIn;
+
+  /// Said under the password field on the sign-up screen when it is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a password'**
+  String get authChoosePassword;
+
+  /// Said under the username field on the sign-up screen when it is empty. Choosing, because the account does not exist yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a username'**
+  String get authChooseUsername;
+
+  /// The second password field on the first-run screen, which has to match the first.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm password'**
+  String get authConfirmPassword;
+
+  /// A single-sign-on button. {provider} is the identity provider's own name, configured on the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with {provider}'**
+  String authContinueWith(String provider);
+
+  /// The first-run screen's confirming button.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get authCreateAccount;
+
+  /// The field for the name other people see, which need not be the account name.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name (optional)'**
+  String get authDisplayName;
+
+  /// Said under the password field on the sign-in screen when it is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a password'**
+  String get authEnterPassword;
+
+  /// Said under the username field on the sign-in screen when it is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a username'**
+  String get authEnterUsername;
+
+  /// What the first-run screen is for: a fresh server has no accounts at all.
+  ///
+  /// In en, this message translates to:
+  /// **'Create the first administrator account'**
+  String get authFirstAdmin;
+
+  /// The link to the sign-up screen on a server that only takes invited accounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Have an invite?'**
+  String get authHaveInvite;
+
+  /// Help under the invite field.
+  ///
+  /// In en, this message translates to:
+  /// **'With a valid invite the account works right away'**
+  String get authInviteHelp;
+
+  /// The field for an invite code, which skips the wait for approval.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite token (optional)'**
+  String get authInviteToken;
+
+  /// The sign-in screen's confirming button.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in'**
+  String get authLogIn;
+
+  /// Between the password form and the single-sign-on buttons. Lower case: it is a divider, not a heading.
+  ///
+  /// In en, this message translates to:
+  /// **'or'**
+  String get authOr;
+
+  /// The password field on the sign-in and first-run screens.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get authPassword;
+
+  /// Said under the password field on the first-run screen when it is too short.
+  ///
+  /// In en, this message translates to:
+  /// **'Use at least 8 characters'**
+  String get authPasswordTooShort;
+
+  /// Said under the confirm-password field when the two do not match.
+  ///
+  /// In en, this message translates to:
+  /// **'Passwords do not match'**
+  String get authPasswordsDiffer;
+
+  /// The link to the sign-up screen, and that screen's own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Request an account'**
+  String get authRequestAccount;
+
+  /// Shown after a sign-up that needs approving.
+  ///
+  /// In en, this message translates to:
+  /// **'An administrator has to approve your account before you can sign in.'**
+  String get authRequestPending;
+
+  /// Shown after a sign-up that needs approving.
+  ///
+  /// In en, this message translates to:
+  /// **'Request received'**
+  String get authRequestReceived;
+
+  /// The sign-up screen's confirming button.
+  ///
+  /// In en, this message translates to:
+  /// **'Request account'**
+  String get authRequestSubmit;
+
+  /// Under the sign-in form when the server rejected the credentials just typed.
+  ///
+  /// In en, this message translates to:
+  /// **'That username and password do not go together.'**
+  String get authSignInRejected;
+
+  /// Under the sign-in form when a single-sign-on round trip came back refused, whether the provider is unconfigured or the code was stale.
+  ///
+  /// In en, this message translates to:
+  /// **'Single sign-on did not go through. Try again.'**
+  String get authSsoFailed;
+
+  /// Under the wordmark on the sign-in screen, saying what this is for.
+  ///
+  /// In en, this message translates to:
+  /// **'Music, podcasts, and audiobooks'**
+  String get authTagline;
+
+  /// Said on the sign-in screen when the server did not answer in time.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign-in timed out; try again'**
+  String get authTimedOut;
+
+  /// The account-name field on the sign-in, sign-up and first-run screens.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get authUsername;
+
+  /// Last row of the open bell, emptying the list.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get bellClear;
+
+  /// What a bell row says when this device finished keeping something offline.
+  ///
+  /// In en, this message translates to:
+  /// **'A download finished.'**
+  String get bellDownloadFinished;
+
+  /// Drawn in the open bell when this session has seen nothing. Empty is a legitimate state, not a broken bell.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing has happened yet.'**
+  String get bellEmpty;
+
+  /// What a bell row says when a subscribed show gained an episode on this server.
+  ///
+  /// In en, this message translates to:
+  /// **'A new episode finished downloading.'**
+  String get bellEpisodeDownloaded;
+
+  /// What a bell row says when a subscribed feed was switched off.
+  ///
+  /// In en, this message translates to:
+  /// **'A show kept failing to refresh and was disabled.'**
+  String get bellFeedDisabled;
+
+  /// What a bell row says when an upload was filed. Deliberately not identified: the same marker covers the path where nothing was matched.
+  ///
+  /// In en, this message translates to:
+  /// **'An upload was added to the library.'**
+  String get bellImportCompleted;
+
+  /// What a bell row says. Generic because the marker it comes from carries no detail; the surface it opens has it.
+  ///
+  /// In en, this message translates to:
+  /// **'The review queue changed.'**
+  String get bellReviewChanged;
+
+  /// One row of the bell: which surface moved, then what happened there.
+  ///
+  /// In en, this message translates to:
+  /// **'{surface}: {what}'**
+  String bellRow(String surface, String what);
+
+  /// Which surface a bell row is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get bellSurfaceDownloads;
+
+  /// Which surface a bell row is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Imports'**
+  String get bellSurfaceImports;
+
+  /// Which surface a bell row is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcasts'**
+  String get bellSurfacePodcasts;
+
+  /// Which surface a bell row is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Review queue'**
+  String get bellSurfaceReview;
+
+  /// Which surface a bell row is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Background tasks'**
+  String get bellSurfaceTasks;
+
+  /// Which surface a bell row is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads'**
+  String get bellSurfaceUploads;
+
+  /// What a bell row says. Generic because the marker carries no detail.
+  ///
+  /// In en, this message translates to:
+  /// **'A background task changed.'**
+  String get bellTaskChanged;
+
+  /// Accessible name of the bell in the top app bar with nothing unread.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get bellTitle;
+
+  /// Accessible name of the bell when rows have arrived since it was last opened.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Notifications, 1 unread} other{Notifications, {count} unread}}'**
+  String bellUnread(int count);
+
+  /// What a bell row says. Generic because the marker carries no detail.
+  ///
+  /// In en, this message translates to:
+  /// **'An upload changed.'**
+  String get bellUploadChanged;
+
   /// Snackbar after putting a book's position back at zero.
   ///
   /// In en, this message translates to:
@@ -3081,6 +3441,54 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get commonSave;
 
+  /// Empties the defect log.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get defectsClear;
+
+  /// What the Clear button is called for a screen reader.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the defect log'**
+  String get defectsClearSpoken;
+
+  /// Snackbar confirming the whole log is on the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Defect log copied'**
+  String get defectsCopied;
+
+  /// Puts the whole defect log on the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get defectsCopy;
+
+  /// What the Copy button is called for a screen reader, where the surrounding heading is not in earshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the defect log'**
+  String get defectsCopySpoken;
+
+  /// Empty state of the defect log.
+  ///
+  /// In en, this message translates to:
+  /// **'Errors the app catches on its own turn up here, so a bug report can carry them. An empty list is the good outcome.'**
+  String get defectsEmptyMessage;
+
+  /// Empty state of the defect log.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing has gone wrong'**
+  String get defectsEmptyTitle;
+
+  /// The list of errors the app caught: its own title, and the row on the About page that opens it.
+  ///
+  /// In en, this message translates to:
+  /// **'Defect log'**
+  String get defectsTitle;
+
   /// Says a cast address was set by the server's operator rather than found.
   ///
   /// In en, this message translates to:
@@ -3327,6 +3735,126 @@ abstract class AppLocalizations {
   /// **'Volume on {endpoint}'**
   String devicesVolumeOn(String endpoint);
 
+  /// The high end of the instant-mix slider: range further from the seed.
+  ///
+  /// In en, this message translates to:
+  /// **'Adventurous'**
+  String get discoveryAdventurous;
+
+  /// Accessible name of the instant-mix slider, whose two ends are the Familiar and Adventurous labels beside it.
+  ///
+  /// In en, this message translates to:
+  /// **'Adventurousness'**
+  String get discoveryAdventurousness;
+
+  /// Read aloud for the chip naming which engine answered a mix. {engine} is a wire word the contract defines, drawn untranslated beside this.
+  ///
+  /// In en, this message translates to:
+  /// **'Answered by the {engine} engine'**
+  String discoveryBasisSpoken(String engine);
+
+  /// Empty state of a mix or similar-tracks list.
+  ///
+  /// In en, this message translates to:
+  /// **'This answer came back empty. Try another track.'**
+  String get discoveryEmptyMessage;
+
+  /// Empty state of a mix or similar-tracks list that came back with no tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found'**
+  String get discoveryEmptyTitle;
+
+  /// The low end of the instant-mix slider: stay close to the seed.
+  ///
+  /// In en, this message translates to:
+  /// **'Familiar'**
+  String get discoveryFamiliar;
+
+  /// Under the instant-mix sheet's heading, naming the track the mix is seeded from.
+  ///
+  /// In en, this message translates to:
+  /// **'From \"{title}\"'**
+  String discoveryInstantMixFrom(String title);
+
+  /// The sheet that builds a mix around one track, the list it produces, and what a mix card on home calls itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Instant mix'**
+  String get discoveryInstantMixTitle;
+
+  /// Confirming button of the instant-mix sheet. A verb.
+  ///
+  /// In en, this message translates to:
+  /// **'Mix'**
+  String get discoveryMixAction;
+
+  /// Snackbar when the server built a mix with nothing in it.
+  ///
+  /// In en, this message translates to:
+  /// **'No mix available for this track'**
+  String get discoveryMixEmpty;
+
+  /// Title of the list of tracks the server finds similar to one seed. {title} is the seed track's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Similar to {title}'**
+  String discoverySimilarTitle(String title);
+
+  /// Accessible name of the control that stops one transfer. {title} is what is being downloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel {title}'**
+  String downloadsCancel(String title);
+
+  /// Snackbar when the server behind a transfer does not support resuming it.
+  ///
+  /// In en, this message translates to:
+  /// **'This transfer cannot be paused; cancel it instead'**
+  String get downloadsCannotPause;
+
+  /// Snackbar while the re-download sweep runs.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking downloads against the server'**
+  String get downloadsChecking;
+
+  /// How much one medium takes up: what it is, then how much. {size} is a formatted size.
+  ///
+  /// In en, this message translates to:
+  /// **'{medium} {size}'**
+  String downloadsChip(String medium, String size);
+
+  /// Removes every download from this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all'**
+  String get downloadsClearAll;
+
+  /// Body of the clear-downloads dialog. {size} is a formatted size.
+  ///
+  /// In en, this message translates to:
+  /// **'This frees {size}. Nothing leaves the library: everything here plays again with the server reachable.'**
+  String downloadsClearBody(String size);
+
+  /// Confirming button of the clear-downloads dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove all'**
+  String get downloadsClearConfirm;
+
+  /// Dismissing button of the clear-downloads dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep them'**
+  String get downloadsClearKeep;
+
+  /// Title of the dialog confirming that every download goes.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove every download?'**
+  String get downloadsClearTitle;
+
   /// Accessible name of the download control once the file is on this device.
   ///
   /// In en, this message translates to:
@@ -3339,6 +3867,114 @@ abstract class AppLocalizations {
   /// **'Downloading'**
   String get downloadsDownloading;
 
+  /// Empty state of the downloads screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Download a book, an album, or an episode and it plays here with the server unreachable. Its cover comes with it.'**
+  String get downloadsEmptyMessage;
+
+  /// Empty state of the downloads screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing downloaded'**
+  String get downloadsEmptyTitle;
+
+  /// Overline over one medium's downloads, saying how many.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 item} other{{count} items}}'**
+  String downloadsGroupItems(int count);
+
+  /// Overline over the running downloads, saying how many.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 in flight} other{{count} in flight}}'**
+  String downloadsInFlight(int count);
+
+  /// Title of the error state when the on-device download store would not answer.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read your downloads'**
+  String get downloadsLoadError;
+
+  /// What a group of downloaded audiobooks is called.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobooks'**
+  String get downloadsMediumBooks;
+
+  /// What a group of downloaded music is called.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get downloadsMediumMusic;
+
+  /// What a group of downloaded episodes is called.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcasts'**
+  String get downloadsMediumPodcasts;
+
+  /// Snackbar when the remove-finished sweep found nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No finished episodes to remove'**
+  String get downloadsNoneFinished;
+
+  /// Tooltip of the menu holding the sweeps that act on every download.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get downloadsOverflow;
+
+  /// Accessible name of the control that parks one transfer.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause {title}'**
+  String downloadsPause(String title);
+
+  /// Menu row checking every download against the server and fetching what changed.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-download stale'**
+  String get downloadsRefreshStale;
+
+  /// Accessible name of the control that deletes one download from this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {title}'**
+  String downloadsRemove(String title);
+
+  /// Menu row deleting every downloaded episode that was played to the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove finished episodes'**
+  String get downloadsRemoveFinished;
+
+  /// Snackbar after the remove-finished sweep.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Removed 1 episode} other{Removed {count} episodes}}'**
+  String downloadsRemovedEpisodes(int count);
+
+  /// Accessible name of the control that restarts one paused transfer.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume {title}'**
+  String downloadsResume(String title);
+
+  /// Title of the screen managing what this device keeps offline.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get downloadsTitle;
+
+  /// Heading over the downloads running right now.
+  ///
+  /// In en, this message translates to:
+  /// **'Transferring'**
+  String get downloadsTransferring;
+
   /// A wait in whole days, as a picker option: a day reads better than twenty-four hours.
   ///
   /// In en, this message translates to:
@@ -3350,6 +3986,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{hours, plural, =1{1 hour} other{{hours} hours}}'**
   String durationHours(int hours);
+
+  /// A listening total an hour or more long, in the tightest form a stat tile can hold. Unit letters, not words - keep whatever the language abbreviates hours and minutes to.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours}h {minutes}m'**
+  String durationHoursMinutesShort(int hours, int minutes);
+
+  /// A listening total under an hour, in the tightest form a stat tile can hold.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes}m'**
+  String durationMinutesShort(int minutes);
+
+  /// A listening total under a minute, in the tightest form a stat tile can hold.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds}s'**
+  String durationSecondsShort(int seconds);
 
   /// Error sentence for the spec code `catalog-busy`: a file-moving request cannot start yet, and this one clears on its own.
   ///
@@ -4040,6 +4694,264 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'File tags out of sync with the catalog'**
   String get healthWriteUnsynced;
+
+  /// Opens the sheet that adds audio to the library. Both the top-right button on home and the action on its first-run empty state.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to library'**
+  String get homeAddAction;
+
+  /// Overline above the Continue listening shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Where you left off'**
+  String get homeContinueOverline;
+
+  /// Shelf of items with a saved position.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue listening'**
+  String get homeContinueTitle;
+
+  /// Overline above the On this device shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Plays with no network'**
+  String get homeDownloadedOverline;
+
+  /// Shelf of downloaded items, the only one home draws with no server to ask.
+  ///
+  /// In en, this message translates to:
+  /// **'On this device'**
+  String get homeDownloadedTitle;
+
+  /// Empty state of home, naming the three ways a library gets filled.
+  ///
+  /// In en, this message translates to:
+  /// **'Point a library at your music, follow a show, or drop files in. Everything you add turns up on these shelves.'**
+  String get homeEmptyMessage;
+
+  /// Empty state of home on a server whose library holds nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing here yet'**
+  String get homeEmptyTitle;
+
+  /// Overline above the New episodes shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'From the shows you follow'**
+  String get homeEpisodesOverline;
+
+  /// Shelf of the newest episodes across the shows the listener follows.
+  ///
+  /// In en, this message translates to:
+  /// **'New episodes'**
+  String get homeEpisodesTitle;
+
+  /// Title of the error state when home's probe of the library failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach the library'**
+  String get homeLibraryLoadError;
+
+  /// Snackbar when a mix card was tapped and the server answered with no tracks. {title} is the card's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'No mix available for {title}'**
+  String homeMixEmpty(String title);
+
+  /// Card for a mix seeded by one artist. {artist} is that artist's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'More like {artist}'**
+  String homeMixMoreLike(String artist);
+
+  /// Overline above the Made for you shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Mixes from what you play'**
+  String get homeMixesOverline;
+
+  /// Shelf of mixes built from what this listener plays.
+  ///
+  /// In en, this message translates to:
+  /// **'Made for you'**
+  String get homeMixesTitle;
+
+  /// Overline above the Most played shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'What you come back to'**
+  String get homeMostPlayedOverline;
+
+  /// Shelf of the items with the highest play counts.
+  ///
+  /// In en, this message translates to:
+  /// **'Most played'**
+  String get homeMostPlayedTitle;
+
+  /// Overline above the Never played shelf. The image is a record still in its shrink wrap.
+  ///
+  /// In en, this message translates to:
+  /// **'In your library, still sealed'**
+  String get homeNeverPlayedOverline;
+
+  /// Shelf of items in the library that have never been played.
+  ///
+  /// In en, this message translates to:
+  /// **'Never played'**
+  String get homeNeverPlayedTitle;
+
+  /// Banner across home with no server to ask.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline. The shelves come back when the server does; what this device holds still plays.'**
+  String get homeOfflineMessage;
+
+  /// Menu row on an entity screen that pins it to the home shelf. Home is the landing screen, named here the way the navigation names it.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin to Home'**
+  String get homePinAction;
+
+  /// Said when a pin failed for a reason the error table has no sentence for.
+  ///
+  /// In en, this message translates to:
+  /// **'That pin was not saved.'**
+  String get homePinNotSaved;
+
+  /// Row in the pin sheet, which can offer more than one target at once, so each says what it is about. {what} is the kind of thing: album, artist or book.
+  ///
+  /// In en, this message translates to:
+  /// **'{what, select, album{Pin album to Home} artist{Pin artist to Home} book{Pin book to Home} other{Pin to Home}}'**
+  String homePinSheetPin(String what);
+
+  /// Row in the pin sheet for a target that is already pinned. {what} is the kind of thing: album, artist or book.
+  ///
+  /// In en, this message translates to:
+  /// **'{what, select, album{Unpin album from Home} artist{Unpin artist from Home} book{Unpin book from Home} other{Unpin from Home}}'**
+  String homePinSheetUnpin(String what);
+
+  /// Said when a pin was refused because the shelf is at its cap.
+  ///
+  /// In en, this message translates to:
+  /// **'Home holds {limit} pins. Unpin something to make room.'**
+  String homePinShelfFull(int limit);
+
+  /// Line under a pinned card: what the thing is, then whose it is. Only drawn when the artist is known.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind} · {artist}'**
+  String homePinnedCaption(String kind, String artist);
+
+  /// What a pinned card is, on the line under its title.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get homePinnedKindAlbum;
+
+  /// What a pinned card is, on the line under its title.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get homePinnedKindArtist;
+
+  /// What a pinned card is, on the line under its title.
+  ///
+  /// In en, this message translates to:
+  /// **'Book'**
+  String get homePinnedKindBook;
+
+  /// What a pinned card is, on the line under its title.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist'**
+  String get homePinnedKindPlaylist;
+
+  /// What a pinned card is, on the line under its title.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcast'**
+  String get homePinnedKindPodcast;
+
+  /// What a pinned card is, on the line under its title. A release group is one album across all its editions.
+  ///
+  /// In en, this message translates to:
+  /// **'Release group'**
+  String get homePinnedKindReleaseGroup;
+
+  /// Overline above the Pinned shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'What you keep'**
+  String get homePinnedOverline;
+
+  /// Shelf of what this listener pinned to home.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned'**
+  String get homePinnedTitle;
+
+  /// Overline above the Recently added shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'New to the library'**
+  String get homeRecentOverline;
+
+  /// Shelf of what the library gained most recently.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently added'**
+  String get homeRecentTitle;
+
+  /// Overline above the Rediscover shelf. Marked means starred or otherwise singled out.
+  ///
+  /// In en, this message translates to:
+  /// **'Marked, and not heard in months'**
+  String get homeRediscoverOverline;
+
+  /// Shelf of items the listener marked and has not played in months.
+  ///
+  /// In en, this message translates to:
+  /// **'Rediscover'**
+  String get homeRediscoverTitle;
+
+  /// How much of a half-finished item is left, under its card on home. {span} arrives already worded as a duration.
+  ///
+  /// In en, this message translates to:
+  /// **'{span} left'**
+  String homeShelfRemaining(String span);
+
+  /// Action beside a shelf's heading when that one shelf failed to load.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get homeShelfRetry;
+
+  /// Action beside a shelf's heading that opens the surface listing all of it.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all'**
+  String get homeShelfShowAll;
+
+  /// Title of the landing screen, and what the pin affordances call it.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get homeTitle;
+
+  /// Menu row that takes an entity off the home shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin from Home'**
+  String get homeUnpinAction;
+
+  /// Snackbar confirming an unpin made from the shelf, where the card vanishing is the only other sign. {name} is the thing's own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpinned {name}'**
+  String homeUnpinned(String name);
 
   /// Library index order: alphabetical by name.
   ///
@@ -5013,6 +5925,144 @@ abstract class AppLocalizations {
   /// **'Account request'**
   String get notifSignupRequestedTitle;
 
+  /// Runs the move. Both the confirming button and the button that opens the confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get organizeApply;
+
+  /// Column of the dry-run table: where a file is today.
+  ///
+  /// In en, this message translates to:
+  /// **'Now at'**
+  String get organizeColumnFrom;
+
+  /// Column of the dry-run table: where the profile would put it.
+  ///
+  /// In en, this message translates to:
+  /// **'Moves to'**
+  String get organizeColumnTo;
+
+  /// Body of the typed confirmation before files are moved.
+  ///
+  /// In en, this message translates to:
+  /// **'Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.'**
+  String get organizeConfirmMessage;
+
+  /// Title of the typed confirmation before files are moved.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply organize profile?'**
+  String get organizeConfirmTitle;
+
+  /// Empty state of the organize screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Profiles are part of the server configuration. Add one there and it appears here.'**
+  String get organizeEmptyMessage;
+
+  /// Empty state where the server configuration defines no profiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No organize profiles'**
+  String get organizeEmptyTitle;
+
+  /// How many files a finished run could not move.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get organizeFailed;
+
+  /// Drawn where the plan or the report goes, before either exists.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview shows where the selected profile would move files before anything happens.'**
+  String get organizeHint;
+
+  /// Title of the error state when the profile list would not load.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load organize profiles'**
+  String get organizeLoadError;
+
+  /// How many files a finished run moved.
+  ///
+  /// In en, this message translates to:
+  /// **'Moved'**
+  String get organizeMoved;
+
+  /// Empty state of a dry run that would move nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'This profile would move nothing.'**
+  String get organizeNothingMessage;
+
+  /// Empty state of a dry run that would move nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything is already in place'**
+  String get organizeNothingTitle;
+
+  /// Heading over the dry run, saying how many files it would move.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 planned move} other{{count} planned moves}}'**
+  String organizePlannedMoves(int count);
+
+  /// Shows where the chosen profile would move files, without moving any.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get organizePreview;
+
+  /// Accessible name of the profile picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Organize profile'**
+  String get organizeProfileLabel;
+
+  /// Overline over the profile picker.
+  ///
+  /// In en, this message translates to:
+  /// **'The naming scheme to move into'**
+  String get organizeProfileOverline;
+
+  /// Heading over the profile picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get organizeProfileTitle;
+
+  /// Heading over what a finished run actually did.
+  ///
+  /// In en, this message translates to:
+  /// **'Result'**
+  String get organizeResultTitle;
+
+  /// Caption on the dry-run table when the server capped how many moves it listed.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing the first {shown} of {total}'**
+  String organizeShowingFirst(int shown, int total);
+
+  /// How many files a finished run left where they were.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped'**
+  String get organizeSkipped;
+
+  /// Overline over the dry run for a profile that edits the files as well as moving them.
+  ///
+  /// In en, this message translates to:
+  /// **'Tags are rewritten too'**
+  String get organizeTagWrite;
+
+  /// Title of the screen that rewrites the library's on-disk layout.
+  ///
+  /// In en, this message translates to:
+  /// **'Organize files'**
+  String get organizeTitle;
+
   /// Button that opens the metadata editor to write lyrics.
   ///
   /// In en, this message translates to:
@@ -5144,6 +6194,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete files...'**
   String get playerDeleteFiles;
+
+  /// Action on the player that keeps the playing item on this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get playerDownload;
 
   /// Menu item that opens the playing station for editing.
   ///
@@ -7010,18 +8066,6 @@ abstract class AppLocalizations {
   /// **'Download failed'**
   String get podcastDownloadFailed;
 
-  /// How long an episode runs, abbreviated hard for a row's trailing column.
-  ///
-  /// In en, this message translates to:
-  /// **'{hours}h {minutes}m'**
-  String podcastDurationHoursMinutes(int hours, int minutes);
-
-  /// The same, for an episode under an hour.
-  ///
-  /// In en, this message translates to:
-  /// **'{minutes}m'**
-  String podcastDurationMinutes(int minutes);
-
   /// How many episodes a show has, on its card and in the line under its title.
   ///
   /// In en, this message translates to:
@@ -7784,6 +8828,54 @@ abstract class AppLocalizations {
   /// **'Podcasts'**
   String get podcastsTitle;
 
+  /// Context-menu row on the editing prototype.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply proposal'**
+  String get prototypeApply;
+
+  /// Column heading on the editing prototype.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get prototypeColumnArtist;
+
+  /// Column heading on the editing prototype.
+  ///
+  /// In en, this message translates to:
+  /// **'Current title'**
+  String get prototypeColumnCurrent;
+
+  /// Column heading on the editing prototype, over a similarity percentage.
+  ///
+  /// In en, this message translates to:
+  /// **'Match'**
+  String get prototypeColumnMatch;
+
+  /// Column heading on the editing prototype.
+  ///
+  /// In en, this message translates to:
+  /// **'Proposed title'**
+  String get prototypeColumnProposed;
+
+  /// Context-menu row on the editing prototype.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy proposed title'**
+  String get prototypeCopyProposed;
+
+  /// Tooltip of the per-row menu on the editing prototype.
+  ///
+  /// In en, this message translates to:
+  /// **'Row actions'**
+  String get prototypeRowActions;
+
+  /// Title of the evidence screen that exercises text selection, context menus and live fields. Reachable at a fixed location; not a product surface.
+  ///
+  /// In en, this message translates to:
+  /// **'Editing prototype'**
+  String get prototypeTitle;
+
   /// Message after several tracks were dropped onto the queue at once. Never drawn for one, which names the track instead.
   ///
   /// In en, this message translates to:
@@ -7891,6 +8983,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Playing from your library'**
   String get queuePlayingFromLibrary;
+
+  /// Where the queue came from, for a mix with no seed of its own to name.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing from a mix'**
+  String get queuePlayingFromMix;
 
   /// Heading over the tracks already played in this queue, with how many. Upper case as a typographic style; write it the way small headings are written in this language.
   ///
@@ -8395,6 +9493,689 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{months, plural, =1{1mo ago} other{{months}mo ago}}'**
   String relMonthsShort(int months);
+
+  /// Takes the selected candidate as the match. On the entry's decision bar and on the bulk bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve'**
+  String get reviewActionApprove;
+
+  /// Files the entry with the tags it already has, matching nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep as is'**
+  String get reviewActionAsIs;
+
+  /// Throws an uploaded entry away. Offered only for uploads, where there is a staged file to remove.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get reviewActionDiscard;
+
+  /// Undoes a decision that was already applied.
+  ///
+  /// In en, this message translates to:
+  /// **'Revert'**
+  String get reviewActionRevert;
+
+  /// Leaves the entry undecided and moves on.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get reviewActionSkip;
+
+  /// Files the entry as a release no catalogue lists: a bootleg, a rip, a demo.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark unofficial'**
+  String get reviewActionUnofficial;
+
+  /// The best candidate on a queue row: how close it is, then what it is. Spanish puts a space before the percent sign.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% {title}, {artist}'**
+  String reviewCandidateLine(String percent, String title, String artist);
+
+  /// The best candidate on a queue row, where the release has a year.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% {title}, {artist} ({year})'**
+  String reviewCandidateLineYear(
+    String percent,
+    String title,
+    String artist,
+    String year,
+  );
+
+  /// A candidate tile read as a whole for a screen reader.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} by {artist}'**
+  String reviewCandidateSpoken(String title, String artist);
+
+  /// A candidate tile's own line: what the release is called, then whose it is.
+  ///
+  /// In en, this message translates to:
+  /// **'{title}, {artist}'**
+  String reviewCandidateTitleLine(String title, String artist);
+
+  /// Heading over the ranked releases the sources offered for this entry.
+  ///
+  /// In en, this message translates to:
+  /// **'Candidates'**
+  String get reviewCandidatesTitle;
+
+  /// Snackbar after a bulk decision where every entry took it.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Decided 1 entry} other{Decided {count} entries}}'**
+  String reviewDecidedCount(int count);
+
+  /// Snackbar after a bulk decision some entries refused. {count} is how many took it and {failed} how many did not.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Decided 1 entry, {failed} failed} other{Decided {count} entries, {failed} failed}}'**
+  String reviewDecidedSomeFailed(int count, int failed);
+
+  /// On the decision bar of an entry that has already been decided. {status} is already worded by the caller.
+  ///
+  /// In en, this message translates to:
+  /// **'Decided: {status}'**
+  String reviewDecidedStatus(String status);
+
+  /// Column heading over what the files say now.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get reviewDiffCurrent;
+
+  /// A local file the chosen candidate has no track for.
+  ///
+  /// In en, this message translates to:
+  /// **'Extra file, no counterpart'**
+  String get reviewDiffExtra;
+
+  /// A candidate track with no local file to match it.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing locally'**
+  String get reviewDiffMissing;
+
+  /// Column heading over what the chosen candidate would make them say.
+  ///
+  /// In en, this message translates to:
+  /// **'Proposed'**
+  String get reviewDiffProposed;
+
+  /// A local file no candidate track was paired with.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmatched'**
+  String get reviewDiffUnmatched;
+
+  /// Menu row opening the metadata editor on one track.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit metadata'**
+  String get reviewEditMetadata;
+
+  /// Empty state of the review queue, saying what fills it.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads and rematches land here when the match needs a decision.'**
+  String get reviewEmptyMessage;
+
+  /// Empty state of the review queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing waiting for review'**
+  String get reviewEmptyTitle;
+
+  /// A queue row's name where the files name an artist.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} by {artist}'**
+  String reviewEntryLine(String title, String artist);
+
+  /// Title of the error state when one review entry would not load.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the entry'**
+  String get reviewEntryLoadError;
+
+  /// Title of one review entry drawn as a page of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Review entry'**
+  String get reviewEntryTitle;
+
+  /// Re-identify field: the album to search for.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get reviewFieldAlbum;
+
+  /// Re-identify field: the artist to search for.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get reviewFieldArtist;
+
+  /// Re-identify field: the track title to search for. Only drawn where the entry is a single file, since the server ignores it otherwise.
+  ///
+  /// In en, this message translates to:
+  /// **'Track title'**
+  String get reviewFieldTitle;
+
+  /// Filter chip: entries the server matched confidently and applied without asking.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-applied'**
+  String get reviewFilterAutoApplied;
+
+  /// A filter chip with how many entries it holds. {label} is the chip's own word.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} ({count})'**
+  String reviewFilterCount(String label, int count);
+
+  /// Filter chip: every entry that is no longer pending.
+  ///
+  /// In en, this message translates to:
+  /// **'Decided'**
+  String get reviewFilterDecided;
+
+  /// Filter chip: entries nobody has decided yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get reviewFilterPending;
+
+  /// Under an entry's title: how many files it holds and where it came from. {origin} is already worded by the caller.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 track, {origin}} other{{count} tracks, {origin}}}'**
+  String reviewHeaderFacts(int count, String origin);
+
+  /// The same line where the entry was uploaded by a named account. {origin} is already worded by the caller; {who} is a username.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 track, {origin} by {who}} other{{count} tracks, {origin} by {who}}}'**
+  String reviewHeaderFactsBy(int count, String origin, String who);
+
+  /// Beside a spinner on a queue row whose candidate lookup is still running.
+  ///
+  /// In en, this message translates to:
+  /// **'Identifying'**
+  String get reviewIdentifying;
+
+  /// Beside a spinner on the entry itself, where there is room to say what is happening.
+  ///
+  /// In en, this message translates to:
+  /// **'Identifying: candidate lookup is still running'**
+  String get reviewIdentifyingLong;
+
+  /// Title of the error state when the queue would not load.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the review queue'**
+  String get reviewLoadError;
+
+  /// Snackbar when the next page of the queue failed. The rows already loaded stay, so nothing else would report it.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load more; scroll to retry'**
+  String get reviewLoadMoreFailed;
+
+  /// Matching mode: the server decides for itself where it is sure, and only asks otherwise.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-apply confident matches'**
+  String get reviewMatchingAuto;
+
+  /// Tooltip of the menu that sets how hard a library tries to match what it imports.
+  ///
+  /// In en, this message translates to:
+  /// **'Matching mode'**
+  String get reviewMatchingMenu;
+
+  /// Matching mode: files are filed with the tags they arrive with.
+  ///
+  /// In en, this message translates to:
+  /// **'Never match this library'**
+  String get reviewMatchingOff;
+
+  /// Matching mode: every import waits on a person.
+  ///
+  /// In en, this message translates to:
+  /// **'Review everything'**
+  String get reviewMatchingReview;
+
+  /// One row of the matching-mode menu: which library, then which mode.
+  ///
+  /// In en, this message translates to:
+  /// **'{library}: {mode}'**
+  String reviewMatchingRow(String library, String mode);
+
+  /// Empty state where the sources matched nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in the sources matched what these files claim. Keep them as they are, or skip and try again later.'**
+  String get reviewNoCandidatesMessage;
+
+  /// Empty state where the sources were searched and matched nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No candidates found'**
+  String get reviewNoCandidatesTitle;
+
+  /// Badge on a queue row: this entry came in through a download the server ran.
+  ///
+  /// In en, this message translates to:
+  /// **'Acquired'**
+  String get reviewOriginAcquisition;
+
+  /// Badge on a queue row: this entry came in through the upload screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload'**
+  String get reviewOriginUpload;
+
+  /// Closes the entry pane beside the queue, leaving the queue on screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Close the entry'**
+  String get reviewPaneClose;
+
+  /// A queue row's second line with its best candidate. {best} is already worded.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 track, {best}} other{{count} tracks, {best}}}'**
+  String reviewRowBest(int count, String best);
+
+  /// A queue row's second line where nothing matched.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 track, no candidates} other{{count} tracks, no candidates}}'**
+  String reviewRowNoCandidates(int count);
+
+  /// Re-runs identification with what is in the fields. Empty fields clear the stored override and run the plain derivation.
+  ///
+  /// In en, this message translates to:
+  /// **'Search again'**
+  String get reviewSearchAgain;
+
+  /// Above the re-identify fields when they hold what was last searched for.
+  ///
+  /// In en, this message translates to:
+  /// **'Looked up instead of what the files claim. Nothing here is written to the files.'**
+  String get reviewSearchStored;
+
+  /// Above the re-identify fields when they opened on a guess parsed from the source title.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested from the source title. Looked up instead of what the files claim; nothing here is written to the files.'**
+  String get reviewSearchSuggested;
+
+  /// Opens the fields that re-run identification against typed names instead of the files' own tags.
+  ///
+  /// In en, this message translates to:
+  /// **'Search for something else'**
+  String get reviewSearchToggle;
+
+  /// Turns on multi-select so several entries can be decided at once.
+  ///
+  /// In en, this message translates to:
+  /// **'Select entries'**
+  String get reviewSelectEnter;
+
+  /// Turns multi-select back off.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave selection'**
+  String get reviewSelectLeave;
+
+  /// How many entries the bulk bar is about to act on.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 selected} other{{count} selected}}'**
+  String reviewSelectedCount(int count);
+
+  /// Empty state for a skipped identification that has already been decided.
+  ///
+  /// In en, this message translates to:
+  /// **'This submission asked to be taken as delivered, so nothing was searched.'**
+  String get reviewSkippedDecided;
+
+  /// Empty state for a skipped identification that is still pending, so it needs telling what to do.
+  ///
+  /// In en, this message translates to:
+  /// **'This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own - keep the files as they are, or skip.'**
+  String get reviewSkippedPending;
+
+  /// Empty state where nothing was searched for because the submission asked to be taken as delivered.
+  ///
+  /// In en, this message translates to:
+  /// **'Identification was skipped'**
+  String get reviewSkippedTitle;
+
+  /// Review lifecycle state: a person approved a match and it was written.
+  ///
+  /// In en, this message translates to:
+  /// **'Applied'**
+  String get reviewStatusApplied;
+
+  /// Review lifecycle state: the unit's own metadata was accepted unchanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Kept as it was'**
+  String get reviewStatusAsIs;
+
+  /// Review lifecycle state: the engine was confident enough to decide on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Applied automatically'**
+  String get reviewStatusAutoApplied;
+
+  /// Review lifecycle state: the staged files were thrown away rather than filed.
+  ///
+  /// In en, this message translates to:
+  /// **'Discarded'**
+  String get reviewStatusDiscarded;
+
+  /// Review lifecycle state: waiting for somebody to decide.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get reviewStatusPending;
+
+  /// Review lifecycle state: an applied match was undone and the earlier metadata restored.
+  ///
+  /// In en, this message translates to:
+  /// **'Reverted'**
+  String get reviewStatusReverted;
+
+  /// Review lifecycle state: dismissed without a decision.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped'**
+  String get reviewStatusSkipped;
+
+  /// Review lifecycle state: kept as it was, and marked as having nothing official to match against.
+  ///
+  /// In en, this message translates to:
+  /// **'No canonical release'**
+  String get reviewStatusUnofficial;
+
+  /// Title of the screen listing imports waiting on a decision.
+  ///
+  /// In en, this message translates to:
+  /// **'Review queue'**
+  String get reviewTitle;
+
+  /// Tooltip of the menu holding what can be done with one track in the comparison.
+  ///
+  /// In en, this message translates to:
+  /// **'Track actions'**
+  String get reviewTrackMenu;
+
+  /// One track in the comparison, where its number is known.
+  ///
+  /// In en, this message translates to:
+  /// **'{number}. {title}'**
+  String reviewTrackNumbered(String number, String title);
+
+  /// One track in the comparison, where it names its own artist. {track} is already worded, with its number if it has one.
+  ///
+  /// In en, this message translates to:
+  /// **'{track} ({artist})'**
+  String reviewTrackWithArtist(String track, String artist);
+
+  /// Heading over the file-by-file comparison between the entry and the chosen candidate.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracks'**
+  String get reviewTracksTitle;
+
+  /// Stands in for an entry's name when the files carry none.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled'**
+  String get reviewUntitled;
+
+  /// App-bar button that opens the search screen. A verb.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get searchAction;
+
+  /// Button on a directory result that adds that station to this server.
+  ///
+  /// In en, this message translates to:
+  /// **'Add station'**
+  String get searchAddStation;
+
+  /// Banner under the stations this server already has, when the public directory could not be reached.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach the directory, so only your own stations are listed. Adding a station by its stream URL still works.'**
+  String get searchDirectoryDegraded;
+
+  /// The way out offered beside the station-directory error: a stream URL needs no directory.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding a station by its stream URL still works.'**
+  String get searchDirectoryErrorDetail;
+
+  /// Title of the error state when the station directory would not answer and there are no local stations to fall back on.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach the directory'**
+  String get searchDirectoryErrorTitle;
+
+  /// Overline marking the results that come from a public directory rather than from this server.
+  ///
+  /// In en, this message translates to:
+  /// **'Directory'**
+  String get searchDirectoryOverline;
+
+  /// Empty state under the Radio chip, saying what typing will do.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a station name to look it up in the public directory, then add it to this server.'**
+  String get searchDirectoryPromptMessage;
+
+  /// Empty state under the Radio chip before enough has been typed to look anything up.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the station directory'**
+  String get searchDirectoryPromptTitle;
+
+  /// Empty state of the search screen with nothing typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Try searching for an artist, show, or book.'**
+  String get searchEmptyMessage;
+
+  /// Empty state of the search screen with nothing typed and no recent searches.
+  ///
+  /// In en, this message translates to:
+  /// **'Search your library'**
+  String get searchEmptyTitle;
+
+  /// Title of the error state when the library search itself failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not search'**
+  String get searchFailedTitle;
+
+  /// Placeholder in the search field, naming what can be found. Drawn on the search screen and in the sidebar header alike.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists, albums, shows, books'**
+  String get searchFieldHint;
+
+  /// Accessible name of the control that drops one query from the recent list. {query} is that query.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget {query}'**
+  String searchForget(String query);
+
+  /// Heading over the albums a search matched.
+  ///
+  /// In en, this message translates to:
+  /// **'Albums'**
+  String get searchKindAlbums;
+
+  /// Heading over the artists a search matched.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get searchKindArtists;
+
+  /// Heading over the audiobooks a search matched.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobooks'**
+  String get searchKindBooks;
+
+  /// Heading over the podcast episodes a search matched.
+  ///
+  /// In en, this message translates to:
+  /// **'Episodes'**
+  String get searchKindEpisodes;
+
+  /// Heading over the tracks a search matched.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracks'**
+  String get searchKindTracks;
+
+  /// Overline marking the results that are already on this server.
+  ///
+  /// In en, this message translates to:
+  /// **'Library'**
+  String get searchLibraryOverline;
+
+  /// Empty state when the station directory matched nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'The directory lists nothing under that name.'**
+  String get searchNoStationsMessage;
+
+  /// Empty state when the station directory matched nothing. {query} is what was typed.
+  ///
+  /// In en, this message translates to:
+  /// **'No stations for \"{query}\"'**
+  String searchNoStationsTitle(String query);
+
+  /// Empty state when a library search matched nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the spelling or try fewer words.'**
+  String get searchNothingMessage;
+
+  /// Empty state when a library search matched nothing at all. {query} is what was typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing for \"{query}\"'**
+  String searchNothingTitle(String query);
+
+  /// Banner beside the library's own episodes when the public podcast directory could not be reached.
+  ///
+  /// In en, this message translates to:
+  /// **'The podcast directory did not answer, so only your own episodes are listed. Subscribing by feed URL still works.'**
+  String get searchPodcastDirectoryDegraded;
+
+  /// Overline above the list of queries this listener ran before.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get searchRecentOverline;
+
+  /// Heading over the queries this listener ran before.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent searches'**
+  String get searchRecentTitle;
+
+  /// Filter chip that narrows results to nothing: every kind is shown.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get searchScopeAll;
+
+  /// Filter chip narrowing search results to audiobooks.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobooks'**
+  String get searchScopeBooks;
+
+  /// Filter chip narrowing search results to artists, albums and tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get searchScopeMusic;
+
+  /// Filter chip narrowing search results to episodes, plus shows from the public directory.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcasts'**
+  String get searchScopePodcasts;
+
+  /// Filter chip that searches the public station directory instead of the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio'**
+  String get searchScopeRadio;
+
+  /// Action beside a result group's heading that expands it past the first few hits.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all'**
+  String get searchShowAll;
+
+  /// Heading over podcast directory results this server is not subscribed to.
+  ///
+  /// In en, this message translates to:
+  /// **'Shows to subscribe to'**
+  String get searchShowsToSubscribe;
+
+  /// Heading over directory stations this server does not have yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Stations to add'**
+  String get searchStationsToAdd;
+
+  /// Button on a podcast directory result that subscribes this server to that show.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe'**
+  String get searchSubscribe;
+
+  /// Snackbar confirming a subscription made from a directory result. {name} is the show's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribed to {name}.'**
+  String searchSubscribed(String name);
+
+  /// Title of the search screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get searchTitle;
+
+  /// Note under the results when the server capped how many it answered with.
+  ///
+  /// In en, this message translates to:
+  /// **'There are more matches than fit here. Refine your search to narrow them down.'**
+  String get searchTruncated;
+
+  /// Heading over the radio stations this server already has.
+  ///
+  /// In en, this message translates to:
+  /// **'Your stations'**
+  String get searchYourStations;
 
   /// Comma-separated search keywords for the "About WaxDeck" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -10250,11 +12031,1116 @@ abstract class AppLocalizations {
   /// **'Open the visualizer when idle'**
   String get settingsVisualizerIdleTitle;
 
+  /// The switch letting the shared page offer the original file, and its accessible name.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow download'**
+  String get sharingAllowDownload;
+
+  /// Help under the allow-download switch.
+  ///
+  /// In en, this message translates to:
+  /// **'The page offers the original file, not just playback'**
+  String get sharingAllowDownloadHelp;
+
+  /// Accessible name of the control that copies one share link.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy link'**
+  String get sharingCopyLink;
+
+  /// Confirming button of the share dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Create link'**
+  String get sharingCreate;
+
+  /// Body of the share dialog, saying what a link is and where it goes.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone with the link can play this. It goes on your clipboard as soon as it is made.'**
+  String get sharingDialogBody;
+
+  /// Title of the dialog that mints a public link.
+  ///
+  /// In en, this message translates to:
+  /// **'Share link'**
+  String get sharingDialogTitle;
+
+  /// In a share row's caption, for a link that offers the original file. Lower case: the caption is a line of facts.
+  ///
+  /// In en, this message translates to:
+  /// **'download allowed'**
+  String get sharingDownloadAllowed;
+
+  /// Empty state of the share-links screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Share a track, an episode, a book, or a playlist and the link turns up here, with how often it has been played and a way to switch it off.'**
+  String get sharingEmptyMessage;
+
+  /// Empty state of the share-links screen.
+  ///
+  /// In en, this message translates to:
+  /// **'No share links yet'**
+  String get sharingEmptyTitle;
+
+  /// In a share row's caption, for a link past its expiry. Lower case: the caption is a line of facts. {date} is already formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'expired {date}'**
+  String sharingExpiredOn(String date);
+
+  /// The row choosing when a link stops working, and the accessible name of its picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires'**
+  String get sharingExpires;
+
+  /// Help under the expiry picker.
+  ///
+  /// In en, this message translates to:
+  /// **'When the link stops working'**
+  String get sharingExpiresHelp;
+
+  /// In a share row's caption, for a link that still works. Lower case: the caption is a line of facts.
+  ///
+  /// In en, this message translates to:
+  /// **'expires {date}'**
+  String sharingExpiresOn(String date);
+
+  /// Expiry choice: the link lasts a day.
+  ///
+  /// In en, this message translates to:
+  /// **'1 day'**
+  String get sharingExpiryDay;
+
+  /// Expiry choice: the link lasts thirty days.
+  ///
+  /// In en, this message translates to:
+  /// **'30 days'**
+  String get sharingExpiryMonth;
+
+  /// Expiry choice: the link keeps working until it is revoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Never'**
+  String get sharingExpiryNever;
+
+  /// Expiry choice: the link lasts a week.
+  ///
+  /// In en, this message translates to:
+  /// **'1 week'**
+  String get sharingExpiryWeek;
+
+  /// What a share link opens, in the caption under its title. The vocabulary is open, so an unknown kind falls back to the server's own word.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, track{Track} album{Album} playlist{Playlist} book{Audiobook} episode{Episode} other{{kind}}}'**
+  String sharingKind(String kind);
+
+  /// Snackbar confirming a share link is on the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Link copied'**
+  String get sharingLinkCopied;
+
+  /// Snackbar confirming a share link has been switched off.
+  ///
+  /// In en, this message translates to:
+  /// **'Link revoked'**
+  String get sharingLinkRevoked;
+
+  /// Title of the error state on the share-links screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your share links'**
+  String get sharingLoadError;
+
+  /// In a share row's caption, for a link with no expiry. Lower case: the caption is a comma-separated line of facts.
+  ///
+  /// In en, this message translates to:
+  /// **'never expires'**
+  String get sharingNeverExpires;
+
+  /// How often a shared link has been used, in the line under it.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 play} other{{count} plays}}'**
+  String sharingPlays(int count);
+
+  /// Accessible name of the control that switches one share link off.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke link'**
+  String get sharingRevokeLink;
+
+  /// The switch making the link open where playback is now. {time} is a timecode.
+  ///
+  /// In en, this message translates to:
+  /// **'Start at {time}'**
+  String sharingStartAt(String time);
+
+  /// Help under the start-at-position switch.
+  ///
+  /// In en, this message translates to:
+  /// **'The link opens where you are now'**
+  String get sharingStartAtHelp;
+
+  /// Accessible name of the start-at-position switch, which its own row already puts a time on.
+  ///
+  /// In en, this message translates to:
+  /// **'Start at this position'**
+  String get sharingStartAtLabel;
+
+  /// Title of the screen listing the links this account has minted.
+  ///
+  /// In en, this message translates to:
+  /// **'Share links'**
+  String get sharingTitle;
+
+  /// Banner when the app itself is behind what the server serves, on a build that can reload itself.
+  ///
+  /// In en, this message translates to:
+  /// **'WaxDeck was updated. Reload to get the new version.'**
+  String get shellClientOutdated;
+
+  /// Command name: the large-target layout meant for a car.
+  ///
+  /// In en, this message translates to:
+  /// **'Open car mode'**
+  String get shellCommandCarMode;
+
+  /// Command name: open the device picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Play on another device'**
+  String get shellCommandCast;
+
+  /// Command name.
+  ///
+  /// In en, this message translates to:
+  /// **'Create playlist'**
+  String get shellCommandCreatePlaylist;
+
+  /// Command name.
+  ///
+  /// In en, this message translates to:
+  /// **'Show lyrics'**
+  String get shellCommandLyrics;
+
+  /// Command name: shrink the desktop window to the mini player.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini player window'**
+  String get shellCommandMiniWindow;
+
+  /// Command name.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute or unmute'**
+  String get shellCommandMute;
+
+  /// Command name: step forward in the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Next track'**
+  String get shellCommandNext;
+
+  /// Command name for the palette itself. It is taught by the shortcut sheet but never listed inside the palette.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the command palette'**
+  String get shellCommandPalette;
+
+  /// Command name. A verb: every command in this list is one.
+  ///
+  /// In en, this message translates to:
+  /// **'Play or pause'**
+  String get shellCommandPlayPause;
+
+  /// Command name.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the player'**
+  String get shellCommandPlayer;
+
+  /// Command name: step back in the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous track'**
+  String get shellCommandPrevious;
+
+  /// Command name.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the queue'**
+  String get shellCommandQueue;
+
+  /// Command name: step through the repeat modes.
+  ///
+  /// In en, this message translates to:
+  /// **'Change repeat'**
+  String get shellCommandRepeat;
+
+  /// Command name, offered to administrators only: start a library scan.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan library'**
+  String get shellCommandScanLibrary;
+
+  /// Command name: go to the search screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get shellCommandSearch;
+
+  /// Heading grouping the commands that work on any screen, in the keyboard-shortcut sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Everywhere'**
+  String get shellCommandSectionApp;
+
+  /// Heading grouping the playback commands in the keyboard-shortcut sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback'**
+  String get shellCommandSectionPlayback;
+
+  /// Heading grouping the commands that open a surface, in the keyboard-shortcut sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Views'**
+  String get shellCommandSectionView;
+
+  /// Command name: nudge the playhead back.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip back 10 seconds'**
+  String get shellCommandSeekBack;
+
+  /// Command name: nudge the playhead forward. The interval is fixed for the keyboard and is not the spoken-word skip setting.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip ahead 10 seconds'**
+  String get shellCommandSeekForward;
+
+  /// Command name: open the sheet listing every command and its keys.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard shortcuts'**
+  String get shellCommandShortcuts;
+
+  /// Command name.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle the queue'**
+  String get shellCommandShuffle;
+
+  /// Command name.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the visualizer'**
+  String get shellCommandVisualizer;
+
+  /// Command name.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume down'**
+  String get shellCommandVolumeDown;
+
+  /// Command name.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume up'**
+  String get shellCommandVolumeUp;
+
+  /// Navigation entry for the administration console.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin console'**
+  String get shellNavAdmin;
+
+  /// Navigation entry for the album index, under Music.
+  ///
+  /// In en, this message translates to:
+  /// **'Albums'**
+  String get shellNavAlbums;
+
+  /// Navigation entry for the artist index, under Music.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get shellNavArtists;
+
+  /// Navigation entry for the audiobook domain. Deliberately shorter than the hub's own title: five of these share a phone's width.
+  ///
+  /// In en, this message translates to:
+  /// **'Books'**
+  String get shellNavBooks;
+
+  /// Sidebar group holding the entries that maintain the library rather than listen to it: uploads, the review queue, tasks, the admin console.
+  ///
+  /// In en, this message translates to:
+  /// **'Curation'**
+  String get shellNavCuration;
+
+  /// Navigation entry for the download manager.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get shellNavDownloads;
+
+  /// Navigation entry for the genre index, under Music.
+  ///
+  /// In en, this message translates to:
+  /// **'Genres'**
+  String get shellNavGenres;
+
+  /// Navigation entry for the landing screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get shellNavHome;
+
+  /// Navigation entry for the music domain.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get shellNavMusic;
+
+  /// Navigation entry for playlists, under Music. Kept short: it shares a sidebar column with six others.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlists'**
+  String get shellNavPlaylists;
+
+  /// Navigation entry for the podcast domain.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcasts'**
+  String get shellNavPodcasts;
+
+  /// Navigation entry for the radio domain.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio'**
+  String get shellNavRadio;
+
+  /// Navigation entry for the queue of imports waiting on an administrator's decision.
+  ///
+  /// In en, this message translates to:
+  /// **'Review queue'**
+  String get shellNavReview;
+
+  /// Navigation entry for the settings screens.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get shellNavSettings;
+
+  /// Navigation entry for the listening statistics screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening stats'**
+  String get shellNavStats;
+
+  /// Navigation entry for the background-task screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get shellNavTasks;
+
+  /// Navigation entry for the track listing, under Music.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracks'**
+  String get shellNavTracks;
+
+  /// Navigation entry for the upload screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads'**
+  String get shellNavUploads;
+
+  /// Navigation entry for the year index, under Music.
+  ///
+  /// In en, this message translates to:
+  /// **'Years'**
+  String get shellNavYears;
+
+  /// Button on the not-found screen that returns to the landing screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Go home'**
+  String get shellNotFoundAction;
+
+  /// Body of the screen shown for a location the app has no route for.
+  ///
+  /// In en, this message translates to:
+  /// **'That page does not exist.'**
+  String get shellNotFoundBody;
+
+  /// Title bar of the screen shown for a location the app has no route for.
+  ///
+  /// In en, this message translates to:
+  /// **'Not found'**
+  String get shellNotFoundTitle;
+
+  /// Palette row opening the settings screen, offered when more settings matched than the palette lists.
+  ///
+  /// In en, this message translates to:
+  /// **'All settings'**
+  String get shellPaletteAllSettings;
+
+  /// The second line of a palette row that is an administrative destination. The same word as the sidebar group they live in.
+  ///
+  /// In en, this message translates to:
+  /// **'Curation'**
+  String get shellPaletteCurationDetail;
+
+  /// Empty state of the command palette with nothing typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to run'**
+  String get shellPaletteEmpty;
+
+  /// The second line of a palette row that is a destination, saying what kind of row it is.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to'**
+  String get shellPaletteGoToDetail;
+
+  /// Command palette group holding the things the app can be told to do.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions'**
+  String get shellPaletteGroupActions;
+
+  /// Command palette group holding the administrative destinations.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin areas'**
+  String get shellPaletteGroupAdmin;
+
+  /// Command palette group holding destinations and search hits.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to'**
+  String get shellPaletteGroupPlaces;
+
+  /// Command palette group holding matching settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get shellPaletteGroupSettings;
+
+  /// Empty state of the command palette when what was typed matched nothing. {query} is what was typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing matches \"{query}\"'**
+  String shellPaletteNoMatch(String query);
+
+  /// Palette row that hands what was typed to the full search screen. {query} is what was typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the library for \"{query}\"'**
+  String shellPaletteSearchAll(String query);
+
+  /// The second line of the palette row that opens the full search screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything that matches'**
+  String get shellPaletteSearchAllDetail;
+
+  /// The second line of the All settings palette row, saying how many settings matched. {query} is what was typed.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 match for \"{query}\"} other{{count} matches for \"{query}\"}}'**
+  String shellPaletteSettingsMore(int count, String query);
+
+  /// The second line of a palette row that is a radio station.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio station'**
+  String get shellPaletteStationDetail;
+
+  /// Banner across the shell while the live connection is being re-established.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting to the server. Anything already playing keeps playing.'**
+  String get shellReconnecting;
+
+  /// Action on the update banner, offered only where the page can reload itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload'**
+  String get shellReload;
+
+  /// Banner when the server moved on and this build cannot reload itself.
+  ///
+  /// In en, this message translates to:
+  /// **'The server was updated. Restart WaxDeck to catch up.'**
+  String get shellServerOutdated;
+
+  /// The one verb in the account menu.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out'**
+  String get shellSignOut;
+
   /// A playback rate as a picker option. The x is the multiplier convention; {speed} arrives already written for this language, so a locale that separates decimals differently is already handled.
   ///
   /// In en, this message translates to:
   /// **'{speed}x'**
   String speedMultiplier(String speed);
+
+  /// Chart grouping: one bar per day.
+  ///
+  /// In en, this message translates to:
+  /// **'Day'**
+  String get statsBucketDay;
+
+  /// The day grouping named inside a sentence rather than on its own chip, which is why it is a second key and not the chip's label lowercased.
+  ///
+  /// In en, this message translates to:
+  /// **'day'**
+  String get statsBucketDayInline;
+
+  /// Chart grouping: one bar per month.
+  ///
+  /// In en, this message translates to:
+  /// **'Month'**
+  String get statsBucketMonth;
+
+  /// The month grouping named inside a sentence; see statsBucketDayInline.
+  ///
+  /// In en, this message translates to:
+  /// **'month'**
+  String get statsBucketMonthInline;
+
+  /// Chart grouping: one bar per week.
+  ///
+  /// In en, this message translates to:
+  /// **'Week'**
+  String get statsBucketWeek;
+
+  /// The week grouping named inside a sentence; see statsBucketDayInline.
+  ///
+  /// In en, this message translates to:
+  /// **'week'**
+  String get statsBucketWeekInline;
+
+  /// Said when rendering the card produced nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'The card could not be drawn'**
+  String get statsCardDrawFailed;
+
+  /// On the export button while the card is being rendered.
+  ///
+  /// In en, this message translates to:
+  /// **'Drawing'**
+  String get statsCardDrawing;
+
+  /// Said when the finished card could not be handed to the platform.
+  ///
+  /// In en, this message translates to:
+  /// **'The card could not be exported'**
+  String get statsCardExportFailed;
+
+  /// Caption on the card under the longest run of consecutive listening days. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'day streak'**
+  String get statsCardFactDayStreak;
+
+  /// Caption on the card under how many separate items were played. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'different things'**
+  String get statsCardFactDifferentThings;
+
+  /// Caption on the server card under how many accounts it covers. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'listeners'**
+  String get statsCardFactListeners;
+
+  /// The square card shape, meant for a feed post or a message.
+  ///
+  /// In en, this message translates to:
+  /// **'Square'**
+  String get statsCardFormatSquare;
+
+  /// Under the square card, saying what it is for.
+  ///
+  /// In en, this message translates to:
+  /// **'For a post or a message'**
+  String get statsCardFormatSquareBlurb;
+
+  /// The tall card shape, meant for a full-screen story post.
+  ///
+  /// In en, this message translates to:
+  /// **'Story'**
+  String get statsCardFormatStory;
+
+  /// Under the tall card, saying what it is for.
+  ///
+  /// In en, this message translates to:
+  /// **'For a full-screen story'**
+  String get statsCardFormatStoryBlurb;
+
+  /// Heading on the card over its list of artists. Drawn in capitals; translate it in capitals too where the language has them.
+  ///
+  /// In en, this message translates to:
+  /// **'MOST PLAYED'**
+  String get statsCardMostPlayed;
+
+  /// Snackbar when the desktop reports neither a downloads folder nor a documents folder to write a share card into.
+  ///
+  /// In en, this message translates to:
+  /// **'There is nowhere to save images here'**
+  String get statsCardNoDestination;
+
+  /// Banner on a platform with nowhere to save or share a picture.
+  ///
+  /// In en, this message translates to:
+  /// **'This build cannot keep an image, so the cards are preview only.'**
+  String get statsCardNoExport;
+
+  /// Overline of the share-card sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Your year, cut to shape'**
+  String get statsCardOverline;
+
+  /// A card preview read as a whole: which shape it is and what it is for. One sentence per shape rather than a name and a blurb joined, because only English can lower-case the second half into the first.
+  ///
+  /// In en, this message translates to:
+  /// **'{format, select, story{Story card, for a full-screen story} square{Square card, for a post or a message} other{Share card}}'**
+  String statsCardPreviewSpoken(String format);
+
+  /// Under the card previews, saying the drawing is local.
+  ///
+  /// In en, this message translates to:
+  /// **'Cards are drawn here and never sent anywhere: what happens next is up to you.'**
+  String get statsCardPrivacy;
+
+  /// Snackbar on a platform with nowhere at all to keep a rendered share card.
+  ///
+  /// In en, this message translates to:
+  /// **'This build cannot save images'**
+  String get statsCardSaveUnsupported;
+
+  /// Said when the card was written to a file. {where} is the path the platform chose.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to {where}'**
+  String statsCardSaved(String where);
+
+  /// Snackbar when the platform's share sheet declined a finished share card and said nothing about why.
+  ///
+  /// In en, this message translates to:
+  /// **'The share sheet refused the image'**
+  String get statsCardShareRefused;
+
+  /// Snackbar when the platform side of the share channel is older than this app and has no image support.
+  ///
+  /// In en, this message translates to:
+  /// **'This build cannot share images'**
+  String get statsCardShareUnsupported;
+
+  /// Said when the platform took the card to share.
+  ///
+  /// In en, this message translates to:
+  /// **'Card shared'**
+  String get statsCardShared;
+
+  /// The subject line the platform's share sheet opens with.
+  ///
+  /// In en, this message translates to:
+  /// **'My {year} in review'**
+  String statsCardSubject(int year);
+
+  /// Heading of the sheet that draws the recap as an image.
+  ///
+  /// In en, this message translates to:
+  /// **'Share cards'**
+  String get statsCardTitle;
+
+  /// Read aloud in place of the chart when there is nothing to draw.
+  ///
+  /// In en, this message translates to:
+  /// **'No listening in this range.'**
+  String get statsChartEmptySummary;
+
+  /// The whole chart read aloud, rather than every bar: how it is grouped, how far it reaches, and where the peak is. {unit} is the grouping word inside a sentence (day, week, month), {peak} is a duration and the three dates are already formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening by {unit}, {bars, plural, =1{1 bar} other{{bars} bars}} from {first} to {last}. The most was {peak} on {peakDay}.'**
+  String statsChartSummary(
+    String unit,
+    int bars,
+    String first,
+    String last,
+    String peak,
+    String peakDay,
+  );
+
+  /// The list of every recorded session: the row on the stats screen that opens it, and its own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Listen log'**
+  String get statsDoorListenLog;
+
+  /// Second line of the row opening the listen log.
+  ///
+  /// In en, this message translates to:
+  /// **'Every recorded listen session'**
+  String get statsDoorListenLogSubtitle;
+
+  /// The year's recap: the row on the stats screen that opens it, and its own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Year in review'**
+  String get statsDoorYearInReview;
+
+  /// Second line of the row opening the year's recap.
+  ///
+  /// In en, this message translates to:
+  /// **'Your listening year, wrapped up'**
+  String get statsDoorYearInReviewSubtitle;
+
+  /// Empty state of the listening chart.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a longer range, or go and play something.'**
+  String get statsEmptyMessage;
+
+  /// Empty state of the listening chart.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing played in this range'**
+  String get statsEmptyTitle;
+
+  /// Accessible name of the picker that sets how wide a chart bar is.
+  ///
+  /// In en, this message translates to:
+  /// **'Group by'**
+  String get statsGroupBy;
+
+  /// Overline over the calendar of the year's listening.
+  ///
+  /// In en, this message translates to:
+  /// **'Every day'**
+  String get statsHeatmapOverline;
+
+  /// The whole calendar read aloud, rather than 365 cells.
+  ///
+  /// In en, this message translates to:
+  /// **'A calendar of {year}: {days, plural, =1{listening on 1 day} other{listening on {days} days}}. {current, plural, =1{Current streak 1 day} other{Current streak {current} days}}, longest {longest}.'**
+  String statsHeatmapSummary(int year, int days, int current, int longest);
+
+  /// Heading over the calendar of the year's listening.
+  ///
+  /// In en, this message translates to:
+  /// **'This year'**
+  String get statsHeatmapTitle;
+
+  /// Chip choosing which ranked list to show.
+  ///
+  /// In en, this message translates to:
+  /// **'Albums'**
+  String get statsKindAlbums;
+
+  /// Chip choosing which ranked list to show.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get statsKindArtists;
+
+  /// Chip choosing which ranked list to show.
+  ///
+  /// In en, this message translates to:
+  /// **'Genres'**
+  String get statsKindGenres;
+
+  /// Chip choosing which ranked list to show.
+  ///
+  /// In en, this message translates to:
+  /// **'Shows'**
+  String get statsKindShows;
+
+  /// Caption under the total listening time. Lower case: it sits under a figure and reads as one phrase with it.
+  ///
+  /// In en, this message translates to:
+  /// **'listened'**
+  String get statsListened;
+
+  /// Title of the error state on the stats screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your listening stats'**
+  String get statsLoadError;
+
+  /// The listen log's client filter with nothing chosen: every reporting device.
+  ///
+  /// In en, this message translates to:
+  /// **'All clients'**
+  String get statsLogAllClients;
+
+  /// Empty state of the listen log.
+  ///
+  /// In en, this message translates to:
+  /// **'Every session a client finishes lands here, whichever device reported it.'**
+  String get statsLogEmptyMessage;
+
+  /// Empty state of the listen log.
+  ///
+  /// In en, this message translates to:
+  /// **'No listens recorded yet'**
+  String get statsLogEmptyTitle;
+
+  /// Badge on a session that ran to the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished'**
+  String get statsLogFinished;
+
+  /// A finished session read aloud: how long it ran, then that it completed. {time} is already worded as a duration.
+  ///
+  /// In en, this message translates to:
+  /// **'{time}, finished'**
+  String statsLogFinishedSpoken(String time);
+
+  /// Title of the error state on the listen log.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the listen log'**
+  String get statsLogLoadError;
+
+  /// Stands in for a session's name when the item it was about has been deleted since. The session still happened.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed item'**
+  String get statsLogRemovedItem;
+
+  /// Accessible name of the listen log's client filter.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported by'**
+  String get statsLogReportedBy;
+
+  /// How many times a ranked entry was played, under its name.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 play} other{{count} plays}}'**
+  String statsPlays(int count);
+
+  /// Range chip: the last month.
+  ///
+  /// In en, this message translates to:
+  /// **'30 days'**
+  String get statsRange30d;
+
+  /// Range chip: the last year.
+  ///
+  /// In en, this message translates to:
+  /// **'A year'**
+  String get statsRange365d;
+
+  /// Range chip: the last week.
+  ///
+  /// In en, this message translates to:
+  /// **'7 days'**
+  String get statsRange7d;
+
+  /// Range chip: the last three months.
+  ///
+  /// In en, this message translates to:
+  /// **'90 days'**
+  String get statsRange90d;
+
+  /// Range chip: every session on record.
+  ///
+  /// In en, this message translates to:
+  /// **'All time'**
+  String get statsRangeAll;
+
+  /// Title over the failure of one year-in-review panel, which retries in place.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the recap'**
+  String get statsRecapLoadError;
+
+  /// Caption under how many listening sessions were recorded. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'sessions'**
+  String get statsSessions;
+
+  /// Under the calendar: how many days in a row this listener has played something, now and at their best.
+  ///
+  /// In en, this message translates to:
+  /// **'{current, plural, =1{Current streak: 1 day} other{Current streak: {current} days}} · {longest, plural, =1{Longest: 1 day} other{Longest: {longest} days}}'**
+  String statsStreaks(int current, int longest);
+
+  /// Caption under how much time playing faster and trimming silence saved. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'time saved'**
+  String get statsTimeSaved;
+
+  /// Title of the screen showing what this listener has played.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening stats'**
+  String get statsTitle;
+
+  /// Empty state of a ranked list, naming what it lists. Whole sentences per kind rather than a noun in a frame, because the article follows the noun's gender.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, artists{A longer range, or an artist you have actually played.} albums{A longer range, or an album you have actually played.} genres{A longer range, or a genre you have actually played.} shows{A longer range, or a show you have actually played.} other{A longer range, or something you have actually played.}}'**
+  String statsTopEmptyMessage(String kind);
+
+  /// Empty state of a ranked list.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing here for this range'**
+  String get statsTopEmptyTitle;
+
+  /// Overline over the ranked lists, saying they follow the range chips above.
+  ///
+  /// In en, this message translates to:
+  /// **'In this range'**
+  String get statsTopOverline;
+
+  /// Heading over the ranked lists of what was played most.
+  ///
+  /// In en, this message translates to:
+  /// **'Top'**
+  String get statsTopTitle;
+
+  /// Read aloud in place of the recap's chart when the year holds nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No listening recorded in {year}.'**
+  String statsYearChartEmpty(int year);
+
+  /// The recap's chart read aloud: the year it covers and where the peak fell. {peak} is a duration, {month} the month's own short label.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening month by month through {year}. The most was {peak} in {month}.'**
+  String statsYearChartSummary(int year, String peak, String month);
+
+  /// Caption under how many separate items were played at least once. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'different things played'**
+  String get statsYearDistinct;
+
+  /// Caption under the server-wide listening total. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'listened together'**
+  String get statsYearListenedTogether;
+
+  /// Caption under the longest run of consecutive days with listening. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'longest streak'**
+  String get statsYearLongestStreak;
+
+  /// Opens the sheet that draws the recap as a shareable image.
+  ///
+  /// In en, this message translates to:
+  /// **'Make a share card'**
+  String get statsYearMakeCard;
+
+  /// Heading over the recap's year-long bar chart.
+  ///
+  /// In en, this message translates to:
+  /// **'Month by month'**
+  String get statsYearMonthByMonth;
+
+  /// Stands in for a month's label where the chart has none. {month} is its number.
+  ///
+  /// In en, this message translates to:
+  /// **'month {month}'**
+  String statsYearMonthFallback(int month);
+
+  /// Caption under how much the library gained that year. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'new in the library'**
+  String get statsYearNewInLibrary;
+
+  /// Steps the recap forward one year.
+  ///
+  /// In en, this message translates to:
+  /// **'Next year'**
+  String get statsYearNext;
+
+  /// Drawn in place of a recap for a year with no sessions in it.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing played this year'**
+  String get statsYearNothingPlayed;
+
+  /// Caption under how many accounts the server-wide recap covers. Lower case: it sits under a figure.
+  ///
+  /// In en, this message translates to:
+  /// **'listeners counted in'**
+  String get statsYearParticipants;
+
+  /// Chip showing the recap of what this listener played.
+  ///
+  /// In en, this message translates to:
+  /// **'My year'**
+  String get statsYearPersonal;
+
+  /// Steps the recap back one year.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous year'**
+  String get statsYearPrev;
+
+  /// Chip showing the recap of what everyone on this server played.
+  ///
+  /// In en, this message translates to:
+  /// **'Whole server'**
+  String get statsYearServer;
+
+  /// The longest-streak figure itself, in days.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{1 day} other{{days} days}}'**
+  String statsYearStreakDays(int days);
+
+  /// Heading over the recap's five most-played artists.
+  ///
+  /// In en, this message translates to:
+  /// **'Top artists'**
+  String get statsYearTopArtists;
+
+  /// Heading over the recap's five most-played genres.
+  ///
+  /// In en, this message translates to:
+  /// **'Top genres'**
+  String get statsYearTopGenres;
+
+  /// Heading over the recap's five most-played podcasts.
+  ///
+  /// In en, this message translates to:
+  /// **'Top shows'**
+  String get statsYearTopShows;
+
+  /// Heading over the recap's five most-played tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Top tracks'**
+  String get statsYearTopTracks;
 
   /// Button that removes every finished task from the list at once.
   ///
@@ -10417,6 +13303,384 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tool tasks'**
   String get toolsTitle;
+
+  /// Snackbar after asking the server to download from a URL.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading. It will appear in the review queue when ready.'**
+  String get uploadsAcquireQueued;
+
+  /// Action on the downloading snackbar, opening the background-task screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get uploadsAcquireTasks;
+
+  /// Overline of the add sheet, saying nothing is filed without a decision.
+  ///
+  /// In en, this message translates to:
+  /// **'Both routes land in the review queue'**
+  String get uploadsAddOverline;
+
+  /// Heading of the sheet offering the ways audio gets in.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to the library'**
+  String get uploadsAddTitle;
+
+  /// Header over the files of one batch upload.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Uploaded together, 1 file} other{Uploaded together, {count} files}}'**
+  String uploadsBatch(int count);
+
+  /// Body of the discard confirmation. {fileName} is the file's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{fileName}\" and its staged bytes are removed, and the space they hold against your quota is released.'**
+  String uploadsDiscardBody(String fileName);
+
+  /// Confirming button of the discard dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get uploadsDiscardConfirm;
+
+  /// Accessible name of the control that throws one staged upload away.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard upload'**
+  String get uploadsDiscardRow;
+
+  /// Title of the typed confirmation before a staged upload is thrown away.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard upload?'**
+  String get uploadsDiscardTitle;
+
+  /// The word somebody types to confirm a discard. Lower case, one word, and what the field is checked against - keep it short and easy to type.
+  ///
+  /// In en, this message translates to:
+  /// **'discard'**
+  String get uploadsDiscardWord;
+
+  /// Confirming button of the add-from-URL dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get uploadsDownload;
+
+  /// Overlay caption while audio is dragged over a page-sized drop zone, on Home and on the uploads screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop audio files to upload'**
+  String get uploadsDropHint;
+
+  /// Banner on an upload the server matched against something already in the library. {kind} says how it matched; {what} names what it matched.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate ({kind}): {what}'**
+  String uploadsDuplicate(String kind, String what);
+
+  /// What a duplicate matched, where the match names an artist.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} by {artist}'**
+  String uploadsDuplicateBy(String title, String artist);
+
+  /// How a duplicate matched: the bytes are the same file. Lower case: it sits in brackets inside a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'exact copy'**
+  String get uploadsDuplicateContent;
+
+  /// How a duplicate matched: a different file of the same audio. Lower case: it sits in brackets.
+  ///
+  /// In en, this message translates to:
+  /// **'same recording'**
+  String get uploadsDuplicateFingerprint;
+
+  /// How a duplicate matched: only the name is the same. Lower case: it sits in brackets.
+  ///
+  /// In en, this message translates to:
+  /// **'name match'**
+  String get uploadsDuplicateName;
+
+  /// Empty state of the uploads screen for an account that may upload.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick files from the bar above, or drop them anywhere on this page.'**
+  String get uploadsEmptyMessage;
+
+  /// Empty state of the uploads screen for an account without the upload right.
+  ///
+  /// In en, this message translates to:
+  /// **'This account cannot upload. Ask an administrator for the permission.'**
+  String get uploadsEmptyNoPermission;
+
+  /// Empty state of the uploads screen.
+  ///
+  /// In en, this message translates to:
+  /// **'No uploads yet'**
+  String get uploadsEmptyTitle;
+
+  /// One file's failure inside a multi-file upload, which keeps going: the file's own name and the worded reason.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: {reason}'**
+  String uploadsFileFailed(String name, String reason);
+
+  /// What the file picker calls the group that accepts anything, which is what keeps a file in a custom accepted-format set reachable.
+  ///
+  /// In en, this message translates to:
+  /// **'All files'**
+  String get uploadsFileTypeAny;
+
+  /// What the file picker calls the group of audio formats it accepts.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get uploadsFileTypeAudio;
+
+  /// Accessible name of the picker choosing what a URL download is converted to.
+  ///
+  /// In en, this message translates to:
+  /// **'Download format'**
+  String get uploadsFormat;
+
+  /// Download format: keep the source's own audio without re-encoding it. The other choices are codec names and are not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Best quality (recommended)'**
+  String get uploadsFormatBest;
+
+  /// Opens the dialog that has the server download from a source URL. The bar button, the sheet row, and the dialog's own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Add from URL'**
+  String get uploadsFromUrl;
+
+  /// Second line of the add-from-URL row, naming what a source URL may point at.
+  ///
+  /// In en, this message translates to:
+  /// **'A video, a playlist, or a channel'**
+  String get uploadsFromUrlSubtitle;
+
+  /// Grouping choice: every file is part of one release.
+  ///
+  /// In en, this message translates to:
+  /// **'One album'**
+  String get uploadsGroupingAlbum;
+
+  /// Help under the one-album grouping choice.
+  ///
+  /// In en, this message translates to:
+  /// **'Review all files as one release'**
+  String get uploadsGroupingAlbumHelp;
+
+  /// Grouping choice: let the server decide from the tags and folders.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-detect'**
+  String get uploadsGroupingAuto;
+
+  /// Help under the auto-detect grouping choice.
+  ///
+  /// In en, this message translates to:
+  /// **'Group into albums by their tags and folders'**
+  String get uploadsGroupingAutoHelp;
+
+  /// Heading over the grouping choice for a multi-file upload.
+  ///
+  /// In en, this message translates to:
+  /// **'How should these files be grouped?'**
+  String get uploadsGroupingTitle;
+
+  /// Grouping choice: every file stands on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Separate tracks'**
+  String get uploadsGroupingTracks;
+
+  /// Help under the separate-tracks grouping choice.
+  ///
+  /// In en, this message translates to:
+  /// **'Review every file on its own'**
+  String get uploadsGroupingTracksHelp;
+
+  /// The switch that matches music against the MusicBrainz catalogue before filing it. MusicBrainz is a service name and stays.
+  ///
+  /// In en, this message translates to:
+  /// **'Identify against MusicBrainz'**
+  String get uploadsIdentifyMusic;
+
+  /// Help under the identify switch for music.
+  ///
+  /// In en, this message translates to:
+  /// **'Matches it, then waits for your decision. Off adds it with the tags it has'**
+  String get uploadsIdentifyMusicHelp;
+
+  /// The same switch for a podcast or a book, where there is no catalogue to match against, so all it decides is whether the submission waits.
+  ///
+  /// In en, this message translates to:
+  /// **'Review before adding'**
+  String get uploadsIdentifyOther;
+
+  /// Help under the review-before-adding switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Waits for your decision. Off adds it with the tags it has'**
+  String get uploadsIdentifyOtherHelp;
+
+  /// Title of the error state on the uploads screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load uploads'**
+  String get uploadsLoadError;
+
+  /// Fetches the next page of uploads.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get uploadsLoadMore;
+
+  /// Medium choice on the upload dialogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobook'**
+  String get uploadsMediaBook;
+
+  /// Medium choice on the upload dialogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get uploadsMediaMusic;
+
+  /// Medium choice on the upload dialogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcast'**
+  String get uploadsMediaPodcast;
+
+  /// Opens the review queue on the entry this upload made.
+  ///
+  /// In en, this message translates to:
+  /// **'Open review entry'**
+  String get uploadsOpenReview;
+
+  /// Opens the file picker. The bar button on the uploads screen and a row in the add sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload files'**
+  String get uploadsPick;
+
+  /// Opens the folder picker, whose hierarchy rides along as a grouping hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload a folder'**
+  String get uploadsPickFolder;
+
+  /// Second line of the upload-folder row.
+  ///
+  /// In en, this message translates to:
+  /// **'An album or a collection, hierarchy and all'**
+  String get uploadsPickFolderSubtitle;
+
+  /// Second line of the upload-files row in the add sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'One track, or a set you pick yourself'**
+  String get uploadsPickSubtitle;
+
+  /// Under the staging figure, saying what the cap is a cap on.
+  ///
+  /// In en, this message translates to:
+  /// **'This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.'**
+  String get uploadsQuotaHelp;
+
+  /// Under the staging figure on a server with no cap.
+  ///
+  /// In en, this message translates to:
+  /// **'Staged files are held until they are imported or discarded.'**
+  String get uploadsQuotaHelpUncapped;
+
+  /// How much of the staging cap is in use. Both are formatted sizes.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {cap}'**
+  String uploadsQuotaOf(String used, String cap);
+
+  /// Overline over how much is staged against the cap. The cap is on what may sit staged, not on what may be contributed.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to be imported'**
+  String get uploadsQuotaOverline;
+
+  /// How far one upload has got. {size} is a formatted size; Spanish puts a space before the percent sign.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% of {size} received'**
+  String uploadsReceivedOf(int percent, String size);
+
+  /// Under an upload row while bytes are arriving and the total size is not known.
+  ///
+  /// In en, this message translates to:
+  /// **'Receiving'**
+  String get uploadsReceiving;
+
+  /// Accessible name of the control that sends a failed upload again.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry upload'**
+  String get uploadsRetry;
+
+  /// The field taking the address the server downloads from.
+  ///
+  /// In en, this message translates to:
+  /// **'Source URL'**
+  String get uploadsSourceUrl;
+
+  /// Placeholder in the source-URL field.
+  ///
+  /// In en, this message translates to:
+  /// **'A single video, or a playlist or channel'**
+  String get uploadsSourceUrlHint;
+
+  /// Title of the screen listing what has been sent to the server and not yet imported.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads'**
+  String get uploadsTitle;
+
+  /// Drawn where an upload row's state chip goes when the bytes did not arrive.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer failed'**
+  String get uploadsTransferFailed;
+
+  /// Confirming button of the dialog asking what is being uploaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload'**
+  String get uploadsUpload;
+
+  /// Title of the dialog asking what several files are.
+  ///
+  /// In en, this message translates to:
+  /// **'What are these {count} files?'**
+  String uploadsWhatMany(int count);
+
+  /// Title of the dialog asking what one file is.
+  ///
+  /// In en, this message translates to:
+  /// **'What are you uploading?'**
+  String get uploadsWhatOne;
+
+  /// Accessible name of the picker choosing which medium is being added.
+  ///
+  /// In en, this message translates to:
+  /// **'What this is'**
+  String get uploadsWhatThisIs;
 }
 
 class _AppLocalizationsDelegate

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import 'notifications_controller.dart';
 
@@ -25,27 +26,31 @@ class NotificationsBell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rows = ref.watch(notificationsProvider);
     final unseen = ref.watch(unseenNotificationsProvider);
+    final l10n = context.l10n;
     return WaxMenuButton<String>(
       glyph: WaxIcons.bell,
-      label: unseen == 0 ? 'Notifications' : 'Notifications, $unseen unread',
+      label: unseen == 0 ? l10n.bellTitle : l10n.bellUnread(unseen),
       semanticsId: SemanticsIds.notificationsBell,
       badge: unseen == 0 ? null : '$unseen',
-      emptyLabel: 'Nothing has happened yet.',
+      emptyLabel: l10n.bellEmpty,
       onOpen: ref.read(notificationsProvider.notifier).markSeen,
       items: <WaxMenuItem<String>>[
-        for (var i = 0; i < rows.length; i++)
+        for (final row in rows)
           WaxMenuItem<String>(
             // Not the index: the menu holds the list it opened with, and
             // news landing behind it shifts every index down one.
-            value: rows[i].location,
-            label: '${rows[i].kind.label}: ${rows[i].message}',
-            glyph: rows[i].kind.glyph,
-            semanticsId: SemanticsIds.notificationRow(i),
+            value: row.location,
+            label: l10n.bellRow(
+              row.kind.labelOf(l10n),
+              row.kind.messageOf(l10n),
+            ),
+            glyph: row.kind.glyph,
+            semanticsId: row.semanticsId,
           ),
         if (rows.isNotEmpty)
           WaxMenuItem<String>(
             value: _clearValue,
-            label: 'Clear',
+            label: l10n.bellClear,
             glyph: WaxIcons.close,
             semanticsId: SemanticsIds.notificationsClear,
           ),

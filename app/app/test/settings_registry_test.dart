@@ -18,6 +18,26 @@ const _admin = WaxDeckUser(
 );
 
 void main() {
+  group('the fold both searches share', () {
+    test('an accent is folded whichever way it is spelled', () {
+      // Precomposed and decomposed, which is the same word twice. A
+      // query folded one way against a haystack folded the other
+      // matches nothing.
+      expect(foldForSearch('Pódcast'), 'podcast');
+      expect(foldForSearch('Po\u0301dcast'), 'podcast');
+      expect(foldForSearch('Reproducción'), 'reproduccion');
+      expect(foldForSearch('Reproduccio\u0301n'), 'reproduccion');
+      expect(foldForSearch('año'), 'ano');
+    });
+
+    test('a script it has no folding for is carried through', () {
+      // Not dropped and not mangled: an unfoldable name still has to be
+      // findable by typing it.
+      expect(foldForSearch('Ραδιό'), 'ραδιό');
+      expect(foldForSearch('東京'), '東京');
+    });
+  });
+
   late AppLocalizations en;
   late AppLocalizations es;
   late List<SettingEntry> entries;

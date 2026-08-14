@@ -30,17 +30,23 @@ Future<PickedAudioFile> pickedFromXFile(
 }
 
 class _WebFilePickerPort implements FilePickerPort {
-  static final _audioGroup = XTypeGroup(
-    label: 'Audio',
-    extensions: kAcceptedAudioExtensions.toList(),
-  );
+  static XTypeGroup _audioGroup(String label) =>
+      XTypeGroup(label: label, extensions: kAcceptedAudioExtensions.toList());
 
   @override
   bool get canPickFolders => false;
 
+  // The browser's own picker draws no group names and offers its own
+  // "all files" row, so [anyLabel] has nowhere to go here and no group
+  // is added for it.
   @override
-  Future<List<PickedAudioFile>> pickAudioFiles() async {
-    final files = await openFiles(acceptedTypeGroups: [_audioGroup]);
+  Future<List<PickedAudioFile>> pickAudioFiles({
+    required String audioLabel,
+    required String anyLabel,
+  }) async {
+    final files = await openFiles(
+      acceptedTypeGroups: [_audioGroup(audioLabel)],
+    );
     return [for (final f in files) await pickedFromXFile(f)];
   }
 
@@ -51,6 +57,7 @@ class _WebFilePickerPort implements FilePickerPort {
   Future<PickedAudioFile?> pickFile({
     required Set<String> extensions,
     required String label,
+    required String anyLabel,
   }) async {
     final file = await openFile(
       acceptedTypeGroups: [

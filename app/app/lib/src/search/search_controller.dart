@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../radio/radio_controller.dart';
 import '../settings/client_settings_providers.dart';
@@ -37,15 +38,15 @@ enum SearchSource {
 
 /// Which kinds of result the filter chips narrow to.
 enum SearchScope {
-  all('all', 'All'),
-  music('music', 'Music'),
+  all('all'),
+  music('music'),
 
   /// Library episodes, plus shows from the public podcast directory
   /// that this server has never seen. Both, because a listener typing a
   /// show name means the show whether or not they are already
   /// subscribed to it, and answering only one of those is the bug.
-  podcasts('podcasts', 'Podcasts', SearchSource.libraryAndDirectory),
-  books('books', 'Audiobooks'),
+  podcasts('podcasts', SearchSource.libraryAndDirectory),
+  books('books'),
 
   /// The one chip that does not narrow the library search: it asks a
   /// different question of a different surface. Everything else here
@@ -55,16 +56,23 @@ enum SearchScope {
   /// with no chip chosen must not fire a directory call over the internet
   /// on every keystroke, and a station that is not in the library is not a
   /// search result in the sense the other groups are.
-  radio('radio', 'Radio', SearchSource.directory);
+  radio('radio', SearchSource.directory);
 
-  const SearchScope(
-    this.name,
-    this.label, [
-    this.source = SearchSource.library,
-  ]);
+  const SearchScope(this.name, [this.source = SearchSource.library]);
 
+  /// Stable: the chip's handle and what the filter is read back as.
   final String name;
-  final String label;
+
+  /// The chip's own word. A method rather than a field for the reason
+  /// every other enum here keeps one: a name is a handle and a label is
+  /// copy, and only one of the two is the same in every language.
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    SearchScope.all => l10n.searchScopeAll,
+    SearchScope.music => l10n.searchScopeMusic,
+    SearchScope.podcasts => l10n.searchScopePodcasts,
+    SearchScope.books => l10n.searchScopeBooks,
+    SearchScope.radio => l10n.searchScopeRadio,
+  };
 
   /// Where this scope's answers come from.
   final SearchSource source;
@@ -89,16 +97,25 @@ enum SearchScope {
 
 /// One group of results, in the order the screen lists them.
 enum SearchHitKind {
-  artists('artists', 'Artists'),
-  albums('albums', 'Albums'),
-  tracks('tracks', 'Tracks'),
-  books('books', 'Audiobooks'),
-  episodes('episodes', 'Episodes');
+  artists('artists'),
+  albums('albums'),
+  tracks('tracks'),
+  books('books'),
+  episodes('episodes');
 
-  const SearchHitKind(this.name, this.label);
+  const SearchHitKind(this.name);
 
+  /// Stable: the group's handle.
   final String name;
-  final String label;
+
+  /// The heading over this group's hits.
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    SearchHitKind.artists => l10n.searchKindArtists,
+    SearchHitKind.albums => l10n.searchKindAlbums,
+    SearchHitKind.tracks => l10n.searchKindTracks,
+    SearchHitKind.books => l10n.searchKindBooks,
+    SearchHitKind.episodes => l10n.searchKindEpisodes,
+  };
 
   List<SearchHit> from(SearchResults results) => switch (this) {
     SearchHitKind.artists => results.artists,

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../podcasts/podcast_shelves.dart';
 import '../providers.dart';
@@ -176,10 +177,12 @@ final List<ProviderBase<Object?>> musicUserShelfProviders =
 /// a shelf nobody may tap would be eight neighbor-graph walks per visit
 /// to the home screen; the tap is what mints one.
 class MixCard {
-  const MixCard({required this.title, this.genre, this.seedPid, this.artUrl});
+  const MixCard({required this.name, this.genre, this.seedPid, this.artUrl});
 
-  /// What the card says, and what the minted mix is titled.
-  final String title;
+  /// The genre or artist this mix is drawn from, under its own name.
+  /// Not copy: it rides the queue as the source label, where a
+  /// translated frame would freeze one device's language. See [titleOf].
+  final String name;
 
   /// The genre this mix is drawn from, for a top-genre card.
   final String? genre;
@@ -190,6 +193,17 @@ class MixCard {
   /// A cover to draw it with. A genre has none; an artist card borrows
   /// the artwork the top list already answered.
   final String? artUrl;
+
+  /// What the card says. A genre card is its genre and nothing else; an
+  /// artist card is a sentence about one, so the frame is the
+  /// translator's.
+  String titleOf(AppLocalizations l10n) =>
+      seedPid == null ? name : l10n.homeMixMoreLike(name);
+
+  /// What the queue calls where these tracks came from. A genre mix is
+  /// its genre; a seeded one is not the thing it was seeded from, so it
+  /// carries no name and the queue words the kind instead.
+  String get queueLabel => seedPid == null ? name : '';
 }
 
 /// How many top genres get a card. Enough to feel like a set of choices,
@@ -216,17 +230,13 @@ final mixCardsProvider = FutureProvider.autoDispose<List<MixCard>>((ref) async {
   ]);
   return <MixCard>[
     for (final genre in genres.entries.take(kMixCards))
-      MixCard(title: genre.name, genre: genre.name, artUrl: genre.artUrl),
+      MixCard(name: genre.name, genre: genre.name, artUrl: genre.artUrl),
     for (final artist in artists.entries.take(kMixCards))
       // A top entry carries a pid only while its name still resolves to
       // an entity; a renamed or merged artist reads as a name alone,
       // which is nothing the mix endpoint takes as a seed.
       if (artist.pid case final seed?)
-        MixCard(
-          title: 'More like ${artist.name}',
-          seedPid: seed,
-          artUrl: artist.artUrl,
-        ),
+        MixCard(name: artist.name, seedPid: seed, artUrl: artist.artUrl),
   ];
 });
 

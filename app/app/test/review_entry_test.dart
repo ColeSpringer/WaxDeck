@@ -11,11 +11,12 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'routed_host.dart';
 
 Widget _host(FakeRepository repo, String entryId) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: MaterialApp(home: ReviewEntryScreen(entryId: entryId)),
+  child: localizedHost(ReviewEntryScreen(entryId: entryId)),
 );
 
 ReviewEntryDetail _detail({String status = 'pending'}) => ReviewEntryDetail(
@@ -309,7 +310,7 @@ void main() {
     final repo = _repoWith(_detail(status: 'applied'));
     await _pump(tester, _host(repo, 'rv-1'));
 
-    expect(find.text('Decided: applied'), findsOneWidget);
+    expect(find.text('Decided: Applied'), findsOneWidget);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
       findsNothing,

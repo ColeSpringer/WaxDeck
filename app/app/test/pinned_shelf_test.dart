@@ -4,6 +4,7 @@ import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/pinned_controller.dart';
 import 'package:waxdeck/src/home/pinned_shelf.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
@@ -163,6 +164,14 @@ void main() {
   _showPinGroup();
 
   group('PinnedEntities', () {
+    // The controller answers a refusal as a value; the words are the
+    // table's, so the table is what the assertions read.
+    late AppLocalizations english;
+
+    setUpAll(() async {
+      english = await AppLocalizations.delegate.load(const Locale('en'));
+    });
+
     ProviderContainer container(FakeRepository repo) {
       final c = ProviderContainer(
         overrides: [
@@ -209,7 +218,10 @@ void main() {
           .read(pinnedEntitiesProvider.notifier)
           .toggle(_show);
 
-      expect(refusal, 'not a pinnable entity pid');
+      expect(refusal, isA<PinWriteRejected>());
+      // The code's own sentence, not the server's: nothing anybody typed
+      // was refused, so the table is what words it.
+      expect(pinRefusalMessage(english, refusal!), english.errorInvalidRequest);
       expect(c.read(pinnedEntitiesProvider), <String>[_album]);
     });
 
@@ -226,7 +238,11 @@ void main() {
           .read(pinnedEntitiesProvider.notifier)
           .toggle(_show);
 
-      expect(refusal, contains('Unpin'));
+      expect(refusal, isA<PinShelfFull>());
+      expect(
+        pinRefusalMessage(english, refusal!),
+        english.homePinShelfFull(PinnedEntities.limit),
+      );
       // Not written at all: a tap that reports success and does nothing
       // is worse than one that says the list is full.
       expect(repo.putPrefsCalls, isEmpty);

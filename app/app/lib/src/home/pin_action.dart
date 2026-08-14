@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import 'pinned_controller.dart';
 
@@ -21,13 +22,14 @@ Future<void> togglePin(
   String? label,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
   final pinned = ref.read(pinnedEntitiesProvider.notifier);
   final wasPinned = pinned.contains(pid);
   final refusal = await pinned.toggle(pid);
   if (refusal != null) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(refusal)));
+      ..showSnackBar(SnackBar(content: Text(pinRefusalMessage(l10n, refusal))));
     return;
   }
   // Confirmed only on the way off, and only where the caller named what
@@ -37,29 +39,31 @@ Future<void> togglePin(
   if (!wasPinned || label == null) return;
   messenger
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text('Unpinned $label')));
+    ..showSnackBar(SnackBar(content: Text(l10n.homeUnpinned(label))));
 }
 
 /// The menu row every entity surface offers, labelled for what the tap
 /// will do.
 WaxMenuItem<T> pinMenuItem<T>(
+  BuildContext context,
   WidgetRef ref,
   String pid, {
   required T value,
   String? semanticsId,
 }) {
   final pinned = ref.watch(pinnedEntitiesProvider).contains(pid);
+  final l10n = context.l10n;
   return WaxMenuItem<T>(
     value: value,
-    label: pinned ? 'Unpin from Home' : 'Pin to Home',
+    label: pinned ? l10n.homeUnpinAction : l10n.homePinAction,
     glyph: WaxIcons.home,
     semanticsId: semanticsId,
   );
 }
 
-/// One target the pin sheet offers: the pid, and the words for it.
-/// [what] is the kind said out loud ("album", "artist"), and [name] is
-/// the thing's own name on the row under it.
+/// One target the pin sheet offers: the pid, and what to say about it.
+/// [what] is a token, not a word - the row is a whole sentence about
+/// the kind. [name] is the thing's own name on the row under it.
 typedef PinTarget = ({String pid, String what, String name});
 
 /// The pin affordance for rows and tiles with no menu of their own: the
@@ -101,8 +105,8 @@ Future<void> showPinSheet(
                       sheetRef
                           .watch(pinnedEntitiesProvider)
                           .contains(target.pid)
-                      ? 'Unpin ${target.what} from Home'
-                      : 'Pin ${target.what} to Home',
+                      ? sheetContext.l10n.homePinSheetUnpin(target.what)
+                      : sheetContext.l10n.homePinSheetPin(target.what),
                   subtitle: target.name,
                   glyph: WaxIcons.home,
                   semanticsId: SemanticsIds.pinSheetTarget(target.pid),

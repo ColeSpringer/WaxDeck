@@ -1,25 +1,55 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 
 /// Lifecycle filter above the review list. Each value is a server-side
 /// status, `decided` included, so pages come back full rather than
 /// being thinned client-side.
 enum ReviewFilter {
-  pending('pending', 'Pending'),
-  autoApplied('auto-applied', 'Auto-applied'),
-  decided('decided', 'Decided');
+  pending('pending'),
+  autoApplied('auto-applied'),
+  decided('decided');
 
-  const ReviewFilter(this.status, this.label);
+  const ReviewFilter(this.status);
 
   /// Server-side status filter. 'decided' is a server pseudo-status meaning
   /// "every entry that is not pending", so the queue never pages through a
   /// head of pending entries only to render nothing.
   final String? status;
 
-  final String label;
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    ReviewFilter.pending => l10n.reviewFilterPending,
+    ReviewFilter.autoApplied => l10n.reviewFilterAutoApplied,
+    ReviewFilter.decided => l10n.reviewFilterDecided,
+  };
 }
+
+/// Where a unit came from, worded. The vocabulary is the server's and
+/// open (`api/spec/review.yaml` calls it a string, not an enum), so a
+/// token this build has no word for is drawn as it arrived.
+String reviewOriginLabel(AppLocalizations l10n, String origin) =>
+    switch (origin) {
+      'upload' => l10n.reviewOriginUpload,
+      'acquisition' => l10n.reviewOriginAcquisition,
+      _ => origin,
+    };
+
+/// An entry's lifecycle state, worded; open the same way. Every server
+/// outcome is here, not only the ones this client can ask for.
+String reviewStatusLabel(AppLocalizations l10n, String status) =>
+    switch (status) {
+      'pending' => l10n.reviewStatusPending,
+      'applied' => l10n.reviewStatusApplied,
+      'auto-applied' => l10n.reviewStatusAutoApplied,
+      'as-is' => l10n.reviewStatusAsIs,
+      'unofficial' => l10n.reviewStatusUnofficial,
+      'skipped' => l10n.reviewStatusSkipped,
+      'discarded' => l10n.reviewStatusDiscarded,
+      'reverted' => l10n.reviewStatusReverted,
+      _ => status,
+    };
 
 class ReviewFilterController extends Notifier<ReviewFilter> {
   @override

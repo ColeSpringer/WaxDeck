@@ -16,6 +16,43 @@ ServerSyncEvent _marker(String kind, {String pid = 'rv-1'}) =>
     ServerSyncEvent(kind: kind, pid: pid);
 
 void main() {
+  group('the vocabulary a row is addressed by', () {
+    // The token is the handle a spec locates a row with. One that
+    // drifted from the event name is a locator matching nothing, which
+    // `toBeHidden` would pass.
+    test('every kind carries the event name it comes from', () {
+      const fromStream = <NotificationKind, String>{
+        NotificationKind.review: 'review',
+        NotificationKind.upload: 'upload',
+        NotificationKind.task: 'task',
+        NotificationKind.feedDisabled: 'feed-disabled',
+        NotificationKind.importCompleted: 'import-completed',
+        NotificationKind.episodeDownloaded: 'episode-downloaded',
+      };
+      for (final entry in fromStream.entries) {
+        expect(entry.key.token, entry.value);
+        expect(NotificationKind.forEvent(entry.value), entry.key);
+      }
+      // The one kind this client mints for itself: it has a token so a
+      // spec can address its row, and no event on the stream is called
+      // that.
+      expect(NotificationKind.download.token, 'download');
+      expect(NotificationKind.forEvent('download'), isNull);
+    });
+
+    test('the kinds that name an entity are the ones that navigate to '
+        'one', () {
+      for (final kind in NotificationKind.values) {
+        final named = kind.locationFor('pc-01JZX5N8QW3F4V9T2B7KD3M9R6');
+        expect(
+          named != kind.location,
+          kind.namesEntity,
+          reason: '${kind.name} disagrees with itself about carrying a pid',
+        );
+      }
+    });
+  });
+
   group('what a server-state change becomes', () {
     late ProviderContainer container;
     late NotificationsController notifications;
@@ -57,11 +94,13 @@ void main() {
     });
 
     test('the list is capped', () {
+      // Distinct shows, because a row's identity is its kind and what it
+      // is about: forty markers naming one show are one row by design.
       for (var i = 0; i < NotificationsController.cap * 2; i++) {
         notifications.record(
-          NotificationKind.task,
-          'task $i changed',
+          NotificationKind.feedDisabled,
           at: DateTime(2026, 7, 31, 12, i),
+          pid: 'pc-01JZX5N8QW3F4V9T2B7KD3M9$i',
         );
       }
       expect(
@@ -79,7 +118,6 @@ void main() {
 
       notifications.record(
         NotificationKind.upload,
-        'An upload changed.',
         at: DateTime.now().add(const Duration(seconds: 1)),
       );
       expect(container.read(unseenNotificationsProvider), 1);

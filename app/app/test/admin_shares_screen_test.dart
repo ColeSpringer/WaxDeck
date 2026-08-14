@@ -71,7 +71,7 @@ void main() {
     );
     // The owner leads the caption: it is what turns a row into
     // somebody's.
-    expect(find.textContaining('Sam Gamgee · track'), findsOneWidget);
+    expect(find.textContaining('Sam Gamgee · Track'), findsOneWidget);
   });
 
   testWidgets('a link revoked here leaves the wide listing', (tester) async {

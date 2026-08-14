@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../sync/sync_providers.dart';
 import 'page_reload/page_reload.dart';
@@ -104,15 +105,13 @@ final serverUpdatedProvider = NotifierProvider<ServerBuildWatcher, bool>(
 /// instead of leaving actions to fail one at a time, and a server that
 /// came back as a different build says so before a stale bundle meets a
 /// changed API.
-List<Widget> lifecycleBanners(WidgetRef ref) {
+List<Widget> lifecycleBanners(AppLocalizations l10n, WidgetRef ref) {
   final connected = ref.watch(liveConnectionProvider);
   final updated = ref.watch(serverUpdatedProvider);
   return <Widget>[
     if (connected == false)
-      const WaxBanner(
-        message:
-            'Reconnecting to the server. Anything already playing '
-            'keeps playing.',
+      WaxBanner(
+        message: l10n.shellReconnecting,
         glyph: WaxIcons.offline,
         semanticsId: SemanticsIds.bannerReconnecting,
       ),
@@ -120,9 +119,9 @@ List<Widget> lifecycleBanners(WidgetRef ref) {
       WaxBanner(
         tone: WaxBannerTone.notice,
         message: canReloadPage
-            ? 'WaxDeck was updated. Reload to get the new version.'
-            : 'The server was updated. Restart WaxDeck to catch up.',
-        actionLabel: canReloadPage ? 'Reload' : null,
+            ? l10n.shellClientOutdated
+            : l10n.shellServerOutdated,
+        actionLabel: canReloadPage ? l10n.shellReload : null,
         onAction: canReloadPage ? reloadPage : null,
         semanticsId: SemanticsIds.bannerUpdated,
         actionSemanticsId: SemanticsIds.bannerUpdatedReload,

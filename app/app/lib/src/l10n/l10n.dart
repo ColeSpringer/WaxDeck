@@ -64,6 +64,38 @@ const Map<String, String> languageEndonyms = <String, String>{
   'es': 'Español',
 };
 
+/// Case and diacritics folded away, both spellings of an accent alike:
+/// composed letters mapped, combining marks dropped. Here rather than
+/// in either search, which would be two answers to one query.
+String foldForSearch(String text) {
+  final lower = text.toLowerCase();
+  final out = <int>[];
+  for (var i = 0; i < lower.length; i++) {
+    final unit = lower.codeUnitAt(i);
+    if (unit < 0x80) {
+      out.add(unit);
+      continue;
+    }
+    // Combining Diacritical Marks: what a decomposed letter carries its
+    // accent in, and nothing a query is ever typed with.
+    if (unit >= 0x0300 && unit <= 0x036F) continue;
+    out.add(_folded[unit] ?? unit);
+  }
+  return String.fromCharCodes(out);
+}
+
+/// Precomposed lowercase Latin letters to their base, by code unit.
+const Map<int, int> _folded = <int, int>{
+  0xE0: 0x61, 0xE1: 0x61, 0xE2: 0x61, 0xE3: 0x61, 0xE4: 0x61, 0xE5: 0x61, //
+  0xE7: 0x63,
+  0xE8: 0x65, 0xE9: 0x65, 0xEA: 0x65, 0xEB: 0x65,
+  0xEC: 0x69, 0xED: 0x69, 0xEE: 0x69, 0xEF: 0x69,
+  0xF1: 0x6E,
+  0xF2: 0x6F, 0xF3: 0x6F, 0xF4: 0x6F, 0xF5: 0x6F, 0xF6: 0x6F,
+  0xF9: 0x75, 0xFA: 0x75, 0xFB: 0x75, 0xFC: 0x75,
+  0xFD: 0x79, 0xFF: 0x79,
+};
+
 /// A stored BCP 47 tag as a Flutter Locale, via intl's parser (dart:ui
 /// has no Locale.parse). An unparseable tag answers null: follow the
 /// system rather than force a garbage locale.

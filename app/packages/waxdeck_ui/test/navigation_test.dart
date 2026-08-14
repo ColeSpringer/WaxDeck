@@ -31,6 +31,7 @@ const _settings = WaxDestination(
 const _secondary = <WaxNavEntry>[
   WaxNavLink(_settings),
   WaxNavGroup(
+    name: 'curation',
     label: 'Curation',
     glyph: WaxIcons.admin,
     children: <WaxDestination>[

@@ -26,11 +26,34 @@ class ShareCardSaved extends ShareCardOutcome {
   final String where;
 }
 
-/// Nothing happened, and why.
+/// Nothing happened, and why. A [kind] rather than a sentence: an
+/// exporter is built outside the element tree and has no table, so the
+/// screen words it. [detail] is the platform's own account, if any.
 class ShareCardFailed extends ShareCardOutcome {
-  const ShareCardFailed(this.reason);
+  const ShareCardFailed(this.kind, {this.detail});
 
-  final String reason;
+  final ShareCardFailure kind;
+
+  final String? detail;
+}
+
+/// Why a card did not get out.
+enum ShareCardFailure {
+  /// The share sheet took it and declined, saying nothing usable.
+  shareRefused,
+
+  /// The platform side of the share channel is older than this Dart
+  /// side and has no image support.
+  shareUnsupported,
+
+  /// This build cannot keep an image at all.
+  saveUnsupported,
+
+  /// Neither a downloads folder nor a documents folder to write into.
+  noDestination,
+
+  /// The write itself failed, and [ShareCardFailed.detail] says how.
+  writeFailed,
 }
 
 /// Getting a finished card off this device.
@@ -60,5 +83,5 @@ class InertShareCardExporter implements ShareCardExporter {
     required List<int> png,
     required String fileName,
     required String subject,
-  }) async => const ShareCardFailed('This build cannot save images');
+  }) async => const ShareCardFailed(ShareCardFailure.saveUnsupported);
 }

@@ -759,6 +759,7 @@ class _Overflow extends ConsumerWidget {
       semanticsId: SemanticsIds.playlistOverflow,
       items: <WaxMenuItem<_PlaylistAction>>[
         pinMenuItem<_PlaylistAction>(
+          context,
           ref,
           playlist.pid,
           value: _PlaylistAction.pin,
@@ -984,6 +985,7 @@ class _Overflow extends ConsumerWidget {
       final file = await picker.pickFile(
         extensions: _coverExtensions,
         label: l10n.playlistCoverImage,
+        anyLabel: l10n.uploadsFileTypeAny,
       );
       final openRead = file?.openRead;
       if (file == null || openRead == null) return;

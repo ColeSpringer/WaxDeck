@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/lifecycle_banners.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 /// The banners on their own, the way the shell frame hosts them.
 class _BannerHost extends ConsumerWidget {
@@ -14,7 +16,7 @@ class _BannerHost extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
     body: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: lifecycleBanners(ref),
+      children: lifecycleBanners(context.l10n, ref),
     ),
   );
 }
@@ -30,7 +32,7 @@ Future<ProviderContainer> _pump(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MaterialApp(theme: buildWaxTheme(), home: const _BannerHost()),
+      child: localizedHost(const _BannerHost(), theme: buildWaxTheme()),
     ),
   );
   await tester.pumpAndSettle();

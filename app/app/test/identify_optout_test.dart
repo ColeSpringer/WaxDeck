@@ -12,6 +12,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'routed_host.dart';
 
 /// The per-submission identification choice, from the sheet that asks it
@@ -204,7 +205,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: const MaterialApp(home: ReviewEntryScreen(entryId: 'rv-1')),
+        child: localizedHost(const ReviewEntryScreen(entryId: 'rv-1')),
       ),
     );
     await tester.pumpAndSettle();
@@ -228,7 +229,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: const MaterialApp(home: ReviewEntryScreen(entryId: 'rv-2')),
+        child: localizedHost(const ReviewEntryScreen(entryId: 'rv-2')),
       ),
     );
     await tester.pumpAndSettle();

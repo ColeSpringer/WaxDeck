@@ -620,6 +620,7 @@ class DeckBar extends StatelessWidget {
     WaxColors colors, {
     required bool compact,
   }) {
+    final l10n = context.waxL10n;
     // One line, fade-clipped. No marquee anywhere: it is motion and an
     // accessibility liability, and the full text is always reachable
     // through the player or a tooltip.
@@ -648,10 +649,16 @@ class DeckBar extends StatelessWidget {
             ],
             Flexible(
               child: Text(
-                <String?>[
-                  now.subtitle,
-                  if (now.remoteEndpoint != null) 'on ${now.remoteEndpoint}',
-                ].nonNulls.join(' '),
+                // Composed from whole sentences rather than joined from
+                // fragments: where the sound comes out goes before what
+                // is playing in plenty of languages.
+                switch ((now.subtitle, now.remoteEndpoint)) {
+                  (final subtitle?, final endpoint?) =>
+                    l10n.deckBarSubtitleOnEndpoint(subtitle, endpoint),
+                  (null, final endpoint?) => l10n.deckBarOnEndpoint(endpoint),
+                  (final subtitle?, null) => subtitle,
+                  _ => '',
+                },
                 maxLines: 1,
                 overflow: TextOverflow.fade,
                 softWrap: false,

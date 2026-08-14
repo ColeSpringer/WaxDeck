@@ -24,7 +24,10 @@ class _FakePicker implements FilePickerPort {
   bool get canPickFolders => false;
 
   @override
-  Future<List<PickedAudioFile>> pickAudioFiles() async => files;
+  Future<List<PickedAudioFile>> pickAudioFiles({
+    String audioLabel = '',
+    String anyLabel = '',
+  }) async => files;
 
   @override
   Future<List<PickedAudioFile>> pickAudioFolder() async => const [];
@@ -33,6 +36,7 @@ class _FakePicker implements FilePickerPort {
   Future<PickedAudioFile?> pickFile({
     required Set<String> extensions,
     required String label,
+    String anyLabel = '',
   }) async => files.isEmpty ? null : files.first;
 }
 

@@ -6,10 +6,11 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: const MaterialApp(home: LoginScreen()),
+  child: localizedHost(const LoginScreen()),
 );
 
 void main() {
@@ -40,13 +41,16 @@ void main() {
     expect(repo.loginCalls, isEmpty);
   });
 
-  testWidgets('a rejected login shows the structured API message', (
+  testWidgets('a rejected login says so in the reader\'s language', (
     tester,
   ) async {
+    // The server answers `unauthenticated` with a log line, not copy,
+    // and the table's sentence for that code tells a reader to sign in
+    // again - which is what just failed. So the screen words it.
     final repo = FakeRepository()
       ..loginError = const WaxDeckApiException(
         code: 'unauthenticated',
-        message: 'wrong username or password',
+        message: 'invalid credentials',
         statusCode: 401,
       );
     await tester.pumpWidget(_host(repo));
@@ -58,6 +62,10 @@ void main() {
 
     expect(repo.loginCalls, hasLength(1));
     expect(find.byKey(const Key('login-error')), findsOneWidget);
-    expect(find.text('wrong username or password'), findsOneWidget);
+    expect(
+      find.text('That username and password do not go together.'),
+      findsOneWidget,
+    );
+    expect(find.text('invalid credentials'), findsNothing);
   });
 }

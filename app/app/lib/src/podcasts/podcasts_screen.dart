@@ -208,6 +208,7 @@ class _HubOverflow extends ConsumerWidget {
       final file = await picker.pickFile(
         extensions: _opmlExtensions,
         label: l10n.podcastOpmlPickerLabel,
+        anyLabel: l10n.uploadsFileTypeAny,
       );
       final openRead = file?.openRead;
       if (file == null || openRead == null) return;

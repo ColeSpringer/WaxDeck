@@ -38,11 +38,11 @@ class _AndroidShareCardExporter implements ShareCardExporter {
       });
       return const ShareCardShared();
     } on PlatformException catch (e) {
-      return ShareCardFailed(e.message ?? 'The share sheet refused the image');
+      return ShareCardFailed(ShareCardFailure.shareRefused, detail: e.message);
     } on MissingPluginException {
       // An older platform side than this Dart side: real on a partial
       // upgrade, and not something to crash a share button over.
-      return const ShareCardFailed('This build cannot share images');
+      return const ShareCardFailed(ShareCardFailure.shareUnsupported);
     }
   }
 }
@@ -69,9 +69,9 @@ class _DesktopShareCardExporter implements ShareCardExporter {
       await _writeAtomically(file, Uint8List.fromList(png));
       return ShareCardSaved(file.path);
     } on FileSystemException catch (e) {
-      return ShareCardFailed(e.message);
+      return ShareCardFailed(ShareCardFailure.writeFailed, detail: e.message);
     } on MissingPlatformDirectoryException {
-      return const ShareCardFailed('There is nowhere to save images here');
+      return const ShareCardFailed(ShareCardFailure.noDestination);
     }
   }
 

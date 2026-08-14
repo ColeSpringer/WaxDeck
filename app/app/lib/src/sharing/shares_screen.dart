@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'share_dialog.dart';
@@ -54,17 +55,17 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
   Future<void> _copy(Share share) async {
     await Clipboard.setData(ClipboardData(text: shareAbsoluteUrl(share.url)));
     if (!mounted) return;
-    _report('Link copied');
+    _report(context.l10n.sharingLinkCopied);
   }
 
   Future<void> _revoke(Share share) async {
     try {
       await ref.read(sharesProvider.notifier).revoke(share.pid);
       if (!mounted) return;
-      _report('Link revoked');
+      _report(context.l10n.sharingLinkRevoked);
     } on WaxDeckApiException catch (e) {
       if (!mounted) return;
-      _report(e.message);
+      _report(context.explain(e));
     }
   }
 
@@ -74,20 +75,17 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
     final rows = shares.value?.shares ?? const <Share>[];
 
     return WaxScaffold(
-      title: 'Share links',
+      title: context.l10n.sharingTitle,
       largeTitle: false,
       controller: _scroll,
       onBack: () => context.leave(fallback: WaxRoute.settings),
       slivers: <Widget>[
         switch (shares) {
-          AsyncData() when rows.isEmpty => const SliverFillRemaining(
+          AsyncData() when rows.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'No share links yet',
-              message:
-                  'Share a track, an episode, a book, or a playlist and the '
-                  'link turns up here, with how often it has been played and '
-                  'a way to switch it off.',
+              title: context.l10n.sharingEmptyTitle,
+              message: context.l10n.sharingEmptyMessage,
               glyph: WaxIcons.share,
               semanticsId: SemanticsIds.sharesEmpty,
             ),
@@ -100,10 +98,8 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load your share links',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: context.l10n.sharingLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(sharesProvider),
             ),
           ),

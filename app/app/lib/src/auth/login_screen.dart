@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -42,6 +43,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final l10n = context.l10n;
     setState(() {
       _submitting = true;
       _error = null;
@@ -55,12 +57,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = e.message;
+        _error = _signInError(l10n, e, l10n.authSignInRejected);
       });
     }
   }
 
+  /// `explainRefusal`, except for `unauthenticated`: the table tells a
+  /// reader to sign in again, which is what just failed, and the server
+  /// answers a log line. [rejected] is what this half of the form says.
+  static String _signInError(
+    AppLocalizations l10n,
+    Object error,
+    String rejected,
+  ) {
+    if (error is WaxDeckApiException && error.code == 'unauthenticated') {
+      return rejected;
+    }
+    return explainRefusal(l10n, error);
+  }
+
   Future<void> _oidcSubmit(OidcProvider provider) async {
+    final l10n = context.l10n;
     setState(() {
       _submitting = true;
       _error = null;
@@ -73,13 +90,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = e.message;
+        _error = _signInError(l10n, e, l10n.authSsoFailed);
       });
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = 'Sign-in timed out; try again';
+        _error = l10n.authTimedOut;
       });
     }
   }
@@ -94,6 +111,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final oidcProviders =
         ref.watch(oidcProvidersProvider).value ?? const <OidcProvider>[];
     final signupEnabled = ref.watch(signupEnabledProvider).value ?? false;
@@ -112,9 +130,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   // The mark, not the name set as a heading: this is the
                   // first screen an account ever sees, and the one place
                   // the identity is the whole content.
-                  const WaxBrandBlock(
-                    tagline: 'Music, podcasts, and audiobooks',
-                  ),
+                  WaxBrandBlock(tagline: l10n.authTagline),
                   const SizedBox(height: WaxSpace.s32),
                   Semantics(
                     identifier: SemanticsIds.loginUsername,
@@ -122,13 +138,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       key: const Key(SemanticsIds.loginUsername),
                       controller: _username,
                       autofillHints: const [AutofillHints.username],
-                      decoration: const InputDecoration(
-                        labelText: 'Username',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.authUsername,
+                        border: const OutlineInputBorder(),
                       ),
                       validator: (value) =>
                           (value == null || value.trim().isEmpty)
-                          ? 'Enter a username'
+                          ? l10n.authEnterUsername
                           : null,
                     ),
                   ),
@@ -140,12 +156,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       controller: _password,
                       obscureText: true,
                       autofillHints: const [AutofillHints.password],
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.authPassword,
+                        border: const OutlineInputBorder(),
                       ),
                       validator: (value) => (value == null || value.isEmpty)
-                          ? 'Enter a password'
+                          ? l10n.authEnterPassword
                           : null,
                       onFieldSubmitted: (_) => _submit(),
                     ),
@@ -174,7 +190,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Log in'),
+                          : Text(l10n.authLogIn),
                     ),
                   ),
                   const SizedBox(height: WaxSpace.s12),
@@ -187,8 +203,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       onPressed: _submitting ? null : _openSignup,
                       child: Text(
                         signupEnabled
-                            ? 'Request an account'
-                            : 'Have an invite?',
+                            ? l10n.authRequestAccount
+                            : l10n.authHaveInvite,
                       ),
                     ),
                   ),
@@ -202,7 +218,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             horizontal: WaxSpace.s12,
                           ),
                           child: Text(
-                            'or',
+                            l10n.authOr,
                             style: WaxType.bodySmall.copyWith(
                               color: colors.textSecondary,
                             ),
@@ -221,7 +237,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ? null
                               : () => _oidcSubmit(provider),
                           icon: const WaxIcon(WaxIcons.signIn),
-                          label: Text('Continue with ${provider.displayName}'),
+                          label: Text(
+                            l10n.authContinueWith(provider.displayName),
+                          ),
                         ),
                       ),
                     ],

@@ -47,9 +47,9 @@ class AudioDropArea extends StatefulWidget {
     super.key,
     required this.child,
     required this.onDropped,
+    required this.hint,
     this.enabled = true,
     this.extensions = kAcceptedAudioExtensions,
-    this.hint = 'Drop audio files to upload',
     this.semanticsId = SemanticsIds.uploadDropTarget,
   });
 
@@ -62,7 +62,9 @@ class AudioDropArea extends StatefulWidget {
 
   final Set<String> extensions;
 
-  /// Overlay caption while hovering.
+  /// Overlay caption while hovering, and the zone's spoken name.
+  /// Required, because a defaulted sentence is one language every
+  /// caller who forgets it draws in all of them.
   final String hint;
 
   /// The zone's own handle. Defaulted to the uploads target, which is

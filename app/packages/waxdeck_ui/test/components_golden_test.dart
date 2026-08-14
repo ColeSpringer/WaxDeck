@@ -49,6 +49,7 @@ const _secondaryEntries = <WaxNavEntry>[
     ),
   ),
   WaxNavGroup(
+    name: 'curation',
     label: 'Curation',
     glyph: WaxIcons.admin,
     children: <WaxDestination>[

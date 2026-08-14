@@ -1,5 +1,6 @@
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter/services.dart';
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 
 /// A data-dense editing prototype shaped like the metadata review
@@ -74,14 +75,14 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
           value: 'copy',
           child: Semantics(
             identifier: SemanticsIds.protoMenuCopy,
-            child: const Text('Copy proposed title'),
+            child: Text(context.l10n.prototypeCopyProposed),
           ),
         ),
         PopupMenuItem(
           value: 'apply',
           child: Semantics(
             identifier: SemanticsIds.protoMenuApply,
-            child: const Text('Apply proposal'),
+            child: Text(context.l10n.prototypeApply),
           ),
         ),
       ],
@@ -95,7 +96,7 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Editing prototype')),
+      appBar: AppBar(title: Text(context.l10n.prototypeTitle)),
       body: SelectionArea(
         child: Semantics(
           identifier: SemanticsIds.protoTable,
@@ -160,7 +161,7 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
                         ),
                         Semantics(
                           identifier: SemanticsIds.protoKebab(i),
-                          label: 'Row actions',
+                          label: context.l10n.prototypeRowActions,
                           button: true,
                           excludeSemantics: true,
                           onTap: () => _kebabMenu(i),
@@ -198,11 +199,23 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
       ),
       child: Row(
         children: [
-          Expanded(flex: 3, child: Text('Current title', style: style)),
-          Expanded(flex: 3, child: Text('Proposed title', style: style)),
+          Expanded(
+            flex: 3,
+            child: Text(context.l10n.prototypeColumnCurrent, style: style),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(context.l10n.prototypeColumnProposed, style: style),
+          ),
           const SizedBox(width: WaxSpace.s8),
-          Expanded(flex: 2, child: Text('Artist', style: style)),
-          SizedBox(width: 48, child: Text('Match', style: style)),
+          Expanded(
+            flex: 2,
+            child: Text(context.l10n.prototypeColumnArtist, style: style),
+          ),
+          SizedBox(
+            width: 48,
+            child: Text(context.l10n.prototypeColumnMatch, style: style),
+          ),
         ],
       ),
     );

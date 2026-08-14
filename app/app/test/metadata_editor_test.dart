@@ -25,7 +25,10 @@ class _ImagePicker implements FilePickerPort {
   bool get canPickFolders => false;
 
   @override
-  Future<List<PickedAudioFile>> pickAudioFiles() async => const [];
+  Future<List<PickedAudioFile>> pickAudioFiles({
+    String audioLabel = '',
+    String anyLabel = '',
+  }) async => const [];
 
   @override
   Future<List<PickedAudioFile>> pickAudioFolder() async => const [];
@@ -34,6 +37,7 @@ class _ImagePicker implements FilePickerPort {
   Future<PickedAudioFile?> pickFile({
     required Set<String> extensions,
     required String label,
+    String anyLabel = '',
   }) async => image;
 }
 

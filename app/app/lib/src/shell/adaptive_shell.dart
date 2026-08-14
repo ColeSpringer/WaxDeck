@@ -7,6 +7,7 @@ import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../player/deck_bar_host.dart';
 import '../providers.dart';
 import '../search/search_controller.dart';
@@ -46,95 +47,59 @@ enum WaxNavSection {
 /// books hub to send anyone to, and search and downloads when those
 /// screens exist.
 enum WaxNavTarget {
-  home('Home', WaxIcons.home, WaxRoute.home, WaxNavSection.primary),
+  home(WaxIcons.home, WaxRoute.home, WaxNavSection.primary),
 
-  music('Music', WaxIcons.music, WaxRoute.music, WaxNavSection.primary),
+  music(WaxIcons.music, WaxRoute.music, WaxNavSection.primary),
 
   // The ways into music, in the order the hub's tiles list them. They sit
   // under Music in the sidebar; everywhere else the hub is the way to
   // them, which is why they are not tabs and not in the rail's overflow.
   artists(
-    'Artists',
     WaxIcons.artists,
     '${WaxRoute.music}/artists',
     WaxNavSection.domainIndex,
   ),
   albums(
-    'Albums',
     WaxIcons.albums,
     '${WaxRoute.music}/albums',
     WaxNavSection.domainIndex,
   ),
-  tracks(
-    'Tracks',
-    WaxIcons.music,
-    WaxRoute.musicTracks,
-    WaxNavSection.domainIndex,
-  ),
+  tracks(WaxIcons.music, WaxRoute.musicTracks, WaxNavSection.domainIndex),
   genres(
-    'Genres',
     WaxIcons.filter,
     '${WaxRoute.music}/genres',
     WaxNavSection.domainIndex,
   ),
-  years(
-    'Years',
-    WaxIcons.recent,
-    '${WaxRoute.music}/years',
-    WaxNavSection.domainIndex,
-  ),
+  years(WaxIcons.recent, '${WaxRoute.music}/years', WaxNavSection.domainIndex),
   // Playlists moves under Music now that there is a group to hold it. It
   // is a way into the collection like the others, and the hub lists it
   // beside them.
-  playlists(
-    'Playlists',
-    WaxIcons.playlists,
-    WaxRoute.playlists,
-    WaxNavSection.domainIndex,
-  ),
+  playlists(WaxIcons.playlists, WaxRoute.playlists, WaxNavSection.domainIndex),
 
-  podcasts(
-    'Podcasts',
-    WaxIcons.podcasts,
-    WaxRoute.podcasts,
-    WaxNavSection.primary,
-  ),
+  podcasts(WaxIcons.podcasts, WaxRoute.podcasts, WaxNavSection.primary),
   // "Books" rather than "Audiobooks" on the chrome, which is what the
   // layout system's own tab row says: five labels share a phone's width,
   // and the hub's own title is where the long name belongs.
   books(
-    'Books',
     WaxIcons.audiobooks,
     WaxRoute.books,
     WaxNavSection.primary,
     hidesWhenEmpty: true,
   ),
-  radio('Radio', WaxIcons.radio, WaxRoute.radio, WaxNavSection.primary),
+  radio(WaxIcons.radio, WaxRoute.radio, WaxNavSection.primary),
 
-  stats(
-    'Listening stats',
-    WaxIcons.stats,
-    WaxRoute.stats,
-    WaxNavSection.secondary,
-  ),
+  stats(WaxIcons.stats, WaxRoute.stats, WaxNavSection.secondary),
   // Native only: the web build keeps nothing offline, so there is no
   // manager to reach and the destination is not offered.
   downloads(
-    'Downloads',
     WaxIcons.downloads,
     WaxRoute.downloads,
     WaxNavSection.secondary,
     needsDownloads: true,
   ),
-  settings(
-    'Settings',
-    WaxIcons.settings,
-    WaxRoute.settings,
-    WaxNavSection.secondary,
-  ),
+  settings(WaxIcons.settings, WaxRoute.settings, WaxNavSection.secondary),
 
   uploads(
-    'Uploads',
     WaxIcons.add,
     WaxRoute.uploads,
     WaxNavSection.curation,
@@ -145,7 +110,6 @@ enum WaxNavTarget {
   // burying the keyboard-first screen one level deeper to tidy the group
   // would cost more than the tidiness is worth.
   review(
-    'Review queue',
     WaxIcons.check,
     WaxRoute.review,
     WaxNavSection.curation,
@@ -156,7 +120,6 @@ enum WaxNavTarget {
   // one (an upload, an acquisition) is what needs the right. A listener
   // who can start none is the only account with nothing to see here.
   tasks(
-    'Tasks',
     WaxIcons.refresh,
     WaxRoute.tasks,
     WaxNavSection.curation,
@@ -167,7 +130,6 @@ enum WaxNavTarget {
   // Curation group that told nobody how they related; the console's own
   // section list groups them and says what each is for.
   admin(
-    'Admin console',
     WaxIcons.admin,
     WaxRoute.admin,
     WaxNavSection.curation,
@@ -175,7 +137,6 @@ enum WaxNavTarget {
   );
 
   const WaxNavTarget(
-    this.label,
     this.glyph,
     this.location,
     this.section, {
@@ -185,7 +146,6 @@ enum WaxNavTarget {
     this.hidesWhenEmpty = false,
   });
 
-  final String label;
   final WaxGlyph glyph;
   final String location;
   final WaxNavSection section;
@@ -233,20 +193,51 @@ enum WaxNavTarget {
   }
 
   /// The indexes the sidebar lists beneath this target, for the domains
-  /// that have any.
-  List<WaxNavTarget> get indexes => this == WaxNavTarget.music
-      ? WaxNavTarget.values
-            .where((t) => t.section == WaxNavSection.domainIndex)
-            .toList()
-      : const <WaxNavTarget>[];
+  /// that have any. Computed once: it is a property of the declaration
+  /// and every sidebar build walked the whole enum for it.
+  List<WaxNavTarget> get indexes =>
+      this == WaxNavTarget.music ? _musicIndexes : const <WaxNavTarget>[];
 
-  WaxDestination get destination => WaxDestination(
+  static final List<WaxNavTarget> _musicIndexes =
+      List<WaxNavTarget>.unmodifiable(
+        WaxNavTarget.values.where(
+          (t) => t.section == WaxNavSection.domainIndex,
+        ),
+      );
+
+  /// What the chrome calls this destination. The enum keeps its `name`,
+  /// which is the handle every spec and every semantics identifier uses
+  /// and is the same in every language.
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    WaxNavTarget.home => l10n.shellNavHome,
+    WaxNavTarget.music => l10n.shellNavMusic,
+    WaxNavTarget.artists => l10n.shellNavArtists,
+    WaxNavTarget.albums => l10n.shellNavAlbums,
+    WaxNavTarget.tracks => l10n.shellNavTracks,
+    WaxNavTarget.genres => l10n.shellNavGenres,
+    WaxNavTarget.years => l10n.shellNavYears,
+    WaxNavTarget.playlists => l10n.shellNavPlaylists,
+    WaxNavTarget.podcasts => l10n.shellNavPodcasts,
+    WaxNavTarget.books => l10n.shellNavBooks,
+    WaxNavTarget.radio => l10n.shellNavRadio,
+    WaxNavTarget.stats => l10n.shellNavStats,
+    WaxNavTarget.downloads => l10n.shellNavDownloads,
+    WaxNavTarget.settings => l10n.shellNavSettings,
+    WaxNavTarget.uploads => l10n.shellNavUploads,
+    WaxNavTarget.review => l10n.shellNavReview,
+    WaxNavTarget.tasks => l10n.shellNavTasks,
+    WaxNavTarget.admin => l10n.shellNavAdmin,
+  };
+
+  WaxDestination destinationOf(AppLocalizations l10n) => WaxDestination(
     name: name,
-    label: label,
+    label: labelOf(l10n),
     glyph: glyph,
     semanticsId: SemanticsIds.navDestination(name),
     discloseSemanticsId: SemanticsIds.navDisclose(name),
-    children: <WaxDestination>[for (final index in indexes) index.destination],
+    children: <WaxDestination>[
+      for (final index in indexes) index.destinationOf(l10n),
+    ],
   );
 }
 
@@ -363,16 +354,19 @@ final sidebarCollapsedProvider = NotifierProvider<SidebarCollapsed, bool>(
 /// One entry today. It is an enum rather than a string so the shell's
 /// switch stays exhaustive as the menu grows.
 enum WaxAccountVerb {
-  signOut('Sign out', WaxIcons.close);
+  signOut(WaxIcons.close);
 
-  const WaxAccountVerb(this.label, this.glyph);
+  const WaxAccountVerb(this.glyph);
 
-  final String label;
   final WaxGlyph glyph;
 
-  WaxAccountAction get action => WaxAccountAction(
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    WaxAccountVerb.signOut => l10n.shellSignOut,
+  };
+
+  WaxAccountAction actionOf(AppLocalizations l10n) => WaxAccountAction(
     name: name,
-    label: label,
+    label: labelOf(l10n),
     glyph: glyph,
     semanticsId: SemanticsIds.navAccountAction(name),
   );
@@ -402,26 +396,85 @@ enum WaxAccountVerb {
 /// does its menu carry" would be two places to get role gating wrong, so
 /// they read this.
 class ShellChrome {
-  const ShellChrome({
+  ShellChrome({
     required this.visible,
     required this.byName,
-    required this.destinations,
-    required this.secondary,
-    required this.account,
+    required this.curation,
+    required this.accountName,
   });
+
+  /// The stable handle of the curation group, in the vocabulary every
+  /// destination name and every semantics identifier already uses.
+  static const String _curationGroup = 'curation';
 
   /// Every target this account may be offered, in declaration order.
   final List<WaxNavTarget> visible;
 
   final Map<String, WaxNavTarget> byName;
 
-  /// The domains, as the tabs, rail, and sidebar draw them.
-  final List<WaxDestination> destinations;
+  /// The curation targets, which the sidebar draws under one group.
+  final List<WaxNavTarget> curation;
+
+  /// Who is signed in. A username rather than copy.
+  final String accountName;
+
+  /// The words the three below were built from, and the whole cache
+  /// key. Held, because the shell rebuilds on every navigation and the
+  /// account menu asks again in the same frame.
+  AppLocalizations? _worded;
+  List<WaxDestination>? _destinations;
+  List<WaxNavEntry>? _secondary;
+  WaxAccount? _account;
+
+  void _reword(AppLocalizations l10n) {
+    if (identical(_worded, l10n)) return;
+    _worded = l10n;
+    _destinations = null;
+    _secondary = null;
+    _account = null;
+  }
+
+  /// The domains, as the tabs, rail, and sidebar draw them. Worded here
+  /// rather than taken as a constructor argument, because this is a
+  /// provider: it decides what may be offered, the widget names it.
+  List<WaxDestination> destinationsOf(AppLocalizations l10n) {
+    _reword(l10n);
+    return _destinations ??= <WaxDestination>[
+      for (final target in visible)
+        if (target.section == WaxNavSection.primary) target.destinationOf(l10n),
+    ];
+  }
 
   /// Everything that is not a domain, as menu entries.
-  final List<WaxNavEntry> secondary;
+  List<WaxNavEntry> secondaryOf(AppLocalizations l10n) {
+    _reword(l10n);
+    return _secondary ??= <WaxNavEntry>[
+      for (final target in visible)
+        if (target.section == WaxNavSection.secondary)
+          WaxNavLink(target.destinationOf(l10n)),
+      if (curation.isNotEmpty)
+        WaxNavGroup(
+          name: _curationGroup,
+          label: l10n.shellNavCuration,
+          glyph: WaxIcons.admin,
+          semanticsId: SemanticsIds.navGroup(_curationGroup),
+          children: <WaxDestination>[
+            for (final target in curation) target.destinationOf(l10n),
+          ],
+        ),
+    ];
+  }
 
-  final WaxAccount account;
+  WaxAccount accountOf(AppLocalizations l10n) {
+    _reword(l10n);
+    return _account ??= WaxAccount(
+      name: accountName,
+      actions: <WaxAccountAction>[
+        for (final verb in WaxAccountVerb.values) verb.actionOf(l10n),
+      ],
+      semanticsId: SemanticsIds.navAccount,
+    );
+  }
 }
 
 /// The chrome for the signed-in account.
@@ -453,31 +506,8 @@ final shellChromeProvider = Provider.autoDispose<ShellChrome>((ref) {
     byName: <String, WaxNavTarget>{
       for (final target in visible) target.name: target,
     },
-    destinations: <WaxDestination>[
-      for (final target in visible)
-        if (target.section == WaxNavSection.primary) target.destination,
-    ],
-    secondary: <WaxNavEntry>[
-      for (final target in visible)
-        if (target.section == WaxNavSection.secondary)
-          WaxNavLink(target.destination),
-      if (curation.isNotEmpty)
-        WaxNavGroup(
-          label: 'Curation',
-          glyph: WaxIcons.admin,
-          semanticsId: SemanticsIds.navGroup('curation'),
-          children: <WaxDestination>[
-            for (final target in curation) target.destination,
-          ],
-        ),
-    ],
-    account: WaxAccount(
-      name: user?.username ?? '',
-      actions: <WaxAccountAction>[
-        for (final verb in WaxAccountVerb.values) verb.action,
-      ],
-      semanticsId: SemanticsIds.navAccount,
-    ),
+    curation: curation,
+    accountName: user?.username ?? '',
   );
 });
 
@@ -736,9 +766,10 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
     _listenForQuery();
 
     final router = GoRouter.of(context);
+    final l10n = context.l10n;
     final frame = WaxShellFrame(
-      destinations: chrome.destinations,
-      secondary: chrome.secondary,
+      destinations: chrome.destinationsOf(l10n),
+      secondary: chrome.secondaryOf(l10n),
       selected: activeNavTarget(
         widget.location,
         chrome.visible,
@@ -754,7 +785,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       // frame draws none at compact: below rail width the avatar is in
       // the screen's own top app bar (`AccountAction`), where the layout
       // system puts it and where it carries the secondary destinations.
-      account: chrome.account,
+      account: chrome.accountOf(l10n),
       onAccountAction: (name) {
         final verb = WaxAccountVerb.named(name);
         if (verb != null) runAccountVerb(ref, verb);
@@ -768,7 +799,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       sidebarHeader: SearchField(
         controller: _searchField,
         focusNode: _searchFocus,
-        hint: 'Artists, albums, shows, books',
+        hint: l10n.searchFieldHint,
         semanticsId: SemanticsIds.searchField,
         clearSemanticsId: SemanticsIds.searchClear,
         onChanged: _onSearchChanged,
@@ -785,7 +816,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       // opens beside the content where there is room for one.
       bottom: const DeckBarHost(),
       panel: shellSidePanel(ref),
-      banners: lifecycleBanners(ref),
+      banners: lifecycleBanners(l10n, ref),
       content: widget.shell,
     );
 

@@ -508,6 +508,7 @@ class _BookOverflow extends ConsumerWidget {
       semanticsId: SemanticsIds.bookOverflow,
       items: <WaxMenuItem<_BookAction>>[
         pinMenuItem<_BookAction>(
+          context,
           ref,
           book.pid,
           value: _BookAction.pin,

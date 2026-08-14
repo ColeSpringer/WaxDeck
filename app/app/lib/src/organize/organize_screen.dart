@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../admin/admin_console.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -33,6 +34,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
       _busy = true;
       _report = null;
     });
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final plan = await ref
@@ -40,7 +42,9 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
           .previewOrganize(profile: profile);
       if (mounted) setState(() => _plan = plan);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      // The profile came off the server's own list rather than out of a
+      // field, so the table's sentence is the right one.
+      messenger.show(explainError(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -48,15 +52,13 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
 
   Future<void> _apply(String profile) async {
     if (_busy) return;
+    final l10n = context.l10n;
     final confirmed = await showTypedConfirm(
       context,
-      title: 'Apply organize profile?',
-      message:
-          'Files move to their new locations on the server. The catalog '
-          'follows them, but anything else pointing at the old paths does '
-          'not.',
+      title: l10n.organizeConfirmTitle,
+      message: l10n.organizeConfirmMessage,
       confirmWord: profile,
-      confirmLabel: 'Apply',
+      confirmLabel: l10n.organizeApply,
       fieldSemanticsId: SemanticsIds.confirmField,
       confirmSemanticsId: SemanticsIds.organizeConfirm,
       cancelSemanticsId: SemanticsIds.confirmCancel,
@@ -75,7 +77,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
         });
       }
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -84,9 +86,10 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
   @override
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final profiles = ref.watch(organizeProfilesProvider);
     return WaxScaffold(
-      title: 'Organize files',
+      title: l10n.organizeTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminOrganize,
       onBack: adminBack(context),
@@ -97,10 +100,8 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
         child: switch (profiles) {
           AsyncData(:final value) => _body(context, value),
           AsyncError(:final error) => ErrorState(
-            title: 'Could not load organize profiles',
-            message: error is WaxDeckApiException
-                ? error.message
-                : 'The server did not answer.',
+            title: l10n.organizeLoadError,
+            message: context.explain(error),
             onRetry: () => ref.invalidate(organizeProfilesProvider),
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -111,13 +112,12 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
 
   Widget _body(BuildContext context, List<OrganizeProfile> profiles) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     if (profiles.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         glyph: WaxIcons.sort,
-        title: 'No organize profiles',
-        message:
-            'Profiles are part of the server configuration. Add one there '
-            'and it appears here.',
+        title: l10n.organizeEmptyTitle,
+        message: l10n.organizeEmptyMessage,
       );
     }
     final profile = _profile ?? profiles.first.name;
@@ -126,12 +126,12 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(
-          title: 'Profile',
-          overline: 'The naming scheme to move into',
+        SectionHeader(
+          title: l10n.organizeProfileTitle,
+          overline: l10n.organizeProfileOverline,
         ),
         WaxChoice<String>(
-          label: 'Organize profile',
+          label: l10n.organizeProfileLabel,
           value: profile,
           semanticsId: SemanticsIds.organizeProfile,
           options: <String>[for (final p in profiles) p.name],
@@ -146,7 +146,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
         Row(
           children: <Widget>[
             WaxButton(
-              label: 'Preview',
+              label: l10n.organizePreview,
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.search,
               semanticsId: SemanticsIds.organizePreview,
@@ -154,7 +154,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
             ),
             const SizedBox(width: WaxSpace.s8),
             WaxButton(
-              label: 'Apply',
+              label: l10n.organizeApply,
               icon: WaxIcons.sort,
               semanticsId: SemanticsIds.organizeApply,
               // No plan, no apply: a run without one rewrites the
@@ -170,8 +170,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
           _ReportView(report: report)
         else
           Text(
-            'Preview shows where the selected profile would move files '
-            'before anything happens.',
+            l10n.organizeHint,
             style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
           ),
       ],
@@ -188,6 +187,7 @@ class _PlanTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Semantics(
       identifier: SemanticsIds.organizePlan,
       container: true,
@@ -195,16 +195,14 @@ class _PlanTable extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           SectionHeader(
-            title:
-                '${plan.totalActions} planned '
-                '${plan.totalActions == 1 ? 'move' : 'moves'}',
-            overline: plan.tagWrite ? 'Tags are rewritten too' : null,
+            title: l10n.organizePlannedMoves(plan.totalActions),
+            overline: plan.tagWrite ? l10n.organizeTagWrite : null,
           ),
           if (plan.actions.isEmpty)
-            const EmptyState(
+            EmptyState(
               glyph: WaxIcons.success,
-              title: 'Everything is already in place',
-              message: 'This profile would move nothing.',
+              title: l10n.organizeNothingTitle,
+              message: l10n.organizeNothingMessage,
             )
           else
             WaxTable<OrganizeAction>(
@@ -213,12 +211,14 @@ class _PlanTable extends StatelessWidget {
               rowSemanticsId: SemanticsIds.organizeRow,
               rowDetailSemanticsId: SemanticsIds.organizeRowDetail,
               caption: plan.actions.length < plan.totalActions
-                  ? 'Showing the first ${plan.actions.length} of '
-                        '${plan.totalActions}'
+                  ? l10n.organizeShowingFirst(
+                      plan.actions.length,
+                      plan.totalActions,
+                    )
                   : null,
               columns: <WaxColumn<OrganizeAction>>[
                 WaxColumn<OrganizeAction>(
-                  label: 'Now at',
+                  label: l10n.organizeColumnFrom,
                   priority: WaxColumnPriority.primary,
                   text: (action) => action.from,
                   cell: (context, action) => Text(
@@ -230,7 +230,7 @@ class _PlanTable extends StatelessWidget {
                   ),
                 ),
                 WaxColumn<OrganizeAction>(
-                  label: 'Moves to',
+                  label: l10n.organizeColumnTo,
                   text: (action) => action.to,
                   cell: (context, action) => Text(
                     action.to,
@@ -255,21 +255,22 @@ class _ReportView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Semantics(
       identifier: SemanticsIds.organizeReport,
       container: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const SectionHeader(title: 'Result'),
+          SectionHeader(title: l10n.organizeResultTitle),
           Wrap(
             spacing: WaxSpace.s12,
             runSpacing: WaxSpace.s12,
             children: <Widget>[
-              StatTile(label: 'Moved', value: '${report.moved}'),
-              StatTile(label: 'Skipped', value: '${report.skipped}'),
+              StatTile(label: l10n.organizeMoved, value: '${report.moved}'),
+              StatTile(label: l10n.organizeSkipped, value: '${report.skipped}'),
               StatTile(
-                label: 'Failed',
+                label: l10n.organizeFailed,
                 value: '${report.failed}',
                 tone: report.failed == 0 ? null : colors.error,
               ),

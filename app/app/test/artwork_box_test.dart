@@ -1,3 +1,5 @@
+import 'localized_host.dart';
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -11,9 +13,7 @@ const _art = 'https://deck.local/api/v1/items/tr-1/art';
 
 Widget _host(_RecordingStore store, Widget child) => ProviderScope(
   overrides: [artworkStoreProvider.overrideWithValue(store)],
-  child: MaterialApp(
-    home: Scaffold(body: Center(child: child)),
-  ),
+  child: localizedHost(Scaffold(body: Center(child: child))),
 );
 
 void main() {

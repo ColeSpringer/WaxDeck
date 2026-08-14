@@ -115,6 +115,26 @@ extension WaxFormats on AppLocalizations {
       ? durationDays(hours ~/ 24)
       : durationHours(hours);
 
+  /// The single letters a chart labels its months with, by month index
+  /// from zero: CLDR's standalone narrow forms rather than a hand-kept
+  /// table, since Spanish starts the year with E. Cached whole.
+  Map<int, String> monthInitials() => _monthInitialsFor(localeName);
+
+  /// A span in the tightest form a tile or a trailing column can hold:
+  /// "2h 6m", "45s". Not `formatSpan`, which spells its units out.
+  /// Episode durations share it; two copies were two sets of letters.
+  String formatListenTime(int ms) {
+    final span = Duration(milliseconds: ms);
+    if (span.inHours > 0) {
+      return durationHoursMinutesShort(
+        span.inHours,
+        span.inMinutes.remainder(60),
+      );
+    }
+    if (span.inMinutes > 0) return durationMinutesShort(span.inMinutes);
+    return durationSecondsShort(span.inSeconds);
+  }
+
   /// A playback rate: "1x", "1.2x", never "1.0x".
   ///
   /// The separator is the locale's and the trailing zeros go, which is
@@ -154,6 +174,22 @@ final Map<String, DateFormat> _dateCache = <String, DateFormat>{};
 final Map<String, DateFormat> _stampCache = <String, DateFormat>{};
 final Map<String, DateFormat> _monthDayCache = <String, DateFormat>{};
 final Map<String, DateFormat> _numericCache = <String, DateFormat>{};
+final Map<String, DateFormat> _monthInitialCache = <String, DateFormat>{};
+
+/// The standalone narrow month, which is the axis label's case: `LLLLL`
+/// rather than `MMMMM`, because a label stands on its own rather than
+/// inside a date.
+DateFormat _monthInitialFormat(String locale) =>
+    _monthInitialCache[locale] ??= DateFormat('LLLLL', locale);
+
+final Map<String, Map<int, String>> _monthInitialsCache =
+    <String, Map<int, String>>{};
+
+Map<int, String> _monthInitialsFor(String locale) =>
+    _monthInitialsCache[locale] ??= Map<int, String>.unmodifiable(<int, String>{
+      for (var month = 1; month <= 12; month++)
+        month - 1: _monthInitialFormat(locale).format(DateTime(2000, month)),
+    });
 
 /// The one number pattern, held for the same reason and keyed the same
 /// way. Trailing zeros are dropped by the pattern itself, so 1.0 reads

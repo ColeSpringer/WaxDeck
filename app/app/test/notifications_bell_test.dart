@@ -57,23 +57,26 @@ void main() {
 
     notifications.record(
       NotificationKind.feedDisabled,
-      'A show kept failing to refresh and was disabled.',
       at: DateTime(2026, 8, 12, 9),
     );
     await tester.pumpAndSettle();
     await tester.tap(_byId(SemanticsIds.notificationsBell));
     await tester.pumpAndSettle();
 
-    // Behind the open menu, which holds the rows it opened with: the row
-    // on screen is still the podcast one, at the review row's index.
+    // Newer news arrives behind the open menu, which holds the rows it
+    // opened with. The handle names what the row is about, so it goes on
+    // meaning the podcast row however the list reorders underneath.
     notifications.record(
       NotificationKind.review,
-      'The review queue changed.',
       at: DateTime(2026, 8, 12, 10),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(_byId(SemanticsIds.notificationRow(0)));
+    await tester.tap(
+      _byId(
+        SemanticsIds.notificationRowPlain(NotificationKind.feedDisabled.token),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(_location(router), WaxRoute.podcasts);
@@ -88,11 +91,7 @@ void main() {
 
     container
         .read(notificationsProvider.notifier)
-        .record(
-          NotificationKind.download,
-          'A download finished.',
-          at: DateTime(2026, 8, 12, 9),
-        );
+        .record(NotificationKind.download, at: DateTime(2026, 8, 12, 9));
     await tester.pumpAndSettle();
     await tester.tap(_byId(SemanticsIds.notificationsBell));
     await tester.pumpAndSettle();
@@ -113,11 +112,7 @@ void main() {
 
     container
         .read(notificationsProvider.notifier)
-        .record(
-          NotificationKind.upload,
-          'An upload changed.',
-          at: DateTime(2026, 8, 12, 9),
-        );
+        .record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9));
     await tester.pumpAndSettle();
 
     // The name, not the drawn badge: it is what the e2e waits on.

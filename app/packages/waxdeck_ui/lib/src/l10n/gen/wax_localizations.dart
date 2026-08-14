@@ -309,7 +309,7 @@ abstract class WaxLocalizations {
   /// **'Pick up where you left off'**
   String get deckBarOfferTitle;
 
-  /// Tail of the now-playing bar's spoken description when the sound is coming out of another device. {endpoint} is that device's user-chosen name.
+  /// Where the sound is coming out, when that is another device: the tail of the now-playing bar's spoken description, and its second line where there is nothing else to say there. {endpoint} is that device's user-chosen name.
   ///
   /// In en, this message translates to:
   /// **'on {endpoint}'**
@@ -386,6 +386,12 @@ abstract class WaxLocalizations {
   /// In en, this message translates to:
   /// **'{speed}x'**
   String deckBarSpeed(String speed);
+
+  /// The deck bar's second line while playback is on another device: what is playing, then where. {subtitle} is usually the artist; {endpoint} is that device's user-chosen name.
+  ///
+  /// In en, this message translates to:
+  /// **'{subtitle} on {endpoint}'**
+  String deckBarSubtitleOnEndpoint(String subtitle, String endpoint);
 
   /// Label on the play button when the browser blocked playback and a press is what starts it.
   ///

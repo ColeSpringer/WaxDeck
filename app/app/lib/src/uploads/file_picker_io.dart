@@ -40,22 +40,25 @@ Future<PickedAudioFile> pickedFromXFile(
 }
 
 class _IoFilePickerPort implements FilePickerPort {
-  static final _audioGroup = XTypeGroup(
-    label: 'Audio',
-    extensions: kAcceptedAudioExtensions.toList(),
-  );
+  static XTypeGroup _audioGroup(String label) =>
+      XTypeGroup(label: label, extensions: kAcceptedAudioExtensions.toList());
 
-  // The unfiltered group keeps files in a custom
-  // WAXDECK_UPLOAD_FORMATS set reachable; the server checks the real
-  // accepted list at session create.
-  static const _anyGroup = XTypeGroup(label: 'All files');
+  // Keeps files in a custom WAXDECK_UPLOAD_FORMATS set reachable.
+  // Named, because the Linux and Windows plugins hand a missing label
+  // to the toolkit as an empty string rather than substituting one.
+  static XTypeGroup _anyGroup(String label) => XTypeGroup(label: label);
 
   @override
   bool get canPickFolders => Platform.isLinux || Platform.isWindows;
 
   @override
-  Future<List<PickedAudioFile>> pickAudioFiles() async {
-    final files = await openFiles(acceptedTypeGroups: [_audioGroup, _anyGroup]);
+  Future<List<PickedAudioFile>> pickAudioFiles({
+    required String audioLabel,
+    required String anyLabel,
+  }) async {
+    final files = await openFiles(
+      acceptedTypeGroups: [_audioGroup(audioLabel), _anyGroup(anyLabel)],
+    );
     return [for (final f in files) await pickedFromXFile(f)];
   }
 
@@ -71,11 +74,12 @@ class _IoFilePickerPort implements FilePickerPort {
   Future<PickedAudioFile?> pickFile({
     required Set<String> extensions,
     required String label,
+    required String anyLabel,
   }) async {
     final file = await openFile(
       acceptedTypeGroups: [
         XTypeGroup(label: label, extensions: extensions.toList()),
-        _anyGroup,
+        _anyGroup(anyLabel),
       ],
     );
     if (file == null) return null;

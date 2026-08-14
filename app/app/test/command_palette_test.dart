@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
@@ -163,6 +164,24 @@ Finder _row(String id) =>
     find.bySemanticsIdentifier(SemanticsIds.commandPaletteEntry(id));
 
 void main() {
+  test('every standing command is named in both languages', () async {
+    // The standing list is declared above every BuildContext, so its
+    // names live in a table keyed on the id, and nothing in Dart ties
+    // the two. A command added to one and not the other draws its id.
+    for (final locale in <String>['en', 'es']) {
+      final l10n = await AppLocalizations.delegate.load(Locale(locale));
+      for (final command in waxStandingCommands) {
+        final label = commandLabel(l10n, command);
+        expect(
+          label,
+          isNot(command.id),
+          reason: '$locale: ${command.id} falls back to its own id',
+        );
+        expect(label.trim(), isNotEmpty);
+      }
+    }
+  });
+
   testWidgets('space plays and pauses what is on the deck bar', (tester) async {
     final shell = await _pumpShell(tester);
     await _play(tester, shell);

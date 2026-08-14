@@ -3,7 +3,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../shell/routes.dart';
+import '../shell/semantics_ids.dart';
 
 /// What a notification is about, and where it goes.
 ///
@@ -11,46 +13,106 @@ import '../shell/routes.dart';
 /// are decided in one place and a kind this build does not know is
 /// dropped rather than drawn as a row that goes nowhere.
 enum NotificationKind {
-  review('Review queue', WaxIcons.check, WaxRoute.review),
-  upload('Uploads', WaxIcons.add, WaxRoute.uploads),
-  task('Background tasks', WaxIcons.refresh, WaxRoute.tasks),
-  feedDisabled('Podcasts', WaxIcons.warning, WaxRoute.podcasts),
-  episodeDownloaded('Podcasts', WaxIcons.podcasts, WaxRoute.podcasts),
-  importCompleted('Imports', WaxIcons.success, WaxRoute.uploads),
-  download('Downloads', WaxIcons.downloads, WaxRoute.downloads);
+  review('review', WaxIcons.check, WaxRoute.review),
+  upload('upload', WaxIcons.add, WaxRoute.uploads),
+  task('task', WaxIcons.refresh, WaxRoute.tasks),
+  feedDisabled('feed-disabled', WaxIcons.warning, WaxRoute.podcasts),
+  episodeDownloaded('episode-downloaded', WaxIcons.podcasts, WaxRoute.podcasts),
+  importCompleted('import-completed', WaxIcons.success, WaxRoute.uploads),
+  download('download', WaxIcons.downloads, WaxRoute.downloads);
 
-  const NotificationKind(this.label, this.glyph, this.location);
+  const NotificationKind(this.token, this.glyph, this.location);
 
-  /// What the row's overline says: the surface, not the change.
-  final String label;
+  /// The one name this kind has outside Dart: the server's event name,
+  /// and what a row's identifier is built from. A Dart value's `name`
+  /// would let a rename break the driver silently.
+  final String token;
 
   final WaxGlyph glyph;
 
   /// Where tapping the row goes when the row names nowhere better.
   final String location;
+
+  /// Whether news of this kind is about one entity rather than about a
+  /// surface - which is what makes a pid worth recording, what
+  /// [locationFor] opens, and what keeps two broken feeds two rows.
+  bool get namesEntity =>
+      this == NotificationKind.feedDisabled ||
+      this == NotificationKind.episodeDownloaded;
+
+  /// The kind one server event means, or null where it means nothing
+  /// worth telling anybody about. Matched on [token], so the vocabulary
+  /// lives on the values rather than in a switch beside them.
+  static NotificationKind? forEvent(String event) {
+    for (final kind in NotificationKind.values) {
+      // Not the client's own: a future server event called that would
+      // otherwise mint a row worded as a finished download.
+      if (kind == NotificationKind.download) continue;
+      if (kind.token == event) return kind;
+    }
+    return null;
+  }
+
+  /// What the row's overline says: the surface, not the change.
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    NotificationKind.review => l10n.bellSurfaceReview,
+    NotificationKind.upload => l10n.bellSurfaceUploads,
+    NotificationKind.task => l10n.bellSurfaceTasks,
+    NotificationKind.feedDisabled ||
+    NotificationKind.episodeDownloaded => l10n.bellSurfacePodcasts,
+    NotificationKind.importCompleted => l10n.bellSurfaceImports,
+    NotificationKind.download => l10n.bellSurfaceDownloads,
+  };
+
+  /// The one sentence a row of this kind says. The kind's own rather
+  /// than the recorder's: the markers carry no detail, so holding it
+  /// here lets a controller record a row with no table to word it.
+  String messageOf(AppLocalizations l10n) => switch (this) {
+    NotificationKind.review => l10n.bellReviewChanged,
+    NotificationKind.upload => l10n.bellUploadChanged,
+    NotificationKind.task => l10n.bellTaskChanged,
+    NotificationKind.feedDisabled => l10n.bellFeedDisabled,
+    NotificationKind.episodeDownloaded => l10n.bellEpisodeDownloaded,
+    NotificationKind.importCompleted => l10n.bellImportCompleted,
+    NotificationKind.download => l10n.bellDownloadFinished,
+  };
+
+  /// Where a row goes: the entity the marker named where it named one,
+  /// the kind's own surface otherwise. Only [namesEntity] kinds carry a
+  /// pid, which is what makes kind and pid together a row's identity.
+  String locationFor(String? pid) => switch (this) {
+    NotificationKind.feedDisabled when pid != null => WaxRoute.show(pid),
+    NotificationKind.episodeDownloaded when pid != null => WaxRoute.episode(
+      pid,
+    ),
+    _ => location,
+  };
 }
 
 /// One thing the client saw happen while it was running.
 class WaxNotification {
-  const WaxNotification({
-    required this.kind,
-    required this.message,
-    required this.at,
-    this.locationOverride,
-  });
+  const WaxNotification({required this.kind, required this.at, this.targetPid});
 
   final NotificationKind kind;
 
-  /// One sentence, in the app's own voice.
-  final String message;
-
   final DateTime at;
 
-  /// Where a row goes when the event named something more specific than
-  /// its kind's surface: a disabled feed opens its own show.
-  final String? locationOverride;
+  /// The entity the marker named, where it named one: the show whose
+  /// feed was disabled, the episode that arrived. Null where the kind's
+  /// own surface is the whole answer.
+  final String? targetPid;
 
-  String get location => locationOverride ?? kind.location;
+  String get location => kind.locationFor(targetPid);
+
+  /// What this row is about rather than where it sits. Two templates,
+  /// because the stand-in for a missing pid is vocabulary the driver
+  /// writes too, and the registry is where that lives (rule 8).
+  String get semanticsId {
+    final pid = targetPid;
+    return pid == null
+        ? SemanticsIds.notificationRowPlain(kind.token)
+        : SemanticsIds.notificationRow(kind.token, pid);
+  }
 }
 
 /// What this client has seen happen this session.
@@ -94,27 +156,14 @@ class NotificationsController extends Notifier<List<WaxNotification>> {
     return state.where((n) => n.at.isAfter(seen)).length;
   }
 
-  void record(
-    NotificationKind kind,
-    String message, {
-    required DateTime at,
-    String? location,
-  }) {
-    final row = WaxNotification(
-      kind: kind,
-      message: message,
-      at: at,
-      locationOverride: location,
-    );
-    // Deduplicated on the location too: two shows whose feeds both
-    // failed say the same sentence and must stay two rows.
+  void record(NotificationKind kind, {required DateTime at, String? pid}) {
+    final row = WaxNotification(kind: kind, at: at, targetPid: pid);
+    // Deduplicated on the target too: two shows whose feeds both failed
+    // say the same sentence and must stay two rows.
     final kept = <WaxNotification>[
       row,
       for (final existing in state)
-        if (existing.kind != kind ||
-            existing.message != message ||
-            existing.location != row.location)
-          existing,
+        if (existing.kind != kind || existing.targetPid != pid) existing,
     ];
     state = kept.length <= cap ? kept : kept.sublist(0, cap);
   }
@@ -133,65 +182,23 @@ class NotificationsController extends Notifier<List<WaxNotification>> {
     state = const <WaxNotification>[];
   }
 
-  /// Records what one server-state change means, or nothing where it
-  /// means nothing worth telling anybody about.
-  ///
-  /// The user stream is a state-change stream rather than an event log,
-  /// so every kind that survives here is a marker: it names a surface
-  /// that moved and carries no detail, which is exactly as much as the
-  /// row claims. The hydrated kinds (a play state, a preference, a book's
-  /// settings) are this client's own writes coming back as often as
-  /// anybody else's, and a notification for "your position was saved" is
-  /// noise with a bell on it.
-  /// One switch rather than two, so a kind and what it says are decided
-  /// in one place. Two of them meant an arm for every enum value
-  /// including the ones this map cannot produce, and an arm that cannot
-  /// run is an empty message waiting to be drawn by whoever adds the
-  /// producer.
+  /// Records what one server-state change means, or nothing: the
+  /// hydrated kinds are this client's own writes coming back, which is
+  /// noise with a bell on it. What a kind says is the kind's own.
   void recordServerEvent(ServerSyncEvent event, {DateTime? at}) {
-    final pid = event.pid;
-    final (
-      NotificationKind? kind,
-      String message,
-      String? location,
-    ) = switch (event.kind) {
-      'review' => (NotificationKind.review, 'The review queue changed.', null),
-      'upload' => (NotificationKind.upload, 'An upload changed.', null),
-      'task' => (NotificationKind.task, 'A background task changed.', null),
-      // The announcements. Generic messages because a marker carries no
-      // detail; the surface it opens has it.
-      'feed-disabled' => (
-        NotificationKind.feedDisabled,
-        'A show kept failing to refresh and was disabled.',
-        pid == null ? null : WaxRoute.show(pid),
-      ),
-      // Not "identified": the marker is shared with the as-is path,
-      // where nothing was identified and saying so would be wrong on
-      // every upload that declined it.
-      'import-completed' => (
-        NotificationKind.importCompleted,
-        'An upload was added to the library.',
-        null,
-      ),
-      'episode-downloaded' => (
-        NotificationKind.episodeDownloaded,
-        'A new episode finished downloading.',
-        pid == null ? null : WaxRoute.episode(pid),
-      ),
-      _ => (null, '', null),
-    };
+    final kind = NotificationKind.forEvent(event.kind);
     if (kind == null) return;
-    record(kind, message, at: at ?? DateTime.now(), location: location);
+    record(
+      kind,
+      at: at ?? DateTime.now(),
+      pid: kind.namesEntity ? event.pid : null,
+    );
   }
 
   /// Native only: web has no local download manager, so no transfer of
   /// its own to announce. Server-side fetches ride the stream above.
   void recordDownloadCompleted({DateTime? at}) {
-    record(
-      NotificationKind.download,
-      'A download finished.',
-      at: at ?? DateTime.now(),
-    );
+    record(NotificationKind.download, at: at ?? DateTime.now());
   }
 }
 

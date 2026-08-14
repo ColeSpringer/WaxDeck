@@ -2,6 +2,7 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'defect_log.dart';
@@ -23,11 +24,12 @@ class DefectLogScreen extends ConsumerStatefulWidget {
 class _DefectLogScreenState extends ConsumerState<DefectLogScreen> {
   Future<void> _copy() async {
     final report = ref.read(defectLogProvider.notifier).report();
+    final copied = context.l10n.defectsCopied;
     await Clipboard.setData(ClipboardData(text: report));
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('Defect log copied')));
+      ..showSnackBar(SnackBar(content: Text(copied)));
   }
 
   @override
@@ -35,20 +37,19 @@ class _DefectLogScreenState extends ConsumerState<DefectLogScreen> {
     final defects = ref.watch(defectLogProvider);
     final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     return WaxScaffold(
-      title: 'Defect log',
+      title: l10n.defectsTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.defectsScreen,
       onBack: () => context.leave(fallback: WaxRoute.settingsAbout),
       slivers: <Widget>[
         if (defects.isEmpty)
-          const SliverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'Nothing has gone wrong',
-              message:
-                  'Errors the app catches on its own turn up here, so a bug '
-                  'report can carry them. An empty list is the good outcome.',
+              title: l10n.defectsEmptyTitle,
+              message: l10n.defectsEmptyMessage,
               glyph: WaxIcons.info,
             ),
           )
@@ -69,8 +70,8 @@ class _DefectLogScreenState extends ConsumerState<DefectLogScreen> {
                       child: Row(
                         children: <Widget>[
                           WaxButton(
-                            label: 'Copy',
-                            spokenLabel: 'Copy the defect log',
+                            label: l10n.defectsCopy,
+                            spokenLabel: l10n.defectsCopySpoken,
                             kind: WaxButtonKind.text,
                             semanticsId: SemanticsIds.defectsCopy,
                             onPressed: _copy,
@@ -80,8 +81,8 @@ class _DefectLogScreenState extends ConsumerState<DefectLogScreen> {
                           // only holds diagnostics, and the empty state
                           // this flips to is the feedback.
                           WaxButton(
-                            label: 'Clear',
-                            spokenLabel: 'Clear the defect log',
+                            label: l10n.defectsClear,
+                            spokenLabel: l10n.defectsClearSpoken,
                             kind: WaxButtonKind.text,
                             semanticsId: SemanticsIds.defectsClear,
                             onPressed: () =>
@@ -101,6 +102,9 @@ class _DefectLogScreenState extends ConsumerState<DefectLogScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       const SizedBox(height: WaxSpace.s16),
+                      // Not copy, and the three floors this file
+                      // keeps: an entry is pasted into a bug report,
+                      // and reads the same to whoever answers it.
                       Text(
                         d.count > 1
                             ? '${d.at.toIso8601String()} [${d.source}] x${d.count}'

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
 
@@ -64,22 +65,13 @@ class PinnedEntities extends Notifier<List<String>> {
 
   bool get full => state.length >= limit;
 
-  /// Pins or unpins. A pin goes on the end, so the shelf's order is the
-  /// order things were pinned in and does not reshuffle under a thumb.
-  ///
-  /// Answers null when the change landed, or the message to show when it
-  /// did not: a full list, or the server's refusal. Returned rather than
-  /// thrown because the callers are menu rows, which are not places an
-  /// unhandled rejection can be seen.
-  ///
-  /// Optimistic, because a pin that waits for a round trip reads as a
-  /// dropped tap; a refused write puts the old list back.
-  Future<String?> toggle(String pid) async {
+  /// Pins or unpins, on the end, so the shelf does not reshuffle under
+  /// a thumb. Answers null or a refusal as a value, since a controller
+  /// has no table. Optimistic; a refused write puts the old list back.
+  Future<PinRefusal?> toggle(String pid) async {
     final before = state;
     final pinned = state.contains(pid);
-    if (!pinned && full) {
-      return 'Home holds $limit pins. Unpin something to make room.';
-    }
+    if (!pinned && full) return const PinShelfFull(limit);
     state = pinned
         ? <String>[
             for (final entry in state)
@@ -99,7 +91,7 @@ class PinnedEntities extends Notifier<List<String>> {
       // from the wrong base) and escape into an unhandled zone error,
       // because every caller invokes this unawaited.
       if (ref.mounted) state = before;
-      return e is WaxDeckApiException ? e.message : 'That pin was not saved.';
+      return PinWriteRejected(e);
     }
   }
 
@@ -131,6 +123,40 @@ class PinnedEntities extends Notifier<List<String>> {
     }
   }
 }
+
+/// Why a pin did not land.
+sealed class PinRefusal {
+  const PinRefusal();
+}
+
+/// The home shelf is at its cap.
+class PinShelfFull extends PinRefusal {
+  const PinShelfFull(this.limit);
+
+  final int limit;
+}
+
+/// The write did not go through - anything, not only the server's own
+/// refusal: the prefs chain translates a Dio failure and nothing else,
+/// so a decode error arrives untranslated and still has to be reported.
+class PinWriteRejected extends PinRefusal {
+  const PinWriteRejected(this.error);
+
+  final Object error;
+}
+
+/// A refusal as a sentence. Beside the type it words, because the shelf,
+/// the pin sheet, and five entity menus all draw it.
+String pinRefusalMessage(AppLocalizations l10n, PinRefusal refusal) =>
+    switch (refusal) {
+      PinShelfFull(:final limit) => l10n.homePinShelfFull(limit),
+      // Not `explainError`: its generic line says something went wrong,
+      // and what a listener needs to know is that the pin is not stored.
+      PinWriteRejected(:final error) =>
+        error is WaxDeckApiException
+            ? explainError(l10n, error)
+            : l10n.homePinNotSaved,
+    };
 
 final pinnedEntitiesProvider = NotifierProvider<PinnedEntities, List<String>>(
   PinnedEntities.new,

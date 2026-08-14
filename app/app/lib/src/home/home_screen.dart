@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
 import '../downloads/downloads_controller.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../notifications/notifications_bell.dart';
 import '../player/play_progress.dart';
@@ -47,12 +48,14 @@ class HomeScreen extends ConsumerWidget {
     // to say and the screen says that instead of drawing eight error
     // states.
     final offline = ref.watch(offlineProvider);
+    final l10n = context.l10n;
 
     return AudioDropArea(
       enabled: canUpload && !offline,
+      hint: l10n.uploadsDropHint,
       onDropped: (files) => uploadPickedFiles(context, ref, files),
       child: WaxScaffold(
-        title: 'Home',
+        title: l10n.homeTitle,
         semanticsId: SemanticsIds.homeScreen,
         actions: <Widget>[
           const SearchAction(),
@@ -68,7 +71,7 @@ class HomeScreen extends ConsumerWidget {
           if (canUpload && !offline)
             WaxIconButton(
               glyph: WaxIcons.add,
-              label: 'Add to library',
+              label: l10n.homeAddAction,
               semanticsId: SemanticsIds.homeAdd,
               onPressed: () => showAddToLibrarySheet(context, ref),
             ),
@@ -77,11 +80,9 @@ class HomeScreen extends ConsumerWidget {
         onRefresh: () => refreshHome(ref),
         slivers: <Widget>[
           if (offline) ...<Widget>[
-            const SliverToBoxAdapter(
+            SliverToBoxAdapter(
               child: WaxBanner(
-                message:
-                    'Offline. The shelves come back when the server does; '
-                    'what this device holds still plays.',
+                message: l10n.homeOfflineMessage,
                 glyph: WaxIcons.offline,
                 semanticsId: SemanticsIds.offlineBanner,
               ),
@@ -110,18 +111,17 @@ class _OnlineHome extends ConsumerWidget {
     // online, so the offline half is already decided.
     final canUpload =
         ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
+    final l10n = context.l10n;
     return switch (ref.watch(libraryHasAnythingProvider)) {
       // A server with nothing in it gets the first-run state rather
       // than eight empty shelves.
       AsyncData(value: false) => SliverFillRemaining(
         hasScrollBody: false,
         child: EmptyState(
-          title: 'Nothing here yet',
-          message:
-              'Point a library at your music, follow a show, or drop '
-              'files in. Everything you add turns up on these shelves.',
+          title: l10n.homeEmptyTitle,
+          message: l10n.homeEmptyMessage,
           glyph: WaxIcons.home,
-          actionLabel: canUpload ? 'Add to library' : null,
+          actionLabel: canUpload ? l10n.homeAddAction : null,
           onAction: canUpload
               ? () => showAddToLibrarySheet(context, ref)
               : null,
@@ -131,10 +131,8 @@ class _OnlineHome extends ConsumerWidget {
       AsyncError(:final error) => SliverFillRemaining(
         hasScrollBody: false,
         child: ErrorState(
-          title: 'Could not reach the library',
-          message: error is WaxDeckApiException
-              ? error.message
-              : 'The server did not answer.',
+          title: l10n.homeLibraryLoadError,
+          message: context.explain(error),
           onRetry: () => ref.invalidate(libraryHasAnythingProvider),
         ),
       ),
@@ -154,8 +152,8 @@ class _Shelves extends StatelessWidget {
     slivers: <Widget>[
       ItemShelf(
         shelf: 'continue',
-        title: 'Continue listening',
-        overline: 'Where you left off',
+        title: context.l10n.homeContinueTitle,
+        overline: context.l10n.homeContinueOverline,
         provider: continueListeningShelfProvider,
         withProgress: true,
       ),
@@ -166,28 +164,28 @@ class _Shelves extends StatelessWidget {
       const _NewEpisodesShelf(),
       ItemShelf(
         shelf: 'recent',
-        title: 'Recently added',
-        overline: 'New to the library',
+        title: context.l10n.homeRecentTitle,
+        overline: context.l10n.homeRecentOverline,
         provider: recentlyAddedShelfProvider,
         allLocation: WaxRoute.musicTracks,
       ),
       ItemShelf(
         shelf: 'sealed',
-        title: 'Never played',
-        overline: 'In your library, still sealed',
+        title: context.l10n.homeNeverPlayedTitle,
+        overline: context.l10n.homeNeverPlayedOverline,
         provider: neverPlayedShelfProvider,
       ),
       const MixShelf(),
       ItemShelf(
         shelf: 'rediscover',
-        title: 'Rediscover',
-        overline: 'Marked, and not heard in months',
+        title: context.l10n.homeRediscoverTitle,
+        overline: context.l10n.homeRediscoverOverline,
         provider: rediscoverShelfProvider,
       ),
       ItemShelf(
         shelf: 'most-played',
-        title: 'Most played',
-        overline: 'What you come back to',
+        title: context.l10n.homeMostPlayedTitle,
+        overline: context.l10n.homeMostPlayedOverline,
         provider: mostPlayedShelfProvider,
       ),
     ],
@@ -240,10 +238,10 @@ class _DownloadedShelf extends ConsumerWidget {
             bottom: WaxSpace.s24,
           ),
           child: ShelfRow(
-            title: 'On this device',
-            overline: 'Plays with no network',
+            title: context.l10n.homeDownloadedTitle,
+            overline: context.l10n.homeDownloadedOverline,
             items: tiles,
-            actionLabel: 'Show all',
+            actionLabel: context.l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll('downloaded'),
             onAction: () => context.go(WaxRoute.downloads),
             onTapItem: (tile) {
@@ -316,10 +314,10 @@ class _NewEpisodesShelf extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.only(bottom: WaxSpace.s24),
           child: ShelfRow(
-            title: 'New episodes',
-            overline: 'From the shows you follow',
+            title: context.l10n.homeEpisodesTitle,
+            overline: context.l10n.homeEpisodesOverline,
             items: tiles,
-            actionLabel: 'Show all',
+            actionLabel: context.l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll('episodes'),
             onAction: () => context.go(WaxRoute.podcasts),
             onTapItem: (tile) {

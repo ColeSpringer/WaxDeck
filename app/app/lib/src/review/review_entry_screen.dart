@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -18,7 +19,7 @@ class ReviewEntryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return WaxScaffold(
-      title: 'Review entry',
+      title: context.l10n.reviewEntryTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminReviewEntry,
       onBack: () => context.leave(fallback: WaxRoute.review),
@@ -59,23 +60,27 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
   }
 
   Future<void> _decide(String action, {String? candidateMbid}) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final warnings = await ref
           .read(reviewEntryProvider(widget.entryId).notifier)
           .decide(action, candidateMbid: candidateMbid);
+      // The server's own words: a warning names the file or the field it
+      // is about, which no table sentence can.
       if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
   Future<void> _revert() async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(reviewEntryProvider(widget.entryId).notifier).revert();
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -97,10 +102,8 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
       AsyncError(:final error) => Padding(
         padding: const EdgeInsets.all(WaxSpace.s16),
         child: ErrorState(
-          title: 'Could not load the entry',
-          message: error is WaxDeckApiException
-              ? error.message
-              : 'Something went wrong reading it.',
+          title: context.l10n.reviewEntryLoadError,
+          message: context.explain(error),
           onRetry: () => ref.invalidate(reviewEntryProvider(widget.entryId)),
         ),
       ),
@@ -110,6 +113,7 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
 
   Widget _body(BuildContext context, ReviewEntryDetail detail) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final candidate = _selectedCandidate(detail);
     return ListView(
       padding: const EdgeInsets.all(WaxSpace.s16),
@@ -126,7 +130,7 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
               ),
               const SizedBox(width: WaxSpace.s8),
               Text(
-                'Identifying: candidate lookup is still running',
+                l10n.reviewIdentifyingLong,
                 style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
               ),
             ],
@@ -151,7 +155,7 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
           ),
         ],
         const SizedBox(height: WaxSpace.s20),
-        const SectionHeader(title: 'Candidates'),
+        SectionHeader(title: l10n.reviewCandidatesTitle),
         // Two different empty lists: one searched and found nothing, one
         // never searched at all. Saying so is the difference between a
         // dead end and an answer.
@@ -164,22 +168,17 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
               // import that refused, and needs telling what to do.
               child: EmptyState(
                 glyph: WaxIcons.search,
-                title: 'Identification was skipped',
+                title: l10n.reviewSkippedTitle,
                 message: detail.status == 'pending'
-                    ? 'This submission asked to be taken as delivered, so '
-                          'nothing was searched. It could not be added on '
-                          'its own - keep the files as they are, or skip.'
-                    : 'This submission asked to be taken as delivered, so '
-                          'nothing was searched.',
+                    ? l10n.reviewSkippedPending
+                    : l10n.reviewSkippedDecided,
               ),
             )
           else
-            const EmptyState(
+            EmptyState(
               glyph: WaxIcons.search,
-              title: 'No candidates found',
-              message:
-                  'Nothing in the sources matched what these files claim. '
-                  'Keep them as they are, or skip and try again later.',
+              title: l10n.reviewNoCandidatesTitle,
+              message: l10n.reviewNoCandidatesMessage,
             )
         else
           for (final c in detail.candidates)
@@ -191,7 +190,7 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
                   .select(c.mbid),
             ),
         const SizedBox(height: WaxSpace.s20),
-        const SectionHeader(title: 'Tracks'),
+        SectionHeader(title: l10n.reviewTracksTitle),
         _DiffTable(detail: detail, candidate: candidate),
       ],
     );
@@ -217,6 +216,7 @@ class _ActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final decided = detail.status != 'pending';
     final revertible =
         detail.status == 'applied' || detail.status == 'auto-applied';
@@ -233,7 +233,12 @@ class _ActionBar extends StatelessWidget {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      'Decided: ${detail.status}',
+                      // Worded, because the filter chips one screen back
+                      // are, and a raw token here would disagree with
+                      // them. The row's monospace chip keeps the token.
+                      l10n.reviewDecidedStatus(
+                        reviewStatusLabel(l10n, detail.status),
+                      ),
                       style: WaxType.label.copyWith(
                         color: colors.textSecondary,
                       ),
@@ -241,7 +246,7 @@ class _ActionBar extends StatelessWidget {
                   ),
                   if (revertible)
                     WaxButton(
-                      label: 'Revert',
+                      label: l10n.reviewActionRevert,
                       kind: WaxButtonKind.tonal,
                       semanticsId: SemanticsIds.reviewRevert,
                       onPressed: onRevert,
@@ -253,7 +258,7 @@ class _ActionBar extends StatelessWidget {
                 runSpacing: WaxSpace.s8,
                 children: <Widget>[
                   WaxButton(
-                    label: 'Approve',
+                    label: l10n.reviewActionApprove,
                     semanticsId: SemanticsIds.reviewApprove,
                     onPressed: candidate == null
                         ? null
@@ -263,26 +268,26 @@ class _ActionBar extends StatelessWidget {
                           ),
                   ),
                   WaxButton(
-                    label: 'Keep as is',
+                    label: l10n.reviewActionAsIs,
                     kind: WaxButtonKind.tonal,
                     semanticsId: SemanticsIds.reviewAsIs,
                     onPressed: () => onDecide('as-is'),
                   ),
                   WaxButton(
-                    label: 'Mark unofficial',
+                    label: l10n.reviewActionUnofficial,
                     kind: WaxButtonKind.tonal,
                     semanticsId: SemanticsIds.reviewUnofficial,
                     onPressed: () => onDecide('unofficial'),
                   ),
                   WaxButton(
-                    label: 'Skip',
+                    label: l10n.reviewActionSkip,
                     kind: WaxButtonKind.text,
                     semanticsId: SemanticsIds.reviewSkip,
                     onPressed: () => onDecide('skip'),
                   ),
                   if (detail.origin == 'upload')
                     WaxButton(
-                      label: 'Discard',
+                      label: l10n.reviewActionDiscard,
                       kind: WaxButtonKind.destructive,
                       semanticsId: SemanticsIds.reviewDiscard,
                       onPressed: () => onDecide('discard'),
@@ -383,6 +388,7 @@ class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
     // The same gate the button carries: Enter is the keyboard's version
     // of pressing it, not a way around it.
     if (widget.busy) return;
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref
@@ -393,13 +399,16 @@ class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
             title: widget.oneTrack ? _title.text : '',
           );
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      // Names it typed, so the server's own refusal is what says which
+      // of them it could not act on.
+      messenger.show(explainRefusal(l10n, e));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Semantics(
       identifier: SemanticsIds.reviewIdentifyGroup,
       container: true,
@@ -407,7 +416,7 @@ class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           WaxButton(
-            label: 'Search for something else',
+            label: l10n.reviewSearchToggle,
             kind: WaxButtonKind.text,
             icon: _open ? WaxIcons.collapse : WaxIcons.expand,
             semanticsId: SemanticsIds.reviewIdentifyToggle,
@@ -417,23 +426,20 @@ class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
             const SizedBox(height: WaxSpace.s8),
             Text(
               widget.stored == null && widget.suggested != null
-                  ? 'Suggested from the source title. Looked up instead of '
-                        'what the files claim; nothing here is written to '
-                        'the files.'
-                  : 'Looked up instead of what the files claim. Nothing here '
-                        'is written to the files.',
+                  ? l10n.reviewSearchSuggested
+                  : l10n.reviewSearchStored,
               style: WaxType.caption.copyWith(color: colors.textTertiary),
             ),
             const SizedBox(height: WaxSpace.s12),
             WaxTextField(
-              label: 'Artist',
+              label: l10n.reviewFieldArtist,
               controller: _artist,
               semanticsId: SemanticsIds.reviewIdentifyField('artist'),
               onSubmitted: (_) => _search(),
             ),
             const SizedBox(height: WaxSpace.s8),
             WaxTextField(
-              label: 'Album',
+              label: l10n.reviewFieldAlbum,
               controller: _album,
               semanticsId: SemanticsIds.reviewIdentifyField('album'),
               onSubmitted: (_) => _search(),
@@ -441,7 +447,7 @@ class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
             if (widget.oneTrack) ...<Widget>[
               const SizedBox(height: WaxSpace.s8),
               WaxTextField(
-                label: 'Track title',
+                label: l10n.reviewFieldTitle,
                 controller: _title,
                 semanticsId: SemanticsIds.reviewIdentifyField('title'),
                 onSubmitted: (_) => _search(),
@@ -449,7 +455,7 @@ class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
             ],
             const SizedBox(height: WaxSpace.s12),
             WaxButton(
-              label: 'Search again',
+              label: l10n.reviewSearchAgain,
               kind: WaxButtonKind.tonal,
               semanticsId: SemanticsIds.reviewIdentifySubmit,
               // Empty fields are a Search again too: that is how a
@@ -472,6 +478,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final uploadedBy = detail.uploadedBy;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -481,7 +488,7 @@ class _Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                detail.title ?? 'Untitled',
+                detail.title ?? l10n.reviewUntitled,
                 style: WaxType.titleEntity.copyWith(color: colors.textPrimary),
               ),
               if (detail.artist != null)
@@ -491,8 +498,16 @@ class _Header extends StatelessWidget {
                 ),
               const SizedBox(height: WaxSpace.s4),
               Text(
-                '${detail.trackCount} tracks, ${detail.origin}'
-                '${uploadedBy == null ? '' : ' by $uploadedBy'}',
+                uploadedBy == null
+                    ? l10n.reviewHeaderFacts(
+                        detail.trackCount,
+                        reviewOriginLabel(l10n, detail.origin),
+                      )
+                    : l10n.reviewHeaderFactsBy(
+                        detail.trackCount,
+                        reviewOriginLabel(l10n, detail.origin),
+                        uploadedBy,
+                      ),
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ],
@@ -501,7 +516,7 @@ class _Header extends StatelessWidget {
         if (onClose != null)
           WaxIconButton(
             glyph: WaxIcons.close,
-            label: 'Close the entry',
+            label: l10n.reviewPaneClose,
             semanticsId: SemanticsIds.reviewPaneClose,
             onPressed: onClose,
           ),
@@ -536,7 +551,10 @@ class _CandidateTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: WaxSpace.s8),
       child: WaxTappable(
-        label: '${candidate.title} by ${candidate.artist}',
+        label: context.l10n.reviewCandidateSpoken(
+          candidate.title,
+          candidate.artist,
+        ),
         semanticsId: SemanticsIds.candidate(candidate.mbid),
         selected: selected,
         borderRadius: WaxRadius.card,
@@ -573,7 +591,10 @@ class _CandidateTile extends StatelessWidget {
                       const SizedBox(width: WaxSpace.s12),
                       Expanded(
                         child: Text(
-                          '${candidate.title}, ${candidate.artist}',
+                          context.l10n.reviewCandidateTitleLine(
+                            candidate.title,
+                            candidate.artist,
+                          ),
                           style: WaxType.titleItem.copyWith(
                             color: selected
                                 ? colors.onAccentContainer
@@ -678,6 +699,7 @@ class _DiffTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final pairings = <int, CandidatePairing>{
       for (final p in candidate?.pairings ?? const <CandidatePairing>[])
         p.trackIndex: p,
@@ -705,7 +727,7 @@ class _DiffTable extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                _headerRow(colors),
+                _headerRow(l10n, colors),
                 for (var i = 0; i < detail.tracks.length; i++)
                   _TrackDiffRow(
                     index: i,
@@ -724,7 +746,7 @@ class _DiffTable extends StatelessWidget {
     );
   }
 
-  Widget _headerRow(WaxColors colors) {
+  Widget _headerRow(AppLocalizations l10n, WaxColors colors) {
     final style = WaxType.overline.copyWith(color: colors.textSecondary);
     return Container(
       color: colors.surface2,
@@ -734,9 +756,9 @@ class _DiffTable extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Expanded(child: Text('Current', style: style)),
+          Expanded(child: Text(l10n.reviewDiffCurrent, style: style)),
           const SizedBox(width: WaxSpace.s8),
-          Expanded(child: Text('Proposed', style: style)),
+          Expanded(child: Text(l10n.reviewDiffProposed, style: style)),
           const SizedBox(width: WaxSpace.s40),
         ],
       ),
@@ -759,15 +781,24 @@ class _TrackDiffRow extends StatelessWidget {
   final bool extra;
   final bool striped;
 
-  static String _numbered(int? number, String title, String? artist) {
-    final prefix = number == null ? '' : '$number. ';
-    final suffix = artist == null ? '' : ' ($artist)';
-    return '$prefix$title$suffix';
+  static String _numbered(
+    AppLocalizations l10n,
+    int? number,
+    String title,
+    String? artist,
+  ) {
+    final numbered = number == null
+        ? title
+        : l10n.reviewTrackNumbered('$number', title);
+    return artist == null
+        ? numbered
+        : l10n.reviewTrackWithArtist(numbered, artist);
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final paired = pairing;
     final pid = track.pid;
     return Semantics(
@@ -784,7 +815,7 @@ class _TrackDiffRow extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: Text(
-                _numbered(track.trackNo, track.title, track.artist),
+                _numbered(l10n, track.trackNo, track.title, track.artist),
                 style: WaxType.bodySmall.copyWith(color: colors.textPrimary),
               ),
             ),
@@ -792,18 +823,23 @@ class _TrackDiffRow extends StatelessWidget {
             Expanded(
               child: extra
                   ? Text(
-                      'Extra file, no counterpart',
+                      l10n.reviewDiffExtra,
                       style: WaxType.bodySmall.copyWith(color: colors.error),
                     )
                   : paired == null
                   ? Text(
-                      'Unmatched',
+                      l10n.reviewDiffUnmatched,
                       style: WaxType.bodySmall.copyWith(
                         color: colors.textTertiary,
                       ),
                     )
                   : Text(
-                      _numbered(paired.position, paired.title, paired.artist),
+                      _numbered(
+                        l10n,
+                        paired.position,
+                        paired.title,
+                        paired.artist,
+                      ),
                       style: WaxType.bodySmall.copyWith(
                         color: colors.textSecondary,
                       ),
@@ -815,13 +851,13 @@ class _TrackDiffRow extends StatelessWidget {
                   ? null
                   : WaxMenuButton<String>(
                       glyph: WaxIcons.moreVertical,
-                      label: 'Track actions',
+                      label: l10n.reviewTrackMenu,
                       size: 16,
                       semanticsId: SemanticsIds.trackMenu(pid),
                       items: <WaxMenuItem<String>>[
                         WaxMenuItem<String>(
                           value: 'edit',
-                          label: 'Edit metadata',
+                          label: l10n.reviewEditMetadata,
                           glyph: WaxIcons.edit,
                           semanticsId: SemanticsIds.editMetadata(pid),
                         ),
@@ -861,7 +897,7 @@ class _MissingRow extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: Text(
-                'Missing locally',
+                context.l10n.reviewDiffMissing,
                 style: WaxType.bodySmall.copyWith(color: colors.error),
               ),
             ),

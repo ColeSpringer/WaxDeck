@@ -120,8 +120,8 @@ class _CommandPaletteDialog extends ConsumerWidget {
           semanticsId: SemanticsIds.commandPalette,
           fieldSemanticsId: SemanticsIds.commandPaletteField,
           emptyTitle: query.typed.isEmpty
-              ? 'Nothing to run'
-              : 'Nothing matches "${query.typed}"',
+              ? context.l10n.shellPaletteEmpty
+              : context.l10n.shellPaletteNoMatch(query.typed),
           onQueryChanged: ref.read(paletteQueryProvider.notifier).type,
           onClose: () => Navigator.of(context).pop(),
           onRun: (id) {
@@ -148,7 +148,9 @@ class _CommandPaletteDialog extends ConsumerWidget {
     SearchResults? results,
     Map<String, void Function()> runners,
   ) {
-    final needle = query.typed.toLowerCase();
+    // Folded the way the settings search folds: once the labels are
+    // translated, a query typed without its accents has to reach them.
+    final needle = foldForSearch(query.typed);
     final chrome = ref.watch(shellChromeProvider);
 
     WaxPaletteEntry entry({
@@ -171,11 +173,11 @@ class _CommandPaletteDialog extends ConsumerWidget {
     }
 
     final actions = <WaxPaletteEntry>[
-      for (final command in _matchingCommands(ref, needle))
+      for (final command in _matchingCommands(l10n, ref, needle))
         entry(
           id: 'cmd-${command.id}',
-          label: command.label,
-          detail: command.section.title,
+          label: commandLabel(l10n, command),
+          detail: command.section.titleOf(l10n),
           glyph: command.glyph,
           shortcut: command.keys,
           run: () => command.run(host, ref),
@@ -185,11 +187,11 @@ class _CommandPaletteDialog extends ConsumerWidget {
     final places = <WaxPaletteEntry>[
       for (final target in chrome.visible)
         if (target.section != WaxNavSection.curation &&
-            _matches(target.label, needle))
+            _matches(target.labelOf(l10n), needle))
           entry(
             id: 'go-${target.name}',
-            label: target.label,
-            detail: 'Go to',
+            label: target.labelOf(l10n),
+            detail: l10n.shellPaletteGoToDetail,
             glyph: target.glyph,
             run: () => host.go(target.location),
           ),
@@ -210,15 +212,15 @@ class _CommandPaletteDialog extends ConsumerWidget {
           entry(
             id: 'station-${station.pid}',
             label: station.name,
-            detail: 'Radio station',
+            detail: l10n.shellPaletteStationDetail,
             glyph: WaxIcons.radio,
             run: () => unawaited(tuneStation(host, ref, station)),
           ),
       if (query.typed.isNotEmpty)
         entry(
           id: 'search-all',
-          label: 'Search the library for "${query.typed}"',
-          detail: 'Everything that matches',
+          label: l10n.shellPaletteSearchAll(query.typed),
+          detail: l10n.shellPaletteSearchAllDetail,
           glyph: WaxIcons.search,
           run: () {
             ref.read(searchQueryProvider.notifier).submit(query.typed);
@@ -248,8 +250,11 @@ class _CommandPaletteDialog extends ConsumerWidget {
       if (matchedSettings.length > kPaletteSettingLimit)
         entry(
           id: 'set-all',
-          label: 'All settings',
-          detail: '${matchedSettings.length} match "${query.typed}"',
+          label: l10n.shellPaletteAllSettings,
+          detail: l10n.shellPaletteSettingsMore(
+            matchedSettings.length,
+            query.typed,
+          ),
           glyph: WaxIcons.settings,
           run: () => host.go(WaxRoute.settings),
         ),
@@ -260,33 +265,43 @@ class _CommandPaletteDialog extends ConsumerWidget {
     final admin = <WaxPaletteEntry>[
       for (final target in chrome.visible)
         if (target.section == WaxNavSection.curation &&
-            _matches(target.label, needle))
+            _matches(target.labelOf(l10n), needle))
           entry(
             id: 'go-${target.name}',
-            label: target.label,
-            detail: 'Curation',
+            label: target.labelOf(l10n),
+            detail: l10n.shellPaletteCurationDetail,
             glyph: target.glyph,
             run: () => host.go(target.location),
           ),
     ];
 
     return <WaxPaletteGroup>[
-      WaxPaletteGroup(title: 'Actions', entries: actions),
-      WaxPaletteGroup(title: 'Go to', entries: places),
-      WaxPaletteGroup(title: 'Settings', entries: settings),
-      WaxPaletteGroup(title: 'Admin areas', entries: admin),
+      WaxPaletteGroup(title: l10n.shellPaletteGroupActions, entries: actions),
+      WaxPaletteGroup(title: l10n.shellPaletteGroupPlaces, entries: places),
+      WaxPaletteGroup(title: l10n.shellPaletteGroupSettings, entries: settings),
+      WaxPaletteGroup(title: l10n.shellPaletteGroupAdmin, entries: admin),
     ];
   }
 
   /// The commands that can run right now and whose names match, best
   /// first.
-  List<WaxCommand> _matchingCommands(WidgetRef ref, String needle) {
+  List<WaxCommand> _matchingCommands(
+    AppLocalizations l10n,
+    WidgetRef ref,
+    String needle,
+  ) {
     final starts = <WaxCommand>[];
     final contains = <WaxCommand>[];
     for (final command in ref.watch(commandRegistryProvider)) {
       if (!command.inPalette || !command.isEnabled(ref)) continue;
-      final label = command.label.toLowerCase();
-      if (needle.isEmpty || label.startsWith(needle)) {
+      // Nothing narrows an empty query, so an opened palette folds no
+      // labels at all.
+      if (needle.isEmpty) {
+        starts.add(command);
+        continue;
+      }
+      final label = foldForSearch(commandLabel(l10n, command));
+      if (label.startsWith(needle)) {
         starts.add(command);
       } else if (label.contains(needle)) {
         contains.add(command);
@@ -301,8 +316,11 @@ class _CommandPaletteDialog extends ConsumerWidget {
     final stations = ref.watch(radioStationsProvider).value;
     if (stations == null) return const <RadioStation>[];
     final matched = <RadioStation>[
+      // Folded on both sides, like every other haystack here: the needle
+      // arrives folded, so a merely lowercased name never matches an
+      // accent somebody typed - or one they did not.
       for (final station in stations)
-        if (station.name.toLowerCase().contains(needle)) station,
+        if (foldForSearch(station.name).contains(needle)) station,
     ];
     return matched.length <= kPaletteStationLimit
         ? matched
@@ -329,5 +347,5 @@ class _CommandPaletteDialog extends ConsumerWidget {
   }
 
   static bool _matches(String label, String needle) =>
-      needle.isEmpty || label.toLowerCase().contains(needle);
+      needle.isEmpty || foldForSearch(label).contains(needle);
 }

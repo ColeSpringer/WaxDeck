@@ -14,6 +14,7 @@ import 'package:waxdeck/src/stats/year_in_review_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 /// Keeps whatever it is handed, so a test can read the card back.
 class _FakeExporter implements ShareCardExporter {
@@ -88,7 +89,7 @@ final _onePixelPng = Uint8List.fromList(<int>[
 
 Widget _hosted(ProviderContainer container) => UncontrolledProviderScope(
   container: container,
-  child: const MaterialApp(home: YearInReviewScreen()),
+  child: localizedHost(const YearInReviewScreen()),
 );
 
 YearInReview _recap(int year) => YearInReview(

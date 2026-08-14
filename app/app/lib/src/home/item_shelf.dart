@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
@@ -79,7 +80,7 @@ class ItemShelf extends ConsumerWidget {
               child: SectionHeader(
                 title: title,
                 overline: overline,
-                actionLabel: 'Try again',
+                actionLabel: context.l10n.homeShelfRetry,
                 onAction: () => ref.invalidate(provider),
               ),
             ),
@@ -97,7 +98,8 @@ class ItemShelf extends ConsumerWidget {
     }
     final progress = state?.progress ?? PlayProgressView.empty;
     final store = ref.watch(artworkStoreProvider);
-    final l10n = context.waxL10n;
+    final l10n = context.l10n;
+    final wax = context.waxL10n;
     final tiles = <MediaTileData>[
       for (final item in items)
         MediaTileData(
@@ -110,10 +112,10 @@ class ItemShelf extends ConsumerWidget {
               ? progress[item.pid].fractionOf(item.durationMs)
               : null,
           trailingText: withProgress
-              ? _left(l10n, progress, item, short: true)
+              ? _left(l10n, wax, progress, item, short: true)
               : null,
           trailingSpoken: withProgress
-              ? _left(l10n, progress, item, short: false)
+              ? _left(l10n, wax, progress, item, short: false)
               : null,
           // Scoped by shelf, because the shelves overlap by construction:
           // a fresh unplayed track is on Recently added and on Never
@@ -139,7 +141,7 @@ class ItemShelf extends ConsumerWidget {
             title: title,
             overline: overline,
             items: tiles,
-            actionLabel: allLocation == null ? null : 'Show all',
+            actionLabel: allLocation == null ? null : l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll(shelf),
             onAction: allLocation == null
                 ? null
@@ -157,9 +159,12 @@ class ItemShelf extends ConsumerWidget {
     );
   }
 
-  /// "12 min left", and the spelled form a screen reader hears.
+  /// "12 min left", and the spelled form a screen reader hears. Two
+  /// tables: the design system spells the duration, as every read-out
+  /// span does, and the frame around it is this screen's own.
   static String? _left(
-    WaxLocalizations l10n,
+    AppLocalizations l10n,
+    WaxLocalizations wax,
     PlayProgressView progress,
     ItemSummary item, {
     required bool short,
@@ -167,9 +172,9 @@ class ItemShelf extends ConsumerWidget {
     final remaining = progress[item.pid].remainingOf(item.durationMs);
     if (remaining == null) return null;
     final span = short
-        ? l10n.formatSpan(remaining)
-        : l10n.spellDuration(remaining);
-    return '$span left';
+        ? wax.formatSpan(remaining)
+        : wax.spellDuration(remaining);
+    return l10n.homeShelfRemaining(span);
   }
 }
 

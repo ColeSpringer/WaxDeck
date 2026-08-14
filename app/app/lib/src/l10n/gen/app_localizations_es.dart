@@ -11,6 +11,58 @@ class AppLocalizationsEs extends AppLocalizations {
   AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
+  String get aboutDefectsSubtitle =>
+      'Errores que la app ha detectado por su cuenta, los más recientes primero, con una forma de copiarlos a un informe de fallo.';
+
+  @override
+  String get aboutDiagnosticsTitle => 'Diagnóstico';
+
+  @override
+  String get aboutLicenses => 'Licencias de código abierto';
+
+  @override
+  String get aboutLicensesSubtitle =>
+      'WaxDeck es GPL-3.0-only. Esta página también lista los avisos de las tipografías y los iconos incluidos.';
+
+  @override
+  String get aboutLicensingTitle => 'Licencias';
+
+  @override
+  String get aboutRowTitle => 'Acerca de WaxDeck';
+
+  @override
+  String aboutRowVersion(String app) {
+    return 'Versión $app';
+  }
+
+  @override
+  String aboutRowVersions(String app, String server) {
+    return 'App $app, servidor $server';
+  }
+
+  @override
+  String get aboutServerUnreachable => 'no disponible';
+
+  @override
+  String get aboutTagline =>
+      'Un reproductor, gestor de biblioteca y completador de metadatos para música, pódcast y audiolibros.';
+
+  @override
+  String get aboutTitle => 'Acerca de';
+
+  @override
+  String get aboutVersionApi => 'API';
+
+  @override
+  String get aboutVersionApp => 'App';
+
+  @override
+  String get aboutVersionServer => 'Servidor';
+
+  @override
+  String get aboutVersionsTitle => 'Versiones';
+
+  @override
   String get adminAuditEmptyMessage =>
       'Las acciones administrativas se registran aquí según ocurren.';
 
@@ -1547,6 +1599,159 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get authBackToSignIn => 'Volver al inicio de sesión';
+
+  @override
+  String get authChoosePassword => 'Elige una contraseña';
+
+  @override
+  String get authChooseUsername => 'Elige un nombre de usuario';
+
+  @override
+  String get authConfirmPassword => 'Confirmar la contraseña';
+
+  @override
+  String authContinueWith(String provider) {
+    return 'Continuar con $provider';
+  }
+
+  @override
+  String get authCreateAccount => 'Crear la cuenta';
+
+  @override
+  String get authDisplayName => 'Nombre visible (opcional)';
+
+  @override
+  String get authEnterPassword => 'Escribe una contraseña';
+
+  @override
+  String get authEnterUsername => 'Escribe un nombre de usuario';
+
+  @override
+  String get authFirstAdmin => 'Crea la primera cuenta de administrador';
+
+  @override
+  String get authHaveInvite => '¿Tienes una invitación?';
+
+  @override
+  String get authInviteHelp =>
+      'Con una invitación válida la cuenta funciona al momento';
+
+  @override
+  String get authInviteToken => 'Código de invitación (opcional)';
+
+  @override
+  String get authLogIn => 'Iniciar sesión';
+
+  @override
+  String get authOr => 'o';
+
+  @override
+  String get authPassword => 'Contraseña';
+
+  @override
+  String get authPasswordTooShort => 'Usa al menos 8 caracteres';
+
+  @override
+  String get authPasswordsDiffer => 'Las contraseñas no coinciden';
+
+  @override
+  String get authRequestAccount => 'Solicitar una cuenta';
+
+  @override
+  String get authRequestPending =>
+      'Un administrador tiene que aprobar tu cuenta antes de que puedas iniciar sesión.';
+
+  @override
+  String get authRequestReceived => 'Solicitud recibida';
+
+  @override
+  String get authRequestSubmit => 'Solicitar la cuenta';
+
+  @override
+  String get authSignInRejected => 'Ese usuario y esa contraseña no coinciden.';
+
+  @override
+  String get authSsoFailed =>
+      'El inicio de sesión único no se ha completado. Inténtalo de nuevo.';
+
+  @override
+  String get authTagline => 'Música, pódcast y audiolibros';
+
+  @override
+  String get authTimedOut =>
+      'El inicio de sesión ha tardado demasiado; inténtalo de nuevo';
+
+  @override
+  String get authUsername => 'Nombre de usuario';
+
+  @override
+  String get bellClear => 'Vaciar';
+
+  @override
+  String get bellDownloadFinished => 'Ha terminado una descarga.';
+
+  @override
+  String get bellEmpty => 'Todavía no ha pasado nada.';
+
+  @override
+  String get bellEpisodeDownloaded =>
+      'Ha terminado de descargarse un episodio nuevo.';
+
+  @override
+  String get bellFeedDisabled =>
+      'Un programa no ha dejado de fallar al actualizarse y se ha desactivado.';
+
+  @override
+  String get bellImportCompleted => 'Se ha añadido una subida a la biblioteca.';
+
+  @override
+  String get bellReviewChanged => 'La cola de revisión ha cambiado.';
+
+  @override
+  String bellRow(String surface, String what) {
+    return '$surface: $what';
+  }
+
+  @override
+  String get bellSurfaceDownloads => 'Descargas';
+
+  @override
+  String get bellSurfaceImports => 'Importaciones';
+
+  @override
+  String get bellSurfacePodcasts => 'Pódcasts';
+
+  @override
+  String get bellSurfaceReview => 'Cola de revisión';
+
+  @override
+  String get bellSurfaceTasks => 'Tareas en segundo plano';
+
+  @override
+  String get bellSurfaceUploads => 'Subidas';
+
+  @override
+  String get bellTaskChanged => 'Una tarea en segundo plano ha cambiado.';
+
+  @override
+  String get bellTitle => 'Notificaciones';
+
+  @override
+  String bellUnread(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Notificaciones, $count sin leer',
+      one: 'Notificaciones, 1 sin leer',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get bellUploadChanged => 'Una subida ha cambiado.';
+
+  @override
   String get bookBackToBeginning => 'De vuelta al principio';
 
   @override
@@ -1860,6 +2065,31 @@ class AppLocalizationsEs extends AppLocalizations {
   String get commonSave => 'Guardar';
 
   @override
+  String get defectsClear => 'Vaciar';
+
+  @override
+  String get defectsClearSpoken => 'Vaciar el registro de fallos';
+
+  @override
+  String get defectsCopied => 'Registro de fallos copiado';
+
+  @override
+  String get defectsCopy => 'Copiar';
+
+  @override
+  String get defectsCopySpoken => 'Copiar el registro de fallos';
+
+  @override
+  String get defectsEmptyMessage =>
+      'Los errores que la app detecta por su cuenta aparecen aquí, para que un informe de fallo pueda llevarlos. Una lista vacía es la buena noticia.';
+
+  @override
+  String get defectsEmptyTitle => 'No ha ido nada mal';
+
+  @override
+  String get defectsTitle => 'Registro de fallos';
+
+  @override
   String get devicesBaseConfigured => 'Dirección configurada';
 
   @override
@@ -2004,10 +2234,170 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get discoveryAdventurous => 'Atrevido';
+
+  @override
+  String get discoveryAdventurousness => 'Cuánto arriesgar';
+
+  @override
+  String discoveryBasisSpoken(String engine) {
+    return 'Respondido por el motor $engine';
+  }
+
+  @override
+  String get discoveryEmptyMessage =>
+      'Esta respuesta ha llegado vacía. Prueba con otra pista.';
+
+  @override
+  String get discoveryEmptyTitle => 'No se ha encontrado nada';
+
+  @override
+  String get discoveryFamiliar => 'Conocido';
+
+  @override
+  String discoveryInstantMixFrom(String title) {
+    return 'A partir de \"$title\"';
+  }
+
+  @override
+  String get discoveryInstantMixTitle => 'Mezcla instantánea';
+
+  @override
+  String get discoveryMixAction => 'Mezclar';
+
+  @override
+  String get discoveryMixEmpty =>
+      'No hay ninguna mezcla disponible para esta pista';
+
+  @override
+  String discoverySimilarTitle(String title) {
+    return 'Parecido a $title';
+  }
+
+  @override
+  String downloadsCancel(String title) {
+    return 'Cancelar $title';
+  }
+
+  @override
+  String get downloadsCannotPause =>
+      'Esta transferencia no se puede pausar; cancélala en su lugar';
+
+  @override
+  String get downloadsChecking => 'Comprobando las descargas con el servidor';
+
+  @override
+  String downloadsChip(String medium, String size) {
+    return '$medium $size';
+  }
+
+  @override
+  String get downloadsClearAll => 'Vaciar todo';
+
+  @override
+  String downloadsClearBody(String size) {
+    return 'Esto libera $size. Nada sale de la biblioteca: todo esto se vuelve a reproducir cuando el servidor esté disponible.';
+  }
+
+  @override
+  String get downloadsClearConfirm => 'Quitar todas';
+
+  @override
+  String get downloadsClearKeep => 'Conservarlas';
+
+  @override
+  String get downloadsClearTitle => '¿Quitar todas las descargas?';
+
+  @override
   String get downloadsDownloaded => 'Descargado';
 
   @override
   String get downloadsDownloading => 'Descargando';
+
+  @override
+  String get downloadsEmptyMessage =>
+      'Descarga un libro, un álbum o un episodio y se reproduce aquí aunque el servidor no esté disponible. Su portada viene con él.';
+
+  @override
+  String get downloadsEmptyTitle => 'No hay nada descargado';
+
+  @override
+  String downloadsGroupItems(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos',
+      one: '1 elemento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String downloadsInFlight(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count en curso',
+      one: '1 en curso',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get downloadsLoadError => 'No se han podido leer tus descargas';
+
+  @override
+  String get downloadsMediumBooks => 'Audiolibros';
+
+  @override
+  String get downloadsMediumMusic => 'Música';
+
+  @override
+  String get downloadsMediumPodcasts => 'Pódcast';
+
+  @override
+  String get downloadsNoneFinished => 'No hay episodios terminados que quitar';
+
+  @override
+  String get downloadsOverflow => 'Más';
+
+  @override
+  String downloadsPause(String title) {
+    return 'Pausar $title';
+  }
+
+  @override
+  String get downloadsRefreshStale => 'Volver a descargar lo desactualizado';
+
+  @override
+  String downloadsRemove(String title) {
+    return 'Quitar $title';
+  }
+
+  @override
+  String get downloadsRemoveFinished => 'Quitar los episodios terminados';
+
+  @override
+  String downloadsRemovedEpisodes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count episodios quitados',
+      one: '1 episodio quitado',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String downloadsResume(String title) {
+    return 'Reanudar $title';
+  }
+
+  @override
+  String get downloadsTitle => 'Descargas';
+
+  @override
+  String get downloadsTransferring => 'Transfiriendo';
 
   @override
   String durationDays(int days) {
@@ -2043,6 +2433,21 @@ class AppLocalizationsEs extends AppLocalizations {
       one: '1 hora',
     );
     return '$_temp0';
+  }
+
+  @override
+  String durationHoursMinutesShort(int hours, int minutes) {
+    return '$hours h $minutes min';
+  }
+
+  @override
+  String durationMinutesShort(int minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String durationSecondsShort(int seconds) {
+    return '$seconds s';
   }
 
   @override
@@ -2485,6 +2890,166 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get healthWriteUnsynced =>
       'Etiquetas del archivo desincronizadas del catálogo';
+
+  @override
+  String get homeAddAction => 'Añadir a la biblioteca';
+
+  @override
+  String get homeContinueOverline => 'Donde lo dejaste';
+
+  @override
+  String get homeContinueTitle => 'Seguir escuchando';
+
+  @override
+  String get homeDownloadedOverline => 'Se reproduce sin red';
+
+  @override
+  String get homeDownloadedTitle => 'En este dispositivo';
+
+  @override
+  String get homeEmptyMessage =>
+      'Apunta una biblioteca a tu música, sigue un programa o suelta archivos aquí. Todo lo que añadas aparece en estos estantes.';
+
+  @override
+  String get homeEmptyTitle => 'Todavía no hay nada aquí';
+
+  @override
+  String get homeEpisodesOverline => 'De los programas que sigues';
+
+  @override
+  String get homeEpisodesTitle => 'Episodios nuevos';
+
+  @override
+  String get homeLibraryLoadError => 'No se ha podido acceder a la biblioteca';
+
+  @override
+  String homeMixEmpty(String title) {
+    return 'No hay ninguna mezcla disponible para $title';
+  }
+
+  @override
+  String homeMixMoreLike(String artist) {
+    return 'Más como $artist';
+  }
+
+  @override
+  String get homeMixesOverline => 'Mezclas a partir de lo que escuchas';
+
+  @override
+  String get homeMixesTitle => 'Hecho para ti';
+
+  @override
+  String get homeMostPlayedOverline => 'A lo que vuelves';
+
+  @override
+  String get homeMostPlayedTitle => 'Lo más reproducido';
+
+  @override
+  String get homeNeverPlayedOverline => 'En tu biblioteca, aún sin estrenar';
+
+  @override
+  String get homeNeverPlayedTitle => 'Sin reproducir';
+
+  @override
+  String get homeOfflineMessage =>
+      'Sin conexión. Los estantes vuelven cuando vuelve el servidor; lo que hay en este dispositivo se sigue reproduciendo.';
+
+  @override
+  String get homePinAction => 'Fijar en Inicio';
+
+  @override
+  String get homePinNotSaved => 'No se ha guardado ese cambio.';
+
+  @override
+  String homePinSheetPin(String what) {
+    String _temp0 = intl.Intl.selectLogic(what, {
+      'album': 'Fijar el álbum en Inicio',
+      'artist': 'Fijar el artista en Inicio',
+      'book': 'Fijar el libro en Inicio',
+      'other': 'Fijar en Inicio',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String homePinSheetUnpin(String what) {
+    String _temp0 = intl.Intl.selectLogic(what, {
+      'album': 'Quitar el álbum de Inicio',
+      'artist': 'Quitar el artista de Inicio',
+      'book': 'Quitar el libro de Inicio',
+      'other': 'Quitar de Inicio',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String homePinShelfFull(int limit) {
+    return 'Inicio admite $limit elementos fijados. Quita alguno para hacer sitio.';
+  }
+
+  @override
+  String homePinnedCaption(String kind, String artist) {
+    return '$kind · $artist';
+  }
+
+  @override
+  String get homePinnedKindAlbum => 'Álbum';
+
+  @override
+  String get homePinnedKindArtist => 'Artista';
+
+  @override
+  String get homePinnedKindBook => 'Libro';
+
+  @override
+  String get homePinnedKindPlaylist => 'Lista de reproducción';
+
+  @override
+  String get homePinnedKindPodcast => 'Pódcast';
+
+  @override
+  String get homePinnedKindReleaseGroup => 'Grupo de lanzamientos';
+
+  @override
+  String get homePinnedOverline => 'Lo que guardas';
+
+  @override
+  String get homePinnedTitle => 'Fijado';
+
+  @override
+  String get homeRecentOverline => 'Nuevo en la biblioteca';
+
+  @override
+  String get homeRecentTitle => 'Añadido hace poco';
+
+  @override
+  String get homeRediscoverOverline =>
+      'Marcado, y sin escuchar desde hace meses';
+
+  @override
+  String get homeRediscoverTitle => 'Redescubre';
+
+  @override
+  String homeShelfRemaining(String span) {
+    return 'quedan $span';
+  }
+
+  @override
+  String get homeShelfRetry => 'Reintentar';
+
+  @override
+  String get homeShelfShowAll => 'Ver todo';
+
+  @override
+  String get homeTitle => 'Inicio';
+
+  @override
+  String get homeUnpinAction => 'Quitar de Inicio';
+
+  @override
+  String homeUnpinned(String name) {
+    return 'Se ha quitado $name de Inicio';
+  }
 
   @override
   String get libraryBrowseSortAtoZ => 'De la A a la Z';
@@ -3292,6 +3857,89 @@ class AppLocalizationsEs extends AppLocalizations {
   String get notifSignupRequestedTitle => 'Solicitud de cuenta';
 
   @override
+  String get organizeApply => 'Aplicar';
+
+  @override
+  String get organizeColumnFrom => 'Ahora en';
+
+  @override
+  String get organizeColumnTo => 'Se mueve a';
+
+  @override
+  String get organizeConfirmMessage =>
+      'Los archivos se mueven a sus nuevas ubicaciones en el servidor. El catálogo los sigue, pero nada más que apunte a las rutas antiguas lo hará.';
+
+  @override
+  String get organizeConfirmTitle => '¿Aplicar el perfil de organización?';
+
+  @override
+  String get organizeEmptyMessage =>
+      'Los perfiles forman parte de la configuración del servidor. Añade uno allí y aparecerá aquí.';
+
+  @override
+  String get organizeEmptyTitle => 'No hay perfiles de organización';
+
+  @override
+  String get organizeFailed => 'Con error';
+
+  @override
+  String get organizeHint =>
+      'La previsualización muestra a dónde movería los archivos el perfil elegido, antes de que pase nada.';
+
+  @override
+  String get organizeLoadError =>
+      'No se han podido cargar los perfiles de organización';
+
+  @override
+  String get organizeMoved => 'Movidos';
+
+  @override
+  String get organizeNothingMessage => 'Este perfil no movería nada.';
+
+  @override
+  String get organizeNothingTitle => 'Todo está ya en su sitio';
+
+  @override
+  String organizePlannedMoves(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count movimientos previstos',
+      one: '1 movimiento previsto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get organizePreview => 'Previsualizar';
+
+  @override
+  String get organizeProfileLabel => 'Perfil de organización';
+
+  @override
+  String get organizeProfileOverline => 'El esquema de nombres al que mover';
+
+  @override
+  String get organizeProfileTitle => 'Perfil';
+
+  @override
+  String get organizeResultTitle => 'Resultado';
+
+  @override
+  String organizeShowingFirst(int shown, int total) {
+    return 'Se muestran los primeros $shown de $total';
+  }
+
+  @override
+  String get organizeSkipped => 'Omitidos';
+
+  @override
+  String get organizeTagWrite => 'También se reescriben las etiquetas';
+
+  @override
+  String get organizeTitle => 'Organizar los archivos';
+
+  @override
   String get playerAddLyrics => 'Añadir la letra';
 
   @override
@@ -3369,6 +4017,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerDeleteFiles => 'Eliminar los archivos...';
+
+  @override
+  String get playerDownload => 'Descargar';
 
   @override
   String get playerEditStation => 'Editar la emisora';
@@ -4509,16 +5160,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastDownloadFailed => 'La descarga ha fallado';
 
   @override
-  String podcastDurationHoursMinutes(int hours, int minutes) {
-    return '$hours h $minutes min';
-  }
-
-  @override
-  String podcastDurationMinutes(int minutes) {
-    return '$minutes min';
-  }
-
-  @override
   String podcastEpisodeCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -5065,6 +5706,30 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastsTitle => 'Pódcasts';
 
   @override
+  String get prototypeApply => 'Aplicar la propuesta';
+
+  @override
+  String get prototypeColumnArtist => 'Artista';
+
+  @override
+  String get prototypeColumnCurrent => 'Título actual';
+
+  @override
+  String get prototypeColumnMatch => 'Coincidencia';
+
+  @override
+  String get prototypeColumnProposed => 'Título propuesto';
+
+  @override
+  String get prototypeCopyProposed => 'Copiar el título propuesto';
+
+  @override
+  String get prototypeRowActions => 'Acciones de la fila';
+
+  @override
+  String get prototypeTitle => 'Prototipo de edición';
+
+  @override
   String queueAddedMany(int count) {
     return 'Se han añadido $count pistas a la cola';
   }
@@ -5126,6 +5791,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get queuePlayingFromLibrary => 'Reproduciendo de tu biblioteca';
+
+  @override
+  String get queuePlayingFromMix => 'Reproduciendo una mezcla';
 
   @override
   String queuePreviously(int count) {
@@ -5517,6 +6185,452 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get reviewActionApprove => 'Aprobar';
+
+  @override
+  String get reviewActionAsIs => 'Dejar como está';
+
+  @override
+  String get reviewActionDiscard => 'Descartar';
+
+  @override
+  String get reviewActionRevert => 'Deshacer';
+
+  @override
+  String get reviewActionSkip => 'Omitir';
+
+  @override
+  String get reviewActionUnofficial => 'Marcar como no oficial';
+
+  @override
+  String reviewCandidateLine(String percent, String title, String artist) {
+    return '$percent % $title, $artist';
+  }
+
+  @override
+  String reviewCandidateLineYear(
+    String percent,
+    String title,
+    String artist,
+    String year,
+  ) {
+    return '$percent % $title, $artist ($year)';
+  }
+
+  @override
+  String reviewCandidateSpoken(String title, String artist) {
+    return '$title de $artist';
+  }
+
+  @override
+  String reviewCandidateTitleLine(String title, String artist) {
+    return '$title, $artist';
+  }
+
+  @override
+  String get reviewCandidatesTitle => 'Candidatos';
+
+  @override
+  String reviewDecidedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count entradas decididas',
+      one: '1 entrada decidida',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewDecidedSomeFailed(int count, int failed) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count entradas decididas, $failed con error',
+      one: '1 entrada decidida, $failed con error',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewDecidedStatus(String status) {
+    return 'Decidida: $status';
+  }
+
+  @override
+  String get reviewDiffCurrent => 'Actual';
+
+  @override
+  String get reviewDiffExtra => 'Archivo de más, sin equivalente';
+
+  @override
+  String get reviewDiffMissing => 'Falta en local';
+
+  @override
+  String get reviewDiffProposed => 'Propuesto';
+
+  @override
+  String get reviewDiffUnmatched => 'Sin emparejar';
+
+  @override
+  String get reviewEditMetadata => 'Editar los metadatos';
+
+  @override
+  String get reviewEmptyMessage =>
+      'Las subidas y las nuevas coincidencias llegan aquí cuando hay que decidir.';
+
+  @override
+  String get reviewEmptyTitle => 'No hay nada esperando revisión';
+
+  @override
+  String reviewEntryLine(String title, String artist) {
+    return '$title de $artist';
+  }
+
+  @override
+  String get reviewEntryLoadError => 'No se ha podido cargar la entrada';
+
+  @override
+  String get reviewEntryTitle => 'Entrada de revisión';
+
+  @override
+  String get reviewFieldAlbum => 'Álbum';
+
+  @override
+  String get reviewFieldArtist => 'Artista';
+
+  @override
+  String get reviewFieldTitle => 'Título de la pista';
+
+  @override
+  String get reviewFilterAutoApplied => 'Aplicadas automáticamente';
+
+  @override
+  String reviewFilterCount(String label, int count) {
+    return '$label ($count)';
+  }
+
+  @override
+  String get reviewFilterDecided => 'Decididas';
+
+  @override
+  String get reviewFilterPending => 'Pendientes';
+
+  @override
+  String reviewHeaderFacts(int count, String origin) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pistas, $origin',
+      one: '1 pista, $origin',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewHeaderFactsBy(int count, String origin, String who) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pistas, $origin de $who',
+      one: '1 pista, $origin de $who',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get reviewIdentifying => 'Identificando';
+
+  @override
+  String get reviewIdentifyingLong =>
+      'Identificando: la búsqueda de candidatos sigue en marcha';
+
+  @override
+  String get reviewLoadError => 'No se ha podido cargar la cola de revisión';
+
+  @override
+  String get reviewLoadMoreFailed =>
+      'No se ha podido cargar más; desplázate para reintentarlo';
+
+  @override
+  String get reviewMatchingAuto =>
+      'Aplicar automáticamente las coincidencias seguras';
+
+  @override
+  String get reviewMatchingMenu => 'Modo de coincidencia';
+
+  @override
+  String get reviewMatchingOff => 'No buscar coincidencias en esta biblioteca';
+
+  @override
+  String get reviewMatchingReview => 'Revisar todo';
+
+  @override
+  String reviewMatchingRow(String library, String mode) {
+    return '$library: $mode';
+  }
+
+  @override
+  String get reviewNoCandidatesMessage =>
+      'Nada en las fuentes coincide con lo que dicen estos archivos. Déjalos como están, u omítelos y vuelve a intentarlo más tarde.';
+
+  @override
+  String get reviewNoCandidatesTitle => 'No se ha encontrado ningún candidato';
+
+  @override
+  String get reviewOriginAcquisition => 'Adquirido';
+
+  @override
+  String get reviewOriginUpload => 'Subida';
+
+  @override
+  String get reviewPaneClose => 'Cerrar la entrada';
+
+  @override
+  String reviewRowBest(int count, String best) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pistas, $best',
+      one: '1 pista, $best',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewRowNoCandidates(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pistas, sin candidatos',
+      one: '1 pista, sin candidatos',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get reviewSearchAgain => 'Buscar de nuevo';
+
+  @override
+  String get reviewSearchStored =>
+      'Se busca esto en lugar de lo que dicen los archivos. Nada de esto se escribe en ellos.';
+
+  @override
+  String get reviewSearchSuggested =>
+      'Sugerido a partir del título de origen. Se busca esto en lugar de lo que dicen los archivos; nada de esto se escribe en ellos.';
+
+  @override
+  String get reviewSearchToggle => 'Buscar otra cosa';
+
+  @override
+  String get reviewSelectEnter => 'Seleccionar entradas';
+
+  @override
+  String get reviewSelectLeave => 'Salir de la selección';
+
+  @override
+  String reviewSelectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count seleccionadas',
+      one: '1 seleccionada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get reviewSkippedDecided =>
+      'Esta entrega pidió aceptarse tal cual, así que no se ha buscado nada.';
+
+  @override
+  String get reviewSkippedPending =>
+      'Esta entrega pidió aceptarse tal cual, así que no se ha buscado nada. No se ha podido añadir por su cuenta: deja los archivos como están, u omítelos.';
+
+  @override
+  String get reviewSkippedTitle => 'Se ha omitido la identificación';
+
+  @override
+  String get reviewStatusApplied => 'Aplicada';
+
+  @override
+  String get reviewStatusAsIs => 'Conservada tal cual';
+
+  @override
+  String get reviewStatusAutoApplied => 'Aplicada automáticamente';
+
+  @override
+  String get reviewStatusDiscarded => 'Descartada';
+
+  @override
+  String get reviewStatusPending => 'Pendiente';
+
+  @override
+  String get reviewStatusReverted => 'Revertida';
+
+  @override
+  String get reviewStatusSkipped => 'Omitida';
+
+  @override
+  String get reviewStatusUnofficial => 'Sin edición canónica';
+
+  @override
+  String get reviewTitle => 'Cola de revisión';
+
+  @override
+  String get reviewTrackMenu => 'Acciones de la pista';
+
+  @override
+  String reviewTrackNumbered(String number, String title) {
+    return '$number. $title';
+  }
+
+  @override
+  String reviewTrackWithArtist(String track, String artist) {
+    return '$track ($artist)';
+  }
+
+  @override
+  String get reviewTracksTitle => 'Pistas';
+
+  @override
+  String get reviewUntitled => 'Sin título';
+
+  @override
+  String get searchAction => 'Buscar';
+
+  @override
+  String get searchAddStation => 'Añadir emisora';
+
+  @override
+  String get searchDirectoryDegraded =>
+      'No se ha podido acceder al directorio, así que solo se listan tus emisoras. Añadir una emisora por su URL de emisión sigue funcionando.';
+
+  @override
+  String get searchDirectoryErrorDetail =>
+      'Añadir una emisora por su URL de emisión sigue funcionando.';
+
+  @override
+  String get searchDirectoryErrorTitle =>
+      'No se ha podido acceder al directorio';
+
+  @override
+  String get searchDirectoryOverline => 'Directorio';
+
+  @override
+  String get searchDirectoryPromptMessage =>
+      'Escribe el nombre de una emisora para buscarla en el directorio público y luego añadirla a este servidor.';
+
+  @override
+  String get searchDirectoryPromptTitle => 'Busca en el directorio de emisoras';
+
+  @override
+  String get searchEmptyMessage =>
+      'Prueba a buscar un artista, un programa o un libro.';
+
+  @override
+  String get searchEmptyTitle => 'Busca en tu biblioteca';
+
+  @override
+  String get searchFailedTitle => 'No se ha podido buscar';
+
+  @override
+  String get searchFieldHint => 'Artistas, álbumes, programas, libros';
+
+  @override
+  String searchForget(String query) {
+    return 'Olvidar $query';
+  }
+
+  @override
+  String get searchKindAlbums => 'Álbumes';
+
+  @override
+  String get searchKindArtists => 'Artistas';
+
+  @override
+  String get searchKindBooks => 'Audiolibros';
+
+  @override
+  String get searchKindEpisodes => 'Episodios';
+
+  @override
+  String get searchKindTracks => 'Pistas';
+
+  @override
+  String get searchLibraryOverline => 'Biblioteca';
+
+  @override
+  String get searchNoStationsMessage =>
+      'El directorio no tiene nada con ese nombre.';
+
+  @override
+  String searchNoStationsTitle(String query) {
+    return 'Ninguna emisora para \"$query\"';
+  }
+
+  @override
+  String get searchNothingMessage =>
+      'Comprueba la ortografía o usa menos palabras.';
+
+  @override
+  String searchNothingTitle(String query) {
+    return 'Nada para \"$query\"';
+  }
+
+  @override
+  String get searchPodcastDirectoryDegraded =>
+      'El directorio de pódcast no ha respondido, así que solo se listan tus episodios. Suscribirse por la URL del feed sigue funcionando.';
+
+  @override
+  String get searchRecentOverline => 'Reciente';
+
+  @override
+  String get searchRecentTitle => 'Búsquedas recientes';
+
+  @override
+  String get searchScopeAll => 'Todo';
+
+  @override
+  String get searchScopeBooks => 'Audiolibros';
+
+  @override
+  String get searchScopeMusic => 'Música';
+
+  @override
+  String get searchScopePodcasts => 'Pódcasts';
+
+  @override
+  String get searchScopeRadio => 'Radio';
+
+  @override
+  String get searchShowAll => 'Ver todo';
+
+  @override
+  String get searchShowsToSubscribe => 'Programas a los que suscribirse';
+
+  @override
+  String get searchStationsToAdd => 'Emisoras para añadir';
+
+  @override
+  String get searchSubscribe => 'Suscribirse';
+
+  @override
+  String searchSubscribed(String name) {
+    return 'Te has suscrito a $name.';
+  }
+
+  @override
+  String get searchTitle => 'Buscar';
+
+  @override
+  String get searchTruncated =>
+      'Hay más coincidencias de las que caben aquí. Afina la búsqueda para reducirlas.';
+
+  @override
+  String get searchYourStations => 'Tus emisoras';
 
   @override
   String get settingsAboutKeywords =>
@@ -6657,9 +7771,703 @@ class AppLocalizationsEs extends AppLocalizations {
       'Abrir el visualizador al estar inactivo';
 
   @override
+  String get sharingAllowDownload => 'Permitir la descarga';
+
+  @override
+  String get sharingAllowDownloadHelp =>
+      'La página ofrece el archivo original, no solo la reproducción';
+
+  @override
+  String get sharingCopyLink => 'Copiar el enlace';
+
+  @override
+  String get sharingCreate => 'Crear el enlace';
+
+  @override
+  String get sharingDialogBody =>
+      'Cualquiera con el enlace puede reproducir esto. Se copia al portapapeles en cuanto se crea.';
+
+  @override
+  String get sharingDialogTitle => 'Enlace para compartir';
+
+  @override
+  String get sharingDownloadAllowed => 'descarga permitida';
+
+  @override
+  String get sharingEmptyMessage =>
+      'Comparte una pista, un episodio, un libro o una lista y el enlace aparece aquí, con cuántas veces se ha reproducido y una forma de desactivarlo.';
+
+  @override
+  String get sharingEmptyTitle => 'Todavía no hay enlaces compartidos';
+
+  @override
+  String sharingExpiredOn(String date) {
+    return 'caducó el $date';
+  }
+
+  @override
+  String get sharingExpires => 'Caduca';
+
+  @override
+  String get sharingExpiresHelp => 'Cuándo deja de funcionar el enlace';
+
+  @override
+  String sharingExpiresOn(String date) {
+    return 'caduca el $date';
+  }
+
+  @override
+  String get sharingExpiryDay => '1 día';
+
+  @override
+  String get sharingExpiryMonth => '30 días';
+
+  @override
+  String get sharingExpiryNever => 'Nunca';
+
+  @override
+  String get sharingExpiryWeek => '1 semana';
+
+  @override
+  String sharingKind(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'track': 'Pista',
+      'album': 'Álbum',
+      'playlist': 'Lista',
+      'book': 'Audiolibro',
+      'episode': 'Episodio',
+      'other': '$kind',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get sharingLinkCopied => 'Enlace copiado';
+
+  @override
+  String get sharingLinkRevoked => 'Enlace revocado';
+
+  @override
+  String get sharingLoadError =>
+      'No se han podido cargar tus enlaces compartidos';
+
+  @override
+  String get sharingNeverExpires => 'no caduca';
+
+  @override
+  String sharingPlays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count reproducciones',
+      one: '1 reproducción',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get sharingRevokeLink => 'Revocar el enlace';
+
+  @override
+  String sharingStartAt(String time) {
+    return 'Empezar en $time';
+  }
+
+  @override
+  String get sharingStartAtHelp => 'El enlace se abre donde estás ahora';
+
+  @override
+  String get sharingStartAtLabel => 'Empezar en esta posición';
+
+  @override
+  String get sharingTitle => 'Enlaces compartidos';
+
+  @override
+  String get shellClientOutdated =>
+      'WaxDeck se ha actualizado. Vuelve a cargar para obtener la versión nueva.';
+
+  @override
+  String get shellCommandCarMode => 'Abrir el modo coche';
+
+  @override
+  String get shellCommandCast => 'Reproducir en otro dispositivo';
+
+  @override
+  String get shellCommandCreatePlaylist => 'Crear una lista';
+
+  @override
+  String get shellCommandLyrics => 'Mostrar la letra';
+
+  @override
+  String get shellCommandMiniWindow => 'Ventana de reproductor pequeña';
+
+  @override
+  String get shellCommandMute => 'Silenciar o restablecer el sonido';
+
+  @override
+  String get shellCommandNext => 'Pista siguiente';
+
+  @override
+  String get shellCommandPalette => 'Abrir la paleta de comandos';
+
+  @override
+  String get shellCommandPlayPause => 'Reproducir o pausar';
+
+  @override
+  String get shellCommandPlayer => 'Abrir el reproductor';
+
+  @override
+  String get shellCommandPrevious => 'Pista anterior';
+
+  @override
+  String get shellCommandQueue => 'Mostrar la cola';
+
+  @override
+  String get shellCommandRepeat => 'Cambiar la repetición';
+
+  @override
+  String get shellCommandScanLibrary => 'Escanear la biblioteca';
+
+  @override
+  String get shellCommandSearch => 'Buscar';
+
+  @override
+  String get shellCommandSectionApp => 'En todas partes';
+
+  @override
+  String get shellCommandSectionPlayback => 'Reproducción';
+
+  @override
+  String get shellCommandSectionView => 'Vistas';
+
+  @override
+  String get shellCommandSeekBack => 'Retroceder 10 segundos';
+
+  @override
+  String get shellCommandSeekForward => 'Avanzar 10 segundos';
+
+  @override
+  String get shellCommandShortcuts => 'Atajos de teclado';
+
+  @override
+  String get shellCommandShuffle => 'Reproducir la cola al azar';
+
+  @override
+  String get shellCommandVisualizer => 'Abrir el visualizador';
+
+  @override
+  String get shellCommandVolumeDown => 'Bajar el volumen';
+
+  @override
+  String get shellCommandVolumeUp => 'Subir el volumen';
+
+  @override
+  String get shellNavAdmin => 'Consola de administración';
+
+  @override
+  String get shellNavAlbums => 'Álbumes';
+
+  @override
+  String get shellNavArtists => 'Artistas';
+
+  @override
+  String get shellNavBooks => 'Libros';
+
+  @override
+  String get shellNavCuration => 'Gestión';
+
+  @override
+  String get shellNavDownloads => 'Descargas';
+
+  @override
+  String get shellNavGenres => 'Géneros';
+
+  @override
+  String get shellNavHome => 'Inicio';
+
+  @override
+  String get shellNavMusic => 'Música';
+
+  @override
+  String get shellNavPlaylists => 'Listas de reproducción';
+
+  @override
+  String get shellNavPodcasts => 'Pódcasts';
+
+  @override
+  String get shellNavRadio => 'Radio';
+
+  @override
+  String get shellNavReview => 'Cola de revisión';
+
+  @override
+  String get shellNavSettings => 'Ajustes';
+
+  @override
+  String get shellNavStats => 'Estadísticas de escucha';
+
+  @override
+  String get shellNavTasks => 'Tareas';
+
+  @override
+  String get shellNavTracks => 'Pistas';
+
+  @override
+  String get shellNavUploads => 'Subidas';
+
+  @override
+  String get shellNavYears => 'Años';
+
+  @override
+  String get shellNotFoundAction => 'Ir a Inicio';
+
+  @override
+  String get shellNotFoundBody => 'Esa página no existe.';
+
+  @override
+  String get shellNotFoundTitle => 'No encontrado';
+
+  @override
+  String get shellPaletteAllSettings => 'Todos los ajustes';
+
+  @override
+  String get shellPaletteCurationDetail => 'Gestión';
+
+  @override
+  String get shellPaletteEmpty => 'No hay nada que ejecutar';
+
+  @override
+  String get shellPaletteGoToDetail => 'Ir a';
+
+  @override
+  String get shellPaletteGroupActions => 'Acciones';
+
+  @override
+  String get shellPaletteGroupAdmin => 'Áreas de administración';
+
+  @override
+  String get shellPaletteGroupPlaces => 'Ir a';
+
+  @override
+  String get shellPaletteGroupSettings => 'Ajustes';
+
+  @override
+  String shellPaletteNoMatch(String query) {
+    return 'Nada coincide con \"$query\"';
+  }
+
+  @override
+  String shellPaletteSearchAll(String query) {
+    return 'Buscar \"$query\" en la biblioteca';
+  }
+
+  @override
+  String get shellPaletteSearchAllDetail => 'Todo lo que coincida';
+
+  @override
+  String shellPaletteSettingsMore(int count, String query) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count coincidencias con \"$query\"',
+      one: '1 coincidencia con \"$query\"',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shellPaletteStationDetail => 'Emisora de radio';
+
+  @override
+  String get shellReconnecting =>
+      'Reconectando con el servidor. Lo que ya se esté reproduciendo sigue sonando.';
+
+  @override
+  String get shellReload => 'Volver a cargar';
+
+  @override
+  String get shellServerOutdated =>
+      'El servidor se ha actualizado. Reinicia WaxDeck para ponerte al día.';
+
+  @override
+  String get shellSignOut => 'Cerrar sesión';
+
+  @override
   String speedMultiplier(String speed) {
     return '${speed}x';
   }
+
+  @override
+  String get statsBucketDay => 'Día';
+
+  @override
+  String get statsBucketDayInline => 'día';
+
+  @override
+  String get statsBucketMonth => 'Mes';
+
+  @override
+  String get statsBucketMonthInline => 'mes';
+
+  @override
+  String get statsBucketWeek => 'Semana';
+
+  @override
+  String get statsBucketWeekInline => 'semana';
+
+  @override
+  String get statsCardDrawFailed => 'No se ha podido dibujar la tarjeta';
+
+  @override
+  String get statsCardDrawing => 'Dibujando';
+
+  @override
+  String get statsCardExportFailed => 'No se ha podido exportar la tarjeta';
+
+  @override
+  String get statsCardFactDayStreak => 'días de racha';
+
+  @override
+  String get statsCardFactDifferentThings => 'cosas distintas';
+
+  @override
+  String get statsCardFactListeners => 'oyentes';
+
+  @override
+  String get statsCardFormatSquare => 'Cuadrada';
+
+  @override
+  String get statsCardFormatSquareBlurb => 'Para una publicación o un mensaje';
+
+  @override
+  String get statsCardFormatStory => 'Historia';
+
+  @override
+  String get statsCardFormatStoryBlurb =>
+      'Para una historia a pantalla completa';
+
+  @override
+  String get statsCardMostPlayed => 'LO MÁS ESCUCHADO';
+
+  @override
+  String get statsCardNoDestination => 'Aquí no hay dónde guardar imágenes';
+
+  @override
+  String get statsCardNoExport =>
+      'Esta versión no puede guardar imágenes, así que las tarjetas son solo una vista previa.';
+
+  @override
+  String get statsCardOverline => 'Tu año, a la medida';
+
+  @override
+  String statsCardPreviewSpoken(String format) {
+    String _temp0 = intl.Intl.selectLogic(format, {
+      'story': 'Tarjeta de historia, para una historia a pantalla completa',
+      'square': 'Tarjeta cuadrada, para una publicación o un mensaje',
+      'other': 'Tarjeta para compartir',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get statsCardPrivacy =>
+      'Las tarjetas se dibujan aquí y no se envían a ninguna parte: lo que hagas después es cosa tuya.';
+
+  @override
+  String get statsCardSaveUnsupported =>
+      'Esta versión no puede guardar imágenes';
+
+  @override
+  String statsCardSaved(String where) {
+    return 'Guardada en $where';
+  }
+
+  @override
+  String get statsCardShareRefused =>
+      'La hoja de compartir ha rechazado la imagen';
+
+  @override
+  String get statsCardShareUnsupported =>
+      'Esta versión no puede compartir imágenes';
+
+  @override
+  String get statsCardShared => 'Tarjeta compartida';
+
+  @override
+  String statsCardSubject(int year) {
+    return 'Mi resumen de $year';
+  }
+
+  @override
+  String get statsCardTitle => 'Tarjetas para compartir';
+
+  @override
+  String get statsChartEmptySummary => 'No hay escuchas en este periodo.';
+
+  @override
+  String statsChartSummary(
+    String unit,
+    int bars,
+    String first,
+    String last,
+    String peak,
+    String peakDay,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      bars,
+      locale: localeName,
+      other: '$bars barras',
+      one: '1 barra',
+    );
+    return 'Escuchas por $unit: $_temp0, de $first a $last. El máximo fue $peak el $peakDay.';
+  }
+
+  @override
+  String get statsDoorListenLog => 'Registro de escuchas';
+
+  @override
+  String get statsDoorListenLogSubtitle =>
+      'Todas las sesiones de escucha registradas';
+
+  @override
+  String get statsDoorYearInReview => 'Resumen del año';
+
+  @override
+  String get statsDoorYearInReviewSubtitle => 'Tu año de escuchas, resumido';
+
+  @override
+  String get statsEmptyMessage =>
+      'Elige un periodo más largo, o ponte a escuchar algo.';
+
+  @override
+  String get statsEmptyTitle => 'No se ha reproducido nada en este periodo';
+
+  @override
+  String get statsGroupBy => 'Agrupar por';
+
+  @override
+  String get statsHeatmapOverline => 'Cada día';
+
+  @override
+  String statsHeatmapSummary(int year, int days, int current, int longest) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'escuchas en $days días',
+      one: 'escuchas en 1 día',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      current,
+      locale: localeName,
+      other: 'Racha actual de $current días',
+      one: 'Racha actual de 1 día',
+    );
+    return 'Un calendario de $year: $_temp0. $_temp1, la más larga de $longest.';
+  }
+
+  @override
+  String get statsHeatmapTitle => 'Este año';
+
+  @override
+  String get statsKindAlbums => 'Álbumes';
+
+  @override
+  String get statsKindArtists => 'Artistas';
+
+  @override
+  String get statsKindGenres => 'Géneros';
+
+  @override
+  String get statsKindShows => 'Programas';
+
+  @override
+  String get statsListened => 'escuchado';
+
+  @override
+  String get statsLoadError =>
+      'No se han podido cargar tus estadísticas de escucha';
+
+  @override
+  String get statsLogAllClients => 'Todos los clientes';
+
+  @override
+  String get statsLogEmptyMessage =>
+      'Cada sesión que un cliente termina aparece aquí, sea cual sea el dispositivo que la informó.';
+
+  @override
+  String get statsLogEmptyTitle => 'Todavía no hay escuchas registradas';
+
+  @override
+  String get statsLogFinished => 'Terminada';
+
+  @override
+  String statsLogFinishedSpoken(String time) {
+    return '$time, terminada';
+  }
+
+  @override
+  String get statsLogLoadError =>
+      'No se ha podido cargar el registro de escuchas';
+
+  @override
+  String get statsLogRemovedItem => 'Elemento eliminado';
+
+  @override
+  String get statsLogReportedBy => 'Informado por';
+
+  @override
+  String statsPlays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count reproducciones',
+      one: '1 reproducción',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get statsRange30d => '30 días';
+
+  @override
+  String get statsRange365d => 'Un año';
+
+  @override
+  String get statsRange7d => '7 días';
+
+  @override
+  String get statsRange90d => '90 días';
+
+  @override
+  String get statsRangeAll => 'Desde siempre';
+
+  @override
+  String get statsRecapLoadError => 'No se ha podido cargar el resumen';
+
+  @override
+  String get statsSessions => 'sesiones';
+
+  @override
+  String statsStreaks(int current, int longest) {
+    String _temp0 = intl.Intl.pluralLogic(
+      current,
+      locale: localeName,
+      other: 'Racha actual: $current días',
+      one: 'Racha actual: 1 día',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      longest,
+      locale: localeName,
+      other: 'La más larga: $longest días',
+      one: 'La más larga: 1 día',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String get statsTimeSaved => 'tiempo ahorrado';
+
+  @override
+  String get statsTitle => 'Estadísticas de escucha';
+
+  @override
+  String statsTopEmptyMessage(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'artists':
+          'Un periodo más largo, o un artista que hayas escuchado de verdad.',
+      'albums':
+          'Un periodo más largo, o un álbum que hayas escuchado de verdad.',
+      'genres':
+          'Un periodo más largo, o un género que hayas escuchado de verdad.',
+      'shows':
+          'Un periodo más largo, o un programa que hayas escuchado de verdad.',
+      'other': 'Un periodo más largo, o algo que hayas escuchado de verdad.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get statsTopEmptyTitle => 'No hay nada en este periodo';
+
+  @override
+  String get statsTopOverline => 'En este periodo';
+
+  @override
+  String get statsTopTitle => 'Lo más escuchado';
+
+  @override
+  String statsYearChartEmpty(int year) {
+    return 'No hay escuchas registradas en $year.';
+  }
+
+  @override
+  String statsYearChartSummary(int year, String peak, String month) {
+    return 'Escuchas mes a mes durante $year. El máximo fue $peak en $month.';
+  }
+
+  @override
+  String get statsYearDistinct => 'cosas distintas escuchadas';
+
+  @override
+  String get statsYearListenedTogether => 'escuchado entre todos';
+
+  @override
+  String get statsYearLongestStreak => 'racha más larga';
+
+  @override
+  String get statsYearMakeCard => 'Crear una tarjeta';
+
+  @override
+  String get statsYearMonthByMonth => 'Mes a mes';
+
+  @override
+  String statsYearMonthFallback(int month) {
+    return 'mes $month';
+  }
+
+  @override
+  String get statsYearNewInLibrary => 'nuevo en la biblioteca';
+
+  @override
+  String get statsYearNext => 'Año siguiente';
+
+  @override
+  String get statsYearNothingPlayed => 'No se ha reproducido nada este año';
+
+  @override
+  String get statsYearParticipants => 'oyentes incluidos';
+
+  @override
+  String get statsYearPersonal => 'Mi año';
+
+  @override
+  String get statsYearPrev => 'Año anterior';
+
+  @override
+  String get statsYearServer => 'Todo el servidor';
+
+  @override
+  String statsYearStreakDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days días',
+      one: '1 día',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get statsYearTopArtists => 'Artistas más escuchados';
+
+  @override
+  String get statsYearTopGenres => 'Géneros más escuchados';
+
+  @override
+  String get statsYearTopShows => 'Programas más escuchados';
+
+  @override
+  String get statsYearTopTracks => 'Pistas más escuchadas';
 
   @override
   String get toolsClearFinished => 'Borrar las terminadas';
@@ -6774,4 +8582,225 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get toolsTitle => 'Tareas de herramientas';
+
+  @override
+  String get uploadsAcquireQueued =>
+      'Descargando. Aparecerá en la cola de revisión cuando esté lista.';
+
+  @override
+  String get uploadsAcquireTasks => 'Tareas';
+
+  @override
+  String get uploadsAddOverline => 'Ambas vías acaban en la cola de revisión';
+
+  @override
+  String get uploadsAddTitle => 'Añadir a la biblioteca';
+
+  @override
+  String uploadsBatch(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Subidos a la vez, $count archivos',
+      one: 'Subido a la vez, 1 archivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String uploadsDiscardBody(String fileName) {
+    return '\"$fileName\" y sus bytes en espera se eliminan, y el espacio que ocupaban en tu cuota queda libre.';
+  }
+
+  @override
+  String get uploadsDiscardConfirm => 'Descartar';
+
+  @override
+  String get uploadsDiscardRow => 'Descartar la subida';
+
+  @override
+  String get uploadsDiscardTitle => '¿Descartar la subida?';
+
+  @override
+  String get uploadsDiscardWord => 'descartar';
+
+  @override
+  String get uploadsDownload => 'Descargar';
+
+  @override
+  String get uploadsDropHint => 'Suelta archivos de audio para subirlos';
+
+  @override
+  String uploadsDuplicate(String kind, String what) {
+    return 'Duplicado ($kind): $what';
+  }
+
+  @override
+  String uploadsDuplicateBy(String title, String artist) {
+    return '$title de $artist';
+  }
+
+  @override
+  String get uploadsDuplicateContent => 'copia exacta';
+
+  @override
+  String get uploadsDuplicateFingerprint => 'misma grabación';
+
+  @override
+  String get uploadsDuplicateName => 'coincidencia de nombre';
+
+  @override
+  String get uploadsEmptyMessage =>
+      'Elige archivos en la barra de arriba, o suéltalos en cualquier parte de esta página.';
+
+  @override
+  String get uploadsEmptyNoPermission =>
+      'Esta cuenta no puede subir archivos. Pídele el permiso a un administrador.';
+
+  @override
+  String get uploadsEmptyTitle => 'Todavía no hay subidas';
+
+  @override
+  String uploadsFileFailed(String name, String reason) {
+    return '$name: $reason';
+  }
+
+  @override
+  String get uploadsFileTypeAny => 'Todos los archivos';
+
+  @override
+  String get uploadsFileTypeAudio => 'Audio';
+
+  @override
+  String get uploadsFormat => 'Formato de descarga';
+
+  @override
+  String get uploadsFormatBest => 'La mejor calidad (recomendado)';
+
+  @override
+  String get uploadsFromUrl => 'Añadir desde una URL';
+
+  @override
+  String get uploadsFromUrlSubtitle => 'Un vídeo, una lista o un canal';
+
+  @override
+  String get uploadsGroupingAlbum => 'Un solo álbum';
+
+  @override
+  String get uploadsGroupingAlbumHelp =>
+      'Revisar todos los archivos como un solo lanzamiento';
+
+  @override
+  String get uploadsGroupingAuto => 'Detectar automáticamente';
+
+  @override
+  String get uploadsGroupingAutoHelp =>
+      'Agrupar en álbumes según sus etiquetas y carpetas';
+
+  @override
+  String get uploadsGroupingTitle => '¿Cómo hay que agrupar estos archivos?';
+
+  @override
+  String get uploadsGroupingTracks => 'Pistas sueltas';
+
+  @override
+  String get uploadsGroupingTracksHelp => 'Revisar cada archivo por separado';
+
+  @override
+  String get uploadsIdentifyMusic => 'Identificar con MusicBrainz';
+
+  @override
+  String get uploadsIdentifyMusicHelp =>
+      'Lo busca y espera tu decisión. Desactivado, lo añade con las etiquetas que trae';
+
+  @override
+  String get uploadsIdentifyOther => 'Revisar antes de añadir';
+
+  @override
+  String get uploadsIdentifyOtherHelp =>
+      'Espera tu decisión. Desactivado, lo añade con las etiquetas que trae';
+
+  @override
+  String get uploadsLoadError => 'No se han podido cargar las subidas';
+
+  @override
+  String get uploadsLoadMore => 'Cargar más';
+
+  @override
+  String get uploadsMediaBook => 'Audiolibro';
+
+  @override
+  String get uploadsMediaMusic => 'Música';
+
+  @override
+  String get uploadsMediaPodcast => 'Pódcast';
+
+  @override
+  String get uploadsOpenReview => 'Abrir la entrada de revisión';
+
+  @override
+  String get uploadsPick => 'Subir archivos';
+
+  @override
+  String get uploadsPickFolder => 'Subir una carpeta';
+
+  @override
+  String get uploadsPickFolderSubtitle =>
+      'Un álbum o una colección, con su jerarquía';
+
+  @override
+  String get uploadsPickSubtitle => 'Una pista, o un conjunto que elijas tú';
+
+  @override
+  String get uploadsQuotaHelp =>
+      'Esto es lo que puede estar en espera a la vez, no lo que puedes aportar: importar una sesión libera el espacio que ocupaba.';
+
+  @override
+  String get uploadsQuotaHelpUncapped =>
+      'Los archivos en espera se guardan hasta que se importan o se descartan.';
+
+  @override
+  String uploadsQuotaOf(String used, String cap) {
+    return '$used de $cap';
+  }
+
+  @override
+  String get uploadsQuotaOverline => 'Esperando a importarse';
+
+  @override
+  String uploadsReceivedOf(int percent, String size) {
+    return '$percent % de $size recibido';
+  }
+
+  @override
+  String get uploadsReceiving => 'Recibiendo';
+
+  @override
+  String get uploadsRetry => 'Reintentar la subida';
+
+  @override
+  String get uploadsSourceUrl => 'URL de origen';
+
+  @override
+  String get uploadsSourceUrlHint => 'Un solo vídeo, o una lista o un canal';
+
+  @override
+  String get uploadsTitle => 'Subidas';
+
+  @override
+  String get uploadsTransferFailed => 'Transferencia fallida';
+
+  @override
+  String get uploadsUpload => 'Subir';
+
+  @override
+  String uploadsWhatMany(int count) {
+    return '¿Qué son estos $count archivos?';
+  }
+
+  @override
+  String get uploadsWhatOne => '¿Qué estás subiendo?';
+
+  @override
+  String get uploadsWhatThisIs => 'Qué es esto';
 }

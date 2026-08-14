@@ -3,23 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'shares_controller.dart';
 
 /// Expiry choices the share dialog offers.
 enum ShareExpiry {
-  day(24, '1 day'),
-  week(168, '1 week'),
-  month(720, '30 days'),
-  never(null, 'Never');
+  day(24),
+  week(168),
+  month(720),
+  never(null);
 
-  const ShareExpiry(this.hours, this.label);
+  const ShareExpiry(this.hours);
 
   /// Lifetime in hours; null never expires.
   final int? hours;
 
-  final String label;
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    ShareExpiry.day => l10n.sharingExpiryDay,
+    ShareExpiry.week => l10n.sharingExpiryWeek,
+    ShareExpiry.month => l10n.sharingExpiryMonth,
+    ShareExpiry.never => l10n.sharingExpiryNever,
+  };
 }
 
 /// The full URL a share link is copied as. The server resolves share
@@ -78,6 +84,7 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
     setState(() => _busy = true);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     // The container rather than `ref`: the link is minted whether or not
     // this dialog is still on screen when the server answers, and the
     // list it joined has to hear about it either way. `ref` is dead the
@@ -104,11 +111,11 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
       navigator.pop();
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Link copied')));
+        ..showSnackBar(SnackBar(content: Text(l10n.sharingLinkCopied)));
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -117,11 +124,12 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final positionMs = widget.positionMs;
     return AlertDialog(
       backgroundColor: colors.surface1,
       title: Text(
-        'Share link',
+        l10n.sharingDialogTitle,
         style: WaxType.headline.copyWith(color: colors.textPrimary),
       ),
       content: Column(
@@ -129,42 +137,41 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text(
-            'Anyone with the link can play this. It goes on your clipboard '
-            'as soon as it is made.',
+            l10n.sharingDialogBody,
             style: WaxType.body.copyWith(color: colors.textSecondary),
           ),
           const SizedBox(height: WaxSpace.s16),
           WaxSettingRow(
-            title: 'Expires',
-            help: 'When the link stops working',
+            title: l10n.sharingExpires,
+            help: l10n.sharingExpiresHelp,
             control: WaxChoice<ShareExpiry>(
               value: _expiry,
               options: ShareExpiry.values,
-              labelFor: (choice) => choice.label,
-              label: 'Expires',
+              labelFor: (choice) => choice.labelOf(l10n),
+              label: l10n.sharingExpires,
               semanticsId: SemanticsIds.shareExpiry,
               onChanged: (choice) => setState(() => _expiry = choice),
             ),
           ),
           WaxSettingRow(
-            title: 'Allow download',
-            help: 'The page offers the original file, not just playback',
+            title: l10n.sharingAllowDownload,
+            help: l10n.sharingAllowDownloadHelp,
             control: WaxSwitch(
               value: _allowDownload,
-              label: 'Allow download',
+              label: l10n.sharingAllowDownload,
               semanticsId: SemanticsIds.shareAllowDownload,
               onChanged: (value) => setState(() => _allowDownload = value),
             ),
           ),
           if (positionMs != null && positionMs > 0)
             WaxSettingRow(
-              title:
-                  'Start at '
-                  '${formatTimecode(Duration(milliseconds: positionMs))}',
-              help: 'The link opens where you are now',
+              title: l10n.sharingStartAt(
+                formatTimecode(Duration(milliseconds: positionMs)),
+              ),
+              help: l10n.sharingStartAtHelp,
               control: WaxSwitch(
                 value: _startAtPosition,
-                label: 'Start at this position',
+                label: l10n.sharingStartAtLabel,
                 semanticsId: SemanticsIds.shareStartAt,
                 onChanged: (value) => setState(() => _startAtPosition = value),
               ),
@@ -173,12 +180,12 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
       ),
       actions: <Widget>[
         WaxButton(
-          label: 'Cancel',
+          label: l10n.commonCancel,
           kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
         ),
         WaxButton(
-          label: 'Create link',
+          label: l10n.sharingCreate,
           semanticsId: SemanticsIds.shareCreate,
           onPressed: _busy ? null : _create,
         ),

@@ -34,26 +34,24 @@ class ShareRows extends StatelessWidget {
     _ => WaxIcons.music,
   };
 
-  /// What a row says under its title: who minted it where that is not
-  /// obvious, then what it opens, how much it has been used, and when it
-  /// dies. That is the order somebody auditing links reads them in, and
-  /// on the oversight listing the owner comes first because it is what
-  /// turns a row into somebody's.
+  /// What a row says under its title, in the order somebody auditing
+  /// links reads them: whose, what it opens, how used, when it dies.
+  /// The kind is worded, or a wire token sits among translated ones.
   static String captionFor(AppLocalizations l10n, Share share) {
     final expiresAt = share.expiresAt;
     final expired = expiresAt != null && expiresAt.isBefore(DateTime.now());
     final owner = share.owner;
     return <String>[
       if (owner != null && owner.isNotEmpty) owner,
-      share.targetKind,
-      share.plays == 1 ? '1 play' : '${share.plays} plays',
+      l10n.sharingKind(share.targetKind),
+      l10n.sharingPlays(share.plays),
       if (expiresAt == null)
-        'never expires'
+        l10n.sharingNeverExpires
       else if (expired)
-        'expired ${l10n.formatDate(expiresAt)}'
+        l10n.sharingExpiredOn(l10n.formatDate(expiresAt))
       else
-        'expires ${l10n.formatDate(expiresAt)}',
-      if (share.allowDownload) 'download allowed',
+        l10n.sharingExpiresOn(l10n.formatDate(expiresAt)),
+      if (share.allowDownload) l10n.sharingDownloadAllowed,
     ].join(' · ');
   }
 
@@ -77,13 +75,13 @@ class ShareRows extends StatelessWidget {
               children: <Widget>[
                 WaxIconButton(
                   glyph: WaxIcons.share,
-                  label: 'Copy link',
+                  label: l10n.sharingCopyLink,
                   semanticsId: SemanticsIds.shareCopy(share.pid),
                   onPressed: () => onCopy(share),
                 ),
                 WaxIconButton(
                   glyph: WaxIcons.close,
-                  label: 'Revoke link',
+                  label: l10n.sharingRevokeLink,
                   semanticsId: SemanticsIds.shareRevoke(share.pid),
                   onPressed: () => onRevoke(share),
                 ),

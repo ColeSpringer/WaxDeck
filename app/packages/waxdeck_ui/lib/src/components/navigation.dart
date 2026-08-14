@@ -104,11 +104,17 @@ class WaxNavLink extends WaxNavEntry {
 /// discloses its children.
 class WaxNavGroup extends WaxNavEntry {
   const WaxNavGroup({
+    required this.name,
     required this.label,
     required this.glyph,
     required this.children,
     this.semanticsId,
   });
+
+  /// The group's stable handle, in [WaxDestination.name]'s vocabulary.
+  /// What the sidebar remembers a collapse against: keyed on [label],
+  /// that decision belonged to whatever language it was made in.
+  final String name;
 
   final String label;
   final WaxGlyph glyph;
@@ -942,15 +948,13 @@ class WaxSidebar extends StatefulWidget {
 }
 
 class _WaxSidebarState extends State<WaxSidebar> {
-  /// What a visitor has decided about a group, where they have decided
-  /// anything. A group holding the active destination opens on its own, so
-  /// arriving by URL never hides where you are - but that has to be a
-  /// default rather than a floor, or the row cannot be closed from inside
-  /// the very group whose child is selected.
+  /// What a visitor has decided about a group. A group holding the
+  /// active destination opens by default, not by floor, or it could not
+  /// be closed from inside. Keyed by name: a translated key forgets.
   final Map<String, bool> _disclosed = <String, bool>{};
 
   bool _isOpen(WaxNavGroup group) =>
-      _disclosed[group.label] ??
+      _disclosed[group.name] ??
       group.children.any((child) => child.name == widget.selected);
 
   /// A parent destination opens on its own while it or one of its
@@ -1154,7 +1158,7 @@ class _WaxSidebarState extends State<WaxSidebar> {
             size: 16,
             color: WaxColors.of(context).textTertiary,
           ),
-          onTap: () => setState(() => _disclosed[group.label] = !open),
+          onTap: () => setState(() => _disclosed[group.name] = !open),
         ),
       ),
       if (open)

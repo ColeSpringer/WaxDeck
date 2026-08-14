@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
@@ -62,6 +63,7 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
     final navigator = Navigator.of(context);
     final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final playback = ref.read(nowPlayingProvider.notifier);
     try {
       final mix = await ref
@@ -79,9 +81,7 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
       if (mix.items.isEmpty) {
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(content: Text('No mix available for this track')),
-          );
+          ..showSnackBar(SnackBar(content: Text(l10n.discoveryMixEmpty)));
         return;
       }
       // Mirror how playlists start playback: the mix list stands in
@@ -93,7 +93,7 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
         router.push<void>(
           WaxRoute.tracks,
           extra: TrackListArgs(
-            title: 'Instant mix',
+            title: l10n.discoveryInstantMixTitle,
             basis: mix.basis,
             items: mix.items,
             idPrefix: 'mix',
@@ -102,13 +102,16 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
       );
       playback.play(
         mix.items,
-        source: QueueSource(kind: QueueSourceKind.mix, label: 'Instant mix'),
+        // No label: a mix seeded by one track has no name of its own,
+        // and the label is stored with the queue. The queue's own
+        // provenance line words the kind instead.
+        source: const QueueSource(kind: QueueSourceKind.mix, label: ''),
       );
       unawaited(router.push<void>(WaxRoute.nowPlaying));
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -117,6 +120,7 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(WaxSpace.s16),
@@ -125,9 +129,9 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // No gap of its own: SectionHeader owns its bottom s12.
-            const SectionHeader(title: 'Instant mix'),
+            SectionHeader(title: l10n.discoveryInstantMixTitle),
             Text(
-              'From "${widget.seed.title}"',
+              l10n.discoveryInstantMixFrom(widget.seed.title),
               style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -135,11 +139,11 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
             const SizedBox(height: WaxSpace.s8),
             Row(
               children: [
-                const Text('Familiar'),
+                Text(l10n.discoveryFamiliar),
                 Expanded(
                   child: Semantics(
                     identifier: SemanticsIds.mixAdventurousness,
-                    label: 'Adventurousness',
+                    label: l10n.discoveryAdventurousness,
                     child: Slider(
                       key: const Key(SemanticsIds.mixAdventurousness),
                       value: _adventurousness,
@@ -147,18 +151,18 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
                     ),
                   ),
                 ),
-                const Text('Adventurous'),
+                Text(l10n.discoveryAdventurous),
               ],
             ),
             const SizedBox(height: WaxSpace.s8),
             Semantics(
               identifier: SemanticsIds.instantMixRun,
-              label: 'Mix',
+              label: l10n.discoveryMixAction,
               button: true,
               child: FilledButton(
                 key: const Key(SemanticsIds.instantMixRun),
                 onPressed: _busy ? null : _mix,
-                child: const Text('Mix'),
+                child: Text(l10n.discoveryMixAction),
               ),
             ),
           ],
@@ -176,6 +180,7 @@ Future<void> openSimilarTracks(
 ) async {
   final router = GoRouter.of(context);
   final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
   try {
     final similar = await ref
         .read(repositoryProvider)
@@ -183,7 +188,10 @@ Future<void> openSimilarTracks(
     await router.push<void>(
       WaxRoute.tracks,
       extra: TrackListArgs(
-        title: 'Similar to ${seed.title}',
+        title: l10n.discoverySimilarTitle(seed.title),
+        // No source label, the way the instant mix has none: tracks
+        // like this one are not this one, so naming the seed would have
+        // the queue claim a provenance the list does not have.
         basis: similar.basis,
         items: similar.items,
         idPrefix: 'similar',
@@ -192,6 +200,6 @@ Future<void> openSimilarTracks(
   } on WaxDeckApiException catch (e) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(e.message)));
+      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
   }
 }

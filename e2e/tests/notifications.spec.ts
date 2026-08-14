@@ -100,13 +100,10 @@ test('the bell reports what happened while the app was open', async ({
 
   try {
     await app.shell.notificationsBadged();
-    // The copy is the contract, so the spec names it. Waited for by that
-    // copy rather than read off the top of the list: the catalog is
-    // shared, so the news that badges the bell first is not necessarily
-    // this test's own.
-    const mine = await app.shell.openNotificationsUntil(
-      'Uploads: An upload changed.',
-    );
+    // Waited for by what the row is about rather than off the top of
+    // the list: the catalog is shared, so the news that badges the bell
+    // first is not necessarily this test's own.
+    const mine = await app.shell.openNotificationsUntil('upload');
 
     // And the row is a link, not a label.
     await mine.click();
@@ -116,9 +113,9 @@ test('the bell reports what happened while the app was open', async ({
     // rather than re-entered: the list is what this client saw while it
     // was running, so a real page load would empty it first.
     await app.nav.to('home');
-    await app.shell.openNotifications();
+    await app.shell.openNotifications('upload');
     await app.shell.notificationsClear().click();
-    await expect(app.shell.notificationRow(0)).toBeHidden();
+    await expect(app.shell.notificationRow('upload')).toBeHidden();
   } finally {
     await app.api.delete('/uploads/{uploadId}', {
       path: { uploadId: session.id },

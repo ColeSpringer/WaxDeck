@@ -383,12 +383,14 @@ here waits on upstream.
   order - bounded, worth knowing, not worth machinery.
 
 - `[in-repo]` **The surfaces drawn from outside the element tree stay
-  English.** Four of them, and they are one problem: the Android Auto
-  browse tree's folder names (`auto/auto_browse.dart`), the desktop
-  tray menu (`desktop/desktop_ports_io.dart`), the sleep timer's
-  media-session extend button (`player/sleep_timer.dart`), and the
-  notification-channel names and media-session action labels configured
-  at engine init in `waxdeck_player`. Every one is built where there is
+  English.** Five of them, and they are one problem: the Android Auto
+  browse tree's folder names (`auto/auto_browse.dart`), the stand-in
+  title a media-session row falls back to when the catalog has not
+  answered for a queued pid yet (`auto/media_session_feed.dart`), the
+  desktop tray menu (`desktop/desktop_ports_io.dart`), the sleep
+  timer's media-session extend button (`player/sleep_timer.dart`), and
+  the notification-channel names and media-session action labels
+  configured at engine init in `waxdeck_player`. Every one is built where there is
   no `BuildContext` to read a locale through - a port fed a database, a
   notifier, an operating-system menu - so `context.l10n` cannot reach
   them and the sweep left them as they are, with a comment at each site

@@ -10,6 +10,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../admin/dashboard_screen.dart';
 import '../connect/device_picker.dart';
 import '../desktop/mini_window.dart';
+import '../l10n/l10n.dart';
 import '../player/lyrics.dart';
 import '../player/now_playing_controller.dart';
 import '../player/output_volume.dart';
@@ -33,13 +34,15 @@ const double kVolumeStep = 0.05;
 /// How the reference sheet groups its rows. The palette lists every
 /// command under one heading instead.
 enum WaxCommandSection {
-  playback('Playback'),
-  view('Views'),
-  app('Everywhere');
+  playback,
+  view,
+  app;
 
-  const WaxCommandSection(this.title);
-
-  final String title;
+  String titleOf(AppLocalizations l10n) => switch (this) {
+    WaxCommandSection.playback => l10n.shellCommandSectionPlayback,
+    WaxCommandSection.view => l10n.shellCommandSectionView,
+    WaxCommandSection.app => l10n.shellCommandSectionApp,
+  };
 }
 
 /// One thing the app can be told to do, and the single source for the
@@ -48,8 +51,8 @@ enum WaxCommandSection {
 class WaxCommand {
   const WaxCommand({
     required this.id,
-    required this.label,
     required this.section,
+    this.label,
     required this.run,
     this.glyph,
     this.activators = const <ShortcutActivator>[],
@@ -62,8 +65,10 @@ class WaxCommand {
   /// Stable: it is the palette's row handle.
   final String id;
 
-  /// A verb, sentence case.
-  final String label;
+  /// A verb in the reader's language, or null for a standing command,
+  /// whose name [commandLabel] looks up: a screen has a context in hand
+  /// and words itself, the standing list is const above every one.
+  final String? label;
 
   final WaxCommandSection section;
 
@@ -108,9 +113,9 @@ class WaxCommand {
   /// The keystroke to print, in this platform's spelling.
   String? get keys => activators.isEmpty ? null : describeActivator(activators);
 
-  /// Same name, same place, same keys. What it *does* is excluded, so a
-  /// rebuild that changes nothing offered publishes nothing - which is
-  /// why a scoped `run` reads its state rather than closing over it.
+  /// Same name, place and keys. What it *does* is excluded, so a
+  /// rebuild offering nothing new publishes nothing. A standing command
+  /// has no label, so its id is what tells two of them apart.
   bool sameOffer(WaxCommand other) =>
       id == other.id &&
       label == other.label &&
@@ -138,7 +143,6 @@ class WaxCommand {
 final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   WaxCommand(
     id: 'play-pause',
-    label: 'Play or pause',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.play,
     activators: const <ShortcutActivator>[
@@ -149,7 +153,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'next',
-    label: 'Next track',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.next,
     activators: _chord(LogicalKeyboardKey.arrowRight),
@@ -159,7 +162,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'previous',
-    label: 'Previous track',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.previous,
     activators: _chord(LogicalKeyboardKey.arrowLeft),
@@ -169,7 +171,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'seek-forward',
-    label: 'Skip ahead 10 seconds',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.fastForward,
     activators: const <ShortcutActivator>[
@@ -180,7 +181,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'seek-back',
-    label: 'Skip back 10 seconds',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.rewind,
     activators: const <ShortcutActivator>[
@@ -191,7 +191,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'volume-up',
-    label: 'Volume up',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.volume,
     activators: _chord(LogicalKeyboardKey.arrowUp),
@@ -200,7 +199,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'volume-down',
-    label: 'Volume down',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.volume,
     activators: _chord(LogicalKeyboardKey.arrowDown),
@@ -209,7 +207,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'mute',
-    label: 'Mute or unmute',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.volumeMuted,
     activators: const <ShortcutActivator>[
@@ -221,7 +218,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'shuffle',
-    label: 'Shuffle the queue',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.shuffle,
     enabled: (ref) => ref.read(queueControllerProvider).isNotEmpty,
@@ -232,7 +228,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'repeat',
-    label: 'Change repeat',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.repeatAll,
     enabled: (ref) => ref.read(queueControllerProvider).isNotEmpty,
@@ -245,7 +240,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'cast',
-    label: 'Play on another device',
     section: WaxCommandSection.playback,
     glyph: WaxIcons.cast,
     run: (context, ref) {
@@ -263,7 +257,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
 
   WaxCommand(
     id: 'player',
-    label: 'Open the player',
     section: WaxCommandSection.view,
     glyph: WaxIcons.expand,
     enabled: _somethingToPlay,
@@ -271,7 +264,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'queue',
-    label: 'Show the queue',
     section: WaxCommandSection.view,
     glyph: WaxIcons.queue,
     activators: const <ShortcutActivator>[
@@ -281,7 +273,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'lyrics',
-    label: 'Show lyrics',
     section: WaxCommandSection.view,
     glyph: WaxIcons.lyrics,
     activators: const <ShortcutActivator>[
@@ -299,7 +290,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'visualizer',
-    label: 'Open the visualizer',
     section: WaxCommandSection.view,
     glyph: WaxIcons.waveform,
     enabled: _somethingToPlay,
@@ -307,7 +297,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'car-mode',
-    label: 'Open car mode',
     section: WaxCommandSection.view,
     glyph: WaxIcons.car,
     enabled: _somethingToPlay,
@@ -320,14 +309,12 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
 
   WaxCommand(
     id: 'create-playlist',
-    label: 'Create playlist',
     section: WaxCommandSection.app,
     glyph: WaxIcons.playlists,
     run: (context, ref) => unawaited(showCreatePlaylistDialog(context)),
   ),
   WaxCommand(
     id: 'palette',
-    label: 'Open the command palette',
     section: WaxCommandSection.app,
     glyph: WaxIcons.search,
     activators: _chord(LogicalKeyboardKey.keyK),
@@ -337,7 +324,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'search',
-    label: 'Search',
     section: WaxCommandSection.app,
     glyph: WaxIcons.search,
     activators: const <ShortcutActivator>[
@@ -353,7 +339,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   // shortcut sheet alike.
   WaxCommand(
     id: 'scan-library',
-    label: 'Scan library',
     section: WaxCommandSection.app,
     glyph: WaxIcons.refresh,
     // Watched, not read: build() is the one place a predicate may, and a
@@ -366,7 +351,6 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
   WaxCommand(
     id: 'shortcuts',
-    label: 'Keyboard shortcuts',
     section: WaxCommandSection.app,
     glyph: WaxIcons.info,
     // Both spellings: web reports "?", the desktop embedders "/" with
@@ -378,6 +362,40 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
     run: (context, ref) => unawaited(showShortcutSheet(context)),
   ),
 ];
+
+/// What a command is called. A scoped one names itself; a standing one
+/// is named here, because its list is const and above every context.
+/// The id is a last resort `command_palette_test.dart` says is unused.
+String commandLabel(AppLocalizations l10n, WaxCommand command) =>
+    command.label ?? _standingLabel(l10n, command.id) ?? command.id;
+
+String? _standingLabel(AppLocalizations l10n, String id) => switch (id) {
+  'play-pause' => l10n.shellCommandPlayPause,
+  'next' => l10n.shellCommandNext,
+  'previous' => l10n.shellCommandPrevious,
+  'seek-forward' => l10n.shellCommandSeekForward,
+  'seek-back' => l10n.shellCommandSeekBack,
+  'volume-up' => l10n.shellCommandVolumeUp,
+  'volume-down' => l10n.shellCommandVolumeDown,
+  'mute' => l10n.shellCommandMute,
+  'shuffle' => l10n.shellCommandShuffle,
+  'repeat' => l10n.shellCommandRepeat,
+  'cast' => l10n.shellCommandCast,
+  'player' => l10n.shellCommandPlayer,
+  'queue' => l10n.shellCommandQueue,
+  'lyrics' => l10n.shellCommandLyrics,
+  'visualizer' => l10n.shellCommandVisualizer,
+  'car-mode' => l10n.shellCommandCarMode,
+  // Declared in the desktop half, offered only where there is a window
+  // to shrink, and named here with the rest of the standing list.
+  'mini-window' => l10n.shellCommandMiniWindow,
+  'create-playlist' => l10n.shellCommandCreatePlaylist,
+  'palette' => l10n.shellCommandPalette,
+  'search' => l10n.shellCommandSearch,
+  'scan-library' => l10n.shellCommandScanLibrary,
+  'shortcuts' => l10n.shellCommandShortcuts,
+  _ => null,
+};
 
 /// One chord, both conventions, so a keyboard moved between machines
 /// finds what it expects.

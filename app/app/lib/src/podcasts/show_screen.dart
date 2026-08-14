@@ -23,16 +23,6 @@ import 'podcasts_controller.dart';
 import 'show_notes.dart';
 import 'subscription_settings_sheet.dart';
 
-/// How long an episode runs, for a row's trailing column: "2h 30m".
-/// Narrower than the design system's span, which spells its units out.
-String formatEpisodeDuration(AppLocalizations l10n, int durationMs) {
-  final d = Duration(milliseconds: durationMs);
-  final h = d.inHours;
-  final m = d.inMinutes.remainder(60);
-  if (h > 0) return l10n.podcastDurationHoursMinutes(h, m);
-  return l10n.podcastDurationMinutes(m);
-}
-
 /// Which episodes the list is showing.
 enum EpisodeFilterChoice {
   all('all'),
@@ -539,6 +529,7 @@ class _ShowOverflow extends ConsumerWidget {
         // holding a slot of the cap with nowhere left to remove it.
         if (subscribed || ref.watch(pinnedEntitiesProvider).contains(pid))
           pinMenuItem<String>(
+            context,
             ref,
             pid,
             value: 'pin',
@@ -832,8 +823,8 @@ class _EpisodeRow extends ConsumerWidget {
     final l10n = context.l10n;
     final remaining = episode.durationMs - progress.positionMs;
     final trailing = progress.inProgress && remaining > 0
-        ? l10n.podcastTimeLeft(formatEpisodeDuration(l10n, remaining))
-        : formatEpisodeDuration(l10n, episode.durationMs);
+        ? l10n.podcastTimeLeft(l10n.formatListenTime(remaining))
+        : l10n.formatListenTime(episode.durationMs);
 
     final facts = <String>[
       if (episode.season != null && episode.episodeNumber != null)

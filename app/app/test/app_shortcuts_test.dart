@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/shell/shortcuts.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'localized_host.dart';
+
 /// A declined key has to reach the ancestors that own it, which is what
 /// `CallbackShortcuts` cannot do: it reports a key handled the moment an
 /// activator accepts, before the callback runs.
@@ -13,9 +15,9 @@ void main() {
     final elsewhere = FocusNode(debugLabel: 'not-a-control');
     addTearDown(elsewhere.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      localizedHost(
         theme: buildWaxTheme(variant: WaxThemeVariant.dark),
-        home: Scaffold(
+        Scaffold(
           body: AppShortcuts(
             autofocus: false,
             bindings: <ShortcutActivator, VoidCallback>{
@@ -56,9 +58,9 @@ void main() {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      localizedHost(
         theme: buildWaxTheme(variant: WaxThemeVariant.dark),
-        home: Scaffold(
+        Scaffold(
           body: AppShortcuts(
             autofocus: false,
             bindings: <ShortcutActivator, VoidCallback>{

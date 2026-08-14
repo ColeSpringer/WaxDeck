@@ -18,29 +18,46 @@ import 'stats_controller.dart';
 class StatsScreen extends ConsumerWidget {
   const StatsScreen({super.key});
 
-  static String rangeLabel(String range) => switch (range) {
-    'all' => 'All time',
-    '7d' => '7 days',
-    '30d' => '30 days',
-    '90d' => '90 days',
-    '365d' => 'A year',
-    _ => range,
-  };
+  /// The client's word for a range, with the wire value as the last
+  /// resort: a range a newer server offers draws as itself rather than
+  /// as nothing.
+  static String rangeLabel(AppLocalizations l10n, String range) =>
+      switch (range) {
+        'all' => l10n.statsRangeAll,
+        '7d' => l10n.statsRange7d,
+        '30d' => l10n.statsRange30d,
+        '90d' => l10n.statsRange90d,
+        '365d' => l10n.statsRange365d,
+        _ => range,
+      };
 
-  static String bucketLabel(String bucket) => switch (bucket) {
-    'day' => 'Day',
-    'week' => 'Week',
-    'month' => 'Month',
-    _ => bucket,
-  };
+  static String bucketLabel(AppLocalizations l10n, String bucket) =>
+      switch (bucket) {
+        'day' => l10n.statsBucketDay,
+        'week' => l10n.statsBucketWeek,
+        'month' => l10n.statsBucketMonth,
+        _ => bucket,
+      };
+
+  /// The same grouping named inside a sentence. Its own keys rather
+  /// than [bucketLabel] lowercased, because `toLowerCase` is not a
+  /// translation - German keeps its capitals, Turkish loses its I.
+  static String bucketUnit(AppLocalizations l10n, String bucket) =>
+      switch (bucket) {
+        'day' => l10n.statsBucketDayInline,
+        'week' => l10n.statsBucketWeekInline,
+        'month' => l10n.statsBucketMonthInline,
+        _ => bucket,
+      };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final range = ref.watch(statsRangeProvider);
 
     return WaxScaffold(
-      title: 'Listening stats',
+      title: l10n.statsTitle,
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: FilterChipRow(
@@ -50,7 +67,7 @@ class StatsScreen extends ConsumerWidget {
               for (final value in statsRanges)
                 WaxFilterChip(
                   name: value,
-                  label: rangeLabel(value),
+                  label: rangeLabel(l10n, value),
                   semanticsId: SemanticsIds.statsRange(value),
                 ),
             ],
@@ -99,31 +116,31 @@ class _ListeningSection extends ConsumerWidget {
             children: <Widget>[
               StatFigure(
                 keyName: 'stats-total',
-                value: formatListenTime(value.totalMs),
-                label: 'listened',
+                value: l10n.formatListenTime(value.totalMs),
+                label: l10n.statsListened,
               ),
               StatFigure(
                 keyName: 'stats-sessions',
                 value: '${value.sessions}',
-                label: 'sessions',
+                label: l10n.statsSessions,
               ),
               // The general claim, now that it is true: the client
               // counts what playing faster saved as well as what
               // trimming skipped, so the honest word is the plain one.
               StatFigure(
                 keyName: 'stats-saved',
-                value: formatListenTime(value.timeSavedMs),
-                label: 'time saved',
+                value: l10n.formatListenTime(value.timeSavedMs),
+                label: l10n.statsTimeSaved,
               ),
             ],
           ),
           const SizedBox(height: WaxSpace.s16),
           if (value.buckets.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: WaxSpace.s24),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: WaxSpace.s24),
               child: EmptyState(
-                title: 'Nothing played in this range',
-                message: 'Pick a longer range, or go and play something.',
+                title: l10n.statsEmptyTitle,
+                message: l10n.statsEmptyMessage,
                 glyph: WaxIcons.stats,
               ),
             )
@@ -140,8 +157,8 @@ class _ListeningSection extends ConsumerWidget {
               child: WaxChoice<String>(
                 value: bucket,
                 options: statsBuckets,
-                labelFor: StatsScreen.bucketLabel,
-                label: 'Group by',
+                labelFor: (value) => StatsScreen.bucketLabel(l10n, value),
+                label: l10n.statsGroupBy,
                 semanticsId: SemanticsIds.statsBucket,
                 onChanged: (value) =>
                     ref.read(statsBucketProvider.notifier).select(value),
@@ -184,17 +201,19 @@ class _ListeningSection extends ConsumerWidget {
     List<ListeningBucket> buckets,
     String bucket,
   ) {
-    if (buckets.isEmpty) return 'No listening in this range.';
+    if (buckets.isEmpty) return l10n.statsChartEmptySummary;
     var peak = buckets.first;
     for (final b in buckets) {
       if (b.ms > peak.ms) peak = b;
     }
-    final unit = StatsScreen.bucketLabel(bucket).toLowerCase();
-    return 'Listening by $unit, ${buckets.length} bars from '
-        '${l10n.formatMonthDayNumericOnDay(buckets.first.start)} to '
-        '${l10n.formatMonthDayNumericOnDay(buckets.last.start)}. '
-        'The most was ${formatListenTime(peak.ms)} '
-        'on ${l10n.formatMonthDayNumericOnDay(peak.start)}.';
+    return l10n.statsChartSummary(
+      StatsScreen.bucketUnit(l10n, bucket),
+      buckets.length,
+      l10n.formatMonthDayNumericOnDay(buckets.first.start),
+      l10n.formatMonthDayNumericOnDay(buckets.last.start),
+      l10n.formatListenTime(peak.ms),
+      l10n.formatMonthDayNumericOnDay(peak.start),
+    );
   }
 }
 
@@ -254,21 +273,24 @@ class _HeatmapSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final heatmap = ref.watch(listeningHeatmapProvider);
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return switch (heatmap) {
       AsyncData(:final value) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const SectionHeader(title: 'This year', overline: 'Every day'),
+          SectionHeader(
+            title: l10n.statsHeatmapTitle,
+            overline: l10n.statsHeatmapOverline,
+          ),
           const SizedBox(height: WaxSpace.s12),
           YearHeatmap(
             key: const Key('stats-heatmap'),
             heatmap: value,
-            summary: _summary(value),
+            summary: _summary(l10n, value),
           ),
           const SizedBox(height: WaxSpace.s8),
           Text(
-            'Current streak: ${value.currentStreakDays} days · '
-            'Longest: ${value.longestStreakDays} days',
+            l10n.statsStreaks(value.currentStreakDays, value.longestStreakDays),
             key: const Key('stats-streaks'),
             style: WaxType.caption.copyWith(color: colors.textSecondary),
           ),
@@ -282,22 +304,25 @@ class _HeatmapSection extends ConsumerWidget {
     };
   }
 
-  static String _summary(ListeningHeatmap heatmap) {
+  static String _summary(AppLocalizations l10n, ListeningHeatmap heatmap) {
     final days = heatmap.days.where((day) => day.ms > 0).length;
-    return 'A calendar of ${heatmap.year}: listening on $days days. '
-        'Current streak ${heatmap.currentStreakDays} days, '
-        'longest ${heatmap.longestStreakDays}.';
+    return l10n.statsHeatmapSummary(
+      heatmap.year,
+      days,
+      heatmap.currentStreakDays,
+      heatmap.longestStreakDays,
+    );
   }
 }
 
 class _TopListsSection extends ConsumerWidget {
   const _TopListsSection();
 
-  static String kindLabel(String kind) => switch (kind) {
-    'artists' => 'Artists',
-    'albums' => 'Albums',
-    'genres' => 'Genres',
-    'shows' => 'Shows',
+  static String kindLabel(AppLocalizations l10n, String kind) => switch (kind) {
+    'artists' => l10n.statsKindArtists,
+    'albums' => l10n.statsKindAlbums,
+    'genres' => l10n.statsKindGenres,
+    'shows' => l10n.statsKindShows,
     _ => kind,
   };
 
@@ -305,10 +330,14 @@ class _TopListsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final kind = ref.watch(topKindProvider);
     final top = ref.watch(topListProvider);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const SectionHeader(title: 'Top', overline: 'In this range'),
+        SectionHeader(
+          title: l10n.statsTopTitle,
+          overline: l10n.statsTopOverline,
+        ),
         const SizedBox(height: WaxSpace.s8),
         FilterChipRow(
           padding: EdgeInsets.zero,
@@ -317,7 +346,7 @@ class _TopListsSection extends ConsumerWidget {
             for (final value in topListKinds)
               WaxFilterChip(
                 name: value,
-                label: kindLabel(value),
+                label: kindLabel(l10n, value),
                 semanticsId: SemanticsIds.top(value),
               ),
           ],
@@ -326,10 +355,8 @@ class _TopListsSection extends ConsumerWidget {
         const SizedBox(height: WaxSpace.s8),
         switch (top) {
           AsyncData(:final value) when value.entries.isEmpty => EmptyState(
-            title: 'Nothing here for this range',
-            message:
-                'A longer range, or a ${kindLabel(kind).toLowerCase()} '
-                'you have actually played.',
+            title: l10n.statsTopEmptyTitle,
+            message: l10n.statsTopEmptyMessage(kind),
             glyph: WaxIcons.stats,
           ),
           AsyncData(:final value) => Column(
@@ -373,7 +400,7 @@ class TopEntryRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => MediaListRow(
     data: MediaTileData(
       title: entry.name,
-      subtitle: entry.plays == 1 ? '1 play' : '${entry.plays} plays',
+      subtitle: context.l10n.statsPlays(entry.plays),
       artwork: waxArtwork(ref.watch(artworkStoreProvider), entry.artUrl),
       domain: _domain(kind),
       // An artist reads as a disc, the way every other artist row in the
@@ -381,7 +408,7 @@ class TopEntryRow extends ConsumerWidget {
       shape: kind == 'artists' || kind == 'genres'
           ? ArtworkShape.circle
           : ArtworkShape.square,
-      trailingText: formatListenTime(entry.ms),
+      trailingText: context.l10n.formatListenTime(entry.ms),
       semanticsId: SemanticsIds.topEntry(index),
     ),
     // The rank, in the slot the row already has for one, so it lines up
@@ -400,15 +427,15 @@ class _Doors extends StatelessWidget {
     children: <Widget>[
       WaxOptionRow(
         glyph: WaxIcons.recent,
-        title: 'Listen log',
-        subtitle: 'Every recorded listen session',
+        title: context.l10n.statsDoorListenLog,
+        subtitle: context.l10n.statsDoorListenLogSubtitle,
         semanticsId: SemanticsIds.openListenLog,
         onTap: () => context.go(WaxRoute.listenLog),
       ),
       WaxOptionRow(
         glyph: WaxIcons.stats,
-        title: 'Year in review',
-        subtitle: 'Your listening year, wrapped up',
+        title: context.l10n.statsDoorYearInReview,
+        subtitle: context.l10n.statsDoorYearInReviewSubtitle,
         semanticsId: SemanticsIds.openYearInReview,
         onTap: () => context.go(WaxRoute.yearInReview),
       ),
@@ -424,10 +451,8 @@ class _StatsError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ErrorState(
-    title: 'Could not load your listening stats',
-    message: error is WaxDeckApiException
-        ? (error as WaxDeckApiException).message
-        : 'The server did not answer.',
+    title: context.l10n.statsLoadError,
+    message: context.explain(error),
     onRetry: onRetry,
   );
 }

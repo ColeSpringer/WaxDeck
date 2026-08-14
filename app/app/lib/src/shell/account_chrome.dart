@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import 'adaptive_shell.dart';
 
 /// The account menu, in a screen's top app bar.
@@ -28,13 +29,14 @@ class AccountAction extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!WaxSizeClass.of(context).isCompact) return const SizedBox.shrink();
     final chrome = ref.watch(shellChromeProvider);
+    final l10n = context.l10n;
     return WaxAccountButton(
-      account: chrome.account,
+      account: chrome.accountOf(l10n),
       onAction: (name) {
         final verb = WaxAccountVerb.named(name);
         if (verb != null) runAccountVerb(ref, verb);
       },
-      entries: chrome.secondary,
+      entries: chrome.secondaryOf(l10n),
       onSelect: (name) => goToNavTarget(context, chrome.byName[name]),
       // Which secondary destination is current, so the menu marks it.
       // Resolved from the location without the branch tie-break the shell

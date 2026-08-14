@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'share_cards.dart';
@@ -23,27 +24,13 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
   late int _year = DateTime.now().year;
   var _server = false;
 
-  static const _monthLabels = {
-    0: 'J',
-    1: 'F',
-    2: 'M',
-    3: 'A',
-    4: 'M',
-    5: 'J',
-    6: 'J',
-    7: 'A',
-    8: 'S',
-    9: 'O',
-    10: 'N',
-    11: 'D',
-  };
-
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     return WaxScaffold(
-      title: 'Year in review',
+      title: l10n.statsDoorYearInReview,
       largeTitle: false,
       onBack: () => context.leave(fallback: WaxRoute.stats),
       slivers: <Widget>[
@@ -64,7 +51,7 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
                   children: <Widget>[
                     WaxIconButton(
                       glyph: WaxIcons.back,
-                      label: 'Previous year',
+                      label: l10n.statsYearPrev,
                       semanticsId: SemanticsIds.yirPrevYear,
                       onPressed: () => setState(() => _year--),
                     ),
@@ -82,7 +69,7 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
                     ),
                     WaxIconButton(
                       glyph: WaxIcons.forward,
-                      label: 'Next year',
+                      label: l10n.statsYearNext,
                       semanticsId: SemanticsIds.yirNextYear,
                       onPressed: () => setState(() => _year++),
                     ),
@@ -94,15 +81,15 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
                 child: FilterChipRow(
                   padding: EdgeInsets.zero,
                   selected: _server ? 'server' : 'personal',
-                  chips: const <WaxFilterChip>[
+                  chips: <WaxFilterChip>[
                     WaxFilterChip(
                       name: 'personal',
-                      label: 'My year',
+                      label: l10n.statsYearPersonal,
                       semanticsId: SemanticsIds.yirPersonal,
                     ),
                     WaxFilterChip(
                       name: 'server',
-                      label: 'Whole server',
+                      label: l10n.statsYearServer,
                       semanticsId: SemanticsIds.yirServer,
                     ),
                   ],
@@ -114,7 +101,10 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
               ReadingColumn(
                 child: _server
                     ? _ServerRecap(year: _year)
-                    : _PersonalRecap(year: _year, monthLabels: _monthLabels),
+                    : _PersonalRecap(
+                        year: _year,
+                        monthLabels: l10n.monthInitials(),
+                      ),
               ),
               const SizedBox(height: WaxSpace.s32),
             ],
@@ -134,20 +124,23 @@ class _PersonalRecap extends ConsumerWidget {
   /// What the year's bar chart says out loud. A canvas announces
   /// nothing, and "your biggest month" is the one fact somebody reads a
   /// recap chart for.
-  String _monthSummary(List<MonthListening> months) {
-    if (months.isEmpty) return 'No listening recorded in $year.';
+  String _monthSummary(AppLocalizations l10n, List<MonthListening> months) {
+    if (months.isEmpty) return l10n.statsYearChartEmpty(year);
     var peak = months.first;
     for (final month in months) {
       if (month.ms > peak.ms) peak = month;
     }
-    return 'Listening month by month through $year. The most was '
-        '${formatListenTime(peak.ms)} in '
-        '${monthLabels[peak.month - 1] ?? 'month ${peak.month}'}.';
+    return l10n.statsYearChartSummary(
+      year,
+      l10n.formatListenTime(peak.ms),
+      monthLabels[peak.month - 1] ?? l10n.statsYearMonthFallback(peak.month),
+    );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recap = ref.watch(yearInReviewProvider(year));
+    final l10n = context.l10n;
     return switch (recap) {
       AsyncData(:final value) =>
         value.totalMs == 0 && value.sessions == 0
@@ -161,65 +154,67 @@ class _PersonalRecap extends ConsumerWidget {
                     children: [
                       StatFigure(
                         keyName: 'yir-total',
-                        value: formatListenTime(value.totalMs),
-                        label: 'listened',
+                        value: l10n.formatListenTime(value.totalMs),
+                        label: l10n.statsListened,
                       ),
                       StatFigure(
                         keyName: 'yir-sessions',
                         value: '${value.sessions}',
-                        label: 'sessions',
+                        label: l10n.statsSessions,
                       ),
                       StatFigure(
                         keyName: 'yir-distinct',
                         value: '${value.distinctItems}',
-                        label: 'different things played',
+                        label: l10n.statsYearDistinct,
                       ),
                       StatFigure(
                         keyName: 'yir-new',
                         value: '${value.newInLibrary}',
-                        label: 'new in the library',
+                        label: l10n.statsYearNewInLibrary,
                       ),
                       StatFigure(
                         keyName: 'yir-streak',
-                        value: '${value.longestStreakDays} days',
-                        label: 'longest streak',
+                        value: l10n.statsYearStreakDays(
+                          value.longestStreakDays,
+                        ),
+                        label: l10n.statsYearLongestStreak,
                       ),
                       StatFigure(
                         keyName: 'yir-saved',
-                        value: formatListenTime(value.timeSavedMs),
-                        label: 'time saved',
+                        value: l10n.formatListenTime(value.timeSavedMs),
+                        label: l10n.statsTimeSaved,
                       ),
                     ],
                   ),
                   SizedBox(height: WaxLayout.of(context).sectionGap),
-                  const SectionHeader(title: 'Month by month'),
+                  SectionHeader(title: l10n.statsYearMonthByMonth),
                   ListeningBarChart(
                     key: const Key('yir-month-chart'),
                     values: [for (final m in value.byMonth) m.ms],
                     labels: monthLabels,
-                    summary: _monthSummary(value.byMonth),
+                    summary: _monthSummary(l10n, value.byMonth),
                   ),
                   _TopFive(
-                    title: 'Top artists',
+                    title: l10n.statsYearTopArtists,
                     kind: 'artists',
                     entries: value.topArtists,
                   ),
                   _TopFive(
-                    title: 'Top tracks',
+                    title: l10n.statsYearTopTracks,
                     kind: 'tracks',
                     entries: value.topTracks,
                   ),
                   _TopFive(
-                    title: 'Top genres',
+                    title: l10n.statsYearTopGenres,
                     kind: 'genres',
                     entries: value.topGenres,
                   ),
                   _TopFive(
-                    title: 'Top shows',
+                    title: l10n.statsYearTopShows,
                     kind: 'shows',
                     entries: value.topShows,
                   ),
-                  _ShareCardsDoor(data: ShareCardData.personal(value)),
+                  _ShareCardsDoor(data: ShareCardData.personal(l10n, value)),
                 ],
               ),
       AsyncError(:final error) => _RecapError(
@@ -244,6 +239,7 @@ class _ServerRecap extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recap = ref.watch(serverYearInReviewProvider(year));
+    final l10n = context.l10n;
     return switch (recap) {
       AsyncData(:final value) =>
         value.totalMs == 0 && value.sessions == 0
@@ -258,36 +254,36 @@ class _ServerRecap extends ConsumerWidget {
                       StatFigure(
                         keyName: 'yir-participants',
                         value: '${value.participants}',
-                        label: 'listeners counted in',
+                        label: l10n.statsYearParticipants,
                       ),
                       StatFigure(
                         keyName: 'yir-server-total',
-                        value: formatListenTime(value.totalMs),
-                        label: 'listened together',
+                        value: l10n.formatListenTime(value.totalMs),
+                        label: l10n.statsYearListenedTogether,
                       ),
                       StatFigure(
                         keyName: 'yir-server-sessions',
                         value: '${value.sessions}',
-                        label: 'sessions',
+                        label: l10n.statsSessions,
                       ),
                     ],
                   ),
                   _TopFive(
-                    title: 'Top artists',
+                    title: l10n.statsYearTopArtists,
                     kind: 'artists',
                     entries: value.topArtists,
                   ),
                   _TopFive(
-                    title: 'Top tracks',
+                    title: l10n.statsYearTopTracks,
                     kind: 'tracks',
                     entries: value.topTracks,
                   ),
                   _TopFive(
-                    title: 'Top genres',
+                    title: l10n.statsYearTopGenres,
                     kind: 'genres',
                     entries: value.topGenres,
                   ),
-                  _ShareCardsDoor(data: ShareCardData.server(value)),
+                  _ShareCardsDoor(data: ShareCardData.server(l10n, value)),
                 ],
               ),
       AsyncError(:final error) => _RecapError(
@@ -345,7 +341,7 @@ class _ShareCardsDoor extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: WaxSpace.s32),
       child: WaxButton(
-        label: 'Make a share card',
+        label: context.l10n.statsYearMakeCard,
         kind: WaxButtonKind.tonal,
         icon: WaxIcons.share,
         semanticsId: SemanticsIds.shareCardOpen,
@@ -360,10 +356,13 @@ class _NothingPlayed extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: WaxSpace.s48),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: WaxSpace.s48),
       child: Center(
-        child: Text('Nothing played this year', key: Key('yir-nothing-played')),
+        child: Text(
+          context.l10n.statsYearNothingPlayed,
+          key: const Key('yir-nothing-played'),
+        ),
       ),
     );
   }
@@ -377,17 +376,20 @@ class _RecapError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final message = error is WaxDeckApiException
-        ? (error as WaxDeckApiException).message
-        : 'Could not load the recap';
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.all(WaxSpace.s16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(message, textAlign: TextAlign.center),
+          // Titled, because `explain` answers a generic sentence for
+          // anything that is not an API exception, and a panel among
+          // panels has to say which one could not be drawn.
+          Text(l10n.statsRecapLoadError, textAlign: TextAlign.center),
+          const SizedBox(height: WaxSpace.s4),
+          Text(context.explain(error), textAlign: TextAlign.center),
           const SizedBox(height: WaxSpace.s12),
-          OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+          OutlinedButton(onPressed: onRetry, child: Text(l10n.commonRetry)),
         ],
       ),
     );

@@ -2,6 +2,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import 'add_to_library.dart';
 import 'share_intake.dart';
@@ -59,6 +60,9 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     List<SharedFile> files,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    // Held beside the messenger and for the same reason: the loop below
+    // outlives this frame, and both are read from the element tree.
+    final l10n = context.l10n;
     // A multi-file share groups through a batch with auto-detection -
     // no dialog: the share sheet is a fire-and-forget gesture, and
     // auto clustering does the right thing for an album share while
@@ -76,7 +80,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
       } on WaxDeckApiException catch (e) {
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(e.message)));
+          ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
         return;
       }
     }
@@ -96,7 +100,13 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
       } on WaxDeckApiException catch (e) {
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text('${file.name}: ${e.message}')));
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                l10n.uploadsFileFailed(file.name, explainError(l10n, e)),
+              ),
+            ),
+          );
       }
     }
     if (batchId != null) {
@@ -105,7 +115,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
       } on WaxDeckApiException catch (e) {
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(e.message)));
+          ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
       }
       ref.invalidate(uploadsProvider);
     }

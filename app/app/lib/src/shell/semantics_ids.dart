@@ -288,7 +288,10 @@ abstract final class SemanticsIds {
   static const String homeAdd = 'home-add';
   static String homeMix(Object index) => 'home-mix-$index';
   static const String homeScreen = 'home-screen';
-  static String notificationRow(Object index) => 'notification-row-$index';
+  static String notificationRow(Object kind, Object target) =>
+      'notification-row-$kind-$target';
+  static String notificationRowPlain(Object kind) =>
+      'notification-row-$kind-none';
   static const String notificationsBell = 'notifications-bell';
   static const String notificationsClear = 'notifications-clear';
   static String pinSheetTarget(Object pid) => 'pin-sheet-target-$pid';

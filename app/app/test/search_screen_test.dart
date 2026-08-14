@@ -579,7 +579,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('the catalog is busy'), findsOneWidget);
+    // The code's own sentence rather than the server's: nothing anybody
+    // typed was refused. The title alone would pass on a revert, so the
+    // server's line has to be gone as well.
+    expect(find.text('Could not search'), findsOneWidget);
+    expect(find.text('the catalog is busy'), findsNothing);
     expect(find.text('Nightjar Radio Hour'), findsOneWidget);
     expect(repository.podcastDirectoryQueries, <String>['night']);
   });

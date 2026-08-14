@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
@@ -35,6 +36,7 @@ class PinnedShelf extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     // Short-circuited on the stored list rather than on the resolved one,
     // so an account with nothing pinned costs no round trip and no
     // skeleton: the pids are already in hand.
@@ -54,17 +56,20 @@ class PinnedShelf extends ConsumerWidget {
                   WaxSizeClass.of(context).gutter +
                   const EdgeInsets.only(bottom: WaxSpace.s24),
               child: SectionHeader(
-                title: 'Pinned',
-                overline: 'What you keep',
-                actionLabel: 'Try again',
+                title: l10n.homePinnedTitle,
+                overline: l10n.homePinnedOverline,
+                actionLabel: l10n.homeShelfRetry,
                 onAction: () => ref.invalidate(pinnedCardsProvider),
               ),
             ),
           ),
         );
       }
-      return const SliverToBoxAdapter(
-        child: DelayedShelfSkeleton(title: 'Pinned', overline: 'What you keep'),
+      return SliverToBoxAdapter(
+        child: DelayedShelfSkeleton(
+          title: l10n.homePinnedTitle,
+          overline: l10n.homePinnedOverline,
+        ),
       );
     }
     final cards = async.value ?? const <EntityCard>[];
@@ -81,7 +86,7 @@ class PinnedShelf extends ConsumerWidget {
       for (final card in cards)
         MediaTileData(
           title: card.title,
-          subtitle: _caption(card),
+          subtitle: _caption(l10n, card),
           // A release group statically holds no artwork of its own, so it
           // draws a monogram rather than asking for a cover that 404s.
           artwork: card.kind == EntityCardKind.releaseGroup
@@ -103,8 +108,8 @@ class PinnedShelf extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.only(bottom: WaxSpace.s24),
           child: ShelfRow(
-            title: 'Pinned',
-            overline: 'What you keep',
+            title: l10n.homePinnedTitle,
+            overline: l10n.homePinnedOverline,
             items: tiles,
             // By position, like every other shelf here: a tile carries no
             // value equality and two releases can share a title.
@@ -155,9 +160,12 @@ class PinnedShelf extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              SectionHeader(title: card.title, overline: _caption(card)),
+              SectionHeader(
+                title: card.title,
+                overline: _caption(sheetContext.l10n, card),
+              ),
               WaxOptionRow(
-                title: 'Unpin from Home',
+                title: sheetContext.l10n.homeUnpinAction,
                 glyph: WaxIcons.home,
                 semanticsId: SemanticsIds.entityPin,
                 onTap: () => Navigator.of(sheetContext).pop(true),
@@ -173,17 +181,19 @@ class PinnedShelf extends ConsumerWidget {
 
   /// The line under the title: what the thing is, plus whose it is where
   /// that is not the title itself.
-  static String _caption(EntityCard card) {
+  static String _caption(AppLocalizations l10n, EntityCard card) {
     final kind = switch (card.kind) {
-      EntityCardKind.album => 'Album',
-      EntityCardKind.artist => 'Artist',
-      EntityCardKind.releaseGroup => 'Release group',
-      EntityCardKind.playlist => 'Playlist',
-      EntityCardKind.podcast => 'Podcast',
-      EntityCardKind.book => 'Book',
+      EntityCardKind.album => l10n.homePinnedKindAlbum,
+      EntityCardKind.artist => l10n.homePinnedKindArtist,
+      EntityCardKind.releaseGroup => l10n.homePinnedKindReleaseGroup,
+      EntityCardKind.playlist => l10n.homePinnedKindPlaylist,
+      EntityCardKind.podcast => l10n.homePinnedKindPodcast,
+      EntityCardKind.book => l10n.homePinnedKindBook,
     };
     final artist = card.artist;
-    return artist == null || artist.isEmpty ? kind : '$kind · $artist';
+    return artist == null || artist.isEmpty
+        ? kind
+        : l10n.homePinnedCaption(kind, artist);
   }
 
   static WaxDomain _domain(EntityCardKind kind) => switch (kind) {

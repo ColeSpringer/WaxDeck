@@ -28,6 +28,9 @@ String? queueProvenance(AppLocalizations l10n, QueueSource source) {
     // no name of its own, and the label is stored with the queue, so it
     // outlives the language it was built in.
     QueueSourceKind.library => l10n.queuePlayingFromLibrary,
+    // A mix seeded by one track is the same case: the seed is not what
+    // the mix is, so there is no name to carry and the kind says it.
+    QueueSourceKind.mix when source.label.isEmpty => l10n.queuePlayingFromMix,
     _ when source.label.isEmpty => null,
     _ => l10n.queuePlayingFrom(source.label),
   };

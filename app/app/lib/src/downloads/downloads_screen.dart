@@ -28,7 +28,7 @@ class DownloadsScreen extends ConsumerWidget {
     final downloads = state.value ?? DownloadsState.empty;
 
     return WaxScaffold(
-      title: 'Downloads',
+      title: context.l10n.downloadsTitle,
       semanticsId: SemanticsIds.downloadsScreen,
       actions: <Widget>[
         if (downloads.entries.isNotEmpty) const _Overflow(),
@@ -45,26 +45,20 @@ class DownloadsScreen extends ConsumerWidget {
             ),
           ),
         switch (state) {
-          AsyncData() when downloads.entries.isEmpty =>
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: EmptyState(
-                title: 'Nothing downloaded',
-                message:
-                    'Download a book, an album, or an episode and it plays '
-                    'here with the server unreachable. Its cover comes with '
-                    'it.',
-                glyph: WaxIcons.downloads,
-              ),
+          AsyncData() when downloads.entries.isEmpty => SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              title: context.l10n.downloadsEmptyTitle,
+              message: context.l10n.downloadsEmptyMessage,
+              glyph: WaxIcons.downloads,
             ),
+          ),
           AsyncData() => _Groups(downloads: downloads),
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not read your downloads',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The download store did not answer.',
+              title: context.l10n.downloadsLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(downloadsProvider),
             ),
           ),
@@ -119,7 +113,7 @@ class _StorageHeader extends ConsumerWidget {
                   ),
                 ),
                 WaxButton(
-                  label: 'Clear all',
+                  label: l10n.downloadsClearAll,
                   kind: WaxButtonKind.text,
                   semanticsId: SemanticsIds.downloadsClearAll,
                   onPressed: () => unawaited(_confirmClear(context, ref)),
@@ -133,8 +127,10 @@ class _StorageHeader extends ConsumerWidget {
               children: <Widget>[
                 for (final domain in downloads.byDomain)
                   CodecChip(
-                    '${_mediumLabel(domain.mediaType)} '
-                    '${l10n.formatBytes(domain.bytes)}',
+                    l10n.downloadsChip(
+                      _mediumLabel(l10n, domain.mediaType),
+                      l10n.formatBytes(domain.bytes),
+                    ),
                   ),
               ],
             ),
@@ -148,24 +144,21 @@ class _StorageHeader extends ConsumerWidget {
     // Read before the dialog: this runs unawaited, so `ref` may be dead
     // by the time the answer comes back.
     final notifier = ref.read(downloadsProvider.notifier);
-    final freed = context.l10n.formatBytes(downloads.usedBytes);
+    final l10n = context.l10n;
+    final freed = l10n.formatBytes(downloads.usedBytes);
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove every download?'),
-        content: Text(
-          'This frees $freed. Nothing leaves '
-          'the library: everything here plays again with the server '
-          'reachable.',
-        ),
+        title: Text(l10n.downloadsClearTitle),
+        content: Text(l10n.downloadsClearBody(freed)),
         actions: <Widget>[
           WaxButton(
-            label: 'Keep them',
+            label: l10n.downloadsClearKeep,
             kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(context).pop(false),
           ),
           WaxButton(
-            label: 'Remove all',
+            label: l10n.downloadsClearConfirm,
             onPressed: () => Navigator.of(context).pop(true),
           ),
         ],
@@ -183,20 +176,21 @@ class _Overflow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return WaxMenuButton<_DownloadsAction>(
       glyph: WaxIcons.more,
-      label: 'More',
+      label: l10n.downloadsOverflow,
       semanticsId: SemanticsIds.downloadsOverflow,
-      items: const <WaxMenuItem<_DownloadsAction>>[
+      items: <WaxMenuItem<_DownloadsAction>>[
         WaxMenuItem<_DownloadsAction>(
           value: _DownloadsAction.removeFinished,
-          label: 'Remove finished episodes',
+          label: l10n.downloadsRemoveFinished,
           glyph: WaxIcons.check,
           semanticsId: SemanticsIds.downloadsRemoveFinished,
         ),
         WaxMenuItem<_DownloadsAction>(
           value: _DownloadsAction.refreshStale,
-          label: 'Re-download stale',
+          label: l10n.downloadsRefreshStale,
           glyph: WaxIcons.refresh,
           semanticsId: SemanticsIds.downloadsRefresh,
         ),
@@ -211,6 +205,7 @@ class _Overflow extends ConsumerWidget {
     _DownloadsAction action,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final notifier = ref.read(downloadsProvider.notifier);
     switch (action) {
       case _DownloadsAction.removeFinished:
@@ -221,20 +216,15 @@ class _Overflow extends ConsumerWidget {
             SnackBar(
               content: Text(
                 removed == 0
-                    ? 'No finished episodes to remove'
-                    : 'Removed $removed '
-                          '${removed == 1 ? 'episode' : 'episodes'}',
+                    ? l10n.downloadsNoneFinished
+                    : l10n.downloadsRemovedEpisodes(removed),
               ),
             ),
           );
       case _DownloadsAction.refreshStale:
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text('Checking downloads against the server'),
-            ),
-          );
+          ..showSnackBar(SnackBar(content: Text(l10n.downloadsChecking)));
         await notifier.refreshStale();
     }
   }
@@ -260,8 +250,8 @@ class _Transfers extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           SectionHeader(
-            title: 'Transferring',
-            overline: '${entries.length} in flight',
+            title: l10n.downloadsTransferring,
+            overline: l10n.downloadsInFlight(entries.length),
           ),
           for (final entry in entries)
             MediaListRow(
@@ -283,7 +273,7 @@ class _Transfers extends ConsumerWidget {
                 _PauseButton(key: ValueKey(entry.pid), entry: entry),
                 WaxIconButton(
                   glyph: WaxIcons.close,
-                  label: 'Cancel ${entry.title}',
+                  label: l10n.downloadsCancel(entry.title),
                   size: 18,
                   semanticsId: SemanticsIds.downloadCancel(entry.pid),
                   onPressed: () => unawaited(
@@ -320,11 +310,12 @@ class _PauseButtonState extends ConsumerState<_PauseButton> {
   @override
   Widget build(BuildContext context) {
     final pid = widget.entry.pid;
+    final l10n = context.l10n;
     return WaxIconButton(
       glyph: _paused ? WaxIcons.play : WaxIcons.pause,
       label: _paused
-          ? 'Resume ${widget.entry.title}'
-          : 'Pause ${widget.entry.title}',
+          ? l10n.downloadsResume(widget.entry.title)
+          : l10n.downloadsPause(widget.entry.title),
       size: 18,
       semanticsId: _paused
           ? SemanticsIds.downloadResume(pid)
@@ -336,6 +327,7 @@ class _PauseButtonState extends ConsumerState<_PauseButton> {
   Future<void> _toggle(String pid) async {
     final notifier = ref.read(downloadsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
+    final cannotPause = context.l10n.downloadsCannotPause;
     if (_paused) {
       await notifier.resume(pid);
       if (mounted) setState(() => _paused = false);
@@ -348,11 +340,7 @@ class _PauseButtonState extends ConsumerState<_PauseButton> {
     } else {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('This transfer cannot be paused; cancel it instead'),
-          ),
-        );
+        ..showSnackBar(SnackBar(content: Text(cannotPause)));
     }
   }
 }
@@ -377,10 +365,8 @@ class _Groups extends ConsumerWidget {
         children: <Widget>[
           for (final group in groups) ...<Widget>[
             SectionHeader(
-              title: _mediumLabel(group.mediaType),
-              overline:
-                  '${group.entries.length} '
-                  '${group.entries.length == 1 ? 'item' : 'items'}',
+              title: _mediumLabel(l10n, group.mediaType),
+              overline: l10n.downloadsGroupItems(group.entries.length),
             ),
             for (final entry in group.entries)
               MediaListRow(
@@ -403,7 +389,7 @@ class _Groups extends ConsumerWidget {
                 actions: <Widget>[
                   WaxIconButton(
                     glyph: WaxIcons.delete,
-                    label: 'Remove ${entry.title}',
+                    label: l10n.downloadsRemove(entry.title),
                     size: 18,
                     semanticsId: SemanticsIds.downloadRemove(entry.pid),
                     onPressed: () => unawaited(
@@ -426,10 +412,10 @@ class _Groups extends ConsumerWidget {
   }
 }
 
-String _mediumLabel(MediaType type) => switch (type) {
-  MediaType.music => 'Music',
-  MediaType.podcast => 'Podcasts',
-  MediaType.audiobook => 'Audiobooks',
+String _mediumLabel(AppLocalizations l10n, MediaType type) => switch (type) {
+  MediaType.music => l10n.downloadsMediumMusic,
+  MediaType.podcast => l10n.downloadsMediumPodcasts,
+  MediaType.audiobook => l10n.downloadsMediumBooks,
 };
 
 WaxDomain _domainOf(MediaType type) => switch (type) {

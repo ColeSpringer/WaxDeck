@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
 import '../shell/routes.dart';
@@ -45,29 +46,29 @@ Future<void> showAddToLibrarySheet(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const SectionHeader(
-              title: 'Add to the library',
-              overline: 'Both routes land in the review queue',
+            SectionHeader(
+              title: sheetContext.l10n.uploadsAddTitle,
+              overline: sheetContext.l10n.uploadsAddOverline,
             ),
             WaxOptionRow(
-              title: 'Add from URL',
-              subtitle: 'A video, a playlist, or a channel',
+              title: sheetContext.l10n.uploadsFromUrl,
+              subtitle: sheetContext.l10n.uploadsFromUrlSubtitle,
               glyph: WaxIcons.downloads,
               semanticsId: SemanticsIds.addFromUrl,
               onTap: () => Navigator.of(sheetContext).pop('url'),
             ),
             if (picker != null)
               WaxOptionRow(
-                title: 'Upload files',
-                subtitle: 'One track, or a set you pick yourself',
+                title: sheetContext.l10n.uploadsPick,
+                subtitle: sheetContext.l10n.uploadsPickSubtitle,
                 glyph: WaxIcons.add,
                 semanticsId: SemanticsIds.addUploadFile,
                 onTap: () => Navigator.of(sheetContext).pop('file'),
               ),
             if (picker != null && picker.canPickFolders)
               WaxOptionRow(
-                title: 'Upload a folder',
-                subtitle: 'An album or a collection, hierarchy and all',
+                title: sheetContext.l10n.uploadsPickFolder,
+                subtitle: sheetContext.l10n.uploadsPickFolderSubtitle,
                 glyph: WaxIcons.albums,
                 semanticsId: SemanticsIds.addUploadFolder,
                 onTap: () => Navigator.of(sheetContext).pop('folder'),
@@ -103,6 +104,7 @@ Future<void> acquireFromUrl(
 }) async {
   final messenger = ref.read(shellMessengerProvider.notifier);
   final router = GoRouter.of(context);
+  final l10n = context.l10n;
   final identifyDefault = await _identifyDefault(ref);
   if (!context.mounted) return;
   final request =
@@ -132,13 +134,15 @@ Future<void> acquireFromUrl(
     // It runs in the background and lands in review rather than the
     // library, so the message says where to look.
     messenger.show(
-      'Downloading. It will appear in the review queue when ready.',
-      actionLabel: 'Tasks',
+      l10n.uploadsAcquireQueued,
+      actionLabel: l10n.uploadsAcquireTasks,
       actionSemanticsId: SemanticsIds.acquireTasks,
       onAction: () => router.push<void>(WaxRoute.tasks),
     );
   } on WaxDeckApiException catch (e) {
-    messenger.show(e.message);
+    // A refusal of the URL somebody just pasted keeps the server's own
+    // words: only it can say what was wrong with that address.
+    messenger.show(explainRefusal(l10n, e));
   }
 }
 
@@ -149,7 +153,10 @@ Future<void> pickAndUpload(
   FilePickerPort picker, {
   MediaType? initial,
 }) async {
-  final files = await picker.pickAudioFiles();
+  final files = await picker.pickAudioFiles(
+    audioLabel: context.l10n.uploadsFileTypeAudio,
+    anyLabel: context.l10n.uploadsFileTypeAny,
+  );
   if (files.isEmpty || !context.mounted) return;
   await uploadPickedFiles(context, ref, files, initial: initial);
 }
@@ -178,6 +185,10 @@ Future<void> uploadPickedFiles(
   MediaType? initial,
 }) async {
   final messenger = ref.read(shellMessengerProvider.notifier);
+  // Held across the awaits below, which outlive the dialog: everything
+  // this loop reports is worded from a code, and there is no context to
+  // read a table through once the last upload settles.
+  final l10n = context.l10n;
   final identifyDefault = await _identifyDefault(ref);
   if (!context.mounted) return;
   final choice =
@@ -203,7 +214,7 @@ Future<void> uploadPickedFiles(
       );
       batchId = batch.id;
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
       return;
     }
   }
@@ -218,14 +229,14 @@ Future<void> uploadPickedFiles(
             identify: choice.identify,
           );
     } on WaxDeckApiException catch (e) {
-      messenger.show('${file.name}: ${e.message}');
+      messenger.show(l10n.uploadsFileFailed(file.name, explainError(l10n, e)));
     }
   }
   if (batchId != null) {
     try {
       await repository.completeUploadBatch(batchId);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
     // Finalization filled the members' review entries; refresh the
     // rows.
@@ -305,18 +316,19 @@ class _AcquireDialogState extends State<AcquireDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final url = _urlController.text.trim();
     return AlertDialog(
       backgroundColor: colors.surface2,
-      title: const Text('Add from URL'),
+      title: Text(l10n.uploadsFromUrl),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             WaxTextField(
-              label: 'Source URL',
-              hint: 'A single video, or a playlist or channel',
+              label: l10n.uploadsSourceUrl,
+              hint: l10n.uploadsSourceUrlHint,
               controller: _urlController,
               autofocus: true,
               semanticsId: SemanticsIds.acquireUrl,
@@ -349,12 +361,12 @@ class _AcquireDialogState extends State<AcquireDialog> {
       ),
       actions: <Widget>[
         WaxButton(
-          label: 'Cancel',
+          label: l10n.commonCancel,
           kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
         ),
         WaxButton(
-          label: 'Download',
+          label: l10n.uploadsDownload,
           semanticsId: SemanticsIds.acquireSubmit,
           onPressed: url.isEmpty
               ? null
@@ -403,13 +415,12 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final several = widget.fileCount > 1;
     return AlertDialog(
       backgroundColor: colors.surface2,
       title: Text(
-        several
-            ? 'What are these ${widget.fileCount} files?'
-            : 'What are you uploading?',
+        several ? l10n.uploadsWhatMany(widget.fileCount) : l10n.uploadsWhatOne,
       ),
       // Scrollable: with the grouping selector the content outgrows a
       // short viewport (a phone in landscape) and an AlertDialog does
@@ -442,12 +453,12 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
       ),
       actions: <Widget>[
         WaxButton(
-          label: 'Cancel',
+          label: l10n.commonCancel,
           kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
         ),
         WaxButton(
-          label: 'Upload',
+          label: l10n.uploadsUpload,
           semanticsId: SemanticsIds.uploadMediaConfirm,
           onPressed: () => Navigator.of(context).pop((
             mediaType: _mediaType,
@@ -471,19 +482,30 @@ class UploadGroupingSelector extends StatelessWidget {
   final UploadGrouping value;
   final ValueChanged<UploadGrouping> onChanged;
 
-  static const _options = [
+  static List<(UploadGrouping, String, String)> _options(
+    AppLocalizations l10n,
+  ) => <(UploadGrouping, String, String)>[
     (
       UploadGrouping.auto,
-      'Auto-detect',
-      'Group into albums by their tags and folders',
+      l10n.uploadsGroupingAuto,
+      l10n.uploadsGroupingAutoHelp,
     ),
-    (UploadGrouping.album, 'One album', 'Review all files as one release'),
-    (UploadGrouping.tracks, 'Separate tracks', 'Review every file on its own'),
+    (
+      UploadGrouping.album,
+      l10n.uploadsGroupingAlbum,
+      l10n.uploadsGroupingAlbumHelp,
+    ),
+    (
+      UploadGrouping.tracks,
+      l10n.uploadsGroupingTracks,
+      l10n.uploadsGroupingTracksHelp,
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Semantics(
       identifier: SemanticsIds.uploadGrouping,
       container: true,
@@ -492,11 +514,11 @@ class UploadGroupingSelector extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'How should these files be grouped?',
+            l10n.uploadsGroupingTitle,
             style: WaxType.overline.copyWith(color: colors.textSecondary),
           ),
           const SizedBox(height: WaxSpace.s4),
-          for (final (grouping, label, help) in _options)
+          for (final (grouping, label, help) in _options(l10n))
             WaxOptionRow(
               title: label,
               subtitle: help,
@@ -523,20 +545,21 @@ class MediaTypeSelector extends StatelessWidget {
   final MediaType value;
   final ValueChanged<MediaType> onChanged;
 
-  static String label(MediaType type) => switch (type) {
-    MediaType.music => 'Music',
-    MediaType.podcast => 'Podcast',
-    MediaType.audiobook => 'Audiobook',
+  static String label(AppLocalizations l10n, MediaType type) => switch (type) {
+    MediaType.music => l10n.uploadsMediaMusic,
+    MediaType.podcast => l10n.uploadsMediaPodcast,
+    MediaType.audiobook => l10n.uploadsMediaBook,
   };
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return WaxChoice<MediaType>(
-      label: 'What this is',
+      label: l10n.uploadsWhatThisIs,
       value: value,
       semanticsId: SemanticsIds.uploadMediaType,
       options: MediaType.values,
-      labelFor: label,
+      labelFor: (type) => label(l10n, type),
       onChanged: onChanged,
     );
   }
@@ -563,26 +586,28 @@ class IdentifySwitch extends StatelessWidget {
   final String semanticsId;
   final ValueChanged<bool> onChanged;
 
-  String get _title => mediaType == MediaType.music
-      ? 'Identify against MusicBrainz'
-      : 'Review before adding';
+  String _title(AppLocalizations l10n) => mediaType == MediaType.music
+      ? l10n.uploadsIdentifyMusic
+      : l10n.uploadsIdentifyOther;
 
-  String get _help => mediaType == MediaType.music
-      ? 'Matches it, then waits for your decision. Off adds it with the '
-            'tags it has'
-      : 'Waits for your decision. Off adds it with the tags it has';
+  String _help(AppLocalizations l10n) => mediaType == MediaType.music
+      ? l10n.uploadsIdentifyMusicHelp
+      : l10n.uploadsIdentifyOtherHelp;
 
   @override
-  Widget build(BuildContext context) => WaxSettingRow(
-    title: _title,
-    help: _help,
-    control: WaxSwitch(
-      value: value ?? true,
-      label: _title,
-      semanticsId: semanticsId,
-      onChanged: onChanged,
-    ),
-  );
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return WaxSettingRow(
+      title: _title(l10n),
+      help: _help(l10n),
+      control: WaxSwitch(
+        value: value ?? true,
+        label: _title(l10n),
+        semanticsId: semanticsId,
+        onChanged: onChanged,
+      ),
+    );
+  }
 }
 
 /// The optional download-format selector for a URL acquisition. "Best"
@@ -598,22 +623,30 @@ class AcquireFormatSelector extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
 
-  static const _labels = {
-    'best': 'Best quality (recommended)',
-    'opus': 'Opus',
-    'm4a': 'M4A (AAC)',
-    'mp3': 'MP3',
-    'flac': 'FLAC',
-  };
+  /// The formats offered, in order. The codec names are written out
+  /// rather than derived from the wire token, because Opus is a name
+  /// and MP3 is an acronym.
+  static const _formats = ['best', 'opus', 'm4a', 'mp3', 'flac'];
+
+  static String _label(AppLocalizations l10n, String format) =>
+      switch (format) {
+        'best' => l10n.uploadsFormatBest,
+        'opus' => 'Opus',
+        'm4a' => 'M4A (AAC)',
+        'mp3' => 'MP3',
+        'flac' => 'FLAC',
+        _ => format,
+      };
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return WaxChoice<String>(
-      label: 'Download format',
+      label: l10n.uploadsFormat,
       value: value,
       semanticsId: SemanticsIds.acquireFormat,
-      options: _labels.keys.toList(),
-      labelFor: (format) => _labels[format] ?? format,
+      options: _formats,
+      labelFor: (format) => _label(l10n, format),
       onChanged: onChanged,
     );
   }

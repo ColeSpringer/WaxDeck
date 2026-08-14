@@ -1,36 +1,9 @@
 {
-  "../packages/waxdeck_ui/lib/src/components/command_palette.dart": {
-    "hardcoded-copy": 1
-  },
-  "../packages/waxdeck_ui/lib/src/components/controls.dart": {
-    "hardcoded-copy": 1
-  },
-  "../packages/waxdeck_ui/lib/src/components/deck_bar.dart": {
-    "hardcoded-copy": 1
-  },
-  "../packages/waxdeck_ui/lib/src/components/inputs.dart": {
-    "hardcoded-copy": 1
-  },
-  "../packages/waxdeck_ui/lib/src/components/navigation.dart": {
-    "hardcoded-copy": 3
-  },
-  "../packages/waxdeck_ui/lib/src/components/settings.dart": {
-    "hardcoded-copy": 3
-  },
   "../packages/waxdeck_ui/lib/src/components/wordmark.dart": {
     "hardcoded-copy": 2
   },
   "lib/src/app.dart": {
     "hardcoded-copy": 1
-  },
-  "lib/src/auth/login_screen.dart": {
-    "hardcoded-copy": 6
-  },
-  "lib/src/auth/setup_screen.dart": {
-    "hardcoded-copy": 2
-  },
-  "lib/src/auth/signup_screen.dart": {
-    "hardcoded-copy": 5
   },
   "lib/src/auto/auto_browse.dart": {
     "hardcoded-copy": 5
@@ -53,118 +26,13 @@
   "lib/src/desktop/desktop_ports_io.dart": {
     "hardcoded-copy": 6
   },
-  "lib/src/desktop/mini_window.dart": {
-    "hardcoded-copy": 2
-  },
   "lib/src/diagnostics/defect_log_screen.dart": {
-    "hardcoded-copy": 11
-  },
-  "lib/src/discovery/discovery_actions.dart": {
-    "hardcoded-copy": 11
-  },
-  "lib/src/discovery/track_list_screen.dart": {
     "hardcoded-copy": 3
-  },
-  "lib/src/downloads/downloads_screen.dart": {
-    "hardcoded-copy": 23
-  },
-  "lib/src/home/home_screen.dart": {
-    "hardcoded-copy": 24
-  },
-  "lib/src/home/home_shelves.dart": {
-    "hardcoded-copy": 1
-  },
-  "lib/src/home/item_shelf.dart": {
-    "hardcoded-copy": 2
-  },
-  "lib/src/home/mix_shelf.dart": {
-    "hardcoded-copy": 6
-  },
-  "lib/src/home/pin_action.dart": {
-    "hardcoded-copy": 5
-  },
-  "lib/src/home/pinned_controller.dart": {
-    "hardcoded-copy": 1
-  },
-  "lib/src/home/pinned_shelf.dart": {
-    "hardcoded-copy": 8
-  },
-  "lib/src/notifications/notifications_bell.dart": {
-    "hardcoded-copy": 4
-  },
-  "lib/src/organize/organize_screen.dart": {
-    "hardcoded-copy": 25
   },
   "lib/src/player/sleep_timer.dart": {
     "hardcoded-copy": 1
   },
-  "lib/src/prototype/editing_prototype_screen.dart": {
-    "hardcoded-copy": 8
-  },
-  "lib/src/review/review_entry_screen.dart": {
-    "hardcoded-copy": 36
-  },
-  "lib/src/review/review_screen.dart": {
-    "hardcoded-copy": 18
-  },
-  "lib/src/search/search_chrome.dart": {
-    "hardcoded-copy": 1
-  },
-  "lib/src/search/search_screen.dart": {
-    "hardcoded-copy": 33
-  },
-  "lib/src/settings/about_screen.dart": {
-    "hardcoded-copy": 17
-  },
   "lib/src/settings/account_sections.dart": {
     "hardcoded-copy": 1
-  },
-  "lib/src/sharing/share_dialog.dart": {
-    "hardcoded-copy": 14
-  },
-  "lib/src/sharing/share_rows.dart": {
-    "hardcoded-copy": 2
-  },
-  "lib/src/sharing/shares_screen.dart": {
-    "hardcoded-copy": 5
-  },
-  "lib/src/shell/adaptive_shell.dart": {
-    "hardcoded-copy": 3
-  },
-  "lib/src/shell/command_palette.dart": {
-    "hardcoded-copy": 13
-  },
-  "lib/src/shell/commands.dart": {
-    "hardcoded-copy": 21
-  },
-  "lib/src/shell/lifecycle_banners.dart": {
-    "hardcoded-copy": 4
-  },
-  "lib/src/shell/router.dart": {
-    "hardcoded-copy": 4
-  },
-  "lib/src/stats/listen_log_screen.dart": {
-    "hardcoded-copy": 7
-  },
-  "lib/src/stats/share_cards.dart": {
-    "hardcoded-copy": 14
-  },
-  "lib/src/stats/stats_screen.dart": {
-    "hardcoded-copy": 22
-  },
-  "lib/src/stats/year_in_review_screen.dart": {
-    "hardcoded-copy": 26
-  },
-  "lib/src/uploads/add_to_library.dart": {
-    "hardcoded-copy": 22
-  },
-  "lib/src/uploads/file_picker_io.dart": {
-    "hardcoded-copy": 2
-  },
-  "lib/src/uploads/file_picker_web.dart": {
-    "hardcoded-copy": 1
-  },
-  "lib/src/uploads/uploads_screen.dart": {
-    "hardcoded-copy": 26
   }
 }

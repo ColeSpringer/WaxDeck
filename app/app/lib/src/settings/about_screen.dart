@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/app_version.dart';
 import '../shell/routes.dart';
@@ -29,11 +30,12 @@ class AboutRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final health = ref.watch(serverHealthProvider).value;
+    final l10n = context.l10n;
     return WaxOptionRow(
-      title: 'About WaxDeck',
+      title: l10n.aboutRowTitle,
       subtitle: health == null
-          ? 'Version $kAppVersion'
-          : 'App $kAppVersion, server ${health.version}',
+          ? l10n.aboutRowVersion(kAppVersion)
+          : l10n.aboutRowVersions(kAppVersion, health.version),
       glyph: WaxIcons.info,
       semanticsId: SemanticsIds.setting(semanticsId),
       trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -64,8 +66,9 @@ class AboutScreen extends ConsumerWidget {
     // About is one tap from Account, which spaces at the section gap, so
     // it takes the same rhythm rather than a hand-written neighbour of it.
     final sectionGap = WaxLayout.of(context).sectionGap;
+    final l10n = context.l10n;
     return WaxScaffold(
-      title: 'About',
+      title: l10n.aboutTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.aboutOpen,
       onBack: () => context.leave(fallback: WaxRoute.settings),
@@ -81,41 +84,47 @@ class AboutScreen extends ConsumerWidget {
                   const WaxWordmark(),
                   const SizedBox(height: WaxSpace.s8),
                   Text(
-                    'A player, library manager, and metadata completer for '
-                    'music, podcasts, and audiobooks.',
+                    l10n.aboutTagline,
                     style: WaxType.body.copyWith(
                       color: WaxColors.of(context).textSecondary,
                     ),
                   ),
                   SizedBox(height: sectionGap),
-                  SectionHeader(title: 'Versions'),
-                  MonoDetailRow(label: 'App', value: appVersionLabel),
+                  SectionHeader(title: l10n.aboutVersionsTitle),
+                  MonoDetailRow(
+                    label: l10n.aboutVersionApp,
+                    value: appVersionLabel,
+                  ),
                   switch (health) {
                     AsyncData(:final value) => Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        MonoDetailRow(label: 'Server', value: value.version),
                         MonoDetailRow(
-                          label: 'API',
+                          label: l10n.aboutVersionServer,
+                          value: value.version,
+                        ),
+                        MonoDetailRow(
+                          label: l10n.aboutVersionApi,
                           value: 'v${value.apiVersion}',
                         ),
                       ],
                     ),
                     // Not an error state: this page's job is to report
                     // the app's own version, and it still can.
-                    AsyncError() => const MonoDetailRow(
-                      label: 'Server',
-                      value: 'unreachable',
+                    AsyncError() => MonoDetailRow(
+                      label: l10n.aboutVersionServer,
+                      value: l10n.aboutServerUnreachable,
                     ),
-                    _ => const MonoDetailRow(label: 'Server', value: '...'),
+                    _ => MonoDetailRow(
+                      label: l10n.aboutVersionServer,
+                      value: '...',
+                    ),
                   },
                   SizedBox(height: sectionGap),
-                  SectionHeader(title: 'Licensing'),
+                  SectionHeader(title: l10n.aboutLicensingTitle),
                   WaxOptionRow(
-                    title: 'Open-source licenses',
-                    subtitle:
-                        'WaxDeck is GPL-3.0-only. This page also lists the '
-                        'bundled type and icon notices.',
+                    title: l10n.aboutLicenses,
+                    subtitle: l10n.aboutLicensesSubtitle,
                     glyph: WaxIcons.info,
                     semanticsId: SemanticsIds.aboutLicenses,
                     trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -132,12 +141,10 @@ class AboutScreen extends ConsumerWidget {
                     ),
                   ),
                   SizedBox(height: sectionGap),
-                  SectionHeader(title: 'Diagnostics'),
+                  SectionHeader(title: l10n.aboutDiagnosticsTitle),
                   WaxOptionRow(
-                    title: 'Defect log',
-                    subtitle:
-                        'Errors the app caught on its own, newest first, with '
-                        'a way to copy them into a bug report.',
+                    title: l10n.defectsTitle,
+                    subtitle: l10n.aboutDefectsSubtitle,
                     glyph: WaxIcons.warning,
                     semanticsId: SemanticsIds.aboutDefects,
                     trailing: const WaxIcon(WaxIcons.forward, size: 16),

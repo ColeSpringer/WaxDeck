@@ -149,16 +149,17 @@ export class Shell extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.notificationsBell));
   }
 
-  /// One row of the open bell, newest first.
-  notificationRow(index: number): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.notificationRow(index)));
-  }
-
-  /// A row of the open bell by its copy, a menu row having no text of
-  /// its own. Not by position: the catalog is one installation every
-  /// worker writes to, so newest-first is not mine-first.
-  notificationNamed(name: string): Locator {
-    return this.ctx.page.getByRole('menuitem', { name, exact: true });
+  /// One row of the open bell, by what it is about: `kind` is the
+  /// server's event name, `target` the pid the news names. Not by
+  /// position (the catalog is shared) or by copy (that gets translated).
+  notificationRow(kind: string, target?: string): Locator {
+    return this.ctx.page.locator(
+      sem(
+        target === undefined
+          ? SemanticsIds.notificationRowPlain(kind)
+          : SemanticsIds.notificationRow(kind, target),
+      ),
+    );
   }
 
   notificationsClear(): Locator {
@@ -174,10 +175,13 @@ export class Shell extends Surface {
     });
   }
 
-  /// Opens the bell and waits for its first row, for the same reason
-  /// the account menu is opened rather than clicked through.
-  async openNotifications(): Promise<void> {
-    await openMenu(this.notificationsBell(), this.notificationRow(0));
+  /// Opens the bell and waits for one kind of news to be in it. A kind
+  /// rather than nothing: the bell holds a shared installation's news,
+  /// so "it has a first row" is not "it has mine".
+  async openNotifications(kind: string, target?: string): Promise<Locator> {
+    const row = this.notificationRow(kind, target);
+    await openMenu(this.notificationsBell(), row);
+    return row;
   }
 
   /// Open the bell and wait for one particular piece of news.
@@ -185,14 +189,19 @@ export class Shell extends Surface {
   /// Re-opened rather than waited out: the menu holds the rows it opened
   /// with, and the badge that brought us here was not necessarily this
   /// test's news.
-  async openNotificationsUntil(name: string): Promise<Locator> {
-    const row = this.notificationNamed(name);
+  async openNotificationsUntil(
+    kind: string,
+    target?: string,
+  ): Promise<Locator> {
+    const row = this.notificationRow(kind, target);
     await expect(async () => {
       if (await row.isVisible()) return;
       // Closed first, because `openMenu` reads an open menu as done.
+      // Waited on Clear, not the row the line above proved absent: only
+      // that tells a closed menu from a click that dismissed one.
       await this.ctx.page.keyboard.press('Escape');
-      await expect(this.notificationRow(0)).toBeHidden({ timeout: T.step });
-      await openMenu(this.notificationsBell(), this.notificationRow(0));
+      await expect(this.notificationsClear()).toBeHidden({ timeout: T.step });
+      await openMenu(this.notificationsBell(), row);
       await expect(row).toBeVisible({ timeout: T.step });
       // The assert tier, not the fetch one: waiting for the news to
       // arrive is `notificationsBadged`'s job, so a budget long enough

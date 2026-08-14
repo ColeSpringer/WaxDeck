@@ -57,9 +57,10 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen> {
       for (final entry in entries) entry.client,
     }.toList()..sort();
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: 'Listen log',
+      title: l10n.statsDoorListenLog,
       largeTitle: false,
       controller: _scroll,
       onBack: () => context.leave(fallback: WaxRoute.stats),
@@ -67,8 +68,9 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen> {
         WaxChoice<String>(
           value: filter ?? _allClients,
           options: clients,
-          labelFor: (client) => client == _allClients ? 'All clients' : client,
-          label: 'Reported by',
+          labelFor: (client) =>
+              client == _allClients ? l10n.statsLogAllClients : client,
+          label: l10n.statsLogReportedBy,
           semanticsId: SemanticsIds.listenLogClientFilter,
           onChanged: (client) => ref
               .read(listenLogClientProvider.notifier)
@@ -77,13 +79,11 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen> {
       ],
       slivers: <Widget>[
         switch (log) {
-          AsyncData() when entries.isEmpty => const SliverFillRemaining(
+          AsyncData() when entries.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'No listens recorded yet',
-              message:
-                  'Every session a client finishes lands here, whichever '
-                  'device reported it.',
+              title: l10n.statsLogEmptyTitle,
+              message: l10n.statsLogEmptyMessage,
               glyph: WaxIcons.recent,
             ),
           ),
@@ -98,10 +98,8 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen> {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load the listen log',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.statsLogLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(listenLogProvider),
             ),
           ),
@@ -130,27 +128,29 @@ class _ListenLogRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final played = l10n.formatListenTime(entry.msPlayed);
     final details = <String>[
       ?entry.artist,
       entry.client,
-      context.l10n.formatStamp(entry.startedAt),
+      l10n.formatStamp(entry.startedAt),
     ];
     return MediaListRow(
       key: Key('listen-log-row-$index'),
       data: MediaTileData(
         // A session outlives the item it was about: a track deleted
         // since is still a listen that happened.
-        title: entry.title ?? 'Removed item',
+        title: entry.title ?? l10n.statsLogRemovedItem,
         subtitle: details.join(' · '),
         domain: waxDomainOf(entry.mediaType),
         shape: waxShapeOf(entry.mediaType),
-        trailingText: formatListenTime(entry.msPlayed),
+        trailingText: played,
         // The tick is the whole of what "finished" means here, and the
         // row reads it out rather than leaving it to a glyph.
         trailingSpoken: entry.finished
-            ? '${formatListenTime(entry.msPlayed)}, finished'
-            : formatListenTime(entry.msPlayed),
-        badge: entry.finished ? 'Finished' : null,
+            ? l10n.statsLogFinishedSpoken(played)
+            : played,
+        badge: entry.finished ? l10n.statsLogFinished : null,
       ),
     );
   }

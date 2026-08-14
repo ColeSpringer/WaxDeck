@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 
@@ -21,7 +22,7 @@ class SearchAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) => WaxIconButton(
     glyph: WaxIcons.search,
-    label: 'Search',
+    label: context.l10n.searchAction,
     semanticsId: SemanticsIds.searchAction,
     // A location, not an overlay: a search is shareable, so it gets a URL
     // and a place in the table rather than a pushed page.

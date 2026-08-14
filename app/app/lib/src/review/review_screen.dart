@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../admin/admin_console.dart';
 import '../admin/admin_providers.dart';
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -138,20 +139,24 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     String action, {
     String? candidateMbid,
   }) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final warnings = await ref
           .read(reviewQueueProvider.notifier)
           .decide(entryId, action, candidateMbid: candidateMbid);
+      // The server's own words: a warning names the file or the field it
+      // is about, which no table sentence can.
       if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
   Future<void> _decideBulk(String action) async {
     final ids = _checked.toList();
     if (ids.isEmpty) return;
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final outcomes = await ref
@@ -160,15 +165,15 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       final failed = outcomes.where((o) => !o.ok).length;
       messenger.show(
         failed == 0
-            ? 'Decided ${outcomes.length} entries'
-            : 'Decided ${outcomes.length - failed} entries, $failed failed',
+            ? l10n.reviewDecidedCount(outcomes.length)
+            : l10n.reviewDecidedSomeFailed(outcomes.length - failed, failed),
       );
       setState(() {
         _selecting = false;
         _checked.clear();
       });
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -237,6 +242,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
     final queue = ref.watch(reviewQueueProvider);
+    final l10n = context.l10n;
     _syncSelection(queue.value?.entries ?? const []);
     // Surface a failed "load more": the queue keeps its rows, so the
     // failure is otherwise invisible. Firing on the flag's rising edge
@@ -247,7 +253,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       if (failedNow && !failedBefore) {
         ref
             .read(shellMessengerProvider.notifier)
-            .show('Could not load more; scroll to retry');
+            .show(l10n.reviewLoadMoreFailed);
       }
     });
     return AppShortcuts(
@@ -266,7 +272,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         const SingleActivator(LogicalKeyboardKey.escape): _escape,
       },
       child: WaxScaffold(
-        title: 'Review queue',
+        title: l10n.reviewTitle,
         largeTitle: false,
         semanticsId: SemanticsIds.adminReview,
         onBack: adminBack(context),
@@ -274,7 +280,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
           const _MatchingModeMenu(),
           WaxIconButton(
             glyph: _selecting ? WaxIcons.close : WaxIcons.check,
-            label: _selecting ? 'Leave selection' : 'Select entries',
+            label: _selecting ? l10n.reviewSelectLeave : l10n.reviewSelectEnter,
             active: _selecting,
             semanticsId: SemanticsIds.reviewSelectToggle,
             onPressed: () => setState(() {
@@ -356,10 +362,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       AsyncError(:final error) => Padding(
         padding: sizeClass.gutter,
         child: ErrorState(
-          title: 'Could not load the review queue',
-          message: error is WaxDeckApiException
-              ? error.message
-              : 'Something went wrong reading it.',
+          title: context.l10n.reviewLoadError,
+          message: context.explain(error),
           onRetry: () => ref.invalidate(reviewQueueProvider),
         ),
       ),
@@ -371,12 +375,10 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     if (state.entries.isEmpty) {
       return Padding(
         padding: sizeClass.gutter,
-        child: const EmptyState(
+        child: EmptyState(
           glyph: WaxIcons.check,
-          title: 'Nothing waiting for review',
-          message:
-              'Uploads and rematches land here when the match needs a '
-              'decision.',
+          title: context.l10n.reviewEmptyTitle,
+          message: context.l10n.reviewEmptyMessage,
         ),
       );
     }
@@ -442,24 +444,24 @@ class _BulkBar extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Text(
-            '$count selected',
+            context.l10n.reviewSelectedCount(count),
             style: WaxType.label.copyWith(color: colors.textSecondary),
           ),
           const Spacer(),
           WaxButton(
-            label: 'Approve',
+            label: context.l10n.reviewActionApprove,
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.reviewBulkApprove,
             onPressed: () => onDecide('approve'),
           ),
           WaxButton(
-            label: 'Keep as is',
+            label: context.l10n.reviewActionAsIs,
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.reviewBulkAsIs,
             onPressed: () => onDecide('as-is'),
           ),
           WaxButton(
-            label: 'Skip',
+            label: context.l10n.reviewActionSkip,
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.reviewBulkSkip,
             onPressed: () => onDecide('skip'),
@@ -478,11 +480,16 @@ class _MatchingModeMenu extends ConsumerWidget {
 
   static const _modes = ['auto', 'review', 'off'];
 
-  static const _labels = {
-    'auto': 'Auto-apply confident matches',
-    'review': 'Review everything',
-    'off': 'Never match this library',
-  };
+  /// The client's word for a mode, with the wire value as the last
+  /// resort - the shape every other open vocabulary here keeps, so a
+  /// mode a newer server invents draws as itself.
+  static String _modeLabel(AppLocalizations l10n, String mode) =>
+      switch (mode) {
+        'auto' => l10n.reviewMatchingAuto,
+        'review' => l10n.reviewMatchingReview,
+        'off' => l10n.reviewMatchingOff,
+        _ => mode,
+      };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -497,30 +504,39 @@ class _MatchingModeMenu extends ConsumerWidget {
     if (!isAdmin) return const SizedBox.shrink();
     final libraries = ref.watch(librariesProvider).value ?? const [];
     if (libraries.isEmpty) return const SizedBox.shrink();
+    final l10n = context.l10n;
     return WaxMenuButton<(String, String)>(
       glyph: WaxIcons.filter,
-      label: 'Matching mode',
+      label: l10n.reviewMatchingMenu,
       semanticsId: SemanticsIds.matchingMenu,
       items: <WaxMenuItem<(String, String)>>[
         for (final library in libraries)
           for (final mode in _modes)
             WaxMenuItem<(String, String)>(
               value: (library.pid, mode),
-              label: '${library.name}: ${_labels[mode] ?? mode}',
+              label: l10n.reviewMatchingRow(
+                library.name,
+                _modeLabel(l10n, mode),
+              ),
               semanticsId: SemanticsIds.matchingOption(library.pid, mode),
               selected:
                   ref.watch(libraryMatchingProvider(library.pid)).value == mode,
             ),
       ],
-      onSelected: (choice) => _set(ref, choice.$1, choice.$2),
+      onSelected: (choice) => _set(l10n, ref, choice.$1, choice.$2),
     );
   }
 
-  Future<void> _set(WidgetRef ref, String libraryPid, String mode) async {
+  Future<void> _set(
+    AppLocalizations l10n,
+    WidgetRef ref,
+    String libraryPid,
+    String mode,
+  ) async {
     try {
       await ref.read(libraryMatchingProvider(libraryPid).notifier).set(mode);
     } on WaxDeckApiException catch (e) {
-      ref.read(shellMessengerProvider.notifier).show(e.message);
+      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, e));
     }
   }
 }
@@ -535,14 +551,18 @@ class _FilterChips extends ConsumerWidget {
       stats.unofficial +
       stats.skipped;
 
-  static String _label(ReviewFilter filter, ReviewStats? stats) {
-    if (stats == null) return filter.label;
+  static String _label(
+    AppLocalizations l10n,
+    ReviewFilter filter,
+    ReviewStats? stats,
+  ) {
+    if (stats == null) return filter.labelOf(l10n);
     final count = switch (filter) {
       ReviewFilter.pending => stats.pending,
       ReviewFilter.autoApplied => stats.autoApplied,
       ReviewFilter.decided => _decidedCount(stats),
     };
-    return '${filter.label} ($count)';
+    return l10n.reviewFilterCount(filter.labelOf(l10n), count);
   }
 
   @override
@@ -556,7 +576,7 @@ class _FilterChips extends ConsumerWidget {
         for (final filter in ReviewFilter.values)
           WaxFilterChip(
             name: filter.name,
-            label: _label(filter, stats),
+            label: _label(context.l10n, filter, stats),
             semanticsId: SemanticsIds.reviewFilter(filter.name),
           ),
       ],
@@ -590,18 +610,28 @@ class _ReviewRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  static String bestLine(CandidateSummary best) {
-    final year = best.year == null ? '' : ' (${best.year})';
-    return '${best.similarityPct.round()}% ${best.title}, ${best.artist}$year';
+  static String bestLine(AppLocalizations l10n, CandidateSummary best) {
+    final percent = '${best.similarityPct.round()}';
+    final year = best.year;
+    return year == null
+        ? l10n.reviewCandidateLine(percent, best.title, best.artist)
+        : l10n.reviewCandidateLineYear(
+            percent,
+            best.title,
+            best.artist,
+            '$year',
+          );
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final best = entry.best;
+    final name = entry.title ?? l10n.reviewUntitled;
     final title = entry.artist == null
-        ? (entry.title ?? 'Untitled')
-        : '${entry.title ?? 'Untitled'} by ${entry.artist}';
+        ? name
+        : l10n.reviewEntryLine(name, entry.artist!);
     final surface = selected || open ? colors.accentContainer : colors.canvas;
     return WaxTappable(
       label: title,
@@ -657,7 +687,7 @@ class _ReviewRow extends StatelessWidget {
                             ),
                             const SizedBox(width: WaxSpace.s8),
                             Text(
-                              'Identifying',
+                              l10n.reviewIdentifying,
                               style: WaxType.caption.copyWith(
                                 color: colors.textSecondary,
                               ),
@@ -667,8 +697,11 @@ class _ReviewRow extends StatelessWidget {
                       else
                         Text(
                           best == null
-                              ? '${entry.trackCount} tracks, no candidates'
-                              : '${entry.trackCount} tracks, ${bestLine(best)}',
+                              ? l10n.reviewRowNoCandidates(entry.trackCount)
+                              : l10n.reviewRowBest(
+                                  entry.trackCount,
+                                  bestLine(l10n, best),
+                                ),
                           style: WaxType.caption.copyWith(
                             color: best == null
                                 ? colors.textTertiary
@@ -683,7 +716,7 @@ class _ReviewRow extends StatelessWidget {
                 const SizedBox(width: WaxSpace.s8),
                 DomainBadge(
                   waxDomainOf(entry.mediaType),
-                  label: _originLabel(context.waxL10n, entry),
+                  label: _originLabel(l10n, context.waxL10n, entry),
                   compact: true,
                 ),
                 if (entry.status != 'pending') ...<Widget>[
@@ -701,10 +734,12 @@ class _ReviewRow extends StatelessWidget {
   /// Where the unit came from, in the badge that would otherwise say
   /// the media type twice: the queue is one domain deep at a time and
   /// "Upload" is the fact a reviewer is actually sorting by.
-  static String _originLabel(WaxLocalizations l10n, ReviewEntry entry) =>
-      switch (entry.origin) {
-        'upload' => 'Upload',
-        'acquisition' => 'Acquired',
-        _ => DomainBadge.defaultLabel(l10n, waxDomainOf(entry.mediaType)),
-      };
+  static String _originLabel(
+    AppLocalizations l10n,
+    WaxLocalizations wax,
+    ReviewEntry entry,
+  ) => switch (entry.origin) {
+    'upload' || 'acquisition' => reviewOriginLabel(l10n, entry.origin),
+    _ => DomainBadge.defaultLabel(wax, waxDomainOf(entry.mediaType)),
+  };
 }

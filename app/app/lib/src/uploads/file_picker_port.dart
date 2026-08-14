@@ -57,9 +57,13 @@ class PickedAudioFile {
 /// Platform file picking behind a WaxDeck-owned interface, so screens
 /// never touch a picker plugin directly.
 abstract interface class FilePickerPort {
-  /// Opens the platform picker and resolves to the chosen audio files;
-  /// empty when the user cancels.
-  Future<List<PickedAudioFile>> pickAudioFiles();
+  /// Opens the platform picker; empty when the user cancels.
+  /// [audioLabel] and [anyLabel] name the dialog's two filter rows: a
+  /// port is built off the tree and has no table to word them from.
+  Future<List<PickedAudioFile>> pickAudioFiles({
+    required String audioLabel,
+    required String anyLabel,
+  });
 
   /// Whether [pickAudioFolder] works here (desktop only: Android
   /// folder access means SAF tree URIs, which this port does not
@@ -72,10 +76,12 @@ abstract interface class FilePickerPort {
   Future<List<PickedAudioFile>> pickAudioFolder();
 
   /// Picks one arbitrary file filtered to [extensions] (the backup
-  /// archive case); null when the user cancels.
+  /// archive case); null when the user cancels. [label] and [anyLabel]
+  /// name the dialog's two filter rows, as in [pickAudioFiles].
   Future<PickedAudioFile?> pickFile({
     required Set<String> extensions,
     required String label,
+    required String anyLabel,
   });
 }
 

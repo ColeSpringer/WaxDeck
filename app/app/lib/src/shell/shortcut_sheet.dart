@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import 'commands.dart';
 import 'semantics_ids.dart';
 
@@ -20,7 +21,7 @@ class _ShortcutSheetDialog extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(WaxSpace.s16),
         child: WaxShortcutSheet(
-          groups: shortcutGroups(commands),
+          groups: shortcutGroups(context.l10n, commands),
           semanticsId: SemanticsIds.shortcutSheet,
           closeSemanticsId: SemanticsIds.shortcutSheetClose,
           onClose: () => Navigator.of(context).pop(),
@@ -38,16 +39,19 @@ class _ShortcutSheetDialog extends ConsumerWidget {
 /// a reason to stop teaching the space bar. What a build genuinely does
 /// not have is kept out of the registry itself (`WaxCommand.offered`),
 /// so it never reaches this.
-List<WaxShortcutGroup> shortcutGroups(List<WaxCommand> commands) {
+List<WaxShortcutGroup> shortcutGroups(
+  AppLocalizations l10n,
+  List<WaxCommand> commands,
+) {
   return <WaxShortcutGroup>[
     for (final section in WaxCommandSection.values)
       WaxShortcutGroup(
-        title: section.title,
+        title: section.titleOf(l10n),
         rows: <WaxShortcutRow>[
           for (final command in commands)
             if (command.section == section && command.keys != null)
               WaxShortcutRow(
-                label: command.label,
+                label: commandLabel(l10n, command),
                 keys: command.keys!,
                 semanticsId: SemanticsIds.shortcutSheetRow(command.id),
               ),

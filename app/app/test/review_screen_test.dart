@@ -11,6 +11,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
@@ -25,7 +26,7 @@ ProviderContainer _container(FakeRepository repo) {
 
 Widget _host(ProviderContainer container) => UncontrolledProviderScope(
   container: container,
-  child: const MaterialApp(home: ReviewScreen()),
+  child: localizedHost(const ReviewScreen()),
 );
 
 /// Narrow enough that the queue is the whole page: the detail pane is
@@ -165,8 +166,8 @@ void main() {
     // stays silent once an EditableText takes primary focus.
     var fired = 0;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      localizedHost(
+        Scaffold(
           body: AppShortcuts(
             bindings: {
               const SingleActivator(LogicalKeyboardKey.keyA): () => fired++,
@@ -221,7 +222,15 @@ void main() {
     await _pump(tester, _host(_container(repo)));
     await tester.pumpAndSettle();
 
-    expect(find.text('queue exploded'), findsOneWidget);
+    // The code's own sentence rather than the server's: a failed read
+    // refused nothing anybody typed. The title was drawn before the
+    // conversion too, so the absent server line is what proves it.
+    expect(find.text('Could not load the review queue'), findsOneWidget);
+    expect(
+      find.text('The server ran into a problem it could not handle.'),
+      findsOneWidget,
+    );
+    expect(find.text('queue exploded'), findsNothing);
     repo.reviewError = null;
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();

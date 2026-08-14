@@ -12,15 +12,6 @@ const statsBuckets = ['day', 'week', 'month'];
 /// Top-list kinds, in display order.
 const topListKinds = ['artists', 'albums', 'genres', 'shows'];
 
-/// Compact listening-time label: hours and minutes once an hour is
-/// reached, minutes below that, seconds only under a minute.
-String formatListenTime(int ms) {
-  final d = Duration(milliseconds: ms);
-  if (d.inHours > 0) return '${d.inHours}h ${d.inMinutes.remainder(60)}m';
-  if (d.inMinutes > 0) return '${d.inMinutes}m';
-  return '${d.inSeconds}s';
-}
-
 /// The range the listening chart and top lists aggregate over.
 class StatsRangeController extends Notifier<String> {
   @override
