@@ -92,10 +92,48 @@ void main() {
       expect(await resolve(const Prefs(locale: 'es')), const Locale('es'));
     });
 
+    test(
+      'a regional variant overrides with the language it resolves to',
+      () async {
+        // Legal, and a tag another client can write. Pinned as `es`
+        // rather than as itself, which is the locale this build draws.
+        expect(await resolve(const Prefs(locale: 'es-MX')), const Locale('es'));
+      },
+    );
+
     test('absent, empty, or unparseable all follow the system', () async {
       expect(await resolve(const Prefs()), isNull);
       expect(await resolve(const Prefs(locale: '')), isNull);
       expect(await resolve(const Prefs(locale: 'not a tag')), isNull);
+    });
+
+    test('a language this build does not have follows the system', () async {
+      // The trap this closes: `MaterialApp.locale` is a pin, resolved on
+      // its own with the device's languages never consulted. Pinning
+      // `fr` would answer a Spanish device in English and call it the
+      // listener's choice, while the picker read "Match the system".
+      expect(await resolve(const Prefs(locale: 'fr')), isNull);
+    });
+  });
+
+  group('the two tables', () {
+    test('spell an hour the same way', () async {
+      // `durationHours` is in both: the design system spells the
+      // durations its components draw, and the app spells the wait on
+      // the downloads setting. Two Weblate components, one unit - and
+      // nothing but this stops a locale shipping "6 h" on one screen
+      // and "6 horas" on the next.
+      for (final locale in waxSupportedLocales) {
+        final app = await AppLocalizations.delegate.load(locale);
+        final wax = lookupWaxLocalizations(locale);
+        for (final hours in <int>[1, 6]) {
+          expect(
+            app.durationHours(hours),
+            wax.durationHours(hours),
+            reason: 'the two tables disagree at $locale on $hours hours',
+          );
+        }
+      }
     });
   });
 

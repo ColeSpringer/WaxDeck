@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxGlyph, WaxIcons;
 
 import '../auth/auth_controller.dart';
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 
 /// Whether the signed-in account administers this server.
@@ -20,74 +21,57 @@ final isAdminProvider = Provider<bool>((ref) {
 /// Account is first because it is the one everybody opens, and Server is
 /// last because most accounts never see it. The eight in between are the
 /// layout blueprint's own, unchanged.
+///
+/// What a section is called is copy and so is not a constructor argument:
+/// the enum carries the two things that are the same in every language,
+/// its location and its glyph, and [titleOf] and [blurbOf] read the rest
+/// from the table.
 enum SettingsSection {
-  account(
-    'account',
-    'Account',
-    'You, your devices, and how you sign in',
-    WaxIcons.settings,
-  ),
-  playback(
-    'playback',
-    'Playback',
-    'Speeds, skips, casting, and what plays next',
-    WaxIcons.play,
-  ),
-  library(
-    'library',
-    'Library and metadata',
-    'What browsing shows you, and what you can see',
-    WaxIcons.albums,
-  ),
-  downloads(
-    'downloads',
-    'Downloads and storage',
-    'What this device keeps offline, and how much room it takes',
-    WaxIcons.downloads,
-  ),
-  devices(
-    'devices',
-    'Devices and casting',
-    'Where else your listening can come out',
-    WaxIcons.cast,
-  ),
-  integrations(
-    'integrations',
-    'Integrations',
-    'Scrobbling, other apps, and notifications',
-    WaxIcons.share,
-  ),
-  appearance(
-    'appearance',
-    'Appearance',
-    'Theme, density, and how large artwork is drawn',
-    WaxIcons.star,
-  ),
-  accessibility(
-    'accessibility',
-    'Accessibility',
-    'Motion, and how the app reads out',
-    WaxIcons.headphones,
-  ),
-  server(
-    'server',
-    'Server',
-    'This instance, for administrators',
-    WaxIcons.admin,
-  );
+  account('account', WaxIcons.settings),
+  playback('playback', WaxIcons.play),
+  library('library', WaxIcons.albums),
+  downloads('downloads', WaxIcons.downloads),
+  devices('devices', WaxIcons.cast),
+  integrations('integrations', WaxIcons.share),
+  appearance('appearance', WaxIcons.star),
+  accessibility('accessibility', WaxIcons.headphones),
+  server('server', WaxIcons.admin);
 
-  const SettingsSection(this.segment, this.title, this.blurb, this.glyph);
+  const SettingsSection(this.segment, this.glyph);
 
   /// The path segment under `/settings`. A location, so a section is a
   /// link somebody can send - "it is in Settings, Playback" becomes a URL.
   final String segment;
 
-  final String title;
+  final WaxGlyph glyph;
+
+  /// What the section is called, on the home list and as the title of its
+  /// own screen. Exhaustive rather than a map, so a tenth section is a
+  /// compile error here instead of a row with no name.
+  String titleOf(AppLocalizations l10n) => switch (this) {
+    SettingsSection.account => l10n.settingsSectionAccountTitle,
+    SettingsSection.playback => l10n.settingsSectionPlaybackTitle,
+    SettingsSection.library => l10n.settingsSectionLibraryTitle,
+    SettingsSection.downloads => l10n.settingsSectionDownloadsTitle,
+    SettingsSection.devices => l10n.settingsSectionDevicesTitle,
+    SettingsSection.integrations => l10n.settingsSectionIntegrationsTitle,
+    SettingsSection.appearance => l10n.settingsSectionAppearanceTitle,
+    SettingsSection.accessibility => l10n.settingsSectionAccessibilityTitle,
+    SettingsSection.server => l10n.settingsSectionServerTitle,
+  };
 
   /// The line under the section's name on the settings home.
-  final String blurb;
-
-  final WaxGlyph glyph;
+  String blurbOf(AppLocalizations l10n) => switch (this) {
+    SettingsSection.account => l10n.settingsSectionAccountBlurb,
+    SettingsSection.playback => l10n.settingsSectionPlaybackBlurb,
+    SettingsSection.library => l10n.settingsSectionLibraryBlurb,
+    SettingsSection.downloads => l10n.settingsSectionDownloadsBlurb,
+    SettingsSection.devices => l10n.settingsSectionDevicesBlurb,
+    SettingsSection.integrations => l10n.settingsSectionIntegrationsBlurb,
+    SettingsSection.appearance => l10n.settingsSectionAppearanceBlurb,
+    SettingsSection.accessibility => l10n.settingsSectionAccessibilityBlurb,
+    SettingsSection.server => l10n.settingsSectionServerBlurb,
+  };
 
   /// Administrators only. The section is not merely empty for everyone
   /// else: it is absent from the list and from search.
@@ -164,6 +148,40 @@ class SettingEntry {
   final bool desktopOnly;
 }
 
+/// The search words for one setting, out of the one comma-separated
+/// string the translator works on.
+///
+/// Kept as they were written: [_fold] is what makes a query reach them,
+/// so a keyword that came back capitalized or accented is still one
+/// anybody can type their way to. The spaces translators put after their
+/// commas go, and a trailing comma does not mint an empty word.
+List<String> _words(String commaSeparated) => commaSeparated
+    .split(',')
+    .map((word) => word.trim())
+    .where((word) => word.isNotEmpty)
+    .toList(growable: false);
+
+/// Case and Latin diacritics folded away, so a query matches what
+/// somebody types rather than what their keyboard makes hard.
+///
+/// "podcast" has to find "pódcast", and "reproduccion" "Reproducción":
+/// the accent belongs to the language and the typed form belongs to
+/// whoever is in a hurry, and a settings search that answers only the
+/// accented spelling is one a Spanish reader gives up on. `ñ` folds to
+/// `n` with the rest, which over-matches ("ano" finds "año") and never
+/// under-matches - the trade a filter wants and a dictionary would not.
+String _fold(String text) {
+  const accented = 'àáâãäåçèéêëìíîïñòóôõöùúûüýÿ';
+  const plain = 'aaaaaaceeeeiiiinooooouuuuyy';
+  final lower = text.toLowerCase();
+  final folded = StringBuffer();
+  for (var i = 0; i < lower.length; i++) {
+    final at = accented.indexOf(lower[i]);
+    folded.write(at < 0 ? lower[i] : plain[at]);
+  }
+  return folded.toString();
+}
+
 /// Every leaf setting this build ships.
 ///
 /// Kept beside the sections rather than derived from the widgets,
@@ -171,306 +189,305 @@ class SettingEntry {
 /// settings home has to answer a query without mounting nine screens.
 /// `settings_registry_test.dart` is what stops the two drifting: it fails
 /// on a registered setting no section draws.
-const settingsRegistry = <SettingEntry>[
+///
+/// Built per call rather than held: the list is forty-odd rows of string
+/// reads, and holding one would mean holding the locale it was built in.
+///
+/// Most titles are the same key the control's own row draws, so a search
+/// result and the setting it opens say the same thing. The exceptions
+/// are the rows that ask a question rather than name a setting - the
+/// shared-stats and Discord switches - the row that opens the admin
+/// console, and About, whose row is titled by the account it describes.
+/// Those name the setting here and read as themselves on screen.
+List<SettingEntry> settingsEntries(AppLocalizations l10n) => <SettingEntry>[
   // Account
   SettingEntry(
     id: 'display-name',
-    title: 'Display name',
+    title: l10n.settingsDisplayNameTitle,
     section: SettingsSection.account,
-    keywords: <String>['username', 'profile', 'who'],
+    keywords: _words(l10n.settingsDisplayNameKeywords),
   ),
   SettingEntry(
     id: 'password',
-    title: 'Change password',
+    title: l10n.settingsPasswordTitle,
     section: SettingsSection.account,
-    keywords: <String>['security', 'sign in', 'login'],
+    keywords: _words(l10n.settingsPasswordKeywords),
   ),
   SettingEntry(
     id: 'devices',
-    title: 'Signed-in devices',
+    title: l10n.settingsDevicesTitle,
     section: SettingsSection.account,
-    keywords: <String>['sessions', 'revoke', 'sign out', 'logout'],
+    keywords: _words(l10n.settingsDevicesKeywords),
   ),
   SettingEntry(
     id: 'app-passwords',
-    title: 'App passwords',
+    title: l10n.settingsAppPasswordsTitle,
     section: SettingsSection.account,
-    keywords: <String>['subsonic', 'gpodder', 'token', 'third party'],
+    keywords: _words(l10n.settingsAppPasswordsKeywords),
   ),
   SettingEntry(
     id: 'timezone',
     handle: SemanticsIds.timezoneEdit,
-    title: 'Timezone',
+    title: l10n.settingsTimezoneTitle,
     section: SettingsSection.account,
-    keywords: <String>['stats', 'calendar', 'streak'],
+    keywords: _words(l10n.settingsTimezoneKeywords),
   ),
   SettingEntry(
     id: 'shared-stats',
     handle: SemanticsIds.sharedStatsSwitch,
-    title: 'Server-wide stats',
+    title: l10n.settingsSharedStatsTitle,
     section: SettingsSection.account,
-    keywords: <String>['year in review', 'privacy', 'opt out'],
+    keywords: _words(l10n.settingsSharedStatsKeywords),
   ),
   SettingEntry(
     id: 'about',
-    title: 'About WaxDeck',
+    title: l10n.settingsAboutTitle,
     section: SettingsSection.account,
     // The defect log lives on the About page rather than as a control of
     // its own, so About is what a search for it has to find.
-    keywords: <String>[
-      'version',
-      'licenses',
-      'open source',
-      'build',
-      'defects',
-      'errors',
-      'diagnostics',
-      'log',
-      'crash',
-    ],
+    keywords: _words(l10n.settingsAboutKeywords),
   ),
 
   // Playback
   SettingEntry(
     id: 'skip-back',
-    title: 'Skip back by',
+    title: l10n.settingsSkipBackTitle,
     section: SettingsSection.playback,
-    keywords: <String>['rewind', 'seconds', 'podcast', 'audiobook'],
+    keywords: _words(l10n.settingsSkipBackKeywords),
   ),
   SettingEntry(
     id: 'skip-forward',
-    title: 'Skip forward by',
+    title: l10n.settingsSkipForwardTitle,
     section: SettingsSection.playback,
-    keywords: <String>['seconds', 'podcast', 'audiobook', 'ad'],
+    keywords: _words(l10n.settingsSkipForwardKeywords),
   ),
   SettingEntry(
     id: 'podcast-speed',
-    title: 'Podcast speed',
+    title: l10n.settingsPodcastSpeedTitle,
     section: SettingsSection.playback,
-    keywords: <String>['rate', 'faster', 'default'],
+    keywords: _words(l10n.settingsPodcastSpeedKeywords),
   ),
   SettingEntry(
     id: 'book-speed',
-    title: 'Audiobook speed',
+    title: l10n.settingsBookSpeedTitle,
     section: SettingsSection.playback,
-    keywords: <String>['rate', 'faster', 'default', 'narration'],
+    keywords: _words(l10n.settingsBookSpeedKeywords),
   ),
   SettingEntry(
     id: 'smart-rewind',
-    title: 'Rewind on resume',
+    title: l10n.settingsSmartRewindTitle,
     section: SettingsSection.playback,
-    keywords: <String>['smart rewind', 'back', 'context', 'podcast', 'book'],
+    keywords: _words(l10n.settingsSmartRewindKeywords),
   ),
   SettingEntry(
     id: 'trim-default',
-    title: 'Trim silence by default',
+    title: l10n.settingsTrimDefaultTitle,
     section: SettingsSection.playback,
-    keywords: <String>['silence', 'skip', 'spoken word', 'podcast', 'book'],
+    keywords: _words(l10n.settingsTrimDefaultKeywords),
   ),
   SettingEntry(
     id: 'boost-default',
-    title: 'Voice boost by default',
+    title: l10n.settingsBoostDefaultTitle,
     section: SettingsSection.playback,
-    keywords: <String>['loudness', 'normalize', 'volume', 'speech', 'quiet'],
+    keywords: _words(l10n.settingsBoostDefaultKeywords),
   ),
   SettingEntry(
     id: 'crossfade',
-    title: 'Casting crossfade',
+    title: l10n.settingsCrossfadeTitle,
     section: SettingsSection.playback,
-    keywords: <String>['fade', 'gapless', 'seam', 'chromecast'],
+    keywords: _words(l10n.settingsCrossfadeKeywords),
   ),
   SettingEntry(
     id: 'replay-gain',
-    title: 'Level casting volume',
+    title: l10n.settingsReplayGainTitle,
     section: SettingsSection.playback,
-    keywords: <String>['replaygain', 'loudness', 'normalize', 'gain'],
+    keywords: _words(l10n.settingsReplayGainKeywords),
   ),
   SettingEntry(
     id: 'preload-wifi',
-    title: 'Prepare the next track on wifi only',
+    title: l10n.settingsPreloadWifiTitle,
     section: SettingsSection.playback,
-    keywords: <String>['gapless', 'preload', 'data', 'metered', 'mobile'],
+    keywords: _words(l10n.settingsPreloadWifiKeywords),
     nativeOnly: true,
   ),
   SettingEntry(
     id: 'autoplay',
-    title: 'Start playing without asking',
+    title: l10n.settingsAutoplayTitle,
     section: SettingsSection.playback,
-    keywords: <String>['autoplay', 'resume', 'handover', 'connect', 'browser'],
+    keywords: _words(l10n.settingsAutoplayKeywords),
   ),
   SettingEntry(
     id: 'car-button',
-    title: 'Car mode button',
+    title: l10n.settingsCarButtonTitle,
     section: SettingsSection.playback,
-    keywords: <String>['driving', 'large', 'dashboard', 'player'],
+    keywords: _words(l10n.settingsCarButtonKeywords),
   ),
   SettingEntry(
     id: 'visualizer-idle',
-    title: 'Open the visualizer when idle',
+    title: l10n.settingsVisualizerIdleTitle,
     section: SettingsSection.playback,
-    keywords: <String>['screensaver', 'waveform', 'platter', 'away'],
+    keywords: _words(l10n.settingsVisualizerIdleKeywords),
     desktopOnly: true,
   ),
 
   // Library and metadata
   SettingEntry(
     id: 'technical-details',
-    title: 'Show technical details',
+    title: l10n.settingsTechnicalDetailsTitle,
     section: SettingsSection.library,
-    keywords: <String>['codec', 'bitrate', 'format', 'flac', 'provenance'],
+    keywords: _words(l10n.settingsTechnicalDetailsKeywords),
   ),
   SettingEntry(
     id: 'browse-unknown',
-    title: 'Show unknown groups',
+    title: l10n.settingsBrowseUnknownTitle,
     section: SettingsSection.library,
-    keywords: <String>['unknown', 'untagged', 'missing', 'no genre', 'browse'],
+    keywords: _words(l10n.settingsBrowseUnknownKeywords),
   ),
   // One entry for the set: five near-identical results would bury
   // whatever else the word matched.
   SettingEntry(
     id: 'browse-sort-artists',
-    title: 'Default order',
+    title: l10n.settingsBrowseOrderTitle,
     section: SettingsSection.library,
-    keywords: <String>['sort', 'order', 'alphabetical', 'browse', 'index'],
+    keywords: _words(l10n.settingsBrowseOrderKeywords),
   ),
   SettingEntry(
     id: 'identify-uploads',
-    title: 'Identify uploads',
+    title: l10n.settingsIdentifyUploadsTitle,
     section: SettingsSection.library,
-    keywords: <String>[
-      'musicbrainz',
-      'match',
-      'identify',
-      'upload',
-      'tags',
-      'acquire',
-    ],
+    keywords: _words(l10n.settingsIdentifyUploadsKeywords),
   ),
   SettingEntry(
     id: 'library-access',
-    title: 'What I can see',
+    title: l10n.settingsLibraryAccessTitle,
     section: SettingsSection.library,
-    keywords: <String>['permissions', 'libraries', 'access'],
+    keywords: _words(l10n.settingsLibraryAccessKeywords),
   ),
 
   // Downloads and storage
   SettingEntry(
     id: 'downloads-wifi',
-    title: 'Download on wifi only',
+    title: l10n.settingsDownloadsWifiTitle,
     section: SettingsSection.downloads,
-    keywords: <String>['data', 'metered', 'mobile', 'cellular'],
+    keywords: _words(l10n.settingsDownloadsWifiKeywords),
     nativeOnly: true,
   ),
   SettingEntry(
     id: 'auto-remove-finished',
-    title: 'Remove finished episodes',
+    title: l10n.settingsAutoRemoveFinishedTitle,
     section: SettingsSection.downloads,
-    keywords: <String>['tidy', 'reclaim', 'space', 'listened', 'podcast'],
+    keywords: _words(l10n.settingsAutoRemoveFinishedKeywords),
     nativeOnly: true,
   ),
   SettingEntry(
     id: 'downloads-manager',
-    title: 'Manage downloads',
+    title: l10n.settingsDownloadsManagerTitle,
     section: SettingsSection.downloads,
-    keywords: <String>['offline', 'storage', 'space', 'remove'],
+    keywords: _words(l10n.settingsDownloadsManagerKeywords),
     nativeOnly: true,
   ),
   SettingEntry(
     id: 'artwork-cache',
-    title: 'Artwork cache',
+    title: l10n.settingsArtworkCacheTitle,
     section: SettingsSection.downloads,
-    keywords: <String>['covers', 'images', 'clear', 'space'],
+    keywords: _words(l10n.settingsArtworkCacheKeywords),
   ),
 
   // Devices and casting
   SettingEntry(
     id: 'endpoints',
-    title: 'Playback endpoints',
+    title: l10n.settingsEndpointsTitle,
     section: SettingsSection.devices,
-    keywords: <String>['cast', 'chromecast', 'dlna', 'speaker', 'connect'],
+    keywords: _words(l10n.settingsEndpointsKeywords),
   ),
   SettingEntry(
     id: 'cast-check',
-    title: 'Connection check',
+    title: l10n.settingsCastCheckTitle,
     section: SettingsSection.devices,
-    keywords: <String>['preflight', 'diagnose', 'reachable', 'cast'],
+    keywords: _words(l10n.settingsCastCheckKeywords),
   ),
 
   // Integrations
   SettingEntry(
     id: 'scrobbling',
-    title: 'Scrobbling',
+    title: l10n.settingsScrobblingTitle,
     section: SettingsSection.integrations,
-    keywords: <String>['last.fm', 'lastfm', 'listenbrainz'],
+    keywords: _words(l10n.settingsScrobblingKeywords),
   ),
   SettingEntry(
     id: 'radio-scrobbling',
     handle: SemanticsIds.radioScrobbleSwitch,
-    title: 'Scrobble radio',
+    title: l10n.settingsRadioScrobblingTitle,
     section: SettingsSection.integrations,
-    keywords: <String>['last.fm', 'listenbrainz', 'station', 'stream'],
+    keywords: _words(l10n.settingsRadioScrobblingKeywords),
   ),
   SettingEntry(
     id: 'discord-presence',
-    title: 'Show what I am listening to on Discord',
+    title: l10n.settingsDiscordPresenceTitle,
     section: SettingsSection.integrations,
-    keywords: <String>['discord', 'rich presence', 'status', 'listening to'],
+    keywords: _words(l10n.settingsDiscordPresenceKeywords),
     desktopOnly: true,
   ),
   SettingEntry(
     id: 'notifications',
-    title: 'Notification targets',
+    title: l10n.settingsNotificationsTitle,
     section: SettingsSection.integrations,
-    keywords: <String>['ntfy', 'webhook', 'discord', 'push', 'alerts'],
+    keywords: _words(l10n.settingsNotificationsKeywords),
   ),
 
   // Appearance
   SettingEntry(
     id: 'theme',
     handle: SemanticsIds.themeSelect,
-    title: 'Theme',
+    title: l10n.settingsThemeTitle,
     section: SettingsSection.appearance,
-    keywords: <String>['dark', 'light', 'oled', 'black'],
+    keywords: _words(l10n.settingsThemeKeywords),
+  ),
+  SettingEntry(
+    id: 'language',
+    title: l10n.settingsLanguageTitle,
+    section: SettingsSection.appearance,
+    keywords: _words(l10n.settingsLanguageKeywords),
   ),
   SettingEntry(
     id: 'density',
-    title: 'Density',
+    title: l10n.settingsDensityTitle,
     section: SettingsSection.appearance,
-    keywords: <String>['compact', 'comfortable', 'spacing', 'rows'],
+    keywords: _words(l10n.settingsDensityKeywords),
   ),
   SettingEntry(
     id: 'grid-size',
-    title: 'Artwork size',
+    title: l10n.settingsGridSizeTitle,
     section: SettingsSection.appearance,
-    keywords: <String>['grid', 'tiles', 'covers', 'large', 'small'],
+    keywords: _words(l10n.settingsGridSizeKeywords),
   ),
   SettingEntry(
     id: 'artwork-glow',
-    title: 'Artwork glow',
+    title: l10n.settingsArtworkGlowTitle,
     section: SettingsSection.appearance,
-    keywords: <String>['backdrop', 'colour', 'color', 'player', 'wash'],
+    keywords: _words(l10n.settingsArtworkGlowKeywords),
   ),
   SettingEntry(
     id: 'card-captions',
-    title: 'Card captions',
+    title: l10n.settingsCardCaptionsTitle,
     section: SettingsSection.appearance,
-    keywords: <String>['labels', 'titles', 'hover', 'grid', 'covers'],
+    keywords: _words(l10n.settingsCardCaptionsKeywords),
   ),
 
   // Accessibility
   SettingEntry(
     id: 'reduce-motion',
-    title: 'Reduce motion',
+    title: l10n.settingsReduceMotionTitle,
     section: SettingsSection.accessibility,
-    keywords: <String>['animation', 'transitions', 'vestibular'],
+    keywords: _words(l10n.settingsReduceMotionKeywords),
   ),
 
   // Server
   SettingEntry(
     id: 'server-summary',
-    title: 'This server',
+    title: l10n.settingsServerSummaryTitle,
     section: SettingsSection.server,
-    keywords: <String>['version', 'uptime', 'build'],
+    keywords: _words(l10n.settingsServerSummaryKeywords),
     adminOnly: true,
   ),
   // The switches themselves live in the console now, but searching
@@ -479,20 +496,9 @@ const settingsRegistry = <SettingEntry>[
   // about the server, and this is the way to the server's own screens.
   SettingEntry(
     id: 'admin-console',
-    title: 'Admin console',
+    title: l10n.settingsAdminConsoleTitle,
     section: SettingsSection.server,
-    keywords: <String>[
-      'read-only',
-      'signup',
-      'libraries',
-      'users',
-      'backups',
-      'schedules',
-      'trash',
-      'audit',
-      'transcoding',
-      'genres',
-    ],
+    keywords: _words(l10n.settingsAdminConsoleKeywords),
     adminOnly: true,
   ),
 ];
@@ -509,27 +515,28 @@ const settingsRegistry = <SettingEntry>[
 /// reach, rather than offering a row that opens a section without it.
 List<SettingEntry> searchSettings(
   String query, {
+  required AppLocalizations l10n,
   required bool isAdmin,
   required bool isNative,
   required bool isDesktop,
 }) {
-  final needle = query.trim().toLowerCase();
+  final needle = _fold(query.trim());
   if (needle.isEmpty) return const <SettingEntry>[];
   final starts = <SettingEntry>[];
   final contains = <SettingEntry>[];
   final byKeyword = <SettingEntry>[];
-  for (final entry in settingsRegistry) {
+  for (final entry in settingsEntries(l10n)) {
     if (entry.adminOnly && !isAdmin) continue;
     if (entry.section.adminOnly && !isAdmin) continue;
     if (entry.nativeOnly && !isNative) continue;
     if (entry.desktopOnly && !isDesktop) continue;
-    final title = entry.title.toLowerCase();
+    final title = _fold(entry.title);
     if (title.startsWith(needle)) {
       starts.add(entry);
     } else if (title.contains(needle)) {
       contains.add(entry);
-    } else if (entry.keywords.any((k) => k.contains(needle)) ||
-        entry.section.title.toLowerCase().contains(needle)) {
+    } else if (entry.keywords.any((k) => _fold(k).contains(needle)) ||
+        _fold(entry.section.titleOf(l10n)).contains(needle)) {
       byKeyword.add(entry);
     }
   }

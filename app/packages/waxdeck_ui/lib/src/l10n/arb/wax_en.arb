@@ -304,7 +304,7 @@
   },
   "durationHours": "{hours, plural, =1{1 hour} other{{hours} hours}}",
   "@durationHours": {
-    "description": "A whole number of hours, spelled out for a screen reader. Every unit is named because this is the only positional feedback a screen-reader user gets.",
+    "description": "A whole number of hours, spelled out for a screen reader. Every unit is named because this is the only positional feedback a screen-reader user gets. The app's own table carries the same message for the wait on a settings picker (app_en.arb, durationHours), and a test holds the two to the same words.",
     "placeholders": {
       "hours": {
         "type": "int",

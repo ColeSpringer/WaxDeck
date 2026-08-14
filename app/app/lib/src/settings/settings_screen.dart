@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -34,10 +35,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final isAdmin = ref.watch(isAdminProvider);
     final query = _query.text;
     final results = searchSettings(
       query,
+      l10n: l10n,
       isAdmin: isAdmin,
       isNative: !kIsWeb,
       isDesktop: ref.watch(desktopProvider),
@@ -48,7 +51,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ];
 
     return WaxScaffold(
-      title: 'Settings',
+      title: l10n.settingsTitle,
       semanticsId: SemanticsIds.settingsScreen,
       slivers: <Widget>[
         SliverPadding(
@@ -56,8 +59,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           sliver: SliverToBoxAdapter(
             child: SearchField(
               controller: _query,
-              hint: 'Search settings',
-              label: 'Search settings',
+              hint: l10n.settingsSearchLabel,
+              label: l10n.settingsSearchLabel,
               semanticsId: SemanticsIds.settingsSearch,
               onChanged: (_) => setState(() {}),
             ),
@@ -73,8 +76,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               itemBuilder: (context, index) {
                 final section = sections[index];
                 return WaxOptionRow(
-                  title: section.title,
-                  subtitle: section.blurb,
+                  title: section.titleOf(l10n),
+                  subtitle: section.blurbOf(l10n),
                   glyph: section.glyph,
                   semanticsId: SemanticsIds.settingsSection(section.segment),
                   trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -106,14 +109,13 @@ class _Results extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     if (results.isEmpty) {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: EmptyState(
-          title: 'No setting matches "${query.trim()}"',
-          message:
-              'Server-wide settings live in the admin console, not here. '
-              'A per-show or per-book setting is on that show or book.',
+          title: l10n.settingsSearchNoMatchTitle(query.trim()),
+          message: l10n.settingsSearchNoMatchMessage,
           glyph: WaxIcons.search,
         ),
       );
@@ -126,7 +128,7 @@ class _Results extends StatelessWidget {
           final entry = results[index];
           return WaxOptionRow(
             title: entry.title,
-            subtitle: entry.section.title,
+            subtitle: entry.section.titleOf(l10n),
             glyph: entry.section.glyph,
             semanticsId: SemanticsIds.settingsResult(entry.id),
             trailing: const WaxIcon(WaxIcons.forward, size: 16),

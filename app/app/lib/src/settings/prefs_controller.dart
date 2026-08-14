@@ -179,8 +179,11 @@ final prefsControllerProvider = AsyncNotifierProvider<PrefsController, Prefs>(
 final localeOverrideProvider = Provider<Locale?>((ref) {
   final tag = ref.watch(prefsControllerProvider).value?.locale;
   if (tag == null || tag.isEmpty) return null;
-  // An unparseable tag answers null, which is the system too.
-  return localeFromTag(tag);
+  // A tag this build cannot draw answers null, which is the system too:
+  // pinning one would resolve it alone, ignore the device's own
+  // languages, and land on English while the picker said the system was
+  // deciding. See [supportedLocaleFor].
+  return supportedLocaleFor(tag);
 });
 
 /// Material theme mode derived from the synced preference. The unset

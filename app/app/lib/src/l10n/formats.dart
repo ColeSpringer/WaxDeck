@@ -104,6 +104,26 @@ extension WaxFormats on AppLocalizations {
     return relInDays(delta.inDays);
   }
 
+  /// A wait as words: "6 hours", "1 day", "3 days".
+  ///
+  /// Days once the hours divide evenly into them: a week offered as
+  /// "168 hours" is a number the reader has to do arithmetic on. Seconds
+  /// and minutes are the design system's `spellDuration`, which every
+  /// other duration on a control already goes through; this one is here
+  /// because days are past where that stops.
+  String spellHours(int hours) => hours >= 24 && hours % 24 == 0
+      ? durationDays(hours ~/ 24)
+      : durationHours(hours);
+
+  /// A playback rate: "1x", "1.2x", never "1.0x".
+  ///
+  /// The separator is the locale's and the trailing zeros go, which is
+  /// what intl's decimal pattern does by itself - the same shape the
+  /// hand-trimmed `toStringAsFixed` drew, in every language rather than
+  /// in English alone.
+  String formatSpeed(double speed) =>
+      speedMultiplier(_speedFormat(localeName).format(speed));
+
   /// A size in the largest unit that leaves a number worth reading:
   /// "512 B", "640 KB", "12.4 MB", "1.5 GB".
   ///
@@ -134,6 +154,14 @@ final Map<String, DateFormat> _dateCache = <String, DateFormat>{};
 final Map<String, DateFormat> _stampCache = <String, DateFormat>{};
 final Map<String, DateFormat> _monthDayCache = <String, DateFormat>{};
 final Map<String, DateFormat> _numericCache = <String, DateFormat>{};
+
+/// The one number pattern, held for the same reason and keyed the same
+/// way. Trailing zeros are dropped by the pattern itself, so 1.0 reads
+/// "1" and 1.5 reads "1,5" where that is how a decimal is written.
+final Map<String, NumberFormat> _speedCache = <String, NumberFormat>{};
+
+NumberFormat _speedFormat(String locale) =>
+    _speedCache.putIfAbsent(locale, () => NumberFormat.decimalPattern(locale));
 
 DateFormat _dateFormat(String locale) =>
     _dateCache.putIfAbsent(locale, () => DateFormat.yMMMd(locale));

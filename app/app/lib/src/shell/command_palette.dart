@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../radio/radio_controller.dart';
 import '../radio/radio_screen.dart';
@@ -106,7 +107,7 @@ class _CommandPaletteDialog extends ConsumerWidget {
     final query = ref.watch(paletteQueryProvider);
     final hits = ref.watch(paletteHitsProvider);
     final entries = <String, void Function()>{};
-    final groups = _groups(ref, query, hits.value, entries);
+    final groups = _groups(context.l10n, ref, query, hits.value, entries);
 
     return Align(
       // High rather than centred, so results grow into empty space.
@@ -141,6 +142,7 @@ class _CommandPaletteDialog extends ConsumerWidget {
   /// [runners] is filled as rows are built, so a row can be reported by
   /// id rather than carrying a closure through the design system.
   List<WaxPaletteGroup> _groups(
+    AppLocalizations l10n,
     WidgetRef ref,
     PaletteQuery query,
     SearchResults? results,
@@ -227,6 +229,7 @@ class _CommandPaletteDialog extends ConsumerWidget {
 
     final matchedSettings = searchSettings(
       query.typed,
+      l10n: l10n,
       isAdmin: ref.watch(isAdminProvider),
       isNative: !kIsWeb,
       isDesktop: ref.watch(desktopProvider),
@@ -236,7 +239,7 @@ class _CommandPaletteDialog extends ConsumerWidget {
         entry(
           id: 'set-${setting.id}',
           label: setting.title,
-          detail: setting.section.title,
+          detail: setting.section.titleOf(l10n),
           glyph: setting.section.glyph,
           run: () => host.go(WaxRoute.settingsSection(setting.section)),
         ),

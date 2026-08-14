@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
@@ -103,7 +104,7 @@ void main() {
         expect(
           row,
           section.adminOnly ? findsNothing : findsOneWidget,
-          reason: section.title,
+          reason: section.segment,
         );
       }
     });
@@ -501,6 +502,106 @@ void main() {
       expect(repo.prefs.theme, ThemePref.light);
     });
 
+    testWidgets('the language picker stores a tag and clears it again', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo();
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await tester.pumpAndSettle();
+
+      final picker = find.bySemanticsIdentifier(
+        SemanticsIds.setting('language'),
+      );
+      WaxChoice<String> language() =>
+          tester.widget(find.byWidgetPredicate((w) => w is WaxChoice<String>));
+      await _show(tester, picker);
+      // Nothing stored reads as the system, which is what the interface
+      // is doing: a null option is not offered, because the menu answers
+      // null when it is dismissed and the two would be one answer.
+      expect(language().value, 'system');
+
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      // By its endonym, not by a translation: somebody looking for
+      // Spanish on an English screen is looking for "Espanol".
+      await tester.tap(
+        find.bySemanticsIdentifier(
+          SemanticsIds.settingOption('language', 'es'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(repo.prefs.locale, 'es');
+      expect(language().value, 'es');
+
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(
+          SemanticsIds.settingOption('language', 'system'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Cleared rather than stored as a word: the document carries no
+      // locale at all when the system decides.
+      expect(repo.prefs.locale, isNull);
+      expect(repo.putPrefsCalls.last.locale, isNull);
+    });
+
+    testWidgets('a stored regional tag reads as the language it resolves '
+        'to', (tester) async {
+      _tallWindow(tester);
+      // `es-MX` is a legal tag another client can write, and this app
+      // answers it with Spanish - so the row must say Spanish rather
+      // than claim the system is deciding.
+      final repo = _signedInRepo()..prefs = const Prefs(locale: 'es-MX');
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<WaxChoice<String>>(
+              find.byWidgetPredicate((w) => w is WaxChoice<String>),
+            )
+            .value,
+        'es',
+      );
+    });
+
+    testWidgets('a stored language the build does not have follows the '
+        'system', (tester) async {
+      _tallWindow(tester);
+      // French resolves only by falling back, so the interface is
+      // English and no option stands for what is stored.
+      final repo = _signedInRepo()..prefs = const Prefs(locale: 'fr');
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<WaxChoice<String>>(
+              find.byWidgetPredicate((w) => w is WaxChoice<String>),
+            )
+            .value,
+        'system',
+      );
+    });
+
+    test('every locale the app offers names itself', () {
+      // The picker falls back to the raw tag for a language it has no
+      // endonym for, which is a row reading "es". This is what keeps
+      // that fallback unreachable.
+      for (final locale in waxSupportedLocales) {
+        expect(
+          languageEndonyms[locale.toLanguageTag()],
+          isNotNull,
+          reason:
+              '${locale.toLanguageTag()} is offered by the picker and would '
+              'be drawn as its own tag',
+        );
+      }
+    });
+
     testWidgets('density and artwork size are this device, not the account', (
       tester,
     ) async {
@@ -664,6 +765,73 @@ void main() {
         container.read(waxThemeSpecProvider).captions,
         WaxCaptionMode.always,
       );
+    });
+  });
+
+  group('a preference that will not save', () {
+    // The controls here are drawn from the stored document and hold
+    // nothing of their own, so a refused write moves nothing on screen.
+    // Without a sentence that is a tap that did nothing.
+    testWidgets('says so instead of doing nothing quietly', (tester) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo()
+        ..putPrefsError = const WaxDeckApiException(
+          code: 'read-only',
+          message: 'the library is read-only',
+        );
+      await tester.pumpWidget(_section(repo, SettingsSection.playback));
+      await tester.pumpAndSettle();
+
+      final leveling = find.bySemanticsIdentifier(
+        SemanticsIds.setting('replay-gain'),
+      );
+      await _show(tester, leveling);
+      await tester.tap(leveling);
+      await tester.pumpAndSettle();
+
+      // The client's own sentence for the code, not the server's line.
+      expect(
+        find.text(
+          'The library is read-only right now, so nothing can be changed.',
+        ),
+        findsOneWidget,
+      );
+      // Nothing was stored, and nothing on the row moved either: the
+      // sentence is the only thing that happened.
+      expect(repo.prefs.replayGain, isNull);
+      expect(repo.putPrefsCalls, isEmpty);
+    });
+
+    testWidgets('reports a refused language the same way', (tester) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo()
+        ..putPrefsError = const WaxDeckApiException(
+          code: 'read-only',
+          message: 'the library is read-only',
+        );
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await tester.pumpAndSettle();
+
+      final picker = find.bySemanticsIdentifier(
+        SemanticsIds.setting('language'),
+      );
+      await _show(tester, picker);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(
+          SemanticsIds.settingOption('language', 'es'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'The library is read-only right now, so nothing can be changed.',
+        ),
+        findsOneWidget,
+      );
+      expect(repo.prefs.locale, isNull);
     });
   });
 

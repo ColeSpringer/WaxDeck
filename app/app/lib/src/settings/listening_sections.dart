@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'prefs_controller.dart';
+import 'save_setting.dart';
 
 /// Listening preferences: shared-stats participation, the stats
 /// timezone, and the door into the share-links list.
@@ -21,32 +23,36 @@ class ListeningSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final prefs = ref.watch(prefsControllerProvider).value;
     final optedOut = prefs?.sharedStatsOptOut ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(title: 'Listening'),
+        SectionHeader(title: l10n.settingsGroupListening),
         WaxSettingRow(
           key: const Key(SemanticsIds.sharedStatsSwitch),
-          title: 'Include me in server-wide stats',
-          help: 'Counts your listening into the shared year in review',
+          title: l10n.settingsSharedStatsSwitchTitle,
+          help: l10n.settingsSharedStatsHelp,
           glyph: WaxIcons.stats,
           control: WaxSwitch(
             value: !optedOut,
-            label: 'Include me in server-wide stats',
+            label: l10n.settingsSharedStatsSwitchTitle,
             semanticsId: SemanticsIds.sharedStatsSwitch,
             onChanged: prefs == null
                 ? null
-                : (include) => ref
-                      .read(prefsControllerProvider.notifier)
-                      .setSharedStatsOptOut(!include),
+                : (include) => saveSetting(
+                    context,
+                    ref
+                        .read(prefsControllerProvider.notifier)
+                        .setSharedStatsOptOut(!include),
+                  ),
           ),
         ),
         WaxOptionRow(
           key: const Key(SemanticsIds.timezoneEdit),
-          title: 'Timezone',
-          subtitle: prefs?.timezone ?? 'Server default',
+          title: l10n.settingsTimezoneTitle,
+          subtitle: prefs?.timezone ?? l10n.settingsTimezoneServerDefault,
           glyph: WaxIcons.clock,
           semanticsId: SemanticsIds.timezoneEdit,
           trailing: const WaxIcon(WaxIcons.edit, size: 16),
@@ -56,8 +62,8 @@ class ListeningSection extends ConsumerWidget {
         ),
         WaxOptionRow(
           key: const Key(SemanticsIds.openShareLinks),
-          title: 'Share links',
-          subtitle: 'Public links you have handed out',
+          title: l10n.settingsShareLinksTitle,
+          subtitle: l10n.settingsShareLinksBlurb,
           glyph: WaxIcons.share,
           semanticsId: SemanticsIds.openShareLinks,
           trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -113,6 +119,10 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
       }
       navigator.pop();
     } on WaxDeckApiException catch (e) {
+      // The server's own sentence, not the code's: what a timezone name
+      // may be is the server's rule, and the translation for
+      // `invalid-request` would say only that something was wrong with
+      // the field it is written under.
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -121,18 +131,17 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return AlertDialog(
-      title: const Text('Timezone'),
+      title: Text(l10n.settingsTimezoneTitle),
       content: TextField(
         key: const Key('timezone-field'),
         controller: _controller,
         autofocus: true,
         decoration: InputDecoration(
-          labelText: 'IANA timezone',
-          hintText: 'Europe/Amsterdam',
-          helperText:
-              'Calendar stats bucket days in this timezone; '
-              'empty uses the server default (UTC)',
+          labelText: l10n.settingsTimezoneFieldLabel,
+          hintText: l10n.settingsTimezoneFieldHint,
+          helperText: l10n.settingsTimezoneFieldHelp,
           errorText: _error,
         ),
         onSubmitted: (_) => _save(),
@@ -140,16 +149,16 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.commonCancel),
         ),
         Semantics(
           identifier: SemanticsIds.timezoneSave,
-          label: 'Save',
+          label: l10n.commonSave,
           button: true,
           child: FilledButton(
             key: const Key(SemanticsIds.timezoneSave),
             onPressed: _busy ? null : _save,
-            child: const Text('Save'),
+            child: Text(l10n.commonSave),
           ),
         ),
       ],
@@ -169,27 +178,31 @@ class SimilarityStatusSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final status = ref.watch(similarityStatusProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(title: 'Sonic similarity'),
+        SectionHeader(title: l10n.settingsGroupSonicSimilarity),
         switch (status) {
           AsyncData(:final value) => WaxOptionRow(
             key: const Key('similarity-status'),
             glyph: value.enabled ? WaxIcons.waveform : WaxIcons.power,
             title: value.enabled
-                ? 'Coverage ${value.coveragePct.toStringAsFixed(0)}%'
-                : 'No analysis worker configured',
+                ? l10n.settingsSimilarityCoverage(value.coveragePct.round())
+                : l10n.settingsSimilarityNoWorker,
             subtitle: value.enabled
-                ? '${value.embeddedTracks} of ${value.totalTracks} tracks '
-                      'analyzed, ${value.queueDepth} queued'
-                : 'Similar tracks and mixes fall back to metadata',
+                ? l10n.settingsSimilarityAnalyzed(
+                    value.totalTracks,
+                    value.embeddedTracks,
+                    value.queueDepth,
+                  )
+                : l10n.settingsSimilarityFallback,
           ),
-          AsyncError() => const WaxOptionRow(
-            key: Key('similarity-status'),
+          AsyncError() => WaxOptionRow(
+            key: const Key('similarity-status'),
             glyph: WaxIcons.errorCircle,
-            title: 'Could not load similarity status',
+            title: l10n.settingsSimilarityError,
           ),
           _ => const Center(
             child: Padding(

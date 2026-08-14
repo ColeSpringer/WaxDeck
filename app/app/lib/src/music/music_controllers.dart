@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../settings/prefs_controller.dart';
@@ -351,9 +352,9 @@ FacetSort defaultBrowseSort(MusicDimension dimension) => switch (dimension) {
   MusicDimension.genres || MusicDimension.years => FacetSort.count,
 };
 
-String browseSortLabel(FacetSort sort) => switch (sort) {
-  FacetSort.label => 'A to Z',
-  FacetSort.count => 'Most first',
+String browseSortLabel(AppLocalizations l10n, FacetSort sort) => switch (sort) {
+  FacetSort.label => l10n.libraryBrowseSortAtoZ,
+  FacetSort.count => l10n.libraryBrowseSortMostFirst,
 };
 
 /// Which order an index is showing. Per dimension, because the choice is

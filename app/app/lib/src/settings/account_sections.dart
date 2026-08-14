@@ -22,6 +22,12 @@ final myAccountProvider = FutureProvider<UserAccount>((ref) async {
   final session = await ref.watch(authControllerProvider.future);
   final user = session.user;
   if (user == null) {
+    // The one English string left in this file, and a diagnostic
+    // rather than copy: the one surface that reads this provider draws
+    // its own sentence for the failure, and anything that renders an
+    // exception instead goes through `explainError`, which answers on
+    // the code. `error_table_test.dart` records why the code is the
+    // contract's own here.
     throw const WaxDeckApiException(
       code: 'unauthenticated',
       message: 'Not signed in',
@@ -42,6 +48,7 @@ class AccountSectionBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final user = ref.watch(authControllerProvider).value?.user;
     // The same gap the sibling sections get from `_Group`. Account is
     // the one body built out of whole widgets rather than that helper,
@@ -56,16 +63,16 @@ class AccountSectionBody extends ConsumerWidget {
         // jump under one app bar that the rest of this fixed.
         SizedBox(height: sectionGap),
         WaxOptionRow(
-          title: user?.label ?? 'Signed in',
+          title: user?.label ?? l10n.settingsAccountSignedIn,
           subtitle: user?.username,
           glyph: WaxIcons.settings,
           semanticsId: SemanticsIds.setting('display-name'),
         ),
         WaxSettingRow(
-          title: 'Change password',
-          help: 'Signs out your other devices; app passwords are unaffected',
+          title: l10n.settingsPasswordTitle,
+          help: l10n.settingsPasswordHelp,
           control: WaxButton(
-            label: 'Change',
+            label: l10n.settingsPasswordChangeAction,
             kind: WaxButtonKind.tonal,
             semanticsId: SemanticsIds.setting('password'),
             onPressed: user == null
@@ -93,11 +100,11 @@ class AccountSectionBody extends ConsumerWidget {
           child: const AppPasswordsSection(),
         ),
         SizedBox(height: sectionGap),
-        SectionHeader(title: 'About'),
+        SectionHeader(title: l10n.settingsGroupAbout),
         const AboutRow(semanticsId: SemanticsIds.aboutRow),
         SizedBox(height: sectionGap),
         WaxButton(
-          label: 'Sign out',
+          label: l10n.settingsSignOut,
           kind: WaxButtonKind.destructive,
           icon: WaxIcons.offline,
           semanticsId: SemanticsIds.logoutButton,
@@ -145,6 +152,7 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
     if (_busy) return;
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final changed = context.l10n.settingsPasswordChanged;
     setState(() {
       _busy = true;
       _currentError = null;
@@ -163,7 +171,7 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
       // the scrim. The password still changed, so the confirmation is
       // shown either way.
       if (mounted) navigator.pop();
-      messenger.showSnackBar(const SnackBar(content: Text('Password changed')));
+      messenger.showSnackBar(SnackBar(content: Text(changed)));
     } on WaxDeckApiException catch (e) {
       // Guarded because the dialog can be dismissed while the request is
       // out, and setState past that throws.
@@ -184,42 +192,50 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Change password'),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        WaxTextField(
-          label: 'Current password',
-          controller: _current,
-          obscureText: true,
-          autofocus: true,
-          errorText: _currentError,
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return AlertDialog(
+      title: Text(l10n.settingsPasswordTitle),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          WaxTextField(
+            label: l10n.settingsPasswordCurrentLabel,
+            controller: _current,
+            obscureText: true,
+            autofocus: true,
+            errorText: _currentError,
+          ),
+          const SizedBox(height: WaxSpace.s12),
+          WaxTextField(
+            label: l10n.settingsPasswordNewLabel,
+            controller: _next,
+            obscureText: true,
+            errorText: _nextError,
+            onSubmitted: (_) => _save(),
+          ),
+        ],
+      ),
+      actions: <Widget>[
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
+          onPressed: () => Navigator.of(context).pop(),
         ),
-        const SizedBox(height: WaxSpace.s12),
-        WaxTextField(
-          label: 'New password',
-          controller: _next,
-          obscureText: true,
-          errorText: _nextError,
-          onSubmitted: (_) => _save(),
+        WaxButton(
+          label: l10n.settingsPasswordTitle,
+          onPressed: _busy ? null : _save,
+          semanticsId: SemanticsIds.setting('password-save'),
         ),
       ],
-    ),
-    actions: <Widget>[
-      WaxButton(
-        label: 'Cancel',
-        kind: WaxButtonKind.text,
-        onPressed: () => Navigator.of(context).pop(),
-      ),
-      WaxButton(
-        label: 'Change password',
-        onPressed: _busy ? null : _save,
-        semanticsId: SemanticsIds.setting('password-save'),
-      ),
-    ],
-  );
+    );
+  }
 }
+
+/// The app to name beside a session, or null where the row's title is
+/// already it.
+String? _namedClient(DeviceSession session) =>
+    session.deviceName == null ? null : session.client;
 
 /// What is signed in as this account, and how to sign one out.
 class _DeviceSessions extends ConsumerWidget {
@@ -236,27 +252,29 @@ class _DeviceSessions extends ConsumerWidget {
     WidgetRef ref,
     DeviceSession session,
   ) async {
+    final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          session.current ? 'Sign out this device?' : 'Sign out device?',
+          session.current
+              ? l10n.settingsDeviceSignOutCurrentTitle
+              : l10n.settingsDeviceSignOutTitle,
         ),
         content: Text(
           session.current
-              ? 'This is the device you are using now. Revoking its '
-                    'session signs you out.'
-              : '"${session.label}" will be signed out immediately.',
+              ? l10n.settingsDeviceSignOutCurrentMessage
+              : l10n.settingsDeviceSignOutMessage(session.label),
         ),
         actions: <Widget>[
           WaxButton(
-            label: 'Cancel',
+            label: l10n.commonCancel,
             kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(context).pop(false),
           ),
           WaxButton(
-            label: 'Sign out',
+            label: l10n.settingsSignOut,
             kind: WaxButtonKind.destructive,
             key: const Key('device-revoke-confirm'),
             onPressed: () => Navigator.of(context).pop(true),
@@ -273,7 +291,7 @@ class _DeviceSessions extends ConsumerWidget {
         await ref.read(authControllerProvider.notifier).signOutLocally();
       }
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
@@ -284,23 +302,30 @@ class _DeviceSessions extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(title: 'Signed-in devices'),
+        SectionHeader(title: l10n.settingsDevicesTitle),
         switch (sessions) {
           AsyncData(:final value) => Column(
             children: <Widget>[
               for (final session in value)
                 WaxOptionRow(
                   title: session.current
-                      ? '${session.label} (this device)'
+                      ? l10n.settingsDeviceThisDevice(session.label)
                       : session.label,
                   // The client is named only where the title is not
                   // already it: a web session with no device name is
                   // titled by its browser, and "Firefox / signed in
-                  // with Firefox" says one thing twice.
-                  subtitle: <String>[
-                    'Signed in ${l10n.formatDate(session.createdAt)}',
-                    if (session.deviceName != null) ?session.client,
-                  ].join(' with '),
+                  // with Firefox" says one thing twice. Two sentences
+                  // rather than one joined here, so a translation can
+                  // put the app before the date.
+                  subtitle: switch (_namedClient(session)) {
+                    final client? => l10n.settingsDeviceSignedInWith(
+                      l10n.formatDate(session.createdAt),
+                      client,
+                    ),
+                    null => l10n.settingsDeviceSignedIn(
+                      l10n.formatDate(session.createdAt),
+                    ),
+                  },
                   glyph: session.kind == SessionKind.web
                       ? WaxIcons.devices
                       : WaxIcons.headphones,
@@ -312,13 +337,13 @@ class _DeviceSessions extends ConsumerWidget {
                     children: <Widget>[
                       WaxIconButton(
                         glyph: WaxIcons.edit,
-                        label: 'Rename device',
+                        label: l10n.settingsDeviceRename,
                         semanticsId: SemanticsIds.deviceRename(session.id),
                         onPressed: () => _rename(context, session),
                       ),
                       WaxIconButton(
                         glyph: WaxIcons.offline,
-                        label: 'Sign out device',
+                        label: l10n.settingsDeviceSignOutAction,
                         semanticsId: SemanticsIds.deviceRevoke(session.id),
                         onPressed: () => _revoke(context, ref, session),
                       ),
@@ -327,9 +352,9 @@ class _DeviceSessions extends ConsumerWidget {
                 ),
             ],
           ),
-          AsyncError() => const ErrorState(
-            title: 'Could not load devices',
-            message: 'The server did not answer.',
+          AsyncError() => ErrorState(
+            title: l10n.settingsDevicesErrorTitle,
+            message: l10n.settingsDevicesErrorMessage,
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
         },
@@ -382,6 +407,8 @@ class _DeviceRenameDialogState extends ConsumerState<_DeviceRenameDialog> {
           .rename(widget.session.id, name);
       navigator.pop();
     } on WaxDeckApiException catch (e) {
+      // The server's own sentence: what a device name may be is its
+      // rule, and this lands under the field that broke it.
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -390,19 +417,16 @@ class _DeviceRenameDialogState extends ConsumerState<_DeviceRenameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final empty = _controller.text.trim().isEmpty;
     return AlertDialog(
-      title: const Text('Rename device'),
+      title: Text(l10n.settingsDeviceRename),
       content: WaxTextField(
-        label: 'Device name',
-        hint: 'Kitchen radio',
+        label: l10n.settingsDeviceNameLabel,
+        hint: l10n.settingsDeviceNameHint,
         controller: _controller,
         autofocus: true,
         errorText: _error,
-        // Clears the refusal as well as re-running the save gate: the
-        // message is about the name that was submitted, and leaving it
-        // under a name that has since changed would show "invalid" beside
-        // an enabled Save.
         // Clears the refusal as well as re-running the save gate: the
         // message is about the name that was submitted, and leaving it
         // under a name that has since changed would show "invalid" beside
@@ -412,13 +436,13 @@ class _DeviceRenameDialogState extends ConsumerState<_DeviceRenameDialog> {
       ),
       actions: <Widget>[
         WaxButton(
-          label: 'Cancel',
+          label: l10n.commonCancel,
           kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
         ),
         WaxButton(
           key: const Key('device-rename-confirm'),
-          label: 'Save',
+          label: l10n.commonSave,
           onPressed: _busy || empty ? null : _save,
         ),
       ],

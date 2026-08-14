@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
@@ -17,55 +18,52 @@ const _admin = WaxDeckUser(
 );
 
 void main() {
+  late AppLocalizations en;
+  late AppLocalizations es;
+  late List<SettingEntry> entries;
+
+  setUpAll(() async {
+    en = await AppLocalizations.delegate.load(const Locale('en'));
+    es = await AppLocalizations.delegate.load(const Locale('es'));
+    entries = settingsEntries(en);
+  });
+
   group('the registry', () {
     test('every setting has a unique id', () {
       final seen = <String, String>{};
-      for (final entry in settingsRegistry) {
+      for (final entry in entries) {
         final previous = seen[entry.id];
         expect(
           previous,
           isNull,
           reason:
               '"${entry.id}" is registered twice ($previous, '
-              '${entry.section.title})',
+              '${entry.section.titleOf(en)})',
         );
-        seen[entry.id] = entry.section.title;
+        seen[entry.id] = entry.section.titleOf(en);
       }
     });
 
     test('every section has at least one setting behind it', () {
       for (final section in SettingsSection.values) {
         expect(
-          settingsRegistry.any((e) => e.section == section),
+          entries.any((e) => e.section == section),
           isTrue,
           reason:
-              '${section.title} is listed on the settings home and search '
+              '${section.titleOf(en)} is listed on the settings home and search '
               'can find nothing in it',
         );
       }
     });
 
-    test('keywords are lower case, since the query is folded and they '
-        'are not', () {
-      for (final entry in settingsRegistry) {
-        for (final keyword in entry.keywords) {
-          expect(
-            keyword,
-            keyword.toLowerCase(),
-            reason: '${entry.id} carries "$keyword", which no query matches',
-          );
-        }
-      }
-    });
-
     test('a setting in an admin-only section is admin-only itself', () {
-      for (final entry in settingsRegistry) {
+      for (final entry in entries) {
         if (!entry.section.adminOnly) continue;
         expect(
           entry.adminOnly,
           isTrue,
           reason:
-              '${entry.id} is in ${entry.section.title} and would be offered '
+              '${entry.id} is in ${entry.section.titleOf(en)} and would be offered '
               'to a member by search',
         );
       }
@@ -76,6 +74,7 @@ void main() {
     test('a title match outranks a keyword match', () {
       final hits = searchSettings(
         'speed',
+        l10n: en,
         isAdmin: true,
         isNative: true,
         isDesktop: true,
@@ -85,7 +84,13 @@ void main() {
 
     test('an empty query answers nothing rather than everything', () {
       expect(
-        searchSettings('  ', isAdmin: true, isNative: true, isDesktop: true),
+        searchSettings(
+          '  ',
+          l10n: en,
+          isAdmin: true,
+          isNative: true,
+          isDesktop: true,
+        ),
         isEmpty,
       );
     });
@@ -93,6 +98,7 @@ void main() {
     test('a member is offered nothing they cannot open', () {
       final hits = searchSettings(
         'server',
+        l10n: en,
         isAdmin: false,
         isNative: true,
         isDesktop: true,
@@ -103,25 +109,39 @@ void main() {
     test('the web build is offered nothing it does not have', () {
       final hits = searchSettings(
         'wifi',
+        l10n: en,
         isAdmin: true,
         isNative: false,
         isDesktop: true,
       );
       expect(hits, isEmpty);
       expect(
-        searchSettings('wifi', isAdmin: true, isNative: true, isDesktop: true),
+        searchSettings(
+          'wifi',
+          l10n: en,
+          isAdmin: true,
+          isNative: true,
+          isDesktop: true,
+        ),
         isNotEmpty,
       );
     });
 
     test('a phone is offered nothing only a desktop can do', () {
       expect(
-        searchSettings('idle', isAdmin: true, isNative: true, isDesktop: false),
+        searchSettings(
+          'idle',
+          l10n: en,
+          isAdmin: true,
+          isNative: true,
+          isDesktop: false,
+        ),
         isEmpty,
       );
       expect(
         searchSettings(
           'idle',
+          l10n: en,
           isAdmin: true,
           isNative: true,
           isDesktop: true,
@@ -130,10 +150,40 @@ void main() {
       );
     });
 
+    test('an accent is not something the listener has to type', () {
+      // The Spanish copy spells it "pódcast", and the accent is the
+      // language's rather than the searcher's: a settings search that
+      // answers only the accented spelling is one a Spanish reader
+      // gives up on. Title and keyword both, since either can carry it.
+      final hits = searchSettings(
+        'podcast',
+        l10n: es,
+        isAdmin: true,
+        isNative: true,
+        isDesktop: true,
+      ).map((e) => e.id);
+      expect(hits, contains('podcast-speed'));
+      expect(hits, contains('skip-back'));
+
+      // And the accented spelling still finds them, which is the half a
+      // fold done in one direction only would lose.
+      expect(
+        searchSettings(
+          'pódcast',
+          l10n: es,
+          isAdmin: true,
+          isNative: true,
+          isDesktop: true,
+        ).map((e) => e.id),
+        contains('podcast-speed'),
+      );
+    });
+
     test('the match is case-insensitive in both directions', () {
       expect(
         searchSettings(
           'CROSSFADE',
+          l10n: en,
           isAdmin: true,
           isNative: true,
           isDesktop: true,
@@ -179,14 +229,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      for (final entry in settingsRegistry.where((e) => e.section == section)) {
+      for (final entry in entries.where((e) => e.section == section)) {
         // Native-only settings are drawn on this platform: the widget
         // test runs on the VM, where `kIsWeb` is false.
         expect(
           find.bySemanticsIdentifier(entry.semanticsId),
           findsWidgets,
           reason:
-              '"${entry.title}" is registered under ${section.title} and '
+              '"${entry.title}" is registered under ${section.titleOf(en)} and '
               'that section draws no control for it',
         );
       }

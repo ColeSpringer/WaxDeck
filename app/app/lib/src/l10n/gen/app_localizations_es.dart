@@ -71,6 +71,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get commonRetry => 'Reintentar';
 
   @override
+  String get commonSave => 'Guardar';
+
+  @override
   String devicesMultiPartAudiobook(String endpoint) {
     return 'Los audiolibros de varias partes todavía no se pueden reproducir en $endpoint. Reprodúcelo en este dispositivo.';
   }
@@ -78,6 +81,42 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get devicesNothingToSend =>
       'Aquí no hay nada reproduciéndose que enviar. Empieza algo primero.';
+
+  @override
+  String durationDays(int days) {
+    final intl.NumberFormat daysNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String daysString = daysNumberFormat.format(days);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$daysString días',
+      one: '1 día',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int hours) {
+    final intl.NumberFormat hoursNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String hoursString = hoursNumberFormat.format(hours);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hoursString horas',
+      one: '1 hora',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get errorCatalogBusy =>
@@ -248,6 +287,12 @@ class AppLocalizationsEs extends AppLocalizations {
       'Etiquetas del archivo desincronizadas del catálogo';
 
   @override
+  String get libraryBrowseSortAtoZ => 'De la A a la Z';
+
+  @override
+  String get libraryBrowseSortMostFirst => 'Más primero';
+
+  @override
   String get localeFontSample => 'Música, pódcasts y audiolibros.';
 
   @override
@@ -413,5 +458,1148 @@ class AppLocalizationsEs extends AppLocalizations {
       one: 'hace 1 mes',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get settingsAboutKeywords =>
+      'versión, licencias, código abierto, compilación, defectos, errores, diagnóstico, registro, fallo';
+
+  @override
+  String get settingsAboutTitle => 'Acerca de WaxDeck';
+
+  @override
+  String get settingsAccountSignedIn => 'Sesión iniciada';
+
+  @override
+  String get settingsAdminConsoleBlurb =>
+      'Bibliotecas, usuarios, escaneos, copias de seguridad y el registro de auditoría';
+
+  @override
+  String get settingsAdminConsoleKeywords =>
+      'solo lectura, registro, bibliotecas, usuarios, copias de seguridad, tareas programadas, papelera, auditoría, transcodificación, géneros';
+
+  @override
+  String get settingsAdminConsoleOpenTitle =>
+      'Abrir la consola de administración';
+
+  @override
+  String get settingsAdminConsoleTitle => 'Consola de administración';
+
+  @override
+  String get settingsAppPasswordCopy => 'Copiar';
+
+  @override
+  String get settingsAppPasswordCreate => 'Crear';
+
+  @override
+  String get settingsAppPasswordCreatedMessage =>
+      'Cópiala ahora; el servidor la guarda sellada y no la vuelve a mostrar.';
+
+  @override
+  String get settingsAppPasswordCreatedTitle =>
+      'Contraseña de aplicación creada';
+
+  @override
+  String get settingsAppPasswordDone => 'Hecho';
+
+  @override
+  String get settingsAppPasswordLabel => 'Etiqueta';
+
+  @override
+  String get settingsAppPasswordLabelHelp => '¿Para qué aplicación es?';
+
+  @override
+  String get settingsAppPasswordNewAction => 'Nueva';
+
+  @override
+  String get settingsAppPasswordNewSpoken => 'Nueva contraseña de aplicación';
+
+  @override
+  String settingsAppPasswordRevoke(String label) {
+    return 'Revocar $label';
+  }
+
+  @override
+  String get settingsAppPasswordUnlabeled => 'Sin etiqueta';
+
+  @override
+  String get settingsAppPasswordsBlurb =>
+      'Para aplicaciones de Subsonic y clientes de sincronización de pódcasts. Tu contraseña de inicio de sesión nunca funciona ahí.';
+
+  @override
+  String get settingsAppPasswordsEmpty =>
+      'Todavía no hay contraseñas de aplicación';
+
+  @override
+  String get settingsAppPasswordsError =>
+      'No se han podido cargar las contraseñas de aplicación';
+
+  @override
+  String get settingsAppPasswordsKeywords =>
+      'subsonic, gpodder, token, terceros';
+
+  @override
+  String get settingsAppPasswordsTitle => 'Contraseñas de aplicación';
+
+  @override
+  String get settingsArtworkCacheClear => 'Vaciar';
+
+  @override
+  String get settingsArtworkCacheCleared => 'Caché de carátulas vaciada';
+
+  @override
+  String get settingsArtworkCacheHelp =>
+      'Las carátulas se vuelven a descargar según se necesiten';
+
+  @override
+  String get settingsArtworkCacheKeywords =>
+      'carátulas, imágenes, vaciar, espacio';
+
+  @override
+  String get settingsArtworkCacheTitle => 'Caché de carátulas';
+
+  @override
+  String get settingsArtworkGlowHelp =>
+      'El color que la carátula proyecta detrás del reproductor';
+
+  @override
+  String get settingsArtworkGlowKeywords =>
+      'fondo, colorido, color, reproductor, baño de color';
+
+  @override
+  String get settingsArtworkGlowTitle => 'Resplandor de la carátula';
+
+  @override
+  String get settingsAutoRemoveAfterHelp =>
+      'Cuánto tiempo se queda un episodio terminado antes de irse';
+
+  @override
+  String get settingsAutoRemoveAfterTitle => 'Esperar antes de eliminar';
+
+  @override
+  String get settingsAutoRemoveFinishedHelp =>
+      'Recupera un episodio descargado cuando lleva un tiempo terminado. Los libros y los álbumes se quedan como están';
+
+  @override
+  String get settingsAutoRemoveFinishedKeywords =>
+      'ordenar, recuperar, espacio, escuchado, pódcast';
+
+  @override
+  String get settingsAutoRemoveFinishedTitle =>
+      'Eliminar los episodios terminados';
+
+  @override
+  String get settingsAutoplayHelp =>
+      'Deja que una cola que te pasa otro dispositivo empiece aquí. Desactivado significa que llega lista y espera a que la toques';
+
+  @override
+  String get settingsAutoplayKeywords =>
+      'reproducción automática, reanudar, traspaso, conexión, navegador';
+
+  @override
+  String get settingsAutoplayTitle => 'Empezar a reproducir sin preguntar';
+
+  @override
+  String get settingsBookSpeedHelp =>
+      'La velocidad a la que suena un libro hasta que le pongas una propia';
+
+  @override
+  String get settingsBookSpeedKeywords =>
+      'ritmo, más rápido, predeterminada, narración';
+
+  @override
+  String get settingsBookSpeedTitle => 'Velocidad de los audiolibros';
+
+  @override
+  String get settingsBoostDefaultHelp =>
+      'Los programas y libros sin una elección guardada propia se abren con la normalización de sonoridad activada';
+
+  @override
+  String get settingsBoostDefaultKeywords =>
+      'sonoridad, normalizar, volumen, voz, bajo';
+
+  @override
+  String get settingsBoostDefaultTitle => 'Realce de voz por defecto';
+
+  @override
+  String settingsBrowseOrderChoiceLabel(String dimension) {
+    return 'Orden de $dimension';
+  }
+
+  @override
+  String get settingsBrowseOrderHelp => 'El orden en que se abre este índice';
+
+  @override
+  String get settingsBrowseOrderKeywords =>
+      'ordenar, orden, alfabético, navegar, índice';
+
+  @override
+  String get settingsBrowseOrderTitle => 'Orden predeterminado';
+
+  @override
+  String get settingsBrowseUnknownHelp =>
+      'Muestra el grupo de lo que no tiene género, álbum ni año propios';
+
+  @override
+  String get settingsBrowseUnknownKeywords =>
+      'desconocido, sin etiquetas, ausente, sin género, navegar';
+
+  @override
+  String get settingsBrowseUnknownTitle => 'Mostrar los grupos desconocidos';
+
+  @override
+  String get settingsCaptionsAlways => 'Siempre';
+
+  @override
+  String get settingsCaptionsOnHover => 'Al pasar el puntero';
+
+  @override
+  String get settingsCarButtonHelp =>
+      'Pone el modo coche en el propio reproductor en vez de dentro de su menú';
+
+  @override
+  String get settingsCarButtonKeywords =>
+      'conducir, grande, salpicadero, reproductor';
+
+  @override
+  String get settingsCarButtonTitle => 'Botón de modo coche';
+
+  @override
+  String get settingsCardCaptionsHelp =>
+      'Las líneas debajo de una carátula en la cuadrícula';
+
+  @override
+  String get settingsCardCaptionsKeywords =>
+      'etiquetas, títulos, pasar el ratón, cuadrícula, carátulas';
+
+  @override
+  String get settingsCardCaptionsNoPointerHelp =>
+      'Siempre visibles: para ocultarlas hace falta un puntero que las recupere';
+
+  @override
+  String get settingsCardCaptionsTitle => 'Títulos de las tarjetas';
+
+  @override
+  String get settingsCastCheckBlurb =>
+      'Si un dispositivo de transmisión puede llegar a este servidor';
+
+  @override
+  String get settingsCastCheckKeywords =>
+      'comprobación previa, diagnosticar, accesible, transmitir';
+
+  @override
+  String get settingsCastCheckTitle => 'Comprobación de la conexión';
+
+  @override
+  String get settingsCrossfadeHelp =>
+      'Funde una pista con la siguiente al transmitir una cola';
+
+  @override
+  String get settingsCrossfadeKeywords =>
+      'fundido, sin pausas, unión, chromecast';
+
+  @override
+  String get settingsCrossfadeTitle => 'Fundido al transmitir';
+
+  @override
+  String get settingsDensityComfortable => 'Cómoda';
+
+  @override
+  String get settingsDensityCompact => 'Compacta';
+
+  @override
+  String get settingsDensityHelp =>
+      'Cómo de juntas van las filas; el tamaño del texto sigue siendo el del sistema';
+
+  @override
+  String get settingsDensityKeywords => 'compacta, cómoda, espaciado, filas';
+
+  @override
+  String get settingsDensityTitle => 'Densidad';
+
+  @override
+  String get settingsDeviceNameHint => 'Radio de la cocina';
+
+  @override
+  String get settingsDeviceNameLabel => 'Nombre del dispositivo';
+
+  @override
+  String get settingsDeviceRename => 'Renombrar dispositivo';
+
+  @override
+  String get settingsDeviceSignOutAction => 'Cerrar sesión en el dispositivo';
+
+  @override
+  String get settingsDeviceSignOutCurrentMessage =>
+      'Este es el dispositivo que estás usando ahora. Revocar su sesión cerrará tu sesión.';
+
+  @override
+  String get settingsDeviceSignOutCurrentTitle =>
+      '¿Cerrar sesión en este dispositivo?';
+
+  @override
+  String settingsDeviceSignOutMessage(String name) {
+    return 'Se cerrará la sesión de «$name» inmediatamente.';
+  }
+
+  @override
+  String get settingsDeviceSignOutTitle => '¿Cerrar sesión en el dispositivo?';
+
+  @override
+  String settingsDeviceSignedIn(String date) {
+    return 'Sesión iniciada el $date';
+  }
+
+  @override
+  String settingsDeviceSignedInWith(String date, String client) {
+    return 'Sesión iniciada el $date con $client';
+  }
+
+  @override
+  String settingsDeviceThisDevice(String name) {
+    return '$name (este dispositivo)';
+  }
+
+  @override
+  String get settingsDevicesErrorMessage => 'El servidor no ha respondido.';
+
+  @override
+  String get settingsDevicesErrorTitle =>
+      'No se han podido cargar los dispositivos';
+
+  @override
+  String get settingsDevicesKeywords =>
+      'sesiones, revocar, cerrar sesión, salir';
+
+  @override
+  String get settingsDevicesTitle => 'Dispositivos con la sesión iniciada';
+
+  @override
+  String get settingsDiscordApplicationHelp =>
+      'Vacío publica como WaxDeck. Un ID de aplicación de discord.com/developers cambia el nombre que muestra Discord y de dónde sale su carátula';
+
+  @override
+  String get settingsDiscordApplicationLabel =>
+      'Publicar como otra aplicación (opcional)';
+
+  @override
+  String get settingsDiscordCoverNote =>
+      'La carátula es una sola imagen para todas las pistas, subida a esa aplicación en vez de tomada de tu biblioteca: Discord obtiene las imágenes a través de sus propios servidores, que no pueden llegar a uno privado.';
+
+  @override
+  String get settingsDiscordPresenceHelp =>
+      'Pone tu estado de Discord mientras WaxDeck suena, a través de la aplicación de Discord de esta máquina';
+
+  @override
+  String get settingsDiscordPresenceKeywords =>
+      'discord, presencia enriquecida, estado, escuchando';
+
+  @override
+  String get settingsDiscordPresenceRowTitle =>
+      'Mostrar lo que estoy escuchando';
+
+  @override
+  String get settingsDiscordPresenceTitle =>
+      'Mostrar en Discord lo que estoy escuchando';
+
+  @override
+  String get settingsDisplayNameKeywords => 'usuario, perfil, quién';
+
+  @override
+  String get settingsDisplayNameTitle => 'Nombre visible';
+
+  @override
+  String get settingsDownloadsManagerBlurb =>
+      'Qué guarda este dispositivo sin conexión y cómo liberarlo';
+
+  @override
+  String get settingsDownloadsManagerKeywords =>
+      'sin conexión, almacenamiento, espacio, eliminar';
+
+  @override
+  String get settingsDownloadsManagerTitle => 'Gestionar las descargas';
+
+  @override
+  String get settingsDownloadsWifiHelp =>
+      'Retiene las transferencias hasta que este dispositivo esté en wifi, en vez de hacerlas fallar';
+
+  @override
+  String get settingsDownloadsWifiKeywords =>
+      'datos, uso medido, móvil, celular';
+
+  @override
+  String get settingsDownloadsWifiTitle => 'Descargar solo con wifi';
+
+  @override
+  String get settingsEndpointsBlurb =>
+      'Destinos de transmisión, reproductores y tus otros dispositivos';
+
+  @override
+  String get settingsEndpointsKeywords =>
+      'transmitir, chromecast, dlna, altavoz, conectar';
+
+  @override
+  String get settingsEndpointsTitle => 'Destinos de reproducción';
+
+  @override
+  String get settingsFollowsAccountHelp => 'Te sigue a tus otros dispositivos';
+
+  @override
+  String get settingsGridLarge => 'Grande';
+
+  @override
+  String get settingsGridMedium => 'Mediano';
+
+  @override
+  String get settingsGridSizeHelp =>
+      'A qué tamaño se dibujan las carátulas en las cuadrículas';
+
+  @override
+  String get settingsGridSizeKeywords =>
+      'cuadrícula, mosaicos, carátulas, grande, pequeño';
+
+  @override
+  String get settingsGridSizeTitle => 'Tamaño de las carátulas';
+
+  @override
+  String get settingsGridSmall => 'Pequeño';
+
+  @override
+  String get settingsGroupAbout => 'Acerca de';
+
+  @override
+  String get settingsGroupAccess => 'Acceso';
+
+  @override
+  String get settingsGroupAdding => 'Añadir a la biblioteca';
+
+  @override
+  String get settingsGroupBrowsing => 'Navegación';
+
+  @override
+  String get settingsGroupCasting => 'Transmisión';
+
+  @override
+  String get settingsGroupData => 'Datos';
+
+  @override
+  String get settingsGroupDiscord => 'Discord';
+
+  @override
+  String get settingsGroupDownloads => 'Descargas';
+
+  @override
+  String get settingsGroupListening => 'Escucha';
+
+  @override
+  String get settingsGroupMotion => 'Movimiento';
+
+  @override
+  String get settingsGroupPlayer => 'El reproductor';
+
+  @override
+  String get settingsGroupScreenReaders => 'Lectores de pantalla';
+
+  @override
+  String get settingsGroupSonicSimilarity => 'Similitud sonora';
+
+  @override
+  String get settingsGroupSpokenWord => 'Palabra hablada';
+
+  @override
+  String get settingsGroupStartingOnItsOwn => 'Empezar por su cuenta';
+
+  @override
+  String get settingsGroupStorage => 'Almacenamiento';
+
+  @override
+  String get settingsGroupThisDevice => 'Este dispositivo';
+
+  @override
+  String get settingsGroupWhatGetsScrobbled => 'Qué se envía por scrobble';
+
+  @override
+  String get settingsGroupWhereSoundComesOut => 'Por dónde sale el sonido';
+
+  @override
+  String get settingsIdentifyUploadsHelp =>
+      'Compara lo que añades con MusicBrainz. Desactivado lo añade con las etiquetas que trae, sin revisión';
+
+  @override
+  String get settingsIdentifyUploadsKeywords =>
+      'musicbrainz, coincidencia, identificar, subida, etiquetas, adquirir';
+
+  @override
+  String get settingsIdentifyUploadsTitle => 'Identificar las subidas';
+
+  @override
+  String get settingsLanguageKeywords =>
+      'idioma, language, configuración regional, traducción, español, inglés';
+
+  @override
+  String get settingsLanguageTitle => 'Idioma';
+
+  @override
+  String get settingsLastfmApiKey => 'Clave de la API';
+
+  @override
+  String get settingsLastfmApiKeyHelp =>
+      'Regístrate en last.fm/api/account/create';
+
+  @override
+  String get settingsLastfmCredentialsClear => 'Borrar';
+
+  @override
+  String get settingsLastfmCredentialsError =>
+      'No se ha podido cargar el estado de las credenciales';
+
+  @override
+  String get settingsLastfmCredentialsTitle =>
+      'Credenciales de la API de Last.fm';
+
+  @override
+  String get settingsLastfmSecret => 'Secreto compartido';
+
+  @override
+  String get settingsLastfmSecretHelp =>
+      'Guardado sellado; no se vuelve a mostrar';
+
+  @override
+  String get settingsLibraryAccessAll =>
+      'Puedes ver todas las bibliotecas de este servidor';
+
+  @override
+  String get settingsLibraryAccessChecking => 'Comprobando';
+
+  @override
+  String get settingsLibraryAccessError => 'No se ha podido leer tu acceso';
+
+  @override
+  String get settingsLibraryAccessKeywords => 'permisos, bibliotecas, acceso';
+
+  @override
+  String settingsLibraryAccessSome(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Puedes ver $countString de las bibliotecas de este servidor',
+      one: 'Puedes ver 1 de las bibliotecas de este servidor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsLibraryAccessTitle => 'Lo que puedo ver';
+
+  @override
+  String get settingsListenBrainzApi => 'Servidor de la API (opcional)';
+
+  @override
+  String get settingsListenBrainzApiHelp =>
+      'Para un servidor compatible; vacío para listenbrainz.org';
+
+  @override
+  String get settingsListenBrainzTitle => 'Conectar ListenBrainz';
+
+  @override
+  String get settingsListenBrainzToken => 'Token de usuario';
+
+  @override
+  String get settingsListenBrainzTokenHelp =>
+      'De la página de tu perfil de ListenBrainz';
+
+  @override
+  String get settingsMatchTheSystem => 'Igual que el sistema';
+
+  @override
+  String get settingsNotificationsKeywords =>
+      'ntfy, webhook, discord, push, alertas';
+
+  @override
+  String get settingsNotificationsTitle => 'Destinos de notificación';
+
+  @override
+  String get settingsNotifyAbout => 'Avisarme de';
+
+  @override
+  String get settingsNotifyAccessToken => 'Token de acceso';
+
+  @override
+  String get settingsNotifyAppriseServerUrl => 'URL del servidor de Apprise';
+
+  @override
+  String get settingsNotifyAppriseTargets => 'Destinos';
+
+  @override
+  String get settingsNotifyAppriseTargetsHelp =>
+      'URLs de Apprise; vacío usa la configuración propia del servidor';
+
+  @override
+  String get settingsNotifyCatalogError =>
+      'No se ha podido cargar el catálogo de eventos';
+
+  @override
+  String get settingsNotifyDeliverVia => 'Enviar por';
+
+  @override
+  String get settingsNotifyDiscordWebhookHelp =>
+      'Una URL de webhook de discord.com';
+
+  @override
+  String get settingsNotifyEndpointUrl => 'URL del endpoint';
+
+  @override
+  String settingsNotifyFieldOptional(String field) {
+    return '$field (opcional)';
+  }
+
+  @override
+  String settingsNotifyFieldRequired(String field) {
+    return '$field es obligatorio';
+  }
+
+  @override
+  String settingsNotifyFieldWholeNumber(String field) {
+    return '$field debe ser un número entero';
+  }
+
+  @override
+  String get settingsNotifyGotifyPriorityHelp => 'De 0 a 10';
+
+  @override
+  String settingsNotifyLastDelivered(String when) {
+    return 'Último envío: $when';
+  }
+
+  @override
+  String settingsNotifyLastFailed(String error) {
+    return 'El último envío ha fallado: $error';
+  }
+
+  @override
+  String get settingsNotifyMyBlurb =>
+      'Adónde se envían tus eventos (episodios nuevos, cola de revisión): Pushover, ntfy, Gotify, Discord, webhooks o el registro push de este dispositivo.';
+
+  @override
+  String get settingsNotifyMyEvents => 'Mis eventos';
+
+  @override
+  String get settingsNotifyMyTitle => 'Mis notificaciones';
+
+  @override
+  String get settingsNotifyNtfyServerHelp => 'Vacío usa ntfy.sh';
+
+  @override
+  String get settingsNotifyNtfyTopic => 'Tema';
+
+  @override
+  String get settingsNotifyPriority => 'Prioridad';
+
+  @override
+  String get settingsNotifyPushoverPriorityHelp =>
+      'De -2 (lo más silencioso) a 2 (emergencia)';
+
+  @override
+  String get settingsNotifyPushoverToken => 'Token de la aplicación';
+
+  @override
+  String get settingsNotifyPushoverUserKey => 'Clave de usuario o de grupo';
+
+  @override
+  String get settingsNotifySendTest => 'Enviar prueba';
+
+  @override
+  String get settingsNotifyServerBlurb =>
+      'Eventos de operaciones (solicitudes de cuenta, resultados de copias de seguridad) enviados a destinos de todo el servidor.';
+
+  @override
+  String get settingsNotifyServerEvents => 'Eventos del servidor';
+
+  @override
+  String get settingsNotifyServerTitle => 'Notificaciones del servidor';
+
+  @override
+  String get settingsNotifyServerUrl => 'URL del servidor';
+
+  @override
+  String get settingsNotifyTargetAddAction => 'Añadir';
+
+  @override
+  String get settingsNotifyTargetAddSpoken => 'Añadir destino de notificación';
+
+  @override
+  String settingsNotifyTargetEditTitle(String kind) {
+    return 'Editar el destino de $kind';
+  }
+
+  @override
+  String get settingsNotifyTargetLabel => 'Etiqueta (opcional)';
+
+  @override
+  String get settingsNotifyTargetNewTitle => 'Nuevo destino de notificación';
+
+  @override
+  String get settingsNotifyTargetRemove => 'Quitar';
+
+  @override
+  String get settingsNotifyTargetsEmpty =>
+      'Todavía no hay destinos de notificación';
+
+  @override
+  String get settingsNotifyTargetsError =>
+      'No se han podido cargar los destinos de notificación';
+
+  @override
+  String get settingsNotifyTestQueued =>
+      'Prueba en cola; el resultado aparecerá en el destino en breve';
+
+  @override
+  String get settingsNotifyUnifiedPushHelp =>
+      'Normalmente la registra la aplicación a través de su distribuidor';
+
+  @override
+  String get settingsNotifyUrl => 'URL';
+
+  @override
+  String get settingsNotifyWebhookHelp =>
+      'Recibe un objeto JSON con event, title, body y timestamp';
+
+  @override
+  String get settingsNotifyWebhookUrl => 'URL del webhook';
+
+  @override
+  String get settingsOptionOff => 'Desactivado';
+
+  @override
+  String get settingsPasswordChangeAction => 'Cambiar';
+
+  @override
+  String get settingsPasswordChanged => 'Contraseña cambiada';
+
+  @override
+  String get settingsPasswordCurrentLabel => 'Contraseña actual';
+
+  @override
+  String get settingsPasswordHelp =>
+      'Cierra la sesión en tus otros dispositivos; las contraseñas de aplicación no se ven afectadas';
+
+  @override
+  String get settingsPasswordKeywords => 'seguridad, iniciar sesión, acceso';
+
+  @override
+  String get settingsPasswordNewLabel => 'Contraseña nueva';
+
+  @override
+  String get settingsPasswordTitle => 'Cambiar contraseña';
+
+  @override
+  String get settingsPodcastSpeedHelp =>
+      'La velocidad a la que suena un programa hasta que le pongas una propia';
+
+  @override
+  String get settingsPodcastSpeedKeywords =>
+      'ritmo, más rápido, predeterminada';
+
+  @override
+  String get settingsPodcastSpeedTitle => 'Velocidad de los pódcasts';
+
+  @override
+  String get settingsPreloadWifiHelp =>
+      'La reproducción sin pausas carga la siguiente pista con antelación; esto lo retiene con datos móviles';
+
+  @override
+  String get settingsPreloadWifiKeywords =>
+      'sin pausas, precarga, datos, uso medido, móvil';
+
+  @override
+  String get settingsPreloadWifiTitle =>
+      'Preparar la siguiente pista solo con wifi';
+
+  @override
+  String get settingsRadioScrobblingHelp =>
+      'Los segmentos de radio se envían como pistas cuando una emisora los nombra con honestidad';
+
+  @override
+  String get settingsRadioScrobblingKeywords =>
+      'last.fm, listenbrainz, emisora, emisión';
+
+  @override
+  String get settingsRadioScrobblingTitle => 'Hacer scrobble de la radio';
+
+  @override
+  String get settingsReduceMotionHelp =>
+      'Detiene las transiciones y el indicador de reproducción';
+
+  @override
+  String get settingsReduceMotionKeywords =>
+      'animación, transiciones, vestibular';
+
+  @override
+  String get settingsReduceMotionPlatformHelp =>
+      'Ya está reducido: este dispositivo pide menos movimiento a todas las aplicaciones';
+
+  @override
+  String get settingsReduceMotionTitle => 'Reducir el movimiento';
+
+  @override
+  String get settingsReplayGainHelp =>
+      'Reproduce una cola transmitida a una sola sonoridad, cuando los archivos se han analizado';
+
+  @override
+  String get settingsReplayGainKeywords =>
+      'replaygain, sonoridad, normalizar, ganancia';
+
+  @override
+  String get settingsReplayGainTitle => 'Igualar el volumen al transmitir';
+
+  @override
+  String get settingsScreenReaderBlurb =>
+      'Todos los controles tienen nombre, la cola se reordena desde el teclado y la barra del reproductor es un único punto de referencia';
+
+  @override
+  String get settingsScreenReaderTitle => 'Cómo se lee WaxDeck en voz alta';
+
+  @override
+  String get settingsScrobblerApprove =>
+      'Autoriza WaxDeck en la pestaña del navegador y vuelve aquí';
+
+  @override
+  String get settingsScrobblerConnect => 'Conectar';
+
+  @override
+  String get settingsScrobblerConnected => 'Conectado';
+
+  @override
+  String settingsScrobblerConnectedAs(String username) {
+    return 'Conectado como $username';
+  }
+
+  @override
+  String get settingsScrobblerCredentialsLabel =>
+      'Credenciales de la API del servidor';
+
+  @override
+  String get settingsScrobblerDelivering => 'Conectado y enviando';
+
+  @override
+  String settingsScrobblerDeliveringAs(String username) {
+    return 'Conectado como $username y enviando';
+  }
+
+  @override
+  String get settingsScrobblerDisconnect => 'Desconectar';
+
+  @override
+  String settingsScrobblerFailing(String error) {
+    return 'Fallo de envío: $error';
+  }
+
+  @override
+  String get settingsScrobblerNeedsCredentials =>
+      'Faltan las credenciales de la API del servidor';
+
+  @override
+  String get settingsScrobblerNotConnected => 'Sin conectar';
+
+  @override
+  String get settingsScrobblerSetUp => 'Configurar…';
+
+  @override
+  String get settingsScrobblingError =>
+      'No se han podido cargar las conexiones de scrobbling';
+
+  @override
+  String get settingsScrobblingKeywords => 'last.fm, lastfm, listenbrainz';
+
+  @override
+  String get settingsScrobblingTitle => 'Scrobbling';
+
+  @override
+  String get settingsSearchLabel => 'Buscar ajustes';
+
+  @override
+  String get settingsSearchNoMatchMessage =>
+      'Los ajustes de todo el servidor están en la consola de administración, no aquí. Un ajuste de un programa o de un libro está en ese programa o libro.';
+
+  @override
+  String settingsSearchNoMatchTitle(String query) {
+    return 'Ningún ajuste coincide con \"$query\"';
+  }
+
+  @override
+  String get settingsSectionAccessibilityBlurb =>
+      'Movimiento y cómo se lee la aplicación en voz alta';
+
+  @override
+  String get settingsSectionAccessibilityTitle => 'Accesibilidad';
+
+  @override
+  String get settingsSectionAccountBlurb =>
+      'Tú, tus dispositivos y cómo inicias sesión';
+
+  @override
+  String get settingsSectionAccountTitle => 'Cuenta';
+
+  @override
+  String get settingsSectionAppearanceBlurb =>
+      'Tema, densidad y a qué tamaño se dibujan las carátulas';
+
+  @override
+  String get settingsSectionAppearanceTitle => 'Apariencia';
+
+  @override
+  String get settingsSectionDevicesBlurb =>
+      'Por dónde más puede sonar lo que escuchas';
+
+  @override
+  String get settingsSectionDevicesTitle => 'Dispositivos y transmisión';
+
+  @override
+  String get settingsSectionDownloadsBlurb =>
+      'Qué guarda este dispositivo sin conexión y cuánto espacio ocupa';
+
+  @override
+  String get settingsSectionDownloadsTitle => 'Descargas y almacenamiento';
+
+  @override
+  String get settingsSectionIntegrationsBlurb =>
+      'Scrobbling, otras aplicaciones y notificaciones';
+
+  @override
+  String get settingsSectionIntegrationsTitle => 'Integraciones';
+
+  @override
+  String get settingsSectionLibraryBlurb =>
+      'Qué te muestra la navegación y qué puedes ver';
+
+  @override
+  String get settingsSectionLibraryTitle => 'Biblioteca y metadatos';
+
+  @override
+  String get settingsSectionPlaybackBlurb =>
+      'Velocidades, saltos, transmisión y qué suena después';
+
+  @override
+  String get settingsSectionPlaybackTitle => 'Reproducción';
+
+  @override
+  String get settingsSectionServerBlurb =>
+      'Esta instancia, para administradores';
+
+  @override
+  String get settingsSectionServerTitle => 'Servidor';
+
+  @override
+  String get settingsServerAdminOnlyMessage =>
+      'Esta sección trata del servidor en sí.';
+
+  @override
+  String get settingsServerAdminOnlyTitle => 'Solo para administradores';
+
+  @override
+  String get settingsServerSummaryKeywords =>
+      'versión, tiempo activo, compilación';
+
+  @override
+  String get settingsServerSummaryTitle => 'Este servidor';
+
+  @override
+  String get settingsShareLinksBlurb => 'Enlaces públicos que has repartido';
+
+  @override
+  String get settingsShareLinksTitle => 'Enlaces compartidos';
+
+  @override
+  String get settingsSharedStatsHelp =>
+      'Cuenta lo que escuchas en el resumen del año compartido';
+
+  @override
+  String get settingsSharedStatsKeywords =>
+      'resumen del año, privacidad, excluirse';
+
+  @override
+  String get settingsSharedStatsSwitchTitle =>
+      'Incluirme en las estadísticas de todo el servidor';
+
+  @override
+  String get settingsSharedStatsTitle => 'Estadísticas de todo el servidor';
+
+  @override
+  String get settingsSignOut => 'Cerrar sesión';
+
+  @override
+  String settingsSimilarityAnalyzed(int total, int embedded, int queued) {
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String totalString = totalNumberFormat.format(total);
+    final intl.NumberFormat embeddedNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String embeddedString = embeddedNumberFormat.format(embedded);
+    final intl.NumberFormat queuedNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String queuedString = queuedNumberFormat.format(queued);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other:
+          '$embeddedString de $totalString pistas analizadas, $queuedString en cola',
+      one: '$embeddedString de 1 pista analizada, $queuedString en cola',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsSimilarityCoverage(int percent) {
+    final intl.NumberFormat percentNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String percentString = percentNumberFormat.format(percent);
+
+    return 'Cobertura del $percentString %';
+  }
+
+  @override
+  String get settingsSimilarityError =>
+      'No se ha podido cargar el estado de similitud';
+
+  @override
+  String get settingsSimilarityFallback =>
+      'Las pistas similares y las mezclas recurren a los metadatos';
+
+  @override
+  String get settingsSimilarityNoWorker =>
+      'No hay ningún trabajador de análisis configurado';
+
+  @override
+  String get settingsSkipBackHelp =>
+      'Cuánto salta el control de retroceso en un pódcast o un libro';
+
+  @override
+  String get settingsSkipBackKeywords =>
+      'rebobinar, segundos, pódcast, audiolibro';
+
+  @override
+  String get settingsSkipBackTitle => 'Retroceder';
+
+  @override
+  String get settingsSkipForwardHelp => 'Cuánto salta el control de avance';
+
+  @override
+  String get settingsSkipForwardKeywords =>
+      'segundos, pódcast, audiolibro, anuncio';
+
+  @override
+  String get settingsSkipForwardTitle => 'Avanzar';
+
+  @override
+  String get settingsSmartRewindHelp =>
+      'Retrocede un poco cuando vuelves a un programa o a un libro tras una pausa, para que caigas antes de la frase que perdiste';
+
+  @override
+  String get settingsSmartRewindKeywords =>
+      'retroceso inteligente, atrás, contexto, pódcast, libro';
+
+  @override
+  String get settingsSmartRewindLittle => 'Un poco';
+
+  @override
+  String get settingsSmartRewindMore => 'Más';
+
+  @override
+  String get settingsSmartRewindTitle => 'Retroceder al reanudar';
+
+  @override
+  String get settingsTechnicalDetailsHelp =>
+      'Dibuja etiquetas de códec y formato junto a lo que describen';
+
+  @override
+  String get settingsTechnicalDetailsKeywords =>
+      'códec, tasa de bits, formato, flac, procedencia';
+
+  @override
+  String get settingsTechnicalDetailsTitle => 'Mostrar los detalles técnicos';
+
+  @override
+  String get settingsThemeDark => 'Oscuro';
+
+  @override
+  String get settingsThemeKeywords => 'oscuro, claro, oled, negro';
+
+  @override
+  String get settingsThemeLight => 'Claro';
+
+  @override
+  String get settingsThemeOled => 'Negro OLED';
+
+  @override
+  String get settingsThemeTitle => 'Tema';
+
+  @override
+  String get settingsTimezoneFieldHelp =>
+      'Las estadísticas de calendario agrupan los días en esta zona horaria; vacío usa la predeterminada del servidor (UTC)';
+
+  @override
+  String get settingsTimezoneFieldHint => 'Europe/Amsterdam';
+
+  @override
+  String get settingsTimezoneFieldLabel => 'Zona horaria IANA';
+
+  @override
+  String get settingsTimezoneKeywords => 'estadísticas, calendario, racha';
+
+  @override
+  String get settingsTimezoneServerDefault => 'Predeterminada del servidor';
+
+  @override
+  String get settingsTimezoneTitle => 'Zona horaria';
+
+  @override
+  String get settingsTitle => 'Ajustes';
+
+  @override
+  String get settingsTrimDefaultHelp =>
+      'Los programas y libros sin una elección guardada propia se abren con el recorte de silencios activado';
+
+  @override
+  String get settingsTrimDefaultKeywords =>
+      'silencio, saltar, voz hablada, pódcast, libro';
+
+  @override
+  String get settingsTrimDefaultTitle => 'Recortar los silencios por defecto';
+
+  @override
+  String get settingsVisualizerIdleHelp =>
+      'Llena la pantalla con la pista cuando la música lleva unos minutos sonando sin que la toques';
+
+  @override
+  String get settingsVisualizerIdleKeywords =>
+      'salvapantallas, forma de onda, plato, ausente';
+
+  @override
+  String get settingsVisualizerIdleTitle =>
+      'Abrir el visualizador al estar inactivo';
+
+  @override
+  String speedMultiplier(String speed) {
+    return '${speed}x';
   }
 }

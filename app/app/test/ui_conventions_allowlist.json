@@ -282,22 +282,7 @@
     "hardcoded-copy": 15
   },
   "lib/src/settings/account_sections.dart": {
-    "hardcoded-copy": 24
-  },
-  "lib/src/settings/integrations_sections.dart": {
-    "hardcoded-copy": 64
-  },
-  "lib/src/settings/listening_sections.dart": {
-    "hardcoded-copy": 16
-  },
-  "lib/src/settings/settings_registry.dart": {
-    "hardcoded-copy": 43
-  },
-  "lib/src/settings/settings_screen.dart": {
-    "hardcoded-copy": 5
-  },
-  "lib/src/settings/settings_section_screen.dart": {
-    "hardcoded-copy": 113
+    "hardcoded-copy": 1
   },
   "lib/src/sharing/share_dialog.dart": {
     "hardcoded-copy": 14

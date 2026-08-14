@@ -51,6 +51,19 @@ final List<Locale> waxSupportedLocales = List<Locale>.unmodifiable([
   ...AppLocalizations.supportedLocales.where((l) => l != const Locale('en')),
 ]);
 
+/// What each supported language calls itself.
+///
+/// Not in the ARB, and beside the list it names rather than in the
+/// screen that draws it: a language names itself the same on every
+/// screen, and a Spanish reader looking for Spanish on an English
+/// interface is looking for "Español". A locale missing from here falls
+/// back to its own tag, which `settings_screen_test.dart` asserts never
+/// happens for a locale [waxSupportedLocales] offers.
+const Map<String, String> languageEndonyms = <String, String>{
+  'en': 'English',
+  'es': 'Español',
+};
+
 /// A stored BCP 47 tag as a Flutter Locale, via intl's parser (dart:ui
 /// has no Locale.parse). An unparseable tag answers null: follow the
 /// system rather than force a garbage locale.
@@ -62,4 +75,27 @@ Locale? localeFromTag(String tag) {
     scriptCode: parsed.scriptCode,
     countryCode: parsed.countryCode,
   );
+}
+
+/// The locale this build would draw for a stored tag, or null where it
+/// would draw none of them.
+///
+/// `es-MX` is a Spanish this build has and resolves to `es`; `fr` is not
+/// a language it has at all. The difference matters because
+/// `MaterialApp.locale` is a pin rather than a preference: a locale set
+/// there is resolved on its own and the device's own languages are never
+/// consulted (`widgets/localizations.dart`, where a non-null locale
+/// resolves as a one-element list). Pinning a tag this build cannot draw
+/// would answer a Spanish device in English and call it the listener's
+/// choice, so an unresolvable tag answers null and the system decides.
+Locale? supportedLocaleFor(String tag) {
+  final parsed = localeFromTag(tag);
+  if (parsed == null) return null;
+  final resolved = basicLocaleListResolution(<Locale>[
+    parsed,
+  ], waxSupportedLocales);
+  // Resolution always answers something - the first supported locale is
+  // its fallback - so what says a tag was understood is that the answer
+  // is in the language that was asked for.
+  return resolved.languageCode == parsed.languageCode ? resolved : null;
 }

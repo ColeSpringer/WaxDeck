@@ -16,6 +16,7 @@ import 'notify_labels.dart';
 class ScrobblingSection extends ConsumerWidget {
   const ScrobblingSection({super.key});
 
+  /// Service names, which are the same in every language.
   String _label(String service) => switch (service) {
     'lastfm' => 'Last.fm',
     'listenbrainz' => 'ListenBrainz',
@@ -27,6 +28,7 @@ class ScrobblingSection extends ConsumerWidget {
     WidgetRef ref,
     Scrobbler slot,
   ) async {
+    final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     if (slot.service == 'lastfm') {
       try {
@@ -35,14 +37,10 @@ class ScrobblingSection extends ConsumerWidget {
             .startLastfmConnect();
         await ref.read(urlOpenerProvider).open(authUrl);
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Approve WaxDeck in the browser tab, then come back here',
-            ),
-          ),
+          SnackBar(content: Text(l10n.settingsScrobblerApprove)),
         );
       } on WaxDeckApiException catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text(e.message)));
+        messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
       }
       return;
     }
@@ -58,11 +56,12 @@ class ScrobblingSection extends ConsumerWidget {
     WidgetRef ref,
     Scrobbler slot,
   ) async {
+    final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(scrobblersProvider.notifier).disconnect(slot.service);
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
@@ -81,6 +80,7 @@ class ScrobblingSection extends ConsumerWidget {
     Scrobbler slot, {
     required bool isAdmin,
   }) {
+    final l10n = context.l10n;
     final adminSetup = isAdmin && slot.service == 'lastfm';
     if (adminSetup && !slot.connected && !slot.available) {
       return Semantics(
@@ -89,7 +89,7 @@ class ScrobblingSection extends ConsumerWidget {
         child: TextButton(
           key: const ValueKey(SemanticsIds.scrobblerSetupLastfm),
           onPressed: () => _openLastfmSetup(context),
-          child: const Text('Set up…'),
+          child: Text(l10n.settingsScrobblerSetUp),
         ),
       );
     }
@@ -100,7 +100,7 @@ class ScrobblingSection extends ConsumerWidget {
             child: TextButton(
               key: ValueKey(SemanticsIds.scrobblerDisconnect(slot.service)),
               onPressed: () => _disconnect(context, ref, slot),
-              child: const Text('Disconnect'),
+              child: Text(l10n.settingsScrobblerDisconnect),
             ),
           )
         : Semantics(
@@ -111,7 +111,7 @@ class ScrobblingSection extends ConsumerWidget {
               onPressed: slot.available
                   ? () => _connect(context, ref, slot)
                   : null,
-              child: const Text('Connect'),
+              child: Text(l10n.settingsScrobblerConnect),
             ),
           );
     if (!adminSetup) return action;
@@ -122,7 +122,7 @@ class ScrobblingSection extends ConsumerWidget {
         WaxIconButton(
           key: const ValueKey(SemanticsIds.scrobblerSetupLastfm),
           glyph: WaxIcons.settings,
-          label: 'Server API credentials',
+          label: l10n.settingsScrobblerCredentialsLabel,
           semanticsId: SemanticsIds.scrobblerSetupLastfm,
           onPressed: () => _openLastfmSetup(context),
         ),
@@ -133,29 +133,38 @@ class ScrobblingSection extends ConsumerWidget {
   /// The row's one-line status: connection state first, then delivery
   /// health. A standing error outranks the connected pleasantry; the
   /// user opening this screen wants to know why scrobbles stopped.
-  String _slotStatus(Scrobbler slot) {
+  String _slotStatus(AppLocalizations l10n, Scrobbler slot) {
     if (!slot.connected) {
-      return slot.available ? 'Not connected' : 'Needs server API credentials';
+      return slot.available
+          ? l10n.settingsScrobblerNotConnected
+          : l10n.settingsScrobblerNeedsCredentials;
     }
-    if (slot.lastError != null) {
-      return 'Delivery failing: ${slot.lastError}';
-    }
-    final who = slot.username == null ? '' : ' as ${slot.username}';
+    final failure = slot.lastError;
+    if (failure != null) return l10n.settingsScrobblerFailing(failure);
+    // Four sentences rather than one built out of pieces: which half of
+    // "connected as X, delivering" comes first is the translator's, and
+    // a string joined here would take that away.
+    final who = slot.username;
     if (slot.lastSuccessAt != null) {
-      return 'Connected$who, delivering';
+      return who == null
+          ? l10n.settingsScrobblerDelivering
+          : l10n.settingsScrobblerDeliveringAs(who);
     }
-    return 'Connected$who';
+    return who == null
+        ? l10n.settingsScrobblerConnected
+        : l10n.settingsScrobblerConnectedAs(who);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final scrobblers = ref.watch(scrobblersProvider);
     final user = ref.watch(authControllerProvider).value?.user;
     final isAdmin = user?.roles.contains('admin') ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(title: 'Scrobbling'),
+        SectionHeader(title: l10n.settingsScrobblingTitle),
         switch (scrobblers) {
           AsyncData(:final value) => Column(
             children: [
@@ -172,7 +181,7 @@ class ScrobblingSection extends ConsumerWidget {
                       ? WaxIcons.waveform
                       : WaxIcons.warning,
                   title: _label(slot.service),
-                  subtitle: _slotStatus(slot),
+                  subtitle: _slotStatus(l10n, slot),
                   // The status can carry a whole server error; two
                   // lines would ellipse the half that says why.
                   subtitleMaxLines: 6,
@@ -180,7 +189,7 @@ class ScrobblingSection extends ConsumerWidget {
                 ),
             ],
           ),
-          AsyncError() => const Text('Could not load scrobbling connections'),
+          AsyncError() => Text(l10n.settingsScrobblingError),
           _ => const Padding(
             padding: EdgeInsets.all(WaxSpace.s8),
             child: LinearProgressIndicator(),
@@ -224,6 +233,10 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
           .connectListenBrainz(token, apiUrl: apiUrl.isEmpty ? null : apiUrl);
       navigator.pop();
     } on WaxDeckApiException catch (e) {
+      // The server's own sentence rather than the code's: this is a
+      // refusal of the token that was just typed, and the translation
+      // for `invalid-request` would say only that something was wrong.
+      // The same rule the password and timezone dialogs follow.
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(e.message)));
@@ -234,8 +247,9 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return AlertDialog(
-      title: const Text('Connect ListenBrainz'),
+      title: Text(l10n.settingsListenBrainzTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -244,9 +258,9 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
           TextField(
             key: const Key('listenbrainz-token-field'),
             controller: _tokenController,
-            decoration: const InputDecoration(
-              labelText: 'User token',
-              helperText: 'From your ListenBrainz profile page',
+            decoration: InputDecoration(
+              labelText: l10n.settingsListenBrainzToken,
+              helperText: l10n.settingsListenBrainzTokenHelp,
             ),
             autofocus: true,
           ),
@@ -254,9 +268,9 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
           TextField(
             key: const Key('listenbrainz-api-field'),
             controller: _apiUrlController,
-            decoration: const InputDecoration(
-              labelText: 'API server (optional)',
-              helperText: 'For a compatible server; empty for listenbrainz.org',
+            decoration: InputDecoration(
+              labelText: l10n.settingsListenBrainzApi,
+              helperText: l10n.settingsListenBrainzApiHelp,
             ),
             keyboardType: TextInputType.url,
           ),
@@ -265,16 +279,16 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.commonCancel),
         ),
         Semantics(
           identifier: SemanticsIds.listenbrainzConnectConfirm,
-          label: 'Connect',
+          label: l10n.settingsScrobblerConnect,
           button: true,
           child: FilledButton(
             key: const Key(SemanticsIds.listenbrainzConnectConfirm),
             onPressed: _busy ? null : _connect,
-            child: const Text('Connect'),
+            child: Text(l10n.settingsScrobblerConnect),
           ),
         ),
       ],
@@ -328,6 +342,9 @@ class _LastfmCredentialsDialogState
           );
       navigator.pop();
     } on WaxDeckApiException catch (e) {
+      // The server's own sentence, for the same reason the ListenBrainz
+      // dialog keeps one: this refuses the pair that was just typed, and
+      // says which half is missing.
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(e.message)));
@@ -338,9 +355,10 @@ class _LastfmCredentialsDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final config = ref.watch(scrobblingAdminConfigProvider);
     return AlertDialog(
-      title: const Text('Last.fm API credentials'),
+      title: Text(l10n.settingsLastfmCredentialsTitle),
       content: switch (config) {
         AsyncData(:final value) => Builder(
           builder: (context) {
@@ -353,9 +371,9 @@ class _LastfmCredentialsDialogState
                 TextField(
                   key: const Key('lastfm-api-key-field'),
                   controller: _apiKeyController,
-                  decoration: const InputDecoration(
-                    labelText: 'API key',
-                    helperText: 'Register at last.fm/api/account/create',
+                  decoration: InputDecoration(
+                    labelText: l10n.settingsLastfmApiKey,
+                    helperText: l10n.settingsLastfmApiKeyHelp,
                   ),
                   autofocus: true,
                 ),
@@ -365,9 +383,9 @@ class _LastfmCredentialsDialogState
                   controller: _secretController,
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText: 'Shared secret',
+                    labelText: l10n.settingsLastfmSecret,
                     helperText: value.lastfmSecretSet
-                        ? 'Stored sealed; never shown again'
+                        ? l10n.settingsLastfmSecretHelp
                         : null,
                   ),
                 ),
@@ -375,7 +393,7 @@ class _LastfmCredentialsDialogState
             );
           },
         ),
-        AsyncError() => const Text('Could not load the credential state'),
+        AsyncError() => Text(l10n.settingsLastfmCredentialsError),
         _ => const Padding(
           padding: EdgeInsets.all(WaxSpace.s8),
           child: LinearProgressIndicator(),
@@ -391,23 +409,23 @@ class _LastfmCredentialsDialogState
             child: TextButton(
               key: const Key(SemanticsIds.lastfmCredentialsClear),
               onPressed: _busy ? null : () => _save(clear: true),
-              child: const Text('Clear'),
+              child: Text(l10n.settingsLastfmCredentialsClear),
             ),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.commonCancel),
         ),
         Semantics(
           identifier: SemanticsIds.lastfmCredentialsSave,
-          label: 'Save',
+          label: l10n.commonSave,
           button: true,
           child: FilledButton(
             key: const Key(SemanticsIds.lastfmCredentialsSave),
             onPressed: _busy || config is! AsyncData
                 ? null
                 : () => _save(clear: false),
-            child: const Text('Save'),
+            child: Text(l10n.commonSave),
           ),
         ),
       ],
@@ -460,20 +478,19 @@ class _DiscordPresenceSectionState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final on = ref.watch(discordPresenceEnabledProvider);
     final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Discord'),
+        SectionHeader(title: l10n.settingsGroupDiscord),
         WaxSettingRow(
-          title: 'Show what I am listening to',
-          help:
-              'Sets your Discord status while WaxDeck plays, through the '
-              'Discord app on this machine',
+          title: l10n.settingsDiscordPresenceRowTitle,
+          help: l10n.settingsDiscordPresenceHelp,
           control: WaxSwitch(
             value: on,
-            label: 'Show what I am listening to on Discord',
+            label: l10n.settingsDiscordPresenceTitle,
             semanticsId: SemanticsIds.setting('discord-presence'),
             onChanged: ref.read(discordPresenceEnabledProvider.notifier).set,
           ),
@@ -495,12 +512,9 @@ class _DiscordPresenceSectionState
                   child: TextField(
                     key: const Key('discord-application-id-field'),
                     controller: _id,
-                    decoration: const InputDecoration(
-                      labelText: 'Publish as another application (optional)',
-                      helperText:
-                          'Empty publishes as WaxDeck. An application ID from '
-                          'discord.com/developers changes the name Discord '
-                          'shows and where its cover art comes from',
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsDiscordApplicationLabel,
+                      helperText: l10n.settingsDiscordApplicationHelp,
                     ),
                     keyboardType: TextInputType.number,
                     onSubmitted: (_) => _commit(),
@@ -509,10 +523,7 @@ class _DiscordPresenceSectionState
                 Padding(
                   padding: const EdgeInsets.only(top: WaxSpace.s8),
                   child: Text(
-                    'The cover is one image for every track, uploaded to '
-                    'that application rather than taken from your library: '
-                    'Discord fetches art through its own servers, which '
-                    'cannot reach a private one.',
+                    l10n.settingsDiscordCoverNote,
                     style: WaxType.bodySmall.copyWith(
                       color: colors.textSecondary,
                     ),
@@ -532,30 +543,31 @@ class AppPasswordsSection extends ConsumerWidget {
   const AppPasswordsSection({super.key});
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final controller = TextEditingController();
     final messenger = ScaffoldMessenger.of(context);
     final label = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('New app password'),
+        title: Text(l10n.settingsAppPasswordNewSpoken),
         content: TextField(
           key: const Key('app-password-label-field'),
           controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Label',
-            helperText: 'Which app is this for?',
+          decoration: InputDecoration(
+            labelText: l10n.settingsAppPasswordLabel,
+            helperText: l10n.settingsAppPasswordLabelHelp,
           ),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             key: const Key('app-password-create-confirm'),
             onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('Create'),
+            child: Text(l10n.settingsAppPasswordCreate),
           ),
         ],
       ),
@@ -569,15 +581,12 @@ class AppPasswordsSection extends ConsumerWidget {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('App password created'),
+          title: Text(l10n.settingsAppPasswordCreatedTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Copy it now; the server stores it sealed and never '
-                'shows it again.',
-              ),
+              Text(l10n.settingsAppPasswordCreatedMessage),
               const SizedBox(height: WaxSpace.s12),
               SelectableText(
                 created.secret,
@@ -591,47 +600,47 @@ class AppPasswordsSection extends ConsumerWidget {
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: created.secret));
               },
-              child: const Text('Copy'),
+              child: Text(l10n.settingsAppPasswordCopy),
             ),
             FilledButton(
               key: const Key('app-password-secret-done'),
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+              child: Text(l10n.settingsAppPasswordDone),
             ),
           ],
         ),
       );
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final passwords = ref.watch(appPasswordsProvider);
     final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(
-          title: 'App passwords',
-          actionLabel: 'New',
-          spokenActionLabel: 'New app password',
+          title: l10n.settingsAppPasswordsTitle,
+          actionLabel: l10n.settingsAppPasswordNewAction,
+          spokenActionLabel: l10n.settingsAppPasswordNewSpoken,
           semanticsId: SemanticsIds.appPasswordAdd,
           onAction: () => _create(context, ref),
         ),
         Text(
-          'For Subsonic apps and podcast sync clients. Your login '
-          'password never works there.',
+          l10n.settingsAppPasswordsBlurb,
           style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
         ),
         const SizedBox(height: WaxSpace.s8),
         switch (passwords) {
           AsyncData(:final value) =>
             value.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: WaxSpace.s8),
-                    child: Text('No app passwords yet'),
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
+                    child: Text(l10n.settingsAppPasswordsEmpty),
                   )
                 : Column(
                     children: [
@@ -639,7 +648,9 @@ class AppPasswordsSection extends ConsumerWidget {
                         WaxOptionRow(
                           key: ValueKey('app-password-${ap.id}'),
                           glyph: WaxIcons.key,
-                          title: ap.label.isEmpty ? 'Unlabeled' : ap.label,
+                          title: ap.label.isEmpty
+                              ? l10n.settingsAppPasswordUnlabeled
+                              : ap.label,
                           trailing: WaxIconButton(
                             key: ValueKey(
                               SemanticsIds.appPasswordRevoke(ap.id),
@@ -647,11 +658,13 @@ class AppPasswordsSection extends ConsumerWidget {
                             glyph: WaxIcons.delete,
                             // The same fallback the title takes: an
                             // unlabelled password would otherwise give
-                            // two identical "Revoke" buttons with a
-                            // trailing space and no subject.
-                            label:
-                                'Revoke '
-                                '${ap.label.isEmpty ? 'Unlabeled' : ap.label}',
+                            // two identical "Revoke" buttons with no
+                            // subject.
+                            label: l10n.settingsAppPasswordRevoke(
+                              ap.label.isEmpty
+                                  ? l10n.settingsAppPasswordUnlabeled
+                                  : ap.label,
+                            ),
                             semanticsId: SemanticsIds.appPasswordRevoke(ap.id),
                             onPressed: () => ref
                                 .read(appPasswordsProvider.notifier)
@@ -660,7 +673,7 @@ class AppPasswordsSection extends ConsumerWidget {
                         ),
                     ],
                   ),
-          AsyncError() => const Text('Could not load app passwords'),
+          AsyncError() => Text(l10n.settingsAppPasswordsError),
           _ => const Padding(
             padding: EdgeInsets.all(WaxSpace.s8),
             child: LinearProgressIndicator(),
@@ -690,74 +703,87 @@ class _ConfigField {
   final String? helper;
 }
 
-/// The per-kind config surface. Mirrors the server's provider
-/// validation; the server's message is the authority when they drift.
-const _kindFields = <String, List<_ConfigField>>{
-  'pushover': [
-    _ConfigField('token', 'Application token', secret: true),
-    _ConfigField('userKey', 'User or group key', secret: true),
+/// The per-kind config surface, and the kinds themselves: the picker
+/// offers these keys, so a service cannot be listed with no fields
+/// behind it, nor carry fields nothing can reach.
+///
+/// Mirrors the server's provider validation; the server's message is the
+/// authority when they drift. A map rather than a switch because the
+/// keys are half of what it answers.
+Map<String, List<_ConfigField>> _kindFields(
+  AppLocalizations l10n,
+) => <String, List<_ConfigField>>{
+  'pushover': <_ConfigField>[
+    _ConfigField('token', l10n.settingsNotifyPushoverToken, secret: true),
+    _ConfigField('userKey', l10n.settingsNotifyPushoverUserKey, secret: true),
     _ConfigField(
       'priority',
-      'Priority',
+      l10n.settingsNotifyPriority,
       optional: true,
       integer: true,
-      helper: '-2 (quietest) to 2 (emergency)',
+      helper: l10n.settingsNotifyPushoverPriorityHelp,
     ),
   ],
-  'ntfy': [
-    _ConfigField('topic', 'Topic'),
+  'ntfy': <_ConfigField>[
+    _ConfigField('topic', l10n.settingsNotifyNtfyTopic),
     _ConfigField(
       'serverUrl',
-      'Server URL',
+      l10n.settingsNotifyServerUrl,
       optional: true,
-      helper: 'Empty uses ntfy.sh',
+      helper: l10n.settingsNotifyNtfyServerHelp,
     ),
-    _ConfigField('accessToken', 'Access token', optional: true, secret: true),
+    _ConfigField(
+      'accessToken',
+      l10n.settingsNotifyAccessToken,
+      optional: true,
+      secret: true,
+    ),
   ],
-  'gotify': [
-    _ConfigField('serverUrl', 'Server URL'),
-    _ConfigField('token', 'Application token', secret: true),
+  'gotify': <_ConfigField>[
+    _ConfigField('serverUrl', l10n.settingsNotifyServerUrl),
+    _ConfigField('token', l10n.settingsNotifyPushoverToken, secret: true),
     _ConfigField(
       'priority',
-      'Priority',
+      l10n.settingsNotifyPriority,
       optional: true,
       integer: true,
-      helper: '0 to 10',
+      helper: l10n.settingsNotifyGotifyPriorityHelp,
     ),
   ],
-  'discord': [
+  'discord': <_ConfigField>[
     _ConfigField(
       'webhookUrl',
-      'Webhook URL',
+      l10n.settingsNotifyWebhookUrl,
       secret: true,
-      helper: 'A discord.com webhook URL',
+      helper: l10n.settingsNotifyDiscordWebhookHelp,
     ),
   ],
-  'webhook': [
+  'webhook': <_ConfigField>[
     _ConfigField(
       'url',
-      'URL',
-      helper: 'Receives {event, title, body, timestamp} as JSON',
+      l10n.settingsNotifyUrl,
+      helper: l10n.settingsNotifyWebhookHelp,
     ),
   ],
-  'apprise': [
-    _ConfigField('serverUrl', 'Apprise server URL'),
+  'apprise': <_ConfigField>[
+    _ConfigField('serverUrl', l10n.settingsNotifyAppriseServerUrl),
     _ConfigField(
       'targets',
-      'Targets',
+      l10n.settingsNotifyAppriseTargets,
       optional: true,
-      helper: 'Apprise URLs; empty uses the server\'s own configuration',
+      helper: l10n.settingsNotifyAppriseTargetsHelp,
     ),
   ],
-  'unifiedpush': [
+  'unifiedpush': <_ConfigField>[
     _ConfigField(
       'endpoint',
-      'Endpoint URL',
-      helper: 'Usually registered by the app through its distributor',
+      l10n.settingsNotifyEndpointUrl,
+      helper: l10n.settingsNotifyUnifiedPushHelp,
     ),
   ],
 };
 
+/// Service names, which are the same in every language.
 String _kindLabel(String kind) => switch (kind) {
   'pushover' => 'Pushover',
   'ntfy' => 'ntfy',
@@ -820,7 +846,9 @@ class _EventChecklist extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: WaxSpace.s8),
                   child: Text(
-                    event.scope == 'server' ? 'Server events' : 'My events',
+                    event.scope == 'server'
+                        ? l10n.settingsNotifyServerEvents
+                        : l10n.settingsNotifyMyEvents,
                     style: WaxType.label.copyWith(color: colors.textSecondary),
                   ),
                 ),
@@ -853,7 +881,7 @@ class _EventChecklist extends ConsumerWidget {
           );
         },
       ),
-      AsyncError() => const Text('Could not load the event catalog'),
+      AsyncError() => Text(l10n.settingsNotifyCatalogError),
       _ => const Padding(
         padding: EdgeInsets.all(WaxSpace.s8),
         child: LinearProgressIndicator(),
@@ -900,12 +928,6 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
   var _busy = false;
 
   @override
-  void initState() {
-    super.initState();
-    _seedFields();
-  }
-
-  @override
   void dispose() {
     _labelController.dispose();
     for (final controller in _fieldControllers.values) {
@@ -914,26 +936,28 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
     super.dispose();
   }
 
-  void _seedFields() {
-    final config = widget.existing?.config ?? const <String, Object?>{};
-    for (final field in _kindFields[_kind] ?? const <_ConfigField>[]) {
-      _fieldControllers.putIfAbsent(
-        '$_kind.${field.key}',
-        () => TextEditingController(text: '${config[field.key] ?? ''}'),
-      );
-    }
-  }
-
+  /// The controller for one field, made the first time that field is
+  /// drawn.
+  ///
+  /// On demand rather than seeded ahead: a field's label is copy now, so
+  /// the list of them needs a locale, and `initState` has no context to
+  /// read one from. Switching kinds needs no seeding either - the new
+  /// kind's controllers are made as its fields are built.
   TextEditingController _controllerFor(_ConfigField field) =>
-      _fieldControllers['$_kind.${field.key}']!;
+      _fieldControllers.putIfAbsent('$_kind.${field.key}', () {
+        final config = widget.existing?.config ?? const <String, Object?>{};
+        return TextEditingController(text: '${config[field.key] ?? ''}');
+      });
 
-  Map<String, Object?>? _buildConfig() {
+  Map<String, Object?>? _buildConfig(AppLocalizations l10n) {
     final config = <String, Object?>{};
-    for (final field in _kindFields[_kind] ?? const <_ConfigField>[]) {
+    for (final field in _kindFields(l10n)[_kind] ?? const <_ConfigField>[]) {
       final text = _controllerFor(field).text.trim();
       if (text.isEmpty) {
         if (!field.optional) {
-          setState(() => _error = '${field.label} is required');
+          setState(
+            () => _error = l10n.settingsNotifyFieldRequired(field.label),
+          );
           return null;
         }
         continue;
@@ -941,7 +965,9 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
       if (field.integer) {
         final parsed = int.tryParse(text);
         if (parsed == null) {
-          setState(() => _error = '${field.label} must be a whole number');
+          setState(
+            () => _error = l10n.settingsNotifyFieldWholeNumber(field.label),
+          );
           return null;
         }
         config[field.key] = parsed;
@@ -954,7 +980,7 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
 
   Future<void> _save() async {
     if (_busy) return;
-    final config = _buildConfig();
+    final config = _buildConfig(context.l10n);
     if (config == null) return;
     setState(() {
       _busy = true;
@@ -982,12 +1008,14 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final kinds = _kindFields(l10n);
     final creating = widget.existing == null;
     return AlertDialog(
       title: Text(
         creating
-            ? 'New notification target'
-            : 'Edit ${_kindLabel(_kind)} target',
+            ? l10n.settingsNotifyTargetNewTitle
+            : l10n.settingsNotifyTargetEditTitle(_kindLabel(_kind)),
       ),
       content: SizedBox(
         width: 420,
@@ -1000,9 +1028,11 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
                 DropdownButtonFormField<String>(
                   key: const Key('notify-target-kind'),
                   initialValue: _kind,
-                  decoration: const InputDecoration(labelText: 'Deliver via'),
+                  decoration: InputDecoration(
+                    labelText: l10n.settingsNotifyDeliverVia,
+                  ),
                   items: [
-                    for (final kind in _kindFields.keys)
+                    for (final kind in kinds.keys)
                       DropdownMenuItem(
                         value: kind,
                         child: Text(_kindLabel(kind)),
@@ -1011,31 +1041,30 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
                   onChanged: (kind) => setState(() {
                     _kind = kind ?? _kind;
                     _error = null;
-                    _seedFields();
                   }),
                 ),
               TextField(
                 key: const Key('notify-target-label'),
                 controller: _labelController,
-                decoration: const InputDecoration(
-                  labelText: 'Label (optional)',
+                decoration: InputDecoration(
+                  labelText: l10n.settingsNotifyTargetLabel,
                 ),
               ),
-              for (final field in _kindFields[_kind] ?? const <_ConfigField>[])
+              for (final field in kinds[_kind] ?? const <_ConfigField>[])
                 TextField(
                   key: ValueKey('notify-config-${field.key}'),
                   controller: _controllerFor(field),
                   obscureText: field.secret,
                   decoration: InputDecoration(
                     labelText: field.optional
-                        ? '${field.label} (optional)'
+                        ? l10n.settingsNotifyFieldOptional(field.label)
                         : field.label,
                     helperText: field.helper,
                   ),
                 ),
               const SizedBox(height: WaxSpace.s12),
               Text(
-                'Notify me about',
+                l10n.settingsNotifyAbout,
                 style: WaxType.label.copyWith(
                   color: WaxColors.of(context).textPrimary,
                 ),
@@ -1064,12 +1093,12 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.commonCancel),
         ),
         FilledButton(
           key: const Key('notify-target-save'),
           onPressed: _busy ? null : _save,
-          child: const Text('Save'),
+          child: Text(l10n.commonSave),
         ),
       ],
     );
@@ -1113,35 +1142,45 @@ class _TargetList extends ConsumerWidget {
   }
 
   Future<void> _test(BuildContext context, NotificationTarget target) async {
+    final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await controller.sendTest(target.pid);
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Test queued; the outcome shows on the target shortly'),
-        ),
+        SnackBar(content: Text(l10n.settingsNotifyTestQueued)),
       );
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
-  String _healthLine(NotificationTarget t) {
-    if (t.lastError != null) return 'Last delivery failed: ${t.lastError}';
-    if (t.lastSuccessAt != null) return 'Last delivered ${t.lastSuccessAt}';
-    return '';
+  /// The delivery line under a target, or null where it has neither
+  /// failed nor delivered.
+  ///
+  /// Null rather than an empty string, so the row draws it with one
+  /// call: an empty sentinel has to be asked for twice, and this one
+  /// formats a date.
+  String? _healthLine(AppLocalizations l10n, NotificationTarget t) {
+    final failure = t.lastError;
+    if (failure != null) return l10n.settingsNotifyLastFailed(failure);
+    final delivered = t.lastSuccessAt;
+    if (delivered != null) {
+      return l10n.settingsNotifyLastDelivered(l10n.formatStamp(delivered));
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(
           title: title,
-          actionLabel: 'Add',
-          spokenActionLabel: 'Add notification target',
+          actionLabel: l10n.settingsNotifyTargetAddAction,
+          spokenActionLabel: l10n.settingsNotifyTargetAddSpoken,
           semanticsId: addKey,
           onAction: () => _edit(context, ref),
         ),
@@ -1153,9 +1192,9 @@ class _TargetList extends ConsumerWidget {
         switch (targets) {
           AsyncData(:final value) =>
             value.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: WaxSpace.s8),
-                    child: Text('No notification targets yet'),
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
+                    child: Text(l10n.settingsNotifyTargetsEmpty),
                   )
                 : Column(
                     children: [
@@ -1173,8 +1212,7 @@ class _TargetList extends ConsumerWidget {
                               : _kindLabel(target.kind),
                           subtitle: [
                             _kindLabel(target.kind),
-                            if (_healthLine(target).isNotEmpty)
-                              _healthLine(target),
+                            ?_healthLine(l10n, target),
                           ].join('\n'),
                           // Two lines are the kind and the health line;
                           // a failing delivery adds the server's own
@@ -1189,7 +1227,7 @@ class _TargetList extends ConsumerWidget {
                                   SemanticsIds.notifyTargetTest(target.pid),
                                 ),
                                 glyph: WaxIcons.bell,
-                                label: 'Send test',
+                                label: l10n.settingsNotifySendTest,
                                 semanticsId: SemanticsIds.notifyTargetTest(
                                   target.pid,
                                 ),
@@ -1200,7 +1238,7 @@ class _TargetList extends ConsumerWidget {
                                   'notify-target-remove-${target.pid}',
                                 ),
                                 glyph: WaxIcons.delete,
-                                label: 'Remove',
+                                label: l10n.settingsNotifyTargetRemove,
                                 onPressed: () => controller.remove(target.pid),
                               ),
                             ],
@@ -1208,7 +1246,7 @@ class _TargetList extends ConsumerWidget {
                         ),
                     ],
                   ),
-          AsyncError() => const Text('Could not load notification targets'),
+          AsyncError() => Text(l10n.settingsNotifyTargetsError),
           _ => const Padding(
             padding: EdgeInsets.all(WaxSpace.s8),
             child: LinearProgressIndicator(),
@@ -1226,13 +1264,11 @@ class PersonalNotificationTargetsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final user = ref.watch(authControllerProvider).value?.user;
     return _TargetList(
-      title: 'My notifications',
-      subtitle:
-          'Where your events (new episodes, review queue) get '
-          'delivered: Pushover, ntfy, Gotify, Discord, webhooks, or '
-          'this device\'s push registration.',
+      title: l10n.settingsNotifyMyTitle,
+      subtitle: l10n.settingsNotifyMyBlurb,
       serverScope: false,
       ownerIsAdmin: user?.roles.contains('admin') ?? false,
       targets: ref.watch(myNotificationTargetsProvider),
@@ -1248,11 +1284,10 @@ class ServerNotificationTargetsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return _TargetList(
-      title: 'Server notifications',
-      subtitle:
-          'Operations events (account requests, backup outcomes) '
-          'delivered to server-wide destinations.',
+      title: l10n.settingsNotifyServerTitle,
+      subtitle: l10n.settingsNotifyServerBlurb,
       serverScope: true,
       // The section renders behind the admin gate; the flag only
       // shapes the personal checklist, which server scope never shows.

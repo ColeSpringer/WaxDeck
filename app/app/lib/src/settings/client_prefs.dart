@@ -646,30 +646,3 @@ class ReduceMotion extends BoolSetting {
 final reduceMotionProvider = NotifierProvider<ReduceMotion, bool>(
   ReduceMotion.new,
 );
-
-/// How a duration reads on a control and to a screen reader.
-String spellSeconds(int seconds) {
-  if (seconds % 60 == 0 && seconds >= 60) {
-    final minutes = seconds ~/ 60;
-    return minutes == 1 ? '1 minute' : '$minutes minutes';
-  }
-  return '$seconds seconds';
-}
-
-/// How a wait reads on a control: "a day", not "24 hours".
-String spellHours(int hours) {
-  if (hours % 24 == 0 && hours >= 24) {
-    final days = hours ~/ 24;
-    return days == 1 ? '1 day' : '$days days';
-  }
-  return hours == 1 ? '1 hour' : '$hours hours';
-}
-
-/// How a speed reads on a control: `1x`, `1.2x`, never `1.0x`.
-String spellSpeed(double speed) {
-  final text = speed.toStringAsFixed(2);
-  final trimmed = text
-      .replaceAll(RegExp(r'0+$'), '')
-      .replaceAll(RegExp(r'\.$'), '');
-  return '${trimmed}x';
-}

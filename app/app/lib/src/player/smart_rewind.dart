@@ -1,3 +1,5 @@
+import '../l10n/l10n.dart';
+
 /// How far a spoken-word resume steps back for context.
 ///
 /// Coming back to a book after a night is coming back mid-sentence, and
@@ -48,10 +50,10 @@ enum SmartRewind {
   }
 
   /// What the setting's picker says for this option.
-  String get label => switch (this) {
-    SmartRewind.off => 'Off',
-    SmartRewind.short => 'A little',
-    SmartRewind.long => 'More',
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    SmartRewind.off => l10n.settingsOptionOff,
+    SmartRewind.short => l10n.settingsSmartRewindLittle,
+    SmartRewind.long => l10n.settingsSmartRewindMore,
   };
 }
 

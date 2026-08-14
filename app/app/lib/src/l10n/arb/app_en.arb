@@ -64,6 +64,10 @@
   "@commonRetry": {
     "description": "Button that runs the request that just failed again."
   },
+  "commonSave": "Save",
+  "@commonSave": {
+    "description": "Button that commits an edit. Used across dialogs."
+  },
   "devicesMultiPartAudiobook": "Multi-part audiobooks can't play on {endpoint} yet. Play it on this device instead.",
   "@devicesMultiPartAudiobook": {
     "description": "Snackbar when handing a multi-part audiobook to a device that cannot play one. {endpoint} is that device's user-chosen name.",
@@ -77,6 +81,32 @@
   "devicesNothingToSend": "Nothing is playing here to send. Start something first.",
   "@devicesNothingToSend": {
     "description": "Snackbar when the device picker is asked to hand playback over with nothing playing."
+  },
+  "durationDays": "{days, plural, =1{1 day} other{{days} days}}",
+  "@durationDays": {
+    "description": "A wait in whole days, as a picker option: a day reads better than twenty-four hours.",
+    "placeholders": {
+      "days": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        }
+      }
+    }
+  },
+  "durationHours": "{hours, plural, =1{1 hour} other{{hours} hours}}",
+  "@durationHours": {
+    "description": "A wait in hours, as a picker option. The design system's table carries this same message for the durations its own components spell (wax_en.arb, durationHours), and a test holds the two to the same words - so translate them alike or a listener meets one unit spelled two ways on adjacent screens.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        }
+      }
+    }
   },
   "errorCatalogBusy": "Another job is holding the library's files. Try again shortly.",
   "@errorCatalogBusy": {
@@ -268,6 +298,14 @@
   "@healthWriteUnsynced": {
     "description": "Name of the health rule `write-unsynced`."
   },
+  "libraryBrowseSortAtoZ": "A to Z",
+  "@libraryBrowseSortAtoZ": {
+    "description": "Library index order: alphabetical by name."
+  },
+  "libraryBrowseSortMostFirst": "Most first",
+  "@libraryBrowseSortMostFirst": {
+    "description": "Library index order: the groups holding the most come first."
+  },
   "localeFontSample": "Music, podcasts, and audiobooks.",
   "@localeFontSample": {
     "description": "Never displayed. Any natural sentence in this language, written the way the language actually is, accents and all: the app scans it for the scripts this locale needs and loads their fonts before the interface draws."
@@ -433,6 +471,1393 @@
       "months": {
         "type": "int",
         "example": "4"
+      }
+    }
+  },
+  "settingsAboutKeywords": "version, licenses, open source, build, defects, errors, diagnostics, log, crash",
+  "@settingsAboutKeywords": {
+    "description": "Comma-separated search keywords for the \"About WaxDeck\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsAboutTitle": "About WaxDeck",
+  "@settingsAboutTitle": {
+    "description": "Name of the \"About WaxDeck\" setting, drawn on its own row and in settings search."
+  },
+  "settingsAccountSignedIn": "Signed in",
+  "@settingsAccountSignedIn": {
+    "description": "What the account row reads for an account with no display name of its own."
+  },
+  "settingsAdminConsoleBlurb": "Libraries, users, scans, backups, and the audit log",
+  "@settingsAdminConsoleBlurb": {
+    "description": "The line under the row that opens the admin console."
+  },
+  "settingsAdminConsoleKeywords": "read-only, signup, libraries, users, backups, schedules, trash, audit, transcoding, genres",
+  "@settingsAdminConsoleKeywords": {
+    "description": "Comma-separated search keywords for the \"Admin console\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsAdminConsoleOpenTitle": "Open the admin console",
+  "@settingsAdminConsoleOpenTitle": {
+    "description": "Name of the row that leads out of settings into the admin console."
+  },
+  "settingsAdminConsoleTitle": "Admin console",
+  "@settingsAdminConsoleTitle": {
+    "description": "Name of the \"Admin console\" setting, drawn on its own row and in settings search."
+  },
+  "settingsAppPasswordCopy": "Copy",
+  "@settingsAppPasswordCopy": {
+    "description": "Button that copies the new app password to the clipboard."
+  },
+  "settingsAppPasswordCreate": "Create",
+  "@settingsAppPasswordCreate": {
+    "description": "Button that creates the app password."
+  },
+  "settingsAppPasswordCreatedMessage": "Copy it now; the server stores it sealed and never shows it again.",
+  "@settingsAppPasswordCreatedMessage": {
+    "description": "Body of the dialog showing a newly created app password."
+  },
+  "settingsAppPasswordCreatedTitle": "App password created",
+  "@settingsAppPasswordCreatedTitle": {
+    "description": "Title of the dialog showing a newly created app password."
+  },
+  "settingsAppPasswordDone": "Done",
+  "@settingsAppPasswordDone": {
+    "description": "Button that closes the dialog showing a new app password."
+  },
+  "settingsAppPasswordLabel": "Label",
+  "@settingsAppPasswordLabel": {
+    "description": "Field for what an app password is called."
+  },
+  "settingsAppPasswordLabelHelp": "Which app is this for?",
+  "@settingsAppPasswordLabelHelp": {
+    "description": "The line under the app password label field."
+  },
+  "settingsAppPasswordNewAction": "New",
+  "@settingsAppPasswordNewAction": {
+    "description": "Action on the app passwords heading that creates one."
+  },
+  "settingsAppPasswordNewSpoken": "New app password",
+  "@settingsAppPasswordNewSpoken": {
+    "description": "What a screen reader hears for the app password create action, and the title of the dialog it opens."
+  },
+  "settingsAppPasswordRevoke": "Revoke {label}",
+  "@settingsAppPasswordRevoke": {
+    "description": "The button that revokes one app password. {label} is what that password is called, so two of them do not sound alike.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Feishin"
+      }
+    }
+  },
+  "settingsAppPasswordUnlabeled": "Unlabeled",
+  "@settingsAppPasswordUnlabeled": {
+    "description": "What an app password with no label of its own is called."
+  },
+  "settingsAppPasswordsBlurb": "For Subsonic apps and podcast sync clients. Your login password never works there.",
+  "@settingsAppPasswordsBlurb": {
+    "description": "The line under the app passwords heading, saying what they are for."
+  },
+  "settingsAppPasswordsEmpty": "No app passwords yet",
+  "@settingsAppPasswordsEmpty": {
+    "description": "Shown where the app password rows would be when there are none."
+  },
+  "settingsAppPasswordsError": "Could not load app passwords",
+  "@settingsAppPasswordsError": {
+    "description": "Shown where the app password rows would be when the read failed."
+  },
+  "settingsAppPasswordsKeywords": "subsonic, gpodder, token, third party",
+  "@settingsAppPasswordsKeywords": {
+    "description": "Comma-separated search keywords for the \"App passwords\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsAppPasswordsTitle": "App passwords",
+  "@settingsAppPasswordsTitle": {
+    "description": "Name of the \"App passwords\" setting, drawn on its own row and in settings search."
+  },
+  "settingsArtworkCacheClear": "Clear",
+  "@settingsArtworkCacheClear": {
+    "description": "Button that empties the artwork cache."
+  },
+  "settingsArtworkCacheCleared": "Artwork cache cleared",
+  "@settingsArtworkCacheCleared": {
+    "description": "Snackbar after the artwork cache has been emptied."
+  },
+  "settingsArtworkCacheHelp": "Covers are re-fetched as they are needed again",
+  "@settingsArtworkCacheHelp": {
+    "description": "The line under the artwork cache row, saying what clearing it costs."
+  },
+  "settingsArtworkCacheKeywords": "covers, images, clear, space",
+  "@settingsArtworkCacheKeywords": {
+    "description": "Comma-separated search keywords for the \"Artwork cache\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsArtworkCacheTitle": "Artwork cache",
+  "@settingsArtworkCacheTitle": {
+    "description": "Name of the \"Artwork cache\" setting, drawn on its own row and in settings search."
+  },
+  "settingsArtworkGlowHelp": "The colour a cover casts behind the player",
+  "@settingsArtworkGlowHelp": {
+    "description": "The line under the artwork glow switch."
+  },
+  "settingsArtworkGlowKeywords": "backdrop, colour, color, player, wash",
+  "@settingsArtworkGlowKeywords": {
+    "description": "Comma-separated search keywords for the \"Artwork glow\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsArtworkGlowTitle": "Artwork glow",
+  "@settingsArtworkGlowTitle": {
+    "description": "Name of the \"Artwork glow\" setting, drawn on its own row and in settings search."
+  },
+  "settingsAutoRemoveAfterHelp": "How long a finished episode stays before it goes",
+  "@settingsAutoRemoveAfterHelp": {
+    "description": "The line under the wait-before-removing setting."
+  },
+  "settingsAutoRemoveAfterTitle": "Wait before removing",
+  "@settingsAutoRemoveAfterTitle": {
+    "description": "Name of the setting for how long a finished episode is kept."
+  },
+  "settingsAutoRemoveFinishedHelp": "Reclaims a downloaded episode once it has been finished for a while. Books and albums are left alone",
+  "@settingsAutoRemoveFinishedHelp": {
+    "description": "The line under the remove-finished-episodes switch."
+  },
+  "settingsAutoRemoveFinishedKeywords": "tidy, reclaim, space, listened, podcast",
+  "@settingsAutoRemoveFinishedKeywords": {
+    "description": "Comma-separated search keywords for the \"Remove finished episodes\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsAutoRemoveFinishedTitle": "Remove finished episodes",
+  "@settingsAutoRemoveFinishedTitle": {
+    "description": "Name of the \"Remove finished episodes\" setting, drawn on its own row and in settings search."
+  },
+  "settingsAutoplayHelp": "Lets a queue another device hands over start here. Off means it arrives ready and waits to be tapped",
+  "@settingsAutoplayHelp": {
+    "description": "The line under the start-without-asking switch."
+  },
+  "settingsAutoplayKeywords": "autoplay, resume, handover, connect, browser",
+  "@settingsAutoplayKeywords": {
+    "description": "Comma-separated search keywords for the \"Start playing without asking\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsAutoplayTitle": "Start playing without asking",
+  "@settingsAutoplayTitle": {
+    "description": "Name of the \"Start playing without asking\" setting, drawn on its own row and in settings search."
+  },
+  "settingsBookSpeedHelp": "The speed a book plays at until you set one for it",
+  "@settingsBookSpeedHelp": {
+    "description": "The line under the default audiobook speed setting."
+  },
+  "settingsBookSpeedKeywords": "rate, faster, default, narration",
+  "@settingsBookSpeedKeywords": {
+    "description": "Comma-separated search keywords for the \"Audiobook speed\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsBookSpeedTitle": "Audiobook speed",
+  "@settingsBookSpeedTitle": {
+    "description": "Name of the \"Audiobook speed\" setting, drawn on its own row and in settings search."
+  },
+  "settingsBoostDefaultHelp": "Shows and books with no stored choice of their own open with loudness normalization on",
+  "@settingsBoostDefaultHelp": {
+    "description": "The line under the voice boost default."
+  },
+  "settingsBoostDefaultKeywords": "loudness, normalize, volume, speech, quiet",
+  "@settingsBoostDefaultKeywords": {
+    "description": "Comma-separated search keywords for the \"Voice boost by default\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsBoostDefaultTitle": "Voice boost by default",
+  "@settingsBoostDefaultTitle": {
+    "description": "Name of the \"Voice boost by default\" setting, drawn on its own row and in settings search."
+  },
+  "settingsBrowseOrderChoiceLabel": "{dimension} order",
+  "@settingsBrowseOrderChoiceLabel": {
+    "description": "The accessible name of one library index's order picker, so a screen reader hears which index it belongs to. {dimension} is what the index lists.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "Artists"
+      }
+    }
+  },
+  "settingsBrowseOrderHelp": "The order this index opens in",
+  "@settingsBrowseOrderHelp": {
+    "description": "The line under one library index's default order, on the row that already names the index."
+  },
+  "settingsBrowseOrderKeywords": "sort, order, alphabetical, browse, index",
+  "@settingsBrowseOrderKeywords": {
+    "description": "Comma-separated search keywords for the \"Default order\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsBrowseOrderTitle": "Default order",
+  "@settingsBrowseOrderTitle": {
+    "description": "Name of the \"Default order\" setting, drawn on its own row and in settings search."
+  },
+  "settingsBrowseUnknownHelp": "Lists the group for what has no genre, no album, or no year of its own",
+  "@settingsBrowseUnknownHelp": {
+    "description": "The line under the show-unknown-groups switch."
+  },
+  "settingsBrowseUnknownKeywords": "unknown, untagged, missing, no genre, browse",
+  "@settingsBrowseUnknownKeywords": {
+    "description": "Comma-separated search keywords for the \"Show unknown groups\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsBrowseUnknownTitle": "Show unknown groups",
+  "@settingsBrowseUnknownTitle": {
+    "description": "Name of the \"Show unknown groups\" setting, drawn on its own row and in settings search."
+  },
+  "settingsCaptionsAlways": "Always",
+  "@settingsCaptionsAlways": {
+    "description": "Card captions option: the names under a cover are always drawn."
+  },
+  "settingsCaptionsOnHover": "On hover",
+  "@settingsCaptionsOnHover": {
+    "description": "Card captions option: the names under a cover appear when the pointer is over them."
+  },
+  "settingsCarButtonHelp": "Puts car mode on the player itself instead of inside its menu",
+  "@settingsCarButtonHelp": {
+    "description": "The line under the car mode button switch."
+  },
+  "settingsCarButtonKeywords": "driving, large, dashboard, player",
+  "@settingsCarButtonKeywords": {
+    "description": "Comma-separated search keywords for the \"Car mode button\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsCarButtonTitle": "Car mode button",
+  "@settingsCarButtonTitle": {
+    "description": "Name of the \"Car mode button\" setting, drawn on its own row and in settings search."
+  },
+  "settingsCardCaptionsHelp": "The lines under a cover in a grid",
+  "@settingsCardCaptionsHelp": {
+    "description": "The line under the card captions setting, where the choice is offered."
+  },
+  "settingsCardCaptionsKeywords": "labels, titles, hover, grid, covers",
+  "@settingsCardCaptionsKeywords": {
+    "description": "Comma-separated search keywords for the \"Card captions\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsCardCaptionsNoPointerHelp": "Always shown: hiding them needs a pointer to bring them back",
+  "@settingsCardCaptionsNoPointerHelp": {
+    "description": "The line under the card captions setting on a device with no pointer, where the choice is refused rather than stored and ignored."
+  },
+  "settingsCardCaptionsTitle": "Card captions",
+  "@settingsCardCaptionsTitle": {
+    "description": "Name of the \"Card captions\" setting, drawn on its own row and in settings search."
+  },
+  "settingsCastCheckBlurb": "Whether a cast device can reach this server",
+  "@settingsCastCheckBlurb": {
+    "description": "The line under the row that opens the cast connection check."
+  },
+  "settingsCastCheckKeywords": "preflight, diagnose, reachable, cast",
+  "@settingsCastCheckKeywords": {
+    "description": "Comma-separated search keywords for the \"Connection check\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsCastCheckTitle": "Connection check",
+  "@settingsCastCheckTitle": {
+    "description": "Name of the \"Connection check\" setting, drawn on its own row and in settings search."
+  },
+  "settingsCrossfadeHelp": "Fades one track into the next when casting a queue",
+  "@settingsCrossfadeHelp": {
+    "description": "The line under the casting crossfade setting."
+  },
+  "settingsCrossfadeKeywords": "fade, gapless, seam, chromecast",
+  "@settingsCrossfadeKeywords": {
+    "description": "Comma-separated search keywords for the \"Casting crossfade\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsCrossfadeTitle": "Casting crossfade",
+  "@settingsCrossfadeTitle": {
+    "description": "Name of the \"Casting crossfade\" setting, drawn on its own row and in settings search."
+  },
+  "settingsDensityComfortable": "Comfortable",
+  "@settingsDensityComfortable": {
+    "description": "Density option: rows with room around them."
+  },
+  "settingsDensityCompact": "Compact",
+  "@settingsDensityCompact": {
+    "description": "Density option: more rows on a screen."
+  },
+  "settingsDensityHelp": "How tightly rows pack; text size stays the system's",
+  "@settingsDensityHelp": {
+    "description": "The line under the density setting, saying what it does and what it does not touch."
+  },
+  "settingsDensityKeywords": "compact, comfortable, spacing, rows",
+  "@settingsDensityKeywords": {
+    "description": "Comma-separated search keywords for the \"Density\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsDensityTitle": "Density",
+  "@settingsDensityTitle": {
+    "description": "Name of the \"Density\" setting, drawn on its own row and in settings search."
+  },
+  "settingsDeviceNameHint": "Kitchen radio",
+  "@settingsDeviceNameHint": {
+    "description": "Placeholder in the device name field: an example of the kind of name somebody gives a device."
+  },
+  "settingsDeviceNameLabel": "Device name",
+  "@settingsDeviceNameLabel": {
+    "description": "Field for what a signed-in device is called."
+  },
+  "settingsDeviceRename": "Rename device",
+  "@settingsDeviceRename": {
+    "description": "The button that opens the rename dialog, and that dialog's title."
+  },
+  "settingsDeviceSignOutAction": "Sign out device",
+  "@settingsDeviceSignOutAction": {
+    "description": "The button on a session row that revokes it."
+  },
+  "settingsDeviceSignOutCurrentMessage": "This is the device you are using now. Revoking its session signs you out.",
+  "@settingsDeviceSignOutCurrentMessage": {
+    "description": "Body of the sign-out dialog for the device being used right now."
+  },
+  "settingsDeviceSignOutCurrentTitle": "Sign out this device?",
+  "@settingsDeviceSignOutCurrentTitle": {
+    "description": "Title of the dialog confirming that the device being used right now is being signed out."
+  },
+  "settingsDeviceSignOutMessage": "\"{name}\" will be signed out immediately.",
+  "@settingsDeviceSignOutMessage": {
+    "description": "Body of the sign-out dialog for another device. {name} is that device's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Pixel 9"
+      }
+    }
+  },
+  "settingsDeviceSignOutTitle": "Sign out device?",
+  "@settingsDeviceSignOutTitle": {
+    "description": "Title of the dialog confirming that another device is being signed out."
+  },
+  "settingsDeviceSignedIn": "Signed in {date}",
+  "@settingsDeviceSignedIn": {
+    "description": "The line under a session row. {date} is when the session began, already written for this language.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Aug 12, 2026"
+      }
+    }
+  },
+  "settingsDeviceSignedInWith": "Signed in {date} with {client}",
+  "@settingsDeviceSignedInWith": {
+    "description": "The line under a session row that also knows which app signed in. {date} is already written for this language; {client} is the app's own name.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Aug 12, 2026"
+      },
+      "client": {
+        "type": "String",
+        "example": "Firefox"
+      }
+    }
+  },
+  "settingsDeviceThisDevice": "{name} (this device)",
+  "@settingsDeviceThisDevice": {
+    "description": "The session row for the device being used right now. {name} is the device's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Kitchen radio"
+      }
+    }
+  },
+  "settingsDevicesErrorMessage": "The server did not answer.",
+  "@settingsDevicesErrorMessage": {
+    "description": "Second line of the session list error state."
+  },
+  "settingsDevicesErrorTitle": "Could not load devices",
+  "@settingsDevicesErrorTitle": {
+    "description": "Error state where the session list would be."
+  },
+  "settingsDevicesKeywords": "sessions, revoke, sign out, logout",
+  "@settingsDevicesKeywords": {
+    "description": "Comma-separated search keywords for the \"Signed-in devices\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsDevicesTitle": "Signed-in devices",
+  "@settingsDevicesTitle": {
+    "description": "Name of the \"Signed-in devices\" setting, drawn on its own row and in settings search."
+  },
+  "settingsDiscordApplicationHelp": "Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and where its cover art comes from",
+  "@settingsDiscordApplicationHelp": {
+    "description": "The line under the Discord application ID field."
+  },
+  "settingsDiscordApplicationLabel": "Publish as another application (optional)",
+  "@settingsDiscordApplicationLabel": {
+    "description": "Field for a Discord application ID of the listener's own, instead of WaxDeck's."
+  },
+  "settingsDiscordCoverNote": "The cover is one image for every track, uploaded to that application rather than taken from your library: Discord fetches art through its own servers, which cannot reach a private one.",
+  "@settingsDiscordCoverNote": {
+    "description": "Note under the Discord application ID field explaining why the cover art cannot be the album's."
+  },
+  "settingsDiscordPresenceHelp": "Sets your Discord status while WaxDeck plays, through the Discord app on this machine",
+  "@settingsDiscordPresenceHelp": {
+    "description": "The line under the Discord presence switch."
+  },
+  "settingsDiscordPresenceKeywords": "discord, rich presence, status, listening to",
+  "@settingsDiscordPresenceKeywords": {
+    "description": "Comma-separated search keywords for the \"Show what I am listening to on Discord\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsDiscordPresenceRowTitle": "Show what I am listening to",
+  "@settingsDiscordPresenceRowTitle": {
+    "description": "The Discord presence switch, under a Discord heading that already names the service. Settings search spells the service out."
+  },
+  "settingsDiscordPresenceTitle": "Show what I am listening to on Discord",
+  "@settingsDiscordPresenceTitle": {
+    "description": "Name of the \"Show what I am listening to on Discord\" setting, drawn on its own row and in settings search."
+  },
+  "settingsDisplayNameKeywords": "username, profile, who",
+  "@settingsDisplayNameKeywords": {
+    "description": "Comma-separated search keywords for the \"Display name\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsDisplayNameTitle": "Display name",
+  "@settingsDisplayNameTitle": {
+    "description": "Name of the \"Display name\" setting, drawn on its own row and in settings search."
+  },
+  "settingsDownloadsManagerBlurb": "What this device holds offline, and how to free it",
+  "@settingsDownloadsManagerBlurb": {
+    "description": "The line under the row that opens the download manager."
+  },
+  "settingsDownloadsManagerKeywords": "offline, storage, space, remove",
+  "@settingsDownloadsManagerKeywords": {
+    "description": "Comma-separated search keywords for the \"Manage downloads\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsDownloadsManagerTitle": "Manage downloads",
+  "@settingsDownloadsManagerTitle": {
+    "description": "Name of the \"Manage downloads\" setting, drawn on its own row and in settings search."
+  },
+  "settingsDownloadsWifiHelp": "Holds transfers until this device is on wifi, rather than failing them",
+  "@settingsDownloadsWifiHelp": {
+    "description": "The line under the download-on-wifi-only switch."
+  },
+  "settingsDownloadsWifiKeywords": "data, metered, mobile, cellular",
+  "@settingsDownloadsWifiKeywords": {
+    "description": "Comma-separated search keywords for the \"Download on wifi only\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsDownloadsWifiTitle": "Download on wifi only",
+  "@settingsDownloadsWifiTitle": {
+    "description": "Name of the \"Download on wifi only\" setting, drawn on its own row and in settings search."
+  },
+  "settingsEndpointsBlurb": "Cast targets, renderers, and your other devices",
+  "@settingsEndpointsBlurb": {
+    "description": "The line under the row that opens the playback endpoint list."
+  },
+  "settingsEndpointsKeywords": "cast, chromecast, dlna, speaker, connect",
+  "@settingsEndpointsKeywords": {
+    "description": "Comma-separated search keywords for the \"Playback endpoints\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsEndpointsTitle": "Playback endpoints",
+  "@settingsEndpointsTitle": {
+    "description": "Name of the \"Playback endpoints\" setting, drawn on its own row and in settings search."
+  },
+  "settingsFollowsAccountHelp": "Follows you to your other devices",
+  "@settingsFollowsAccountHelp": {
+    "description": "The line under the two Appearance settings stored on the account rather than on this device: the theme and the language."
+  },
+  "settingsGridLarge": "Large",
+  "@settingsGridLarge": {
+    "description": "Artwork size option."
+  },
+  "settingsGridMedium": "Medium",
+  "@settingsGridMedium": {
+    "description": "Artwork size option."
+  },
+  "settingsGridSizeHelp": "How large covers are drawn in grids",
+  "@settingsGridSizeHelp": {
+    "description": "The line under the artwork size setting."
+  },
+  "settingsGridSizeKeywords": "grid, tiles, covers, large, small",
+  "@settingsGridSizeKeywords": {
+    "description": "Comma-separated search keywords for the \"Artwork size\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsGridSizeTitle": "Artwork size",
+  "@settingsGridSizeTitle": {
+    "description": "Name of the \"Artwork size\" setting, drawn on its own row and in settings search."
+  },
+  "settingsGridSmall": "Small",
+  "@settingsGridSmall": {
+    "description": "Artwork size option."
+  },
+  "settingsGroupAbout": "About",
+  "@settingsGroupAbout": {
+    "description": "Heading over the settings rows about the version and licence rows."
+  },
+  "settingsGroupAccess": "Access",
+  "@settingsGroupAccess": {
+    "description": "Heading over the settings rows about which libraries this account can see."
+  },
+  "settingsGroupAdding": "Adding to the library",
+  "@settingsGroupAdding": {
+    "description": "Heading over the settings rows about what happens to what you upload."
+  },
+  "settingsGroupBrowsing": "Browsing",
+  "@settingsGroupBrowsing": {
+    "description": "Heading over the settings rows about what the library listings show."
+  },
+  "settingsGroupCasting": "Casting",
+  "@settingsGroupCasting": {
+    "description": "Heading over the settings rows about playing on another device."
+  },
+  "settingsGroupData": "Data",
+  "@settingsGroupData": {
+    "description": "Heading over the settings rows about what the app does on a metered connection."
+  },
+  "settingsGroupDiscord": "Discord",
+  "@settingsGroupDiscord": {
+    "description": "Heading over the settings rows about the Discord rich presence switch."
+  },
+  "settingsGroupDownloads": "Downloads",
+  "@settingsGroupDownloads": {
+    "description": "Heading over the settings rows about what this device keeps offline."
+  },
+  "settingsGroupListening": "Listening",
+  "@settingsGroupListening": {
+    "description": "Heading over the settings rows about stats participation and the timezone they are counted in."
+  },
+  "settingsGroupMotion": "Motion",
+  "@settingsGroupMotion": {
+    "description": "Heading over the settings rows about animation and movement."
+  },
+  "settingsGroupPlayer": "The player",
+  "@settingsGroupPlayer": {
+    "description": "Heading over the settings rows about the player screen itself."
+  },
+  "settingsGroupScreenReaders": "Screen readers",
+  "@settingsGroupScreenReaders": {
+    "description": "Heading over the settings rows about how the app reads out."
+  },
+  "settingsGroupSonicSimilarity": "Sonic similarity",
+  "@settingsGroupSonicSimilarity": {
+    "description": "Heading over the settings rows about coverage of the audio analysis behind similar tracks and mixes."
+  },
+  "settingsGroupSpokenWord": "Spoken word",
+  "@settingsGroupSpokenWord": {
+    "description": "Heading over the settings rows about podcasts and audiobooks."
+  },
+  "settingsGroupStartingOnItsOwn": "Starting on its own",
+  "@settingsGroupStartingOnItsOwn": {
+    "description": "Heading over the settings rows about playback that begins without being asked."
+  },
+  "settingsGroupStorage": "Storage",
+  "@settingsGroupStorage": {
+    "description": "Heading over the settings rows about space this device is using."
+  },
+  "settingsGroupThisDevice": "This device",
+  "@settingsGroupThisDevice": {
+    "description": "Heading over the Appearance settings stored on this device alone, rather than on the account."
+  },
+  "settingsGroupWhatGetsScrobbled": "What gets scrobbled",
+  "@settingsGroupWhatGetsScrobbled": {
+    "description": "Heading over the settings rows about which listening is reported to a scrobbling service."
+  },
+  "settingsGroupWhereSoundComesOut": "Where sound comes out",
+  "@settingsGroupWhereSoundComesOut": {
+    "description": "Heading over the settings rows about cast targets and other devices."
+  },
+  "settingsIdentifyUploadsHelp": "Matches what you add against MusicBrainz. Off adds it with the tags it has, without review",
+  "@settingsIdentifyUploadsHelp": {
+    "description": "The line under the identify-uploads switch."
+  },
+  "settingsIdentifyUploadsKeywords": "musicbrainz, match, identify, upload, tags, acquire",
+  "@settingsIdentifyUploadsKeywords": {
+    "description": "Comma-separated search keywords for the \"Identify uploads\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsIdentifyUploadsTitle": "Identify uploads",
+  "@settingsIdentifyUploadsTitle": {
+    "description": "Name of the \"Identify uploads\" setting, drawn on its own row and in settings search."
+  },
+  "settingsLanguageKeywords": "language, idioma, locale, translation, spanish, english",
+  "@settingsLanguageKeywords": {
+    "description": "Comma-separated search keywords for the language setting. Deliberately bilingual: somebody looking for their own language types its name, and the interface they are typing into is the one they cannot read. Keep the other languages' words and add this one's."
+  },
+  "settingsLanguageTitle": "Language",
+  "@settingsLanguageTitle": {
+    "description": "Name of the language setting, in the Appearance section and in settings search."
+  },
+  "settingsLastfmApiKey": "API key",
+  "@settingsLastfmApiKey": {
+    "description": "Field for the Last.fm API key, which reads back for display."
+  },
+  "settingsLastfmApiKeyHelp": "Register at last.fm/api/account/create",
+  "@settingsLastfmApiKeyHelp": {
+    "description": "The line under the Last.fm API key field, saying where a key comes from."
+  },
+  "settingsLastfmCredentialsClear": "Clear",
+  "@settingsLastfmCredentialsClear": {
+    "description": "Button that removes the stored Last.fm credentials, falling back to the server environment's own."
+  },
+  "settingsLastfmCredentialsError": "Could not load the credential state",
+  "@settingsLastfmCredentialsError": {
+    "description": "Shown in the Last.fm credentials dialog when the read failed."
+  },
+  "settingsLastfmCredentialsTitle": "Last.fm API credentials",
+  "@settingsLastfmCredentialsTitle": {
+    "description": "Title of the administrator dialog holding the server's Last.fm credentials."
+  },
+  "settingsLastfmSecret": "Shared secret",
+  "@settingsLastfmSecret": {
+    "description": "Field for the Last.fm shared secret, which is write-only."
+  },
+  "settingsLastfmSecretHelp": "Stored sealed; never shown again",
+  "@settingsLastfmSecretHelp": {
+    "description": "The line under the Last.fm secret field once a secret is stored."
+  },
+  "settingsLibraryAccessAll": "You can see every library on this server",
+  "@settingsLibraryAccessAll": {
+    "description": "The read-only access line for an account granted every library."
+  },
+  "settingsLibraryAccessChecking": "Checking",
+  "@settingsLibraryAccessChecking": {
+    "description": "The access line while the account is still being read."
+  },
+  "settingsLibraryAccessError": "Could not read your access",
+  "@settingsLibraryAccessError": {
+    "description": "The access line when the account read failed."
+  },
+  "settingsLibraryAccessKeywords": "permissions, libraries, access",
+  "@settingsLibraryAccessKeywords": {
+    "description": "Comma-separated search keywords for the \"What I can see\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsLibraryAccessSome": "{count, plural, =1{You can see 1 of this server's libraries} other{You can see {count} of this server's libraries}}",
+  "@settingsLibraryAccessSome": {
+    "description": "The read-only access line for an account granted some libraries. {count} is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        }
+      }
+    }
+  },
+  "settingsLibraryAccessTitle": "What I can see",
+  "@settingsLibraryAccessTitle": {
+    "description": "Name of the \"What I can see\" setting, drawn on its own row and in settings search."
+  },
+  "settingsListenBrainzApi": "API server (optional)",
+  "@settingsListenBrainzApi": {
+    "description": "Field for an alternative ListenBrainz-compatible server."
+  },
+  "settingsListenBrainzApiHelp": "For a compatible server; empty for listenbrainz.org",
+  "@settingsListenBrainzApiHelp": {
+    "description": "The line under the ListenBrainz API server field."
+  },
+  "settingsListenBrainzTitle": "Connect ListenBrainz",
+  "@settingsListenBrainzTitle": {
+    "description": "Title of the dialog that connects ListenBrainz with a token."
+  },
+  "settingsListenBrainzToken": "User token",
+  "@settingsListenBrainzToken": {
+    "description": "Field for the ListenBrainz token."
+  },
+  "settingsListenBrainzTokenHelp": "From your ListenBrainz profile page",
+  "@settingsListenBrainzTokenHelp": {
+    "description": "The line under the ListenBrainz token field, saying where to find it."
+  },
+  "settingsMatchTheSystem": "Match the system",
+  "@settingsMatchTheSystem": {
+    "description": "The option that follows the device's own setting rather than choosing one. Shown in both the theme picker and the language picker."
+  },
+  "settingsNotificationsKeywords": "ntfy, webhook, discord, push, alerts",
+  "@settingsNotificationsKeywords": {
+    "description": "Comma-separated search keywords for the \"Notification targets\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsNotificationsTitle": "Notification targets",
+  "@settingsNotificationsTitle": {
+    "description": "Name of the \"Notification targets\" setting, drawn on its own row and in settings search."
+  },
+  "settingsNotifyAbout": "Notify me about",
+  "@settingsNotifyAbout": {
+    "description": "Heading over the checklist of events one target delivers."
+  },
+  "settingsNotifyAccessToken": "Access token",
+  "@settingsNotifyAccessToken": {
+    "description": "ntfy field: the token for a topic that needs one."
+  },
+  "settingsNotifyAppriseServerUrl": "Apprise server URL",
+  "@settingsNotifyAppriseServerUrl": {
+    "description": "Apprise field: which Apprise instance relays the notification."
+  },
+  "settingsNotifyAppriseTargets": "Targets",
+  "@settingsNotifyAppriseTargets": {
+    "description": "Apprise field: the Apprise URLs the notification fans out to."
+  },
+  "settingsNotifyAppriseTargetsHelp": "Apprise URLs; empty uses the server's own configuration",
+  "@settingsNotifyAppriseTargetsHelp": {
+    "description": "The line under the Apprise targets field."
+  },
+  "settingsNotifyCatalogError": "Could not load the event catalog",
+  "@settingsNotifyCatalogError": {
+    "description": "Shown where the event checklist would be when the read failed."
+  },
+  "settingsNotifyDeliverVia": "Deliver via",
+  "@settingsNotifyDeliverVia": {
+    "description": "Field choosing which service a new notification target uses."
+  },
+  "settingsNotifyDiscordWebhookHelp": "A discord.com webhook URL",
+  "@settingsNotifyDiscordWebhookHelp": {
+    "description": "The line under the Discord webhook field."
+  },
+  "settingsNotifyEndpointUrl": "Endpoint URL",
+  "@settingsNotifyEndpointUrl": {
+    "description": "UnifiedPush field: the endpoint the distributor registered."
+  },
+  "settingsNotifyFieldOptional": "{field} (optional)",
+  "@settingsNotifyFieldOptional": {
+    "description": "The label of a notification target field that may be left empty. {field} is that field's own name.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Priority"
+      }
+    }
+  },
+  "settingsNotifyFieldRequired": "{field} is required",
+  "@settingsNotifyFieldRequired": {
+    "description": "Refusal when a required notification target field was left empty. {field} is that field's own name.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Topic"
+      }
+    }
+  },
+  "settingsNotifyFieldWholeNumber": "{field} must be a whole number",
+  "@settingsNotifyFieldWholeNumber": {
+    "description": "Refusal when a numeric notification target field holds something else. {field} is that field's own name.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Priority"
+      }
+    }
+  },
+  "settingsNotifyGotifyPriorityHelp": "0 to 10",
+  "@settingsNotifyGotifyPriorityHelp": {
+    "description": "The range the Gotify priority field accepts."
+  },
+  "settingsNotifyLastDelivered": "Last delivered {when}",
+  "@settingsNotifyLastDelivered": {
+    "description": "Health line on a notification target that has delivered. {when} is already written for this language.",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "Aug 12, 2026 3:04 PM"
+      }
+    }
+  },
+  "settingsNotifyLastFailed": "Last delivery failed: {error}",
+  "@settingsNotifyLastFailed": {
+    "description": "Health line on a notification target whose last delivery failed. {error} is the service's own words, which stay in their language.",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "502 Bad Gateway"
+      }
+    }
+  },
+  "settingsNotifyMyBlurb": "Where your events (new episodes, review queue) get delivered: Pushover, ntfy, Gotify, Discord, webhooks, or this device's push registration.",
+  "@settingsNotifyMyBlurb": {
+    "description": "The line under this account's notification targets, listing what can carry them."
+  },
+  "settingsNotifyMyEvents": "My events",
+  "@settingsNotifyMyEvents": {
+    "description": "Heading over the events that are about this account, in the event checklist an administrator sees."
+  },
+  "settingsNotifyMyTitle": "My notifications",
+  "@settingsNotifyMyTitle": {
+    "description": "Heading over this account's own notification targets."
+  },
+  "settingsNotifyNtfyServerHelp": "Empty uses ntfy.sh",
+  "@settingsNotifyNtfyServerHelp": {
+    "description": "The line under the ntfy server field, naming the public default."
+  },
+  "settingsNotifyNtfyTopic": "Topic",
+  "@settingsNotifyNtfyTopic": {
+    "description": "ntfy field: the topic notifications are published to."
+  },
+  "settingsNotifyPriority": "Priority",
+  "@settingsNotifyPriority": {
+    "description": "Pushover and Gotify field: how loudly the notification arrives."
+  },
+  "settingsNotifyPushoverPriorityHelp": "-2 (quietest) to 2 (emergency)",
+  "@settingsNotifyPushoverPriorityHelp": {
+    "description": "The range the Pushover priority field accepts."
+  },
+  "settingsNotifyPushoverToken": "Application token",
+  "@settingsNotifyPushoverToken": {
+    "description": "Pushover field: the token of the application notifications are sent from. Also the Gotify field of the same name."
+  },
+  "settingsNotifyPushoverUserKey": "User or group key",
+  "@settingsNotifyPushoverUserKey": {
+    "description": "Pushover field: who the notification goes to."
+  },
+  "settingsNotifySendTest": "Send test",
+  "@settingsNotifySendTest": {
+    "description": "The button that sends a test notification to one target."
+  },
+  "settingsNotifyServerBlurb": "Operations events (account requests, backup outcomes) delivered to server-wide destinations.",
+  "@settingsNotifyServerBlurb": {
+    "description": "The line under the server's notification targets."
+  },
+  "settingsNotifyServerEvents": "Server events",
+  "@settingsNotifyServerEvents": {
+    "description": "Heading over the events that are about the server, in the event checklist an administrator sees."
+  },
+  "settingsNotifyServerTitle": "Server notifications",
+  "@settingsNotifyServerTitle": {
+    "description": "Heading over the notification targets the whole server delivers to."
+  },
+  "settingsNotifyServerUrl": "Server URL",
+  "@settingsNotifyServerUrl": {
+    "description": "ntfy and Gotify field: which server the notification goes to."
+  },
+  "settingsNotifyTargetAddAction": "Add",
+  "@settingsNotifyTargetAddAction": {
+    "description": "Action on a notification targets heading that adds one."
+  },
+  "settingsNotifyTargetAddSpoken": "Add notification target",
+  "@settingsNotifyTargetAddSpoken": {
+    "description": "What a screen reader hears for the add-a-target action."
+  },
+  "settingsNotifyTargetEditTitle": "Edit {kind} target",
+  "@settingsNotifyTargetEditTitle": {
+    "description": "Title of the dialog that edits a notification target. {kind} is the service's own name.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "Pushover"
+      }
+    }
+  },
+  "settingsNotifyTargetLabel": "Label (optional)",
+  "@settingsNotifyTargetLabel": {
+    "description": "Field for what a notification target is called."
+  },
+  "settingsNotifyTargetNewTitle": "New notification target",
+  "@settingsNotifyTargetNewTitle": {
+    "description": "Title of the dialog that creates a notification target."
+  },
+  "settingsNotifyTargetRemove": "Remove",
+  "@settingsNotifyTargetRemove": {
+    "description": "The button that deletes one notification target."
+  },
+  "settingsNotifyTargetsEmpty": "No notification targets yet",
+  "@settingsNotifyTargetsEmpty": {
+    "description": "Shown where the notification target rows would be when there are none."
+  },
+  "settingsNotifyTargetsError": "Could not load notification targets",
+  "@settingsNotifyTargetsError": {
+    "description": "Shown where the notification target rows would be when the read failed."
+  },
+  "settingsNotifyTestQueued": "Test queued; the outcome shows on the target shortly",
+  "@settingsNotifyTestQueued": {
+    "description": "Snackbar after a test notification has been asked for."
+  },
+  "settingsNotifyUnifiedPushHelp": "Usually registered by the app through its distributor",
+  "@settingsNotifyUnifiedPushHelp": {
+    "description": "The line under the UnifiedPush endpoint field, saying it is not usually typed by hand."
+  },
+  "settingsNotifyUrl": "URL",
+  "@settingsNotifyUrl": {
+    "description": "Webhook field: where the notification is posted."
+  },
+  "settingsNotifyWebhookHelp": "Receives a JSON object with event, title, body and timestamp",
+  "@settingsNotifyWebhookHelp": {
+    "description": "The line under the webhook URL field. The four names are the JSON keys the request carries and stay as they are; only the sentence around them is translated."
+  },
+  "settingsNotifyWebhookUrl": "Webhook URL",
+  "@settingsNotifyWebhookUrl": {
+    "description": "Discord field: the webhook the notification is posted to."
+  },
+  "settingsOptionOff": "Off",
+  "@settingsOptionOff": {
+    "description": "The option that turns a setting off, on the pickers that have one - the casting crossfade and the rewind on resume."
+  },
+  "settingsPasswordChangeAction": "Change",
+  "@settingsPasswordChangeAction": {
+    "description": "Button on the change-password row that opens the dialog."
+  },
+  "settingsPasswordChanged": "Password changed",
+  "@settingsPasswordChanged": {
+    "description": "Snackbar after the password has been replaced."
+  },
+  "settingsPasswordCurrentLabel": "Current password",
+  "@settingsPasswordCurrentLabel": {
+    "description": "Field for the password being replaced, which the server requires."
+  },
+  "settingsPasswordHelp": "Signs out your other devices; app passwords are unaffected",
+  "@settingsPasswordHelp": {
+    "description": "The line under the change-password row."
+  },
+  "settingsPasswordKeywords": "security, sign in, login",
+  "@settingsPasswordKeywords": {
+    "description": "Comma-separated search keywords for the \"Change password\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsPasswordNewLabel": "New password",
+  "@settingsPasswordNewLabel": {
+    "description": "Field for the password being set."
+  },
+  "settingsPasswordTitle": "Change password",
+  "@settingsPasswordTitle": {
+    "description": "Name of the \"Change password\" setting, drawn on its own row and in settings search."
+  },
+  "settingsPodcastSpeedHelp": "The speed a show plays at until you set one for it",
+  "@settingsPodcastSpeedHelp": {
+    "description": "The line under the default podcast speed setting."
+  },
+  "settingsPodcastSpeedKeywords": "rate, faster, default",
+  "@settingsPodcastSpeedKeywords": {
+    "description": "Comma-separated search keywords for the \"Podcast speed\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsPodcastSpeedTitle": "Podcast speed",
+  "@settingsPodcastSpeedTitle": {
+    "description": "Name of the \"Podcast speed\" setting, drawn on its own row and in settings search."
+  },
+  "settingsPreloadWifiHelp": "Gapless playback buffers the next track early; this holds that back on mobile data",
+  "@settingsPreloadWifiHelp": {
+    "description": "The line under the preload-on-wifi-only switch."
+  },
+  "settingsPreloadWifiKeywords": "gapless, preload, data, metered, mobile",
+  "@settingsPreloadWifiKeywords": {
+    "description": "Comma-separated search keywords for the \"Prepare the next track on wifi only\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsPreloadWifiTitle": "Prepare the next track on wifi only",
+  "@settingsPreloadWifiTitle": {
+    "description": "Name of the \"Prepare the next track on wifi only\" setting, drawn on its own row and in settings search."
+  },
+  "settingsRadioScrobblingHelp": "Radio segments report as tracks where a station names them honestly",
+  "@settingsRadioScrobblingHelp": {
+    "description": "The line under the scrobble-radio switch."
+  },
+  "settingsRadioScrobblingKeywords": "last.fm, listenbrainz, station, stream",
+  "@settingsRadioScrobblingKeywords": {
+    "description": "Comma-separated search keywords for the \"Scrobble radio\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsRadioScrobblingTitle": "Scrobble radio",
+  "@settingsRadioScrobblingTitle": {
+    "description": "Name of the \"Scrobble radio\" setting, drawn on its own row and in settings search."
+  },
+  "settingsReduceMotionHelp": "Stills transitions and the playing indicator",
+  "@settingsReduceMotionHelp": {
+    "description": "The line under the reduce motion switch."
+  },
+  "settingsReduceMotionKeywords": "animation, transitions, vestibular",
+  "@settingsReduceMotionKeywords": {
+    "description": "Comma-separated search keywords for the \"Reduce motion\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsReduceMotionPlatformHelp": "Already reduced: this device asks every app for less motion",
+  "@settingsReduceMotionPlatformHelp": {
+    "description": "The line under the reduce motion switch when the device itself already asks for less motion, so the switch looks like it is doing nothing."
+  },
+  "settingsReduceMotionTitle": "Reduce motion",
+  "@settingsReduceMotionTitle": {
+    "description": "Name of the \"Reduce motion\" setting, drawn on its own row and in settings search."
+  },
+  "settingsReplayGainHelp": "Plays a cast queue at one loudness, where the files have been analyzed",
+  "@settingsReplayGainHelp": {
+    "description": "The line under the level-casting-volume switch."
+  },
+  "settingsReplayGainKeywords": "replaygain, loudness, normalize, gain",
+  "@settingsReplayGainKeywords": {
+    "description": "Comma-separated search keywords for the \"Level casting volume\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsReplayGainTitle": "Level casting volume",
+  "@settingsReplayGainTitle": {
+    "description": "Name of the \"Level casting volume\" setting, drawn on its own row and in settings search."
+  },
+  "settingsScreenReaderBlurb": "Every control is named, the queue reorders from the keyboard, and the deck bar is one landmark",
+  "@settingsScreenReaderBlurb": {
+    "description": "The line under the screen reader row."
+  },
+  "settingsScreenReaderTitle": "How WaxDeck reads out",
+  "@settingsScreenReaderTitle": {
+    "description": "Name of the row describing the app's screen reader support."
+  },
+  "settingsScrobblerApprove": "Approve WaxDeck in the browser tab, then come back here",
+  "@settingsScrobblerApprove": {
+    "description": "Snackbar after the Last.fm authorization page has been opened."
+  },
+  "settingsScrobblerConnect": "Connect",
+  "@settingsScrobblerConnect": {
+    "description": "Action on a scrobbling service that is not connected, and the confirming button of the ListenBrainz dialog."
+  },
+  "settingsScrobblerConnected": "Connected",
+  "@settingsScrobblerConnected": {
+    "description": "Status of a connected scrobbling service that has not delivered anything yet, and whose account name is unknown."
+  },
+  "settingsScrobblerConnectedAs": "Connected as {username}",
+  "@settingsScrobblerConnectedAs": {
+    "description": "Status of a connected scrobbling service that has not delivered anything yet. {username} is the account it connected as.",
+    "placeholders": {
+      "username": {
+        "type": "String",
+        "example": "listener"
+      }
+    }
+  },
+  "settingsScrobblerCredentialsLabel": "Server API credentials",
+  "@settingsScrobblerCredentialsLabel": {
+    "description": "The button that opens the server's Last.fm API credentials."
+  },
+  "settingsScrobblerDelivering": "Connected, delivering",
+  "@settingsScrobblerDelivering": {
+    "description": "Status of a scrobbling service that is connected and has delivered, and whose account name is unknown."
+  },
+  "settingsScrobblerDeliveringAs": "Connected as {username}, delivering",
+  "@settingsScrobblerDeliveringAs": {
+    "description": "Status of a scrobbling service that is connected and has delivered. {username} is the account it connected as.",
+    "placeholders": {
+      "username": {
+        "type": "String",
+        "example": "listener"
+      }
+    }
+  },
+  "settingsScrobblerDisconnect": "Disconnect",
+  "@settingsScrobblerDisconnect": {
+    "description": "Action on a connected scrobbling service."
+  },
+  "settingsScrobblerFailing": "Delivery failing: {error}",
+  "@settingsScrobblerFailing": {
+    "description": "Status of a connected scrobbling service that is refusing scrobbles. {error} is the service's own words, which stay in their language.",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "the service answered status 503"
+      }
+    }
+  },
+  "settingsScrobblerNeedsCredentials": "Needs server API credentials",
+  "@settingsScrobblerNeedsCredentials": {
+    "description": "Status of a scrobbling service the server cannot connect to yet."
+  },
+  "settingsScrobblerNotConnected": "Not connected",
+  "@settingsScrobblerNotConnected": {
+    "description": "Status of a scrobbling service that could be connected and is not."
+  },
+  "settingsScrobblerSetUp": "Set up…",
+  "@settingsScrobblerSetUp": {
+    "description": "Administrator action on the Last.fm row while the server has no API credentials, so connecting is not yet possible."
+  },
+  "settingsScrobblingError": "Could not load scrobbling connections",
+  "@settingsScrobblingError": {
+    "description": "Shown where the scrobbling rows would be when the read failed."
+  },
+  "settingsScrobblingKeywords": "last.fm, lastfm, listenbrainz",
+  "@settingsScrobblingKeywords": {
+    "description": "Comma-separated search keywords for the \"Scrobbling\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsScrobblingTitle": "Scrobbling",
+  "@settingsScrobblingTitle": {
+    "description": "Name of the \"Scrobbling\" setting, drawn on its own row and in settings search."
+  },
+  "settingsSearchLabel": "Search settings",
+  "@settingsSearchLabel": {
+    "description": "The search field at the top of the settings home: both its accessible name and the placeholder shown while it is empty."
+  },
+  "settingsSearchNoMatchMessage": "Server-wide settings live in the admin console, not here. A per-show or per-book setting is on that show or book.",
+  "@settingsSearchNoMatchMessage": {
+    "description": "Second line of the settings search empty state: where the settings that are not here can be found."
+  },
+  "settingsSearchNoMatchTitle": "No setting matches \"{query}\"",
+  "@settingsSearchNoMatchTitle": {
+    "description": "Empty state on the settings home when a search finds nothing. {query} is what the listener typed.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "crossfade"
+      }
+    }
+  },
+  "settingsSectionAccessibilityBlurb": "Motion, and how the app reads out",
+  "@settingsSectionAccessibilityBlurb": {
+    "description": "The line under Accessibility on the settings home, saying what is inside it."
+  },
+  "settingsSectionAccessibilityTitle": "Accessibility",
+  "@settingsSectionAccessibilityTitle": {
+    "description": "Name of the Accessibility settings section, on the settings home and as the title of the section's own screen."
+  },
+  "settingsSectionAccountBlurb": "You, your devices, and how you sign in",
+  "@settingsSectionAccountBlurb": {
+    "description": "The line under Account on the settings home, saying what is inside it."
+  },
+  "settingsSectionAccountTitle": "Account",
+  "@settingsSectionAccountTitle": {
+    "description": "Name of the Account settings section, on the settings home and as the title of the section's own screen."
+  },
+  "settingsSectionAppearanceBlurb": "Theme, density, and how large artwork is drawn",
+  "@settingsSectionAppearanceBlurb": {
+    "description": "The line under Appearance on the settings home, saying what is inside it."
+  },
+  "settingsSectionAppearanceTitle": "Appearance",
+  "@settingsSectionAppearanceTitle": {
+    "description": "Name of the Appearance settings section, on the settings home and as the title of the section's own screen."
+  },
+  "settingsSectionDevicesBlurb": "Where else your listening can come out",
+  "@settingsSectionDevicesBlurb": {
+    "description": "The line under Devices and casting on the settings home, saying what is inside it."
+  },
+  "settingsSectionDevicesTitle": "Devices and casting",
+  "@settingsSectionDevicesTitle": {
+    "description": "Name of the Devices and casting settings section, on the settings home and as the title of the section's own screen."
+  },
+  "settingsSectionDownloadsBlurb": "What this device keeps offline, and how much room it takes",
+  "@settingsSectionDownloadsBlurb": {
+    "description": "The line under Downloads and storage on the settings home, saying what is inside it."
+  },
+  "settingsSectionDownloadsTitle": "Downloads and storage",
+  "@settingsSectionDownloadsTitle": {
+    "description": "Name of the Downloads and storage settings section, on the settings home and as the title of the section's own screen."
+  },
+  "settingsSectionIntegrationsBlurb": "Scrobbling, other apps, and notifications",
+  "@settingsSectionIntegrationsBlurb": {
+    "description": "The line under Integrations on the settings home, saying what is inside it."
+  },
+  "settingsSectionIntegrationsTitle": "Integrations",
+  "@settingsSectionIntegrationsTitle": {
+    "description": "Name of the Integrations settings section, on the settings home and as the title of the section's own screen."
+  },
+  "settingsSectionLibraryBlurb": "What browsing shows you, and what you can see",
+  "@settingsSectionLibraryBlurb": {
+    "description": "The line under Library and metadata on the settings home, saying what is inside it."
+  },
+  "settingsSectionLibraryTitle": "Library and metadata",
+  "@settingsSectionLibraryTitle": {
+    "description": "Name of the Library and metadata settings section, on the settings home and as the title of the section's own screen."
+  },
+  "settingsSectionPlaybackBlurb": "Speeds, skips, casting, and what plays next",
+  "@settingsSectionPlaybackBlurb": {
+    "description": "The line under Playback on the settings home, saying what is inside it."
+  },
+  "settingsSectionPlaybackTitle": "Playback",
+  "@settingsSectionPlaybackTitle": {
+    "description": "Name of the Playback settings section, on the settings home and as the title of the section's own screen."
+  },
+  "settingsSectionServerBlurb": "This instance, for administrators",
+  "@settingsSectionServerBlurb": {
+    "description": "The line under Server on the settings home, saying what is inside it."
+  },
+  "settingsSectionServerTitle": "Server",
+  "@settingsSectionServerTitle": {
+    "description": "Name of the Server settings section, on the settings home and as the title of the section's own screen."
+  },
+  "settingsServerAdminOnlyMessage": "This section is about the server itself.",
+  "@settingsServerAdminOnlyMessage": {
+    "description": "Second line of the administrators-only empty state."
+  },
+  "settingsServerAdminOnlyTitle": "Administrators only",
+  "@settingsServerAdminOnlyTitle": {
+    "description": "Empty state on the Server section for an account that is not an administrator, reached by typing the location."
+  },
+  "settingsServerSummaryKeywords": "version, uptime, build",
+  "@settingsServerSummaryKeywords": {
+    "description": "Comma-separated search keywords for the \"This server\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsServerSummaryTitle": "This server",
+  "@settingsServerSummaryTitle": {
+    "description": "Name of the \"This server\" setting, drawn on its own row and in settings search."
+  },
+  "settingsShareLinksBlurb": "Public links you have handed out",
+  "@settingsShareLinksBlurb": {
+    "description": "The line under the share links row."
+  },
+  "settingsShareLinksTitle": "Share links",
+  "@settingsShareLinksTitle": {
+    "description": "Name of the row that opens the list of public links this account has created."
+  },
+  "settingsSharedStatsHelp": "Counts your listening into the shared year in review",
+  "@settingsSharedStatsHelp": {
+    "description": "The line under the shared-stats switch."
+  },
+  "settingsSharedStatsKeywords": "year in review, privacy, opt out",
+  "@settingsSharedStatsKeywords": {
+    "description": "Comma-separated search keywords for the \"Server-wide stats\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsSharedStatsSwitchTitle": "Include me in server-wide stats",
+  "@settingsSharedStatsSwitchTitle": {
+    "description": "The shared-stats switch, asked as the choice it is. Settings search calls the same setting Server-wide stats."
+  },
+  "settingsSharedStatsTitle": "Server-wide stats",
+  "@settingsSharedStatsTitle": {
+    "description": "Name of the \"Server-wide stats\" setting, drawn on its own row and in settings search."
+  },
+  "settingsSignOut": "Sign out",
+  "@settingsSignOut": {
+    "description": "Button that ends this session. Also the confirming button of the sign-out-a-device dialog."
+  },
+  "settingsSimilarityAnalyzed": "{total, plural, =1{{embedded} of 1 track analyzed, {queued} queued} other{{embedded} of {total} tracks analyzed, {queued} queued}}",
+  "@settingsSimilarityAnalyzed": {
+    "description": "The sonic similarity progress line: how many tracks carry an analysis, out of how many, and how many are waiting.",
+    "placeholders": {
+      "total": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        }
+      },
+      "embedded": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        }
+      },
+      "queued": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        }
+      }
+    }
+  },
+  "settingsSimilarityCoverage": "Coverage {percent}%",
+  "@settingsSimilarityCoverage": {
+    "description": "How much of the library has been analyzed for sonic similarity. {percent} is a whole number from 0 to 100.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        }
+      }
+    }
+  },
+  "settingsSimilarityError": "Could not load similarity status",
+  "@settingsSimilarityError": {
+    "description": "The sonic similarity row when the status read failed."
+  },
+  "settingsSimilarityFallback": "Similar tracks and mixes fall back to metadata",
+  "@settingsSimilarityFallback": {
+    "description": "The line under the sonic similarity row when there is no worker, saying what the app does instead."
+  },
+  "settingsSimilarityNoWorker": "No analysis worker configured",
+  "@settingsSimilarityNoWorker": {
+    "description": "The sonic similarity row when no analysis worker may connect."
+  },
+  "settingsSkipBackHelp": "How far the back control jumps on a podcast or a book",
+  "@settingsSkipBackHelp": {
+    "description": "The line under the skip back setting."
+  },
+  "settingsSkipBackKeywords": "rewind, seconds, podcast, audiobook",
+  "@settingsSkipBackKeywords": {
+    "description": "Comma-separated search keywords for the \"Skip back by\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsSkipBackTitle": "Skip back by",
+  "@settingsSkipBackTitle": {
+    "description": "Name of the \"Skip back by\" setting, drawn on its own row and in settings search."
+  },
+  "settingsSkipForwardHelp": "How far the forward control jumps",
+  "@settingsSkipForwardHelp": {
+    "description": "The line under the skip forward setting."
+  },
+  "settingsSkipForwardKeywords": "seconds, podcast, audiobook, ad",
+  "@settingsSkipForwardKeywords": {
+    "description": "Comma-separated search keywords for the \"Skip forward by\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsSkipForwardTitle": "Skip forward by",
+  "@settingsSkipForwardTitle": {
+    "description": "Name of the \"Skip forward by\" setting, drawn on its own row and in settings search."
+  },
+  "settingsSmartRewindHelp": "Steps back a little when you come back to a show or a book after a break, so you land before the sentence you lost",
+  "@settingsSmartRewindHelp": {
+    "description": "The line under the rewind-on-resume setting."
+  },
+  "settingsSmartRewindKeywords": "smart rewind, back, context, podcast, book",
+  "@settingsSmartRewindKeywords": {
+    "description": "Comma-separated search keywords for the \"Rewind on resume\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsSmartRewindLittle": "A little",
+  "@settingsSmartRewindLittle": {
+    "description": "Rewind-on-resume option: the shorter ladder, a few seconds after a break."
+  },
+  "settingsSmartRewindMore": "More",
+  "@settingsSmartRewindMore": {
+    "description": "Rewind-on-resume option: twice the shorter ladder, for a listener who loses the thread faster."
+  },
+  "settingsSmartRewindTitle": "Rewind on resume",
+  "@settingsSmartRewindTitle": {
+    "description": "Name of the \"Rewind on resume\" setting, drawn on its own row and in settings search."
+  },
+  "settingsTechnicalDetailsHelp": "Draws codec and format chips beside what they describe",
+  "@settingsTechnicalDetailsHelp": {
+    "description": "The line under the technical details switch."
+  },
+  "settingsTechnicalDetailsKeywords": "codec, bitrate, format, flac, provenance",
+  "@settingsTechnicalDetailsKeywords": {
+    "description": "Comma-separated search keywords for the \"Show technical details\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsTechnicalDetailsTitle": "Show technical details",
+  "@settingsTechnicalDetailsTitle": {
+    "description": "Name of the \"Show technical details\" setting, drawn on its own row and in settings search."
+  },
+  "settingsThemeDark": "Dark",
+  "@settingsThemeDark": {
+    "description": "Theme option: the dark palette."
+  },
+  "settingsThemeKeywords": "dark, light, oled, black",
+  "@settingsThemeKeywords": {
+    "description": "Comma-separated search keywords for the \"Theme\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsThemeLight": "Light",
+  "@settingsThemeLight": {
+    "description": "Theme option: the light palette."
+  },
+  "settingsThemeOled": "OLED black",
+  "@settingsThemeOled": {
+    "description": "Theme option: dark with a true black background, which an OLED screen draws by switching pixels off."
+  },
+  "settingsThemeTitle": "Theme",
+  "@settingsThemeTitle": {
+    "description": "Name of the \"Theme\" setting, drawn on its own row and in settings search."
+  },
+  "settingsTimezoneFieldHelp": "Calendar stats bucket days in this timezone; empty uses the server default (UTC)",
+  "@settingsTimezoneFieldHelp": {
+    "description": "The line under the timezone field, saying what the timezone decides and what leaving it empty does."
+  },
+  "settingsTimezoneFieldHint": "Europe/Amsterdam",
+  "@settingsTimezoneFieldHint": {
+    "description": "Placeholder in the timezone field. An IANA identifier, which is the same in every language - translate it only to a different example."
+  },
+  "settingsTimezoneFieldLabel": "IANA timezone",
+  "@settingsTimezoneFieldLabel": {
+    "description": "Label of the timezone field. IANA is the body that names timezones; the name itself is not translated."
+  },
+  "settingsTimezoneKeywords": "stats, calendar, streak",
+  "@settingsTimezoneKeywords": {
+    "description": "Comma-separated search keywords for the \"Timezone\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsTimezoneServerDefault": "Server default",
+  "@settingsTimezoneServerDefault": {
+    "description": "What the timezone row reads when no timezone has been stored."
+  },
+  "settingsTimezoneTitle": "Timezone",
+  "@settingsTimezoneTitle": {
+    "description": "Name of the \"Timezone\" setting, drawn on its own row and in settings search."
+  },
+  "settingsTitle": "Settings",
+  "@settingsTitle": {
+    "description": "Title of the settings home screen."
+  },
+  "settingsTrimDefaultHelp": "Shows and books with no stored choice of their own open with silence trimming on",
+  "@settingsTrimDefaultHelp": {
+    "description": "The line under the trim silence default."
+  },
+  "settingsTrimDefaultKeywords": "silence, skip, spoken word, podcast, book",
+  "@settingsTrimDefaultKeywords": {
+    "description": "Comma-separated search keywords for the \"Trim silence by default\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsTrimDefaultTitle": "Trim silence by default",
+  "@settingsTrimDefaultTitle": {
+    "description": "Name of the \"Trim silence by default\" setting, drawn on its own row and in settings search."
+  },
+  "settingsVisualizerIdleHelp": "Fills the screen with the track once music has been playing untouched for a few minutes",
+  "@settingsVisualizerIdleHelp": {
+    "description": "The line under the idle visualizer switch."
+  },
+  "settingsVisualizerIdleKeywords": "screensaver, waveform, platter, away",
+  "@settingsVisualizerIdleKeywords": {
+    "description": "Comma-separated search keywords for the \"Open the visualizer when idle\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsVisualizerIdleTitle": "Open the visualizer when idle",
+  "@settingsVisualizerIdleTitle": {
+    "description": "Name of the \"Open the visualizer when idle\" setting, drawn on its own row and in settings search."
+  },
+  "speedMultiplier": "{speed}x",
+  "@speedMultiplier": {
+    "description": "A playback rate as a picker option. The x is the multiplier convention; {speed} arrives already written for this language, so a locale that separates decimals differently is already handled.",
+    "placeholders": {
+      "speed": {
+        "type": "String",
+        "example": "1.5"
       }
     }
   }

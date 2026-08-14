@@ -8,6 +8,7 @@ import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../connect/cast_preflight.dart';
 import '../connect/device_picker.dart';
+import '../l10n/l10n.dart';
 import '../music/music_controllers.dart';
 import '../player/smart_rewind.dart';
 import '../providers.dart';
@@ -19,6 +20,7 @@ import 'client_prefs.dart';
 import 'integrations_sections.dart';
 import 'listening_sections.dart';
 import 'prefs_controller.dart';
+import 'save_setting.dart';
 import 'settings_registry.dart';
 
 /// One settings section, at its own location. A drilled-in screen rather
@@ -31,10 +33,11 @@ class SettingsSectionScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final sizeClass = WaxSizeClass.of(context);
     final isAdmin = ref.watch(isAdminProvider);
     return WaxScaffold(
-      title: section.title,
+      title: section.titleOf(l10n),
       largeTitle: false,
       // No identifier of its own: the obvious one is the row's, and one
       // id naming two things means a retried click meant for the row
@@ -65,9 +68,9 @@ class SettingsSectionScreen extends ConsumerWidget {
                 SettingsSection.server =>
                   isAdmin
                       ? const _ServerBody()
-                      : const EmptyState(
-                          title: 'Administrators only',
-                          message: 'This section is about the server itself.',
+                      : EmptyState(
+                          title: l10n.settingsServerAdminOnlyTitle,
+                          message: l10n.settingsServerAdminOnlyMessage,
                           glyph: WaxIcons.admin,
                         ),
               },
@@ -109,22 +112,27 @@ class _PlaybackBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    // The design system spells a duration the same way everywhere it is
+    // read out, and a skip interval is one of those.
+    final wax = context.waxL10n;
     final prefs = ref.watch(prefsControllerProvider).value;
     final prefsController = ref.read(prefsControllerProvider.notifier);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _Group(
-          title: 'Spoken word',
+          title: l10n.settingsGroupSpokenWord,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Skip back by',
-              help: 'How far the back control jumps on a podcast or a book',
+              title: l10n.settingsSkipBackTitle,
+              help: l10n.settingsSkipBackHelp,
               control: WaxChoice<int>(
                 value: ref.watch(skipBackSecondsProvider),
                 options: SkipBackSeconds.options,
-                labelFor: spellSeconds,
-                label: 'Skip back by',
+                labelFor: (seconds) =>
+                    wax.spellDuration(Duration(seconds: seconds)),
+                label: l10n.settingsSkipBackTitle,
                 semanticsId: SemanticsIds.setting('skip-back'),
                 optionSemanticsIdFor: (seconds) =>
                     SemanticsIds.settingOption('skip-back', seconds),
@@ -132,76 +140,70 @@ class _PlaybackBody extends ConsumerWidget {
               ),
             ),
             WaxSettingRow(
-              title: 'Skip forward by',
-              help: 'How far the forward control jumps',
+              title: l10n.settingsSkipForwardTitle,
+              help: l10n.settingsSkipForwardHelp,
               control: WaxChoice<int>(
                 value: ref.watch(skipForwardSecondsProvider),
                 options: SkipForwardSeconds.options,
-                labelFor: spellSeconds,
-                label: 'Skip forward by',
+                labelFor: (seconds) =>
+                    wax.spellDuration(Duration(seconds: seconds)),
+                label: l10n.settingsSkipForwardTitle,
                 semanticsId: SemanticsIds.setting('skip-forward'),
                 onChanged: ref.read(skipForwardSecondsProvider.notifier).set,
               ),
             ),
             WaxSettingRow(
-              title: 'Podcast speed',
-              help: 'The speed a show plays at until you set one for it',
+              title: l10n.settingsPodcastSpeedTitle,
+              help: l10n.settingsPodcastSpeedHelp,
               control: WaxChoice<double>(
                 value: ref.watch(podcastSpeedProvider),
                 options: SpeedSetting.options,
-                labelFor: spellSpeed,
-                label: 'Podcast speed',
+                labelFor: l10n.formatSpeed,
+                label: l10n.settingsPodcastSpeedTitle,
                 semanticsId: SemanticsIds.setting('podcast-speed'),
                 onChanged: ref.read(podcastSpeedProvider.notifier).set,
               ),
             ),
             WaxSettingRow(
-              title: 'Audiobook speed',
-              help: 'The speed a book plays at until you set one for it',
+              title: l10n.settingsBookSpeedTitle,
+              help: l10n.settingsBookSpeedHelp,
               control: WaxChoice<double>(
                 value: ref.watch(bookSpeedProvider),
                 options: SpeedSetting.options,
-                labelFor: spellSpeed,
-                label: 'Audiobook speed',
+                labelFor: l10n.formatSpeed,
+                label: l10n.settingsBookSpeedTitle,
                 semanticsId: SemanticsIds.setting('book-speed'),
                 onChanged: ref.read(bookSpeedProvider.notifier).set,
               ),
             ),
             WaxSettingRow(
-              title: 'Rewind on resume',
-              help:
-                  'Steps back a little when you come back to a show or a '
-                  'book after a break, so you land before the sentence you '
-                  'lost',
+              title: l10n.settingsSmartRewindTitle,
+              help: l10n.settingsSmartRewindHelp,
               control: WaxChoice<SmartRewind>(
                 value: ref.watch(smartRewindProvider),
                 options: SmartRewind.values,
-                labelFor: (value) => value.label,
-                label: 'Rewind on resume',
+                labelFor: (value) => value.labelOf(l10n),
+                label: l10n.settingsSmartRewindTitle,
                 semanticsId: SemanticsIds.setting('smart-rewind'),
                 onChanged: ref.read(smartRewindProvider.notifier).set,
               ),
             ),
             WaxSettingRow(
-              title: 'Trim silence by default',
-              help:
-                  'Shows and books with no stored choice of their own '
-                  'open with silence trimming on',
+              title: l10n.settingsTrimDefaultTitle,
+              help: l10n.settingsTrimDefaultHelp,
               control: WaxSwitch(
                 value: ref.watch(trimSilenceDefaultProvider),
-                label: 'Trim silence by default',
+                label: l10n.settingsTrimDefaultTitle,
                 semanticsId: SemanticsIds.setting('trim-default'),
                 onChanged: ref.read(trimSilenceDefaultProvider.notifier).set,
               ),
             ),
             WaxSettingRow(
-              title: 'Voice boost by default',
-              help:
-                  'Shows and books with no stored choice of their own '
-                  'open with loudness normalization on',
+              title: l10n.settingsBoostDefaultTitle,
+              help: l10n.settingsBoostDefaultHelp,
               control: WaxSwitch(
                 value: ref.watch(voiceBoostDefaultProvider),
-                label: 'Voice boost by default',
+                label: l10n.settingsBoostDefaultTitle,
                 semanticsId: SemanticsIds.setting('boost-default'),
                 onChanged: ref.read(voiceBoostDefaultProvider.notifier).set,
               ),
@@ -209,16 +211,14 @@ class _PlaybackBody extends ConsumerWidget {
           ],
         ),
         _Group(
-          title: 'The player',
+          title: l10n.settingsGroupPlayer,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Car mode button',
-              help:
-                  'Puts car mode on the player itself instead of inside '
-                  'its menu',
+              title: l10n.settingsCarButtonTitle,
+              help: l10n.settingsCarButtonHelp,
               control: WaxSwitch(
                 value: ref.watch(carModeButtonProvider),
-                label: 'Car mode button',
+                label: l10n.settingsCarButtonTitle,
                 semanticsId: SemanticsIds.setting('car-button'),
                 onChanged: ref.read(carModeButtonProvider.notifier).set,
               ),
@@ -228,13 +228,11 @@ class _PlaybackBody extends ConsumerWidget {
             // disabled, since a switch with nothing behind it lies.
             if (ref.watch(desktopProvider))
               WaxSettingRow(
-                title: 'Open the visualizer when idle',
-                help:
-                    'Fills the screen with the track once music has been '
-                    'playing untouched for a few minutes',
+                title: l10n.settingsVisualizerIdleTitle,
+                help: l10n.settingsVisualizerIdleHelp,
                 control: WaxSwitch(
                   value: ref.watch(visualizerWhenIdleProvider),
-                  label: 'Open the visualizer when idle',
+                  label: l10n.settingsVisualizerIdleTitle,
                   semanticsId: SemanticsIds.setting('visualizer-idle'),
                   onChanged: ref.read(visualizerWhenIdleProvider.notifier).set,
                 ),
@@ -246,69 +244,75 @@ class _PlaybackBody extends ConsumerWidget {
           // Nothing local reads either value yet, and a "Crossfade"
           // heading over a control that does nothing on this device is
           // the kind of promise a settings screen must not make.
-          title: 'Casting',
+          title: l10n.settingsGroupCasting,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Casting crossfade',
-              help: 'Fades one track into the next when casting a queue',
+              title: l10n.settingsCrossfadeTitle,
+              help: l10n.settingsCrossfadeHelp,
               control: WaxChoice<double>(
                 value: prefs?.crossfadeSeconds ?? 0,
                 options: const <double>[0, 2, 4, 6, 8, 12],
-                labelFor: (seconds) =>
-                    seconds == 0 ? 'Off' : spellSeconds(seconds.round()),
-                label: 'Casting crossfade',
+                labelFor: (seconds) => seconds == 0
+                    ? l10n.settingsOptionOff
+                    : wax.spellDuration(Duration(seconds: seconds.round())),
+                label: l10n.settingsCrossfadeTitle,
                 semanticsId: SemanticsIds.setting('crossfade'),
                 // Rounded: the options are doubles, and a spec names 6.
                 optionSemanticsIdFor: (seconds) =>
                     SemanticsIds.settingOption('crossfade', seconds.round()),
                 onChanged: prefs == null
                     ? null
-                    : prefsController.setCrossfadeSeconds,
+                    : (seconds) => saveSetting(
+                        context,
+                        prefsController.setCrossfadeSeconds(seconds),
+                      ),
               ),
             ),
             WaxSettingRow(
-              title: 'Level casting volume',
-              help:
-                  'Plays a cast queue at one loudness, where the files '
-                  'have been analyzed',
+              title: l10n.settingsReplayGainTitle,
+              help: l10n.settingsReplayGainHelp,
               control: WaxSwitch(
                 value: prefs?.replayGain ?? false,
-                label: 'Level casting volume',
+                label: l10n.settingsReplayGainTitle,
                 semanticsId: SemanticsIds.setting('replay-gain'),
-                onChanged: prefs == null ? null : prefsController.setReplayGain,
+                onChanged: prefs == null
+                    ? null
+                    : (on) => saveSetting(
+                        context,
+                        prefsController.setReplayGain(on),
+                      ),
               ),
             ),
           ],
         ),
         _Group(
-          title: 'Starting on its own',
+          title: l10n.settingsGroupStartingOnItsOwn,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Start playing without asking',
-              help:
-                  'Lets a queue another device hands over start here. Off '
-                  'means it arrives ready and waits to be tapped',
+              title: l10n.settingsAutoplayTitle,
+              help: l10n.settingsAutoplayHelp,
               control: WaxSwitch(
                 value: prefs?.autoplay ?? true,
-                label: 'Start playing without asking',
+                label: l10n.settingsAutoplayTitle,
                 semanticsId: SemanticsIds.setting('autoplay'),
-                onChanged: prefs == null ? null : prefsController.setAutoplay,
+                onChanged: prefs == null
+                    ? null
+                    : (on) =>
+                          saveSetting(context, prefsController.setAutoplay(on)),
               ),
             ),
           ],
         ),
         if (!kIsWeb)
           _Group(
-            title: 'Data',
+            title: l10n.settingsGroupData,
             children: <Widget>[
               WaxSettingRow(
-                title: 'Prepare the next track on wifi only',
-                help:
-                    'Gapless playback buffers the next track early; this '
-                    'holds that back on mobile data',
+                title: l10n.settingsPreloadWifiTitle,
+                help: l10n.settingsPreloadWifiHelp,
                 control: WaxSwitch(
                   value: ref.watch(preloadOnWifiOnlyProvider),
-                  label: 'Prepare the next track on wifi only',
+                  label: l10n.settingsPreloadWifiTitle,
                   semanticsId: SemanticsIds.setting('preload-wifi'),
                   onChanged: ref.read(preloadOnWifiOnlyProvider.notifier).set,
                 ),
@@ -327,89 +331,105 @@ class _LibraryBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final prefs = ref.watch(prefsControllerProvider).value;
     final prefsController = ref.read(prefsControllerProvider.notifier);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _Group(
-          title: 'Browsing',
+          title: l10n.settingsGroupBrowsing,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Show technical details',
-              help: 'Draws codec and format chips beside what they describe',
+              title: l10n.settingsTechnicalDetailsTitle,
+              help: l10n.settingsTechnicalDetailsHelp,
               control: WaxSwitch(
                 value: ref.watch(technicalDetailsProvider),
-                label: 'Show technical details',
+                label: l10n.settingsTechnicalDetailsTitle,
                 semanticsId: SemanticsIds.setting('technical-details'),
                 onChanged: ref.read(technicalDetailsProvider.notifier).set,
               ),
             ),
             WaxSettingRow(
-              title: 'Show unknown groups',
-              help:
-                  'Lists the group for what has no genre, no album, or no '
-                  'year of its own',
+              title: l10n.settingsBrowseUnknownTitle,
+              help: l10n.settingsBrowseUnknownHelp,
               control: WaxSwitch(
                 value: prefs?.browseShowUnknown ?? true,
-                label: 'Show unknown groups',
+                label: l10n.settingsBrowseUnknownTitle,
                 semanticsId: SemanticsIds.setting('browse-unknown'),
                 onChanged: prefs == null
                     ? null
-                    : prefsController.setBrowseShowUnknown,
+                    : (on) => saveSetting(
+                        context,
+                        prefsController.setBrowseShowUnknown(on),
+                      ),
               ),
             ),
           ],
         ),
         _Group(
-          title: 'Default order',
+          title: l10n.settingsBrowseOrderTitle,
           children: <Widget>[
             for (final dimension in MusicDimension.values)
               WaxSettingRow(
                 title: dimension.label,
-                help:
-                    'The order the ${dimension.label.toLowerCase()} '
-                    'index opens in',
+                // The row already names the index, so the line under it
+                // does not: naming it again meant lower-casing an
+                // English noun (an English rule) and dropping it into a
+                // translated sentence, where it read as a hole. The
+                // picker's accessible name still takes it, because five
+                // controls in one group need telling apart - and there
+                // it is a name beside a word rather than a sentence
+                // built around one. `MusicDimension.label` is English
+                // until the library slice takes it.
+                help: l10n.settingsBrowseOrderHelp,
                 control: WaxChoice<FacetSort>(
                   value:
                       prefs?.browseSortFor(dimension.wireName) ??
                       defaultBrowseSort(dimension),
                   options: FacetSort.values,
-                  labelFor: browseSortLabel,
-                  label: '${dimension.label} order',
+                  labelFor: (sort) => browseSortLabel(l10n, sort),
+                  label: l10n.settingsBrowseOrderChoiceLabel(dimension.label),
                   semanticsId: SemanticsIds.setting(
                     'browse-sort-${dimension.segment}',
                   ),
                   onChanged: prefs == null
                       ? null
-                      : (value) => prefsController.setBrowseSort(
-                          dimension.wireName,
-                          value,
+                      : (value) => saveSetting(
+                          context,
+                          prefsController.setBrowseSort(
+                            dimension.wireName,
+                            value,
+                          ),
                         ),
                 ),
               ),
           ],
         ),
         _Group(
-          title: 'Adding to the library',
+          title: l10n.settingsGroupAdding,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Identify uploads',
-              help:
-                  'Matches what you add against MusicBrainz. Off adds it '
-                  'with the tags it has, without review',
+              title: l10n.settingsIdentifyUploadsTitle,
+              help: l10n.settingsIdentifyUploadsHelp,
               control: WaxSwitch(
                 value: !(prefs?.identifyOptOut ?? false),
-                label: 'Identify uploads',
+                label: l10n.settingsIdentifyUploadsTitle,
                 semanticsId: SemanticsIds.setting('identify-uploads'),
                 onChanged: prefs == null
                     ? null
-                    : (on) => prefsController.setIdentifyOptOut(!on),
+                    : (on) => saveSetting(
+                        context,
+                        prefsController.setIdentifyOptOut(!on),
+                      ),
               ),
             ),
           ],
         ),
-        const _Group(title: 'Access', children: <Widget>[_LibraryAccessRow()]),
+        _Group(
+          title: l10n.settingsGroupAccess,
+          children: const <Widget>[_LibraryAccessRow()],
+        ),
       ],
     );
   }
@@ -423,22 +443,22 @@ class _LibraryAccessRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final account = ref.watch(myAccountProvider);
     final help = switch (account) {
       AsyncData(:final value) => switch (value.libraryAccess.mode) {
-        'all' => 'You can see every library on this server',
-        _ =>
-          'You can see '
-              '${value.libraryAccess.libraryPids.length} of this '
-              "server's libraries",
+        'all' => l10n.settingsLibraryAccessAll,
+        _ => l10n.settingsLibraryAccessSome(
+          value.libraryAccess.libraryPids.length,
+        ),
       },
-      AsyncError() => 'Could not read your access',
-      _ => 'Checking',
+      AsyncError() => l10n.settingsLibraryAccessError,
+      _ => l10n.settingsLibraryAccessChecking,
     };
     return Semantics(
       identifier: SemanticsIds.setting('library-access'),
       child: WaxSettingRow(
-        title: 'What I can see',
+        title: l10n.settingsLibraryAccessTitle,
         help: help,
         glyph: WaxIcons.albums,
         control: const SizedBox.shrink(),
@@ -454,33 +474,30 @@ class _DownloadsBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         if (!kIsWeb) ...<Widget>[
           _Group(
-            title: 'Downloads',
+            title: l10n.settingsGroupDownloads,
             children: <Widget>[
               WaxSettingRow(
-                title: 'Download on wifi only',
-                help:
-                    'Holds transfers until this device is on wifi, rather '
-                    'than failing them',
+                title: l10n.settingsDownloadsWifiTitle,
+                help: l10n.settingsDownloadsWifiHelp,
                 control: WaxSwitch(
                   value: ref.watch(downloadsOnWifiOnlyProvider),
-                  label: 'Download on wifi only',
+                  label: l10n.settingsDownloadsWifiTitle,
                   semanticsId: SemanticsIds.setting('downloads-wifi'),
                   onChanged: ref.read(downloadsOnWifiOnlyProvider.notifier).set,
                 ),
               ),
               WaxSettingRow(
-                title: 'Remove finished episodes',
-                help:
-                    'Reclaims a downloaded episode once it has been '
-                    'finished for a while. Books and albums are left alone',
+                title: l10n.settingsAutoRemoveFinishedTitle,
+                help: l10n.settingsAutoRemoveFinishedHelp,
                 control: WaxSwitch(
                   value: ref.watch(autoRemoveFinishedProvider),
-                  label: 'Remove finished episodes',
+                  label: l10n.settingsAutoRemoveFinishedTitle,
                   semanticsId: SemanticsIds.setting('auto-remove-finished'),
                   onChanged: ref.read(autoRemoveFinishedProvider.notifier).set,
                 ),
@@ -488,13 +505,13 @@ class _DownloadsBody extends ConsumerWidget {
               // Only where it decides something.
               if (ref.watch(autoRemoveFinishedProvider))
                 WaxSettingRow(
-                  title: 'Wait before removing',
-                  help: 'How long a finished episode stays before it goes',
+                  title: l10n.settingsAutoRemoveAfterTitle,
+                  help: l10n.settingsAutoRemoveAfterHelp,
                   control: WaxChoice<int>(
                     value: ref.watch(autoRemoveFinishedAfterHoursProvider),
                     options: AutoRemoveFinishedAfterHours.options,
-                    labelFor: spellHours,
-                    label: 'Wait before removing',
+                    labelFor: (hours) => l10n.spellHours(hours),
+                    label: l10n.settingsAutoRemoveAfterTitle,
                     semanticsId: SemanticsIds.setting('auto-remove-after'),
                     onChanged: ref
                         .read(autoRemoveFinishedAfterHoursProvider.notifier)
@@ -502,8 +519,8 @@ class _DownloadsBody extends ConsumerWidget {
                   ),
                 ),
               WaxOptionRow(
-                title: 'Manage downloads',
-                subtitle: 'What this device holds offline, and how to free it',
+                title: l10n.settingsDownloadsManagerTitle,
+                subtitle: l10n.settingsDownloadsManagerBlurb,
                 glyph: WaxIcons.downloads,
                 semanticsId: SemanticsIds.setting('downloads-manager'),
                 trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -512,7 +529,10 @@ class _DownloadsBody extends ConsumerWidget {
             ],
           ),
         ],
-        const _Group(title: 'Storage', children: <Widget>[_ArtworkCacheRow()]),
+        _Group(
+          title: l10n.settingsGroupStorage,
+          children: const <Widget>[_ArtworkCacheRow()],
+        ),
       ],
     );
   }
@@ -533,30 +553,32 @@ class _ArtworkCacheRowState extends ConsumerState<_ArtworkCacheRow> {
 
   Future<void> _clear() async {
     final messenger = ScaffoldMessenger.of(context);
+    final cleared = context.l10n.settingsArtworkCacheCleared;
     setState(() => _clearing = true);
     try {
       await ref.read(artworkStoreProvider).forgetEverything();
       ref.read(paletteCacheProvider).clear();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Artwork cache cleared')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text(cleared)));
     } finally {
       if (mounted) setState(() => _clearing = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) => WaxSettingRow(
-    title: 'Artwork cache',
-    help: 'Covers are re-fetched as they are needed again',
-    glyph: WaxIcons.albums,
-    control: WaxButton(
-      label: 'Clear',
-      kind: WaxButtonKind.tonal,
-      onPressed: _clearing ? null : () => _clear(),
-      semanticsId: SemanticsIds.setting('artwork-cache'),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return WaxSettingRow(
+      title: l10n.settingsArtworkCacheTitle,
+      help: l10n.settingsArtworkCacheHelp,
+      glyph: WaxIcons.albums,
+      control: WaxButton(
+        label: l10n.settingsArtworkCacheClear,
+        kind: WaxButtonKind.tonal,
+        onPressed: _clearing ? null : () => _clear(),
+        semanticsId: SemanticsIds.setting('artwork-cache'),
+      ),
+    );
+  }
 }
 
 // --- Devices and casting -----------------------------------------------------
@@ -566,15 +588,16 @@ class _DevicesBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _Group(
-          title: 'Where sound comes out',
+          title: l10n.settingsGroupWhereSoundComesOut,
           children: <Widget>[
             WaxOptionRow(
-              title: 'Playback endpoints',
-              subtitle: 'Cast targets, renderers, and your other devices',
+              title: l10n.settingsEndpointsTitle,
+              subtitle: l10n.settingsEndpointsBlurb,
               glyph: WaxIcons.cast,
               semanticsId: SemanticsIds.setting('endpoints'),
               trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -584,8 +607,8 @@ class _DevicesBody extends ConsumerWidget {
               onTap: () => showDevicePicker(context, from: CastSource.here),
             ),
             WaxOptionRow(
-              title: 'Connection check',
-              subtitle: 'Whether a cast device can reach this server',
+              title: l10n.settingsCastCheckTitle,
+              subtitle: l10n.settingsCastCheckBlurb,
               glyph: WaxIcons.warning,
               semanticsId: SemanticsIds.setting('cast-check'),
               trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -605,6 +628,7 @@ class _IntegrationsBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final prefs = ref.watch(prefsControllerProvider).value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -616,22 +640,23 @@ class _IntegrationsBody extends ConsumerWidget {
           child: const ScrobblingSection(),
         ),
         _Group(
-          title: 'What gets scrobbled',
+          title: l10n.settingsGroupWhatGetsScrobbled,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Scrobble radio',
-              help:
-                  'Radio segments report as tracks where a station names '
-                  'them honestly',
+              title: l10n.settingsRadioScrobblingTitle,
+              help: l10n.settingsRadioScrobblingHelp,
               control: WaxSwitch(
                 value: !(prefs?.radioScrobbleOptOut ?? false),
-                label: 'Scrobble radio',
+                label: l10n.settingsRadioScrobblingTitle,
                 semanticsId: SemanticsIds.radioScrobbleSwitch,
                 onChanged: prefs == null
                     ? null
-                    : (on) => ref
-                          .read(prefsControllerProvider.notifier)
-                          .setRadioScrobbleOptOut(!on),
+                    : (on) => saveSetting(
+                        context,
+                        ref
+                            .read(prefsControllerProvider.notifier)
+                            .setRadioScrobbleOptOut(!on),
+                      ),
               ),
             ),
           ],
@@ -656,115 +681,178 @@ class _IntegrationsBody extends ConsumerWidget {
 
 // --- Appearance --------------------------------------------------------------
 
+/// The tag that stands for "no stored choice" in the language picker.
+///
+/// A sentinel rather than a null option: the picker rides `showMenu`,
+/// which answers null when it is dismissed, so a null value would make
+/// choosing Match the system indistinguishable from closing the menu.
+/// Not a parseable BCP 47 tag, so it can never collide with a real one.
+const _systemLocaleTag = 'system';
+
+/// Which option a stored preference stands for.
+///
+/// The same reading the app itself does, so the row cannot disagree with
+/// what is on screen: `es-MX` is a Spanish this build has and reads as
+/// Spanish, and a tag it cannot draw reads as the system - which is what
+/// the app is then following, because [localeOverrideProvider] answers
+/// null for exactly the same tags.
+String _languageValue(String? stored) =>
+    (stored == null ? null : supportedLocaleFor(stored))?.toLanguageTag() ??
+    _systemLocaleTag;
+
 class _AppearanceBody extends ConsumerWidget {
   const _AppearanceBody();
 
-  static String _themeLabel(ThemePref theme) => switch (theme) {
-    ThemePref.system => 'Match the system',
-    ThemePref.dark => 'Dark',
-    ThemePref.light => 'Light',
-    ThemePref.oled => 'OLED black',
-  };
+  static String _themeLabel(AppLocalizations l10n, ThemePref theme) =>
+      switch (theme) {
+        ThemePref.system => l10n.settingsMatchTheSystem,
+        ThemePref.dark => l10n.settingsThemeDark,
+        ThemePref.light => l10n.settingsThemeLight,
+        ThemePref.oled => l10n.settingsThemeOled,
+      };
 
-  static String _densityLabel(WaxDensity density) => switch (density) {
-    WaxDensity.comfortable => 'Comfortable',
-    WaxDensity.compact => 'Compact',
-  };
+  static String _densityLabel(AppLocalizations l10n, WaxDensity density) =>
+      switch (density) {
+        WaxDensity.comfortable => l10n.settingsDensityComfortable,
+        WaxDensity.compact => l10n.settingsDensityCompact,
+      };
 
-  static String _gridLabel(WaxGridSize size) => switch (size) {
-    WaxGridSize.small => 'Small',
-    WaxGridSize.medium => 'Medium',
-    WaxGridSize.large => 'Large',
-  };
+  static String _gridLabel(AppLocalizations l10n, WaxGridSize size) =>
+      switch (size) {
+        WaxGridSize.small => l10n.settingsGridSmall,
+        WaxGridSize.medium => l10n.settingsGridMedium,
+        WaxGridSize.large => l10n.settingsGridLarge,
+      };
 
-  static String _captionLabel(WaxCaptionMode mode) => switch (mode) {
-    WaxCaptionMode.always => 'Always',
-    WaxCaptionMode.onHover => 'On hover',
-  };
+  static String _captionLabel(AppLocalizations l10n, WaxCaptionMode mode) =>
+      switch (mode) {
+        WaxCaptionMode.always => l10n.settingsCaptionsAlways,
+        WaxCaptionMode.onHover => l10n.settingsCaptionsOnHover,
+      };
+
+  static String _languageLabel(AppLocalizations l10n, String tag) =>
+      tag == _systemLocaleTag
+      ? l10n.settingsMatchTheSystem
+      : languageEndonyms[tag] ?? tag;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final prefs = ref.watch(prefsControllerProvider).value;
+    final prefsController = ref.read(prefsControllerProvider.notifier);
     // The hardware question, not the this-second one: a touchscreen
     // laptop is in touch highlight mode for as long as the last input
     // was a finger, and greying the row there would be the app telling
     // a machine with a mouse on it that it has no pointer.
     final hasPointer = ref.watch(mouseConnectedProvider);
+    // Derived from the locales the app resolves, so the picker cannot
+    // offer one it has no strings for: a third ARB pair is the only edit
+    // adding a language takes, beside its endonym.
+    final languageTags = <String>[
+      _systemLocaleTag,
+      for (final locale in waxSupportedLocales) locale.toLanguageTag(),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _Group(
-          title: 'Theme',
+          title: l10n.settingsThemeTitle,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Theme',
-              // The one Appearance setting that follows the account
-              // rather than the device, which is why it says so.
-              help: 'Follows you to your other devices',
+              title: l10n.settingsThemeTitle,
+              // The Appearance settings that follow the account rather
+              // than the device, which is why they say so.
+              help: l10n.settingsFollowsAccountHelp,
               control: WaxChoice<ThemePref>(
                 value: prefs?.theme ?? ThemePref.system,
                 options: ThemePref.values,
-                labelFor: _themeLabel,
-                label: 'Theme',
+                labelFor: (theme) => _themeLabel(l10n, theme),
+                label: l10n.settingsThemeTitle,
                 semanticsId: SemanticsIds.themeSelect,
                 onChanged: prefs == null
                     ? null
-                    : ref.read(prefsControllerProvider.notifier).setTheme,
+                    : (theme) =>
+                          saveSetting(context, prefsController.setTheme(theme)),
               ),
             ),
           ],
         ),
         _Group(
-          title: 'This device',
+          title: l10n.settingsLanguageTitle,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Density',
-              help: 'How tightly rows pack; text size stays the system\'s',
+              title: l10n.settingsLanguageTitle,
+              help: l10n.settingsFollowsAccountHelp,
+              control: WaxChoice<String>(
+                value: _languageValue(prefs?.locale),
+                options: languageTags,
+                labelFor: (tag) => _languageLabel(l10n, tag),
+                label: l10n.settingsLanguageTitle,
+                semanticsId: SemanticsIds.setting('language'),
+                optionSemanticsIdFor: (tag) =>
+                    SemanticsIds.settingOption('language', tag),
+                onChanged: prefs == null
+                    ? null
+                    : (tag) => saveSetting(
+                        context,
+                        tag == _systemLocaleTag
+                            ? prefsController.clearLocale()
+                            : prefsController.setLocale(tag),
+                      ),
+              ),
+            ),
+          ],
+        ),
+        _Group(
+          title: l10n.settingsGroupThisDevice,
+          children: <Widget>[
+            WaxSettingRow(
+              title: l10n.settingsDensityTitle,
+              help: l10n.settingsDensityHelp,
               control: WaxChoice<WaxDensity>(
                 value: ref.watch(densityProvider),
                 options: WaxDensity.values,
-                labelFor: _densityLabel,
-                label: 'Density',
+                labelFor: (density) => _densityLabel(l10n, density),
+                label: l10n.settingsDensityTitle,
                 semanticsId: SemanticsIds.setting('density'),
                 onChanged: ref.read(densityProvider.notifier).set,
               ),
             ),
             WaxSettingRow(
-              title: 'Artwork size',
-              help: 'How large covers are drawn in grids',
+              title: l10n.settingsGridSizeTitle,
+              help: l10n.settingsGridSizeHelp,
               control: WaxChoice<WaxGridSize>(
                 value: ref.watch(gridSizeProvider),
                 options: WaxGridSize.values,
-                labelFor: _gridLabel,
-                label: 'Artwork size',
+                labelFor: (size) => _gridLabel(l10n, size),
+                label: l10n.settingsGridSizeTitle,
                 semanticsId: SemanticsIds.setting('grid-size'),
                 onChanged: ref.read(gridSizeProvider.notifier).set,
               ),
             ),
             WaxSettingRow(
-              title: 'Artwork glow',
-              help: 'The colour a cover casts behind the player',
+              title: l10n.settingsArtworkGlowTitle,
+              help: l10n.settingsArtworkGlowHelp,
               control: WaxSwitch(
                 value: ref.watch(artworkGlowProvider),
-                label: 'Artwork glow',
+                label: l10n.settingsArtworkGlowTitle,
                 semanticsId: SemanticsIds.setting('artwork-glow'),
                 onChanged: ref.read(artworkGlowProvider.notifier).set,
               ),
             ),
             WaxSettingRow(
-              title: 'Card captions',
+              title: l10n.settingsCardCaptionsTitle,
               // Hover is the only way back to a hidden caption, so with
               // no pointer the choice is refused rather than taken and
               // quietly ignored, and the help line says why.
               help: hasPointer
-                  ? 'The lines under a cover in a grid'
-                  : 'Always shown: hiding them needs a pointer to bring '
-                        'them back',
+                  ? l10n.settingsCardCaptionsHelp
+                  : l10n.settingsCardCaptionsNoPointerHelp,
               control: WaxChoice<WaxCaptionMode>(
                 value: ref.watch(cardCaptionsProvider),
                 options: WaxCaptionMode.values,
-                labelFor: _captionLabel,
-                label: 'Card captions',
+                labelFor: (mode) => _captionLabel(l10n, mode),
+                label: l10n.settingsCardCaptionsTitle,
                 semanticsId: SemanticsIds.setting('card-captions'),
                 onChanged: hasPointer
                     ? ref.read(cardCaptionsProvider.notifier).set
@@ -785,26 +873,26 @@ class _AccessibilityBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final platformReduced = MediaQuery.disableAnimationsOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _Group(
-          title: 'Motion',
+          title: l10n.settingsGroupMotion,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Reduce motion',
+              title: l10n.settingsReduceMotionTitle,
               // Says what it is doing when the platform already asked for
               // this, rather than sitting on with no effect and looking
               // broken. The switch stays live: turning it off here does
               // not put motion back, and the line is what explains that.
               help: platformReduced && !ref.watch(reduceMotionProvider)
-                  ? 'Already reduced: this device asks every app for less '
-                        'motion'
-                  : 'Stills transitions and the playing indicator',
+                  ? l10n.settingsReduceMotionPlatformHelp
+                  : l10n.settingsReduceMotionHelp,
               control: WaxSwitch(
                 value: ref.watch(reduceMotionProvider),
-                label: 'Reduce motion',
+                label: l10n.settingsReduceMotionTitle,
                 semanticsId: SemanticsIds.setting('reduce-motion'),
                 onChanged: ref.read(reduceMotionProvider.notifier).set,
               ),
@@ -812,13 +900,11 @@ class _AccessibilityBody extends ConsumerWidget {
           ],
         ),
         _Group(
-          title: 'Screen readers',
+          title: l10n.settingsGroupScreenReaders,
           children: <Widget>[
             WaxOptionRow(
-              title: 'How WaxDeck reads out',
-              subtitle:
-                  'Every control is named, the queue reorders from the '
-                  'keyboard, and the deck bar is one landmark',
+              title: l10n.settingsScreenReaderTitle,
+              subtitle: l10n.settingsScreenReaderBlurb,
               glyph: WaxIcons.headphones,
             ),
           ],
@@ -835,19 +921,20 @@ class _ServerBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _Group(
-          title: 'This server',
+          title: l10n.settingsServerSummaryTitle,
           children: <Widget>[
             const AboutRow(semanticsId: SemanticsIds.serverSummary),
             // A door rather than a control panel: the switches that used
             // to sit here are decisions about the server, and belong
             // beside the other ones.
             WaxOptionRow(
-              title: 'Open the admin console',
-              subtitle: 'Libraries, users, scans, backups, and the audit log',
+              title: l10n.settingsAdminConsoleOpenTitle,
+              subtitle: l10n.settingsAdminConsoleBlurb,
               glyph: WaxIcons.admin,
               trailing: const WaxIcon(WaxIcons.forward, size: 16),
               semanticsId: SemanticsIds.setting('admin-console'),

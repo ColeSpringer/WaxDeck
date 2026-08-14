@@ -135,6 +135,12 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get commonRetry;
 
+  /// Button that commits an edit. Used across dialogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get commonSave;
+
   /// Snackbar when handing a multi-part audiobook to a device that cannot play one. {endpoint} is that device's user-chosen name.
   ///
   /// In en, this message translates to:
@@ -146,6 +152,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing is playing here to send. Start something first.'**
   String get devicesNothingToSend;
+
+  /// A wait in whole days, as a picker option: a day reads better than twenty-four hours.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{1 day} other{{days} days}}'**
+  String durationDays(int days);
+
+  /// A wait in hours, as a picker option. The design system's table carries this same message for the durations its own components spell (wax_en.arb, durationHours), and a test holds the two to the same words - so translate them alike or a listener meets one unit spelled two ways on adjacent screens.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{1 hour} other{{hours} hours}}'**
+  String durationHours(int hours);
 
   /// Error sentence for the spec code `catalog-busy`: a file-moving request cannot start yet, and this one clears on its own.
   ///
@@ -423,6 +441,18 @@ abstract class AppLocalizations {
   /// **'File tags out of sync with the catalog'**
   String get healthWriteUnsynced;
 
+  /// Library index order: alphabetical by name.
+  ///
+  /// In en, this message translates to:
+  /// **'A to Z'**
+  String get libraryBrowseSortAtoZ;
+
+  /// Library index order: the groups holding the most come first.
+  ///
+  /// In en, this message translates to:
+  /// **'Most first'**
+  String get libraryBrowseSortMostFirst;
+
   /// Never displayed. Any natural sentence in this language, written the way the language actually is, accents and all: the app scans it for the scripts this locale needs and loads their fonts before the interface draws.
   ///
   /// In en, this message translates to:
@@ -584,6 +614,1866 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{months, plural, =1{1mo ago} other{{months}mo ago}}'**
   String relMonthsShort(int months);
+
+  /// Comma-separated search keywords for the "About WaxDeck" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'version, licenses, open source, build, defects, errors, diagnostics, log, crash'**
+  String get settingsAboutKeywords;
+
+  /// Name of the "About WaxDeck" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'About WaxDeck'**
+  String get settingsAboutTitle;
+
+  /// What the account row reads for an account with no display name of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in'**
+  String get settingsAccountSignedIn;
+
+  /// The line under the row that opens the admin console.
+  ///
+  /// In en, this message translates to:
+  /// **'Libraries, users, scans, backups, and the audit log'**
+  String get settingsAdminConsoleBlurb;
+
+  /// Comma-separated search keywords for the "Admin console" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'read-only, signup, libraries, users, backups, schedules, trash, audit, transcoding, genres'**
+  String get settingsAdminConsoleKeywords;
+
+  /// Name of the row that leads out of settings into the admin console.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the admin console'**
+  String get settingsAdminConsoleOpenTitle;
+
+  /// Name of the "Admin console" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin console'**
+  String get settingsAdminConsoleTitle;
+
+  /// Button that copies the new app password to the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get settingsAppPasswordCopy;
+
+  /// Button that creates the app password.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get settingsAppPasswordCreate;
+
+  /// Body of the dialog showing a newly created app password.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy it now; the server stores it sealed and never shows it again.'**
+  String get settingsAppPasswordCreatedMessage;
+
+  /// Title of the dialog showing a newly created app password.
+  ///
+  /// In en, this message translates to:
+  /// **'App password created'**
+  String get settingsAppPasswordCreatedTitle;
+
+  /// Button that closes the dialog showing a new app password.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get settingsAppPasswordDone;
+
+  /// Field for what an app password is called.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get settingsAppPasswordLabel;
+
+  /// The line under the app password label field.
+  ///
+  /// In en, this message translates to:
+  /// **'Which app is this for?'**
+  String get settingsAppPasswordLabelHelp;
+
+  /// Action on the app passwords heading that creates one.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get settingsAppPasswordNewAction;
+
+  /// What a screen reader hears for the app password create action, and the title of the dialog it opens.
+  ///
+  /// In en, this message translates to:
+  /// **'New app password'**
+  String get settingsAppPasswordNewSpoken;
+
+  /// The button that revokes one app password. {label} is what that password is called, so two of them do not sound alike.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke {label}'**
+  String settingsAppPasswordRevoke(String label);
+
+  /// What an app password with no label of its own is called.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlabeled'**
+  String get settingsAppPasswordUnlabeled;
+
+  /// The line under the app passwords heading, saying what they are for.
+  ///
+  /// In en, this message translates to:
+  /// **'For Subsonic apps and podcast sync clients. Your login password never works there.'**
+  String get settingsAppPasswordsBlurb;
+
+  /// Shown where the app password rows would be when there are none.
+  ///
+  /// In en, this message translates to:
+  /// **'No app passwords yet'**
+  String get settingsAppPasswordsEmpty;
+
+  /// Shown where the app password rows would be when the read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load app passwords'**
+  String get settingsAppPasswordsError;
+
+  /// Comma-separated search keywords for the "App passwords" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'subsonic, gpodder, token, third party'**
+  String get settingsAppPasswordsKeywords;
+
+  /// Name of the "App passwords" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'App passwords'**
+  String get settingsAppPasswordsTitle;
+
+  /// Button that empties the artwork cache.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get settingsArtworkCacheClear;
+
+  /// Snackbar after the artwork cache has been emptied.
+  ///
+  /// In en, this message translates to:
+  /// **'Artwork cache cleared'**
+  String get settingsArtworkCacheCleared;
+
+  /// The line under the artwork cache row, saying what clearing it costs.
+  ///
+  /// In en, this message translates to:
+  /// **'Covers are re-fetched as they are needed again'**
+  String get settingsArtworkCacheHelp;
+
+  /// Comma-separated search keywords for the "Artwork cache" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'covers, images, clear, space'**
+  String get settingsArtworkCacheKeywords;
+
+  /// Name of the "Artwork cache" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Artwork cache'**
+  String get settingsArtworkCacheTitle;
+
+  /// The line under the artwork glow switch.
+  ///
+  /// In en, this message translates to:
+  /// **'The colour a cover casts behind the player'**
+  String get settingsArtworkGlowHelp;
+
+  /// Comma-separated search keywords for the "Artwork glow" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'backdrop, colour, color, player, wash'**
+  String get settingsArtworkGlowKeywords;
+
+  /// Name of the "Artwork glow" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Artwork glow'**
+  String get settingsArtworkGlowTitle;
+
+  /// The line under the wait-before-removing setting.
+  ///
+  /// In en, this message translates to:
+  /// **'How long a finished episode stays before it goes'**
+  String get settingsAutoRemoveAfterHelp;
+
+  /// Name of the setting for how long a finished episode is kept.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait before removing'**
+  String get settingsAutoRemoveAfterTitle;
+
+  /// The line under the remove-finished-episodes switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Reclaims a downloaded episode once it has been finished for a while. Books and albums are left alone'**
+  String get settingsAutoRemoveFinishedHelp;
+
+  /// Comma-separated search keywords for the "Remove finished episodes" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'tidy, reclaim, space, listened, podcast'**
+  String get settingsAutoRemoveFinishedKeywords;
+
+  /// Name of the "Remove finished episodes" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove finished episodes'**
+  String get settingsAutoRemoveFinishedTitle;
+
+  /// The line under the start-without-asking switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Lets a queue another device hands over start here. Off means it arrives ready and waits to be tapped'**
+  String get settingsAutoplayHelp;
+
+  /// Comma-separated search keywords for the "Start playing without asking" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'autoplay, resume, handover, connect, browser'**
+  String get settingsAutoplayKeywords;
+
+  /// Name of the "Start playing without asking" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Start playing without asking'**
+  String get settingsAutoplayTitle;
+
+  /// The line under the default audiobook speed setting.
+  ///
+  /// In en, this message translates to:
+  /// **'The speed a book plays at until you set one for it'**
+  String get settingsBookSpeedHelp;
+
+  /// Comma-separated search keywords for the "Audiobook speed" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'rate, faster, default, narration'**
+  String get settingsBookSpeedKeywords;
+
+  /// Name of the "Audiobook speed" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobook speed'**
+  String get settingsBookSpeedTitle;
+
+  /// The line under the voice boost default.
+  ///
+  /// In en, this message translates to:
+  /// **'Shows and books with no stored choice of their own open with loudness normalization on'**
+  String get settingsBoostDefaultHelp;
+
+  /// Comma-separated search keywords for the "Voice boost by default" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'loudness, normalize, volume, speech, quiet'**
+  String get settingsBoostDefaultKeywords;
+
+  /// Name of the "Voice boost by default" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice boost by default'**
+  String get settingsBoostDefaultTitle;
+
+  /// The accessible name of one library index's order picker, so a screen reader hears which index it belongs to. {dimension} is what the index lists.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension} order'**
+  String settingsBrowseOrderChoiceLabel(String dimension);
+
+  /// The line under one library index's default order, on the row that already names the index.
+  ///
+  /// In en, this message translates to:
+  /// **'The order this index opens in'**
+  String get settingsBrowseOrderHelp;
+
+  /// Comma-separated search keywords for the "Default order" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'sort, order, alphabetical, browse, index'**
+  String get settingsBrowseOrderKeywords;
+
+  /// Name of the "Default order" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Default order'**
+  String get settingsBrowseOrderTitle;
+
+  /// The line under the show-unknown-groups switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Lists the group for what has no genre, no album, or no year of its own'**
+  String get settingsBrowseUnknownHelp;
+
+  /// Comma-separated search keywords for the "Show unknown groups" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'unknown, untagged, missing, no genre, browse'**
+  String get settingsBrowseUnknownKeywords;
+
+  /// Name of the "Show unknown groups" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Show unknown groups'**
+  String get settingsBrowseUnknownTitle;
+
+  /// Card captions option: the names under a cover are always drawn.
+  ///
+  /// In en, this message translates to:
+  /// **'Always'**
+  String get settingsCaptionsAlways;
+
+  /// Card captions option: the names under a cover appear when the pointer is over them.
+  ///
+  /// In en, this message translates to:
+  /// **'On hover'**
+  String get settingsCaptionsOnHover;
+
+  /// The line under the car mode button switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Puts car mode on the player itself instead of inside its menu'**
+  String get settingsCarButtonHelp;
+
+  /// Comma-separated search keywords for the "Car mode button" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'driving, large, dashboard, player'**
+  String get settingsCarButtonKeywords;
+
+  /// Name of the "Car mode button" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Car mode button'**
+  String get settingsCarButtonTitle;
+
+  /// The line under the card captions setting, where the choice is offered.
+  ///
+  /// In en, this message translates to:
+  /// **'The lines under a cover in a grid'**
+  String get settingsCardCaptionsHelp;
+
+  /// Comma-separated search keywords for the "Card captions" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'labels, titles, hover, grid, covers'**
+  String get settingsCardCaptionsKeywords;
+
+  /// The line under the card captions setting on a device with no pointer, where the choice is refused rather than stored and ignored.
+  ///
+  /// In en, this message translates to:
+  /// **'Always shown: hiding them needs a pointer to bring them back'**
+  String get settingsCardCaptionsNoPointerHelp;
+
+  /// Name of the "Card captions" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Card captions'**
+  String get settingsCardCaptionsTitle;
+
+  /// The line under the row that opens the cast connection check.
+  ///
+  /// In en, this message translates to:
+  /// **'Whether a cast device can reach this server'**
+  String get settingsCastCheckBlurb;
+
+  /// Comma-separated search keywords for the "Connection check" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'preflight, diagnose, reachable, cast'**
+  String get settingsCastCheckKeywords;
+
+  /// Name of the "Connection check" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection check'**
+  String get settingsCastCheckTitle;
+
+  /// The line under the casting crossfade setting.
+  ///
+  /// In en, this message translates to:
+  /// **'Fades one track into the next when casting a queue'**
+  String get settingsCrossfadeHelp;
+
+  /// Comma-separated search keywords for the "Casting crossfade" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'fade, gapless, seam, chromecast'**
+  String get settingsCrossfadeKeywords;
+
+  /// Name of the "Casting crossfade" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Casting crossfade'**
+  String get settingsCrossfadeTitle;
+
+  /// Density option: rows with room around them.
+  ///
+  /// In en, this message translates to:
+  /// **'Comfortable'**
+  String get settingsDensityComfortable;
+
+  /// Density option: more rows on a screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Compact'**
+  String get settingsDensityCompact;
+
+  /// The line under the density setting, saying what it does and what it does not touch.
+  ///
+  /// In en, this message translates to:
+  /// **'How tightly rows pack; text size stays the system\'s'**
+  String get settingsDensityHelp;
+
+  /// Comma-separated search keywords for the "Density" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'compact, comfortable, spacing, rows'**
+  String get settingsDensityKeywords;
+
+  /// Name of the "Density" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Density'**
+  String get settingsDensityTitle;
+
+  /// Placeholder in the device name field: an example of the kind of name somebody gives a device.
+  ///
+  /// In en, this message translates to:
+  /// **'Kitchen radio'**
+  String get settingsDeviceNameHint;
+
+  /// Field for what a signed-in device is called.
+  ///
+  /// In en, this message translates to:
+  /// **'Device name'**
+  String get settingsDeviceNameLabel;
+
+  /// The button that opens the rename dialog, and that dialog's title.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename device'**
+  String get settingsDeviceRename;
+
+  /// The button on a session row that revokes it.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out device'**
+  String get settingsDeviceSignOutAction;
+
+  /// Body of the sign-out dialog for the device being used right now.
+  ///
+  /// In en, this message translates to:
+  /// **'This is the device you are using now. Revoking its session signs you out.'**
+  String get settingsDeviceSignOutCurrentMessage;
+
+  /// Title of the dialog confirming that the device being used right now is being signed out.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out this device?'**
+  String get settingsDeviceSignOutCurrentTitle;
+
+  /// Body of the sign-out dialog for another device. {name} is that device's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{name}\" will be signed out immediately.'**
+  String settingsDeviceSignOutMessage(String name);
+
+  /// Title of the dialog confirming that another device is being signed out.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out device?'**
+  String get settingsDeviceSignOutTitle;
+
+  /// The line under a session row. {date} is when the session began, already written for this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in {date}'**
+  String settingsDeviceSignedIn(String date);
+
+  /// The line under a session row that also knows which app signed in. {date} is already written for this language; {client} is the app's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in {date} with {client}'**
+  String settingsDeviceSignedInWith(String date, String client);
+
+  /// The session row for the device being used right now. {name} is the device's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} (this device)'**
+  String settingsDeviceThisDevice(String name);
+
+  /// Second line of the session list error state.
+  ///
+  /// In en, this message translates to:
+  /// **'The server did not answer.'**
+  String get settingsDevicesErrorMessage;
+
+  /// Error state where the session list would be.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load devices'**
+  String get settingsDevicesErrorTitle;
+
+  /// Comma-separated search keywords for the "Signed-in devices" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'sessions, revoke, sign out, logout'**
+  String get settingsDevicesKeywords;
+
+  /// Name of the "Signed-in devices" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed-in devices'**
+  String get settingsDevicesTitle;
+
+  /// The line under the Discord application ID field.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and where its cover art comes from'**
+  String get settingsDiscordApplicationHelp;
+
+  /// Field for a Discord application ID of the listener's own, instead of WaxDeck's.
+  ///
+  /// In en, this message translates to:
+  /// **'Publish as another application (optional)'**
+  String get settingsDiscordApplicationLabel;
+
+  /// Note under the Discord application ID field explaining why the cover art cannot be the album's.
+  ///
+  /// In en, this message translates to:
+  /// **'The cover is one image for every track, uploaded to that application rather than taken from your library: Discord fetches art through its own servers, which cannot reach a private one.'**
+  String get settingsDiscordCoverNote;
+
+  /// The line under the Discord presence switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Sets your Discord status while WaxDeck plays, through the Discord app on this machine'**
+  String get settingsDiscordPresenceHelp;
+
+  /// Comma-separated search keywords for the "Show what I am listening to on Discord" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'discord, rich presence, status, listening to'**
+  String get settingsDiscordPresenceKeywords;
+
+  /// The Discord presence switch, under a Discord heading that already names the service. Settings search spells the service out.
+  ///
+  /// In en, this message translates to:
+  /// **'Show what I am listening to'**
+  String get settingsDiscordPresenceRowTitle;
+
+  /// Name of the "Show what I am listening to on Discord" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Show what I am listening to on Discord'**
+  String get settingsDiscordPresenceTitle;
+
+  /// Comma-separated search keywords for the "Display name" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'username, profile, who'**
+  String get settingsDisplayNameKeywords;
+
+  /// Name of the "Display name" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name'**
+  String get settingsDisplayNameTitle;
+
+  /// The line under the row that opens the download manager.
+  ///
+  /// In en, this message translates to:
+  /// **'What this device holds offline, and how to free it'**
+  String get settingsDownloadsManagerBlurb;
+
+  /// Comma-separated search keywords for the "Manage downloads" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'offline, storage, space, remove'**
+  String get settingsDownloadsManagerKeywords;
+
+  /// Name of the "Manage downloads" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage downloads'**
+  String get settingsDownloadsManagerTitle;
+
+  /// The line under the download-on-wifi-only switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Holds transfers until this device is on wifi, rather than failing them'**
+  String get settingsDownloadsWifiHelp;
+
+  /// Comma-separated search keywords for the "Download on wifi only" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'data, metered, mobile, cellular'**
+  String get settingsDownloadsWifiKeywords;
+
+  /// Name of the "Download on wifi only" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Download on wifi only'**
+  String get settingsDownloadsWifiTitle;
+
+  /// The line under the row that opens the playback endpoint list.
+  ///
+  /// In en, this message translates to:
+  /// **'Cast targets, renderers, and your other devices'**
+  String get settingsEndpointsBlurb;
+
+  /// Comma-separated search keywords for the "Playback endpoints" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'cast, chromecast, dlna, speaker, connect'**
+  String get settingsEndpointsKeywords;
+
+  /// Name of the "Playback endpoints" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback endpoints'**
+  String get settingsEndpointsTitle;
+
+  /// The line under the two Appearance settings stored on the account rather than on this device: the theme and the language.
+  ///
+  /// In en, this message translates to:
+  /// **'Follows you to your other devices'**
+  String get settingsFollowsAccountHelp;
+
+  /// Artwork size option.
+  ///
+  /// In en, this message translates to:
+  /// **'Large'**
+  String get settingsGridLarge;
+
+  /// Artwork size option.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get settingsGridMedium;
+
+  /// The line under the artwork size setting.
+  ///
+  /// In en, this message translates to:
+  /// **'How large covers are drawn in grids'**
+  String get settingsGridSizeHelp;
+
+  /// Comma-separated search keywords for the "Artwork size" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'grid, tiles, covers, large, small'**
+  String get settingsGridSizeKeywords;
+
+  /// Name of the "Artwork size" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Artwork size'**
+  String get settingsGridSizeTitle;
+
+  /// Artwork size option.
+  ///
+  /// In en, this message translates to:
+  /// **'Small'**
+  String get settingsGridSmall;
+
+  /// Heading over the settings rows about the version and licence rows.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get settingsGroupAbout;
+
+  /// Heading over the settings rows about which libraries this account can see.
+  ///
+  /// In en, this message translates to:
+  /// **'Access'**
+  String get settingsGroupAccess;
+
+  /// Heading over the settings rows about what happens to what you upload.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding to the library'**
+  String get settingsGroupAdding;
+
+  /// Heading over the settings rows about what the library listings show.
+  ///
+  /// In en, this message translates to:
+  /// **'Browsing'**
+  String get settingsGroupBrowsing;
+
+  /// Heading over the settings rows about playing on another device.
+  ///
+  /// In en, this message translates to:
+  /// **'Casting'**
+  String get settingsGroupCasting;
+
+  /// Heading over the settings rows about what the app does on a metered connection.
+  ///
+  /// In en, this message translates to:
+  /// **'Data'**
+  String get settingsGroupData;
+
+  /// Heading over the settings rows about the Discord rich presence switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Discord'**
+  String get settingsGroupDiscord;
+
+  /// Heading over the settings rows about what this device keeps offline.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get settingsGroupDownloads;
+
+  /// Heading over the settings rows about stats participation and the timezone they are counted in.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening'**
+  String get settingsGroupListening;
+
+  /// Heading over the settings rows about animation and movement.
+  ///
+  /// In en, this message translates to:
+  /// **'Motion'**
+  String get settingsGroupMotion;
+
+  /// Heading over the settings rows about the player screen itself.
+  ///
+  /// In en, this message translates to:
+  /// **'The player'**
+  String get settingsGroupPlayer;
+
+  /// Heading over the settings rows about how the app reads out.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen readers'**
+  String get settingsGroupScreenReaders;
+
+  /// Heading over the settings rows about coverage of the audio analysis behind similar tracks and mixes.
+  ///
+  /// In en, this message translates to:
+  /// **'Sonic similarity'**
+  String get settingsGroupSonicSimilarity;
+
+  /// Heading over the settings rows about podcasts and audiobooks.
+  ///
+  /// In en, this message translates to:
+  /// **'Spoken word'**
+  String get settingsGroupSpokenWord;
+
+  /// Heading over the settings rows about playback that begins without being asked.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting on its own'**
+  String get settingsGroupStartingOnItsOwn;
+
+  /// Heading over the settings rows about space this device is using.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage'**
+  String get settingsGroupStorage;
+
+  /// Heading over the Appearance settings stored on this device alone, rather than on the account.
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get settingsGroupThisDevice;
+
+  /// Heading over the settings rows about which listening is reported to a scrobbling service.
+  ///
+  /// In en, this message translates to:
+  /// **'What gets scrobbled'**
+  String get settingsGroupWhatGetsScrobbled;
+
+  /// Heading over the settings rows about cast targets and other devices.
+  ///
+  /// In en, this message translates to:
+  /// **'Where sound comes out'**
+  String get settingsGroupWhereSoundComesOut;
+
+  /// The line under the identify-uploads switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Matches what you add against MusicBrainz. Off adds it with the tags it has, without review'**
+  String get settingsIdentifyUploadsHelp;
+
+  /// Comma-separated search keywords for the "Identify uploads" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'musicbrainz, match, identify, upload, tags, acquire'**
+  String get settingsIdentifyUploadsKeywords;
+
+  /// Name of the "Identify uploads" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Identify uploads'**
+  String get settingsIdentifyUploadsTitle;
+
+  /// Comma-separated search keywords for the language setting. Deliberately bilingual: somebody looking for their own language types its name, and the interface they are typing into is the one they cannot read. Keep the other languages' words and add this one's.
+  ///
+  /// In en, this message translates to:
+  /// **'language, idioma, locale, translation, spanish, english'**
+  String get settingsLanguageKeywords;
+
+  /// Name of the language setting, in the Appearance section and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get settingsLanguageTitle;
+
+  /// Field for the Last.fm API key, which reads back for display.
+  ///
+  /// In en, this message translates to:
+  /// **'API key'**
+  String get settingsLastfmApiKey;
+
+  /// The line under the Last.fm API key field, saying where a key comes from.
+  ///
+  /// In en, this message translates to:
+  /// **'Register at last.fm/api/account/create'**
+  String get settingsLastfmApiKeyHelp;
+
+  /// Button that removes the stored Last.fm credentials, falling back to the server environment's own.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get settingsLastfmCredentialsClear;
+
+  /// Shown in the Last.fm credentials dialog when the read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the credential state'**
+  String get settingsLastfmCredentialsError;
+
+  /// Title of the administrator dialog holding the server's Last.fm credentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Last.fm API credentials'**
+  String get settingsLastfmCredentialsTitle;
+
+  /// Field for the Last.fm shared secret, which is write-only.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared secret'**
+  String get settingsLastfmSecret;
+
+  /// The line under the Last.fm secret field once a secret is stored.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored sealed; never shown again'**
+  String get settingsLastfmSecretHelp;
+
+  /// The read-only access line for an account granted every library.
+  ///
+  /// In en, this message translates to:
+  /// **'You can see every library on this server'**
+  String get settingsLibraryAccessAll;
+
+  /// The access line while the account is still being read.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking'**
+  String get settingsLibraryAccessChecking;
+
+  /// The access line when the account read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read your access'**
+  String get settingsLibraryAccessError;
+
+  /// Comma-separated search keywords for the "What I can see" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'permissions, libraries, access'**
+  String get settingsLibraryAccessKeywords;
+
+  /// The read-only access line for an account granted some libraries. {count} is how many.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{You can see 1 of this server\'s libraries} other{You can see {count} of this server\'s libraries}}'**
+  String settingsLibraryAccessSome(int count);
+
+  /// Name of the "What I can see" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'What I can see'**
+  String get settingsLibraryAccessTitle;
+
+  /// Field for an alternative ListenBrainz-compatible server.
+  ///
+  /// In en, this message translates to:
+  /// **'API server (optional)'**
+  String get settingsListenBrainzApi;
+
+  /// The line under the ListenBrainz API server field.
+  ///
+  /// In en, this message translates to:
+  /// **'For a compatible server; empty for listenbrainz.org'**
+  String get settingsListenBrainzApiHelp;
+
+  /// Title of the dialog that connects ListenBrainz with a token.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect ListenBrainz'**
+  String get settingsListenBrainzTitle;
+
+  /// Field for the ListenBrainz token.
+  ///
+  /// In en, this message translates to:
+  /// **'User token'**
+  String get settingsListenBrainzToken;
+
+  /// The line under the ListenBrainz token field, saying where to find it.
+  ///
+  /// In en, this message translates to:
+  /// **'From your ListenBrainz profile page'**
+  String get settingsListenBrainzTokenHelp;
+
+  /// The option that follows the device's own setting rather than choosing one. Shown in both the theme picker and the language picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Match the system'**
+  String get settingsMatchTheSystem;
+
+  /// Comma-separated search keywords for the "Notification targets" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'ntfy, webhook, discord, push, alerts'**
+  String get settingsNotificationsKeywords;
+
+  /// Name of the "Notification targets" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification targets'**
+  String get settingsNotificationsTitle;
+
+  /// Heading over the checklist of events one target delivers.
+  ///
+  /// In en, this message translates to:
+  /// **'Notify me about'**
+  String get settingsNotifyAbout;
+
+  /// ntfy field: the token for a topic that needs one.
+  ///
+  /// In en, this message translates to:
+  /// **'Access token'**
+  String get settingsNotifyAccessToken;
+
+  /// Apprise field: which Apprise instance relays the notification.
+  ///
+  /// In en, this message translates to:
+  /// **'Apprise server URL'**
+  String get settingsNotifyAppriseServerUrl;
+
+  /// Apprise field: the Apprise URLs the notification fans out to.
+  ///
+  /// In en, this message translates to:
+  /// **'Targets'**
+  String get settingsNotifyAppriseTargets;
+
+  /// The line under the Apprise targets field.
+  ///
+  /// In en, this message translates to:
+  /// **'Apprise URLs; empty uses the server\'s own configuration'**
+  String get settingsNotifyAppriseTargetsHelp;
+
+  /// Shown where the event checklist would be when the read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the event catalog'**
+  String get settingsNotifyCatalogError;
+
+  /// Field choosing which service a new notification target uses.
+  ///
+  /// In en, this message translates to:
+  /// **'Deliver via'**
+  String get settingsNotifyDeliverVia;
+
+  /// The line under the Discord webhook field.
+  ///
+  /// In en, this message translates to:
+  /// **'A discord.com webhook URL'**
+  String get settingsNotifyDiscordWebhookHelp;
+
+  /// UnifiedPush field: the endpoint the distributor registered.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint URL'**
+  String get settingsNotifyEndpointUrl;
+
+  /// The label of a notification target field that may be left empty. {field} is that field's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} (optional)'**
+  String settingsNotifyFieldOptional(String field);
+
+  /// Refusal when a required notification target field was left empty. {field} is that field's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} is required'**
+  String settingsNotifyFieldRequired(String field);
+
+  /// Refusal when a numeric notification target field holds something else. {field} is that field's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} must be a whole number'**
+  String settingsNotifyFieldWholeNumber(String field);
+
+  /// The range the Gotify priority field accepts.
+  ///
+  /// In en, this message translates to:
+  /// **'0 to 10'**
+  String get settingsNotifyGotifyPriorityHelp;
+
+  /// Health line on a notification target that has delivered. {when} is already written for this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Last delivered {when}'**
+  String settingsNotifyLastDelivered(String when);
+
+  /// Health line on a notification target whose last delivery failed. {error} is the service's own words, which stay in their language.
+  ///
+  /// In en, this message translates to:
+  /// **'Last delivery failed: {error}'**
+  String settingsNotifyLastFailed(String error);
+
+  /// The line under this account's notification targets, listing what can carry them.
+  ///
+  /// In en, this message translates to:
+  /// **'Where your events (new episodes, review queue) get delivered: Pushover, ntfy, Gotify, Discord, webhooks, or this device\'s push registration.'**
+  String get settingsNotifyMyBlurb;
+
+  /// Heading over the events that are about this account, in the event checklist an administrator sees.
+  ///
+  /// In en, this message translates to:
+  /// **'My events'**
+  String get settingsNotifyMyEvents;
+
+  /// Heading over this account's own notification targets.
+  ///
+  /// In en, this message translates to:
+  /// **'My notifications'**
+  String get settingsNotifyMyTitle;
+
+  /// The line under the ntfy server field, naming the public default.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty uses ntfy.sh'**
+  String get settingsNotifyNtfyServerHelp;
+
+  /// ntfy field: the topic notifications are published to.
+  ///
+  /// In en, this message translates to:
+  /// **'Topic'**
+  String get settingsNotifyNtfyTopic;
+
+  /// Pushover and Gotify field: how loudly the notification arrives.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority'**
+  String get settingsNotifyPriority;
+
+  /// The range the Pushover priority field accepts.
+  ///
+  /// In en, this message translates to:
+  /// **'-2 (quietest) to 2 (emergency)'**
+  String get settingsNotifyPushoverPriorityHelp;
+
+  /// Pushover field: the token of the application notifications are sent from. Also the Gotify field of the same name.
+  ///
+  /// In en, this message translates to:
+  /// **'Application token'**
+  String get settingsNotifyPushoverToken;
+
+  /// Pushover field: who the notification goes to.
+  ///
+  /// In en, this message translates to:
+  /// **'User or group key'**
+  String get settingsNotifyPushoverUserKey;
+
+  /// The button that sends a test notification to one target.
+  ///
+  /// In en, this message translates to:
+  /// **'Send test'**
+  String get settingsNotifySendTest;
+
+  /// The line under the server's notification targets.
+  ///
+  /// In en, this message translates to:
+  /// **'Operations events (account requests, backup outcomes) delivered to server-wide destinations.'**
+  String get settingsNotifyServerBlurb;
+
+  /// Heading over the events that are about the server, in the event checklist an administrator sees.
+  ///
+  /// In en, this message translates to:
+  /// **'Server events'**
+  String get settingsNotifyServerEvents;
+
+  /// Heading over the notification targets the whole server delivers to.
+  ///
+  /// In en, this message translates to:
+  /// **'Server notifications'**
+  String get settingsNotifyServerTitle;
+
+  /// ntfy and Gotify field: which server the notification goes to.
+  ///
+  /// In en, this message translates to:
+  /// **'Server URL'**
+  String get settingsNotifyServerUrl;
+
+  /// Action on a notification targets heading that adds one.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get settingsNotifyTargetAddAction;
+
+  /// What a screen reader hears for the add-a-target action.
+  ///
+  /// In en, this message translates to:
+  /// **'Add notification target'**
+  String get settingsNotifyTargetAddSpoken;
+
+  /// Title of the dialog that edits a notification target. {kind} is the service's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit {kind} target'**
+  String settingsNotifyTargetEditTitle(String kind);
+
+  /// Field for what a notification target is called.
+  ///
+  /// In en, this message translates to:
+  /// **'Label (optional)'**
+  String get settingsNotifyTargetLabel;
+
+  /// Title of the dialog that creates a notification target.
+  ///
+  /// In en, this message translates to:
+  /// **'New notification target'**
+  String get settingsNotifyTargetNewTitle;
+
+  /// The button that deletes one notification target.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get settingsNotifyTargetRemove;
+
+  /// Shown where the notification target rows would be when there are none.
+  ///
+  /// In en, this message translates to:
+  /// **'No notification targets yet'**
+  String get settingsNotifyTargetsEmpty;
+
+  /// Shown where the notification target rows would be when the read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load notification targets'**
+  String get settingsNotifyTargetsError;
+
+  /// Snackbar after a test notification has been asked for.
+  ///
+  /// In en, this message translates to:
+  /// **'Test queued; the outcome shows on the target shortly'**
+  String get settingsNotifyTestQueued;
+
+  /// The line under the UnifiedPush endpoint field, saying it is not usually typed by hand.
+  ///
+  /// In en, this message translates to:
+  /// **'Usually registered by the app through its distributor'**
+  String get settingsNotifyUnifiedPushHelp;
+
+  /// Webhook field: where the notification is posted.
+  ///
+  /// In en, this message translates to:
+  /// **'URL'**
+  String get settingsNotifyUrl;
+
+  /// The line under the webhook URL field. The four names are the JSON keys the request carries and stay as they are; only the sentence around them is translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Receives a JSON object with event, title, body and timestamp'**
+  String get settingsNotifyWebhookHelp;
+
+  /// Discord field: the webhook the notification is posted to.
+  ///
+  /// In en, this message translates to:
+  /// **'Webhook URL'**
+  String get settingsNotifyWebhookUrl;
+
+  /// The option that turns a setting off, on the pickers that have one - the casting crossfade and the rewind on resume.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get settingsOptionOff;
+
+  /// Button on the change-password row that opens the dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get settingsPasswordChangeAction;
+
+  /// Snackbar after the password has been replaced.
+  ///
+  /// In en, this message translates to:
+  /// **'Password changed'**
+  String get settingsPasswordChanged;
+
+  /// Field for the password being replaced, which the server requires.
+  ///
+  /// In en, this message translates to:
+  /// **'Current password'**
+  String get settingsPasswordCurrentLabel;
+
+  /// The line under the change-password row.
+  ///
+  /// In en, this message translates to:
+  /// **'Signs out your other devices; app passwords are unaffected'**
+  String get settingsPasswordHelp;
+
+  /// Comma-separated search keywords for the "Change password" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'security, sign in, login'**
+  String get settingsPasswordKeywords;
+
+  /// Field for the password being set.
+  ///
+  /// In en, this message translates to:
+  /// **'New password'**
+  String get settingsPasswordNewLabel;
+
+  /// Name of the "Change password" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Change password'**
+  String get settingsPasswordTitle;
+
+  /// The line under the default podcast speed setting.
+  ///
+  /// In en, this message translates to:
+  /// **'The speed a show plays at until you set one for it'**
+  String get settingsPodcastSpeedHelp;
+
+  /// Comma-separated search keywords for the "Podcast speed" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'rate, faster, default'**
+  String get settingsPodcastSpeedKeywords;
+
+  /// Name of the "Podcast speed" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcast speed'**
+  String get settingsPodcastSpeedTitle;
+
+  /// The line under the preload-on-wifi-only switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Gapless playback buffers the next track early; this holds that back on mobile data'**
+  String get settingsPreloadWifiHelp;
+
+  /// Comma-separated search keywords for the "Prepare the next track on wifi only" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'gapless, preload, data, metered, mobile'**
+  String get settingsPreloadWifiKeywords;
+
+  /// Name of the "Prepare the next track on wifi only" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepare the next track on wifi only'**
+  String get settingsPreloadWifiTitle;
+
+  /// The line under the scrobble-radio switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio segments report as tracks where a station names them honestly'**
+  String get settingsRadioScrobblingHelp;
+
+  /// Comma-separated search keywords for the "Scrobble radio" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'last.fm, listenbrainz, station, stream'**
+  String get settingsRadioScrobblingKeywords;
+
+  /// Name of the "Scrobble radio" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Scrobble radio'**
+  String get settingsRadioScrobblingTitle;
+
+  /// The line under the reduce motion switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Stills transitions and the playing indicator'**
+  String get settingsReduceMotionHelp;
+
+  /// Comma-separated search keywords for the "Reduce motion" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'animation, transitions, vestibular'**
+  String get settingsReduceMotionKeywords;
+
+  /// The line under the reduce motion switch when the device itself already asks for less motion, so the switch looks like it is doing nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Already reduced: this device asks every app for less motion'**
+  String get settingsReduceMotionPlatformHelp;
+
+  /// Name of the "Reduce motion" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Reduce motion'**
+  String get settingsReduceMotionTitle;
+
+  /// The line under the level-casting-volume switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Plays a cast queue at one loudness, where the files have been analyzed'**
+  String get settingsReplayGainHelp;
+
+  /// Comma-separated search keywords for the "Level casting volume" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'replaygain, loudness, normalize, gain'**
+  String get settingsReplayGainKeywords;
+
+  /// Name of the "Level casting volume" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Level casting volume'**
+  String get settingsReplayGainTitle;
+
+  /// The line under the screen reader row.
+  ///
+  /// In en, this message translates to:
+  /// **'Every control is named, the queue reorders from the keyboard, and the deck bar is one landmark'**
+  String get settingsScreenReaderBlurb;
+
+  /// Name of the row describing the app's screen reader support.
+  ///
+  /// In en, this message translates to:
+  /// **'How WaxDeck reads out'**
+  String get settingsScreenReaderTitle;
+
+  /// Snackbar after the Last.fm authorization page has been opened.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve WaxDeck in the browser tab, then come back here'**
+  String get settingsScrobblerApprove;
+
+  /// Action on a scrobbling service that is not connected, and the confirming button of the ListenBrainz dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get settingsScrobblerConnect;
+
+  /// Status of a connected scrobbling service that has not delivered anything yet, and whose account name is unknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get settingsScrobblerConnected;
+
+  /// Status of a connected scrobbling service that has not delivered anything yet. {username} is the account it connected as.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected as {username}'**
+  String settingsScrobblerConnectedAs(String username);
+
+  /// The button that opens the server's Last.fm API credentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Server API credentials'**
+  String get settingsScrobblerCredentialsLabel;
+
+  /// Status of a scrobbling service that is connected and has delivered, and whose account name is unknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected, delivering'**
+  String get settingsScrobblerDelivering;
+
+  /// Status of a scrobbling service that is connected and has delivered. {username} is the account it connected as.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected as {username}, delivering'**
+  String settingsScrobblerDeliveringAs(String username);
+
+  /// Action on a connected scrobbling service.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get settingsScrobblerDisconnect;
+
+  /// Status of a connected scrobbling service that is refusing scrobbles. {error} is the service's own words, which stay in their language.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery failing: {error}'**
+  String settingsScrobblerFailing(String error);
+
+  /// Status of a scrobbling service the server cannot connect to yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs server API credentials'**
+  String get settingsScrobblerNeedsCredentials;
+
+  /// Status of a scrobbling service that could be connected and is not.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected'**
+  String get settingsScrobblerNotConnected;
+
+  /// Administrator action on the Last.fm row while the server has no API credentials, so connecting is not yet possible.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up…'**
+  String get settingsScrobblerSetUp;
+
+  /// Shown where the scrobbling rows would be when the read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load scrobbling connections'**
+  String get settingsScrobblingError;
+
+  /// Comma-separated search keywords for the "Scrobbling" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'last.fm, lastfm, listenbrainz'**
+  String get settingsScrobblingKeywords;
+
+  /// Name of the "Scrobbling" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Scrobbling'**
+  String get settingsScrobblingTitle;
+
+  /// The search field at the top of the settings home: both its accessible name and the placeholder shown while it is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'Search settings'**
+  String get settingsSearchLabel;
+
+  /// Second line of the settings search empty state: where the settings that are not here can be found.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-wide settings live in the admin console, not here. A per-show or per-book setting is on that show or book.'**
+  String get settingsSearchNoMatchMessage;
+
+  /// Empty state on the settings home when a search finds nothing. {query} is what the listener typed.
+  ///
+  /// In en, this message translates to:
+  /// **'No setting matches \"{query}\"'**
+  String settingsSearchNoMatchTitle(String query);
+
+  /// The line under Accessibility on the settings home, saying what is inside it.
+  ///
+  /// In en, this message translates to:
+  /// **'Motion, and how the app reads out'**
+  String get settingsSectionAccessibilityBlurb;
+
+  /// Name of the Accessibility settings section, on the settings home and as the title of the section's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility'**
+  String get settingsSectionAccessibilityTitle;
+
+  /// The line under Account on the settings home, saying what is inside it.
+  ///
+  /// In en, this message translates to:
+  /// **'You, your devices, and how you sign in'**
+  String get settingsSectionAccountBlurb;
+
+  /// Name of the Account settings section, on the settings home and as the title of the section's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get settingsSectionAccountTitle;
+
+  /// The line under Appearance on the settings home, saying what is inside it.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme, density, and how large artwork is drawn'**
+  String get settingsSectionAppearanceBlurb;
+
+  /// Name of the Appearance settings section, on the settings home and as the title of the section's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsSectionAppearanceTitle;
+
+  /// The line under Devices and casting on the settings home, saying what is inside it.
+  ///
+  /// In en, this message translates to:
+  /// **'Where else your listening can come out'**
+  String get settingsSectionDevicesBlurb;
+
+  /// Name of the Devices and casting settings section, on the settings home and as the title of the section's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices and casting'**
+  String get settingsSectionDevicesTitle;
+
+  /// The line under Downloads and storage on the settings home, saying what is inside it.
+  ///
+  /// In en, this message translates to:
+  /// **'What this device keeps offline, and how much room it takes'**
+  String get settingsSectionDownloadsBlurb;
+
+  /// Name of the Downloads and storage settings section, on the settings home and as the title of the section's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads and storage'**
+  String get settingsSectionDownloadsTitle;
+
+  /// The line under Integrations on the settings home, saying what is inside it.
+  ///
+  /// In en, this message translates to:
+  /// **'Scrobbling, other apps, and notifications'**
+  String get settingsSectionIntegrationsBlurb;
+
+  /// Name of the Integrations settings section, on the settings home and as the title of the section's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Integrations'**
+  String get settingsSectionIntegrationsTitle;
+
+  /// The line under Library and metadata on the settings home, saying what is inside it.
+  ///
+  /// In en, this message translates to:
+  /// **'What browsing shows you, and what you can see'**
+  String get settingsSectionLibraryBlurb;
+
+  /// Name of the Library and metadata settings section, on the settings home and as the title of the section's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Library and metadata'**
+  String get settingsSectionLibraryTitle;
+
+  /// The line under Playback on the settings home, saying what is inside it.
+  ///
+  /// In en, this message translates to:
+  /// **'Speeds, skips, casting, and what plays next'**
+  String get settingsSectionPlaybackBlurb;
+
+  /// Name of the Playback settings section, on the settings home and as the title of the section's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback'**
+  String get settingsSectionPlaybackTitle;
+
+  /// The line under Server on the settings home, saying what is inside it.
+  ///
+  /// In en, this message translates to:
+  /// **'This instance, for administrators'**
+  String get settingsSectionServerBlurb;
+
+  /// Name of the Server settings section, on the settings home and as the title of the section's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Server'**
+  String get settingsSectionServerTitle;
+
+  /// Second line of the administrators-only empty state.
+  ///
+  /// In en, this message translates to:
+  /// **'This section is about the server itself.'**
+  String get settingsServerAdminOnlyMessage;
+
+  /// Empty state on the Server section for an account that is not an administrator, reached by typing the location.
+  ///
+  /// In en, this message translates to:
+  /// **'Administrators only'**
+  String get settingsServerAdminOnlyTitle;
+
+  /// Comma-separated search keywords for the "This server" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'version, uptime, build'**
+  String get settingsServerSummaryKeywords;
+
+  /// Name of the "This server" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'This server'**
+  String get settingsServerSummaryTitle;
+
+  /// The line under the share links row.
+  ///
+  /// In en, this message translates to:
+  /// **'Public links you have handed out'**
+  String get settingsShareLinksBlurb;
+
+  /// Name of the row that opens the list of public links this account has created.
+  ///
+  /// In en, this message translates to:
+  /// **'Share links'**
+  String get settingsShareLinksTitle;
+
+  /// The line under the shared-stats switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Counts your listening into the shared year in review'**
+  String get settingsSharedStatsHelp;
+
+  /// Comma-separated search keywords for the "Server-wide stats" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'year in review, privacy, opt out'**
+  String get settingsSharedStatsKeywords;
+
+  /// The shared-stats switch, asked as the choice it is. Settings search calls the same setting Server-wide stats.
+  ///
+  /// In en, this message translates to:
+  /// **'Include me in server-wide stats'**
+  String get settingsSharedStatsSwitchTitle;
+
+  /// Name of the "Server-wide stats" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-wide stats'**
+  String get settingsSharedStatsTitle;
+
+  /// Button that ends this session. Also the confirming button of the sign-out-a-device dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out'**
+  String get settingsSignOut;
+
+  /// The sonic similarity progress line: how many tracks carry an analysis, out of how many, and how many are waiting.
+  ///
+  /// In en, this message translates to:
+  /// **'{total, plural, =1{{embedded} of 1 track analyzed, {queued} queued} other{{embedded} of {total} tracks analyzed, {queued} queued}}'**
+  String settingsSimilarityAnalyzed(int total, int embedded, int queued);
+
+  /// How much of the library has been analyzed for sonic similarity. {percent} is a whole number from 0 to 100.
+  ///
+  /// In en, this message translates to:
+  /// **'Coverage {percent}%'**
+  String settingsSimilarityCoverage(int percent);
+
+  /// The sonic similarity row when the status read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load similarity status'**
+  String get settingsSimilarityError;
+
+  /// The line under the sonic similarity row when there is no worker, saying what the app does instead.
+  ///
+  /// In en, this message translates to:
+  /// **'Similar tracks and mixes fall back to metadata'**
+  String get settingsSimilarityFallback;
+
+  /// The sonic similarity row when no analysis worker may connect.
+  ///
+  /// In en, this message translates to:
+  /// **'No analysis worker configured'**
+  String get settingsSimilarityNoWorker;
+
+  /// The line under the skip back setting.
+  ///
+  /// In en, this message translates to:
+  /// **'How far the back control jumps on a podcast or a book'**
+  String get settingsSkipBackHelp;
+
+  /// Comma-separated search keywords for the "Skip back by" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'rewind, seconds, podcast, audiobook'**
+  String get settingsSkipBackKeywords;
+
+  /// Name of the "Skip back by" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip back by'**
+  String get settingsSkipBackTitle;
+
+  /// The line under the skip forward setting.
+  ///
+  /// In en, this message translates to:
+  /// **'How far the forward control jumps'**
+  String get settingsSkipForwardHelp;
+
+  /// Comma-separated search keywords for the "Skip forward by" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'seconds, podcast, audiobook, ad'**
+  String get settingsSkipForwardKeywords;
+
+  /// Name of the "Skip forward by" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip forward by'**
+  String get settingsSkipForwardTitle;
+
+  /// The line under the rewind-on-resume setting.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps back a little when you come back to a show or a book after a break, so you land before the sentence you lost'**
+  String get settingsSmartRewindHelp;
+
+  /// Comma-separated search keywords for the "Rewind on resume" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'smart rewind, back, context, podcast, book'**
+  String get settingsSmartRewindKeywords;
+
+  /// Rewind-on-resume option: the shorter ladder, a few seconds after a break.
+  ///
+  /// In en, this message translates to:
+  /// **'A little'**
+  String get settingsSmartRewindLittle;
+
+  /// Rewind-on-resume option: twice the shorter ladder, for a listener who loses the thread faster.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get settingsSmartRewindMore;
+
+  /// Name of the "Rewind on resume" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Rewind on resume'**
+  String get settingsSmartRewindTitle;
+
+  /// The line under the technical details switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Draws codec and format chips beside what they describe'**
+  String get settingsTechnicalDetailsHelp;
+
+  /// Comma-separated search keywords for the "Show technical details" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'codec, bitrate, format, flac, provenance'**
+  String get settingsTechnicalDetailsKeywords;
+
+  /// Name of the "Show technical details" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Show technical details'**
+  String get settingsTechnicalDetailsTitle;
+
+  /// Theme option: the dark palette.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get settingsThemeDark;
+
+  /// Comma-separated search keywords for the "Theme" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'dark, light, oled, black'**
+  String get settingsThemeKeywords;
+
+  /// Theme option: the light palette.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get settingsThemeLight;
+
+  /// Theme option: dark with a true black background, which an OLED screen draws by switching pixels off.
+  ///
+  /// In en, this message translates to:
+  /// **'OLED black'**
+  String get settingsThemeOled;
+
+  /// Name of the "Theme" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get settingsThemeTitle;
+
+  /// The line under the timezone field, saying what the timezone decides and what leaving it empty does.
+  ///
+  /// In en, this message translates to:
+  /// **'Calendar stats bucket days in this timezone; empty uses the server default (UTC)'**
+  String get settingsTimezoneFieldHelp;
+
+  /// Placeholder in the timezone field. An IANA identifier, which is the same in every language - translate it only to a different example.
+  ///
+  /// In en, this message translates to:
+  /// **'Europe/Amsterdam'**
+  String get settingsTimezoneFieldHint;
+
+  /// Label of the timezone field. IANA is the body that names timezones; the name itself is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'IANA timezone'**
+  String get settingsTimezoneFieldLabel;
+
+  /// Comma-separated search keywords for the "Timezone" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'stats, calendar, streak'**
+  String get settingsTimezoneKeywords;
+
+  /// What the timezone row reads when no timezone has been stored.
+  ///
+  /// In en, this message translates to:
+  /// **'Server default'**
+  String get settingsTimezoneServerDefault;
+
+  /// Name of the "Timezone" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Timezone'**
+  String get settingsTimezoneTitle;
+
+  /// Title of the settings home screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsTitle;
+
+  /// The line under the trim silence default.
+  ///
+  /// In en, this message translates to:
+  /// **'Shows and books with no stored choice of their own open with silence trimming on'**
+  String get settingsTrimDefaultHelp;
+
+  /// Comma-separated search keywords for the "Trim silence by default" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'silence, skip, spoken word, podcast, book'**
+  String get settingsTrimDefaultKeywords;
+
+  /// Name of the "Trim silence by default" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim silence by default'**
+  String get settingsTrimDefaultTitle;
+
+  /// The line under the idle visualizer switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Fills the screen with the track once music has been playing untouched for a few minutes'**
+  String get settingsVisualizerIdleHelp;
+
+  /// Comma-separated search keywords for the "Open the visualizer when idle" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'screensaver, waveform, platter, away'**
+  String get settingsVisualizerIdleKeywords;
+
+  /// Name of the "Open the visualizer when idle" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the visualizer when idle'**
+  String get settingsVisualizerIdleTitle;
+
+  /// A playback rate as a picker option. The x is the multiplier convention; {speed} arrives already written for this language, so a locale that separates decimals differently is already handled.
+  ///
+  /// In en, this message translates to:
+  /// **'{speed}x'**
+  String speedMultiplier(String speed);
 }
 
 class _AppLocalizationsDelegate

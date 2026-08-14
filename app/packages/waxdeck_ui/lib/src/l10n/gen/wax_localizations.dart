@@ -423,7 +423,7 @@ abstract class WaxLocalizations {
   /// **'Radio'**
   String get domainRadio;
 
-  /// A whole number of hours, spelled out for a screen reader. Every unit is named because this is the only positional feedback a screen-reader user gets.
+  /// A whole number of hours, spelled out for a screen reader. Every unit is named because this is the only positional feedback a screen-reader user gets. The app's own table carries the same message for the wait on a settings picker (app_en.arb, durationHours), and a test holds the two to the same words.
   ///
   /// In en, this message translates to:
   /// **'{hours, plural, =1{1 hour} other{{hours} hours}}'**
