@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
@@ -22,8 +23,9 @@ class ServerSettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final settings = ref.watch(adminSettingsProvider);
+    final l10n = context.l10n;
     return WaxScaffold(
-      title: 'Server settings',
+      title: l10n.adminServerTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminSettingsSection,
       onBack: adminBack(context),
@@ -38,10 +40,8 @@ class ServerSettingsScreen extends ConsumerWidget {
           // so far apart that the pair stops reading as one row.
           child: switch (settings) {
             AsyncError(:final error) => ErrorState(
-              title: 'Could not load the server settings',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'Something went wrong reading them.',
+              title: l10n.adminServerLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(adminSettingsProvider),
             ),
             AsyncData(:final value) => Column(
@@ -67,79 +67,76 @@ class _Switches extends ConsumerWidget {
 
   final AdminSettings settings;
 
-  Future<void> _save(WidgetRef ref, AdminSettings next) async {
+  Future<void> _save(
+    BuildContext context,
+    WidgetRef ref,
+    AdminSettings next,
+  ) async {
     // Taken before the write: a refusal has to be sayable even when the
     // section has been left, and `ref` past its widget throws.
     final messenger = ref.read(shellMessengerProvider.notifier);
+    final l10n = context.l10n;
     try {
       await ref.read(adminSettingsProvider.notifier).save(next);
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainError(l10n, error));
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sectionGap = WaxLayout.of(context).sectionGap;
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Access'),
+        SectionHeader(title: l10n.adminServerAccessGroup),
         WaxSettingRow(
-          title: 'Open signup',
-          help: 'Anyone may request an account; requests wait for approval',
+          title: l10n.adminServerSignupTitle,
+          help: l10n.adminServerSignupHelp,
           control: WaxSwitch(
-            label: 'Open signup',
+            label: l10n.adminServerSignupTitle,
             value: settings.signupEnabled,
             semanticsId: SemanticsIds.settingSignupEnabled,
             onChanged: (value) =>
-                _save(ref, settings.copyWith(signupEnabled: value)),
+                _save(context, ref, settings.copyWith(signupEnabled: value)),
           ),
         ),
         WaxSettingRow(
-          title: 'Read-only mode',
-          help:
-              'Refuse every change to library content, server-wide. '
-              'Playback, stars, and progress keep working',
+          title: l10n.adminServerReadOnlyTitle,
+          help: l10n.adminServerReadOnlyHelp,
           control: WaxSwitch(
-            label: 'Read-only mode',
+            label: l10n.adminServerReadOnlyTitle,
             value: settings.readOnly,
             semanticsId: SemanticsIds.settingReadOnly,
             onChanged: (value) =>
-                _save(ref, settings.copyWith(readOnly: value)),
+                _save(context, ref, settings.copyWith(readOnly: value)),
           ),
         ),
         SizedBox(height: sectionGap),
-        const SectionHeader(title: 'Analysis'),
+        SectionHeader(title: l10n.adminServerAnalysisGroup),
         WaxSettingRow(
-          title: 'Sonic analysis',
-          help:
-              'Analyze the library in the background for instant mixes, '
-              'similar tracks, and sonic paths',
+          title: l10n.adminServerSonicTitle,
+          help: l10n.adminServerSonicHelp,
           control: WaxSwitch(
-            label: 'Sonic analysis',
+            label: l10n.adminServerSonicTitle,
             value: settings.sonicAnalysis,
             semanticsId: SemanticsIds.settingSonicAnalysis,
             onChanged: (value) =>
-                _save(ref, settings.copyWith(sonicAnalysis: value)),
+                _save(context, ref, settings.copyWith(sonicAnalysis: value)),
           ),
         ),
         SizedBox(height: sectionGap),
-        const SectionHeader(title: 'Radio'),
+        SectionHeader(title: l10n.adminServerRadioGroup),
         WaxSettingRow(
-          title: 'Look up cover art online',
-          help:
-              'When a station announces a track this library does not '
-              'hold, ask MusicBrainz and the Cover Art Archive for its '
-              'cover. This sends the artist and title the station '
-              'announced off this server. Off by default; with it off '
-              'the player draws the station mark.',
+          title: l10n.adminServerRadioArtTitle,
+          help: l10n.adminServerRadioArtHelp,
           control: WaxSwitch(
-            label: 'Look up cover art online',
+            label: l10n.adminServerRadioArtTitle,
             value: settings.radioExternalArt,
             semanticsId: SemanticsIds.settingRadioExternalArt,
             onChanged: (value) =>
-                _save(ref, settings.copyWith(radioExternalArt: value)),
+                _save(context, ref, settings.copyWith(radioExternalArt: value)),
           ),
         ),
       ],
@@ -181,6 +178,7 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
   Future<void> _save(TranscodingLimits current) async {
     if (_busy) return;
     setState(() => _busy = true);
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref
@@ -198,9 +196,9 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
                   current.defaultMaxBitrateKbps,
             ),
           );
-      messenger.show('Transcoding limits saved');
+      messenger.show(l10n.adminServerTranscodingSaved);
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainRefusal(l10n, error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -209,17 +207,16 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final limits = ref.watch(transcodingLimitsProvider).value;
     if (limits == null) return const SizedBox.shrink();
     _seed(limits);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Transcoding'),
+        SectionHeader(title: l10n.adminServerTranscodingGroup),
         Text(
-          'A transcode is what happens when a client cannot play a file as '
-          'stored. These bound how many run at once, so a busy evening does '
-          'not become a slow one.',
+          l10n.adminServerTranscodingBlurb,
           style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
         ),
         const SizedBox(height: WaxSpace.s12),
@@ -235,23 +232,23 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
               // throttle everybody by putting the per-listener number
               // in the server-wide field.
               WaxTextField(
-                label: 'Transcodes at once, server-wide',
+                label: l10n.adminServerTranscodesMaxLabel,
                 showLabel: true,
                 controller: _maxConcurrent,
                 semanticsId: SemanticsIds.transcodingMaxConcurrent,
               ),
               const SizedBox(height: WaxSpace.s12),
               WaxTextField(
-                label: 'Transcodes at once, per listener',
+                label: l10n.adminServerTranscodesPerUserLabel,
                 showLabel: true,
                 controller: _maxPerUser,
                 semanticsId: SemanticsIds.transcodingMaxPerUser,
               ),
               const SizedBox(height: WaxSpace.s12),
               WaxTextField(
-                label: 'Default bitrate ceiling (kbps)',
+                label: l10n.adminServerDefaultKbpsLabel,
                 showLabel: true,
-                hint: '0 means no ceiling',
+                hint: l10n.adminServerDefaultKbpsHint,
                 controller: _defaultKbps,
                 semanticsId: SemanticsIds.transcodingDefaultKbps,
               ),
@@ -259,7 +256,7 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: WaxButton(
-                  label: 'Save transcoding limits',
+                  label: l10n.adminServerSaveTranscoding,
                   kind: WaxButtonKind.tonal,
                   semanticsId: SemanticsIds.transcodingSave,
                   onPressed: _busy ? null : () => _save(limits),
@@ -288,18 +285,15 @@ class _TranscodingActivityLine extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final activity = ref.watch(transcodingActivityProvider);
     final count = activity.value?.activeSessions;
     final headline = switch (activity) {
-      AsyncError() => 'The server did not say what is running.',
-      _ when count == null => 'Reading what is running...',
-      _ when count == 1 => '1 engine-backed stream right now.',
-      _ => '$count engine-backed streams right now.',
+      AsyncError() => l10n.adminServerActivityUnknown,
+      _ when count == null => l10n.adminServerActivityReading,
+      _ => l10n.adminServerActivityCount(count),
     };
-    const caveat =
-        'Counts streams the engine is transcoding or remuxing, '
-        'including a client that forced the source\'s own format; HLS '
-        'timelines are admitted separately and are not counted here.';
+    final caveat = l10n.adminServerActivityCaveat;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -312,7 +306,9 @@ class _TranscodingActivityLine extends ConsumerWidget {
           child: Semantics(
             identifier: SemanticsIds.transcodingActivity,
             container: true,
-            label: count != null ? '$headline $caveat' : headline,
+            label: count != null
+                ? l10n.adminServerActivitySpoken(headline, caveat)
+                : headline,
             excludeSemantics: true,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,7 +327,7 @@ class _TranscodingActivityLine extends ConsumerWidget {
         ),
         WaxIconButton(
           glyph: WaxIcons.refresh,
-          label: 'Refresh what is running',
+          label: l10n.adminServerActivityRefresh,
           semanticsId: SemanticsIds.transcodingActivityRefresh,
           onPressed: () => ref.invalidate(transcodingActivityProvider),
         ),
@@ -365,24 +361,19 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
 
   Future<void> _save() async {
     if (_busy) return;
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     // Refused outright rather than falling back to the stored value and
     // still reporting success. One save writes both windows, so each
     // message names its own field.
     final parsed = int.tryParse(_days.text.trim());
     if (parsed == null || parsed < 0) {
-      messenger.show(
-        'Purge trashed files after: enter a whole number of days '
-        '(0 keeps them until you empty the trash)',
-      );
+      messenger.show(l10n.adminServerTrashDaysInvalid);
       return;
     }
     final parsedTasks = int.tryParse(_taskDays.text.trim());
     if (parsedTasks == null || parsedTasks < 0) {
-      messenger.show(
-        'Clear finished tasks after: enter a whole number of days '
-        '(0 keeps every finished task)',
-      );
+      messenger.show(l10n.adminServerTaskDaysInvalid);
       return;
     }
     setState(() => _busy = true);
@@ -398,9 +389,9 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
       // Reflect what was stored, so a padded "007" reads back as 7.
       _days.text = '$parsed';
       _taskDays.text = '$parsedTasks';
-      messenger.show('Retention saved');
+      messenger.show(l10n.adminServerRetentionSaved);
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainRefusal(l10n, error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -408,6 +399,7 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     if (!_seeded) {
       _seeded = true;
       _days.text = '${widget.settings.trashRetentionDays}';
@@ -416,7 +408,7 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Retention'),
+        SectionHeader(title: l10n.adminServerRetention),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Column(
@@ -428,9 +420,9 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
               // two boxes reading 30 and 7 under one header is how the
               // task window gets typed into the trash purge.
               WaxTextField(
-                label: 'Purge trashed files after (days)',
+                label: l10n.adminServerTrashDaysLabel,
                 showLabel: true,
-                hint: '0 keeps them until the trash is emptied by hand',
+                hint: l10n.adminServerTrashDaysHint,
                 controller: _days,
                 semanticsId: SemanticsIds.trashRetentionDays,
               ),
@@ -439,15 +431,15 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
               // are the operator's policy on how long a record outlives
               // its use.
               WaxTextField(
-                label: 'Clear finished tasks after (days)',
+                label: l10n.adminServerTaskDaysLabel,
                 showLabel: true,
-                hint: '0 keeps every finished task',
+                hint: l10n.adminServerTaskDaysHint,
                 controller: _taskDays,
                 semanticsId: SemanticsIds.taskRetentionDays,
               ),
               const SizedBox(height: WaxSpace.s16),
               WaxButton(
-                label: 'Save retention',
+                label: l10n.adminServerSaveRetention,
                 kind: WaxButtonKind.tonal,
                 semanticsId: SemanticsIds.trashRetentionSave,
                 onPressed: _busy ? null : _save,

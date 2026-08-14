@@ -20,9 +20,10 @@ class SchedulesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final schedules = ref.watch(schedulesProvider);
     return WaxScaffold(
-      title: 'Schedules',
+      title: l10n.adminSchedulesTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminSchedules,
       onBack: adminBack(context),
@@ -32,10 +33,8 @@ class SchedulesScreen extends ConsumerWidget {
         ),
         child: switch (schedules) {
           AsyncError(:final error) => ErrorState(
-            title: 'Could not load the schedules',
-            message: error is WaxDeckApiException
-                ? error.message
-                : 'Something went wrong reading them.',
+            title: l10n.adminSchedulesLoadError,
+            message: context.explain(error),
             onRetry: () => ref.invalidate(schedulesProvider),
           ),
           AsyncData(:final value) => Column(
@@ -50,10 +49,10 @@ class SchedulesScreen extends ConsumerWidget {
                   ),
                 ),
               if (value.isEmpty)
-                const EmptyState(
+                EmptyState(
                   glyph: WaxIcons.recent,
-                  title: 'No schedules',
-                  message: 'This server runs nothing on a timetable.',
+                  title: l10n.adminSchedulesEmptyTitle,
+                  message: l10n.adminSchedulesEmptyMessage,
                 ),
             ],
           ),
@@ -102,11 +101,11 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
     }
   }
 
-  static String label(String kind) => switch (kind) {
-    'scan' => 'Library scan',
-    'backup' => 'Backup',
-    'prune' => 'Prune',
-    'analyze' => 'Analyze audio',
+  static String label(AppLocalizations l10n, String kind) => switch (kind) {
+    'scan' => l10n.adminScheduleScan,
+    'backup' => l10n.adminScheduleBackup,
+    'prune' => l10n.adminSchedulePrune,
+    'analyze' => l10n.adminScheduleAnalyze,
     _ => kind,
   };
 
@@ -114,18 +113,11 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
   /// it is the sole pass that decodes audio, and an administrator who
   /// reads it as another scan switches it on for a large library and
   /// wonders why the machine is busy all night.
-  static String blurb(String kind) => switch (kind) {
-    'scan' =>
-      'Finds new and changed files, reads their tags, and indexes them. '
-          'Cheap: it does not decode audio.',
-    'backup' => 'Writes an archive of the database and its sidecars.',
-    'prune' =>
-      'Clears expired staging, spent tokens, and trashed files past '
-          'their retention.',
-    'analyze' =>
-      'Measures loudness, fingerprints, and waveforms. Decodes every '
-          'audio file, so a large library takes hours. Resumable: files '
-          'already analyzed are skipped.',
+  static String blurb(AppLocalizations l10n, String kind) => switch (kind) {
+    'scan' => l10n.adminScheduleScanBlurb,
+    'backup' => l10n.adminScheduleBackupBlurb,
+    'prune' => l10n.adminSchedulePruneBlurb,
+    'analyze' => l10n.adminScheduleAnalyzeBlurb,
     _ => '',
   };
 
@@ -138,6 +130,7 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref
@@ -147,9 +140,13 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
             cron: _cron.text.trim(),
             enabled: _enabled,
           );
-      messenger.show('${label(widget.schedule.kind)} schedule saved');
+      messenger.show(
+        l10n.adminScheduleSaved(label(l10n, widget.schedule.kind)),
+      );
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      // The cron expression somebody just typed: the server says which
+      // of its five fields it could not read.
+      messenger.show(explainRefusal(l10n, error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -158,9 +155,10 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final schedule = widget.schedule;
     final kind = schedule.kind;
-    final note = blurb(kind);
+    final note = blurb(l10n, kind);
     return Semantics(
       identifier: SemanticsIds.scheduleRow(kind),
       container: true,
@@ -178,14 +176,14 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    label(kind),
+                    label(l10n, kind),
                     style: WaxType.titleItem.copyWith(
                       color: colors.textPrimary,
                     ),
                   ),
                 ),
                 WaxSwitch(
-                  label: '${label(kind)} runs on a schedule',
+                  label: l10n.adminScheduleEnabledLabel(label(l10n, kind)),
                   value: _enabled,
                   semanticsId: SemanticsIds.scheduleEnabled(kind),
                   onChanged: (value) => setState(() => _enabled = value),
@@ -208,15 +206,15 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
               children: <Widget>[
                 Expanded(
                   child: WaxTextField(
-                    label: 'Cron',
-                    hint: 'minute hour day month weekday',
+                    label: l10n.adminScheduleCronLabel,
+                    hint: l10n.adminScheduleCronHint,
                     controller: _cron,
                     semanticsId: SemanticsIds.scheduleCron(kind),
                   ),
                 ),
                 const SizedBox(width: WaxSpace.s12),
                 WaxButton(
-                  label: 'Save',
+                  label: l10n.commonSave,
                   kind: WaxButtonKind.tonal,
                   semanticsId: SemanticsIds.scheduleSave(kind),
                   onPressed: _busy ? null : _save,
@@ -232,6 +230,15 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
   }
 }
 
+/// How a run went, as a word. The contract keeps the status an open
+/// string, so one this build has not heard of draws as the server
+/// wrote it.
+String _statusLabel(AppLocalizations l10n, String status) => switch (status) {
+  'ok' => l10n.adminScheduleStatusOk,
+  'failed' => l10n.adminScheduleStatusFailed,
+  _ => status,
+};
+
 /// When it last ran, how that went, and when it runs next.
 class _Status extends StatelessWidget {
   const _Status({required this.schedule});
@@ -244,12 +251,16 @@ class _Status extends StatelessWidget {
     final l10n = context.l10n;
     final parts = <String>[
       if (schedule.lastRunAt != null)
-        'Last run ${l10n.formatStamp(schedule.lastRunAt!)}'
-            '${schedule.lastStatus == null ? '' : ' (${schedule.lastStatus})'}',
+        schedule.lastStatus == null
+            ? l10n.adminScheduleLastRun(l10n.formatStamp(schedule.lastRunAt!))
+            : l10n.adminScheduleLastRunStatus(
+                l10n.formatStamp(schedule.lastRunAt!),
+                _statusLabel(l10n, schedule.lastStatus!),
+              ),
       // A disabled schedule has no next run, and the server sends none;
       // saying "next: never" for one somebody just switched off is noise.
       if (schedule.enabled && schedule.nextRunAt != null)
-        'Next ${l10n.formatStamp(schedule.nextRunAt!)}',
+        l10n.adminScheduleNextRun(l10n.formatStamp(schedule.nextRunAt!)),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

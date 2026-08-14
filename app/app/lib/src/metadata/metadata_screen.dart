@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../music/music_controllers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -104,14 +105,20 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
     setState(() => _busy = true);
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await action();
     } on WaxDeckApiException catch (e) {
-      final hint = e.statusCode == 409
-          ? ' Check "Force" to overwrite locked fields.'
-          : '';
-      messenger.show('${e.message}.$hint');
+      // The server's own sentence, kept: it names which field refused,
+      // which is the whole of what an administrator needs when three
+      // were edited and one is locked. The client adds the half the
+      // server cannot know - the switch on this page that overrides it.
+      messenger.show(
+        e.code == 'field-locked'
+            ? '${e.message}. ${l10n.metadataFieldLockedHint}'
+            : explainError(l10n, e),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -137,6 +144,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   });
 
   Future<void> _rematch() => _run(() async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     // Hoisted: the message outlives this screen, and a closure over its
     // context throws once the editor is popped.
@@ -145,8 +153,8 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         .read(metadataControllerProvider(widget.pid).notifier)
         .rematch();
     messenger.show(
-      'Queued for identification',
-      actionLabel: router == null ? null : 'Open review',
+      l10n.metadataQueuedForIdentification,
+      actionLabel: router == null ? null : l10n.metadataOpenReview,
       actionSemanticsId: SemanticsIds.metadataOpenReview,
       onAction: router == null
           ? null
@@ -161,15 +169,20 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   };
 
   Future<void> _enrich(MetadataEditorState state) => _run(() async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final result = await ref
         .read(metadataControllerProvider(widget.pid).notifier)
         .enrich(_wantsFor(state.metadata.mediaType));
-    final parts = [
-      if (result.applied.isNotEmpty) 'Applied: ${result.applied.join(', ')}',
-      if (result.skipped.isNotEmpty) 'Skipped: ${result.skipped.join(', ')}',
+    final parts = <String>[
+      if (result.applied.isNotEmpty)
+        l10n.metadataEnrichApplied(result.applied.join(', ')),
+      if (result.skipped.isNotEmpty)
+        l10n.metadataEnrichSkipped(result.skipped.join(', ')),
     ];
-    messenger.show(parts.isEmpty ? 'Nothing to fetch' : parts.join('. '));
+    messenger.show(
+      parts.isEmpty ? l10n.metadataNothingToFetch : parts.join('. '),
+    );
   });
 
   @override
@@ -181,7 +194,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
       if (value != null) _adoptStored(value);
     });
     return WaxScaffold(
-      title: 'Edit metadata',
+      title: context.l10n.metadataTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.metadataEditor,
       onBack: () => context.leave(),
@@ -192,10 +205,8 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         child: switch (editor) {
           AsyncData(:final value) => _body(context, value, sizeClass),
           AsyncError(:final error) => ErrorState(
-            title: 'Could not load the metadata',
-            message: error is WaxDeckApiException
-                ? error.message
-                : 'Something went wrong reading it.',
+            title: context.l10n.metadataLoadError,
+            message: context.explain(error),
             onRetry: () =>
                 ref.invalidate(metadataControllerProvider(widget.pid)),
           ),
@@ -273,12 +284,13 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   /// The item, its cover, and where its values came from in one line.
   Widget _fieldsSection(BuildContext context, MetadataEditorState state) {
     final changed = _changedFields(state);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(
-          title: 'Fields',
-          overline: 'What this item claims to be',
+        SectionHeader(
+          title: l10n.metadataFieldsTitle,
+          overline: l10n.metadataFieldsOverline,
         ),
         if (_writeBackFailures.isNotEmpty) _writeBackWarning(context),
         for (final field in state.kindFields.fields) ...<Widget>[
@@ -302,30 +314,30 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         _EntityDoors(metadata: state.metadata),
         const SizedBox(height: WaxSpace.s8),
         WaxSettingRow(
-          title: 'Write tags to files',
-          help: 'Also rewrite the tags embedded in the backing files',
+          title: l10n.metadataWriteBackTitle,
+          help: l10n.metadataWriteBackHelp,
           control: WaxSwitch(
-            label: 'Write tags to files',
+            label: l10n.metadataWriteBackTitle,
             value: _writeBack,
             semanticsId: SemanticsIds.metadataWriteback,
             onChanged: (v) => setState(() => _writeBack = v),
           ),
         ),
         WaxSettingRow(
-          title: 'Lock edited fields',
-          help: 'Keep scans and enrichment from overwriting what you type',
+          title: l10n.metadataLockTitle,
+          help: l10n.metadataLockHelp,
           control: WaxSwitch(
-            label: 'Lock edited fields',
+            label: l10n.metadataLockTitle,
             value: _lock,
             semanticsId: SemanticsIds.metadataLock,
             onChanged: (v) => setState(() => _lock = v),
           ),
         ),
         WaxSettingRow(
-          title: 'Force',
-          help: 'Overwrite fields that are already locked',
+          title: l10n.metadataForceTitle,
+          help: l10n.metadataForceHelp,
           control: WaxSwitch(
-            label: 'Force',
+            label: l10n.metadataForceTitle,
             value: _force,
             semanticsId: SemanticsIds.metadataForce,
             onChanged: (v) => setState(() => _force = v),
@@ -334,9 +346,8 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         const SizedBox(height: WaxSpace.s16),
         WaxButton(
           label: changed.isEmpty
-              ? 'Save'
-              : 'Save ${changed.length} '
-                    '${changed.length == 1 ? 'change' : 'changes'}',
+              ? l10n.commonSave
+              : l10n.metadataSaveChanges(changed.length),
           icon: WaxIcons.check,
           semanticsId: SemanticsIds.metadataSave,
           onPressed: changed.isEmpty || _busy ? null : () => _save(state),
@@ -351,13 +362,14 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   /// screen as a caution rather than passing as a message.
   Widget _writeBackWarning(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.only(bottom: WaxSpace.s12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           WaxBanner(
-            message: 'Saved, but some files kept their old tags.',
+            message: l10n.metadataWriteBackWarning,
             tone: WaxBannerTone.caution,
             semanticsId: SemanticsIds.metadataWritebackWarning,
             onDismiss: () => setState(() => _writeBackFailures = const []),
@@ -367,7 +379,10 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
           // stays on screen rather than passing as a message.
           for (final failure in _writeBackFailures)
             Text(
-              '${failure.path ?? failure.filePid}: ${failure.reason}',
+              l10n.metadataWriteBackFailure(
+                failure.path ?? failure.filePid,
+                failure.reason,
+              ),
               style: WaxType.monoData.copyWith(color: colors.textSecondary),
             ),
         ],
@@ -377,12 +392,16 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
 
   Widget _creditsSection(BuildContext context, MetadataEditorState state) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final roles = state.kindFields.creditRoles;
     final role = _creditRole ?? (roles.isEmpty ? null : roles.first.name);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Credits', overline: 'Who else is on it'),
+        SectionHeader(
+          title: l10n.metadataCreditsTitle,
+          overline: l10n.metadataCreditsOverline,
+        ),
         for (final credit in state.metadata.credits)
           Padding(
             padding: const EdgeInsets.only(bottom: WaxSpace.s4),
@@ -393,13 +412,13 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
           ),
         if (roles.isEmpty)
           Text(
-            'No credit roles for this kind',
+            l10n.metadataNoCreditRoles,
             style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
           )
         else ...<Widget>[
           const SizedBox(height: WaxSpace.s8),
           WaxChoice<String>(
-            label: 'Credit role',
+            label: l10n.metadataCreditRole,
             value: role!,
             semanticsId: SemanticsIds.creditsRole,
             options: <String>[for (final r in roles) r.name],
@@ -408,13 +427,13 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
           ),
           const SizedBox(height: WaxSpace.s8),
           WaxTextField(
-            label: 'Names, comma separated',
+            label: l10n.metadataCreditNames,
             controller: _creditNamesController,
             semanticsId: SemanticsIds.creditsNames,
           ),
           const SizedBox(height: WaxSpace.s8),
           WaxButton(
-            label: 'Save credits',
+            label: l10n.metadataSaveCredits,
             kind: WaxButtonKind.tonal,
             semanticsId: SemanticsIds.creditsSave,
             onPressed: _busy
@@ -438,12 +457,13 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   }
 
   Widget _tagsSection(BuildContext context, MetadataEditorState state) {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(
-          title: 'Custom tags',
-          overline: 'Anything the vocabulary has no field for',
+        SectionHeader(
+          title: l10n.metadataTagsTitle,
+          overline: l10n.metadataTagsOverline,
         ),
         for (final tag in state.metadata.customTags)
           Padding(
@@ -458,7 +478,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
                 ),
                 WaxIconButton(
                   glyph: WaxIcons.close,
-                  label: 'Remove tag ${tag.key}',
+                  label: l10n.metadataRemoveTag(tag.key),
                   size: 16,
                   semanticsId: SemanticsIds.tagRemove(tag.key),
                   onPressed: _busy
@@ -481,7 +501,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
             SizedBox(
               width: 140,
               child: WaxTextField(
-                label: 'Key',
+                label: l10n.metadataTagKey,
                 controller: _tagKeyController,
                 semanticsId: SemanticsIds.tagKey,
               ),
@@ -489,7 +509,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
             const SizedBox(width: WaxSpace.s8),
             Expanded(
               child: WaxTextField(
-                label: 'Values, comma separated',
+                label: l10n.metadataTagValues,
                 controller: _tagValuesController,
                 semanticsId: SemanticsIds.tagValues,
               ),
@@ -498,7 +518,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         ),
         const SizedBox(height: WaxSpace.s8),
         WaxButton(
-          label: 'Add tag',
+          label: l10n.metadataAddTag,
           kind: WaxButtonKind.tonal,
           icon: WaxIcons.add,
           semanticsId: SemanticsIds.tagAdd,
@@ -525,16 +545,17 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   }
 
   Widget _lyricsSection(BuildContext context) {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(
-          title: 'Lyrics',
-          overline: 'Timed LRC, or plain lines',
+        SectionHeader(
+          title: l10n.metadataLyricsTitle,
+          overline: l10n.metadataLyricsOverline,
         ),
         WaxTextField(
-          label: 'LRC',
-          hint: '[00:12.00] First line',
+          label: l10n.metadataLyricsLabel,
+          hint: l10n.metadataLyricsHint,
           controller: _lyricsController,
           maxLines: 8,
           semanticsId: SemanticsIds.lyricsField,
@@ -545,7 +566,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         Row(
           children: <Widget>[
             WaxButton(
-              label: 'Save lyrics',
+              label: l10n.metadataSaveLyrics,
               kind: WaxButtonKind.tonal,
               semanticsId: SemanticsIds.lyricsSave,
               onPressed: _busy
@@ -559,7 +580,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
             ),
             const SizedBox(width: WaxSpace.s8),
             WaxButton(
-              label: 'Clear',
+              label: l10n.metadataClearLyrics,
               kind: WaxButtonKind.text,
               semanticsId: SemanticsIds.lyricsClear,
               onPressed: _busy
@@ -578,15 +599,16 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   }
 
   Widget _releaseSection(BuildContext context, MetadataEditorState state) {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Release status'),
+        SectionHeader(title: l10n.metadataReleaseTitle),
         WaxSettingRow(
-          title: 'Unofficial release',
-          help: 'A bootleg, a promo, or another unofficial issue',
+          title: l10n.metadataUnofficialTitle,
+          help: l10n.metadataUnofficialHelp,
           control: WaxSwitch(
-            label: 'Unofficial release',
+            label: l10n.metadataUnofficialTitle,
             value: state.metadata.unofficial,
             semanticsId: SemanticsIds.unofficialSwitch,
             onChanged: _busy
@@ -604,14 +626,13 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
 
   Widget _actionsSection(BuildContext context, MetadataEditorState state) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Identification'),
+        SectionHeader(title: l10n.metadataIdentificationTitle),
         Text(
-          'Rematch reopens identification and puts the result in the review '
-          'queue. Fetching metadata applies what the providers already agree '
-          'on, without asking.',
+          l10n.metadataIdentificationBlurb,
           style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
         ),
         const SizedBox(height: WaxSpace.s12),
@@ -620,14 +641,14 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
           runSpacing: WaxSpace.s8,
           children: <Widget>[
             WaxButton(
-              label: 'Rematch',
+              label: l10n.metadataRematch,
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.search,
               semanticsId: SemanticsIds.metadataRematch,
               onPressed: _busy ? null : _rematch,
             ),
             WaxButton(
-              label: 'Fetch metadata',
+              label: l10n.metadataFetch,
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.downloads,
               semanticsId: SemanticsIds.metadataEnrich,
@@ -649,8 +670,11 @@ class _Header extends StatelessWidget {
   final MetadataEditorState state;
 
   /// "5 from tags, 2 from you, 1 from MusicBrainz", commonest first.
-  static String provenanceSummary(ItemMetadata metadata) {
-    if (metadata.provenance.isEmpty) return 'No recorded sources';
+  static String provenanceSummary(
+    AppLocalizations l10n,
+    ItemMetadata metadata,
+  ) {
+    if (metadata.provenance.isEmpty) return l10n.metadataNoSources;
     final counts = <String, int>{};
     for (final entry in metadata.provenance) {
       final source = entry.provider ?? entry.source;
@@ -658,14 +682,17 @@ class _Header extends StatelessWidget {
     }
     final ordered = counts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    return ordered.map((e) => '${e.value} from ${e.key}').join(', ');
+    return ordered
+        .map((e) => l10n.metadataFromSource(e.value, e.key))
+        .join(', ');
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final metadata = state.metadata;
-    final title = metadata.fields['title'] ?? 'Untitled';
+    final title = metadata.fields['title'] ?? l10n.metadataUntitled;
     final artist = metadata.fields['artist'];
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -685,7 +712,7 @@ class _Header extends StatelessWidget {
                 ),
               const SizedBox(height: WaxSpace.s8),
               Text(
-                provenanceSummary(metadata),
+                provenanceSummary(l10n, metadata),
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ],
@@ -718,6 +745,7 @@ class _EntityDoors extends StatelessWidget {
     if (artistPid == null && albumPid == null && rgPid == null) {
       return const SizedBox.shrink();
     }
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.only(bottom: WaxSpace.s8),
       child: Wrap(
@@ -726,7 +754,7 @@ class _EntityDoors extends StatelessWidget {
         children: <Widget>[
           if (artistPid != null)
             WaxPill(
-              label: 'Open artist',
+              label: l10n.metadataOpenArtist,
               semanticsId: SemanticsIds.metadataOpenArtist,
               onPressed: () => context.push(
                 WaxRoute.musicBucket(MusicDimension.artists, artistPid),
@@ -734,7 +762,7 @@ class _EntityDoors extends StatelessWidget {
             ),
           if (albumPid != null)
             WaxPill(
-              label: 'Open album',
+              label: l10n.metadataOpenAlbum,
               semanticsId: SemanticsIds.metadataOpenAlbum,
               onPressed: () => context.push(
                 WaxRoute.musicBucket(MusicDimension.albums, albumPid),
@@ -742,7 +770,7 @@ class _EntityDoors extends StatelessWidget {
             ),
           if (rgPid != null)
             WaxPill(
-              label: 'Open release group',
+              label: l10n.metadataOpenReleaseGroup,
               semanticsId: SemanticsIds.metadataOpenReleaseGroup,
               onPressed: () => context.push(
                 WaxRoute.musicBucket(MusicDimension.releaseGroups, rgPid),
@@ -776,16 +804,19 @@ class _FieldRow extends StatelessWidget {
 
   final VoidCallback onToggleLock;
 
-  String get _provenanceText {
+  String _provenanceText(AppLocalizations l10n) {
     final p = provenance;
-    if (p == null) return 'Source unknown';
+    if (p == null) return l10n.metadataSourceUnknown;
     final provider = p.provider;
-    return provider == null ? p.source : '${p.source} ($provider)';
+    return provider == null
+        ? p.source
+        : l10n.metadataSourceWithProvider(p.source, provider);
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: <Widget>[
@@ -801,10 +832,12 @@ class _FieldRow extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: WaxSpace.s8),
           child: Row(
             children: <Widget>[
-              CodecChip(_provenanceText, emphasis: dirty),
+              CodecChip(_provenanceText(l10n), emphasis: dirty),
               WaxIconButton(
                 glyph: locked ? WaxIcons.bookmark : WaxIcons.edit,
-                label: locked ? 'Unlock ${field.name}' : 'Lock ${field.name}',
+                label: locked
+                    ? l10n.metadataUnlockField(field.name)
+                    : l10n.metadataLockField(field.name),
                 active: locked,
                 size: 16,
                 color: locked ? colors.accent : null,
@@ -831,6 +864,7 @@ class _LyricsPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: controller,
       builder: (context, value, _) {
@@ -840,7 +874,7 @@ class _LyricsPreview extends StatelessWidget {
             .toList();
         if (lines.isEmpty) {
           return Text(
-            'Nothing to preview',
+            l10n.metadataNothingToPreview,
             style: WaxType.caption.copyWith(color: colors.textTertiary),
           );
         }
@@ -861,8 +895,8 @@ class _LyricsPreview extends StatelessWidget {
               children: <Widget>[
                 Text(
                   synced == lines.length
-                      ? '${lines.length} lines, all timed'
-                      : '${lines.length} lines, $synced timed',
+                      ? l10n.metadataLinesAllTimed(lines.length)
+                      : l10n.metadataLinesSomeTimed(lines.length, synced),
                   style: WaxType.overline.copyWith(
                     color: synced == 0 ? colors.textTertiary : colors.accent,
                   ),

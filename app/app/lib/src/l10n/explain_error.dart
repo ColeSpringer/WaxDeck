@@ -65,6 +65,29 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   _ => null,
 };
 
+/// The sentence for a write that carried values somebody just typed.
+///
+/// The table answers on the code, which is right for an operation that
+/// failed and wrong for a field that was refused: `invalid-request`
+/// translated says only that something was wrong, while the server's own
+/// sentence names the cron field it could not parse, the root that
+/// already covers that path, or the alias two genres share. Those
+/// endpoints validate precisely so they can say which value refused, and
+/// flattening that leaves a form with nothing to look at.
+///
+/// So a refusal of the input keeps the server's words, and everything
+/// else - a timeout, a 500, a code carrying no detail - reads from the
+/// table. The same split the timezone dialog already makes, hoisted to
+/// where the other forms can reach it.
+String explainRefusal(AppLocalizations l10n, Object error) {
+  if (error is WaxDeckApiException &&
+      const {'invalid-request', 'conflict'}.contains(error.code) &&
+      error.message.trim().isNotEmpty) {
+    return error.message;
+  }
+  return explainError(l10n, error);
+}
+
 /// `feature-unavailable` is an umbrella, and its `params` are what say
 /// which refusal it is.
 ///

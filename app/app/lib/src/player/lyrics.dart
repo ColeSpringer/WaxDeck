@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
@@ -91,10 +92,8 @@ class LyricsSurface extends ConsumerWidget {
     return words.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => ErrorState(
-        title: 'Could not load the lyrics',
-        message: error is WaxDeckApiException
-            ? error.message
-            : 'Something went wrong reading them.',
+        title: context.l10n.playerLyricsError,
+        message: context.explain(error),
         onRetry: () => ref.invalidate(lyricsProvider(item.pid)),
         semanticsId: SemanticsIds.lyricsSurface,
       ),
@@ -131,14 +130,14 @@ class _Absent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final admin = canDeleteItems(ref);
+    final l10n = context.l10n;
     return EmptyState(
       glyph: WaxIcons.lyrics,
-      title: 'No lyrics for this track',
+      title: l10n.playerNoLyrics,
       message: admin
-          ? 'Nothing was found in a sidecar or in the file tags. You can '
-                'add them in the metadata editor.'
-          : 'Nothing was found in a sidecar or in the file tags.',
-      actionLabel: admin ? 'Add lyrics' : null,
+          ? l10n.playerNoLyricsAdminMessage
+          : l10n.playerNoLyricsMessage,
+      actionLabel: admin ? l10n.playerAddLyrics : null,
       actionSemanticsId: admin ? SemanticsIds.lyricsAdd : null,
       onAction: admin ? () => _openEditor(context, pid) : null,
       semanticsId: SemanticsIds.lyricsSurface,
@@ -193,10 +192,10 @@ class LyricsPanel extends ConsumerWidget {
       closeSemanticsId: SemanticsIds.panelClose,
       onClose: ref.read(sidePanelProvider.notifier).close,
       child: NowPlayingView(
-        idle: (context) => const EmptyState(
+        idle: (context) => EmptyState(
           glyph: WaxIcons.lyrics,
-          title: 'Nothing is playing',
-          message: 'Words show up here once something is.',
+          title: context.l10n.playerNothingPlaying,
+          message: context.l10n.playerLyricsIdleMessage,
           semanticsId: SemanticsIds.lyricsSurface,
         ),
         builder: (context, session, item, position) =>
@@ -266,7 +265,7 @@ class _LyricsSheet extends StatelessWidget {
                 ),
                 WaxIconButton(
                   glyph: WaxIcons.close,
-                  label: 'Close lyrics',
+                  label: context.l10n.playerCloseLyrics,
                   size: 18,
                   onPressed: () => Navigator.of(context).pop(),
                   semanticsId: SemanticsIds.panelClose,
@@ -276,10 +275,10 @@ class _LyricsSheet extends StatelessWidget {
           ),
           Expanded(
             child: NowPlayingView(
-              idle: (context) => const EmptyState(
+              idle: (context) => EmptyState(
                 glyph: WaxIcons.lyrics,
-                title: 'Nothing is playing',
-                message: 'Words show up here once something is.',
+                title: context.l10n.playerNothingPlaying,
+                message: context.l10n.playerLyricsIdleMessage,
                 semanticsId: SemanticsIds.lyricsSurface,
               ),
               builder: (context, session, item, position) => LyricsSurface(

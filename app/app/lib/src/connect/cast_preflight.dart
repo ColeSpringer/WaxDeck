@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 
@@ -39,12 +40,13 @@ class _CastPreflightSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bases = ref.watch(castPreflightProvider);
+    final l10n = context.l10n;
     return SafeArea(
       child: Semantics(
         identifier: SemanticsIds.preflight,
         container: true,
         explicitChildNodes: true,
-        label: 'Connection check',
+        label: l10n.devicesConnectionCheck,
         child: ConstrainedBox(
           // Bounded, because the notes are prose of unknown length and a
           // sheet is not a page: three unreachable bases with four notes
@@ -56,11 +58,16 @@ class _CastPreflightSheet extends ConsumerWidget {
             shrinkWrap: true,
             padding: const EdgeInsets.only(bottom: WaxSpace.s16),
             children: <Widget>[
-              const Padding(
-                padding: EdgeInsets.fromLTRB(WaxSpace.s16, WaxSpace.s8, 0, 0),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  WaxSpace.s16,
+                  WaxSpace.s8,
+                  0,
+                  0,
+                ),
                 child: SectionHeader(
-                  overline: 'Casting',
-                  title: 'Connection check',
+                  overline: l10n.devicesCastingOverline,
+                  title: l10n.devicesConnectionCheck,
                 ),
               ),
               Padding(
@@ -71,21 +78,17 @@ class _CastPreflightSheet extends ConsumerWidget {
                   WaxSpace.s8,
                 ),
                 child: Text(
-                  'A cast device fetches audio from this server by address. '
-                  'These are the addresses it will try, in order.',
+                  l10n.devicesCastBlurb,
                   style: WaxType.caption.copyWith(
                     color: WaxColors.of(context).textSecondary,
                   ),
                 ),
               ),
               ...switch (bases) {
-                AsyncData(:final value) when value.isEmpty => const <Widget>[
+                AsyncData(:final value) when value.isEmpty => <Widget>[
                   EmptyState(
-                    title: 'No addresses to try',
-                    message:
-                        'This server has not been told a public address and '
-                        'could not detect one on the network. Casting needs '
-                        'one; set it in the server settings.',
+                    title: l10n.devicesNoAddresses,
+                    message: l10n.devicesNoAddressesMessage,
                     glyph: WaxIcons.warning,
                   ),
                 ],
@@ -105,10 +108,7 @@ class _CastPreflightSheet extends ConsumerWidget {
                       // is not the device checking, and a reader deciding
                       // what to fix needs to know which of the two this
                       // is.
-                      'The server checked these itself. An address it '
-                      'cannot reach will not work from a speaker either; '
-                      'one it can may still fail if the speaker is on '
-                      'another network.',
+                      l10n.devicesCastCaveat,
                       style: WaxType.caption.copyWith(
                         color: WaxColors.of(context).textTertiary,
                       ),
@@ -117,10 +117,8 @@ class _CastPreflightSheet extends ConsumerWidget {
                 ],
                 AsyncError(:final error) => <Widget>[
                   ErrorState(
-                    title: 'Could not check',
-                    message: error is WaxDeckApiException
-                        ? error.message
-                        : 'The server did not answer.',
+                    title: l10n.devicesCheckError,
+                    message: context.explain(error),
                     onRetry: () => ref.invalidate(castPreflightProvider),
                     retrySemanticsId: SemanticsIds.preflightRetry,
                   ),
@@ -145,25 +143,24 @@ class _Base extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         WaxOptionRow(
           title: base.base,
-          subtitle: switch (base.source) {
-            'configured' =>
-              base.reachable
-                  ? 'Configured address, reachable'
-                  : 'Configured address, not reachable',
-            'detected' =>
-              base.reachable
-                  ? 'Detected on this network, reachable'
-                  : 'Detected on this network, not reachable',
-            // `source` is an open string: an unrecognised one is still
-            // worth naming, because it is what a server operator set.
-            final other =>
-              base.reachable ? '$other, reachable' : '$other, not reachable',
-          },
+          subtitle: l10n.devicesBaseLine(
+            switch (base.source) {
+              'configured' => l10n.devicesBaseConfigured,
+              'detected' => l10n.devicesBaseDetected,
+              // `source` is an open string: an unrecognised one is still
+              // worth naming, because it is what a server operator set.
+              final other => other,
+            },
+            base.reachable
+                ? l10n.devicesBaseReachable
+                : l10n.devicesBaseUnreachable,
+          ),
           glyph: base.reachable ? WaxIcons.check : WaxIcons.warning,
           // Highlighted for being reachable, which is not playback: the
           // row's default announcement prefixes "Playing".

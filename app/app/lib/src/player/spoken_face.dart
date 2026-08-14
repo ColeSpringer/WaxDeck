@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../podcasts/show_notes.dart';
 import '../providers.dart';
@@ -141,7 +142,7 @@ class ShowOverline extends ConsumerWidget {
     if (name == null) return const SizedBox.shrink();
     return WaxTappable(
       semanticsId: SemanticsIds.playerShow,
-      label: 'Go to $name',
+      label: context.l10n.playerGoToName(name),
       borderRadius: WaxRadius.chip,
       onPressed: () => context.go(WaxRoute.show(episode.showPid)),
       child: InkWell(
@@ -231,6 +232,7 @@ class _BookSeekState extends ConsumerState<BookSeek> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final total = widget.session.mediaDuration;
     // The whole book's envelope, whichever view is drawn. A book that
     // has not been analyzed, or one part of which cannot be, answers
@@ -262,17 +264,17 @@ class _BookSeekState extends ConsumerState<BookSeek> {
               Padding(
                 padding: const EdgeInsets.only(bottom: WaxSpace.s8),
                 child: WaxSegmented(
-                  label: 'Seek bar spans',
+                  label: l10n.playerSeekSpans,
                   selected: _view,
                   segments: <WaxSegment>[
                     WaxSegment(
                       name: _chapterView,
-                      label: 'Chapter',
+                      label: l10n.playerSpanChapter,
                       semanticsId: SemanticsIds.playerTimeline(_chapterView),
                     ),
                     WaxSegment(
                       name: _bookView,
-                      label: 'Book',
+                      label: l10n.playerSpanBook,
                       semanticsId: SemanticsIds.playerTimeline(_bookView),
                     ),
                   ],
@@ -418,11 +420,12 @@ class SpeedChip extends StatelessWidget {
       stream: session.engine.speedStream,
       initialData: session.engine.speed,
       builder: (context, snapshot) {
+        final l10n = context.l10n;
         final speed = snapshot.data ?? 1.0;
         return WaxPill(
           semanticsId: SemanticsIds.playerSpeed,
-          label: 'Playback speed ${formatPlayerSpeed(speed)}',
-          text: formatPlayerSpeed(speed),
+          label: l10n.playerSpeedAt(l10n.formatSpeed(speed)),
+          text: l10n.formatSpeed(speed),
           mono: true,
           onPressed: () => unawaited(showSpeedSheet(context, session)),
         );
@@ -477,9 +480,10 @@ class TrimChip extends ConsumerWidget {
         return ValueListenableBuilder<int>(
           valueListenable: session.hoursSavedMs,
           builder: (context, savedMs, _) {
+            final l10n = context.l10n;
             final label = savedMs > 0
-                ? 'Trim silence (${savedLabel(savedMs)})'
-                : 'Trim silence';
+                ? l10n.playerTrimSilenceSaved(savedLabel(savedMs))
+                : l10n.playerTrimSilence;
             // A chip with its readout drawn rather than an icon with the
             // readout only spoken: what the session has saved is the
             // reason to leave the toggle on, and a glyph says none of it.
@@ -494,9 +498,7 @@ class TrimChip extends ConsumerWidget {
                     context,
                     ref,
                     trimSilenceExplainedProvider,
-                    'Silence trimming skips the mapped quiet parts of an '
-                    'episode. Positions stay honest; the chip counts what '
-                    'it skipped.',
+                    l10n.playerTrimExplained,
                   );
                 }
                 session.setTrimEnabled(!enabled);
@@ -530,13 +532,13 @@ class _VoiceBoostChipState extends ConsumerState<VoiceBoostChip> {
 
   Future<void> _toggle(bool to) async {
     if (_busy) return;
+    final l10n = context.l10n;
     if (to) {
       explainOnce(
         context,
         ref,
         voiceBoostExplainedProvider,
-        'Voice boost evens out a quiet or uneven recording. The server '
-        'applies it, so what is playing reopens.',
+        l10n.playerVoiceBoostExplained,
       );
     }
     final messenger = ScaffoldMessenger.of(context);
@@ -548,14 +550,7 @@ class _VoiceBoostChipState extends ConsumerState<VoiceBoostChip> {
       if (!await widget.session.setVoiceBoost(to)) {
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text(
-                'The settings for this show could not be reached, so '
-                'voice boost was not changed.',
-              ),
-            ),
-          );
+          ..showSnackBar(SnackBar(content: Text(l10n.playerVoiceBoostFailed)));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -568,8 +563,8 @@ class _VoiceBoostChipState extends ConsumerState<VoiceBoostChip> {
       valueListenable: widget.session.voiceBoost,
       builder: (context, enabled, _) => WaxPill(
         semanticsId: SemanticsIds.playerVoiceBoost,
-        label: 'Voice boost',
-        text: 'Voice boost',
+        label: context.l10n.playerVoiceBoost,
+        text: context.l10n.playerVoiceBoost,
         selected: enabled,
         onPressed: _busy ? null : () => unawaited(_toggle(!enabled)),
       ),
@@ -786,7 +781,7 @@ class _ChapterList extends StatelessWidget {
       identifier: SemanticsIds.playerChapters,
       container: true,
       explicitChildNodes: true,
-      label: 'Chapters',
+      label: context.l10n.playerChapters,
       // On chapter changes, not on position ticks: the highlight moves
       // once every few minutes and the position moves several times a
       // second, and rebuilding a list for the second is the most
@@ -801,6 +796,7 @@ class _ChapterList extends StatelessWidget {
             itemBuilder: (context, index) {
               final chapter = chapters[index];
               final playing = current?.index == chapter.index;
+              final l10n = context.l10n;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
@@ -813,7 +809,7 @@ class _ChapterList extends StatelessWidget {
                         WaxSpace.s4,
                       ),
                       child: Text(
-                        'Part ${part + 1}',
+                        context.l10n.playerPart(part + 1),
                         style: WaxType.overline.copyWith(
                           color: colors.textTertiary,
                         ),
@@ -822,7 +818,7 @@ class _ChapterList extends StatelessWidget {
                   WaxTappable(
                     semanticsId: SemanticsIds.playerChapter(chapter.index),
                     label: playing
-                        ? '${chapterTitle(chapter)}, playing'
+                        ? l10n.playerChapterPlaying(chapterTitle(chapter))
                         : chapterTitle(chapter),
                     selected: playing,
                     onPressed: () => unawaited(
@@ -924,8 +920,8 @@ class _TranscriptRegionState extends ConsumerState<_TranscriptRegion> {
             padding: const EdgeInsets.all(WaxSpace.s16),
             child: Text(
               error is WaxDeckApiException
-                  ? error.message
-                  : 'Could not load the transcript.',
+                  ? explainError(context.l10n, error)
+                  : context.l10n.playerTranscriptError,
               style: WaxType.caption.copyWith(color: colors.textTertiary),
             ),
           );

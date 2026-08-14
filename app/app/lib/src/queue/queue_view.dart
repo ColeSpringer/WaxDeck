@@ -7,6 +7,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
@@ -23,11 +24,11 @@ import 'session_history.dart';
 /// Null where naming the source would say nothing: one item tapped on
 /// its own is its own provenance, and a queue that predates the field
 /// has none to give.
-String? queueProvenance(QueueSource source) {
+String? queueProvenance(AppLocalizations l10n, QueueSource source) {
   if (source.label.isEmpty) return null;
   return switch (source.kind) {
     QueueSourceKind.single || QueueSourceKind.unknown => null,
-    _ => 'Playing from ${source.label}',
+    _ => l10n.queuePlayingFrom(source.label),
   };
 }
 
@@ -209,7 +210,7 @@ class QueueCommands extends ConsumerWidget {
       commands: <WaxCommand>[
         WaxCommand(
           id: 'queue-clear-selection',
-          label: 'Clear the queue selection',
+          label: context.l10n.queueClearSelection,
           section: WaxCommandSection.view,
           glyph: WaxIcons.close,
           // Not on repeats, for the reason the player's Escape is not:
@@ -239,6 +240,7 @@ class QueueCommands extends ConsumerWidget {
 /// large title, and a panel has no title to scroll under.
 List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
   final colors = WaxColors.of(context);
+  final l10n = context.l10n;
   final queue = ref.watch(queueControllerProvider);
   final notifier = ref.read(queueControllerProvider.notifier);
   final showHistory = ref.watch(queueHistoryOpenProvider);
@@ -248,19 +250,18 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
       // One sliver, not two: a filled remainder followed by anything
       // puts that anything past the bottom of the viewport, where it is
       // never laid out and never found.
-      const SliverFillRemaining(
+      SliverFillRemaining(
         hasScrollBody: false,
         child: Column(
           children: <Widget>[
             Expanded(
               child: EmptyState(
-                title: 'Nothing queued',
-                message:
-                    'Play an album, a show, or a playlist and it lands here.',
+                title: l10n.queueEmptyTitle,
+                message: l10n.queueEmptyMessage,
                 glyph: WaxIcons.queue,
               ),
             ),
-            SessionHistorySection(),
+            const SessionHistorySection(),
           ],
         ),
       ),
@@ -269,7 +270,7 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
 
   final upNext = queue.entries.sublist(queue.currentIndex + 1);
   final played = queue.entries.sublist(0, queue.currentIndex);
-  final provenance = queueProvenance(queue.source);
+  final provenance = queueProvenance(l10n, queue.source);
   final upNextIds = <String>[for (final e in upNext) e.queueId];
   // Narrowed to what is actually drawn: the queue moves underneath a
   // selection, and a set holding ids nothing shows any more would have
@@ -313,7 +314,7 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
             // the pager's answer, which this line is drawn before.
             if (queue.source.rolling)
               Text(
-                'A window over a larger scope',
+                l10n.queueRollingWindow,
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             const SizedBox(height: WaxSpace.s8),
@@ -321,7 +322,9 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
               children: <Widget>[
                 WaxIconButton(
                   glyph: WaxIcons.shuffle,
-                  label: queue.shuffled ? 'Shuffle on' : 'Shuffle off',
+                  label: queue.shuffled
+                      ? l10n.queueShuffleOn
+                      : l10n.queueShuffleOff,
                   size: 18,
                   active: queue.shuffled,
                   onPressed: () => notifier.setShuffle(!queue.shuffled),
@@ -332,9 +335,9 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
                       ? WaxIcons.repeatOne
                       : WaxIcons.repeatAll,
                   label: switch (queue.repeat) {
-                    QueueRepeat.off => 'Repeat off',
-                    QueueRepeat.all => 'Repeat all',
-                    QueueRepeat.one => 'Repeat one',
+                    QueueRepeat.off => l10n.queueRepeatOff,
+                    QueueRepeat.all => l10n.queueRepeatAll,
+                    QueueRepeat.one => l10n.queueRepeatOne,
                   },
                   size: 18,
                   active: queue.repeat != QueueRepeat.off,
@@ -365,7 +368,10 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
         ),
       ),
     ),
-    _label(context, upNext.isEmpty ? 'NOTHING UP NEXT' : 'UP NEXT'),
+    _label(
+      context,
+      upNext.isEmpty ? l10n.queueNothingUpNext : l10n.playerUpNext,
+    ),
     if (selecting)
       SliverToBoxAdapter(
         child: _SelectionBar(
@@ -469,10 +475,10 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
               child: Semantics(
                 customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
                   if (index > 0)
-                    const CustomSemanticsAction(label: 'Move up'): () =>
+                    CustomSemanticsAction(label: l10n.queueMoveUp): () =>
                         notifier.reorder(at, at - 1),
                   if (index < upNext.length - 1)
-                    const CustomSemanticsAction(label: 'Move down'): () =>
+                    CustomSemanticsAction(label: l10n.queueMoveDown): () =>
                         notifier.reorder(at, at + 1),
                 },
                 child: QueueRow(
@@ -506,7 +512,7 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
                     index: index,
                     child: Semantics(
                       identifier: SemanticsIds.queueEntryDrag(entry.queueId),
-                      label: 'Drag to reorder',
+                      label: l10n.queueDragToReorder,
                       child: Padding(
                         padding: const EdgeInsets.all(WaxSpace.s8),
                         child: WaxIcon(
@@ -537,16 +543,14 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
             onPressed: ref.read(queueHistoryOpenProvider.notifier).toggle,
             semanticsId: SemanticsIds.queueHistory,
             selected: showHistory,
-            label: showHistory
-                ? 'Hide what has played'
-                : 'Show what has played',
+            label: showHistory ? l10n.queueHideHistory : l10n.queueShowHistory,
             child: InkWell(
               onTap: ref.read(queueHistoryOpenProvider.notifier).toggle,
               child: Row(
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      'PREVIOUSLY (${played.length})',
+                      l10n.queuePreviously(played.length),
                       style: WaxType.overline.copyWith(
                         color: colors.textTertiary,
                       ),
@@ -668,13 +672,13 @@ class _SelectionBar extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: <Widget>[
           Text(
-            '$count selected',
+            context.l10n.queueSelectedCount(count),
             style: WaxType.label.copyWith(
               color: WaxColors.of(context).textSecondary,
             ),
           ),
           WaxButton(
-            label: 'Remove',
+            label: context.l10n.queueRemove,
             kind: WaxButtonKind.tonal,
             icon: WaxIcons.close,
             semanticsId: SemanticsIds.queueSelectionRemove,
@@ -684,21 +688,21 @@ class _SelectionBar extends StatelessWidget {
           // next thing that plays, so a second verb for it would be the
           // same button under another name.
           WaxButton(
-            label: 'Move to top',
+            label: context.l10n.queueMoveToTop,
             kind: WaxButtonKind.tonal,
             icon: WaxIcons.collapse,
             semanticsId: SemanticsIds.queueSelectionTop,
             onPressed: onTop,
           ),
           WaxButton(
-            label: 'Move to bottom',
+            label: context.l10n.queueMoveToBottom,
             kind: WaxButtonKind.tonal,
             icon: WaxIcons.expand,
             semanticsId: SemanticsIds.queueSelectionBottom,
             onPressed: onBottom,
           ),
           WaxButton(
-            label: 'Clear',
+            label: context.l10n.queueClearSelectionAction,
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.queueSelectionClear,
             onPressed: onClear,
@@ -811,7 +815,7 @@ class QueueRow extends ConsumerWidget {
     // tap: a queue that cannot be driven until every title has landed
     // is worse than one with a placeholder in it.
     final data = MediaTileData(
-      title: item?.title ?? 'Loading…',
+      title: item?.title ?? context.l10n.commonLoadingTitle,
       subtitle: item?.artist,
       artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
       domain: waxDomainOf(item?.mediaType ?? MediaType.music),
@@ -837,7 +841,7 @@ class QueueRow extends ConsumerWidget {
         if (onRemove != null)
           WaxIconButton(
             glyph: WaxIcons.close,
-            label: 'Remove from queue',
+            label: context.l10n.queueRemoveEntry,
             size: 16,
             onPressed: onRemove,
             semanticsId: SemanticsIds.queueEntryRemove(entry.queueId),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import '../sharing/share_dialog.dart';
 import '../sharing/share_rows.dart';
@@ -53,19 +54,21 @@ class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen> {
   }
 
   Future<void> _copy(Share share) async {
+    final l10n = context.l10n;
     await Clipboard.setData(ClipboardData(text: shareAbsoluteUrl(share.url)));
     if (!mounted) return;
-    _report('Link copied');
+    _report(l10n.adminShareCopied);
   }
 
   Future<void> _revoke(Share share) async {
+    final l10n = context.l10n;
     try {
       await ref.read(adminSharesProvider.notifier).revoke(share.pid);
       if (!mounted) return;
-      _report('Link revoked');
+      _report(l10n.adminShareRevoked);
     } on WaxDeckApiException catch (e) {
       if (!mounted) return;
-      _report(e.message);
+      _report(explainError(l10n, e));
     }
   }
 
@@ -73,23 +76,21 @@ class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen> {
   Widget build(BuildContext context) {
     final shares = ref.watch(adminSharesProvider);
     final rows = shares.value?.shares ?? const <Share>[];
+    final l10n = context.l10n;
 
     return WaxScaffold(
-      title: 'Share links',
+      title: l10n.adminSectionShares,
       largeTitle: false,
       semanticsId: SemanticsIds.adminShares,
       controller: _scroll,
       onBack: adminBack(context),
       slivers: <Widget>[
         switch (shares) {
-          AsyncData() when rows.isEmpty => const SliverFillRemaining(
+          AsyncData() when rows.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'Nothing is shared',
-              message:
-                  'Nobody on this server has minted a public link. When '
-                  'somebody does it turns up here, with who made it and a '
-                  'way to switch it off.',
+              title: l10n.adminSharesEmptyTitle,
+              message: l10n.adminSharesEmptyMessage,
               glyph: WaxIcons.share,
               semanticsId: SemanticsIds.adminSharesEmpty,
             ),
@@ -102,10 +103,8 @@ class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen> {
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(
-              title: 'Could not load the share links',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'The server did not answer.',
+              title: l10n.adminSharesLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(adminSharesProvider),
             ),
           ),

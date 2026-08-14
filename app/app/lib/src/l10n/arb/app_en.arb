@@ -1,5 +1,2083 @@
 {
   "@@locale": "en",
+  "adminAuditEmptyMessage": "Administrative actions are recorded here as they happen.",
+  "@adminAuditEmptyMessage": {
+    "description": "Empty state of the audit log, saying what will fill it."
+  },
+  "adminAuditEmptyTitle": "Nothing logged yet",
+  "@adminAuditEmptyTitle": {
+    "description": "Empty state of the audit log."
+  },
+  "adminAuditFilterHint": "user. or backup.create",
+  "@adminAuditFilterHint": {
+    "description": "Hint in the audit filter, showing two action names. The names themselves are wire tokens and stay as they are; only the word between them is translated."
+  },
+  "adminAuditFilterLabel": "Filter by action",
+  "@adminAuditFilterLabel": {
+    "description": "Field narrowing the audit log to actions starting with what is typed."
+  },
+  "adminAuditLoadError": "Could not load the audit log",
+  "@adminAuditLoadError": {
+    "description": "Title of the error state when the audit log could not be read."
+  },
+  "adminAuditNoDetail": "No further detail",
+  "@adminAuditNoDetail": {
+    "description": "Drawn where an audit event's stored detail would be when it carries none."
+  },
+  "adminAuditRowSpoken": "{action}, {detail}",
+  "@adminAuditRowSpoken": {
+    "description": "One audit row read as a whole for a screen reader: the action's wire name, then who and when.",
+    "placeholders": {
+      "action": {
+        "type": "String",
+        "example": "user.create"
+      },
+      "detail": {
+        "type": "String",
+        "example": "ada, 3m ago"
+      }
+    }
+  },
+  "adminAuditSystemActor": "system",
+  "@adminAuditSystemActor": {
+    "description": "Stands in for the person behind an audit event when the server did it itself. Lower case: it leads a comma-separated line of facts about the event."
+  },
+  "adminBackupActions": "Backup actions",
+  "@adminBackupActions": {
+    "description": "Tooltip of the menu holding what can be done with one backup."
+  },
+  "adminBackupArchiveLabel": "Backup archive",
+  "@adminBackupArchiveLabel": {
+    "description": "What the file picker calls the zip it is asking for."
+  },
+  "adminBackupDeleteAction": "Delete",
+  "@adminBackupDeleteAction": {
+    "description": "Confirming button of the delete-backup dialog."
+  },
+  "adminBackupDeleteBody": "{fileName} is removed for good.",
+  "@adminBackupDeleteBody": {
+    "description": "Body of the dialog confirming that a backup archive is deleted.",
+    "placeholders": {
+      "fileName": {
+        "type": "String",
+        "example": "waxdeck-backup-20260721.zip"
+      }
+    }
+  },
+  "adminBackupDeleteMenu": "Delete...",
+  "@adminBackupDeleteMenu": {
+    "description": "Menu item that opens the delete-backup confirmation. The trailing dots say a dialog follows."
+  },
+  "adminBackupDeleteTitle": "Delete backup?",
+  "@adminBackupDeleteTitle": {
+    "description": "Title of the dialog confirming that a backup archive is deleted."
+  },
+  "adminBackupDownload": "Download",
+  "@adminBackupDownload": {
+    "description": "Menu item that downloads a backup archive."
+  },
+  "adminBackupDropHint": "Drop a backup archive to import",
+  "@adminBackupDropHint": {
+    "description": "Hint drawn over the backups page when a file is dragged onto it."
+  },
+  "adminBackupImportArchive": "Import archive",
+  "@adminBackupImportArchive": {
+    "description": "Button that picks a backup archive from disk and uploads it."
+  },
+  "adminBackupImported": "{fileName} imported; stage its restore",
+  "@adminBackupImported": {
+    "description": "Message after an archive finished uploading. Importing only stores it: restoring is a second, deliberate step.",
+    "placeholders": {
+      "fileName": {
+        "type": "String",
+        "example": "waxdeck-backup-20260721.zip"
+      }
+    }
+  },
+  "adminBackupKeepAll": "0 keeps all",
+  "@adminBackupKeepAll": {
+    "description": "Line under both retention fields, saying that zero means no limit."
+  },
+  "adminBackupKeepCountLabel": "Backups to keep",
+  "@adminBackupKeepCountLabel": {
+    "description": "Field for how many backup archives the server keeps before deleting the oldest."
+  },
+  "adminBackupKeepMbLabel": "Backup space (MB)",
+  "@adminBackupKeepMbLabel": {
+    "description": "Field for how many megabytes of backups the server keeps. MB is the unit abbreviation."
+  },
+  "adminBackupNow": "Back up now",
+  "@adminBackupNow": {
+    "description": "Button that starts a backup."
+  },
+  "adminBackupRestoreBody": "The server replaces its database with {fileName} at the next restart. Changes made since the backup are lost.",
+  "@adminBackupRestoreBody": {
+    "description": "Body of the dialog confirming a staged restore.",
+    "placeholders": {
+      "fileName": {
+        "type": "String",
+        "example": "waxdeck-backup-20260721.zip"
+      }
+    }
+  },
+  "adminBackupRestoreTitle": "Restore this backup?",
+  "@adminBackupRestoreTitle": {
+    "description": "Title of the dialog confirming a staged restore."
+  },
+  "adminBackupRetentionSaved": "Retention saved",
+  "@adminBackupRetentionSaved": {
+    "description": "Message after the retention fields were written."
+  },
+  "adminBackupRunning": "Backing up...",
+  "@adminBackupRunning": {
+    "description": "The back-up button while a backup is already running."
+  },
+  "adminBackupSaveRetention": "Save retention",
+  "@adminBackupSaveRetention": {
+    "description": "Button that writes the two retention fields."
+  },
+  "adminBackupStageRestore": "Stage restore",
+  "@adminBackupStageRestore": {
+    "description": "Confirming button of the restore dialog. It stages the restore rather than performing it: the server applies it at its next start."
+  },
+  "adminBackupStageRestoreMenu": "Stage restore...",
+  "@adminBackupStageRestoreMenu": {
+    "description": "Menu item that opens the restore confirmation. The trailing dots say a dialog follows."
+  },
+  "adminBackupStarted": "Backup started",
+  "@adminBackupStarted": {
+    "description": "Message after a backup was accepted."
+  },
+  "adminBackupStateDone": "done",
+  "@adminBackupStateDone": {
+    "description": "State of a finished backup. Lower case and agreeing with the word for a backup: it sits in a comma-separated run of facts about one."
+  },
+  "adminBackupStateFailed": "failed",
+  "@adminBackupStateFailed": {
+    "description": "State of a backup that did not finish. Lower case and agreeing with the word for a backup: it sits in a comma-separated run of facts about one."
+  },
+  "adminBackupStateRunning": "running",
+  "@adminBackupStateRunning": {
+    "description": "State of a backup being written. Lower case: it sits in a comma-separated run of facts about one backup."
+  },
+  "adminBackupTriggerImported": "imported",
+  "@adminBackupTriggerImported": {
+    "description": "Says a backup arrived as an uploaded archive. Lower case and agreeing with the word for a backup: it sits in a comma-separated run of facts about one."
+  },
+  "adminBackupTriggerManual": "manual",
+  "@adminBackupTriggerManual": {
+    "description": "Says a backup was started by a person. Lower case: it sits in a comma-separated run of facts about one backup."
+  },
+  "adminBackupTriggerScheduled": "scheduled",
+  "@adminBackupTriggerScheduled": {
+    "description": "Says a backup came from the maintenance timetable. Lower case and agreeing with the word for a backup: it sits in a comma-separated run of facts about one."
+  },
+  "adminBackupsEmpty": "No backups yet",
+  "@adminBackupsEmpty": {
+    "description": "Drawn where the backup list would be when the server has made none."
+  },
+  "adminBackupsRetention": "Retention",
+  "@adminBackupsRetention": {
+    "description": "Heading over the fields saying how many backups the server keeps."
+  },
+  "adminBackupsTitle": "Backups",
+  "@adminBackupsTitle": {
+    "description": "Title of the backups screen in the admin console."
+  },
+  "adminDashboardTitle": "Admin",
+  "@adminDashboardTitle": {
+    "description": "Title of the admin console's front page."
+  },
+  "adminGenreAdd": "Add genre",
+  "@adminGenreAdd": {
+    "description": "Button that adds a genre to the vocabulary."
+  },
+  "adminGenreAliasCount": "{count, plural, =1{1 alias} other{{count} aliases}}",
+  "@adminGenreAliasCount": {
+    "description": "How many alternative spellings fold onto one genre, drawn at the end of its row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "adminGenreAliasesBlurb": "Case, accents, and punctuation already fold, so list only the spellings folding cannot reach: Rap for Hip Hop, R&B for Rhythm and Blues.",
+  "@adminGenreAliasesBlurb": {
+    "description": "Line under the aliases field. The two examples are genre names in English and stay as they are; swap them for spellings that make the same point in this language if better ones exist."
+  },
+  "adminGenreAliasesHint": "Comma separated",
+  "@adminGenreAliasesHint": {
+    "description": "Hint in the aliases field."
+  },
+  "adminGenreAliasesLabel": "Aliases",
+  "@adminGenreAliasesLabel": {
+    "description": "Field for the alternative spellings that fold onto this genre."
+  },
+  "adminGenreDryRunStarted": "Dry run started; the task report says what would change",
+  "@adminGenreDryRunStarted": {
+    "description": "Message after a normalization preview started. A dry run changes nothing and only reports."
+  },
+  "adminGenreEmptyMessage": "Add one, or revert to the tree WaxDeck ships.",
+  "@adminGenreEmptyMessage": {
+    "description": "Empty state of the genre tree, naming the two ways out of it."
+  },
+  "adminGenreEmptyTitle": "No genres",
+  "@adminGenreEmptyTitle": {
+    "description": "Empty state of the genre tree."
+  },
+  "adminGenreGroup": "Genre",
+  "@adminGenreGroup": {
+    "description": "Heading over the fields of the one genre being edited."
+  },
+  "adminGenreNameLabel": "Name",
+  "@adminGenreNameLabel": {
+    "description": "Field for a genre's canonical name."
+  },
+  "adminGenreNameTaken": "Another genre is already called {name}",
+  "@adminGenreNameTaken": {
+    "description": "Refusal under the genre name field when the typed name belongs to another genre.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Jazz"
+      }
+    }
+  },
+  "adminGenreNewName": "New genre",
+  "@adminGenreNewName": {
+    "description": "The name a freshly added genre starts with, before it is renamed. It is stored as written, so it reads in the language the administrator works in."
+  },
+  "adminGenreNewNameNumbered": "New genre {number}",
+  "@adminGenreNewNameNumbered": {
+    "description": "The name a freshly added genre starts with when one by that name already exists. {number} counts up until the name is free.",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "adminGenreNoParent": "(top level)",
+  "@adminGenreNoParent": {
+    "description": "The option in the parent menu meaning the genre belongs to no other. Bracketed because it is not a genre's name but the absence of one."
+  },
+  "adminGenreNormalize": "Normalize catalog",
+  "@adminGenreNormalize": {
+    "description": "Button that folds every scanned genre in the catalog onto the vocabulary."
+  },
+  "adminGenreNormalizeBlurb": "A sweeper folds newly scanned genres onto the vocabulary on its own. Normalizing is the catch-up pass, for a catalog older than the change log still holds or a tree you just edited.",
+  "@adminGenreNormalizeBlurb": {
+    "description": "Line under the normalization buttons, saying that normalizing is a catch-up rather than the usual path."
+  },
+  "adminGenreNormalizing": "Normalizing the catalog",
+  "@adminGenreNormalizing": {
+    "description": "Message after a genre normalization pass started for real."
+  },
+  "adminGenreParentHelp": "The top-level genre this one belongs to",
+  "@adminGenreParentHelp": {
+    "description": "Line under the parent row."
+  },
+  "adminGenreParentHelpHasChildren": "Genres group under this one, and the tree is two levels deep",
+  "@adminGenreParentHelpHasChildren": {
+    "description": "Line under the parent row when the genre cannot take a parent because things already group under it."
+  },
+  "adminGenreParentLabel": "Parent genre",
+  "@adminGenreParentLabel": {
+    "description": "Accessible name of the menu choosing a genre's parent."
+  },
+  "adminGenreParentTitle": "Groups under",
+  "@adminGenreParentTitle": {
+    "description": "Row choosing which top-level genre this one belongs to."
+  },
+  "adminGenrePickMessage": "Its name, its parent, and its aliases are edited here.",
+  "@adminGenrePickMessage": {
+    "description": "Empty state of the detail pane, saying what it edits."
+  },
+  "adminGenrePickTitle": "Pick a genre",
+  "@adminGenrePickTitle": {
+    "description": "Empty state of the detail pane, before a genre has been picked from the tree."
+  },
+  "adminGenrePreviewNormalize": "Preview normalization",
+  "@adminGenrePreviewNormalize": {
+    "description": "Button that starts a normalization pass which changes nothing and only reports what it would do."
+  },
+  "adminGenreRemove": "Remove genre",
+  "@adminGenreRemove": {
+    "description": "Button that takes this genre out of the vocabulary. What grouped under it comes up a level."
+  },
+  "adminGenreRevertAction": "Revert",
+  "@adminGenreRevertAction": {
+    "description": "Confirming button of the revert dialog."
+  },
+  "adminGenreRevertBody": "Your genre vocabulary is replaced by the one WaxDeck ships. Aliases you added are lost, and the catalog re-normalizes onto the default.",
+  "@adminGenreRevertBody": {
+    "description": "Body of the dialog confirming a revert to the shipped genre vocabulary."
+  },
+  "adminGenreRevertTitle": "Revert to the default tree?",
+  "@adminGenreRevertTitle": {
+    "description": "Title of the dialog confirming that the stored vocabulary is dropped for the one WaxDeck ships."
+  },
+  "adminGenreRevertToDefault": "Revert to default",
+  "@adminGenreRevertToDefault": {
+    "description": "Button that drops the stored vocabulary for the one WaxDeck ships."
+  },
+  "adminGenreRevertWord": "REVERT",
+  "@adminGenreRevertWord": {
+    "description": "The word an administrator types to confirm reverting the genre tree. Upper case and short; it is compared against what was typed, so translating it changes what has to be typed."
+  },
+  "adminGenreReverted": "Back on the default genre tree",
+  "@adminGenreReverted": {
+    "description": "Message after the stored vocabulary was dropped."
+  },
+  "adminGenreSaved": "Genre tree saved",
+  "@adminGenreSaved": {
+    "description": "Message after the edited vocabulary was written."
+  },
+  "adminGenreSourceDefault": "Running on the vocabulary WaxDeck ships. Editing it stores a tree of your own.",
+  "@adminGenreSourceDefault": {
+    "description": "Line at the top of the genre screen while the server is on the shipped vocabulary."
+  },
+  "adminGenreSourceStored": "Running on a stored vocabulary of your own.",
+  "@adminGenreSourceStored": {
+    "description": "Line at the top of the genre screen once a vocabulary of the server's own has been stored."
+  },
+  "adminGenreTreeLoadError": "Could not load the genre tree",
+  "@adminGenreTreeLoadError": {
+    "description": "Title of the error state when the genre vocabulary could not be read."
+  },
+  "adminGenreTreeTitle": "Genre tree",
+  "@adminGenreTreeTitle": {
+    "description": "Title of the screen editing the canonical genre vocabulary."
+  },
+  "adminGenreVocabulary": "Vocabulary",
+  "@adminGenreVocabulary": {
+    "description": "Heading over the genre tree itself."
+  },
+  "adminGroupLibrary": "Library",
+  "@adminGroupLibrary": {
+    "description": "Console group holding what is in the library and what shape it is in."
+  },
+  "adminGroupOverview": "Overview",
+  "@adminGroupOverview": {
+    "description": "Console group holding the dashboard alone."
+  },
+  "adminGroupPeople": "People",
+  "@adminGroupPeople": {
+    "description": "Console group holding accounts, invites, and share links."
+  },
+  "adminGroupServer": "Server",
+  "@adminGroupServer": {
+    "description": "Console group holding the instance's own settings, records, and maintenance."
+  },
+  "adminInviteAccessAllHelp": "Off picks the libraries this invite can see",
+  "@adminInviteAccessAllHelp": {
+    "description": "Line under the all-libraries switch in the new-invite dialog."
+  },
+  "adminInviteAdminHelp": "Server-wide authority: settings, users, and libraries",
+  "@adminInviteAdminHelp": {
+    "description": "Line under the administrator switch in the new-invite dialog."
+  },
+  "adminInviteCreate": "Create invite",
+  "@adminInviteCreate": {
+    "description": "Button that opens the new-invite dialog, and that dialog's own title."
+  },
+  "adminInviteCreateAction": "Create",
+  "@adminInviteCreateAction": {
+    "description": "Confirming button of the new-invite dialog."
+  },
+  "adminInviteCreatedBody": "Share this token; it is shown exactly once.",
+  "@adminInviteCreatedBody": {
+    "description": "Body of the dialog showing a freshly created invite token, warning that it is not shown again."
+  },
+  "adminInviteCreatedTitle": "Invite created",
+  "@adminInviteCreatedTitle": {
+    "description": "Title of the dialog showing a freshly created invite token."
+  },
+  "adminInviteExpired": "expired",
+  "@adminInviteExpired": {
+    "description": "Leads the line under an expired invite. Lower case and agreeing with the word for an invite: it sits in a comma-separated run of facts about one."
+  },
+  "adminInviteExpiresHelp": "Empty never expires",
+  "@adminInviteExpiresHelp": {
+    "description": "Line under the invite expiry field."
+  },
+  "adminInviteExpiresLabel": "Expires in (days)",
+  "@adminInviteExpiresLabel": {
+    "description": "Field for how many days an invite stays usable."
+  },
+  "adminInviteIncludeLibrary": "Include this library",
+  "@adminInviteIncludeLibrary": {
+    "description": "Line under one named library in the new-invite dialog's library list."
+  },
+  "adminInviteMaxUsesLabel": "Max uses",
+  "@adminInviteMaxUsesLabel": {
+    "description": "Field for how many accounts one invite token may create."
+  },
+  "adminInviteNoteHelp": "Who this invite is for",
+  "@adminInviteNoteHelp": {
+    "description": "Line under the invite note field."
+  },
+  "adminInviteNoteLabel": "Note",
+  "@adminInviteNoteLabel": {
+    "description": "Field for the administrator's own note about an invite."
+  },
+  "adminInviteRevokeAction": "Revoke",
+  "@adminInviteRevokeAction": {
+    "description": "Confirming button of the revoke-invite dialog."
+  },
+  "adminInviteRevokeBody": "The token stops working immediately.",
+  "@adminInviteRevokeBody": {
+    "description": "Body of the dialog confirming that an invite is revoked."
+  },
+  "adminInviteRevokeButton": "Revoke invite",
+  "@adminInviteRevokeButton": {
+    "description": "Accessible name of the button that revokes one invite from its row."
+  },
+  "adminInviteRevokeTitle": "Revoke invite?",
+  "@adminInviteRevokeTitle": {
+    "description": "Title of the dialog confirming that an invite is revoked."
+  },
+  "adminInviteRevoked": "revoked",
+  "@adminInviteRevoked": {
+    "description": "Leads the line under a revoked invite. Lower case and agreeing with the word for an invite: it sits in a comma-separated run of facts about one."
+  },
+  "adminInviteUploadHelp": "Whether this account can add files to the library",
+  "@adminInviteUploadHelp": {
+    "description": "Line under the upload switch in the new-invite dialog."
+  },
+  "adminInviteUses": "uses {used}/{total}",
+  "@adminInviteUses": {
+    "description": "How many times an invite has been used, out of how many it allows. Sits in a comma-separated run of facts about one invite, so it is lower case.",
+    "placeholders": {
+      "used": {
+        "type": "int",
+        "example": "1"
+      },
+      "total": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "adminInvitesEmpty": "No invites yet",
+  "@adminInvitesEmpty": {
+    "description": "Empty state of the invites tab."
+  },
+  "adminLibrariesColumnHolds": "Holds",
+  "@adminLibrariesColumnHolds": {
+    "description": "Column heading for what kind of content a library holds."
+  },
+  "adminLibrariesColumnItems": "Items",
+  "@adminLibrariesColumnItems": {
+    "description": "Column heading for how many items a library holds."
+  },
+  "adminLibrariesColumnMatching": "Matching",
+  "@adminLibrariesColumnMatching": {
+    "description": "Column heading for what the matching engine does with a library: matching is where WaxDeck decides which release a file belongs to."
+  },
+  "adminLibrariesColumnName": "Name",
+  "@adminLibrariesColumnName": {
+    "description": "Column heading for a library's name."
+  },
+  "adminLibrariesColumnPath": "Path",
+  "@adminLibrariesColumnPath": {
+    "description": "Column heading for a library's directory on the server."
+  },
+  "adminLibrariesColumnReadOnly": "Read-only",
+  "@adminLibrariesColumnReadOnly": {
+    "description": "Column heading for whether a library refuses changes."
+  },
+  "adminLibrariesEmptyMessage": "Add a root below and WaxDeck scans what is in it.",
+  "@adminLibrariesEmptyMessage": {
+    "description": "Empty state of the library list, pointing at the form below it. A root is the top directory of a library."
+  },
+  "adminLibrariesEmptyTitle": "No libraries yet",
+  "@adminLibrariesEmptyTitle": {
+    "description": "Empty state of the library list."
+  },
+  "adminLibrariesLoadError": "Could not load the libraries",
+  "@adminLibrariesLoadError": {
+    "description": "Title of the error state when the library list could not be read."
+  },
+  "adminLibrariesTitle": "Libraries",
+  "@adminLibrariesTitle": {
+    "description": "Title of the screen listing the roots WaxDeck scans."
+  },
+  "adminLibraryAddGroup": "Add a library",
+  "@adminLibraryAddGroup": {
+    "description": "Heading over the form that registers a new root."
+  },
+  "adminLibraryContentClass": "Content class",
+  "@adminLibraryContentClass": {
+    "description": "Accessible name of the menu choosing what a new library holds."
+  },
+  "adminLibraryCreate": "Create library",
+  "@adminLibraryCreate": {
+    "description": "Button that registers the root named in the form above it."
+  },
+  "adminLibraryCreated": "Library \"{name}\" created; scanning started",
+  "@adminLibraryCreated": {
+    "description": "Message after a library was registered. Creating one starts a scan of its root, which is why both halves are said at once.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
+  "adminLibraryHoldsHelp": "What kind of content the root carries",
+  "@adminLibraryHoldsHelp": {
+    "description": "Line under the holds row in the add-library form."
+  },
+  "adminLibraryHoldsTitle": "Holds",
+  "@adminLibraryHoldsTitle": {
+    "description": "Row in the add-library form choosing what the root holds."
+  },
+  "adminLibraryManagedHelp": "Let uploads and organizing place files in this root",
+  "@adminLibraryManagedHelp": {
+    "description": "Line under the catalog-managed switch."
+  },
+  "adminLibraryManagedTitle": "Catalog-managed",
+  "@adminLibraryManagedTitle": {
+    "description": "Switch letting WaxDeck place files into this root itself, rather than only reading what is there."
+  },
+  "adminLibraryMatchingAsk": "Ask me",
+  "@adminLibraryMatchingAsk": {
+    "description": "Matching mode where every match waits for an administrator's decision."
+  },
+  "adminLibraryMatchingAuto": "Automatic",
+  "@adminLibraryMatchingAuto": {
+    "description": "Matching mode where WaxDeck decides on its own. Describes the matching, so it agrees with that word in this language."
+  },
+  "adminLibraryMatchingLabel": "Matching for {name}",
+  "@adminLibraryMatchingLabel": {
+    "description": "Accessible name of the matching menu on one library's row. {name} is the library's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
+  "adminLibraryMatchingLeave": "Leave alone",
+  "@adminLibraryMatchingLeave": {
+    "description": "Matching mode for a collection that is already curated: not \"no matching happens\" but \"this is how I want it\"."
+  },
+  "adminLibraryMediaBooks": "Books",
+  "@adminLibraryMediaBooks": {
+    "description": "Says a library holds audiobooks."
+  },
+  "adminLibraryMediaMixed": "Mixed",
+  "@adminLibraryMediaMixed": {
+    "description": "Says a library holds more than one kind of content. Describes the library, so it agrees with the word for a library in this language."
+  },
+  "adminLibraryMediaMusic": "Music",
+  "@adminLibraryMediaMusic": {
+    "description": "Says a library holds music."
+  },
+  "adminLibraryMediaPodcasts": "Podcasts",
+  "@adminLibraryMediaPodcasts": {
+    "description": "Says a library holds podcasts."
+  },
+  "adminLibraryNameHint": "Also the WaxFlow root name serving this directory",
+  "@adminLibraryNameHint": {
+    "description": "Hint in the library name field. WaxFlow is the streaming sidecar and serves a root of the same name, so the name is not free-form decoration."
+  },
+  "adminLibraryNameLabel": "Name",
+  "@adminLibraryNameLabel": {
+    "description": "Field for a new library's name."
+  },
+  "adminLibraryNamePathRequired": "A name and an absolute path are required",
+  "@adminLibraryNamePathRequired": {
+    "description": "Refusal shown when the add-library form is submitted with either field empty."
+  },
+  "adminLibraryPathHint": "/srv/media/music",
+  "@adminLibraryPathHint": {
+    "description": "Sample path in the library path field. A path, not prose: keep it a plausible absolute path on a server."
+  },
+  "adminLibraryPathLabel": "Absolute path on the server",
+  "@adminLibraryPathLabel": {
+    "description": "Field for a new library's directory."
+  },
+  "adminLibraryPathRule": "The path must be absolute, and must not overlap an existing root, the upload inbox, or the podcast download directory.",
+  "@adminLibraryPathRule": {
+    "description": "Line under the create button, saying what the server will refuse."
+  },
+  "adminLibraryReadOnlyLabel": "Read-only: {name}",
+  "@adminLibraryReadOnlyLabel": {
+    "description": "Accessible name of the read-only switch on one library's row. {name} is the library's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
+  "adminLibraryRescan": "Rescan libraries",
+  "@adminLibraryRescan": {
+    "description": "Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural."
+  },
+  "adminLibraryScanning": "Scanning every library root",
+  "@adminLibraryScanning": {
+    "description": "Message after a rescan started, saying that it covers every root rather than the row it was pressed on."
+  },
+  "adminLibraryUnnamedPath": "unnamed on this filesystem",
+  "@adminLibraryUnnamedPath": {
+    "description": "Fills the path cell of a library that has no directory of its own, such as a catalog library. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminMigrateDryRunHelp": "Report what would match; change nothing",
+  "@adminMigrateDryRunHelp": {
+    "description": "Line under the dry run switch in the import form."
+  },
+  "adminMigrateDryRunTitle": "Dry run",
+  "@adminMigrateDryRunTitle": {
+    "description": "Switch making an import report what it would do without changing anything."
+  },
+  "adminMigrateHistoryHelp": "What was played there, and when",
+  "@adminMigrateHistoryHelp": {
+    "description": "Line under the listen history switch in the import form."
+  },
+  "adminMigrateHistoryTitle": "Listen history",
+  "@adminMigrateHistoryTitle": {
+    "description": "Switch including what was played in an import."
+  },
+  "adminMigratePasswordLabel": "Password",
+  "@adminMigratePasswordLabel": {
+    "description": "Field for the password on the server being imported from."
+  },
+  "adminMigrateProgressHelp": "How far into each episode and book the listener was",
+  "@adminMigrateProgressHelp": {
+    "description": "Line under the playback progress switch in the import form."
+  },
+  "adminMigrateProgressTitle": "Playback progress",
+  "@adminMigrateProgressTitle": {
+    "description": "Switch including how far into each episode and book the listener had got."
+  },
+  "adminMigrateRatingsHelp": "The star ratings given there",
+  "@adminMigrateRatingsHelp": {
+    "description": "Line under the ratings switch in the import form."
+  },
+  "adminMigrateRatingsTitle": "Ratings",
+  "@adminMigrateRatingsTitle": {
+    "description": "Switch including star ratings in an import."
+  },
+  "adminMigrateServerUrlHint": "https://music.example",
+  "@adminMigrateServerUrlHint": {
+    "description": "Sample address in the server URL field. An address, not prose: keep it a plausible one."
+  },
+  "adminMigrateServerUrlLabel": "Server URL",
+  "@adminMigrateServerUrlLabel": {
+    "description": "Field for the address of the server being imported from."
+  },
+  "adminMigrateStarsHelp": "Which tracks and albums the other server had starred",
+  "@adminMigrateStarsHelp": {
+    "description": "Line under the stars switch in the import form."
+  },
+  "adminMigrateStarsTitle": "Stars",
+  "@adminMigrateStarsTitle": {
+    "description": "Switch including starred tracks and albums in an import. A star is how a listener marks something a favourite."
+  },
+  "adminMigrateStarted": "Import started",
+  "@adminMigrateStarted": {
+    "description": "Message after an import was accepted. It runs server-side as a task."
+  },
+  "adminMigrateSubmit": "Start import",
+  "@adminMigrateSubmit": {
+    "description": "Button that starts the import described by the form above it."
+  },
+  "adminMigrateSubsonicServer": "Subsonic server",
+  "@adminMigrateSubsonicServer": {
+    "description": "One of the servers WaxDeck can import from. Subsonic is a product name and stays as it is; the word beside it is not."
+  },
+  "adminMigrateTitle": "Import from another server",
+  "@adminMigrateTitle": {
+    "description": "Title of the screen that copies stars, ratings, history, and progress out of another music server."
+  },
+  "adminMigrateTokenLabel": "API token",
+  "@adminMigrateTokenLabel": {
+    "description": "Field for the token that authenticates against the other server."
+  },
+  "adminMigrateUsernameLabel": "Username",
+  "@adminMigrateUsernameLabel": {
+    "description": "Field for the account name on the server being imported from."
+  },
+  "adminOpenTasks": "Tasks",
+  "@adminOpenTasks": {
+    "description": "Button on a message that opens the task list, where the work it started reports."
+  },
+  "adminReadOnlyBanner": "Read-only mode is on. Uploads, edits, and deletes are refused server-wide.",
+  "@adminReadOnlyBanner": {
+    "description": "Banner across the console while read-only mode is on, because every refusal elsewhere says only that something was refused."
+  },
+  "adminRestoreAppliesAtRestart": "The restore applies at the next server restart.",
+  "@adminRestoreAppliesAtRestart": {
+    "description": "Highlighted line in the staged-restore dialog, saying when the restore happens."
+  },
+  "adminRestoreCasualty": "• {kind}: {name}",
+  "@adminRestoreCasualty": {
+    "description": "One sealed secret a restore loses. {kind} is what sort of secret it is and {name} its own name; both come from the server and are not translated.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "lastfm"
+      },
+      "name": {
+        "type": "String",
+        "example": "API secret"
+      }
+    }
+  },
+  "adminRestoreKeyfileMatches": "The secrets keyfile matches; sealed secrets survive.",
+  "@adminRestoreKeyfileMatches": {
+    "description": "Verdict in the staged-restore dialog when the archive's keyfile is this server's."
+  },
+  "adminRestoreKeyfileMismatch": "The secrets keyfile does not match this server; the sealed secrets below are lost.",
+  "@adminRestoreKeyfileMismatch": {
+    "description": "Verdict in the staged-restore dialog when the archive's keyfile belongs to another server."
+  },
+  "adminRestoreLostWithRestore": "Lost with the restore",
+  "@adminRestoreLostWithRestore": {
+    "description": "Heading over the list of sealed secrets a restore cannot carry across."
+  },
+  "adminRestoreNoKeyfile": "The archive has no secrets keyfile; sealed secrets are lost.",
+  "@adminRestoreNoKeyfile": {
+    "description": "Verdict in the staged-restore dialog when the archive carries no keyfile. Sealed secrets are stored credentials the server can only read with the key they were sealed with."
+  },
+  "adminRestoreStagedBanner": "A restore of {backupId} is staged; it applies at the next server restart.",
+  "@adminRestoreStagedBanner": {
+    "description": "Banner at the top of the backups page while a restore is staged. {backupId} identifies the backup.",
+    "placeholders": {
+      "backupId": {
+        "type": "String",
+        "example": "bu-01JZX5N8QW3F4V9T2B7KD3M9R6"
+      }
+    }
+  },
+  "adminRestoreStagedTitle": "Restore staged",
+  "@adminRestoreStagedTitle": {
+    "description": "Title of the dialog shown once a restore has been staged."
+  },
+  "adminRoleAdmin": "admin",
+  "@adminRoleAdmin": {
+    "description": "Display name of the admin role, drawn in the account and invite lists. The wire token stays \"admin\"; this is only how it reads. Lower case because it sits in a comma-separated run of roles."
+  },
+  "adminRoleUser": "user",
+  "@adminRoleUser": {
+    "description": "Display name of the ordinary account role, drawn in the account and invite lists. The wire token stays \"user\"; this is only how it reads. Lower case because it sits in a comma-separated run of roles."
+  },
+  "adminScanLibrary": "Scan library",
+  "@adminScanLibrary": {
+    "description": "Button that starts a scan of every library root."
+  },
+  "adminScanStarted": "Scan started",
+  "@adminScanStarted": {
+    "description": "Message after a library scan was accepted."
+  },
+  "adminScheduleAnalyze": "Analyze audio",
+  "@adminScheduleAnalyze": {
+    "description": "Name of the scheduled job that measures loudness, fingerprints, and waveforms."
+  },
+  "adminScheduleAnalyzeBlurb": "Measures loudness, fingerprints, and waveforms. Decodes every audio file, so a large library takes hours. Resumable: files already analyzed are skipped.",
+  "@adminScheduleAnalyzeBlurb": {
+    "description": "What the analyze job does, and the warning that it is the one pass that decodes audio."
+  },
+  "adminScheduleBackup": "Backup",
+  "@adminScheduleBackup": {
+    "description": "Name of the scheduled job that writes a backup archive."
+  },
+  "adminScheduleBackupBlurb": "Writes an archive of the database and its sidecars.",
+  "@adminScheduleBackupBlurb": {
+    "description": "What the scheduled backup does. Sidecars are the small files stored beside the database."
+  },
+  "adminScheduleCronHint": "minute hour day month weekday",
+  "@adminScheduleCronHint": {
+    "description": "Hint in the cron field, naming its five fields in order. Written as bare words separated by spaces, the way the field itself is."
+  },
+  "adminScheduleCronLabel": "Cron",
+  "@adminScheduleCronLabel": {
+    "description": "Field for a schedule's five-field cron expression. Cron is the name of the format itself, so most languages keep the word."
+  },
+  "adminScheduleEnabledLabel": "{name} runs on a schedule",
+  "@adminScheduleEnabledLabel": {
+    "description": "Accessible name of the switch turning one scheduled job on. {name} is the job's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Library scan"
+      }
+    }
+  },
+  "adminScheduleLastRun": "Last run {stamp}",
+  "@adminScheduleLastRun": {
+    "description": "When a scheduled job last ran. {stamp} is an already-formatted date and time.",
+    "placeholders": {
+      "stamp": {
+        "type": "String",
+        "example": "Aug 12, 2026 3:04 PM"
+      }
+    }
+  },
+  "adminScheduleLastRunStatus": "Last run {stamp} ({status})",
+  "@adminScheduleLastRunStatus": {
+    "description": "When a scheduled job last ran and how it went. {stamp} is an already-formatted date and time; {status} is the outcome word.",
+    "placeholders": {
+      "stamp": {
+        "type": "String",
+        "example": "Aug 12, 2026 3:04 PM"
+      },
+      "status": {
+        "type": "String",
+        "example": "ok"
+      }
+    }
+  },
+  "adminScheduleNextRun": "Next {stamp}",
+  "@adminScheduleNextRun": {
+    "description": "When a scheduled job runs next. {stamp} is an already-formatted date and time.",
+    "placeholders": {
+      "stamp": {
+        "type": "String",
+        "example": "Aug 12, 2026 3:04 PM"
+      }
+    }
+  },
+  "adminSchedulePrune": "Prune",
+  "@adminSchedulePrune": {
+    "description": "Name of the scheduled job that clears expired staging, spent tokens, and trashed files."
+  },
+  "adminSchedulePruneBlurb": "Clears expired staging, spent tokens, and trashed files past their retention.",
+  "@adminSchedulePruneBlurb": {
+    "description": "What the prune job does."
+  },
+  "adminScheduleSaved": "{name} schedule saved",
+  "@adminScheduleSaved": {
+    "description": "Message after one schedule's cron or switch was written. {name} is the job's own name, such as the library scan.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Library scan"
+      }
+    }
+  },
+  "adminScheduleScan": "Library scan",
+  "@adminScheduleScan": {
+    "description": "Name of the scheduled job that looks for new and changed files."
+  },
+  "adminScheduleScanBlurb": "Finds new and changed files, reads their tags, and indexes them. Cheap: it does not decode audio.",
+  "@adminScheduleScanBlurb": {
+    "description": "What the library scan does, and that it costs little."
+  },
+  "adminScheduleStatusFailed": "failed",
+  "@adminScheduleStatusFailed": {
+    "description": "Outcome of a scheduled run that failed. Lower case and inside brackets, agreeing with the word for a run."
+  },
+  "adminScheduleStatusOk": "ok",
+  "@adminScheduleStatusOk": {
+    "description": "Outcome of a scheduled run that succeeded. Lower case and inside brackets, agreeing with the word for a run."
+  },
+  "adminSchedulesEmptyMessage": "This server runs nothing on a timetable.",
+  "@adminSchedulesEmptyMessage": {
+    "description": "Empty state of the maintenance timetable, saying that the server has no scheduled work at all."
+  },
+  "adminSchedulesEmptyTitle": "No schedules",
+  "@adminSchedulesEmptyTitle": {
+    "description": "Empty state of the maintenance timetable."
+  },
+  "adminSchedulesLoadError": "Could not load the schedules",
+  "@adminSchedulesLoadError": {
+    "description": "Title of the error state when the timetable could not be read."
+  },
+  "adminSchedulesTitle": "Schedules",
+  "@adminSchedulesTitle": {
+    "description": "Title of the maintenance timetable screen in the admin console."
+  },
+  "adminSectionAudit": "Audit log",
+  "@adminSectionAudit": {
+    "description": "Name of the screen recording who did what on this server."
+  },
+  "adminSectionAuditBlurb": "Who did what, and to what",
+  "@adminSectionAuditBlurb": {
+    "description": "Line under the audit log in the console's section list."
+  },
+  "adminSectionBackupsBlurb": "Archives, imports, and staged restores",
+  "@adminSectionBackupsBlurb": {
+    "description": "Line under Backups in the console's section list."
+  },
+  "adminSectionDashboard": "Dashboard",
+  "@adminSectionDashboard": {
+    "description": "Name of the console's front page in the section list."
+  },
+  "adminSectionDashboardBlurb": "What needs attention, and what is running",
+  "@adminSectionDashboardBlurb": {
+    "description": "Line under the dashboard in the console's section list."
+  },
+  "adminSectionDiagnostics": "Diagnostics",
+  "@adminSectionDiagnostics": {
+    "description": "Name of the screen listing files the catalog could not read."
+  },
+  "adminSectionDiagnosticsBlurb": "Files the catalog could not read",
+  "@adminSectionDiagnosticsBlurb": {
+    "description": "Line under Diagnostics in the console's section list."
+  },
+  "adminSectionGenresBlurb": "The canonical vocabulary every genre folds onto",
+  "@adminSectionGenresBlurb": {
+    "description": "Line under the genre tree in the console's section list."
+  },
+  "adminSectionHealth": "Health",
+  "@adminSectionHealth": {
+    "description": "Name of the screen listing what is missing, mistagged, or duplicated in the library."
+  },
+  "adminSectionHealthBlurb": "What is missing, mistagged, or duplicated",
+  "@adminSectionHealthBlurb": {
+    "description": "Line under Health in the console's section list."
+  },
+  "adminSectionLibrariesBlurb": "The roots WaxDeck scans, and what each one holds",
+  "@adminSectionLibrariesBlurb": {
+    "description": "Line under Libraries in the console's section list."
+  },
+  "adminSectionMigrateBlurb": "Bring a library, its stars, and its history across",
+  "@adminSectionMigrateBlurb": {
+    "description": "Line under the import screen in the console's section list."
+  },
+  "adminSectionNotifications": "Notifications",
+  "@adminSectionNotifications": {
+    "description": "Name of the screen saying where this server reports operations events."
+  },
+  "adminSectionNotificationsBlurb": "Where this server reports operations events",
+  "@adminSectionNotificationsBlurb": {
+    "description": "Line under Notifications in the console's section list."
+  },
+  "adminSectionOrganize": "Organize",
+  "@adminSectionOrganize": {
+    "description": "Name of the screen that moves library files into a naming scheme."
+  },
+  "adminSectionOrganizeBlurb": "Move files into a naming scheme",
+  "@adminSectionOrganizeBlurb": {
+    "description": "Line under Organize in the console's section list."
+  },
+  "adminSectionReview": "Review queue",
+  "@adminSectionReview": {
+    "description": "Name of the screen holding albums waiting for an identification decision."
+  },
+  "adminSectionReviewBlurb": "Albums waiting for an identification decision",
+  "@adminSectionReviewBlurb": {
+    "description": "Line under the review queue in the console's section list."
+  },
+  "adminSectionSchedulesBlurb": "When scans, backups, and pruning run",
+  "@adminSectionSchedulesBlurb": {
+    "description": "Line under Schedules in the console's section list."
+  },
+  "adminSectionSettingsBlurb": "Signups, read-only mode, transcoding, retention",
+  "@adminSectionSettingsBlurb": {
+    "description": "Line under server settings in the console's section list."
+  },
+  "adminSectionShares": "Share links",
+  "@adminSectionShares": {
+    "description": "Name of the screen listing every public link on this server. The listener's own links are a different screen in settings."
+  },
+  "adminSectionSharesBlurb": "Every public link on this server, and who minted it",
+  "@adminSectionSharesBlurb": {
+    "description": "Line under share links in the console's section list."
+  },
+  "adminSectionTrashBlurb": "Deleted files, until they are purged",
+  "@adminSectionTrashBlurb": {
+    "description": "Line under Trash in the console's section list."
+  },
+  "adminSectionUsersBlurb": "Accounts, invites, and what each one may do",
+  "@adminSectionUsersBlurb": {
+    "description": "Line under Users in the console's section list."
+  },
+  "adminServerAccessGroup": "Access",
+  "@adminServerAccessGroup": {
+    "description": "Heading over the settings deciding who may reach this server and what they may change."
+  },
+  "adminServerActivityCaveat": "Counts streams the engine is transcoding or remuxing, including a client that forced the source's own format; HLS timelines are admitted separately and are not counted here.",
+  "@adminServerActivityCaveat": {
+    "description": "The caveat under the running-stream count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it; HLS is a streaming format."
+  },
+  "adminServerActivityCount": "{count, plural, =1{1 engine-backed stream right now.} other{{count} engine-backed streams right now.}}",
+  "@adminServerActivityCount": {
+    "description": "How many streams the audio engine is serving at this moment.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "adminServerActivityReading": "Reading what is running...",
+  "@adminServerActivityReading": {
+    "description": "Drawn in place of the running-stream count while it is being read."
+  },
+  "adminServerActivityRefresh": "Refresh what is running",
+  "@adminServerActivityRefresh": {
+    "description": "Accessible name of the button that re-reads the running-stream count."
+  },
+  "adminServerActivitySpoken": "{headline} {caveat}",
+  "@adminServerActivitySpoken": {
+    "description": "The running-stream count and its caveat read as one for a screen reader. Both halves are already-worded sentences.",
+    "placeholders": {
+      "headline": {
+        "type": "String",
+        "example": "3 engine-backed streams right now."
+      },
+      "caveat": {
+        "type": "String",
+        "example": "Counts streams the engine is transcoding..."
+      }
+    }
+  },
+  "adminServerActivityUnknown": "The server did not say what is running.",
+  "@adminServerActivityUnknown": {
+    "description": "Drawn in place of the running-stream count when that read failed."
+  },
+  "adminServerAnalysisGroup": "Analysis",
+  "@adminServerAnalysisGroup": {
+    "description": "Heading over the settings deciding what the server analyzes in the background."
+  },
+  "adminServerDefaultKbpsHint": "0 means no ceiling",
+  "@adminServerDefaultKbpsHint": {
+    "description": "Hint in the default bitrate field."
+  },
+  "adminServerDefaultKbpsLabel": "Default bitrate ceiling (kbps)",
+  "@adminServerDefaultKbpsLabel": {
+    "description": "Field for the highest bitrate a transcode uses unless something asks for less. kbps is the unit."
+  },
+  "adminServerLoadError": "Could not load the server settings",
+  "@adminServerLoadError": {
+    "description": "Title of the error state when the server settings could not be read."
+  },
+  "adminServerRadioArtHelp": "When a station announces a track this library does not hold, ask MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. Off by default; with it off the player draws the station mark.",
+  "@adminServerRadioArtHelp": {
+    "description": "Line under the radio cover-art switch. Says plainly what leaves the server, because the setting is off by default for that reason. MusicBrainz and the Cover Art Archive are service names and stay as they are."
+  },
+  "adminServerRadioArtTitle": "Look up cover art online",
+  "@adminServerRadioArtTitle": {
+    "description": "Switch letting the server ask outside services for the cover of a track a radio station announced."
+  },
+  "adminServerRadioGroup": "Radio",
+  "@adminServerRadioGroup": {
+    "description": "Heading over the settings for internet radio stations."
+  },
+  "adminServerReadOnlyHelp": "Refuse every change to library content, server-wide. Playback, stars, and progress keep working",
+  "@adminServerReadOnlyHelp": {
+    "description": "Line under the read-only switch, saying what still works while it is on."
+  },
+  "adminServerReadOnlyTitle": "Read-only mode",
+  "@adminServerReadOnlyTitle": {
+    "description": "Switch refusing every change to library content across the server."
+  },
+  "adminServerRetention": "Retention",
+  "@adminServerRetention": {
+    "description": "Heading over how long the server keeps things it has stopped needing."
+  },
+  "adminServerRetentionSaved": "Retention saved",
+  "@adminServerRetentionSaved": {
+    "description": "Message after the two retention windows were written."
+  },
+  "adminServerSaveRetention": "Save retention",
+  "@adminServerSaveRetention": {
+    "description": "Button that writes the two retention windows."
+  },
+  "adminServerSaveTranscoding": "Save transcoding limits",
+  "@adminServerSaveTranscoding": {
+    "description": "Button that writes the three transcoding fields."
+  },
+  "adminServerSignupHelp": "Anyone may request an account; requests wait for approval",
+  "@adminServerSignupHelp": {
+    "description": "Line under the open-signup switch, saying that a request is not yet an account."
+  },
+  "adminServerSignupTitle": "Open signup",
+  "@adminServerSignupTitle": {
+    "description": "Switch letting anybody request an account on this server."
+  },
+  "adminServerSonicHelp": "Analyze the library in the background for instant mixes, similar tracks, and sonic paths",
+  "@adminServerSonicHelp": {
+    "description": "Line under the sonic-analysis switch, naming the three features that need it."
+  },
+  "adminServerSonicTitle": "Sonic analysis",
+  "@adminServerSonicTitle": {
+    "description": "Switch letting the server analyze how the library sounds, which is what instant mixes and similar tracks are built from."
+  },
+  "adminServerTaskDaysHint": "0 keeps every finished task",
+  "@adminServerTaskDaysHint": {
+    "description": "Hint in the task retention field."
+  },
+  "adminServerTaskDaysInvalid": "Clear finished tasks after: enter a whole number of days (0 keeps every finished task)",
+  "@adminServerTaskDaysInvalid": {
+    "description": "Refusal shown when the task retention field holds something that is not a whole number of days. It leads with the field's own name because one save writes two fields."
+  },
+  "adminServerTaskDaysLabel": "Clear finished tasks after (days)",
+  "@adminServerTaskDaysLabel": {
+    "description": "Field for how many days a finished task stays in the task list."
+  },
+  "adminServerTitle": "Server settings",
+  "@adminServerTitle": {
+    "description": "Title of the screen holding the decisions that apply to the whole server."
+  },
+  "adminServerTranscodesMaxLabel": "Transcodes at once, server-wide",
+  "@adminServerTranscodesMaxLabel": {
+    "description": "Field for how many transcodes the whole server may run at the same time."
+  },
+  "adminServerTranscodesPerUserLabel": "Transcodes at once, per listener",
+  "@adminServerTranscodesPerUserLabel": {
+    "description": "Field for how many transcodes one account may run at the same time."
+  },
+  "adminServerTranscodingBlurb": "A transcode is what happens when a client cannot play a file as stored. These bound how many run at once, so a busy evening does not become a slow one.",
+  "@adminServerTranscodingBlurb": {
+    "description": "Line under the transcoding heading, saying what a transcode is before the fields that bound it."
+  },
+  "adminServerTranscodingGroup": "Transcoding",
+  "@adminServerTranscodingGroup": {
+    "description": "Heading over the limits on how much audio the server re-encodes at once."
+  },
+  "adminServerTranscodingSaved": "Transcoding limits saved",
+  "@adminServerTranscodingSaved": {
+    "description": "Message after the transcoding limits were written."
+  },
+  "adminServerTrashDaysHint": "0 keeps them until the trash is emptied by hand",
+  "@adminServerTrashDaysHint": {
+    "description": "Hint in the trash retention field."
+  },
+  "adminServerTrashDaysInvalid": "Purge trashed files after: enter a whole number of days (0 keeps them until you empty the trash)",
+  "@adminServerTrashDaysInvalid": {
+    "description": "Refusal shown when the trash retention field holds something that is not a whole number of days. It leads with the field's own name because one save writes two fields."
+  },
+  "adminServerTrashDaysLabel": "Purge trashed files after (days)",
+  "@adminServerTrashDaysLabel": {
+    "description": "Field for how many days a trashed file waits before it is deleted for good."
+  },
+  "adminShareCopied": "Link copied",
+  "@adminShareCopied": {
+    "description": "Message after a share link was copied to the clipboard."
+  },
+  "adminShareRevoked": "Link revoked",
+  "@adminShareRevoked": {
+    "description": "Message after a share link was switched off."
+  },
+  "adminSharesEmptyMessage": "Nobody on this server has minted a public link. When somebody does it turns up here, with who made it and a way to switch it off.",
+  "@adminSharesEmptyMessage": {
+    "description": "Empty state of the server-wide share links screen, saying what would fill it."
+  },
+  "adminSharesEmptyTitle": "Nothing is shared",
+  "@adminSharesEmptyTitle": {
+    "description": "Empty state of the server-wide share links screen."
+  },
+  "adminSharesLoadError": "Could not load the share links",
+  "@adminSharesLoadError": {
+    "description": "Title of the error state when the server-wide share list could not be read."
+  },
+  "adminTileAlbumsToDecide": "albums to decide",
+  "@adminTileAlbumsToDecide": {
+    "description": "Caption of the review tile, naming what its number counts. Lower case: it reads as a continuation of the number above it."
+  },
+  "adminTileChecked": "{checked} of {total} checked",
+  "@adminTileChecked": {
+    "description": "Caption of the health tile, saying how much of the library the score covers.",
+    "placeholders": {
+      "checked": {
+        "type": "int",
+        "example": "1200"
+      },
+      "total": {
+        "type": "int",
+        "example": "1500"
+      }
+    }
+  },
+  "adminTileFirstSweep": "First sweep still running",
+  "@adminTileFirstSweep": {
+    "description": "Caption of the health tile while the first health sweep is running."
+  },
+  "adminTileHealth": "Library health",
+  "@adminTileHealth": {
+    "description": "Tile showing the library's health score."
+  },
+  "adminTileHealthWarming": "Warming up",
+  "@adminTileHealthWarming": {
+    "description": "Stands in for the health score while the first sweep is still running. A score of zero would be the console's first lie to a new server."
+  },
+  "adminTileIdentifying": "{count, plural, =1{1 still identifying} other{{count} still identifying}}",
+  "@adminTileIdentifying": {
+    "description": "Caption of the review tile while albums are still being identified.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
+      }
+    }
+  },
+  "adminTileJobs": "Jobs running",
+  "@adminTileJobs": {
+    "description": "Tile counting the server jobs running right now."
+  },
+  "adminTileLastBackup": "Last backup",
+  "@adminTileLastBackup": {
+    "description": "Tile saying when the server last backed itself up."
+  },
+  "adminTileLoading": "Loading",
+  "@adminTileLoading": {
+    "description": "Caption of a tile whose number has not arrived yet."
+  },
+  "adminTileNextRun": "Next {when}",
+  "@adminTileNextRun": {
+    "description": "Caption of the backup tile, saying how long until the next scheduled one. {when} is an already-worded relative phrase like \"in 40 min\", not a date, so a preposition placed before it will read wrong.",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "in 40 min"
+      }
+    }
+  },
+  "adminTileNoArchive": "No archive yet",
+  "@adminTileNoArchive": {
+    "description": "Caption of the backup tile when the server has never made one."
+  },
+  "adminTileNone": "None",
+  "@adminTileNone": {
+    "description": "Stands in for the last backup's age when the server has never made one. Agrees with the word for a backup in this language."
+  },
+  "adminTileNotScheduled": "Not scheduled",
+  "@adminTileNotScheduled": {
+    "description": "Caption of the backup tile when no backup schedule is on."
+  },
+  "adminTileNothingRunning": "Nothing in flight",
+  "@adminTileNothingRunning": {
+    "description": "Caption of the jobs tile when the server is idle."
+  },
+  "adminTilePlayingNow": "Playing now",
+  "@adminTilePlayingNow": {
+    "description": "Tile counting the playback sessions running on this server."
+  },
+  "adminTileReview": "Waiting for review",
+  "@adminTileReview": {
+    "description": "Tile counting albums that need an identification decision."
+  },
+  "adminTileScansAndPasses": "scans and passes",
+  "@adminTileScansAndPasses": {
+    "description": "Caption of the jobs tile, naming what its number counts. Lower case: it reads as a continuation of the number above it."
+  },
+  "adminTileSessions": "active playback sessions",
+  "@adminTileSessions": {
+    "description": "Caption of the playing-now tile, naming what its number counts. Lower case: it reads as a continuation of the number above it."
+  },
+  "adminTileSimilarity": "Similarity coverage",
+  "@adminTileSimilarity": {
+    "description": "Tile saying how much of the library has been analyzed for sonic similarity."
+  },
+  "adminTileTracksEmbedded": "{count, plural, =1{1 track embedded} other{{count} tracks embedded}}",
+  "@adminTileTracksEmbedded": {
+    "description": "Caption of the similarity tile, counting tracks that have been analyzed. Embedding is what the analysis produces.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4200"
+      }
+    }
+  },
+  "adminTileTracksQueued": "{count, plural, =1{1 track queued} other{{count} tracks queued}}",
+  "@adminTileTracksQueued": {
+    "description": "Caption of the similarity tile while tracks are waiting to be analyzed.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "120"
+      }
+    }
+  },
+  "adminTrashColumnFile": "File",
+  "@adminTrashColumnFile": {
+    "description": "Column heading for a trashed file's path."
+  },
+  "adminTrashColumnReason": "Reason",
+  "@adminTrashColumnReason": {
+    "description": "Column heading for why a file was deleted."
+  },
+  "adminTrashColumnSize": "Size",
+  "@adminTrashColumnSize": {
+    "description": "Column heading for a trashed file's size."
+  },
+  "adminTrashColumnTrashed": "Trashed",
+  "@adminTrashColumnTrashed": {
+    "description": "Column heading for the day a file was deleted."
+  },
+  "adminTrashEmptied": "Purged {count, plural, =1{1 file} other{{count} files}}, reclaimed {size}",
+  "@adminTrashEmptied": {
+    "description": "Message after the trash was emptied. {size} is an already-formatted file size.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      },
+      "size": {
+        "type": "String",
+        "example": "4.2 MB"
+      }
+    }
+  },
+  "adminTrashEmptyAction": "Empty trash",
+  "@adminTrashEmptyAction": {
+    "description": "Button that empties the trash, in the screen's action bar and as the confirming button of its dialog."
+  },
+  "adminTrashEmptyBody": "Every trashed file is deleted for good, including the ones still restorable. This cannot be undone.",
+  "@adminTrashEmptyBody": {
+    "description": "Body of the dialog confirming that every trashed file is deleted for good."
+  },
+  "adminTrashEmptyStateMessage": "Deleted files wait here before they are purged.",
+  "@adminTrashEmptyStateMessage": {
+    "description": "Empty state of the trash list, saying what the screen is for."
+  },
+  "adminTrashEmptyStateTitle": "The trash is empty",
+  "@adminTrashEmptyStateTitle": {
+    "description": "Empty state of the trash list."
+  },
+  "adminTrashEmptyTitle": "Empty the trash?",
+  "@adminTrashEmptyTitle": {
+    "description": "Title of the dialog confirming that every trashed file is deleted for good."
+  },
+  "adminTrashEmptyWord": "EMPTY",
+  "@adminTrashEmptyWord": {
+    "description": "The word an administrator types to confirm emptying the trash. Upper case, short, and different from the word for any other typed confirmation; it is compared against what was typed, so translating it changes what has to be typed."
+  },
+  "adminTrashLoadError": "Could not load the trash",
+  "@adminTrashLoadError": {
+    "description": "Title of the error state when the trash list could not be read."
+  },
+  "adminTrashPurgeAction": "Purge",
+  "@adminTrashPurgeAction": {
+    "description": "Confirming button that deletes one trashed file for good."
+  },
+  "adminTrashPurgeBody": "{name} is deleted for good. This cannot be undone.",
+  "@adminTrashPurgeBody": {
+    "description": "Body of the dialog confirming that one trashed file is deleted for good.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Album/01 Track.flac"
+      }
+    }
+  },
+  "adminTrashPurgeRowAction": "Purge {name}",
+  "@adminTrashPurgeRowAction": {
+    "description": "Accessible name of the button deleting one trashed file for good. {name} is the file's library-relative path.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Album/01 Track.flac"
+      }
+    }
+  },
+  "adminTrashPurgeTitle": "Purge this file?",
+  "@adminTrashPurgeTitle": {
+    "description": "Title of the dialog confirming that one trashed file is deleted for good."
+  },
+  "adminTrashPurged": "Purged {name}, reclaimed {size}",
+  "@adminTrashPurged": {
+    "description": "Message after one trashed file was deleted for good. {size} is an already-formatted file size.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Album/01 Track.flac"
+      },
+      "size": {
+        "type": "String",
+        "example": "4.2 MB"
+      }
+    }
+  },
+  "adminTrashReasonPermanent": "permanent",
+  "@adminTrashReasonPermanent": {
+    "description": "Reason for a deletion that was meant to be final. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminTrashReasonPrune": "prune",
+  "@adminTrashReasonPrune": {
+    "description": "Reason for a deletion the server made while tidying the library. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminTrashReasonRestored": "restored",
+  "@adminTrashReasonRestored": {
+    "description": "Replaces the reason for an entry that has been put back. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminTrashReasonUser": "user",
+  "@adminTrashReasonUser": {
+    "description": "Reason for a deletion somebody asked for. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminTrashRestoreAction": "Restore {name}",
+  "@adminTrashRestoreAction": {
+    "description": "Accessible name of the button putting one trashed file back. {name} is the file's library-relative path.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Album/01 Track.flac"
+      }
+    }
+  },
+  "adminTrashRestored": "Restored {name}",
+  "@adminTrashRestored": {
+    "description": "Message after one trashed file was put back. {name} is the file's library-relative path.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Album/01 Track.flac"
+      }
+    }
+  },
+  "adminTrashShowRestoredHelp": "Entries already put back, for the record",
+  "@adminTrashShowRestoredHelp": {
+    "description": "Line under the show-restored switch."
+  },
+  "adminTrashShowRestoredTitle": "Show restored entries",
+  "@adminTrashShowRestoredTitle": {
+    "description": "Switch that keeps already-restored entries in the trash list."
+  },
+  "adminTrashTitle": "Trash",
+  "@adminTrashTitle": {
+    "description": "Title of the trash screen in the admin console: files a deletion parked rather than removed."
+  },
+  "adminUserAccessAllHelp": "Off grants specific libraries instead",
+  "@adminUserAccessAllHelp": {
+    "description": "Line under the \"All libraries\" switch in the account editor, saying what turning it off does."
+  },
+  "adminUserAccessAllTitle": "All libraries",
+  "@adminUserAccessAllTitle": {
+    "description": "Switch in the account editor granting the account every library."
+  },
+  "adminUserAccessGroup": "Library access",
+  "@adminUserAccessGroup": {
+    "description": "Heading over the library-access controls in the account editor."
+  },
+  "adminUserActionsGroup": "Account actions",
+  "@adminUserActionsGroup": {
+    "description": "Heading over the buttons that act on the account being edited: set password, sign out, delete."
+  },
+  "adminUserAdminHelp": "Sees the whole library and the admin console",
+  "@adminUserAdminHelp": {
+    "description": "Line under the administrator switch in the account editor, saying what the role carries."
+  },
+  "adminUserAdminTitle": "Administrator",
+  "@adminUserAdminTitle": {
+    "description": "Switch in the account editor making the account an administrator."
+  },
+  "adminUserApproveAction": "Approve",
+  "@adminUserApproveAction": {
+    "description": "Button that approves a pending signup: on the request row, and in the account editor when it opened to approve one."
+  },
+  "adminUserApproveTitle": "Approve {username}",
+  "@adminUserApproveTitle": {
+    "description": "Title of the account editor when it is approving a pending signup rather than editing a stored account.",
+    "placeholders": {
+      "username": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "adminUserCatalogLibrary": "A catalog library",
+  "@adminUserCatalogLibrary": {
+    "description": "Stands in for a library's path in the access list when it has none, because the library is a catalog rather than a folder."
+  },
+  "adminUserChildPreset": "Child account preset",
+  "@adminUserChildPreset": {
+    "description": "Button that fills the editor below with the settings a household means by an account for a child."
+  },
+  "adminUserChildPresetHelp": "Sets no explicit content, no deleting, downloading, or uploading, and a deny rule for advisory-tagged tracks. Everything below stays editable.",
+  "@adminUserChildPresetHelp": {
+    "description": "Line under the child-account preset button, listing what the preset changes."
+  },
+  "adminUserDeleteAccount": "Delete account",
+  "@adminUserDeleteAccount": {
+    "description": "Button that opens the confirmation for deleting the account being edited."
+  },
+  "adminUserDeleteAction": "Delete",
+  "@adminUserDeleteAction": {
+    "description": "Confirming button in the delete-account dialog."
+  },
+  "adminUserDeleteBody": "{username} is removed for good, along with its sessions and preferences. Library files are untouched.",
+  "@adminUserDeleteBody": {
+    "description": "Body of the delete-account dialog. {username} is the account being deleted.",
+    "placeholders": {
+      "username": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "adminUserDeleteTitle": "Delete account?",
+  "@adminUserDeleteTitle": {
+    "description": "Title of the dialog confirming an account deletion."
+  },
+  "adminUserDisabledHelp": "A disabled account cannot sign in, and its live sessions are revoked",
+  "@adminUserDisabledHelp": {
+    "description": "Line under the disabled switch in the account editor."
+  },
+  "adminUserDisabledTitle": "Disabled",
+  "@adminUserDisabledTitle": {
+    "description": "Switch in the account editor that disables the account. Describes the account, so it agrees with the word for an account in this language."
+  },
+  "adminUserLibraryAccessLabel": "Access to {library}",
+  "@adminUserLibraryAccessLabel": {
+    "description": "Accessible name of the switch granting one named library. {library} is the library's own name.",
+    "placeholders": {
+      "library": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
+  "adminUserMaxKbpsHint": "Empty keeps the server default",
+  "@adminUserMaxKbpsHint": {
+    "description": "Hint in the transcode-ceiling field of the account editor."
+  },
+  "adminUserMaxKbpsLabel": "Transcode ceiling (kbps)",
+  "@adminUserMaxKbpsLabel": {
+    "description": "Field for the highest bitrate this account may be transcoded to. kbps is the unit."
+  },
+  "adminUserMayUploadHelp": "Add files to the library, through review",
+  "@adminUserMayUploadHelp": {
+    "description": "Line under the upload switch in the account editor. Uploads wait in a review queue rather than landing directly."
+  },
+  "adminUserMayUploadTitle": "May upload",
+  "@adminUserMayUploadTitle": {
+    "description": "Switch in the account editor letting the account upload files."
+  },
+  "adminUserNewPasswordLabel": "New password",
+  "@adminUserNewPasswordLabel": {
+    "description": "Field in the dialog where an administrator sets another account's password."
+  },
+  "adminUserPasswordSet": "Password set",
+  "@adminUserPasswordSet": {
+    "description": "Message after an administrator set another account's password."
+  },
+  "adminUserPermDeleteHelp": "Move catalog files to the trash",
+  "@adminUserPermDeleteHelp": {
+    "description": "Line under the delete permission in the account editor."
+  },
+  "adminUserPermDeleteTitle": "Delete library files",
+  "@adminUserPermDeleteTitle": {
+    "description": "Permission switch in the account editor for deleting library files."
+  },
+  "adminUserPermDownloadHelp": "Keep the stored file, not just a stream",
+  "@adminUserPermDownloadHelp": {
+    "description": "Line under the download permission in the account editor."
+  },
+  "adminUserPermDownloadTitle": "Download originals",
+  "@adminUserPermDownloadTitle": {
+    "description": "Permission switch in the account editor for downloading the stored files."
+  },
+  "adminUserPermExplicitHelp": "Off hides what the deny rules match",
+  "@adminUserPermExplicitHelp": {
+    "description": "Line under the explicit-content permission in the account editor."
+  },
+  "adminUserPermExplicitTitle": "Explicit content",
+  "@adminUserPermExplicitTitle": {
+    "description": "Permission switch in the account editor for content marked explicit."
+  },
+  "adminUserPermManagePodcastsHelp": "Subscribe, unsubscribe, and change feed settings",
+  "@adminUserPermManagePodcastsHelp": {
+    "description": "Line under the manage-podcasts permission in the account editor."
+  },
+  "adminUserPermManagePodcastsTitle": "Manage podcasts",
+  "@adminUserPermManagePodcastsTitle": {
+    "description": "Permission switch in the account editor for managing podcast subscriptions."
+  },
+  "adminUserPermSharedOutputsHelp": "May play to endpoints other people also use",
+  "@adminUserPermSharedOutputsHelp": {
+    "description": "Line under the shared-outputs permission in the account editor."
+  },
+  "adminUserPermSharedOutputsTitle": "Shared outputs",
+  "@adminUserPermSharedOutputsTitle": {
+    "description": "Permission switch in the account editor for playing to playback endpoints other accounts also use."
+  },
+  "adminUserPermissionsGroup": "Permissions",
+  "@adminUserPermissionsGroup": {
+    "description": "Heading over the permission switches in the account editor."
+  },
+  "adminUserQuotaHelp": "How much may sit in staging waiting for a decision. Importing an upload into the library frees the space again, so this bounds the queue rather than what the account contributes.",
+  "@adminUserQuotaHelp": {
+    "description": "Line under the pending-upload limit in the account editor, saying that the limit bounds the review queue rather than the account's total contribution."
+  },
+  "adminUserQuotaHint": "Empty means no limit",
+  "@adminUserQuotaHint": {
+    "description": "Hint in the pending-upload limit field of the account editor."
+  },
+  "adminUserQuotaLabel": "Pending upload limit (MB)",
+  "@adminUserQuotaLabel": {
+    "description": "Field for how many megabytes of uploads may await review. MB is the unit abbreviation."
+  },
+  "adminUserRevokeAction": "Sign out",
+  "@adminUserRevokeAction": {
+    "description": "Confirming button in the dialog that revokes every session of an account."
+  },
+  "adminUserRevokeAll": "Sign out everywhere",
+  "@adminUserRevokeAll": {
+    "description": "Button that opens the confirmation for revoking every session of the account being edited."
+  },
+  "adminUserRevokeBody": "Every session of {username} is revoked immediately.",
+  "@adminUserRevokeBody": {
+    "description": "Body of the sign-out-everywhere dialog. {username} is the account being signed out.",
+    "placeholders": {
+      "username": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "adminUserRevokeTitle": "Sign out everywhere?",
+  "@adminUserRevokeTitle": {
+    "description": "Title of the dialog confirming that every session of an account is revoked."
+  },
+  "adminUserRoleGroup": "Role",
+  "@adminUserRoleGroup": {
+    "description": "Heading over the role controls in the account editor."
+  },
+  "adminUserSessionsRevoked": "Sessions revoked",
+  "@adminUserSessionsRevoked": {
+    "description": "Message after every session of an account was revoked."
+  },
+  "adminUserSetPassword": "Set password",
+  "@adminUserSetPassword": {
+    "description": "Button that opens the dialog where an administrator sets another account's password, also the dialog's own title and confirming button."
+  },
+  "adminUserTagAddRule": "Add rule",
+  "@adminUserTagAddRule": {
+    "description": "Button that adds the typed tag rule to the list above it."
+  },
+  "adminUserTagAllowHelp": "With any rule here, only matching content is visible",
+  "@adminUserTagAllowHelp": {
+    "description": "Line under the content allow rules, saying that one rule narrows the account to what matches."
+  },
+  "adminUserTagAllowLabel": "Content allow rules",
+  "@adminUserTagAllowLabel": {
+    "description": "Heading over the tag rules that admit content for the account."
+  },
+  "adminUserTagDenyHelp": "Matching content is hidden from this account",
+  "@adminUserTagDenyHelp": {
+    "description": "Line under the content deny rules."
+  },
+  "adminUserTagDenyLabel": "Content deny rules",
+  "@adminUserTagDenyLabel": {
+    "description": "Heading over the tag rules that hide content from the account."
+  },
+  "adminUserTagKeyLabel": "Tag key",
+  "@adminUserTagKeyLabel": {
+    "description": "Field for the metadata tag name a rule matches on, such as ITUNESADVISORY. The key itself is not translated."
+  },
+  "adminUserTagValueLabel": "Value (optional)",
+  "@adminUserTagValueLabel": {
+    "description": "Field for the value a tag rule matches on. Left empty, the rule matches the tag whatever its value."
+  },
+  "adminUserUploadsGroup": "Uploads",
+  "@adminUserUploadsGroup": {
+    "description": "Heading over the upload controls in the account editor."
+  },
+  "adminUsersColumnAccount": "Account",
+  "@adminUsersColumnAccount": {
+    "description": "Column heading for the account's name in the user table."
+  },
+  "adminUsersColumnRoles": "Roles",
+  "@adminUsersColumnRoles": {
+    "description": "Column heading for an account's roles in the user table."
+  },
+  "adminUsersColumnState": "State",
+  "@adminUsersColumnState": {
+    "description": "Column heading for whether an account is active, disabled, or pending."
+  },
+  "adminUsersColumnUploads": "Uploads",
+  "@adminUsersColumnUploads": {
+    "description": "Column heading for an account's pending-upload allowance."
+  },
+  "adminUsersEmptyMessage": "Invite somebody, or open signup in server settings.",
+  "@adminUsersEmptyMessage": {
+    "description": "Empty state of the account list, naming the two ways an account comes to exist."
+  },
+  "adminUsersEmptyTitle": "No accounts",
+  "@adminUsersEmptyTitle": {
+    "description": "Empty state of the account list."
+  },
+  "adminUsersNamedAccount": "{displayName} ({username})",
+  "@adminUsersNamedAccount": {
+    "description": "An account in the table when it has a display name as well as a username.",
+    "placeholders": {
+      "displayName": {
+        "type": "String",
+        "example": "Ada Lovelace"
+      },
+      "username": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "adminUsersNoRequests": "No pending requests",
+  "@adminUsersNoRequests": {
+    "description": "Empty state of the signup requests tab."
+  },
+  "adminUsersRejectAction": "Reject",
+  "@adminUsersRejectAction": {
+    "description": "Button that refuses a signup request, on the row and in the confirming dialog."
+  },
+  "adminUsersRejectBody": "The request is removed; nothing is created.",
+  "@adminUsersRejectBody": {
+    "description": "Body of the dialog confirming that a signup request is refused."
+  },
+  "adminUsersRejectTitle": "Reject {username}?",
+  "@adminUsersRejectTitle": {
+    "description": "Title of the dialog confirming that a signup request is refused.",
+    "placeholders": {
+      "username": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "adminUsersRequestedByOn": "{displayName}, requested {date}",
+  "@adminUsersRequestedByOn": {
+    "description": "Line under a signup request that carried a display name. {date} is an already-formatted date.",
+    "placeholders": {
+      "displayName": {
+        "type": "String",
+        "example": "Ada Lovelace"
+      },
+      "date": {
+        "type": "String",
+        "example": "Aug 12, 2026"
+      }
+    }
+  },
+  "adminUsersRequestedOn": "Requested {date}",
+  "@adminUsersRequestedOn": {
+    "description": "Line under a signup request, giving the day it arrived. {date} is an already-formatted date.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Aug 12, 2026"
+      }
+    }
+  },
+  "adminUsersStateActive": "Active",
+  "@adminUsersStateActive": {
+    "description": "State of an account that can sign in. Describes the account, so it agrees with the word for an account in this language."
+  },
+  "adminUsersStateDisabled": "Disabled",
+  "@adminUsersStateDisabled": {
+    "description": "State of an account an administrator has disabled. Describes the account, so it agrees with the word for an account in this language."
+  },
+  "adminUsersStatePending": "Pending",
+  "@adminUsersStatePending": {
+    "description": "State of an account whose signup has not been approved yet."
+  },
+  "adminUsersTabInvites": "Invites",
+  "@adminUsersTabInvites": {
+    "description": "Tab holding invite tokens."
+  },
+  "adminUsersTabRequests": "Requests",
+  "@adminUsersTabRequests": {
+    "description": "Tab holding signup requests waiting for a decision."
+  },
+  "adminUsersTabUsers": "Users",
+  "@adminUsersTabUsers": {
+    "description": "Tab holding the list of accounts."
+  },
+  "adminUsersTitle": "Users",
+  "@adminUsersTitle": {
+    "description": "Title of the account administration screen."
+  },
+  "adminUsersUploadsMb": "{megabytes} MB",
+  "@adminUsersUploadsMb": {
+    "description": "An account's pending-upload allowance, in whole megabytes, so the column agrees with the field that sets it. MB is the unit abbreviation; translate it only where the language uses another.",
+    "placeholders": {
+      "megabytes": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        },
+        "example": "500"
+      }
+    }
+  },
+  "adminUsersUploadsNone": "none",
+  "@adminUsersUploadsNone": {
+    "description": "Upload allowance of an account that may not upload at all. Lower case: it sits in a table cell, not at the start of a sentence."
+  },
+  "adminUsersUploadsUnlimited": "unlimited",
+  "@adminUsersUploadsUnlimited": {
+    "description": "Upload allowance of an account with no cap on what may await review. Lower case: it sits in a table cell, not at the start of a sentence."
+  },
+  "adminWarmingBlurb": "Files appear as they are indexed. Artwork, matching, and the health score fill in behind that: albums the scan finds are identified on their own, and anything the matcher is unsure of arrives in the review queue.",
+  "@adminWarmingBlurb": {
+    "description": "Body of the first-hour card. It exists to tell \"still working\" from \"apparently broken\" on a new server."
+  },
+  "adminWarmingScanning": "Scanning your library",
+  "@adminWarmingScanning": {
+    "description": "Heading of the first-hour card while a library scan is running."
+  },
+  "adminWarmingUp": "Still warming up",
+  "@adminWarmingUp": {
+    "description": "Heading of the first-hour card while the server is still filling in after a scan."
+  },
+  "adminWizardAddLibraryAction": "Add a library",
+  "@adminWizardAddLibraryAction": {
+    "description": "Button on the first guided step, opening the libraries screen."
+  },
+  "adminWizardAddLibraryBlurb": "A library is a folder WaxDeck reads. Add one and everything else on this page starts having something to say.",
+  "@adminWizardAddLibraryBlurb": {
+    "description": "Body of the first guided step."
+  },
+  "adminWizardAddLibraryTitle": "Point WaxDeck at your music",
+  "@adminWizardAddLibraryTitle": {
+    "description": "Title of the first guided step, before any library exists."
+  },
+  "adminWizardInvite": "Invite listeners",
+  "@adminWizardInvite": {
+    "description": "Button on the third guided step, opening the accounts screen."
+  },
+  "adminWizardScanBlurb": "A scan indexes the files, pulls their tags, and identifies the albums it recognises. It runs in the background: you can leave this page.",
+  "@adminWizardScanBlurb": {
+    "description": "Body of the second guided step."
+  },
+  "adminWizardScanTitle": "Read what is there",
+  "@adminWizardScanTitle": {
+    "description": "Title of the second guided step, once a root exists and nothing has read it."
+  },
+  "adminWizardSkip": "Skip the tour",
+  "@adminWizardSkip": {
+    "description": "Button that ends the guided first run for good on this device."
+  },
+  "adminWizardStepOf": "Step {number} of 3",
+  "@adminWizardStepOf": {
+    "description": "Position of the guided first run's current card. The tour is three steps long.",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "adminWizardWarmingBlurb": "Files appear as they are indexed, and artwork, matching, and the health score fill in behind them. Two things worth doing meanwhile: invite the people who will listen, and look in on the albums the matcher was unsure of.",
+  "@adminWizardWarmingBlurb": {
+    "description": "Body of the third guided step, naming the two things worth doing while waiting."
+  },
+  "adminWizardWarmingTitle": "While it warms up",
+  "@adminWizardWarmingTitle": {
+    "description": "Title of the third guided step, shown while the scan and the first health sweep run."
+  },
+  "artSlotBack": "Back cover",
+  "@artSlotBack": {
+    "description": "The reverse of the sleeve."
+  },
+  "artSlotBackInline": "back cover",
+  "@artSlotBackInline": {
+    "description": "The back cover named inside a sentence. See the note on the front cover's inline form."
+  },
+  "artSlotBackground": "Background",
+  "@artSlotBackground": {
+    "description": "A wide image, and an artist portrait."
+  },
+  "artSlotBackgroundInline": "background",
+  "@artSlotBackgroundInline": {
+    "description": "The background image named inside a sentence. See the note on the front cover's inline form."
+  },
+  "artSlotBooklet": "Booklet",
+  "@artSlotBooklet": {
+    "description": "A page from the insert."
+  },
+  "artSlotBookletInline": "booklet",
+  "@artSlotBookletInline": {
+    "description": "The booklet page named inside a sentence. See the note on the front cover's inline form."
+  },
+  "artSlotDisc": "Disc",
+  "@artSlotDisc": {
+    "description": "The label printed on the disc itself."
+  },
+  "artSlotDiscInline": "disc",
+  "@artSlotDiscInline": {
+    "description": "The disc image named inside a sentence. See the note on the front cover's inline form."
+  },
+  "artSlotFront": "Front cover",
+  "@artSlotFront": {
+    "description": "The image everything else falls back to."
+  },
+  "artSlotFrontInline": "front cover",
+  "@artSlotFrontInline": {
+    "description": "The front cover named inside a sentence. English lower-cases it; a language needing an article or a different case writes that here, because the sentences around it cannot know the gender of the words in this list."
+  },
+  "artworkClearAction": "Clear",
+  "@artworkClearAction": {
+    "description": "Confirming button of the clear-artwork dialog."
+  },
+  "artworkClearBody": "The slot becomes empty. Nothing falls back into it.",
+  "@artworkClearBody": {
+    "description": "Body of the clear dialog for every slot but the front cover."
+  },
+  "artworkClearFrontBody": "The item falls back to its album or artist cover. The image itself is removed from the catalog.",
+  "@artworkClearFrontBody": {
+    "description": "Body of the clear dialog for the front cover, which is the one slot that falls back to something else."
+  },
+  "artworkClearSlot": "Clear the {slot}",
+  "@artworkClearSlot": {
+    "description": "Accessible name of the control that empties one artwork slot. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkClearTitle": "Clear the {slot}?",
+  "@artworkClearTitle": {
+    "description": "Title of the dialog confirming that one artwork slot is emptied. {slot} is the slot's inline form, which carries the article this language needs.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkClearWord": "clear",
+  "@artworkClearWord": {
+    "description": "The word typed to confirm emptying an artwork slot. Lower case, and compared against what was typed, so translating it changes what has to be typed."
+  },
+  "artworkCleared": "{slot} cleared",
+  "@artworkCleared": {
+    "description": "Message after one artwork slot was emptied. {slot} is the slot's name.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      }
+    }
+  },
+  "artworkDropHint": "Drop an image into {slot}",
+  "@artworkDropHint": {
+    "description": "Hint drawn over one artwork slot when a file is dragged onto it. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkOneImageOnly": "{slot} takes one image; using {file}",
+  "@artworkOneImageOnly": {
+    "description": "Message after several images were dropped on one slot. {slot} is the slot's name and {file} the one that was taken.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      },
+      "file": {
+        "type": "String",
+        "example": "cover.jpg"
+      }
+    }
+  },
+  "artworkOverline": "One image per slot",
+  "@artworkOverline": {
+    "description": "Line above the Artwork heading. A slot is one named place an image can go."
+  },
+  "artworkPickLabel": "Image",
+  "@artworkPickLabel": {
+    "description": "What the file picker calls the image it is asking for."
+  },
+  "artworkReplaceSlot": "Replace the {slot}",
+  "@artworkReplaceSlot": {
+    "description": "Accessible name of the control that replaces a filled artwork slot. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkReplaced": "{slot} replaced",
+  "@artworkReplaced": {
+    "description": "Message after one artwork slot was filled. {slot} is the slot's name.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      }
+    }
+  },
+  "artworkSetSlot": "Set the {slot}",
+  "@artworkSetSlot": {
+    "description": "Accessible name of the control that fills an empty artwork slot. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkSlotSpoken": "{slot}: {state}",
+  "@artworkSlotSpoken": {
+    "description": "One artwork tile read as a whole: the slot's name, then what is in it.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      },
+      "state": {
+        "type": "String",
+        "example": "jpeg, 1000 x 1000"
+      }
+    }
+  },
+  "artworkSlotsUnreadable": "Could not read which slots this item holds; what is drawn below may be inherited.",
+  "@artworkSlotsUnreadable": {
+    "description": "Caution over the artwork grid when the slot listing failed. Inherited means the image belongs to the album or artist rather than to this item."
+  },
+  "artworkStateEmpty": "Empty",
+  "@artworkStateEmpty": {
+    "description": "Says an artwork slot holds nothing. Agrees with the word for a slot in this language."
+  },
+  "artworkStateImage": "image",
+  "@artworkStateImage": {
+    "description": "Stands in for an image's format when the server did not say what it is. Lower case: it leads a comma-separated run of facts about the image."
+  },
+  "artworkStateInherited": "Inherited",
+  "@artworkStateInherited": {
+    "description": "Says a slot draws the album's or artist's image rather than one of its own. Agrees with the word for an image in this language."
+  },
+  "artworkStateSize": "{width} x {height}",
+  "@artworkStateSize": {
+    "description": "An image's pixel size, in a comma-separated run of facts about it.",
+    "placeholders": {
+      "width": {
+        "type": "int",
+        "example": "1000"
+      },
+      "height": {
+        "type": "int",
+        "example": "1000"
+      }
+    }
+  },
+  "artworkTitle": "Artwork",
+  "@artworkTitle": {
+    "description": "Heading over an item's images."
+  },
+  "artworkTooLarge": "{file} is larger than the 16 MB an image may be",
+  "@artworkTooLarge": {
+    "description": "Refusal for an image over the endpoint's ceiling. The ceiling is fixed at 16 megabytes.",
+    "placeholders": {
+      "file": {
+        "type": "String",
+        "example": "scan.png"
+      }
+    }
+  },
+  "artworkUnreadable": "{file} could not be read",
+  "@artworkUnreadable": {
+    "description": "Refusal for a picked image whose bytes could not be opened.",
+    "placeholders": {
+      "file": {
+        "type": "String",
+        "example": "cover.jpg"
+      }
+    }
+  },
   "bytesB": "{bytes, plural, =1{1 B} other{{bytes} B}}",
   "@bytesB": {
     "description": "A file size under a kilobyte, drawn as bytes. B is the unit abbreviation; translate it only where the language uses another.",
@@ -60,6 +2138,22 @@
   "@commonCancel": {
     "description": "Button that closes a dialog or sheet without doing what it asked about."
   },
+  "commonClose": "Close",
+  "@commonClose": {
+    "description": "Button that dismisses a dialog without acting. A true synonym everywhere it appears."
+  },
+  "commonDone": "Done",
+  "@commonDone": {
+    "description": "Button that closes a dialog once its work is read. A true synonym everywhere it appears."
+  },
+  "commonLoading": "Loading",
+  "@commonLoading": {
+    "description": "A control's own label while it is fetching what it was pressed for."
+  },
+  "commonLoadingTitle": "Loading…",
+  "@commonLoadingTitle": {
+    "description": "Stands in for a track's name while the row it sits in is still resolving. The trailing character is a single-glyph ellipsis."
+  },
   "commonRetry": "Retry",
   "@commonRetry": {
     "description": "Button that runs the request that just failed again."
@@ -67,6 +2161,96 @@
   "commonSave": "Save",
   "@commonSave": {
     "description": "Button that commits an edit. Used across dialogs."
+  },
+  "devicesBaseConfigured": "Configured address",
+  "@devicesBaseConfigured": {
+    "description": "Says a cast address was set by the server's operator rather than found."
+  },
+  "devicesBaseDetected": "Detected on this network",
+  "@devicesBaseDetected": {
+    "description": "Says a cast address was found on the network rather than configured."
+  },
+  "devicesBaseLine": "{source}, {state}",
+  "@devicesBaseLine": {
+    "description": "One cast address's line: where it came from, then whether it answered. Where the server names a source this build has not heard of, {source} is that word as the server wrote it.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Configured address"
+      },
+      "state": {
+        "type": "String",
+        "example": "reachable"
+      }
+    }
+  },
+  "devicesBaseReachable": "reachable",
+  "@devicesBaseReachable": {
+    "description": "Says a cast address answered. Lower case: it follows a comma on the same line."
+  },
+  "devicesBaseUnreachable": "not reachable",
+  "@devicesBaseUnreachable": {
+    "description": "Says a cast address did not answer. Lower case: it follows a comma on the same line."
+  },
+  "devicesCastBlurb": "A cast device fetches audio from this server by address. These are the addresses it will try, in order.",
+  "@devicesCastBlurb": {
+    "description": "Under the connection check heading, saying why the addresses matter."
+  },
+  "devicesCastCaveat": "The server checked these itself. An address it cannot reach will not work from a speaker either; one it can may still fail if the speaker is on another network.",
+  "@devicesCastCaveat": {
+    "description": "The caveat over the address list: the server checking itself is not the speaker checking, and a reader deciding what to fix needs to know which of the two this is."
+  },
+  "devicesCastingOverline": "Casting",
+  "@devicesCastingOverline": {
+    "description": "Line above the connection check heading, naming what it is about."
+  },
+  "devicesCheckError": "Could not check",
+  "@devicesCheckError": {
+    "description": "Title of the error state when the connection check could not be run."
+  },
+  "devicesConnectionCheck": "Connection check",
+  "@devicesConnectionCheck": {
+    "description": "Opens the sheet listing the addresses a cast device would try, and heads it."
+  },
+  "devicesCurrentlyElsewhere": "Currently elsewhere",
+  "@devicesCurrentlyElsewhere": {
+    "description": "Line above the device list when the sheet was opened over a session running on another device."
+  },
+  "devicesGroupApps": "WaxDeck apps",
+  "@devicesGroupApps": {
+    "description": "Heading over the devices running WaxDeck itself."
+  },
+  "devicesGroupOther": "Other devices",
+  "@devicesGroupOther": {
+    "description": "Heading over the endpoints of a kind this build does not recognise. It takes whatever the other groups do not, so an endpoint is never dropped."
+  },
+  "devicesGroupServer": "This server",
+  "@devicesGroupServer": {
+    "description": "Heading over the server's own audio output, where it has one."
+  },
+  "devicesGroupSpeakers": "Speakers and displays",
+  "@devicesGroupSpeakers": {
+    "description": "Heading over the cast and DLNA devices playback can be sent to."
+  },
+  "devicesLeaveItPlaying": "Leave it playing",
+  "@devicesLeaveItPlaying": {
+    "description": "Button that closes the remote control without stopping what is playing elsewhere."
+  },
+  "devicesListError": "Could not list devices",
+  "@devicesListError": {
+    "description": "Row in the device sheet when the device list could not be read."
+  },
+  "devicesListErrorMessage": "The server did not answer. Playback here is unaffected.",
+  "@devicesListErrorMessage": {
+    "description": "Under the device-list error, saying that local playback still works."
+  },
+  "devicesLooking": "Looking for devices",
+  "@devicesLooking": {
+    "description": "Row in the device sheet while the device list is being read."
+  },
+  "devicesMore": "More",
+  "@devicesMore": {
+    "description": "Accessible name of the overflow menu in the device sheet."
   },
   "devicesMultiPartAudiobook": "Multi-part audiobooks can't play on {endpoint} yet. Play it on this device instead.",
   "@devicesMultiPartAudiobook": {
@@ -78,9 +2262,123 @@
       }
     }
   },
+  "devicesNoAddresses": "No addresses to try",
+  "@devicesNoAddresses": {
+    "description": "Empty state of the connection check."
+  },
+  "devicesNoAddressesMessage": "This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.",
+  "@devicesNoAddressesMessage": {
+    "description": "Empty state of the connection check, saying what to do about it."
+  },
+  "devicesNothingElsewhere": "Nothing playing elsewhere",
+  "@devicesNothingElsewhere": {
+    "description": "Empty state of the remote playback screen."
+  },
+  "devicesNothingElsewhereMessage": "Pick a device from the now-playing bar to send playback somewhere else.",
+  "@devicesNothingElsewhereMessage": {
+    "description": "Empty state of the remote playback screen, saying where the device list is."
+  },
   "devicesNothingToSend": "Nothing is playing here to send. Start something first.",
   "@devicesNothingToSend": {
     "description": "Snackbar when the device picker is asked to hand playback over with nothing playing."
+  },
+  "devicesOnEndpoint": "on {endpoint}",
+  "@devicesOnEndpoint": {
+    "description": "Under a session running elsewhere, naming the device. Lower case: it continues the line above it.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "devicesPlayOn": "Play on",
+  "@devicesPlayOn": {
+    "description": "Opens the list of devices playback can be sent to, and heads that list. Followed by a device name in the reader's mind rather than on screen, so it reads as the start of a sentence."
+  },
+  "devicesPlayOnAnother": "Play on another device",
+  "@devicesPlayOnAnother": {
+    "description": "Accessible name of the control that opens the device list from the remote screen."
+  },
+  "devicesPlaying": "Playing",
+  "@devicesPlaying": {
+    "description": "Stands in for what another device is playing when its title is not known."
+  },
+  "devicesPlayingElsewhere": "Playing elsewhere",
+  "@devicesPlayingElsewhere": {
+    "description": "Heading over the sessions running on other devices."
+  },
+  "devicesPlayingHere": "Playing here",
+  "@devicesPlayingHere": {
+    "description": "Under this device's row when nothing is playing elsewhere."
+  },
+  "devicesPlayingOn": "Playing on {endpoint}",
+  "@devicesPlayingOn": {
+    "description": "Message after playback was handed to another device, and the title of the sheet asking what to do about a session already there. {endpoint} is that device's user-chosen name.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "devicesRemoteTitle": "Remote playback",
+  "@devicesRemoteTitle": {
+    "description": "Title of the screen controlling playback running on another device."
+  },
+  "devicesStartedBy": "started by {name}",
+  "@devicesStartedBy": {
+    "description": "Says who started the session running on another device. Lower case: it follows a comma on the same line.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "devicesStopOn": "Stop playback on {endpoint}",
+  "@devicesStopOn": {
+    "description": "Button that stops what is playing on another device. {endpoint} is that device's user-chosen name.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "devicesTakeOverBody": "This device can take over, or leave it playing where it is.",
+  "@devicesTakeOverBody": {
+    "description": "Body of the dialog asking what to do about playback already running elsewhere."
+  },
+  "devicesTakeOverOrLeave": "Take over, or leave it playing",
+  "@devicesTakeOverOrLeave": {
+    "description": "Under this device's row while something is playing elsewhere."
+  },
+  "devicesThisDevice": "This device",
+  "@devicesThisDevice": {
+    "description": "The row for the device the listener is holding, in the device sheet."
+  },
+  "devicesTransferHere": "Transfer here",
+  "@devicesTransferHere": {
+    "description": "Button that moves playback from another device to this one."
+  },
+  "devicesVolumeOn": "Volume on {endpoint}",
+  "@devicesVolumeOn": {
+    "description": "Accessible name of the volume slider for another device. {endpoint} is that device's user-chosen name.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "downloadsDownloaded": "Downloaded",
+  "@downloadsDownloaded": {
+    "description": "Accessible name of the download control once the file is on this device."
+  },
+  "downloadsDownloading": "Downloading",
+  "@downloadsDownloading": {
+    "description": "Accessible name of the download control while the transfer is running."
   },
   "durationDays": "{days, plural, =1{1 day} other{{days} days}}",
   "@durationDays": {
@@ -236,9 +2534,151 @@
   "@errorWindowedTrack": {
     "description": "Error sentence for `feature-unavailable` when the params name the feature as windowed-track."
   },
+  "healthColumnAbsorbs": "Absorbs",
+  "@healthColumnAbsorbs": {
+    "description": "Column heading for the entities a merge folds into the survivor."
+  },
+  "healthColumnCode": "Code",
+  "@healthColumnCode": {
+    "description": "Column heading for what was observed about a file. The values themselves stay as the server wrote them."
+  },
+  "healthColumnFailing": "Failing",
+  "@healthColumnFailing": {
+    "description": "Column heading for how many items fail a rule."
+  },
+  "healthColumnFile": "File",
+  "@healthColumnFile": {
+    "description": "Column heading for a diagnosed file's path."
+  },
+  "healthColumnKeeping": "Keeping",
+  "@healthColumnKeeping": {
+    "description": "Column heading for the copy a resolution keeps."
+  },
+  "healthColumnKind": "Kind",
+  "@healthColumnKind": {
+    "description": "Column heading for what sort of entity a duplicate finding is about."
+  },
+  "healthColumnOrigin": "Origin",
+  "@healthColumnOrigin": {
+    "description": "Column heading for which pass recorded a diagnostic. The values themselves stay as the server wrote them."
+  },
+  "healthColumnRecording": "Recording",
+  "@healthColumnRecording": {
+    "description": "Column heading for which recording a quality finding is about."
+  },
+  "healthColumnRule": "Rule",
+  "@healthColumnRule": {
+    "description": "Column heading for a health rule's name."
+  },
+  "healthColumnSeverity": "Severity",
+  "@healthColumnSeverity": {
+    "description": "Column heading for how serious a diagnostic is."
+  },
+  "healthColumnSurvivor": "Survivor",
+  "@healthColumnSurvivor": {
+    "description": "Column heading for the entity a merge keeps."
+  },
+  "healthColumnTrashing": "Trashing",
+  "@healthColumnTrashing": {
+    "description": "Column heading for the copies a resolution trashes."
+  },
+  "healthColumnWhy": "Why",
+  "@healthColumnWhy": {
+    "description": "Column heading for the audit's explanation of a duplicate finding."
+  },
   "healthCorruptAudio": "Corrupt audio",
   "@healthCorruptAudio": {
     "description": "Name of the health rule `corrupt-audio`, which counts files whose audio will not decode."
+  },
+  "healthDiagnosticsChip": "{code} ({count})",
+  "@healthDiagnosticsChip": {
+    "description": "One diagnostic code and how many files carry it, on a filter chip. {code} is a wire token and is not translated.",
+    "placeholders": {
+      "code": {
+        "type": "String",
+        "example": "corrupt_audio"
+      },
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "healthDiagnosticsEmptyMessage": "Every file the catalog has seen decoded cleanly.",
+  "@healthDiagnosticsEmptyMessage": {
+    "description": "Empty state of the diagnostics table."
+  },
+  "healthDiagnosticsEmptyTitle": "No diagnostics recorded",
+  "@healthDiagnosticsEmptyTitle": {
+    "description": "Empty state of the diagnostics table."
+  },
+  "healthDiagnosticsLoadError": "Could not load diagnostics",
+  "@healthDiagnosticsLoadError": {
+    "description": "Title of the error state when the file diagnostics could not be read."
+  },
+  "healthDiagnosticsMore": "{count} shown; there are more",
+  "@healthDiagnosticsMore": {
+    "description": "Caption under the diagnostics table when the list is longer than what has been fetched.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "100"
+      }
+    }
+  },
+  "healthDuplicatesEmptyMessage": "Artists, albums, and shows each appear once.",
+  "@healthDuplicatesEmptyMessage": {
+    "description": "Empty state of the duplicates section."
+  },
+  "healthDuplicatesEmptyTitle": "No duplicates detected",
+  "@healthDuplicatesEmptyTitle": {
+    "description": "Empty state of the duplicates section."
+  },
+  "healthDuplicatesError": "Could not load duplicates",
+  "@healthDuplicatesError": {
+    "description": "Title of the error state when the duplicate findings could not be read."
+  },
+  "healthDuplicatesErrorBody": "The clustering pass did not answer.",
+  "@healthDuplicatesErrorBody": {
+    "description": "Body of the duplicates error state. Clustering is the pass that finds duplicates."
+  },
+  "healthDuplicatesOverline": "One thing under two names",
+  "@healthDuplicatesOverline": {
+    "description": "Line above the Duplicates heading, saying what a duplicate is."
+  },
+  "healthDuplicatesTitle": "Duplicates",
+  "@healthDuplicatesTitle": {
+    "description": "Heading over the duplicate findings."
+  },
+  "healthEntityAlbum": "album",
+  "@healthEntityAlbum": {
+    "description": "Kind of a duplicate finding about two albums. Lower case: it fills a small chip."
+  },
+  "healthEntityArtist": "artist",
+  "@healthEntityArtist": {
+    "description": "Kind of a duplicate finding about two artists. Lower case: it fills a small chip."
+  },
+  "healthEntityGenre": "genre",
+  "@healthEntityGenre": {
+    "description": "Kind of a duplicate finding about two genres. Lower case: it fills a small chip."
+  },
+  "healthEntityReleaseGroup": "release-group",
+  "@healthEntityReleaseGroup": {
+    "description": "Kind of a duplicate finding about two release groups: the same album across its editions. Lower case: it fills a small chip."
+  },
+  "healthEvaluatedOf": "{total, plural, =1{Evaluated {checked} of 1 item} other{Evaluated {checked} of {total} items}}",
+  "@healthEvaluatedOf": {
+    "description": "Line under the warming-up headline, saying how far the first sweep has got.",
+    "placeholders": {
+      "checked": {
+        "type": "int",
+        "example": "1200"
+      },
+      "total": {
+        "type": "int",
+        "example": "1500"
+      }
+    }
   },
   "healthFixRule": "Fix {rule}",
   "@healthFixRule": {
@@ -254,9 +2694,97 @@
   "@healthGenreWhitelist": {
     "description": "Name of the health rule `genre-whitelist`, which counts items tagged with a genre the server's genre tree does not have."
   },
+  "healthIssuesEmptyMessage": "Every item the sweeper has seen passes it.",
+  "@healthIssuesEmptyMessage": {
+    "description": "Empty state of one rule's list of failing items."
+  },
+  "healthIssuesEmptyTitle": "Nothing failing this rule",
+  "@healthIssuesEmptyTitle": {
+    "description": "Empty state of one rule's list of failing items."
+  },
+  "healthIssuesError": "Could not load issues",
+  "@healthIssuesError": {
+    "description": "Title of the error state when a rule's failing items could not be read."
+  },
+  "healthKbps": "{kbps} kbps",
+  "@healthKbps": {
+    "description": "One copy's bitrate, in a comma-separated run of its properties. kbps is the unit.",
+    "placeholders": {
+      "kbps": {
+        "type": "int",
+        "example": "320"
+      }
+    }
+  },
+  "healthKeepBest": "Keep the best version",
+  "@healthKeepBest": {
+    "description": "Accessible name of the button that resolves one quality finding."
+  },
   "healthLegacyTags": "Legacy-only tags",
   "@healthLegacyTags": {
     "description": "Name of the health rule `legacy-tags`, which counts files carrying only an older tag format."
+  },
+  "healthLoadError": "Could not load library health",
+  "@healthLoadError": {
+    "description": "Title of the error state when the health summary could not be read."
+  },
+  "healthLoadMore": "Load more",
+  "@healthLoadMore": {
+    "description": "Button that fetches the next page of diagnostics."
+  },
+  "healthLoadMoreFailed": "Could not load more; scroll to retry",
+  "@healthLoadMoreFailed": {
+    "description": "Message when paging further into a rule's failing items failed. Scrolling again retries, which is why it says so."
+  },
+  "healthLossless": "lossless",
+  "@healthLossless": {
+    "description": "Says a copy is stored without losing anything to compression. Lower case: it sits in a comma-separated run of a copy's properties."
+  },
+  "healthMergeAction": "Merge",
+  "@healthMergeAction": {
+    "description": "Confirming button of the merge dialog."
+  },
+  "healthMergeBody": "{losers} will merge into \"{survivor}\". Their items move under the survivor, and the merge cannot be undone.",
+  "@healthMergeBody": {
+    "description": "Body of the merge dialog. {losers} is a comma-separated run of quoted names and {survivor} the name they merge into.",
+    "placeholders": {
+      "losers": {
+        "type": "String",
+        "example": "\"The Beatles\", \"Beatles, The\""
+      },
+      "survivor": {
+        "type": "String",
+        "example": "The Beatles"
+      }
+    }
+  },
+  "healthMergeInto": "Merge into {name}",
+  "@healthMergeInto": {
+    "description": "Accessible name of the button that merges one duplicate group. {name} is the entity that survives.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "The Beatles"
+      }
+    }
+  },
+  "healthMergeTitle": "Merge duplicates?",
+  "@healthMergeTitle": {
+    "description": "Title of the dialog confirming that duplicate entities are merged into one."
+  },
+  "healthMergeWord": "merge",
+  "@healthMergeWord": {
+    "description": "The word typed to confirm a merge. Lower case here, unlike the destructive confirmations elsewhere, because a merge is recoverable work rather than a deletion. It is compared against what was typed, so translating it changes what has to be typed."
+  },
+  "healthMerged": "{count, plural, =1{Merged 1 entry} other{Merged {count} entries}}",
+  "@healthMerged": {
+    "description": "Message after duplicates were merged, saying how many entries went.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   },
   "healthMissingArt": "Missing cover art",
   "@healthMissingArt": {
@@ -286,13 +2814,147 @@
   "@healthMissingYear": {
     "description": "Name of the health rule `missing-year`."
   },
+  "healthNamesMatch": "Names match",
+  "@healthNamesMatch": {
+    "description": "Stands in for the audit's explanation when it gave none: the finding is a plain name collision."
+  },
   "healthPathMismatch": "File path does not match the organize profile",
   "@healthPathMismatch": {
     "description": "Name of the health rule `path-mismatch`."
   },
+  "healthQueuedItems": "{count, plural, =1{Queued 1 item} other{Queued {count} items}}",
+  "@healthQueuedItems": {
+    "description": "Message after a rule's fix was started, saying how many items it will work on.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "healthResolveAction": "Resolve",
+  "@healthResolveAction": {
+    "description": "Confirming button of the keep-the-best dialog."
+  },
+  "healthResolveBody": "The other versions move to the server trash and can be restored until the trash window closes.",
+  "@healthResolveBody": {
+    "description": "Body of the keep-the-best dialog, saying that the copies are recoverable for a while."
+  },
+  "healthResolveTitle": "Keep the best version?",
+  "@healthResolveTitle": {
+    "description": "Title of the dialog confirming that lesser copies of one recording are trashed."
+  },
+  "healthResolveWord": "resolve",
+  "@healthResolveWord": {
+    "description": "The word typed to confirm keeping the best version. Lower case, and compared against what was typed, so translating it changes what has to be typed."
+  },
+  "healthRulesEmptyMessage": "Rules appear once the sweeper has evaluated the library.",
+  "@healthRulesEmptyMessage": {
+    "description": "Empty state of the rule table, saying what fills it."
+  },
+  "healthRulesEmptyTitle": "Nothing to check yet",
+  "@healthRulesEmptyTitle": {
+    "description": "Empty state of the rule table."
+  },
+  "healthRulesOverline": "What the sweeper checks",
+  "@healthRulesOverline": {
+    "description": "Line above the Rules heading, saying what the rules are."
+  },
+  "healthRulesTitle": "Rules",
+  "@healthRulesTitle": {
+    "description": "Heading over the per-rule failure counts."
+  },
+  "healthScoreBlurb": "{count, plural, =1{Library health across 1 evaluated item} other{Library health across {count} evaluated items}}",
+  "@healthScoreBlurb": {
+    "description": "Line beside the health score, saying how much of the library it covers.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1500"
+      }
+    }
+  },
+  "healthScoreSpoken": "Health score {score}",
+  "@healthScoreSpoken": {
+    "description": "Accessible name of the health score, which is drawn as a bare number.",
+    "placeholders": {
+      "score": {
+        "type": "int",
+        "example": "87"
+      }
+    }
+  },
+  "healthSeverityError": "error",
+  "@healthSeverityError": {
+    "description": "Severity of a diagnostic that means something failed. Lower case: it fills a table cell."
+  },
+  "healthSeverityInfo": "info",
+  "@healthSeverityInfo": {
+    "description": "Severity of a diagnostic that is worth knowing and nothing more. Lower case: it fills a table cell."
+  },
+  "healthSeverityWarn": "warn",
+  "@healthSeverityWarn": {
+    "description": "Severity of a diagnostic worth looking at. Lower case: it fills a table cell."
+  },
   "healthSmallArt": "Low-resolution cover art",
   "@healthSmallArt": {
     "description": "Name of the health rule `small-art`."
+  },
+  "healthSweepNow": "Sweep now",
+  "@healthSweepNow": {
+    "description": "Accessible name of the button that re-evaluates the library against every rule."
+  },
+  "healthSweepQueued": "Sweep queued",
+  "@healthSweepQueued": {
+    "description": "Message after a health sweep was started."
+  },
+  "healthTitleByArtist": "{title} by {artist}",
+  "@healthTitleByArtist": {
+    "description": "A recording named with its artist, in the health tables.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Blue in Green"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Miles Davis"
+      }
+    }
+  },
+  "healthTrashedFiles": "{count, plural, =1{Trashed 1 file} other{Trashed {count} files}}",
+  "@healthTrashedFiles": {
+    "description": "Message after lesser copies were trashed, saying how many went.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "healthUpgradesEmptyMessage": "Every recording is held once.",
+  "@healthUpgradesEmptyMessage": {
+    "description": "Empty state of the quality upgrades section."
+  },
+  "healthUpgradesEmptyTitle": "No duplicate qualities detected",
+  "@healthUpgradesEmptyTitle": {
+    "description": "Empty state of the quality upgrades section."
+  },
+  "healthUpgradesError": "Could not load upgrades",
+  "@healthUpgradesError": {
+    "description": "Title of the error state when the quality findings could not be read."
+  },
+  "healthUpgradesErrorBody": "The quality comparison did not answer.",
+  "@healthUpgradesErrorBody": {
+    "description": "Body of the quality upgrades error state."
+  },
+  "healthUpgradesOverline": "The same recording twice",
+  "@healthUpgradesOverline": {
+    "description": "Line above the quality upgrades heading."
+  },
+  "healthUpgradesTitle": "Quality upgrades",
+  "@healthUpgradesTitle": {
+    "description": "Heading over the findings where one recording is held at several qualities."
   },
   "healthWriteUnsynced": "File tags out of sync with the catalog",
   "@healthWriteUnsynced": {
@@ -306,9 +2968,327 @@
   "@libraryBrowseSortMostFirst": {
     "description": "Library index order: the groups holding the most come first."
   },
+  "libraryKindAlbum": "album",
+  "@libraryKindAlbum": {
+    "description": "The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case."
+  },
+  "libraryKindArtist": "artist",
+  "@libraryKindArtist": {
+    "description": "The word for an artist where it stands inside a sentence, such as the star row's accessible names. Lower case."
+  },
   "localeFontSample": "Music, podcasts, and audiobooks.",
   "@localeFontSample": {
     "description": "Never displayed. Any natural sentence in this language, written the way the language actually is, accents and all: the app scans it for the scripts this locale needs and loads their fonts before the interface draws."
+  },
+  "metadataAddTag": "Add tag",
+  "@metadataAddTag": {
+    "description": "Button that stores the typed custom tag."
+  },
+  "metadataClearLyrics": "Clear",
+  "@metadataClearLyrics": {
+    "description": "Button that removes the item's stored lyrics."
+  },
+  "metadataCreditNames": "Names, comma separated",
+  "@metadataCreditNames": {
+    "description": "Field for the people in one credit role."
+  },
+  "metadataCreditRole": "Credit role",
+  "@metadataCreditRole": {
+    "description": "Accessible name of the menu choosing which credit is being edited."
+  },
+  "metadataCreditsOverline": "Who else is on it",
+  "@metadataCreditsOverline": {
+    "description": "Line above the Credits heading."
+  },
+  "metadataCreditsTitle": "Credits",
+  "@metadataCreditsTitle": {
+    "description": "Heading over who else worked on the item."
+  },
+  "metadataEnrichApplied": "Applied: {fields}",
+  "@metadataEnrichApplied": {
+    "description": "Half of the message after fetching metadata, listing what was taken. {fields} is a comma-separated run of field names from the server.",
+    "placeholders": {
+      "fields": {
+        "type": "String",
+        "example": "cover, genres"
+      }
+    }
+  },
+  "metadataEnrichSkipped": "Skipped: {fields}",
+  "@metadataEnrichSkipped": {
+    "description": "Half of the message after fetching metadata, listing what was left alone. {fields} is a comma-separated run of field names from the server.",
+    "placeholders": {
+      "fields": {
+        "type": "String",
+        "example": "book"
+      }
+    }
+  },
+  "metadataFetch": "Fetch metadata",
+  "@metadataFetch": {
+    "description": "Button that applies what the metadata providers already agree on."
+  },
+  "metadataFieldLockedHint": "Check \"Force\" to overwrite locked fields.",
+  "@metadataFieldLockedHint": {
+    "description": "Added after the server's own refusal when a save was refused for a locked field. The server names which field; this names the switch on this screen that overrides it, and the quoted word must match that switch's label."
+  },
+  "metadataFieldsOverline": "What this item claims to be",
+  "@metadataFieldsOverline": {
+    "description": "Line above the Fields heading."
+  },
+  "metadataFieldsTitle": "Fields",
+  "@metadataFieldsTitle": {
+    "description": "Heading over the item's editable metadata fields."
+  },
+  "metadataForceHelp": "Overwrite fields that are already locked",
+  "@metadataForceHelp": {
+    "description": "Line under the force switch."
+  },
+  "metadataForceTitle": "Force",
+  "@metadataForceTitle": {
+    "description": "Switch that lets a save overwrite fields somebody locked. Its name is quoted in the refusal that suggests it, so the two must agree."
+  },
+  "metadataFromSource": "{count} from {source}",
+  "@metadataFromSource": {
+    "description": "One entry in the provenance line: how many fields came from one source. {source} is a provider or source name from the server.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      },
+      "source": {
+        "type": "String",
+        "example": "MusicBrainz"
+      }
+    }
+  },
+  "metadataIdentificationBlurb": "Rematch reopens identification and puts the result in the review queue. Fetching metadata applies what the providers already agree on, without asking.",
+  "@metadataIdentificationBlurb": {
+    "description": "Line under the Identification heading, telling the two buttons apart."
+  },
+  "metadataIdentificationTitle": "Identification",
+  "@metadataIdentificationTitle": {
+    "description": "Heading over the two ways of asking the providers about this item again."
+  },
+  "metadataLinesAllTimed": "{count, plural, =1{1 line, timed} other{{count} lines, all timed}}",
+  "@metadataLinesAllTimed": {
+    "description": "Heading of the lyrics preview when every line carries a timestamp.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "24"
+      }
+    }
+  },
+  "metadataLinesSomeTimed": "{count, plural, =1{1 line, {timed} timed} other{{count} lines, {timed} timed}}",
+  "@metadataLinesSomeTimed": {
+    "description": "Heading of the lyrics preview when only some lines carry a timestamp.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "24"
+      },
+      "timed": {
+        "type": "int",
+        "example": "18"
+      }
+    }
+  },
+  "metadataLoadError": "Could not load the metadata",
+  "@metadataLoadError": {
+    "description": "Title of the error state when an item's metadata could not be read."
+  },
+  "metadataLockField": "Lock {field}",
+  "@metadataLockField": {
+    "description": "Accessible name of the control that locks one field. {field} is the field's wire name and is not translated.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "title"
+      }
+    }
+  },
+  "metadataLockHelp": "Keep scans and enrichment from overwriting what you type",
+  "@metadataLockHelp": {
+    "description": "Line under the lock switch."
+  },
+  "metadataLockTitle": "Lock edited fields",
+  "@metadataLockTitle": {
+    "description": "Switch that keeps later scans from overwriting what was typed."
+  },
+  "metadataLyricsHint": "[00:12.00] First line",
+  "@metadataLyricsHint": {
+    "description": "Hint in the lyrics field, showing one timed line. The bracketed stamp is the format's own and must not change shape."
+  },
+  "metadataLyricsLabel": "LRC",
+  "@metadataLyricsLabel": {
+    "description": "Field for the lyrics themselves. LRC is the format's name and stays as it is."
+  },
+  "metadataLyricsOverline": "Timed LRC, or plain lines",
+  "@metadataLyricsOverline": {
+    "description": "Line above the Lyrics heading. LRC is the timed-lyrics file format and stays as it is."
+  },
+  "metadataLyricsTitle": "Lyrics",
+  "@metadataLyricsTitle": {
+    "description": "Heading over the item's lyrics."
+  },
+  "metadataNoCreditRoles": "No credit roles for this kind",
+  "@metadataNoCreditRoles": {
+    "description": "Drawn in place of the credit editor for a kind of item that declares no roles."
+  },
+  "metadataNoSources": "No recorded sources",
+  "@metadataNoSources": {
+    "description": "Stands in for the provenance line when nothing recorded where the item's values came from."
+  },
+  "metadataNothingToFetch": "Nothing to fetch",
+  "@metadataNothingToFetch": {
+    "description": "Message after fetching metadata found nothing to apply or skip."
+  },
+  "metadataNothingToPreview": "Nothing to preview",
+  "@metadataNothingToPreview": {
+    "description": "Drawn in place of the lyrics preview while the field is empty."
+  },
+  "metadataOpenAlbum": "Open album",
+  "@metadataOpenAlbum": {
+    "description": "Door from the metadata editor to the album this item belongs to."
+  },
+  "metadataOpenArtist": "Open artist",
+  "@metadataOpenArtist": {
+    "description": "Door from the metadata editor to the artist this item belongs to."
+  },
+  "metadataOpenReleaseGroup": "Open release group",
+  "@metadataOpenReleaseGroup": {
+    "description": "Door from the metadata editor to the release group this item belongs to: the album across its editions."
+  },
+  "metadataOpenReview": "Open review",
+  "@metadataOpenReview": {
+    "description": "Button on the rematch message that opens the review entry it created."
+  },
+  "metadataQueuedForIdentification": "Queued for identification",
+  "@metadataQueuedForIdentification": {
+    "description": "Message after an item was sent back for matching."
+  },
+  "metadataReleaseTitle": "Release status",
+  "@metadataReleaseTitle": {
+    "description": "Heading over whether the item is an official release."
+  },
+  "metadataRematch": "Rematch",
+  "@metadataRematch": {
+    "description": "Button that reopens identification for the item."
+  },
+  "metadataRemoveTag": "Remove tag {key}",
+  "@metadataRemoveTag": {
+    "description": "Accessible name of the control that deletes one custom tag. {key} is the tag's own name and is not translated.",
+    "placeholders": {
+      "key": {
+        "type": "String",
+        "example": "ITUNESADVISORY"
+      }
+    }
+  },
+  "metadataSaveChanges": "{count, plural, =1{Save 1 change} other{Save {count} changes}}",
+  "@metadataSaveChanges": {
+    "description": "The save button once fields have been edited, counting them. With nothing edited it says only Save.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "metadataSaveCredits": "Save credits",
+  "@metadataSaveCredits": {
+    "description": "Button that writes the credit being edited."
+  },
+  "metadataSaveLyrics": "Save lyrics",
+  "@metadataSaveLyrics": {
+    "description": "Button that writes the lyrics as typed."
+  },
+  "metadataSourceUnknown": "Source unknown",
+  "@metadataSourceUnknown": {
+    "description": "Chip beside a field whose value has no recorded source."
+  },
+  "metadataSourceWithProvider": "{source} ({provider})",
+  "@metadataSourceWithProvider": {
+    "description": "Chip beside a field, naming where its value came from and which provider answered. Both come from the server and are not translated.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "enrichment"
+      },
+      "provider": {
+        "type": "String",
+        "example": "MusicBrainz"
+      }
+    }
+  },
+  "metadataTagKey": "Key",
+  "@metadataTagKey": {
+    "description": "Field for a custom tag's name."
+  },
+  "metadataTagValues": "Values, comma separated",
+  "@metadataTagValues": {
+    "description": "Field for a custom tag's values."
+  },
+  "metadataTagsOverline": "Anything the vocabulary has no field for",
+  "@metadataTagsOverline": {
+    "description": "Line above the custom tags heading."
+  },
+  "metadataTagsTitle": "Custom tags",
+  "@metadataTagsTitle": {
+    "description": "Heading over the free-form tags an item carries."
+  },
+  "metadataTitle": "Edit metadata",
+  "@metadataTitle": {
+    "description": "Title of the per-item metadata editor."
+  },
+  "metadataUnlockField": "Unlock {field}",
+  "@metadataUnlockField": {
+    "description": "Accessible name of the control that unlocks one field. {field} is the field's wire name and is not translated.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "title"
+      }
+    }
+  },
+  "metadataUnofficialHelp": "A bootleg, a promo, or another unofficial issue",
+  "@metadataUnofficialHelp": {
+    "description": "Line under the unofficial switch."
+  },
+  "metadataUnofficialTitle": "Unofficial release",
+  "@metadataUnofficialTitle": {
+    "description": "Switch marking the item as something other than an official issue."
+  },
+  "metadataUntitled": "Untitled",
+  "@metadataUntitled": {
+    "description": "Stands in for an item's name when it has none."
+  },
+  "metadataWriteBackFailure": "{file}: {reason}",
+  "@metadataWriteBackFailure": {
+    "description": "One file a write-back could not reach, and why. Both halves come from the server and are not translated.",
+    "placeholders": {
+      "file": {
+        "type": "String",
+        "example": "Album/01 Track.flac"
+      },
+      "reason": {
+        "type": "String",
+        "example": "read-only file"
+      }
+    }
+  },
+  "metadataWriteBackHelp": "Also rewrite the tags embedded in the backing files",
+  "@metadataWriteBackHelp": {
+    "description": "Line under the write-tags switch."
+  },
+  "metadataWriteBackTitle": "Write tags to files",
+  "@metadataWriteBackTitle": {
+    "description": "Switch making a save rewrite the tags stored inside the audio files too."
+  },
+  "metadataWriteBackWarning": "Saved, but some files kept their old tags.",
+  "@metadataWriteBackWarning": {
+    "description": "Banner after a save whose write-back did not reach every file. The catalog holds the edit either way, which is why it is a caution rather than an error."
   },
   "notifBackupCompletedHelp": "A backup archive finished building.",
   "@notifBackupCompletedHelp": {
@@ -365,6 +3345,734 @@
   "notifSignupRequestedTitle": "Account request",
   "@notifSignupRequestedTitle": {
     "description": "Switch label for the `signup-requested` notification."
+  },
+  "playerAddLyrics": "Add lyrics",
+  "@playerAddLyrics": {
+    "description": "Button that opens the metadata editor to write lyrics."
+  },
+  "playerAddToPlaylist": "Add to playlist",
+  "@playerAddToPlaylist": {
+    "description": "Menu item that puts what is playing on a playlist."
+  },
+  "playerAllStations": "All stations",
+  "@playerAllStations": {
+    "description": "Menu item that opens the list of saved radio stations."
+  },
+  "playerBookmarkAdd": "Mark {time}",
+  "@playerBookmarkAdd": {
+    "description": "Button that bookmarks the position it names. {time} is a timecode.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "1:12:40"
+      }
+    }
+  },
+  "playerBookmarkNoNote": "No note",
+  "@playerBookmarkNoNote": {
+    "description": "Stands in for a bookmark's note where it has none."
+  },
+  "playerBookmarkNote": "Note (optional)",
+  "@playerBookmarkNote": {
+    "description": "Field for a word about why a place was marked."
+  },
+  "playerBookmarkNoteAt": "{note}, at {time}",
+  "@playerBookmarkNoteAt": {
+    "description": "Accessible name of a bookmark that carries a note. {time} is a timecode.",
+    "placeholders": {
+      "note": {
+        "type": "String",
+        "example": "the bit about the bridge"
+      },
+      "time": {
+        "type": "String",
+        "example": "1:12:40"
+      }
+    }
+  },
+  "playerBookmarkPlayFrom": "Play from {time}",
+  "@playerBookmarkPlayFrom": {
+    "description": "Accessible name of a bookmark with no note on it. {time} is a timecode.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "1:12:40"
+      }
+    }
+  },
+  "playerBookmarkRemove": "Remove the bookmark at {time}",
+  "@playerBookmarkRemove": {
+    "description": "Accessible name of the control that deletes one bookmark. {time} is its timecode.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "1:12:40"
+      }
+    }
+  },
+  "playerBookmarks": "Bookmarks",
+  "@playerBookmarks": {
+    "description": "The places in a book somebody marked to come back to. Heads the sheet holding them."
+  },
+  "playerBookmarksCount": "Bookmarks, {count}",
+  "@playerBookmarksCount": {
+    "description": "Accessible name of the bookmarks control, with how many the book holds. Drawn without the number when it holds none.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "playerBookmarksEmpty": "Nothing marked yet. A bookmark keeps a place you want to come back to; your listening position is kept for you either way.",
+  "@playerBookmarksEmpty": {
+    "description": "Empty state of the bookmarks sheet, saying that bookmarks are not how listening position is remembered."
+  },
+  "playerBookmarksError": "Could not load the bookmarks.",
+  "@playerBookmarksError": {
+    "description": "Drawn in the bookmarks sheet when the read failed for a reason the error table has no sentence for."
+  },
+  "playerCancelTimer": "Cancel timer",
+  "@playerCancelTimer": {
+    "description": "Stops the running sleep timer."
+  },
+  "playerCarIdleMessage": "Start something and it takes the whole screen.",
+  "@playerCarIdleMessage": {
+    "description": "Under the idle heading in car mode."
+  },
+  "playerCarMode": "Car mode",
+  "@playerCarMode": {
+    "description": "Opens the large-target playback screen made for a car."
+  },
+  "playerChapterPlaying": "{chapter}, playing",
+  "@playerChapterPlaying": {
+    "description": "Accessible name of the chapter a book is currently in. {chapter} is the chapter's own name.",
+    "placeholders": {
+      "chapter": {
+        "type": "String",
+        "example": "Chapter 4"
+      }
+    }
+  },
+  "playerChapters": "Chapters",
+  "@playerChapters": {
+    "description": "Accessible name of the chapter list in the book player."
+  },
+  "playerCloseLyrics": "Close lyrics",
+  "@playerCloseLyrics": {
+    "description": "Accessible name of the control that closes the lyrics panel."
+  },
+  "playerCollapse": "Collapse player",
+  "@playerCollapse": {
+    "description": "Accessible name of the control that closes the full player."
+  },
+  "playerCollapseCommand": "Collapse the player",
+  "@playerCollapseCommand": {
+    "description": "Command that closes the full player, in the command palette and the shortcut sheet."
+  },
+  "playerDeleteFiles": "Delete files...",
+  "@playerDeleteFiles": {
+    "description": "Menu item that deletes the playing item's files. The trailing dots say a confirmation follows."
+  },
+  "playerEditStation": "Edit station",
+  "@playerEditStation": {
+    "description": "Menu item that opens the playing station for editing."
+  },
+  "playerExtendTimer": "Extend 10 minutes",
+  "@playerExtendTimer": {
+    "description": "Adds ten minutes to the running sleep timer, in the timer sheet."
+  },
+  "playerExtendTimerShort": "Extend 10 min",
+  "@playerExtendTimerShort": {
+    "description": "The same as the sleep timer's extend action, worded short for a message that is already a sentence long. min is the abbreviation for minutes."
+  },
+  "playerFaster": "Faster",
+  "@playerFaster": {
+    "description": "Button that steps playback speed up."
+  },
+  "playerFindInLibrary": "Find \"{track}\" in the library",
+  "@playerFindInLibrary": {
+    "description": "Accessible name of the control that searches the library for the track a radio station announced.",
+    "placeholders": {
+      "track": {
+        "type": "String",
+        "example": "Blue in Green"
+      }
+    }
+  },
+  "playerForgetSong": "Forget this song",
+  "@playerForgetSong": {
+    "description": "Accessible name of the control that drops a saved radio song."
+  },
+  "playerGoToName": "Go to {name}",
+  "@playerGoToName": {
+    "description": "Accessible name of the control opening the show a playing episode belongs to. {name} is the show's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Song Exploder"
+      }
+    }
+  },
+  "playerGoToShow": "Go to show",
+  "@playerGoToShow": {
+    "description": "Menu item that opens the show the playing episode belongs to."
+  },
+  "playerIdleMessage": "Pick something from your library and it shows up here.",
+  "@playerIdleMessage": {
+    "description": "Under the idle heading on the full player."
+  },
+  "playerInstantMix": "Instant mix",
+  "@playerInstantMix": {
+    "description": "Menu item that builds a queue around what is playing."
+  },
+  "playerLeaveCarMode": "Leave car mode",
+  "@playerLeaveCarMode": {
+    "description": "Button that closes car mode."
+  },
+  "playerLeaveVisualizer": "Leave the visualizer",
+  "@playerLeaveVisualizer": {
+    "description": "Accessible name of the control that closes the visualizer."
+  },
+  "playerLeftCount": "{count, plural, =1{1 left} other{{count} left}}",
+  "@playerLeftCount": {
+    "description": "How many tracks remain after the ones listed under Up next.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "playerLyrics": "Lyrics",
+  "@playerLyrics": {
+    "description": "Opens the lyrics of what is playing."
+  },
+  "playerLyricsError": "Could not load the lyrics",
+  "@playerLyricsError": {
+    "description": "Title of the error state when lyrics could not be read."
+  },
+  "playerLyricsIdleMessage": "Words show up here once something is.",
+  "@playerLyricsIdleMessage": {
+    "description": "Under the idle heading on the lyrics panel. It finishes the heading's sentence, which says nothing is playing."
+  },
+  "playerMarkPlayed": "Mark as played",
+  "@playerMarkPlayed": {
+    "description": "Menu item that marks the playing episode finished."
+  },
+  "playerMiniWindow": "Mini player window",
+  "@playerMiniWindow": {
+    "description": "Sheet row that puts playback in a small always-on-top window."
+  },
+  "playerMoreLikeThis": "More like this",
+  "@playerMoreLikeThis": {
+    "description": "Menu offering the two ways of finding music like what is playing."
+  },
+  "playerNext": "Next",
+  "@playerNext": {
+    "description": "Accessible name of the control that steps forward a track."
+  },
+  "playerNoLyrics": "No lyrics for this track",
+  "@playerNoLyrics": {
+    "description": "Heading when the playing track carries no lyrics."
+  },
+  "playerNoLyricsAdminMessage": "Nothing was found in a sidecar or in the file tags. You can add them in the metadata editor.",
+  "@playerNoLyricsAdminMessage": {
+    "description": "Under the no-lyrics heading, for somebody who may edit the library."
+  },
+  "playerNoLyricsMessage": "Nothing was found in a sidecar or in the file tags.",
+  "@playerNoLyricsMessage": {
+    "description": "Under the no-lyrics heading. A sidecar is a small file stored beside the audio."
+  },
+  "playerNoShape": "No shape to draw",
+  "@playerNoShape": {
+    "description": "Heading when the playing file has no measured waveform."
+  },
+  "playerNoShapeMessage": "The visualizer draws what the analyze pass measured, and this file has not been measured. Run an analyze pass on the library and it fills in.",
+  "@playerNoShapeMessage": {
+    "description": "Under the no-shape heading, saying what would fill it."
+  },
+  "playerNothingPlaying": "Nothing is playing",
+  "@playerNothingPlaying": {
+    "description": "Heading of every idle playback surface: the player, car mode, the visualizer, and the lyrics panel. Each says something different underneath it."
+  },
+  "playerOfferQueued": "{count, plural, =1{1 queued item} other{{count} queued items}}",
+  "@playerOfferQueued": {
+    "description": "Names a queue offered for resuming when its first item has not resolved, so the count is all there is to say.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "14"
+      }
+    }
+  },
+  "playerOfferResume": "Pick up where you left off",
+  "@playerOfferResume": {
+    "description": "Under the offer to resume an earlier queue."
+  },
+  "playerOpenPlayer": "Open the player",
+  "@playerOpenPlayer": {
+    "description": "Sheet row that opens the full player."
+  },
+  "playerPart": "Part {number}",
+  "@playerPart": {
+    "description": "Heading over the chapters of one part of a multi-part book.",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "playerPause": "Pause",
+  "@playerPause": {
+    "description": "Accessible name of the control that pauses playback."
+  },
+  "playerPinStation": "Pin to the dial",
+  "@playerPinStation": {
+    "description": "Accessible name of the control that keeps a station among the favourites. The dial is the radio screen's own name for that row."
+  },
+  "playerPlay": "Play",
+  "@playerPlay": {
+    "description": "Accessible name of the control that resumes playback."
+  },
+  "playerPrevious": "Previous",
+  "@playerPrevious": {
+    "description": "Accessible name of the control that steps back a track."
+  },
+  "playerQueue": "Queue",
+  "@playerQueue": {
+    "description": "Opens the queue of what plays next."
+  },
+  "playerRatingFailed": "Could not save that change",
+  "@playerRatingFailed": {
+    "description": "Message when a star rating did not reach the server. The control has already moved back, so this is what says why."
+  },
+  "playerSaveSong": "Save this song",
+  "@playerSaveSong": {
+    "description": "Accessible name of the control that keeps the song a radio station is playing."
+  },
+  "playerSeekSpans": "Seek bar spans",
+  "@playerSeekSpans": {
+    "description": "Accessible name of the control choosing whether the seek bar covers the chapter or the whole book."
+  },
+  "playerShareLink": "Share link",
+  "@playerShareLink": {
+    "description": "Menu item that mints a public link to what is playing."
+  },
+  "playerSimilarTracks": "Similar tracks",
+  "@playerSimilarTracks": {
+    "description": "Menu item that lists tracks that sound like what is playing."
+  },
+  "playerSleepTimer": "Sleep timer",
+  "@playerSleepTimer": {
+    "description": "Accessible name of the sleep timer control while no timer is running."
+  },
+  "playerSleepTimerLeft": "Sleep timer, {time} left",
+  "@playerSleepTimerLeft": {
+    "description": "Accessible name of the sleep timer control while one is running. {time} is an already-worded duration.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "12 min"
+      }
+    }
+  },
+  "playerSlower": "Slower",
+  "@playerSlower": {
+    "description": "Button that steps playback speed down."
+  },
+  "playerSpanBook": "Book",
+  "@playerSpanBook": {
+    "description": "Seek bar covering the whole book."
+  },
+  "playerSpanChapter": "Chapter",
+  "@playerSpanChapter": {
+    "description": "Seek bar covering the current chapter alone."
+  },
+  "playerSpeed": "Playback speed",
+  "@playerSpeed": {
+    "description": "Heads the sheet setting how fast playback runs."
+  },
+  "playerSpeedAt": "Playback speed {speed}",
+  "@playerSpeedAt": {
+    "description": "Accessible name of the chip showing the current speed, which draws the number alone.",
+    "placeholders": {
+      "speed": {
+        "type": "String",
+        "example": "1.5x"
+      }
+    }
+  },
+  "playerSpeedRememberedBook": "Remembered for this book",
+  "@playerSpeedRememberedBook": {
+    "description": "Under the speed controls, saying the chosen speed is stored against this book rather than lasting only while it plays."
+  },
+  "playerSpeedRememberedShow": "Remembered for this show",
+  "@playerSpeedRememberedShow": {
+    "description": "Under the speed controls, saying the chosen speed is stored against this show."
+  },
+  "playerSpeedThisSession": "For this session only",
+  "@playerSpeedThisSession": {
+    "description": "Under the speed controls for music, where the speed is not stored."
+  },
+  "playerStar": "Star",
+  "@playerStar": {
+    "description": "Accessible name of the control that marks the playing track a favourite. Agrees with the word for a track in this language."
+  },
+  "playerStarRating": "{count} star rating",
+  "@playerStarRating": {
+    "description": "Accessible name of one star in the five-star row: the rating it would set.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
+      }
+    }
+  },
+  "playerStarRatingOf": "{count} star {kind} rating",
+  "@playerStarRatingOf": {
+    "description": "Accessible name of one star in an album's or artist's rating row. {kind} is the already-worded noun for what it is.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
+      },
+      "kind": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "playerStarThis": "Star this {kind}",
+  "@playerStarThis": {
+    "description": "Accessible name of the control that marks an album or an artist a favourite. {kind} is the already-worded noun for what it is.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "playerStart": "Start",
+  "@playerStart": {
+    "description": "Button that starts the typed sleep-timer length."
+  },
+  "playerStartFailed": "Playback failed to start",
+  "@playerStartFailed": {
+    "description": "Under the player's error heading when the failure came from the audio engine rather than from the server, so there is no code to translate."
+  },
+  "playerStationMenu": "More for {station}",
+  "@playerStationMenu": {
+    "description": "Accessible name of the menu holding what can be done with the playing radio station.",
+    "placeholders": {
+      "station": {
+        "type": "String",
+        "example": "FIP"
+      }
+    }
+  },
+  "playerStationWebsite": "Station website",
+  "@playerStationWebsite": {
+    "description": "Menu item that opens the station's own page in a browser."
+  },
+  "playerStopped": "Playback stopped",
+  "@playerStopped": {
+    "description": "Title of the player's error state."
+  },
+  "playerSupportShow": "Support the show",
+  "@playerSupportShow": {
+    "description": "Menu item opening a podcast's own funding page. Only drawn where the feed names one, and the feed's own wording wins when it gives one."
+  },
+  "playerTimerChapterEnd": "End of chapter",
+  "@playerTimerChapterEnd": {
+    "description": "Sleep timer option that stops when the current chapter ends."
+  },
+  "playerTimerCustom": "Custom minutes",
+  "@playerTimerCustom": {
+    "description": "Field for a sleep-timer length of the listener's own."
+  },
+  "playerTimerCustomStart": "Start custom timer",
+  "@playerTimerCustomStart": {
+    "description": "Accessible name of the button that starts the typed sleep-timer length."
+  },
+  "playerTimerLeft": "{time} left",
+  "@playerTimerLeft": {
+    "description": "Under the extend row in the sleep timer sheet, saying how much of the timer is left. {time} is an already-worded duration.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "12 min"
+      }
+    }
+  },
+  "playerTimerMinutes": "{count, plural, =1{1 minute} other{{count} minutes}}",
+  "@playerTimerMinutes": {
+    "description": "One of the offered sleep-timer lengths.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "playerTranscriptError": "Could not load the transcript.",
+  "@playerTranscriptError": {
+    "description": "Drawn in the transcript panel when the read failed for a reason the error table has no sentence for."
+  },
+  "playerTrimExplained": "Silence trimming skips the mapped quiet parts of an episode. Positions stay honest; the chip counts what it skipped.",
+  "@playerTrimExplained": {
+    "description": "Shown once, the first time silence trimming is turned on."
+  },
+  "playerTrimSilence": "Trim silence",
+  "@playerTrimSilence": {
+    "description": "Control that skips the quiet parts of a spoken recording."
+  },
+  "playerTrimSilenceSaved": "Trim silence ({saved})",
+  "@playerTrimSilenceSaved": {
+    "description": "The trim control once it has saved some listening time. {saved} is an already-worded duration.",
+    "placeholders": {
+      "saved": {
+        "type": "String",
+        "example": "12 min"
+      }
+    }
+  },
+  "playerUnpinStation": "Unpin from the dial",
+  "@playerUnpinStation": {
+    "description": "Accessible name of the control that drops a station from the favourites."
+  },
+  "playerUnstar": "Unstar",
+  "@playerUnstar": {
+    "description": "Accessible name of the control that unmarks the playing track. Agrees with the word for a track in this language."
+  },
+  "playerUnstarThis": "Unstar this {kind}",
+  "@playerUnstarThis": {
+    "description": "Accessible name of the control that unmarks an album or an artist. {kind} is the already-worded noun for what it is.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "playerUpNext": "UP NEXT",
+  "@playerUpNext": {
+    "description": "Heading over what plays after the current track. Upper case as a typographic style; write it the way small headings are written in this language."
+  },
+  "playerUpNextItem": "Up next, {title}",
+  "@playerUpNextItem": {
+    "description": "Accessible name of the up-next peek, naming what plays next.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Blue in Green"
+      }
+    }
+  },
+  "playerUpNextLabel": "Up next",
+  "@playerUpNextLabel": {
+    "description": "Accessible name of the up-next peek when the next track has not resolved yet."
+  },
+  "playerVisualizer": "Visualizer",
+  "@playerVisualizer": {
+    "description": "Menu item that opens the screen drawing the track's shape."
+  },
+  "playerVisualizerIdleMessage": "Start a track and its shape shows up here.",
+  "@playerVisualizerIdleMessage": {
+    "description": "Under the idle heading on the visualizer."
+  },
+  "playerVisualizerMode": "Visualizer mode",
+  "@playerVisualizerMode": {
+    "description": "Accessible name of the control choosing how the visualizer draws."
+  },
+  "playerVoiceBoost": "Voice boost",
+  "@playerVoiceBoost": {
+    "description": "Control that lifts speech out of the rest of the sound."
+  },
+  "playerVoiceBoostExplained": "Voice boost evens out a quiet or uneven recording. The server applies it, so what is playing reopens.",
+  "@playerVoiceBoostExplained": {
+    "description": "Shown once, the first time voice boost is turned on. It warns that playback restarts, because the server is what applies the effect."
+  },
+  "playerVoiceBoostFailed": "The settings for this show could not be reached, so voice boost was not changed.",
+  "@playerVoiceBoostFailed": {
+    "description": "Message when a voice-boost toggle did not reach the server. The setting belongs to the show, so it is stored rather than local."
+  },
+  "playerVolume": "Volume",
+  "@playerVolume": {
+    "description": "Accessible name of the volume slider."
+  },
+  "queueAddedMany": "Added {count} tracks to the queue",
+  "@queueAddedMany": {
+    "description": "Message after several tracks were dropped onto the queue at once. Never drawn for one, which names the track instead.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "queueAddedOne": "Added {title} to the queue",
+  "@queueAddedOne": {
+    "description": "Message after one track was dropped onto the queue.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Blue in Green"
+      }
+    }
+  },
+  "queueClear": "Clear queue",
+  "@queueClear": {
+    "description": "Accessible name of the control that empties the queue."
+  },
+  "queueClearSelection": "Clear the queue selection",
+  "@queueClearSelection": {
+    "description": "Command that unselects the queue rows that are selected, in the command palette and the shortcut sheet."
+  },
+  "queueClearSelectionAction": "Clear",
+  "@queueClearSelectionAction": {
+    "description": "Button that unselects the selected queue rows. It clears the selection, not the queue."
+  },
+  "queueDragToReorder": "Drag to reorder",
+  "@queueDragToReorder": {
+    "description": "Accessible name of the handle that reorders queued tracks by dragging."
+  },
+  "queueDropNothing": "{name} has nothing to play",
+  "@queueDropNothing": {
+    "description": "Message after something was dragged onto the queue and turned out to hold no tracks. {name} is what was dropped.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Live at Leeds"
+      }
+    }
+  },
+  "queueEarlier": "EARLIER",
+  "@queueEarlier": {
+    "description": "Heading over the queues from earlier listening sessions. Upper case as a typographic style; write it the way small headings are written in this language."
+  },
+  "queueEmptyMessage": "Play an album, a show, or a playlist and it lands here.",
+  "@queueEmptyMessage": {
+    "description": "Empty state of the queue, saying what fills it."
+  },
+  "queueEmptyTitle": "Nothing queued",
+  "@queueEmptyTitle": {
+    "description": "Empty state of the queue."
+  },
+  "queueHideHistory": "Hide what has played",
+  "@queueHideHistory": {
+    "description": "Accessible name of the control that folds away the already-played rows."
+  },
+  "queueMoveDown": "Move down",
+  "@queueMoveDown": {
+    "description": "Screen-reader action that moves one queued track later."
+  },
+  "queueMoveToBottom": "Move to bottom",
+  "@queueMoveToBottom": {
+    "description": "Button that moves the selected rows to the end of the queue."
+  },
+  "queueMoveToTop": "Move to top",
+  "@queueMoveToTop": {
+    "description": "Button that moves the selected rows to the front of the queue."
+  },
+  "queueMoveUp": "Move up",
+  "@queueMoveUp": {
+    "description": "Screen-reader action that moves one queued track earlier."
+  },
+  "queueNothingUpNext": "NOTHING UP NEXT",
+  "@queueNothingUpNext": {
+    "description": "Heading where the up-next list would be when the queue holds nothing after the current track. Upper case as a typographic style; write it the way small headings are written in this language."
+  },
+  "queuePlayingFrom": "Playing from {source}",
+  "@queuePlayingFrom": {
+    "description": "Where a queue came from, over the queue itself. {source} is the album, show, or playlist's own name.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Kind of Blue"
+      }
+    }
+  },
+  "queuePreviously": "PREVIOUSLY ({count})",
+  "@queuePreviously": {
+    "description": "Heading over the tracks already played in this queue, with how many. Upper case as a typographic style; write it the way small headings are written in this language.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "8"
+      }
+    }
+  },
+  "queueRemove": "Remove",
+  "@queueRemove": {
+    "description": "Button that takes the selected rows out of the queue."
+  },
+  "queueRemoveEntry": "Remove from queue",
+  "@queueRemoveEntry": {
+    "description": "Accessible name of the control that takes one row out of the queue."
+  },
+  "queueRepeatAll": "Repeat all",
+  "@queueRepeatAll": {
+    "description": "Accessible name of the repeat control while it repeats the whole queue."
+  },
+  "queueRepeatOff": "Repeat off",
+  "@queueRepeatOff": {
+    "description": "Accessible name of the repeat control while it repeats nothing."
+  },
+  "queueRepeatOne": "Repeat one",
+  "@queueRepeatOne": {
+    "description": "Accessible name of the repeat control while it repeats the current track. Agrees with the word for a track in this language."
+  },
+  "queueRestoreSession": "Restore {name}",
+  "@queueRestoreSession": {
+    "description": "Accessible name of the control that puts an earlier queue back. {name} is what that session was playing.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Kind of Blue"
+      }
+    }
+  },
+  "queueRestored": "Restored {name}",
+  "@queueRestored": {
+    "description": "Message after an earlier queue was put back. It is put back paused, so nothing starts playing.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Kind of Blue"
+      }
+    }
+  },
+  "queueRollingWindow": "A window over a larger scope",
+  "@queueRollingWindow": {
+    "description": "Under a rolling queue, saying that what is listed is part of something bigger rather than the whole of it."
+  },
+  "queueSelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@queueSelectedCount": {
+    "description": "How many queue rows are selected, over the controls that act on them. Agrees with the word for a track in this language.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "queueShowHistory": "Show what has played",
+  "@queueShowHistory": {
+    "description": "Accessible name of the control that unfolds the already-played rows."
+  },
+  "queueShuffleOff": "Shuffle off",
+  "@queueShuffleOff": {
+    "description": "Accessible name of the shuffle control while shuffle is off."
+  },
+  "queueShuffleOn": "Shuffle on",
+  "@queueShuffleOn": {
+    "description": "Accessible name of the shuffle control while shuffle is on."
+  },
+  "queueUndo": "Undo",
+  "@queueUndo": {
+    "description": "Button on the restore message that puts the previous queue back."
   },
   "relDaysAgo": "{days, plural, =1{1 d ago} other{{days} d ago}}",
   "@relDaysAgo": {
@@ -1860,5 +5568,167 @@
         "example": "1.5"
       }
     }
+  },
+  "toolsClearFinished": "Clear finished",
+  "@toolsClearFinished": {
+    "description": "Button that removes every finished task from the list at once."
+  },
+  "toolsDismiss": "Dismiss",
+  "@toolsDismiss": {
+    "description": "Accessible name of the control that removes one finished task from the list."
+  },
+  "toolsEmptyMessage": "Merges, splits, downloads, and imports report their progress here while they run and land here when they finish.",
+  "@toolsEmptyMessage": {
+    "description": "Empty state of the tool task list, naming what turns up in it."
+  },
+  "toolsEmptyTitle": "No tool tasks",
+  "@toolsEmptyTitle": {
+    "description": "Empty state of the tool task list."
+  },
+  "toolsFinishedTapForReport": "Finished · tap for the report",
+  "@toolsFinishedTapForReport": {
+    "description": "Line under a finished task that produced no items but stored a report."
+  },
+  "toolsItemsProduced": "{count} items produced · tap to open",
+  "@toolsItemsProduced": {
+    "description": "Line under a finished task that produced several items. It is never drawn for one, which has a line of its own.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
+      }
+    }
+  },
+  "toolsLoadError": "Could not load tool tasks",
+  "@toolsLoadError": {
+    "description": "Title of the error state when the task list could not be read."
+  },
+  "toolsOpenReviewQueue": "Open the review queue",
+  "@toolsOpenReviewQueue": {
+    "description": "Line under a finished download, whose results wait in the review queue."
+  },
+  "toolsProduced": "produced {pids}",
+  "@toolsProduced": {
+    "description": "Names what a task produced, on the row's identifier line. {pids} is a comma-separated run of item identifiers and is not translated.",
+    "placeholders": {
+      "pids": {
+        "type": "String",
+        "example": "al-01JZX5N8QW, al-01JZX5N8QX"
+      }
+    }
+  },
+  "toolsReadyForReview": "{count, plural, =1{1 ready for review} other{{count} ready for review}}",
+  "@toolsReadyForReview": {
+    "description": "Line under a finished download, counting what it left in the review queue.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "toolsStateDone": "Done",
+  "@toolsStateDone": {
+    "description": "State of a task that finished. Agrees with the word for a task in this language."
+  },
+  "toolsStateFailed": "Failed",
+  "@toolsStateFailed": {
+    "description": "State of a task that did not finish. Agrees with the word for a task in this language."
+  },
+  "toolsStateQueued": "Queued",
+  "@toolsStateQueued": {
+    "description": "State of a task waiting its turn."
+  },
+  "toolsStateRunning": "Running",
+  "@toolsStateRunning": {
+    "description": "State of a task in flight, when it reports no percentage."
+  },
+  "toolsStateRunningPct": "Running · {percent}%",
+  "@toolsStateRunningPct": {
+    "description": "State of a task in flight that reports how far along it is.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "toolsSummaryListens": "listens {count}",
+  "@toolsSummaryListens": {
+    "description": "Headline counter from a task's report, counting listening records it carried across. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "3204"
+      }
+    }
+  },
+  "toolsSummaryMatched": "matched {count}",
+  "@toolsSummaryMatched": {
+    "description": "Headline counter from a task's report. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "412"
+      }
+    }
+  },
+  "toolsSummaryUnmatched": "unmatched {count}",
+  "@toolsSummaryUnmatched": {
+    "description": "Headline counter from a task's report. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "18"
+      }
+    }
+  },
+  "toolsTapForReport": "Tap for the report",
+  "@toolsTapForReport": {
+    "description": "Line under a failed task that still stored a report worth reading."
+  },
+  "toolsTapToOpenResult": "Tap to open what it produced",
+  "@toolsTapToOpenResult": {
+    "description": "Line under a finished task that produced exactly one item."
+  },
+  "toolsTaskAcquire": "URL download",
+  "@toolsTaskAcquire": {
+    "description": "Name of the task that fetches audio from a web address."
+  },
+  "toolsTaskBookMerge": "Book merge",
+  "@toolsTaskBookMerge": {
+    "description": "Name of the task that joins several audiobook files into one book."
+  },
+  "toolsTaskBookSplit": "Book split",
+  "@toolsTaskBookSplit": {
+    "description": "Name of the task that breaks one audiobook into its parts."
+  },
+  "toolsTaskCueSplit": "CUE split",
+  "@toolsTaskCueSplit": {
+    "description": "Name of the task that cuts one long audio file into tracks using its CUE sheet. CUE is a file format and stays as it is."
+  },
+  "toolsTaskImportFrom": "Import from {source}",
+  "@toolsTaskImportFrom": {
+    "description": "Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Navidrome"
+      }
+    }
+  },
+  "toolsTasksCleared": "{count, plural, =1{Cleared 1 task} other{Cleared {count} tasks}}",
+  "@toolsTasksCleared": {
+    "description": "Message after finished tasks were swept, saying how many went.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "7"
+      }
+    }
+  },
+  "toolsTitle": "Tool tasks",
+  "@toolsTitle": {
+    "description": "Title of the screen following long-running library work: merges, splits, downloads, imports."
   }
 }

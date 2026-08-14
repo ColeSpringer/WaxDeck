@@ -7,6 +7,7 @@ import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../health/health_controller.dart';
+import '../l10n/l10n.dart';
 import '../settings/client_prefs.dart';
 import '../settings/settings_registry.dart';
 import '../shell/routes.dart';
@@ -169,6 +170,7 @@ class FirstRunCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final number = step.index + 1;
     return Semantics(
       identifier: SemanticsIds.adminWizard,
@@ -187,14 +189,14 @@ class FirstRunCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  'Step $number of 3',
+                  l10n.adminWizardStepOf(number),
                   style: WaxType.overline.copyWith(color: colors.accent),
                 ),
                 const SizedBox(height: WaxSpace.s8),
-                Text(_title(step), style: WaxType.headline),
+                Text(_title(l10n, step), style: WaxType.headline),
                 const SizedBox(height: WaxSpace.s8),
                 Text(
-                  _blurb(step),
+                  _blurb(l10n, step),
                   style: WaxType.body.copyWith(color: colors.textSecondary),
                 ),
                 const SizedBox(height: WaxSpace.s20),
@@ -204,7 +206,7 @@ class FirstRunCard extends ConsumerWidget {
                   children: <Widget>[
                     ..._actions(context, ref),
                     WaxButton(
-                      label: 'Skip the tour',
+                      label: l10n.adminWizardSkip,
                       kind: WaxButtonKind.text,
                       semanticsId: SemanticsIds.adminWizardSkip,
                       onPressed: () =>
@@ -220,59 +222,55 @@ class FirstRunCard extends ConsumerWidget {
     );
   }
 
-  static String _title(FirstRunStep step) => switch (step) {
-    FirstRunStep.addLibrary => 'Point WaxDeck at your music',
-    FirstRunStep.scan => 'Read what is there',
-    FirstRunStep.warming => 'While it warms up',
-  };
+  static String _title(AppLocalizations l10n, FirstRunStep step) =>
+      switch (step) {
+        FirstRunStep.addLibrary => l10n.adminWizardAddLibraryTitle,
+        FirstRunStep.scan => l10n.adminWizardScanTitle,
+        FirstRunStep.warming => l10n.adminWizardWarmingTitle,
+      };
 
-  static String _blurb(FirstRunStep step) => switch (step) {
-    FirstRunStep.addLibrary =>
-      'A library is a folder WaxDeck reads. Add one and everything else '
-          'on this page starts having something to say.',
-    FirstRunStep.scan =>
-      'A scan indexes the files, pulls their tags, and identifies the '
-          'albums it recognises. It runs in the background: you can leave '
-          'this page.',
-    FirstRunStep.warming =>
-      'Files appear as they are indexed, and artwork, matching, and the '
-          'health score fill in behind them. Two things worth doing '
-          'meanwhile: invite the people who will listen, and look in on '
-          'the albums the matcher was unsure of.',
-  };
+  static String _blurb(AppLocalizations l10n, FirstRunStep step) =>
+      switch (step) {
+        FirstRunStep.addLibrary => l10n.adminWizardAddLibraryBlurb,
+        FirstRunStep.scan => l10n.adminWizardScanBlurb,
+        FirstRunStep.warming => l10n.adminWizardWarmingBlurb,
+      };
 
-  List<Widget> _actions(BuildContext context, WidgetRef ref) => switch (step) {
-    FirstRunStep.addLibrary => <Widget>[
-      WaxButton(
-        label: 'Add a library',
-        icon: WaxIcons.albums,
-        semanticsId: SemanticsIds.adminAction('add-library'),
-        onPressed: () => context.go(WaxRoute.libraries),
-      ),
-    ],
-    FirstRunStep.scan => <Widget>[
-      WaxButton(
-        label: 'Scan library',
-        icon: WaxIcons.refresh,
-        semanticsId: SemanticsIds.adminAction('scan'),
-        onPressed: () => startLibraryScan(ref),
-      ),
-    ],
-    FirstRunStep.warming => <Widget>[
-      WaxButton(
-        label: 'Invite listeners',
-        icon: WaxIcons.artists,
-        kind: WaxButtonKind.tonal,
-        semanticsId: SemanticsIds.adminAction('users'),
-        onPressed: () => context.go(WaxRoute.users),
-      ),
-      WaxButton(
-        label: 'Review queue',
-        icon: WaxIcons.check,
-        kind: WaxButtonKind.tonal,
-        semanticsId: SemanticsIds.adminAction('review'),
-        onPressed: () => context.go(WaxRoute.review),
-      ),
-    ],
-  };
+  List<Widget> _actions(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    return switch (step) {
+      FirstRunStep.addLibrary => <Widget>[
+        WaxButton(
+          label: l10n.adminWizardAddLibraryAction,
+          icon: WaxIcons.albums,
+          semanticsId: SemanticsIds.adminAction('add-library'),
+          onPressed: () => context.go(WaxRoute.libraries),
+        ),
+      ],
+      FirstRunStep.scan => <Widget>[
+        WaxButton(
+          label: l10n.adminScanLibrary,
+          icon: WaxIcons.refresh,
+          semanticsId: SemanticsIds.adminAction('scan'),
+          onPressed: () => startLibraryScan(ref),
+        ),
+      ],
+      FirstRunStep.warming => <Widget>[
+        WaxButton(
+          label: l10n.adminWizardInvite,
+          icon: WaxIcons.artists,
+          kind: WaxButtonKind.tonal,
+          semanticsId: SemanticsIds.adminAction('users'),
+          onPressed: () => context.go(WaxRoute.users),
+        ),
+        WaxButton(
+          label: l10n.adminSectionReview,
+          icon: WaxIcons.check,
+          kind: WaxButtonKind.tonal,
+          semanticsId: SemanticsIds.adminAction('review'),
+          onPressed: () => context.go(WaxRoute.review),
+        ),
+      ],
+    };
+  }
 }

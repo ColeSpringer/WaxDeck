@@ -2,16 +2,17 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/providers.dart';
-import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
-import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_panel.dart';
+import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_screen.dart';
-import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/queue/queue_state.dart' as queue_state;
+import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/queue/queue_view.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
+import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
@@ -99,7 +100,11 @@ Widget _keyboardHost(Widget screen) {
     ],
   );
   addTearDown(router.dispose);
-  return MaterialApp.router(routerConfig: router);
+  return MaterialApp.router(
+    routerConfig: router,
+    localizationsDelegates: waxLocalizationsDelegates,
+    supportedLocales: waxSupportedLocales,
+  );
 }
 
 List<String> _rowTitles(WidgetTester tester) => tester

@@ -19,23 +19,25 @@ import 'health_labels.dart';
 class HealthScreen extends ConsumerWidget {
   const HealthScreen({super.key});
 
-  Future<void> _fix(WidgetRef ref, String rule) async {
+  Future<void> _fix(BuildContext context, WidgetRef ref, String rule) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final queued = await ref.read(healthProvider.notifier).fix(rule);
-      messenger.show('Queued $queued items');
+      messenger.show(l10n.healthQueuedItems(queued));
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
-  Future<void> _sweep(WidgetRef ref) async {
+  Future<void> _sweep(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(healthProvider.notifier).sweep();
-      messenger.show('Sweep queued');
+      messenger.show(l10n.healthSweepQueued);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -44,15 +46,14 @@ class HealthScreen extends ConsumerWidget {
     WidgetRef ref,
     DuplicateGroup group,
   ) async {
+    final l10n = context.l10n;
     final losers = group.losers.map((l) => '"${l.name}"').join(', ');
     final confirmed = await showTypedConfirm(
       context,
-      title: 'Merge duplicates?',
-      message:
-          '$losers will merge into "${group.survivor.name}". Their items '
-          'move under the survivor, and the merge cannot be undone.',
-      confirmWord: 'merge',
-      confirmLabel: 'Merge',
+      title: l10n.healthMergeTitle,
+      message: l10n.healthMergeBody(losers, group.survivor.name),
+      confirmWord: l10n.healthMergeWord,
+      confirmLabel: l10n.healthMergeAction,
       fieldSemanticsId: SemanticsIds.confirmField,
       confirmSemanticsId: SemanticsIds.confirmAccept,
       cancelSemanticsId: SemanticsIds.confirmCancel,
@@ -61,9 +62,9 @@ class HealthScreen extends ConsumerWidget {
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final outcome = await ref.read(duplicatesProvider.notifier).merge(group);
-      messenger.show('Merged ${outcome.merged} entries');
+      messenger.show(l10n.healthMerged(outcome.merged));
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -72,14 +73,13 @@ class HealthScreen extends ConsumerWidget {
     WidgetRef ref,
     UpgradeGroup group,
   ) async {
+    final l10n = context.l10n;
     final confirmed = await showTypedConfirm(
       context,
-      title: 'Keep the best version?',
-      message:
-          'The other versions move to the server trash and can be restored '
-          'until the trash window closes.',
-      confirmWord: 'resolve',
-      confirmLabel: 'Resolve',
+      title: l10n.healthResolveTitle,
+      message: l10n.healthResolveBody,
+      confirmWord: l10n.healthResolveWord,
+      confirmLabel: l10n.healthResolveAction,
       fieldSemanticsId: SemanticsIds.confirmField,
       confirmSemanticsId: SemanticsIds.confirmAccept,
       cancelSemanticsId: SemanticsIds.confirmCancel,
@@ -88,15 +88,16 @@ class HealthScreen extends ConsumerWidget {
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final trashed = await ref.read(upgradesProvider.notifier).resolve(group);
-      messenger.show('Trashed $trashed files');
+      messenger.show(l10n.healthTrashedFiles(trashed));
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final health = ref.watch(healthProvider);
     final isAdmin =
         ref
@@ -107,7 +108,7 @@ class HealthScreen extends ConsumerWidget {
             .contains('admin') ??
         false;
     return WaxScaffold(
-      title: 'Library health',
+      title: l10n.adminTileHealth,
       largeTitle: false,
       semanticsId: SemanticsIds.adminHealth,
       onBack: adminBack(context),
@@ -115,9 +116,9 @@ class HealthScreen extends ConsumerWidget {
         if (isAdmin)
           WaxIconButton(
             glyph: WaxIcons.refresh,
-            label: 'Sweep now',
+            label: l10n.healthSweepNow,
             semanticsId: SemanticsIds.healthSweep,
-            onPressed: () => _sweep(ref),
+            onPressed: () => _sweep(context, ref),
           ),
       ],
       body: Padding(
@@ -127,10 +128,8 @@ class HealthScreen extends ConsumerWidget {
         child: switch (health) {
           AsyncData(:final value) => _body(context, ref, value),
           AsyncError(:final error) => ErrorState(
-            title: 'Could not load library health',
-            message: error is WaxDeckApiException
-                ? error.message
-                : 'Something went wrong reading it.',
+            title: l10n.healthLoadError,
+            message: context.explain(error),
             onRetry: () => ref.invalidate(healthProvider),
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -145,13 +144,13 @@ class HealthScreen extends ConsumerWidget {
       children: <Widget>[
         _ScoreHeadline(summary: summary),
         const SizedBox(height: WaxSpace.s32),
-        const SectionHeader(
-          title: 'Rules',
-          overline: 'What the sweeper checks',
+        SectionHeader(
+          title: context.l10n.healthRulesTitle,
+          overline: context.l10n.healthRulesOverline,
         ),
         _RuleTable(
           rules: summary.rules,
-          onFix: (rule) => _fix(ref, rule),
+          onFix: (rule) => _fix(context, ref, rule),
           onOpen: (rule) => context.go(WaxRoute.healthRule(rule)),
         ),
         const SizedBox(height: WaxSpace.s32),
@@ -181,6 +180,7 @@ class _ScoreHeadline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     if (summary.warmingUp) {
       final progress = summary.totalItems == 0
           ? 0.0
@@ -208,15 +208,17 @@ class _ScoreHeadline extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Still warming up',
+                      l10n.adminWarmingUp,
                       style: WaxType.headline.copyWith(
                         color: colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: WaxSpace.s4),
                     Text(
-                      'Evaluated ${summary.evaluatedItems} of '
-                      '${summary.totalItems} items',
+                      l10n.healthEvaluatedOf(
+                        summary.evaluatedItems,
+                        summary.totalItems,
+                      ),
                       style: WaxType.body.copyWith(color: colors.textSecondary),
                     ),
                   ],
@@ -233,7 +235,7 @@ class _ScoreHeadline extends StatelessWidget {
         children: <Widget>[
           Semantics(
             identifier: SemanticsIds.healthScore,
-            label: 'Health score $score',
+            label: l10n.healthScoreSpoken(score),
             excludeSemantics: true,
             child: Text(
               '$score',
@@ -245,8 +247,7 @@ class _ScoreHeadline extends StatelessWidget {
           const SizedBox(width: WaxSpace.s20),
           Expanded(
             child: Text(
-              'Library health across ${summary.evaluatedItems} evaluated '
-              'items',
+              l10n.healthScoreBlurb(summary.evaluatedItems),
               style: WaxType.body.copyWith(color: colors.textSecondary),
             ),
           ),
@@ -296,14 +297,14 @@ class _RuleTable extends StatelessWidget {
       rowId: (rule) => rule.rule,
       rowSemanticsId: SemanticsIds.health,
       onRowTap: (rule) => onOpen(rule.rule),
-      empty: const EmptyState(
+      empty: EmptyState(
         glyph: WaxIcons.success,
-        title: 'Nothing to check yet',
-        message: 'Rules appear once the sweeper has evaluated the library.',
+        title: l10n.healthRulesEmptyTitle,
+        message: l10n.healthRulesEmptyMessage,
       ),
       columns: <WaxColumn<HealthRuleCount>>[
         WaxColumn<HealthRuleCount>(
-          label: 'Rule',
+          label: l10n.healthColumnRule,
           priority: WaxColumnPriority.primary,
           text: (rule) => healthRuleLabel(l10n, rule),
           cell: (context, rule) => Text(
@@ -313,7 +314,7 @@ class _RuleTable extends StatelessWidget {
           ),
         ),
         WaxColumn<HealthRuleCount>(
-          label: 'Failing',
+          label: l10n.healthColumnFailing,
           width: 96,
           numeric: true,
           text: (rule) => '${rule.failing}',
@@ -346,18 +347,19 @@ class _DuplicatesSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final duplicates = ref.watch(duplicatesProvider);
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(
-          title: 'Duplicates',
-          overline: 'One thing under two names',
+        SectionHeader(
+          title: l10n.healthDuplicatesTitle,
+          overline: l10n.healthDuplicatesOverline,
         ),
         switch (duplicates) {
-          AsyncData(:final value) when value.isEmpty => const EmptyState(
+          AsyncData(:final value) when value.isEmpty => EmptyState(
             glyph: WaxIcons.success,
-            title: 'No duplicates detected',
-            message: 'Artists, albums, and shows each appear once.',
+            title: l10n.healthDuplicatesEmptyTitle,
+            message: l10n.healthDuplicatesEmptyMessage,
           ),
           AsyncData(:final value) => WaxTable<DuplicateGroup>(
             rows: value,
@@ -366,7 +368,7 @@ class _DuplicatesSection extends ConsumerWidget {
             rowDetailSemanticsId: SemanticsIds.duplicateDetail,
             columns: <WaxColumn<DuplicateGroup>>[
               WaxColumn<DuplicateGroup>(
-                label: 'Survivor',
+                label: l10n.healthColumnSurvivor,
                 priority: WaxColumnPriority.primary,
                 text: (group) => group.survivor.name,
                 cell: (context, group) => Text(
@@ -376,7 +378,7 @@ class _DuplicatesSection extends ConsumerWidget {
                 ),
               ),
               WaxColumn<DuplicateGroup>(
-                label: 'Absorbs',
+                label: l10n.healthColumnAbsorbs,
                 text: (group) => group.losers.map((l) => l.name).join(', '),
                 cell: (context, group) => Text(
                   group.losers.map((l) => l.name).join(', '),
@@ -387,17 +389,18 @@ class _DuplicatesSection extends ConsumerWidget {
                 ),
               ),
               WaxColumn<DuplicateGroup>(
-                label: 'Kind',
+                label: l10n.healthColumnKind,
                 width: 96,
-                text: (group) => group.entityType,
-                cell: (context, group) => CodecChip(group.entityType),
+                text: (group) => healthEntityKind(l10n, group.entityType),
+                cell: (context, group) =>
+                    CodecChip(healthEntityKind(l10n, group.entityType)),
               ),
               WaxColumn<DuplicateGroup>(
-                label: 'Why',
+                label: l10n.healthColumnWhy,
                 priority: WaxColumnPriority.detail,
-                text: (group) => group.detail ?? 'Names match',
+                text: (group) => group.detail ?? l10n.healthNamesMatch,
                 cell: (context, group) => Text(
-                  group.detail ?? 'Names match',
+                  group.detail ?? l10n.healthNamesMatch,
                   style: WaxType.caption.copyWith(color: colors.textTertiary),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -405,14 +408,14 @@ class _DuplicatesSection extends ConsumerWidget {
             ],
             trailing: (context, group) => WaxIconButton(
               glyph: WaxIcons.check,
-              label: 'Merge into ${group.survivor.name}',
+              label: l10n.healthMergeInto(group.survivor.name),
               semanticsId: SemanticsIds.duplicateMerge(group.survivor.pid),
               onPressed: () => onMerge(group),
             ),
           ),
-          AsyncError() => const ErrorState(
-            title: 'Could not load duplicates',
-            message: 'The clustering pass did not answer.',
+          AsyncError() => ErrorState(
+            title: l10n.healthDuplicatesError,
+            message: l10n.healthDuplicatesErrorBody,
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
         },
@@ -429,11 +432,11 @@ class _UpgradesSection extends ConsumerWidget {
   static UpgradeMember best(UpgradeGroup group) =>
       group.members.where((m) => m.best).firstOrNull ?? group.members.first;
 
-  static String _memberLine(UpgradeMember member) {
-    final parts = [
+  static String _memberLine(AppLocalizations l10n, UpgradeMember member) {
+    final parts = <String>[
       member.codec,
-      if (member.bitrate != null) '${member.bitrate! ~/ 1000} kbps',
-      if (member.lossless) 'lossless',
+      if (member.bitrate != null) l10n.healthKbps(member.bitrate! ~/ 1000),
+      if (member.lossless) l10n.healthLossless,
     ];
     return parts.join(', ');
   }
@@ -442,18 +445,19 @@ class _UpgradesSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final upgrades = ref.watch(upgradesProvider);
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(
-          title: 'Quality upgrades',
-          overline: 'The same recording twice',
+        SectionHeader(
+          title: l10n.healthUpgradesTitle,
+          overline: l10n.healthUpgradesOverline,
         ),
         switch (upgrades) {
-          AsyncData(:final value) when value.isEmpty => const EmptyState(
+          AsyncData(:final value) when value.isEmpty => EmptyState(
             glyph: WaxIcons.success,
-            title: 'No duplicate qualities detected',
-            message: 'Every recording is held once.',
+            title: l10n.healthUpgradesEmptyTitle,
+            message: l10n.healthUpgradesEmptyMessage,
           ),
           AsyncData(:final value) => WaxTable<UpgradeGroup>(
             rows: value,
@@ -462,38 +466,28 @@ class _UpgradesSection extends ConsumerWidget {
             rowDetailSemanticsId: SemanticsIds.upgradeDetail,
             columns: <WaxColumn<UpgradeGroup>>[
               WaxColumn<UpgradeGroup>(
-                label: 'Recording',
+                label: l10n.healthColumnRecording,
                 priority: WaxColumnPriority.primary,
-                text: (group) => best(group).artist == null
-                    ? best(group).title
-                    : '${best(group).title} by ${best(group).artist}',
+                text: (group) => _recording(l10n, best(group)),
                 cell: (context, group) => Text(
-                  best(group).artist == null
-                      ? best(group).title
-                      : '${best(group).title} by ${best(group).artist}',
+                  _recording(l10n, best(group)),
                   style: WaxType.titleItem.copyWith(color: colors.textPrimary),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               WaxColumn<UpgradeGroup>(
-                label: 'Keeping',
+                label: l10n.healthColumnKeeping,
                 width: 180,
-                text: (group) => _memberLine(best(group)),
+                text: (group) => _memberLine(l10n, best(group)),
                 cell: (context, group) =>
-                    CodecChip(_memberLine(best(group)), emphasis: true),
+                    CodecChip(_memberLine(l10n, best(group)), emphasis: true),
               ),
               WaxColumn<UpgradeGroup>(
-                label: 'Trashing',
+                label: l10n.healthColumnTrashing,
                 priority: WaxColumnPriority.detail,
-                text: (group) => group.members
-                    .where((m) => m.itemPid != best(group).itemPid)
-                    .map(_memberLine)
-                    .join('; '),
+                text: (group) => _trashing(l10n, group),
                 cell: (context, group) => Text(
-                  group.members
-                      .where((m) => m.itemPid != best(group).itemPid)
-                      .map(_memberLine)
-                      .join('; '),
+                  _trashing(l10n, group),
                   style: WaxType.caption.copyWith(color: colors.textTertiary),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -501,20 +495,39 @@ class _UpgradesSection extends ConsumerWidget {
             ],
             trailing: (context, group) => WaxIconButton(
               glyph: WaxIcons.check,
-              label: 'Keep the best version',
+              label: l10n.healthKeepBest,
               semanticsId: SemanticsIds.upgradeResolve(best(group).itemPid),
               onPressed: () => onResolve(group),
             ),
           ),
-          AsyncError() => const ErrorState(
-            title: 'Could not load upgrades',
-            message: 'The quality comparison did not answer.',
+          AsyncError() => ErrorState(
+            title: l10n.healthUpgradesError,
+            message: l10n.healthUpgradesErrorBody,
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
         },
       ],
     );
   }
+}
+
+/// One recording named the way both health tables name it.
+String _recording(AppLocalizations l10n, UpgradeMember member) {
+  final artist = member.artist;
+  return artist == null
+      ? member.title
+      : l10n.healthTitleByArtist(member.title, artist);
+}
+
+/// The copies a resolution would trash, worded one per copy.
+String _trashing(AppLocalizations l10n, UpgradeGroup group) {
+  // The kept copy once, not once per member: the predicate runs for
+  // every row and `best` walks the group each time it is asked.
+  final keeping = _UpgradesSection.best(group).itemPid;
+  return group.members
+      .where((m) => m.itemPid != keeping)
+      .map((m) => _UpgradesSection._memberLine(l10n, m))
+      .join('; ');
 }
 
 /// The paginated failing items behind one health rule.
@@ -533,13 +546,14 @@ class HealthIssuesScreen extends ConsumerWidget {
     final title = healthRuleName(context.l10n, rule) ?? rule;
     // A failed "load more" keeps the list intact, so surface it on the
     // flag's rising edge; scrolling again retries.
+    final l10n = context.l10n;
     ref.listen(healthIssuesProvider(rule), (prev, next) {
       final failedNow = next.value?.loadError ?? false;
       final failedBefore = prev?.value?.loadError ?? false;
       if (failedNow && !failedBefore) {
         ref
             .read(shellMessengerProvider.notifier)
-            .show('Could not load more; scroll to retry');
+            .show(l10n.healthLoadMoreFailed);
       }
     });
     // Paged off the scroll rather than from the builder: a `loadMore`
@@ -561,12 +575,12 @@ class HealthIssuesScreen extends ConsumerWidget {
         slivers: <Widget>[
           switch (issues) {
             AsyncData(:final value) when value.items.isEmpty =>
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 hasScrollBody: false,
                 child: EmptyState(
                   glyph: WaxIcons.success,
-                  title: 'Nothing failing this rule',
-                  message: 'Every item the sweeper has seen passes it.',
+                  title: context.l10n.healthIssuesEmptyTitle,
+                  message: context.l10n.healthIssuesEmptyMessage,
                 ),
               ),
             AsyncData(:final value) => SliverPadding(
@@ -576,10 +590,8 @@ class HealthIssuesScreen extends ConsumerWidget {
             AsyncError(:final error) => SliverFillRemaining(
               hasScrollBody: false,
               child: ErrorState(
-                title: 'Could not load issues',
-                message: error is WaxDeckApiException
-                    ? error.message
-                    : 'The server did not answer.',
+                title: context.l10n.healthIssuesError,
+                message: context.explain(error),
                 onRetry: () => ref.invalidate(healthIssuesProvider(rule)),
               ),
             ),
@@ -620,9 +632,11 @@ class _IssueRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final title = issue.artist == null
+    final l10n = context.l10n;
+    final artist = issue.artist;
+    final title = artist == null
         ? issue.title
-        : '${issue.title} by ${issue.artist}';
+        : l10n.healthTitleByArtist(issue.title, artist);
     return Semantics(
       identifier: SemanticsIds.healthIssue(issue.pid),
       container: true,
@@ -645,7 +659,9 @@ class _IssueRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    issue.rules.join(', '),
+                    issue.rules
+                        .map((r) => healthRuleName(l10n, r) ?? r)
+                        .join(', '),
                     style: WaxType.caption.copyWith(color: colors.textTertiary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

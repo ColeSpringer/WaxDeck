@@ -7,12 +7,13 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../shell/semantics_ids.dart';
 import 'now_playing_controller.dart';
 import 'now_playing_view.dart';
-import 'player_screen.dart';
 import 'playback_session.dart';
+import 'player_screen.dart';
 import 'wake_port.dart';
 import 'waveform.dart';
 
@@ -40,8 +41,8 @@ class VisualizerScreen extends ConsumerWidget {
             domain: WaxDomain.music,
             child: EmptyState(
               glyph: WaxIcons.waveform,
-              title: 'Nothing is playing',
-              message: 'Start a track and its shape shows up here.',
+              title: context.l10n.playerNothingPlaying,
+              message: context.l10n.playerVisualizerIdleMessage,
               semanticsId: SemanticsIds.visualizerSurface,
             ),
           ),
@@ -77,7 +78,7 @@ class _Frame extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
                   child: WaxIconButton(
                     glyph: WaxIcons.collapse,
-                    label: 'Leave the visualizer',
+                    label: context.l10n.playerLeaveVisualizer,
                     onPressed: () => leavePlayer(context),
                     semanticsId: SemanticsIds.visualizerClose,
                   ),
@@ -168,11 +169,8 @@ class _VisualizerState extends ConsumerState<_Visualizer> {
         AsyncLoading() => const Center(child: CircularProgressIndicator()),
         _ => EmptyState(
           glyph: WaxIcons.waveform,
-          title: 'No shape to draw',
-          message:
-              'The visualizer draws what the analyze pass measured, and '
-              'this file has not been measured. Run an analyze pass on '
-              'the library and it fills in.',
+          title: context.l10n.playerNoShape,
+          message: context.l10n.playerNoShapeMessage,
           semanticsId: SemanticsIds.visualizerSurface,
         ),
       },
@@ -243,7 +241,7 @@ class _VisualizerState extends ConsumerState<_Visualizer> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           WaxSegmented(
-            label: 'Visualizer mode',
+            label: context.l10n.playerVisualizerMode,
             selected: _mode.name,
             segments: <WaxSegment>[
               for (final mode in WaxVisualizerMode.values)

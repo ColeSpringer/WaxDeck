@@ -13,6 +13,19 @@ import '../l10n/l10n.dart';
 String healthRuleLabel(AppLocalizations l10n, HealthRuleCount rule) =>
     healthRuleName(l10n, rule.rule) ?? rule.label ?? rule.rule;
 
+/// What sort of entity a duplicate finding is about.
+///
+/// An open string in the contract, like every other vocabulary the
+/// client draws, so one this build has not heard of shows as the
+/// server wrote it.
+String healthEntityKind(AppLocalizations l10n, String token) => switch (token) {
+  'artist' => l10n.healthEntityArtist,
+  'album' => l10n.healthEntityAlbum,
+  'release-group' => l10n.healthEntityReleaseGroup,
+  'genre' => l10n.healthEntityGenre,
+  _ => token,
+};
+
 /// The same, for a surface holding the token alone.
 ///
 /// The drill-in screen is reached by route, so a rule arrives as the

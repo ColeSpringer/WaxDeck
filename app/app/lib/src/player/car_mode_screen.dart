@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../shell/semantics_ids.dart';
 import 'now_playing_controller.dart';
@@ -29,6 +30,7 @@ class CarModeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     // Around both branches, not only the scaffold's own: the idle state
     // is text and a button on a hard-coded black, and on the light theme
     // that was primary text at under 3:1 on the one control that leaves.
@@ -39,9 +41,9 @@ class CarModeScreen extends ConsumerWidget {
             body: SafeArea(
               child: EmptyState(
                 glyph: WaxIcons.headphones,
-                title: 'Nothing is playing',
-                message: 'Start something and it takes the whole screen.',
-                actionLabel: 'Leave car mode',
+                title: l10n.playerNothingPlaying,
+                message: l10n.playerCarIdleMessage,
+                actionLabel: l10n.playerLeaveCarMode,
                 actionSemanticsId: SemanticsIds.carExit,
                 onAction: () => leavePlayer(context),
                 semanticsId: SemanticsIds.carSurface,

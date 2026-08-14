@@ -7,10 +7,11 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: const MaterialApp(home: DiagnosticsScreen()),
+  child: localizedHost(const DiagnosticsScreen()),
 );
 
 /// Wide enough for the table to be a table rather than a card list.

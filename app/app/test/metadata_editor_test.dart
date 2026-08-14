@@ -12,6 +12,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'routed_host.dart';
 
 /// Hands back one in-memory image whatever is asked for.
@@ -56,7 +57,7 @@ ProviderContainer _container(FakeRepository repo, {FilePickerPort? picker}) {
 
 Widget _host(ProviderContainer container) => UncontrolledProviderScope(
   container: container,
-  child: const MaterialApp(home: MetadataScreen(pid: 'tr-1')),
+  child: localizedHost(const MetadataScreen(pid: 'tr-1')),
 );
 
 Widget _routed(ProviderContainer container) => UncontrolledProviderScope(
@@ -349,6 +350,8 @@ void main() {
     await tester.tap(save);
     await tester.pumpAndSettle();
 
+    // The server's own sentence names the field that refused; the app
+    // adds the switch that overrides it.
     expect(
       container.read(shellMessengerProvider)?.text,
       'field locked. Check "Force" to overwrite locked fields.',

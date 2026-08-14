@@ -113,6 +113,52 @@ void main() {
       );
     });
   });
+
+  // What the copy rule reads, pinned directly. Its counts are a sweep's
+  // done-signal, and a rule that quietly stops seeing a shape reports
+  // zero for a file still full of English.
+  group('the copy rule', () {
+    List<String> found(String code) =>
+        _CopyRule().find(code).map((h) => h.hint).toList();
+
+    test('reads past a ternary, a fallback, an arrow, and a switch', () {
+      expect(found("label: on ? 'Shuffle on' : 'Shuffle off',"), hasLength(2));
+      expect(found("title: item?.name ?? 'Loading',"), hasLength(1));
+      expect(
+        found("label: switch (r) { A() => 'Repeat all', B() => 'One' },"),
+        hasLength(2),
+      );
+      expect(found("starLabel: (s) => s ? 'Unstar' : 'Star',"), hasLength(2));
+    });
+
+    test('reads a name by what it ends in', () {
+      expect(found("ratingLabel: (n) => 'stars',"), hasLength(1));
+      expect(found("emptyMessage: 'nothing here',"), hasLength(1));
+      expect(found("messenger.show('started'),"), hasLength(1));
+    });
+
+    test('a literal being matched against is not copy', () {
+      expect(found("label: frame['message'] as String,"), isEmpty);
+      expect(found("label: switch (k) { 'detected' => other },"), isEmpty);
+      expect(found("label: kind == 'backup' ? a : b,"), isEmpty);
+    });
+
+    test('formatting is not copy', () {
+      expect(found(r"text: '$count',"), isEmpty);
+      expect(found(r"message: warnings.join('\n'),"), isEmpty);
+    });
+
+    test('prose split across lines is one site', () {
+      expect(
+        found("message:\n  'one half '\n  'and the other',"),
+        hasLength(1),
+      );
+    });
+
+    test('a name and the widget under it count once', () {
+      expect(found("title: Text('Backups'),"), hasLength(1));
+    });
+  });
 }
 
 /// The generated sources, in which every rule is meaningless because
@@ -330,16 +376,19 @@ class _CopyRule extends _Rule {
   _CopyRule()
     : super(
         name: 'hardcoded-copy',
-        // Counted, not guessed: a name missing here is a surface the
-        // sweep declares finished without ever seeing. Re-derive with
-        //     grep -rnoE "\b<name>:\s*(const\s+)?r?['\"]" lib
+        // Matched by what the name ends in rather than by a list of
+        // whole names: `starLabel`, `remainingLabel` and `activeLabel`
+        // carry sentences no less than `label` does, and a hand-kept
+        // list is a list somebody adds a name beside. The four spelled
+        // out in full are the ones whose suffix says nothing.
         pattern: RegExp(
-          r'\b(?:Selectable)?Text\(\s*(?:const\s+)?|'
-          r'\b(?:label|labelText|title|subtitle|overline|caption|help'
-          r'|helperText|hint|hintText|tooltip|semanticLabel|emptyTitle'
-          r'|emptyMessage|confirmLabel|confirmWord|actionLabel'
-          r'|spokenActionLabel|blurb|detail|message|text)'
-          r':\s*(?:const\s+)?',
+          r'\b(?:Selectable)?Text\(\s*|'
+          // The shell messenger takes its sentence positionally.
+          r'\.show\(\s*|'
+          r'\b\w*(?:[Ll]abel|[Tt]itle|[Oo]verline|[Cc]aption|[Hh]elp'
+          r'|[Hh]int|[Tt]ooltip|[Mm]essage|[Bb]lurb|[Dd]etail'
+          r'|[Tt]agline|[Ss]ubject)\s*:\s*|'
+          r'\b(?:text|errorText|confirmWord|semanticLabel)\s*:\s*',
         ),
         fix:
             'move it to an ARB key and read it through context.l10n '
@@ -348,6 +397,10 @@ class _CopyRule extends _Rule {
 
   /// Interpolations, so what is left is what a translator would work on.
   static final _interpolation = RegExp(r'\$\{[^{}]*\}|\$\w+');
+
+  /// Escapes go with them: the `n` in `'\n'` is a newline, not a word,
+  /// and a separator counted as copy is a floor on a finished file.
+  static final _escape = RegExp(r'\\.');
   static final _letter = RegExp(r'[A-Za-z]');
 
   /// The design system is in - its components own eighty strings a
@@ -362,15 +415,102 @@ class _CopyRule extends _Rule {
   bool appliesTo(String path) =>
       !path.startsWith('../packages/waxdeck_ui/example/');
 
+  /// Every literal in the argument's value, not the one at its head.
+  ///
+  /// Copy hides one token in - behind a `?:`, a `??`, an arrow, a
+  /// switch arm - and a rule that reads only the head declares those
+  /// files finished having never seen them. Both branches of a ternary
+  /// are two sentences to translate, so both are counted.
+  ///
+  /// Offsets are what dedupe: `title: Text('x')` matches twice, once on
+  /// the name and once on the widget, and it is one string either way.
   @override
   Iterable<_Hit> find(String code) sync* {
+    final seen = <int>{};
     for (final match in pattern.allMatches(code)) {
-      final literal = _literalAt(code, match.end);
-      if (literal == null) continue;
-      final words = literal.replaceAll(_interpolation, '');
-      if (!_letter.hasMatch(words)) continue;
-      yield _Hit(match.start, _preview(words));
+      final end = _valueEnd(code, match.end);
+      var i = match.end;
+      while (i < end) {
+        final read = _readLiteral(code, i);
+        if (read == null) {
+          i++;
+          continue;
+        }
+        final after = _skipContinuations(code, read.end, end);
+        final matched = _isMatchedAgainst(code, read.start, read.end);
+        i = after;
+        if (!seen.add(read.start)) continue;
+        if (matched) continue;
+        final words = read.body
+            .replaceAll(_interpolation, '')
+            .replaceAll(_escape, '');
+        if (!_letter.hasMatch(words)) continue;
+        yield _Hit(read.start, _preview(words));
+      }
     }
+  }
+
+  /// Where the value ends: the comma or closing bracket at the depth it
+  /// started on. Strings are stepped over whole, so a bracket inside one
+  /// cannot close it.
+  static int _valueEnd(String code, int start) {
+    var depth = 0;
+    var i = start;
+    while (i < code.length) {
+      final read = _readLiteral(code, i);
+      if (read != null) {
+        i = read.end;
+        continue;
+      }
+      final c = code[i];
+      if (c == '(' || c == '[' || c == '{') depth++;
+      if (c == ')' || c == ']' || c == '}') {
+        if (depth == 0) return i;
+        depth--;
+      }
+      if (depth == 0 && (c == ',' || c == ';')) return i;
+      i++;
+    }
+    return code.length;
+  }
+
+  /// Whether the literal is being compared rather than drawn.
+  ///
+  /// A switch pattern (`'detected' =>`), a map or index key
+  /// (`frame['message']`), and an equality test are all wire tokens
+  /// standing in an expression that does draw copy. Counting them
+  /// would put a floor on files with nothing left to translate, which
+  /// is the same lie as missing the copy, pointed the other way.
+  static bool _isMatchedAgainst(String code, int start, int end) {
+    var before = start - 1;
+    while (before >= 0 && (code[before] == ' ' || code[before] == '\n')) {
+      before--;
+    }
+    if (before >= 0 && code[before] == '[') return true;
+    if (before >= 1 && (code.startsWith('==', before - 1))) return true;
+    if (before >= 1 && (code.startsWith('!=', before - 1))) return true;
+    if (before >= 3 && code.startsWith('case', before - 3)) return true;
+    var after = end;
+    while (after < code.length && (code[after] == ' ' || code[after] == '\n')) {
+      after++;
+    }
+    return code.startsWith('=>', after) || code.startsWith(']', after);
+  }
+
+  /// Past the adjacent segments of one literal. Prose split across lines
+  /// is one copy site and becomes one ARB key, so it counts once.
+  static int _skipContinuations(String code, int end, int limit) {
+    var i = end;
+    while (i < limit) {
+      if (code[i] == ' ' || code[i] == '\n' || code[i] == '\r') {
+        i++;
+        continue;
+      }
+      final next = _readLiteral(code, i);
+      if (next == null) return i;
+      i = next.end;
+    }
+    return i;
   }
 
   static String _preview(String words) {
@@ -378,16 +518,17 @@ class _CopyRule extends _Rule {
     return flat.length <= 40 ? "'$flat'" : "'${flat.substring(0, 39)}...'";
   }
 
-  /// The body of the string literal at [start], or null if what stands
-  /// there is not one.
-  ///
-  /// Only the first segment of an adjacent-string concatenation is
-  /// read, which is the count this rule wants: prose split across lines
-  /// is one copy site and becomes one ARB key.
+  /// The string literal beginning at [start], or null if what stands
+  /// there is not one. The bounds ride along, because the value scan
+  /// has to step over a literal to know a bracket inside it is not a
+  /// bracket.
   ///
   /// Interpolations are walked rather than stopped at, because a quote
   /// inside one (`'Added "${item.title}"'`) is not the literal's end.
-  static String? _literalAt(String code, int start) {
+  static ({int start, int end, String body})? _readLiteral(
+    String code,
+    int start,
+  ) {
     var i = start;
     final raw = i < code.length && code[i] == 'r';
     if (raw) i++;
@@ -410,7 +551,9 @@ class _CopyRule extends _Rule {
         i = end;
         continue;
       }
-      if (code.startsWith(quote, i)) return body.toString();
+      if (code.startsWith(quote, i)) {
+        return (start: start, end: i + quote.length, body: body.toString());
+      }
       // A single-quoted literal cannot span a line; an unterminated one
       // is a scan that went wrong, not a finding.
       if (quote.length == 1 && code[i] == '\n') return null;

@@ -34,7 +34,7 @@ class AdminDashboardScreen extends ConsumerWidget {
     // a dashboard for somebody else's server.
     final wizard = ref.watch(firstRunWizardProvider);
     return WaxScaffold(
-      title: 'Admin',
+      title: context.l10n.adminDashboardTitle,
       semanticsId: SemanticsIds.adminDashboard,
       body: Padding(
         padding: sizeClass.gutter.add(
@@ -77,14 +77,13 @@ class _ReadOnlyBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final readOnly = ref.watch(adminSettingsProvider).value?.readOnly ?? false;
     if (!readOnly) return const SizedBox.shrink();
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.only(bottom: WaxSpace.s16),
       child: WaxBanner(
-        message:
-            'Read-only mode is on. Uploads, edits, and deletes are '
-            'refused server-wide.',
+        message: l10n.adminReadOnlyBanner,
         glyph: WaxIcons.warning,
-        actionLabel: 'Server settings',
+        actionLabel: l10n.adminServerTitle,
         onAction: () => context.go(WaxRoute.adminSettings),
       ),
     );
@@ -109,6 +108,7 @@ class _WarmingUp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final health = ref.watch(healthProvider).value;
     final scanning =
         ref
@@ -136,17 +136,14 @@ class _WarmingUp extends ConsumerWidget {
                 WaxIcon(WaxIcons.refresh, size: 16, color: colors.accent),
                 const SizedBox(width: WaxSpace.s8),
                 Text(
-                  scanning ? 'Scanning your library' : 'Still warming up',
+                  scanning ? l10n.adminWarmingScanning : l10n.adminWarmingUp,
                   style: WaxType.titleItem.copyWith(color: colors.textPrimary),
                 ),
               ],
             ),
             const SizedBox(height: WaxSpace.s8),
             Text(
-              'Files appear as they are indexed. Artwork, matching, and the '
-              'health score fill in behind that: albums the scan finds are '
-              'identified on their own, and anything the matcher is unsure '
-              'of arrives in the review queue.',
+              l10n.adminWarmingBlurb,
               style: WaxType.body.copyWith(color: colors.textSecondary),
             ),
           ],
@@ -183,19 +180,22 @@ class _StatusTiles extends ConsumerWidget {
         _tile(
           width: 220,
           child: StatTile(
-            label: 'Library health',
+            label: l10n.adminTileHealth,
             // Warming up is not a score of zero, and drawing one would
             // be the console's first lie to a new server.
             value: health == null
                 ? '--'
                 : health.warmingUp
-                ? 'Warming up'
+                ? l10n.adminTileHealthWarming
                 : '${health.score.round()}',
             caption: health == null
-                ? 'Loading'
+                ? l10n.adminTileLoading
                 : health.warmingUp
-                ? 'First sweep still running'
-                : '${health.evaluatedItems} of ${health.totalItems} checked',
+                ? l10n.adminTileFirstSweep
+                : l10n.adminTileChecked(
+                    health.evaluatedItems,
+                    health.totalItems,
+                  ),
             glyph: WaxIcons.warning,
             tone: health != null && !health.warmingUp && health.score < 80
                 ? colors.error
@@ -207,13 +207,13 @@ class _StatusTiles extends ConsumerWidget {
         _tile(
           width: 220,
           child: StatTile(
-            label: 'Waiting for review',
+            label: l10n.adminTileReview,
             value: review == null ? '--' : '${review.pending}',
             caption: review == null
-                ? 'Loading'
+                ? l10n.adminTileLoading
                 : review.identifying > 0
-                ? '${review.identifying} still identifying'
-                : 'albums to decide',
+                ? l10n.adminTileIdentifying(review.identifying)
+                : l10n.adminTileAlbumsToDecide,
             glyph: WaxIcons.check,
             semanticsId: SemanticsIds.adminTile('review'),
             onTap: () => context.go(WaxRoute.review),
@@ -222,9 +222,11 @@ class _StatusTiles extends ConsumerWidget {
         _tile(
           width: 220,
           child: StatTile(
-            label: 'Jobs running',
+            label: l10n.adminTileJobs,
             value: '$running',
-            caption: running == 0 ? 'Nothing in flight' : 'scans and passes',
+            caption: running == 0
+                ? l10n.adminTileNothingRunning
+                : l10n.adminTileScansAndPasses,
             glyph: WaxIcons.refresh,
             semanticsId: SemanticsIds.adminTile('jobs'),
             onTap: () => context.push(WaxRoute.tasks),
@@ -233,19 +235,20 @@ class _StatusTiles extends ConsumerWidget {
         _tile(
           width: 220,
           child: StatTile(
-            label: 'Last backup',
+            label: l10n.adminTileLastBackup,
             // When, not how big: a tile called "Last backup" is answering
             // "did one happen", and a size answers a question nobody
             // asked. The size is on the backups screen this doors into.
             value: lastBackup == null
-                ? 'None'
+                ? l10n.adminTileNone
                 : l10n.relativeSpaced(lastBackup.createdAt),
             caption: lastBackup == null
-                ? 'No archive yet'
+                ? l10n.adminTileNoArchive
                 // The backup schedule's own next run. Captioning this
                 // with the soonest run of any kind put "Next scan in
                 // 40 min" under the backup tile.
-                : _nextRunOf(l10n, schedules, 'backup') ?? 'Not scheduled',
+                : _nextRunOf(l10n, schedules, _backupSchedule) ??
+                      l10n.adminTileNotScheduled,
             glyph: WaxIcons.bookmark,
             semanticsId: SemanticsIds.adminTile('backups'),
             onTap: () => context.go(WaxRoute.backups),
@@ -255,11 +258,11 @@ class _StatusTiles extends ConsumerWidget {
           _tile(
             width: 220,
             child: StatTile(
-              label: 'Similarity coverage',
+              label: l10n.adminTileSimilarity,
               value: '${similarity.coveragePct.round()}%',
               caption: similarity.queueDepth > 0
-                  ? '${similarity.queueDepth} tracks queued'
-                  : '${similarity.embeddedTracks} tracks embedded',
+                  ? l10n.adminTileTracksQueued(similarity.queueDepth)
+                  : l10n.adminTileTracksEmbedded(similarity.embeddedTracks),
               glyph: WaxIcons.stats,
               semanticsId: SemanticsIds.adminTile('similarity'),
             ),
@@ -267,9 +270,9 @@ class _StatusTiles extends ConsumerWidget {
         _tile(
           width: 220,
           child: StatTile(
-            label: 'Playing now',
+            label: l10n.adminTilePlayingNow,
             value: '${sessions?.length ?? 0}',
-            caption: 'active playback sessions',
+            caption: l10n.adminTileSessions,
             glyph: WaxIcons.play,
             semanticsId: SemanticsIds.adminTile('sessions'),
           ),
@@ -277,6 +280,11 @@ class _StatusTiles extends ConsumerWidget {
       ],
     );
   }
+
+  /// The schedule kind whose next run captions the backup tile. Named
+  /// rather than typed inline: it is a wire token, and the sweep's copy
+  /// rule reads a bare string in an argument as something to translate.
+  static const _backupSchedule = 'backup';
 
   Widget _tile({required double width, required Widget child}) =>
       SizedBox(width: width, child: child);
@@ -292,7 +300,7 @@ class _StatusTiles extends ConsumerWidget {
       if (schedule.kind != kind) continue;
       final next = schedule.nextRunAt;
       if (!schedule.enabled || next == null) return null;
-      return 'Next ${l10n.relativeUntil(next)}';
+      return l10n.adminTileNextRun(l10n.relativeUntil(next));
     }
     return null;
   }
@@ -306,19 +314,20 @@ class _QuickActions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return Wrap(
       spacing: WaxSpace.s12,
       runSpacing: WaxSpace.s12,
       children: <Widget>[
         WaxButton(
-          label: 'Scan library',
+          label: l10n.adminScanLibrary,
           icon: WaxIcons.refresh,
           kind: WaxButtonKind.tonal,
           semanticsId: SemanticsIds.adminAction('scan'),
           onPressed: () => startLibraryScan(ref),
         ),
         WaxButton(
-          label: 'Back up now',
+          label: l10n.adminBackupNow,
           icon: WaxIcons.bookmark,
           kind: WaxButtonKind.tonal,
           semanticsId: SemanticsIds.adminAction('backup'),
@@ -336,12 +345,13 @@ class _QuickActions extends ConsumerWidget {
     // told either way.
     final container = ProviderScope.containerOf(ref.context, listen: false);
     final messenger = container.read(shellMessengerProvider.notifier);
+    final l10n = ref.context.l10n;
     try {
       await container.read(repositoryProvider).createBackup();
       container.invalidate(backupsProvider);
-      messenger.show('Backup started');
+      messenger.show(l10n.adminBackupStarted);
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainRefusal(l10n, error));
     }
   }
 }
@@ -359,10 +369,11 @@ Future<void> startLibraryScan(WidgetRef ref) async {
   // regardless.
   final container = ProviderScope.containerOf(ref.context, listen: false);
   final messenger = container.read(shellMessengerProvider.notifier);
+  final l10n = ref.context.l10n;
   try {
     await container.read(repositoryProvider).rescanLibrary();
     container.invalidate(adminJobsProvider);
-    messenger.show('Scan started');
+    messenger.show(l10n.adminScanStarted);
   } on WaxDeckApiException catch (error) {
     // A scan already running is the common answer, and the server's own
     // message says so better than a guess would. It is also proof the
@@ -371,7 +382,7 @@ Future<void> startLibraryScan(WidgetRef ref) async {
     // watching that list (the first-run wizard) move on instead of
     // offering the same scan again.
     container.invalidate(adminJobsProvider);
-    messenger.show(error.message);
+    messenger.show(explainRefusal(l10n, error));
   }
 }
 
@@ -381,17 +392,18 @@ class _SectionCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         for (final group in AdminGroup.values)
           if (group != AdminGroup.overview) ...<Widget>[
-            SectionHeader(title: group.label),
+            SectionHeader(title: group.labelOf(l10n)),
             for (final section in AdminSection.values)
               if (section.group == group)
                 WaxOptionRow(
-                  title: section.title,
-                  subtitle: section.blurb,
+                  title: section.titleOf(l10n),
+                  subtitle: section.blurbOf(l10n),
                   glyph: section.glyph,
                   trailing: const WaxIcon(WaxIcons.forward, size: 16),
                   semanticsId: section.semanticsId,

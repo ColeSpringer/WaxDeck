@@ -113,6 +113,7 @@ class _DevicePickerSheet extends ConsumerWidget {
     final endpoints = ref.watch(playerEndpointsProvider);
     final sessions = ref.watch(playbackSessionsProvider);
     final remote = ref.watch(remoteSessionProvider);
+    final l10n = context.l10n;
     // This device's own endpoint id arrives with registration, which may
     // land after the sheet opens: listened to rather than read once, or
     // the picker offers to play here, on the device already playing.
@@ -123,7 +124,7 @@ class _DevicePickerSheet extends ConsumerWidget {
           identifier: SemanticsIds.picker,
           container: true,
           explicitChildNodes: true,
-          label: 'Play on',
+          label: l10n.devicesPlayOn,
           child: _rows(context, ref, ownEndpoint, endpoints, sessions, remote),
         ),
       ),
@@ -138,6 +139,7 @@ class _DevicePickerSheet extends ConsumerWidget {
     AsyncValue<List<PlaybackSessionInfo>> sessions,
     RemoteSession? remote,
   ) {
+    final l10n = context.l10n;
     // Whatever was listed last stays listed while a refetch runs: both
     // lists are invalidated whenever any session anywhere starts, ends,
     // or changes its queue, and a sheet that empties for the length of
@@ -168,11 +170,11 @@ class _DevicePickerSheet extends ConsumerWidget {
             children: <Widget>[
               Expanded(
                 child: SectionHeader(
-                  title: 'Play on',
+                  title: l10n.devicesPlayOn,
                   // Only when the sheet is over the session elsewhere;
                   // opened over the album playing here it would describe
                   // something other than what the sheet is about.
-                  overline: _here ? null : 'Currently elsewhere',
+                  overline: _here ? null : l10n.devicesCurrentlyElsewhere,
                 ),
               ),
               // The diagnostic, one level in. A cast that fails is silent,
@@ -180,12 +182,12 @@ class _DevicePickerSheet extends ConsumerWidget {
               // thing anyone opening a picker wants.
               WaxMenuButton<String>(
                 glyph: WaxIcons.more,
-                label: 'More',
+                label: l10n.devicesMore,
                 semanticsId: SemanticsIds.pickerOverflow,
-                items: const <WaxMenuItem<String>>[
+                items: <WaxMenuItem<String>>[
                   WaxMenuItem<String>(
                     value: 'check',
-                    label: 'Connection check',
+                    label: l10n.devicesConnectionCheck,
                     semanticsId: SemanticsIds.pickerCheck,
                   ),
                 ],
@@ -201,17 +203,16 @@ class _DevicePickerSheet extends ConsumerWidget {
         ),
         ...switch (devices) {
           null when endpoints.hasError => <Widget>[
-            const WaxOptionRow(
-              title: 'Could not list devices',
-              subtitle:
-                  'The server did not answer. Playback here is unaffected.',
+            WaxOptionRow(
+              title: l10n.devicesListError,
+              subtitle: l10n.devicesListErrorMessage,
               glyph: WaxIcons.warning,
               enabled: false,
             ),
           ],
-          null => const <Widget>[
+          null => <Widget>[
             WaxOptionRow(
-              title: 'Looking for devices',
+              title: l10n.devicesLooking,
               glyph: WaxIcons.refresh,
               enabled: false,
             ),
@@ -219,14 +220,16 @@ class _DevicePickerSheet extends ConsumerWidget {
           final value => _deviceRows(context, ref, value, ownEndpoint, remote),
         },
         if (elsewhere.isNotEmpty) ...<Widget>[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(WaxSpace.s16, WaxSpace.s8, 0, 0),
-            child: SectionHeader(title: 'Playing elsewhere'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(WaxSpace.s16, WaxSpace.s8, 0, 0),
+            child: SectionHeader(title: l10n.devicesPlayingElsewhere),
           ),
           for (final session in elsewhere)
             WaxOptionRow(
-              title: session.currentEntry?.title ?? 'Playing',
-              subtitle: 'on ${session.endpointName ?? session.endpointId}',
+              title: session.currentEntry?.title ?? l10n.devicesPlaying,
+              subtitle: l10n.devicesOnEndpoint(
+                session.endpointName ?? session.endpointId,
+              ),
               glyph: WaxIcons.play,
               active: session.playing,
               semanticsId: SemanticsIds.session(session.id),
@@ -252,6 +255,7 @@ class _DevicePickerSheet extends ConsumerWidget {
     String? ownEndpoint,
     RemoteSession? remote,
   ) {
+    final l10n = context.l10n;
     // Where the thing being sent already is. Null when it is here, which
     // [_ThisDevice] is the row for.
     final fromEndpoint = _here ? null : remote?.session.endpointId;
@@ -264,7 +268,7 @@ class _DevicePickerSheet extends ConsumerWidget {
       rows.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(WaxSpace.s16, WaxSpace.s8, 0, 0),
-          child: SectionHeader(title: group.label),
+          child: SectionHeader(title: group.labelOf(l10n)),
         ),
       );
       for (final endpoint in members) {
@@ -357,7 +361,7 @@ class _DevicePickerSheet extends ConsumerWidget {
       // it now shows, and the transport on it is routed there.
       remoteController.adopt(started);
       messenger.showSnackBar(
-        SnackBar(content: Text('Playing on ${endpoint.name}')),
+        SnackBar(content: Text(l10n.devicesPlayingOn(endpoint.name))),
       );
     } on WaxDeckApiException catch (e) {
       _explain(l10n, messenger, e, endpoint: endpoint);
@@ -397,27 +401,25 @@ class _DevicePickerSheet extends ConsumerWidget {
     final choice = await showDialog<_LeaveChoice>(
       context: handles.rootContext,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Playing on $name'),
-        content: const Text(
-          'This device can take over, or leave it playing where it is.',
-        ),
+        title: Text(l10n.devicesPlayingOn(name)),
+        content: Text(l10n.devicesTakeOverBody),
         actions: <Widget>[
           TextButton(
             key: const Key(SemanticsIds.remoteLeave),
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_LeaveChoice.leave),
-            child: const Text('Leave it playing'),
+            child: Text(l10n.devicesLeaveItPlaying),
           ),
           TextButton(
             key: const Key(SemanticsIds.remoteStopThere),
             onPressed: () => Navigator.of(dialogContext).pop(_LeaveChoice.stop),
-            child: Text('Stop playback on $name'),
+            child: Text(l10n.devicesStopOn(name)),
           ),
           FilledButton(
             key: const Key(SemanticsIds.remotePlayHere),
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_LeaveChoice.transfer),
-            child: const Text('Transfer here'),
+            child: Text(l10n.devicesTransferHere),
           ),
         ],
       ),
@@ -501,10 +503,13 @@ class _ThisDevice extends StatelessWidget {
   Widget build(BuildContext context) {
     // Two questions that come apart: whether there is a session to step
     // away from, and whether this row is the one being sent from.
+    final l10n = context.l10n;
     final elsewhere = remote != null;
     return WaxOptionRow(
-      title: 'This device',
-      subtitle: elsewhere ? 'Take over, or leave it playing' : 'Playing here',
+      title: l10n.devicesThisDevice,
+      subtitle: elsewhere
+          ? l10n.devicesTakeOverOrLeave
+          : l10n.devicesPlayingHere,
       glyph: WaxIcons.home,
       active: here,
       selected: here,
@@ -521,16 +526,22 @@ class _ThisDevice extends StatelessWidget {
 
 /// How the picker groups endpoints, and what each group is drawn as.
 enum _EndpointGroup {
-  clients('WaxDeck apps', WaxIcons.devices, <String>{'client'}),
-  speakers('Speakers and displays', WaxIcons.cast, <String>{'cast', 'dlna'}),
-  server('This server', WaxIcons.volume, <String>{'jukebox'}),
-  other('Other devices', WaxIcons.devices, <String>{});
+  clients(WaxIcons.devices, <String>{'client'}),
+  speakers(WaxIcons.cast, <String>{'cast', 'dlna'}),
+  server(WaxIcons.volume, <String>{'jukebox'}),
+  other(WaxIcons.devices, <String>{});
 
-  const _EndpointGroup(this.label, this.glyph, this.kinds);
+  const _EndpointGroup(this.glyph, this.kinds);
 
-  final String label;
   final WaxGlyph glyph;
   final Set<String> kinds;
+
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    clients => l10n.devicesGroupApps,
+    speakers => l10n.devicesGroupSpeakers,
+    server => l10n.devicesGroupServer,
+    other => l10n.devicesGroupOther,
+  };
 
   /// Whether [kind] belongs in this group. `kind` is an open string by
   /// contract, so the last group takes whatever the others do not

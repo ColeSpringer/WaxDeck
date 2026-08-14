@@ -11,6 +11,1511 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get adminAuditEmptyMessage =>
+      'Administrative actions are recorded here as they happen.';
+
+  @override
+  String get adminAuditEmptyTitle => 'Nothing logged yet';
+
+  @override
+  String get adminAuditFilterHint => 'user. or backup.create';
+
+  @override
+  String get adminAuditFilterLabel => 'Filter by action';
+
+  @override
+  String get adminAuditLoadError => 'Could not load the audit log';
+
+  @override
+  String get adminAuditNoDetail => 'No further detail';
+
+  @override
+  String adminAuditRowSpoken(String action, String detail) {
+    return '$action, $detail';
+  }
+
+  @override
+  String get adminAuditSystemActor => 'system';
+
+  @override
+  String get adminBackupActions => 'Backup actions';
+
+  @override
+  String get adminBackupArchiveLabel => 'Backup archive';
+
+  @override
+  String get adminBackupDeleteAction => 'Delete';
+
+  @override
+  String adminBackupDeleteBody(String fileName) {
+    return '$fileName is removed for good.';
+  }
+
+  @override
+  String get adminBackupDeleteMenu => 'Delete...';
+
+  @override
+  String get adminBackupDeleteTitle => 'Delete backup?';
+
+  @override
+  String get adminBackupDownload => 'Download';
+
+  @override
+  String get adminBackupDropHint => 'Drop a backup archive to import';
+
+  @override
+  String get adminBackupImportArchive => 'Import archive';
+
+  @override
+  String adminBackupImported(String fileName) {
+    return '$fileName imported; stage its restore';
+  }
+
+  @override
+  String get adminBackupKeepAll => '0 keeps all';
+
+  @override
+  String get adminBackupKeepCountLabel => 'Backups to keep';
+
+  @override
+  String get adminBackupKeepMbLabel => 'Backup space (MB)';
+
+  @override
+  String get adminBackupNow => 'Back up now';
+
+  @override
+  String adminBackupRestoreBody(String fileName) {
+    return 'The server replaces its database with $fileName at the next restart. Changes made since the backup are lost.';
+  }
+
+  @override
+  String get adminBackupRestoreTitle => 'Restore this backup?';
+
+  @override
+  String get adminBackupRetentionSaved => 'Retention saved';
+
+  @override
+  String get adminBackupRunning => 'Backing up...';
+
+  @override
+  String get adminBackupSaveRetention => 'Save retention';
+
+  @override
+  String get adminBackupStageRestore => 'Stage restore';
+
+  @override
+  String get adminBackupStageRestoreMenu => 'Stage restore...';
+
+  @override
+  String get adminBackupStarted => 'Backup started';
+
+  @override
+  String get adminBackupStateDone => 'done';
+
+  @override
+  String get adminBackupStateFailed => 'failed';
+
+  @override
+  String get adminBackupStateRunning => 'running';
+
+  @override
+  String get adminBackupTriggerImported => 'imported';
+
+  @override
+  String get adminBackupTriggerManual => 'manual';
+
+  @override
+  String get adminBackupTriggerScheduled => 'scheduled';
+
+  @override
+  String get adminBackupsEmpty => 'No backups yet';
+
+  @override
+  String get adminBackupsRetention => 'Retention';
+
+  @override
+  String get adminBackupsTitle => 'Backups';
+
+  @override
+  String get adminDashboardTitle => 'Admin';
+
+  @override
+  String get adminGenreAdd => 'Add genre';
+
+  @override
+  String adminGenreAliasCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count aliases',
+      one: '1 alias',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminGenreAliasesBlurb =>
+      'Case, accents, and punctuation already fold, so list only the spellings folding cannot reach: Rap for Hip Hop, R&B for Rhythm and Blues.';
+
+  @override
+  String get adminGenreAliasesHint => 'Comma separated';
+
+  @override
+  String get adminGenreAliasesLabel => 'Aliases';
+
+  @override
+  String get adminGenreDryRunStarted =>
+      'Dry run started; the task report says what would change';
+
+  @override
+  String get adminGenreEmptyMessage =>
+      'Add one, or revert to the tree WaxDeck ships.';
+
+  @override
+  String get adminGenreEmptyTitle => 'No genres';
+
+  @override
+  String get adminGenreGroup => 'Genre';
+
+  @override
+  String get adminGenreNameLabel => 'Name';
+
+  @override
+  String adminGenreNameTaken(String name) {
+    return 'Another genre is already called $name';
+  }
+
+  @override
+  String get adminGenreNewName => 'New genre';
+
+  @override
+  String adminGenreNewNameNumbered(int number) {
+    return 'New genre $number';
+  }
+
+  @override
+  String get adminGenreNoParent => '(top level)';
+
+  @override
+  String get adminGenreNormalize => 'Normalize catalog';
+
+  @override
+  String get adminGenreNormalizeBlurb =>
+      'A sweeper folds newly scanned genres onto the vocabulary on its own. Normalizing is the catch-up pass, for a catalog older than the change log still holds or a tree you just edited.';
+
+  @override
+  String get adminGenreNormalizing => 'Normalizing the catalog';
+
+  @override
+  String get adminGenreParentHelp => 'The top-level genre this one belongs to';
+
+  @override
+  String get adminGenreParentHelpHasChildren =>
+      'Genres group under this one, and the tree is two levels deep';
+
+  @override
+  String get adminGenreParentLabel => 'Parent genre';
+
+  @override
+  String get adminGenreParentTitle => 'Groups under';
+
+  @override
+  String get adminGenrePickMessage =>
+      'Its name, its parent, and its aliases are edited here.';
+
+  @override
+  String get adminGenrePickTitle => 'Pick a genre';
+
+  @override
+  String get adminGenrePreviewNormalize => 'Preview normalization';
+
+  @override
+  String get adminGenreRemove => 'Remove genre';
+
+  @override
+  String get adminGenreRevertAction => 'Revert';
+
+  @override
+  String get adminGenreRevertBody =>
+      'Your genre vocabulary is replaced by the one WaxDeck ships. Aliases you added are lost, and the catalog re-normalizes onto the default.';
+
+  @override
+  String get adminGenreRevertTitle => 'Revert to the default tree?';
+
+  @override
+  String get adminGenreRevertToDefault => 'Revert to default';
+
+  @override
+  String get adminGenreRevertWord => 'REVERT';
+
+  @override
+  String get adminGenreReverted => 'Back on the default genre tree';
+
+  @override
+  String get adminGenreSaved => 'Genre tree saved';
+
+  @override
+  String get adminGenreSourceDefault =>
+      'Running on the vocabulary WaxDeck ships. Editing it stores a tree of your own.';
+
+  @override
+  String get adminGenreSourceStored =>
+      'Running on a stored vocabulary of your own.';
+
+  @override
+  String get adminGenreTreeLoadError => 'Could not load the genre tree';
+
+  @override
+  String get adminGenreTreeTitle => 'Genre tree';
+
+  @override
+  String get adminGenreVocabulary => 'Vocabulary';
+
+  @override
+  String get adminGroupLibrary => 'Library';
+
+  @override
+  String get adminGroupOverview => 'Overview';
+
+  @override
+  String get adminGroupPeople => 'People';
+
+  @override
+  String get adminGroupServer => 'Server';
+
+  @override
+  String get adminInviteAccessAllHelp =>
+      'Off picks the libraries this invite can see';
+
+  @override
+  String get adminInviteAdminHelp =>
+      'Server-wide authority: settings, users, and libraries';
+
+  @override
+  String get adminInviteCreate => 'Create invite';
+
+  @override
+  String get adminInviteCreateAction => 'Create';
+
+  @override
+  String get adminInviteCreatedBody =>
+      'Share this token; it is shown exactly once.';
+
+  @override
+  String get adminInviteCreatedTitle => 'Invite created';
+
+  @override
+  String get adminInviteExpired => 'expired';
+
+  @override
+  String get adminInviteExpiresHelp => 'Empty never expires';
+
+  @override
+  String get adminInviteExpiresLabel => 'Expires in (days)';
+
+  @override
+  String get adminInviteIncludeLibrary => 'Include this library';
+
+  @override
+  String get adminInviteMaxUsesLabel => 'Max uses';
+
+  @override
+  String get adminInviteNoteHelp => 'Who this invite is for';
+
+  @override
+  String get adminInviteNoteLabel => 'Note';
+
+  @override
+  String get adminInviteRevokeAction => 'Revoke';
+
+  @override
+  String get adminInviteRevokeBody => 'The token stops working immediately.';
+
+  @override
+  String get adminInviteRevokeButton => 'Revoke invite';
+
+  @override
+  String get adminInviteRevokeTitle => 'Revoke invite?';
+
+  @override
+  String get adminInviteRevoked => 'revoked';
+
+  @override
+  String get adminInviteUploadHelp =>
+      'Whether this account can add files to the library';
+
+  @override
+  String adminInviteUses(int used, int total) {
+    return 'uses $used/$total';
+  }
+
+  @override
+  String get adminInvitesEmpty => 'No invites yet';
+
+  @override
+  String get adminLibrariesColumnHolds => 'Holds';
+
+  @override
+  String get adminLibrariesColumnItems => 'Items';
+
+  @override
+  String get adminLibrariesColumnMatching => 'Matching';
+
+  @override
+  String get adminLibrariesColumnName => 'Name';
+
+  @override
+  String get adminLibrariesColumnPath => 'Path';
+
+  @override
+  String get adminLibrariesColumnReadOnly => 'Read-only';
+
+  @override
+  String get adminLibrariesEmptyMessage =>
+      'Add a root below and WaxDeck scans what is in it.';
+
+  @override
+  String get adminLibrariesEmptyTitle => 'No libraries yet';
+
+  @override
+  String get adminLibrariesLoadError => 'Could not load the libraries';
+
+  @override
+  String get adminLibrariesTitle => 'Libraries';
+
+  @override
+  String get adminLibraryAddGroup => 'Add a library';
+
+  @override
+  String get adminLibraryContentClass => 'Content class';
+
+  @override
+  String get adminLibraryCreate => 'Create library';
+
+  @override
+  String adminLibraryCreated(String name) {
+    return 'Library \"$name\" created; scanning started';
+  }
+
+  @override
+  String get adminLibraryHoldsHelp => 'What kind of content the root carries';
+
+  @override
+  String get adminLibraryHoldsTitle => 'Holds';
+
+  @override
+  String get adminLibraryManagedHelp =>
+      'Let uploads and organizing place files in this root';
+
+  @override
+  String get adminLibraryManagedTitle => 'Catalog-managed';
+
+  @override
+  String get adminLibraryMatchingAsk => 'Ask me';
+
+  @override
+  String get adminLibraryMatchingAuto => 'Automatic';
+
+  @override
+  String adminLibraryMatchingLabel(String name) {
+    return 'Matching for $name';
+  }
+
+  @override
+  String get adminLibraryMatchingLeave => 'Leave alone';
+
+  @override
+  String get adminLibraryMediaBooks => 'Books';
+
+  @override
+  String get adminLibraryMediaMixed => 'Mixed';
+
+  @override
+  String get adminLibraryMediaMusic => 'Music';
+
+  @override
+  String get adminLibraryMediaPodcasts => 'Podcasts';
+
+  @override
+  String get adminLibraryNameHint =>
+      'Also the WaxFlow root name serving this directory';
+
+  @override
+  String get adminLibraryNameLabel => 'Name';
+
+  @override
+  String get adminLibraryNamePathRequired =>
+      'A name and an absolute path are required';
+
+  @override
+  String get adminLibraryPathHint => '/srv/media/music';
+
+  @override
+  String get adminLibraryPathLabel => 'Absolute path on the server';
+
+  @override
+  String get adminLibraryPathRule =>
+      'The path must be absolute, and must not overlap an existing root, the upload inbox, or the podcast download directory.';
+
+  @override
+  String adminLibraryReadOnlyLabel(String name) {
+    return 'Read-only: $name';
+  }
+
+  @override
+  String get adminLibraryRescan => 'Rescan libraries';
+
+  @override
+  String get adminLibraryScanning => 'Scanning every library root';
+
+  @override
+  String get adminLibraryUnnamedPath => 'unnamed on this filesystem';
+
+  @override
+  String get adminMigrateDryRunHelp =>
+      'Report what would match; change nothing';
+
+  @override
+  String get adminMigrateDryRunTitle => 'Dry run';
+
+  @override
+  String get adminMigrateHistoryHelp => 'What was played there, and when';
+
+  @override
+  String get adminMigrateHistoryTitle => 'Listen history';
+
+  @override
+  String get adminMigratePasswordLabel => 'Password';
+
+  @override
+  String get adminMigrateProgressHelp =>
+      'How far into each episode and book the listener was';
+
+  @override
+  String get adminMigrateProgressTitle => 'Playback progress';
+
+  @override
+  String get adminMigrateRatingsHelp => 'The star ratings given there';
+
+  @override
+  String get adminMigrateRatingsTitle => 'Ratings';
+
+  @override
+  String get adminMigrateServerUrlHint => 'https://music.example';
+
+  @override
+  String get adminMigrateServerUrlLabel => 'Server URL';
+
+  @override
+  String get adminMigrateStarsHelp =>
+      'Which tracks and albums the other server had starred';
+
+  @override
+  String get adminMigrateStarsTitle => 'Stars';
+
+  @override
+  String get adminMigrateStarted => 'Import started';
+
+  @override
+  String get adminMigrateSubmit => 'Start import';
+
+  @override
+  String get adminMigrateSubsonicServer => 'Subsonic server';
+
+  @override
+  String get adminMigrateTitle => 'Import from another server';
+
+  @override
+  String get adminMigrateTokenLabel => 'API token';
+
+  @override
+  String get adminMigrateUsernameLabel => 'Username';
+
+  @override
+  String get adminOpenTasks => 'Tasks';
+
+  @override
+  String get adminReadOnlyBanner =>
+      'Read-only mode is on. Uploads, edits, and deletes are refused server-wide.';
+
+  @override
+  String get adminRestoreAppliesAtRestart =>
+      'The restore applies at the next server restart.';
+
+  @override
+  String adminRestoreCasualty(String kind, String name) {
+    return '• $kind: $name';
+  }
+
+  @override
+  String get adminRestoreKeyfileMatches =>
+      'The secrets keyfile matches; sealed secrets survive.';
+
+  @override
+  String get adminRestoreKeyfileMismatch =>
+      'The secrets keyfile does not match this server; the sealed secrets below are lost.';
+
+  @override
+  String get adminRestoreLostWithRestore => 'Lost with the restore';
+
+  @override
+  String get adminRestoreNoKeyfile =>
+      'The archive has no secrets keyfile; sealed secrets are lost.';
+
+  @override
+  String adminRestoreStagedBanner(String backupId) {
+    return 'A restore of $backupId is staged; it applies at the next server restart.';
+  }
+
+  @override
+  String get adminRestoreStagedTitle => 'Restore staged';
+
+  @override
+  String get adminRoleAdmin => 'admin';
+
+  @override
+  String get adminRoleUser => 'user';
+
+  @override
+  String get adminScanLibrary => 'Scan library';
+
+  @override
+  String get adminScanStarted => 'Scan started';
+
+  @override
+  String get adminScheduleAnalyze => 'Analyze audio';
+
+  @override
+  String get adminScheduleAnalyzeBlurb =>
+      'Measures loudness, fingerprints, and waveforms. Decodes every audio file, so a large library takes hours. Resumable: files already analyzed are skipped.';
+
+  @override
+  String get adminScheduleBackup => 'Backup';
+
+  @override
+  String get adminScheduleBackupBlurb =>
+      'Writes an archive of the database and its sidecars.';
+
+  @override
+  String get adminScheduleCronHint => 'minute hour day month weekday';
+
+  @override
+  String get adminScheduleCronLabel => 'Cron';
+
+  @override
+  String adminScheduleEnabledLabel(String name) {
+    return '$name runs on a schedule';
+  }
+
+  @override
+  String adminScheduleLastRun(String stamp) {
+    return 'Last run $stamp';
+  }
+
+  @override
+  String adminScheduleLastRunStatus(String stamp, String status) {
+    return 'Last run $stamp ($status)';
+  }
+
+  @override
+  String adminScheduleNextRun(String stamp) {
+    return 'Next $stamp';
+  }
+
+  @override
+  String get adminSchedulePrune => 'Prune';
+
+  @override
+  String get adminSchedulePruneBlurb =>
+      'Clears expired staging, spent tokens, and trashed files past their retention.';
+
+  @override
+  String adminScheduleSaved(String name) {
+    return '$name schedule saved';
+  }
+
+  @override
+  String get adminScheduleScan => 'Library scan';
+
+  @override
+  String get adminScheduleScanBlurb =>
+      'Finds new and changed files, reads their tags, and indexes them. Cheap: it does not decode audio.';
+
+  @override
+  String get adminScheduleStatusFailed => 'failed';
+
+  @override
+  String get adminScheduleStatusOk => 'ok';
+
+  @override
+  String get adminSchedulesEmptyMessage =>
+      'This server runs nothing on a timetable.';
+
+  @override
+  String get adminSchedulesEmptyTitle => 'No schedules';
+
+  @override
+  String get adminSchedulesLoadError => 'Could not load the schedules';
+
+  @override
+  String get adminSchedulesTitle => 'Schedules';
+
+  @override
+  String get adminSectionAudit => 'Audit log';
+
+  @override
+  String get adminSectionAuditBlurb => 'Who did what, and to what';
+
+  @override
+  String get adminSectionBackupsBlurb =>
+      'Archives, imports, and staged restores';
+
+  @override
+  String get adminSectionDashboard => 'Dashboard';
+
+  @override
+  String get adminSectionDashboardBlurb =>
+      'What needs attention, and what is running';
+
+  @override
+  String get adminSectionDiagnostics => 'Diagnostics';
+
+  @override
+  String get adminSectionDiagnosticsBlurb => 'Files the catalog could not read';
+
+  @override
+  String get adminSectionGenresBlurb =>
+      'The canonical vocabulary every genre folds onto';
+
+  @override
+  String get adminSectionHealth => 'Health';
+
+  @override
+  String get adminSectionHealthBlurb =>
+      'What is missing, mistagged, or duplicated';
+
+  @override
+  String get adminSectionLibrariesBlurb =>
+      'The roots WaxDeck scans, and what each one holds';
+
+  @override
+  String get adminSectionMigrateBlurb =>
+      'Bring a library, its stars, and its history across';
+
+  @override
+  String get adminSectionNotifications => 'Notifications';
+
+  @override
+  String get adminSectionNotificationsBlurb =>
+      'Where this server reports operations events';
+
+  @override
+  String get adminSectionOrganize => 'Organize';
+
+  @override
+  String get adminSectionOrganizeBlurb => 'Move files into a naming scheme';
+
+  @override
+  String get adminSectionReview => 'Review queue';
+
+  @override
+  String get adminSectionReviewBlurb =>
+      'Albums waiting for an identification decision';
+
+  @override
+  String get adminSectionSchedulesBlurb =>
+      'When scans, backups, and pruning run';
+
+  @override
+  String get adminSectionSettingsBlurb =>
+      'Signups, read-only mode, transcoding, retention';
+
+  @override
+  String get adminSectionShares => 'Share links';
+
+  @override
+  String get adminSectionSharesBlurb =>
+      'Every public link on this server, and who minted it';
+
+  @override
+  String get adminSectionTrashBlurb => 'Deleted files, until they are purged';
+
+  @override
+  String get adminSectionUsersBlurb =>
+      'Accounts, invites, and what each one may do';
+
+  @override
+  String get adminServerAccessGroup => 'Access';
+
+  @override
+  String get adminServerActivityCaveat =>
+      'Counts streams the engine is transcoding or remuxing, including a client that forced the source\'s own format; HLS timelines are admitted separately and are not counted here.';
+
+  @override
+  String adminServerActivityCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count engine-backed streams right now.',
+      one: '1 engine-backed stream right now.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminServerActivityReading => 'Reading what is running...';
+
+  @override
+  String get adminServerActivityRefresh => 'Refresh what is running';
+
+  @override
+  String adminServerActivitySpoken(String headline, String caveat) {
+    return '$headline $caveat';
+  }
+
+  @override
+  String get adminServerActivityUnknown =>
+      'The server did not say what is running.';
+
+  @override
+  String get adminServerAnalysisGroup => 'Analysis';
+
+  @override
+  String get adminServerDefaultKbpsHint => '0 means no ceiling';
+
+  @override
+  String get adminServerDefaultKbpsLabel => 'Default bitrate ceiling (kbps)';
+
+  @override
+  String get adminServerLoadError => 'Could not load the server settings';
+
+  @override
+  String get adminServerRadioArtHelp =>
+      'When a station announces a track this library does not hold, ask MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. Off by default; with it off the player draws the station mark.';
+
+  @override
+  String get adminServerRadioArtTitle => 'Look up cover art online';
+
+  @override
+  String get adminServerRadioGroup => 'Radio';
+
+  @override
+  String get adminServerReadOnlyHelp =>
+      'Refuse every change to library content, server-wide. Playback, stars, and progress keep working';
+
+  @override
+  String get adminServerReadOnlyTitle => 'Read-only mode';
+
+  @override
+  String get adminServerRetention => 'Retention';
+
+  @override
+  String get adminServerRetentionSaved => 'Retention saved';
+
+  @override
+  String get adminServerSaveRetention => 'Save retention';
+
+  @override
+  String get adminServerSaveTranscoding => 'Save transcoding limits';
+
+  @override
+  String get adminServerSignupHelp =>
+      'Anyone may request an account; requests wait for approval';
+
+  @override
+  String get adminServerSignupTitle => 'Open signup';
+
+  @override
+  String get adminServerSonicHelp =>
+      'Analyze the library in the background for instant mixes, similar tracks, and sonic paths';
+
+  @override
+  String get adminServerSonicTitle => 'Sonic analysis';
+
+  @override
+  String get adminServerTaskDaysHint => '0 keeps every finished task';
+
+  @override
+  String get adminServerTaskDaysInvalid =>
+      'Clear finished tasks after: enter a whole number of days (0 keeps every finished task)';
+
+  @override
+  String get adminServerTaskDaysLabel => 'Clear finished tasks after (days)';
+
+  @override
+  String get adminServerTitle => 'Server settings';
+
+  @override
+  String get adminServerTranscodesMaxLabel => 'Transcodes at once, server-wide';
+
+  @override
+  String get adminServerTranscodesPerUserLabel =>
+      'Transcodes at once, per listener';
+
+  @override
+  String get adminServerTranscodingBlurb =>
+      'A transcode is what happens when a client cannot play a file as stored. These bound how many run at once, so a busy evening does not become a slow one.';
+
+  @override
+  String get adminServerTranscodingGroup => 'Transcoding';
+
+  @override
+  String get adminServerTranscodingSaved => 'Transcoding limits saved';
+
+  @override
+  String get adminServerTrashDaysHint =>
+      '0 keeps them until the trash is emptied by hand';
+
+  @override
+  String get adminServerTrashDaysInvalid =>
+      'Purge trashed files after: enter a whole number of days (0 keeps them until you empty the trash)';
+
+  @override
+  String get adminServerTrashDaysLabel => 'Purge trashed files after (days)';
+
+  @override
+  String get adminShareCopied => 'Link copied';
+
+  @override
+  String get adminShareRevoked => 'Link revoked';
+
+  @override
+  String get adminSharesEmptyMessage =>
+      'Nobody on this server has minted a public link. When somebody does it turns up here, with who made it and a way to switch it off.';
+
+  @override
+  String get adminSharesEmptyTitle => 'Nothing is shared';
+
+  @override
+  String get adminSharesLoadError => 'Could not load the share links';
+
+  @override
+  String get adminTileAlbumsToDecide => 'albums to decide';
+
+  @override
+  String adminTileChecked(int checked, int total) {
+    return '$checked of $total checked';
+  }
+
+  @override
+  String get adminTileFirstSweep => 'First sweep still running';
+
+  @override
+  String get adminTileHealth => 'Library health';
+
+  @override
+  String get adminTileHealthWarming => 'Warming up';
+
+  @override
+  String adminTileIdentifying(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count still identifying',
+      one: '1 still identifying',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminTileJobs => 'Jobs running';
+
+  @override
+  String get adminTileLastBackup => 'Last backup';
+
+  @override
+  String get adminTileLoading => 'Loading';
+
+  @override
+  String adminTileNextRun(String when) {
+    return 'Next $when';
+  }
+
+  @override
+  String get adminTileNoArchive => 'No archive yet';
+
+  @override
+  String get adminTileNone => 'None';
+
+  @override
+  String get adminTileNotScheduled => 'Not scheduled';
+
+  @override
+  String get adminTileNothingRunning => 'Nothing in flight';
+
+  @override
+  String get adminTilePlayingNow => 'Playing now';
+
+  @override
+  String get adminTileReview => 'Waiting for review';
+
+  @override
+  String get adminTileScansAndPasses => 'scans and passes';
+
+  @override
+  String get adminTileSessions => 'active playback sessions';
+
+  @override
+  String get adminTileSimilarity => 'Similarity coverage';
+
+  @override
+  String adminTileTracksEmbedded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tracks embedded',
+      one: '1 track embedded',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String adminTileTracksQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tracks queued',
+      one: '1 track queued',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminTrashColumnFile => 'File';
+
+  @override
+  String get adminTrashColumnReason => 'Reason';
+
+  @override
+  String get adminTrashColumnSize => 'Size';
+
+  @override
+  String get adminTrashColumnTrashed => 'Trashed';
+
+  @override
+  String adminTrashEmptied(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+    );
+    return 'Purged $_temp0, reclaimed $size';
+  }
+
+  @override
+  String get adminTrashEmptyAction => 'Empty trash';
+
+  @override
+  String get adminTrashEmptyBody =>
+      'Every trashed file is deleted for good, including the ones still restorable. This cannot be undone.';
+
+  @override
+  String get adminTrashEmptyStateMessage =>
+      'Deleted files wait here before they are purged.';
+
+  @override
+  String get adminTrashEmptyStateTitle => 'The trash is empty';
+
+  @override
+  String get adminTrashEmptyTitle => 'Empty the trash?';
+
+  @override
+  String get adminTrashEmptyWord => 'EMPTY';
+
+  @override
+  String get adminTrashLoadError => 'Could not load the trash';
+
+  @override
+  String get adminTrashPurgeAction => 'Purge';
+
+  @override
+  String adminTrashPurgeBody(String name) {
+    return '$name is deleted for good. This cannot be undone.';
+  }
+
+  @override
+  String adminTrashPurgeRowAction(String name) {
+    return 'Purge $name';
+  }
+
+  @override
+  String get adminTrashPurgeTitle => 'Purge this file?';
+
+  @override
+  String adminTrashPurged(String name, String size) {
+    return 'Purged $name, reclaimed $size';
+  }
+
+  @override
+  String get adminTrashReasonPermanent => 'permanent';
+
+  @override
+  String get adminTrashReasonPrune => 'prune';
+
+  @override
+  String get adminTrashReasonRestored => 'restored';
+
+  @override
+  String get adminTrashReasonUser => 'user';
+
+  @override
+  String adminTrashRestoreAction(String name) {
+    return 'Restore $name';
+  }
+
+  @override
+  String adminTrashRestored(String name) {
+    return 'Restored $name';
+  }
+
+  @override
+  String get adminTrashShowRestoredHelp =>
+      'Entries already put back, for the record';
+
+  @override
+  String get adminTrashShowRestoredTitle => 'Show restored entries';
+
+  @override
+  String get adminTrashTitle => 'Trash';
+
+  @override
+  String get adminUserAccessAllHelp => 'Off grants specific libraries instead';
+
+  @override
+  String get adminUserAccessAllTitle => 'All libraries';
+
+  @override
+  String get adminUserAccessGroup => 'Library access';
+
+  @override
+  String get adminUserActionsGroup => 'Account actions';
+
+  @override
+  String get adminUserAdminHelp =>
+      'Sees the whole library and the admin console';
+
+  @override
+  String get adminUserAdminTitle => 'Administrator';
+
+  @override
+  String get adminUserApproveAction => 'Approve';
+
+  @override
+  String adminUserApproveTitle(String username) {
+    return 'Approve $username';
+  }
+
+  @override
+  String get adminUserCatalogLibrary => 'A catalog library';
+
+  @override
+  String get adminUserChildPreset => 'Child account preset';
+
+  @override
+  String get adminUserChildPresetHelp =>
+      'Sets no explicit content, no deleting, downloading, or uploading, and a deny rule for advisory-tagged tracks. Everything below stays editable.';
+
+  @override
+  String get adminUserDeleteAccount => 'Delete account';
+
+  @override
+  String get adminUserDeleteAction => 'Delete';
+
+  @override
+  String adminUserDeleteBody(String username) {
+    return '$username is removed for good, along with its sessions and preferences. Library files are untouched.';
+  }
+
+  @override
+  String get adminUserDeleteTitle => 'Delete account?';
+
+  @override
+  String get adminUserDisabledHelp =>
+      'A disabled account cannot sign in, and its live sessions are revoked';
+
+  @override
+  String get adminUserDisabledTitle => 'Disabled';
+
+  @override
+  String adminUserLibraryAccessLabel(String library) {
+    return 'Access to $library';
+  }
+
+  @override
+  String get adminUserMaxKbpsHint => 'Empty keeps the server default';
+
+  @override
+  String get adminUserMaxKbpsLabel => 'Transcode ceiling (kbps)';
+
+  @override
+  String get adminUserMayUploadHelp =>
+      'Add files to the library, through review';
+
+  @override
+  String get adminUserMayUploadTitle => 'May upload';
+
+  @override
+  String get adminUserNewPasswordLabel => 'New password';
+
+  @override
+  String get adminUserPasswordSet => 'Password set';
+
+  @override
+  String get adminUserPermDeleteHelp => 'Move catalog files to the trash';
+
+  @override
+  String get adminUserPermDeleteTitle => 'Delete library files';
+
+  @override
+  String get adminUserPermDownloadHelp =>
+      'Keep the stored file, not just a stream';
+
+  @override
+  String get adminUserPermDownloadTitle => 'Download originals';
+
+  @override
+  String get adminUserPermExplicitHelp => 'Off hides what the deny rules match';
+
+  @override
+  String get adminUserPermExplicitTitle => 'Explicit content';
+
+  @override
+  String get adminUserPermManagePodcastsHelp =>
+      'Subscribe, unsubscribe, and change feed settings';
+
+  @override
+  String get adminUserPermManagePodcastsTitle => 'Manage podcasts';
+
+  @override
+  String get adminUserPermSharedOutputsHelp =>
+      'May play to endpoints other people also use';
+
+  @override
+  String get adminUserPermSharedOutputsTitle => 'Shared outputs';
+
+  @override
+  String get adminUserPermissionsGroup => 'Permissions';
+
+  @override
+  String get adminUserQuotaHelp =>
+      'How much may sit in staging waiting for a decision. Importing an upload into the library frees the space again, so this bounds the queue rather than what the account contributes.';
+
+  @override
+  String get adminUserQuotaHint => 'Empty means no limit';
+
+  @override
+  String get adminUserQuotaLabel => 'Pending upload limit (MB)';
+
+  @override
+  String get adminUserRevokeAction => 'Sign out';
+
+  @override
+  String get adminUserRevokeAll => 'Sign out everywhere';
+
+  @override
+  String adminUserRevokeBody(String username) {
+    return 'Every session of $username is revoked immediately.';
+  }
+
+  @override
+  String get adminUserRevokeTitle => 'Sign out everywhere?';
+
+  @override
+  String get adminUserRoleGroup => 'Role';
+
+  @override
+  String get adminUserSessionsRevoked => 'Sessions revoked';
+
+  @override
+  String get adminUserSetPassword => 'Set password';
+
+  @override
+  String get adminUserTagAddRule => 'Add rule';
+
+  @override
+  String get adminUserTagAllowHelp =>
+      'With any rule here, only matching content is visible';
+
+  @override
+  String get adminUserTagAllowLabel => 'Content allow rules';
+
+  @override
+  String get adminUserTagDenyHelp =>
+      'Matching content is hidden from this account';
+
+  @override
+  String get adminUserTagDenyLabel => 'Content deny rules';
+
+  @override
+  String get adminUserTagKeyLabel => 'Tag key';
+
+  @override
+  String get adminUserTagValueLabel => 'Value (optional)';
+
+  @override
+  String get adminUserUploadsGroup => 'Uploads';
+
+  @override
+  String get adminUsersColumnAccount => 'Account';
+
+  @override
+  String get adminUsersColumnRoles => 'Roles';
+
+  @override
+  String get adminUsersColumnState => 'State';
+
+  @override
+  String get adminUsersColumnUploads => 'Uploads';
+
+  @override
+  String get adminUsersEmptyMessage =>
+      'Invite somebody, or open signup in server settings.';
+
+  @override
+  String get adminUsersEmptyTitle => 'No accounts';
+
+  @override
+  String adminUsersNamedAccount(String displayName, String username) {
+    return '$displayName ($username)';
+  }
+
+  @override
+  String get adminUsersNoRequests => 'No pending requests';
+
+  @override
+  String get adminUsersRejectAction => 'Reject';
+
+  @override
+  String get adminUsersRejectBody =>
+      'The request is removed; nothing is created.';
+
+  @override
+  String adminUsersRejectTitle(String username) {
+    return 'Reject $username?';
+  }
+
+  @override
+  String adminUsersRequestedByOn(String displayName, String date) {
+    return '$displayName, requested $date';
+  }
+
+  @override
+  String adminUsersRequestedOn(String date) {
+    return 'Requested $date';
+  }
+
+  @override
+  String get adminUsersStateActive => 'Active';
+
+  @override
+  String get adminUsersStateDisabled => 'Disabled';
+
+  @override
+  String get adminUsersStatePending => 'Pending';
+
+  @override
+  String get adminUsersTabInvites => 'Invites';
+
+  @override
+  String get adminUsersTabRequests => 'Requests';
+
+  @override
+  String get adminUsersTabUsers => 'Users';
+
+  @override
+  String get adminUsersTitle => 'Users';
+
+  @override
+  String adminUsersUploadsMb(int megabytes) {
+    final intl.NumberFormat megabytesNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String megabytesString = megabytesNumberFormat.format(megabytes);
+
+    return '$megabytesString MB';
+  }
+
+  @override
+  String get adminUsersUploadsNone => 'none';
+
+  @override
+  String get adminUsersUploadsUnlimited => 'unlimited';
+
+  @override
+  String get adminWarmingBlurb =>
+      'Files appear as they are indexed. Artwork, matching, and the health score fill in behind that: albums the scan finds are identified on their own, and anything the matcher is unsure of arrives in the review queue.';
+
+  @override
+  String get adminWarmingScanning => 'Scanning your library';
+
+  @override
+  String get adminWarmingUp => 'Still warming up';
+
+  @override
+  String get adminWizardAddLibraryAction => 'Add a library';
+
+  @override
+  String get adminWizardAddLibraryBlurb =>
+      'A library is a folder WaxDeck reads. Add one and everything else on this page starts having something to say.';
+
+  @override
+  String get adminWizardAddLibraryTitle => 'Point WaxDeck at your music';
+
+  @override
+  String get adminWizardInvite => 'Invite listeners';
+
+  @override
+  String get adminWizardScanBlurb =>
+      'A scan indexes the files, pulls their tags, and identifies the albums it recognises. It runs in the background: you can leave this page.';
+
+  @override
+  String get adminWizardScanTitle => 'Read what is there';
+
+  @override
+  String get adminWizardSkip => 'Skip the tour';
+
+  @override
+  String adminWizardStepOf(int number) {
+    return 'Step $number of 3';
+  }
+
+  @override
+  String get adminWizardWarmingBlurb =>
+      'Files appear as they are indexed, and artwork, matching, and the health score fill in behind them. Two things worth doing meanwhile: invite the people who will listen, and look in on the albums the matcher was unsure of.';
+
+  @override
+  String get adminWizardWarmingTitle => 'While it warms up';
+
+  @override
+  String get artSlotBack => 'Back cover';
+
+  @override
+  String get artSlotBackInline => 'back cover';
+
+  @override
+  String get artSlotBackground => 'Background';
+
+  @override
+  String get artSlotBackgroundInline => 'background';
+
+  @override
+  String get artSlotBooklet => 'Booklet';
+
+  @override
+  String get artSlotBookletInline => 'booklet';
+
+  @override
+  String get artSlotDisc => 'Disc';
+
+  @override
+  String get artSlotDiscInline => 'disc';
+
+  @override
+  String get artSlotFront => 'Front cover';
+
+  @override
+  String get artSlotFrontInline => 'front cover';
+
+  @override
+  String get artworkClearAction => 'Clear';
+
+  @override
+  String get artworkClearBody =>
+      'The slot becomes empty. Nothing falls back into it.';
+
+  @override
+  String get artworkClearFrontBody =>
+      'The item falls back to its album or artist cover. The image itself is removed from the catalog.';
+
+  @override
+  String artworkClearSlot(String slot) {
+    return 'Clear the $slot';
+  }
+
+  @override
+  String artworkClearTitle(String slot) {
+    return 'Clear the $slot?';
+  }
+
+  @override
+  String get artworkClearWord => 'clear';
+
+  @override
+  String artworkCleared(String slot) {
+    return '$slot cleared';
+  }
+
+  @override
+  String artworkDropHint(String slot) {
+    return 'Drop an image into $slot';
+  }
+
+  @override
+  String artworkOneImageOnly(String slot, String file) {
+    return '$slot takes one image; using $file';
+  }
+
+  @override
+  String get artworkOverline => 'One image per slot';
+
+  @override
+  String get artworkPickLabel => 'Image';
+
+  @override
+  String artworkReplaceSlot(String slot) {
+    return 'Replace the $slot';
+  }
+
+  @override
+  String artworkReplaced(String slot) {
+    return '$slot replaced';
+  }
+
+  @override
+  String artworkSetSlot(String slot) {
+    return 'Set the $slot';
+  }
+
+  @override
+  String artworkSlotSpoken(String slot, String state) {
+    return '$slot: $state';
+  }
+
+  @override
+  String get artworkSlotsUnreadable =>
+      'Could not read which slots this item holds; what is drawn below may be inherited.';
+
+  @override
+  String get artworkStateEmpty => 'Empty';
+
+  @override
+  String get artworkStateImage => 'image';
+
+  @override
+  String get artworkStateInherited => 'Inherited';
+
+  @override
+  String artworkStateSize(int width, int height) {
+    return '$width x $height';
+  }
+
+  @override
+  String get artworkTitle => 'Artwork';
+
+  @override
+  String artworkTooLarge(String file) {
+    return '$file is larger than the 16 MB an image may be';
+  }
+
+  @override
+  String artworkUnreadable(String file) {
+    return '$file could not be read';
+  }
+
+  @override
   String bytesB(int bytes) {
     final intl.NumberFormat bytesNumberFormat =
         intl.NumberFormat.decimalPatternDigits(
@@ -68,10 +1573,87 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonCancel => 'Cancel';
 
   @override
+  String get commonClose => 'Close';
+
+  @override
+  String get commonDone => 'Done';
+
+  @override
+  String get commonLoading => 'Loading';
+
+  @override
+  String get commonLoadingTitle => 'Loading…';
+
+  @override
   String get commonRetry => 'Retry';
 
   @override
   String get commonSave => 'Save';
+
+  @override
+  String get devicesBaseConfigured => 'Configured address';
+
+  @override
+  String get devicesBaseDetected => 'Detected on this network';
+
+  @override
+  String devicesBaseLine(String source, String state) {
+    return '$source, $state';
+  }
+
+  @override
+  String get devicesBaseReachable => 'reachable';
+
+  @override
+  String get devicesBaseUnreachable => 'not reachable';
+
+  @override
+  String get devicesCastBlurb =>
+      'A cast device fetches audio from this server by address. These are the addresses it will try, in order.';
+
+  @override
+  String get devicesCastCaveat =>
+      'The server checked these itself. An address it cannot reach will not work from a speaker either; one it can may still fail if the speaker is on another network.';
+
+  @override
+  String get devicesCastingOverline => 'Casting';
+
+  @override
+  String get devicesCheckError => 'Could not check';
+
+  @override
+  String get devicesConnectionCheck => 'Connection check';
+
+  @override
+  String get devicesCurrentlyElsewhere => 'Currently elsewhere';
+
+  @override
+  String get devicesGroupApps => 'WaxDeck apps';
+
+  @override
+  String get devicesGroupOther => 'Other devices';
+
+  @override
+  String get devicesGroupServer => 'This server';
+
+  @override
+  String get devicesGroupSpeakers => 'Speakers and displays';
+
+  @override
+  String get devicesLeaveItPlaying => 'Leave it playing';
+
+  @override
+  String get devicesListError => 'Could not list devices';
+
+  @override
+  String get devicesListErrorMessage =>
+      'The server did not answer. Playback here is unaffected.';
+
+  @override
+  String get devicesLooking => 'Looking for devices';
+
+  @override
+  String get devicesMore => 'More';
 
   @override
   String devicesMultiPartAudiobook(String endpoint) {
@@ -79,8 +1661,84 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get devicesNoAddresses => 'No addresses to try';
+
+  @override
+  String get devicesNoAddressesMessage =>
+      'This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.';
+
+  @override
+  String get devicesNothingElsewhere => 'Nothing playing elsewhere';
+
+  @override
+  String get devicesNothingElsewhereMessage =>
+      'Pick a device from the now-playing bar to send playback somewhere else.';
+
+  @override
   String get devicesNothingToSend =>
       'Nothing is playing here to send. Start something first.';
+
+  @override
+  String devicesOnEndpoint(String endpoint) {
+    return 'on $endpoint';
+  }
+
+  @override
+  String get devicesPlayOn => 'Play on';
+
+  @override
+  String get devicesPlayOnAnother => 'Play on another device';
+
+  @override
+  String get devicesPlaying => 'Playing';
+
+  @override
+  String get devicesPlayingElsewhere => 'Playing elsewhere';
+
+  @override
+  String get devicesPlayingHere => 'Playing here';
+
+  @override
+  String devicesPlayingOn(String endpoint) {
+    return 'Playing on $endpoint';
+  }
+
+  @override
+  String get devicesRemoteTitle => 'Remote playback';
+
+  @override
+  String devicesStartedBy(String name) {
+    return 'started by $name';
+  }
+
+  @override
+  String devicesStopOn(String endpoint) {
+    return 'Stop playback on $endpoint';
+  }
+
+  @override
+  String get devicesTakeOverBody =>
+      'This device can take over, or leave it playing where it is.';
+
+  @override
+  String get devicesTakeOverOrLeave => 'Take over, or leave it playing';
+
+  @override
+  String get devicesThisDevice => 'This device';
+
+  @override
+  String get devicesTransferHere => 'Transfer here';
+
+  @override
+  String devicesVolumeOn(String endpoint) {
+    return 'Volume on $endpoint';
+  }
+
+  @override
+  String get downloadsDownloaded => 'Downloaded';
+
+  @override
+  String get downloadsDownloading => 'Downloading';
 
   @override
   String durationDays(int days) {
@@ -239,7 +1897,108 @@ class AppLocalizationsEn extends AppLocalizations {
       'This track is part of a larger file, which another device can\'t play yet. Play it on this one instead.';
 
   @override
+  String get healthColumnAbsorbs => 'Absorbs';
+
+  @override
+  String get healthColumnCode => 'Code';
+
+  @override
+  String get healthColumnFailing => 'Failing';
+
+  @override
+  String get healthColumnFile => 'File';
+
+  @override
+  String get healthColumnKeeping => 'Keeping';
+
+  @override
+  String get healthColumnKind => 'Kind';
+
+  @override
+  String get healthColumnOrigin => 'Origin';
+
+  @override
+  String get healthColumnRecording => 'Recording';
+
+  @override
+  String get healthColumnRule => 'Rule';
+
+  @override
+  String get healthColumnSeverity => 'Severity';
+
+  @override
+  String get healthColumnSurvivor => 'Survivor';
+
+  @override
+  String get healthColumnTrashing => 'Trashing';
+
+  @override
+  String get healthColumnWhy => 'Why';
+
+  @override
   String get healthCorruptAudio => 'Corrupt audio';
+
+  @override
+  String healthDiagnosticsChip(String code, int count) {
+    return '$code ($count)';
+  }
+
+  @override
+  String get healthDiagnosticsEmptyMessage =>
+      'Every file the catalog has seen decoded cleanly.';
+
+  @override
+  String get healthDiagnosticsEmptyTitle => 'No diagnostics recorded';
+
+  @override
+  String get healthDiagnosticsLoadError => 'Could not load diagnostics';
+
+  @override
+  String healthDiagnosticsMore(int count) {
+    return '$count shown; there are more';
+  }
+
+  @override
+  String get healthDuplicatesEmptyMessage =>
+      'Artists, albums, and shows each appear once.';
+
+  @override
+  String get healthDuplicatesEmptyTitle => 'No duplicates detected';
+
+  @override
+  String get healthDuplicatesError => 'Could not load duplicates';
+
+  @override
+  String get healthDuplicatesErrorBody => 'The clustering pass did not answer.';
+
+  @override
+  String get healthDuplicatesOverline => 'One thing under two names';
+
+  @override
+  String get healthDuplicatesTitle => 'Duplicates';
+
+  @override
+  String get healthEntityAlbum => 'album';
+
+  @override
+  String get healthEntityArtist => 'artist';
+
+  @override
+  String get healthEntityGenre => 'genre';
+
+  @override
+  String get healthEntityReleaseGroup => 'release-group';
+
+  @override
+  String healthEvaluatedOf(int checked, int total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: 'Evaluated $checked of $total items',
+      one: 'Evaluated $checked of 1 item',
+    );
+    return '$_temp0';
+  }
 
   @override
   String healthFixRule(String rule) {
@@ -250,7 +2009,67 @@ class AppLocalizationsEn extends AppLocalizations {
   String get healthGenreWhitelist => 'Genre outside the canonical tree';
 
   @override
+  String get healthIssuesEmptyMessage =>
+      'Every item the sweeper has seen passes it.';
+
+  @override
+  String get healthIssuesEmptyTitle => 'Nothing failing this rule';
+
+  @override
+  String get healthIssuesError => 'Could not load issues';
+
+  @override
+  String healthKbps(int kbps) {
+    return '$kbps kbps';
+  }
+
+  @override
+  String get healthKeepBest => 'Keep the best version';
+
+  @override
   String get healthLegacyTags => 'Legacy-only tags';
+
+  @override
+  String get healthLoadError => 'Could not load library health';
+
+  @override
+  String get healthLoadMore => 'Load more';
+
+  @override
+  String get healthLoadMoreFailed => 'Could not load more; scroll to retry';
+
+  @override
+  String get healthLossless => 'lossless';
+
+  @override
+  String get healthMergeAction => 'Merge';
+
+  @override
+  String healthMergeBody(String losers, String survivor) {
+    return '$losers will merge into \"$survivor\". Their items move under the survivor, and the merge cannot be undone.';
+  }
+
+  @override
+  String healthMergeInto(String name) {
+    return 'Merge into $name';
+  }
+
+  @override
+  String get healthMergeTitle => 'Merge duplicates?';
+
+  @override
+  String get healthMergeWord => 'merge';
+
+  @override
+  String healthMerged(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Merged $count entries',
+      one: 'Merged 1 entry',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get healthMissingArt => 'Missing cover art';
@@ -274,11 +2093,117 @@ class AppLocalizationsEn extends AppLocalizations {
   String get healthMissingYear => 'Missing release year';
 
   @override
+  String get healthNamesMatch => 'Names match';
+
+  @override
   String get healthPathMismatch =>
       'File path does not match the organize profile';
 
   @override
+  String healthQueuedItems(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Queued $count items',
+      one: 'Queued 1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get healthResolveAction => 'Resolve';
+
+  @override
+  String get healthResolveBody =>
+      'The other versions move to the server trash and can be restored until the trash window closes.';
+
+  @override
+  String get healthResolveTitle => 'Keep the best version?';
+
+  @override
+  String get healthResolveWord => 'resolve';
+
+  @override
+  String get healthRulesEmptyMessage =>
+      'Rules appear once the sweeper has evaluated the library.';
+
+  @override
+  String get healthRulesEmptyTitle => 'Nothing to check yet';
+
+  @override
+  String get healthRulesOverline => 'What the sweeper checks';
+
+  @override
+  String get healthRulesTitle => 'Rules';
+
+  @override
+  String healthScoreBlurb(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Library health across $count evaluated items',
+      one: 'Library health across 1 evaluated item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String healthScoreSpoken(int score) {
+    return 'Health score $score';
+  }
+
+  @override
+  String get healthSeverityError => 'error';
+
+  @override
+  String get healthSeverityInfo => 'info';
+
+  @override
+  String get healthSeverityWarn => 'warn';
+
+  @override
   String get healthSmallArt => 'Low-resolution cover art';
+
+  @override
+  String get healthSweepNow => 'Sweep now';
+
+  @override
+  String get healthSweepQueued => 'Sweep queued';
+
+  @override
+  String healthTitleByArtist(String title, String artist) {
+    return '$title by $artist';
+  }
+
+  @override
+  String healthTrashedFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Trashed $count files',
+      one: 'Trashed 1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get healthUpgradesEmptyMessage => 'Every recording is held once.';
+
+  @override
+  String get healthUpgradesEmptyTitle => 'No duplicate qualities detected';
+
+  @override
+  String get healthUpgradesError => 'Could not load upgrades';
+
+  @override
+  String get healthUpgradesErrorBody =>
+      'The quality comparison did not answer.';
+
+  @override
+  String get healthUpgradesOverline => 'The same recording twice';
+
+  @override
+  String get healthUpgradesTitle => 'Quality upgrades';
 
   @override
   String get healthWriteUnsynced => 'File tags out of sync with the catalog';
@@ -290,7 +2215,230 @@ class AppLocalizationsEn extends AppLocalizations {
   String get libraryBrowseSortMostFirst => 'Most first';
 
   @override
+  String get libraryKindAlbum => 'album';
+
+  @override
+  String get libraryKindArtist => 'artist';
+
+  @override
   String get localeFontSample => 'Music, podcasts, and audiobooks.';
+
+  @override
+  String get metadataAddTag => 'Add tag';
+
+  @override
+  String get metadataClearLyrics => 'Clear';
+
+  @override
+  String get metadataCreditNames => 'Names, comma separated';
+
+  @override
+  String get metadataCreditRole => 'Credit role';
+
+  @override
+  String get metadataCreditsOverline => 'Who else is on it';
+
+  @override
+  String get metadataCreditsTitle => 'Credits';
+
+  @override
+  String metadataEnrichApplied(String fields) {
+    return 'Applied: $fields';
+  }
+
+  @override
+  String metadataEnrichSkipped(String fields) {
+    return 'Skipped: $fields';
+  }
+
+  @override
+  String get metadataFetch => 'Fetch metadata';
+
+  @override
+  String get metadataFieldLockedHint =>
+      'Check \"Force\" to overwrite locked fields.';
+
+  @override
+  String get metadataFieldsOverline => 'What this item claims to be';
+
+  @override
+  String get metadataFieldsTitle => 'Fields';
+
+  @override
+  String get metadataForceHelp => 'Overwrite fields that are already locked';
+
+  @override
+  String get metadataForceTitle => 'Force';
+
+  @override
+  String metadataFromSource(int count, String source) {
+    return '$count from $source';
+  }
+
+  @override
+  String get metadataIdentificationBlurb =>
+      'Rematch reopens identification and puts the result in the review queue. Fetching metadata applies what the providers already agree on, without asking.';
+
+  @override
+  String get metadataIdentificationTitle => 'Identification';
+
+  @override
+  String metadataLinesAllTimed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lines, all timed',
+      one: '1 line, timed',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String metadataLinesSomeTimed(int count, int timed) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lines, $timed timed',
+      one: '1 line, $timed timed',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get metadataLoadError => 'Could not load the metadata';
+
+  @override
+  String metadataLockField(String field) {
+    return 'Lock $field';
+  }
+
+  @override
+  String get metadataLockHelp =>
+      'Keep scans and enrichment from overwriting what you type';
+
+  @override
+  String get metadataLockTitle => 'Lock edited fields';
+
+  @override
+  String get metadataLyricsHint => '[00:12.00] First line';
+
+  @override
+  String get metadataLyricsLabel => 'LRC';
+
+  @override
+  String get metadataLyricsOverline => 'Timed LRC, or plain lines';
+
+  @override
+  String get metadataLyricsTitle => 'Lyrics';
+
+  @override
+  String get metadataNoCreditRoles => 'No credit roles for this kind';
+
+  @override
+  String get metadataNoSources => 'No recorded sources';
+
+  @override
+  String get metadataNothingToFetch => 'Nothing to fetch';
+
+  @override
+  String get metadataNothingToPreview => 'Nothing to preview';
+
+  @override
+  String get metadataOpenAlbum => 'Open album';
+
+  @override
+  String get metadataOpenArtist => 'Open artist';
+
+  @override
+  String get metadataOpenReleaseGroup => 'Open release group';
+
+  @override
+  String get metadataOpenReview => 'Open review';
+
+  @override
+  String get metadataQueuedForIdentification => 'Queued for identification';
+
+  @override
+  String get metadataReleaseTitle => 'Release status';
+
+  @override
+  String get metadataRematch => 'Rematch';
+
+  @override
+  String metadataRemoveTag(String key) {
+    return 'Remove tag $key';
+  }
+
+  @override
+  String metadataSaveChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Save $count changes',
+      one: 'Save 1 change',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get metadataSaveCredits => 'Save credits';
+
+  @override
+  String get metadataSaveLyrics => 'Save lyrics';
+
+  @override
+  String get metadataSourceUnknown => 'Source unknown';
+
+  @override
+  String metadataSourceWithProvider(String source, String provider) {
+    return '$source ($provider)';
+  }
+
+  @override
+  String get metadataTagKey => 'Key';
+
+  @override
+  String get metadataTagValues => 'Values, comma separated';
+
+  @override
+  String get metadataTagsOverline => 'Anything the vocabulary has no field for';
+
+  @override
+  String get metadataTagsTitle => 'Custom tags';
+
+  @override
+  String get metadataTitle => 'Edit metadata';
+
+  @override
+  String metadataUnlockField(String field) {
+    return 'Unlock $field';
+  }
+
+  @override
+  String get metadataUnofficialHelp =>
+      'A bootleg, a promo, or another unofficial issue';
+
+  @override
+  String get metadataUnofficialTitle => 'Unofficial release';
+
+  @override
+  String get metadataUntitled => 'Untitled';
+
+  @override
+  String metadataWriteBackFailure(String file, String reason) {
+    return '$file: $reason';
+  }
+
+  @override
+  String get metadataWriteBackHelp =>
+      'Also rewrite the tags embedded in the backing files';
+
+  @override
+  String get metadataWriteBackTitle => 'Write tags to files';
+
+  @override
+  String get metadataWriteBackWarning =>
+      'Saved, but some files kept their old tags.';
 
   @override
   String get notifBackupCompletedHelp => 'A backup archive finished building.';
@@ -338,6 +2486,506 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notifSignupRequestedTitle => 'Account request';
+
+  @override
+  String get playerAddLyrics => 'Add lyrics';
+
+  @override
+  String get playerAddToPlaylist => 'Add to playlist';
+
+  @override
+  String get playerAllStations => 'All stations';
+
+  @override
+  String playerBookmarkAdd(String time) {
+    return 'Mark $time';
+  }
+
+  @override
+  String get playerBookmarkNoNote => 'No note';
+
+  @override
+  String get playerBookmarkNote => 'Note (optional)';
+
+  @override
+  String playerBookmarkNoteAt(String note, String time) {
+    return '$note, at $time';
+  }
+
+  @override
+  String playerBookmarkPlayFrom(String time) {
+    return 'Play from $time';
+  }
+
+  @override
+  String playerBookmarkRemove(String time) {
+    return 'Remove the bookmark at $time';
+  }
+
+  @override
+  String get playerBookmarks => 'Bookmarks';
+
+  @override
+  String playerBookmarksCount(int count) {
+    return 'Bookmarks, $count';
+  }
+
+  @override
+  String get playerBookmarksEmpty =>
+      'Nothing marked yet. A bookmark keeps a place you want to come back to; your listening position is kept for you either way.';
+
+  @override
+  String get playerBookmarksError => 'Could not load the bookmarks.';
+
+  @override
+  String get playerCancelTimer => 'Cancel timer';
+
+  @override
+  String get playerCarIdleMessage =>
+      'Start something and it takes the whole screen.';
+
+  @override
+  String get playerCarMode => 'Car mode';
+
+  @override
+  String playerChapterPlaying(String chapter) {
+    return '$chapter, playing';
+  }
+
+  @override
+  String get playerChapters => 'Chapters';
+
+  @override
+  String get playerCloseLyrics => 'Close lyrics';
+
+  @override
+  String get playerCollapse => 'Collapse player';
+
+  @override
+  String get playerCollapseCommand => 'Collapse the player';
+
+  @override
+  String get playerDeleteFiles => 'Delete files...';
+
+  @override
+  String get playerEditStation => 'Edit station';
+
+  @override
+  String get playerExtendTimer => 'Extend 10 minutes';
+
+  @override
+  String get playerExtendTimerShort => 'Extend 10 min';
+
+  @override
+  String get playerFaster => 'Faster';
+
+  @override
+  String playerFindInLibrary(String track) {
+    return 'Find \"$track\" in the library';
+  }
+
+  @override
+  String get playerForgetSong => 'Forget this song';
+
+  @override
+  String playerGoToName(String name) {
+    return 'Go to $name';
+  }
+
+  @override
+  String get playerGoToShow => 'Go to show';
+
+  @override
+  String get playerIdleMessage =>
+      'Pick something from your library and it shows up here.';
+
+  @override
+  String get playerInstantMix => 'Instant mix';
+
+  @override
+  String get playerLeaveCarMode => 'Leave car mode';
+
+  @override
+  String get playerLeaveVisualizer => 'Leave the visualizer';
+
+  @override
+  String playerLeftCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count left',
+      one: '1 left',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playerLyrics => 'Lyrics';
+
+  @override
+  String get playerLyricsError => 'Could not load the lyrics';
+
+  @override
+  String get playerLyricsIdleMessage => 'Words show up here once something is.';
+
+  @override
+  String get playerMarkPlayed => 'Mark as played';
+
+  @override
+  String get playerMiniWindow => 'Mini player window';
+
+  @override
+  String get playerMoreLikeThis => 'More like this';
+
+  @override
+  String get playerNext => 'Next';
+
+  @override
+  String get playerNoLyrics => 'No lyrics for this track';
+
+  @override
+  String get playerNoLyricsAdminMessage =>
+      'Nothing was found in a sidecar or in the file tags. You can add them in the metadata editor.';
+
+  @override
+  String get playerNoLyricsMessage =>
+      'Nothing was found in a sidecar or in the file tags.';
+
+  @override
+  String get playerNoShape => 'No shape to draw';
+
+  @override
+  String get playerNoShapeMessage =>
+      'The visualizer draws what the analyze pass measured, and this file has not been measured. Run an analyze pass on the library and it fills in.';
+
+  @override
+  String get playerNothingPlaying => 'Nothing is playing';
+
+  @override
+  String playerOfferQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count queued items',
+      one: '1 queued item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playerOfferResume => 'Pick up where you left off';
+
+  @override
+  String get playerOpenPlayer => 'Open the player';
+
+  @override
+  String playerPart(int number) {
+    return 'Part $number';
+  }
+
+  @override
+  String get playerPause => 'Pause';
+
+  @override
+  String get playerPinStation => 'Pin to the dial';
+
+  @override
+  String get playerPlay => 'Play';
+
+  @override
+  String get playerPrevious => 'Previous';
+
+  @override
+  String get playerQueue => 'Queue';
+
+  @override
+  String get playerRatingFailed => 'Could not save that change';
+
+  @override
+  String get playerSaveSong => 'Save this song';
+
+  @override
+  String get playerSeekSpans => 'Seek bar spans';
+
+  @override
+  String get playerShareLink => 'Share link';
+
+  @override
+  String get playerSimilarTracks => 'Similar tracks';
+
+  @override
+  String get playerSleepTimer => 'Sleep timer';
+
+  @override
+  String playerSleepTimerLeft(String time) {
+    return 'Sleep timer, $time left';
+  }
+
+  @override
+  String get playerSlower => 'Slower';
+
+  @override
+  String get playerSpanBook => 'Book';
+
+  @override
+  String get playerSpanChapter => 'Chapter';
+
+  @override
+  String get playerSpeed => 'Playback speed';
+
+  @override
+  String playerSpeedAt(String speed) {
+    return 'Playback speed $speed';
+  }
+
+  @override
+  String get playerSpeedRememberedBook => 'Remembered for this book';
+
+  @override
+  String get playerSpeedRememberedShow => 'Remembered for this show';
+
+  @override
+  String get playerSpeedThisSession => 'For this session only';
+
+  @override
+  String get playerStar => 'Star';
+
+  @override
+  String playerStarRating(int count) {
+    return '$count star rating';
+  }
+
+  @override
+  String playerStarRatingOf(int count, String kind) {
+    return '$count star $kind rating';
+  }
+
+  @override
+  String playerStarThis(String kind) {
+    return 'Star this $kind';
+  }
+
+  @override
+  String get playerStart => 'Start';
+
+  @override
+  String get playerStartFailed => 'Playback failed to start';
+
+  @override
+  String playerStationMenu(String station) {
+    return 'More for $station';
+  }
+
+  @override
+  String get playerStationWebsite => 'Station website';
+
+  @override
+  String get playerStopped => 'Playback stopped';
+
+  @override
+  String get playerSupportShow => 'Support the show';
+
+  @override
+  String get playerTimerChapterEnd => 'End of chapter';
+
+  @override
+  String get playerTimerCustom => 'Custom minutes';
+
+  @override
+  String get playerTimerCustomStart => 'Start custom timer';
+
+  @override
+  String playerTimerLeft(String time) {
+    return '$time left';
+  }
+
+  @override
+  String playerTimerMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count minutes',
+      one: '1 minute',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playerTranscriptError => 'Could not load the transcript.';
+
+  @override
+  String get playerTrimExplained =>
+      'Silence trimming skips the mapped quiet parts of an episode. Positions stay honest; the chip counts what it skipped.';
+
+  @override
+  String get playerTrimSilence => 'Trim silence';
+
+  @override
+  String playerTrimSilenceSaved(String saved) {
+    return 'Trim silence ($saved)';
+  }
+
+  @override
+  String get playerUnpinStation => 'Unpin from the dial';
+
+  @override
+  String get playerUnstar => 'Unstar';
+
+  @override
+  String playerUnstarThis(String kind) {
+    return 'Unstar this $kind';
+  }
+
+  @override
+  String get playerUpNext => 'UP NEXT';
+
+  @override
+  String playerUpNextItem(String title) {
+    return 'Up next, $title';
+  }
+
+  @override
+  String get playerUpNextLabel => 'Up next';
+
+  @override
+  String get playerVisualizer => 'Visualizer';
+
+  @override
+  String get playerVisualizerIdleMessage =>
+      'Start a track and its shape shows up here.';
+
+  @override
+  String get playerVisualizerMode => 'Visualizer mode';
+
+  @override
+  String get playerVoiceBoost => 'Voice boost';
+
+  @override
+  String get playerVoiceBoostExplained =>
+      'Voice boost evens out a quiet or uneven recording. The server applies it, so what is playing reopens.';
+
+  @override
+  String get playerVoiceBoostFailed =>
+      'The settings for this show could not be reached, so voice boost was not changed.';
+
+  @override
+  String get playerVolume => 'Volume';
+
+  @override
+  String queueAddedMany(int count) {
+    return 'Added $count tracks to the queue';
+  }
+
+  @override
+  String queueAddedOne(String title) {
+    return 'Added $title to the queue';
+  }
+
+  @override
+  String get queueClear => 'Clear queue';
+
+  @override
+  String get queueClearSelection => 'Clear the queue selection';
+
+  @override
+  String get queueClearSelectionAction => 'Clear';
+
+  @override
+  String get queueDragToReorder => 'Drag to reorder';
+
+  @override
+  String queueDropNothing(String name) {
+    return '$name has nothing to play';
+  }
+
+  @override
+  String get queueEarlier => 'EARLIER';
+
+  @override
+  String get queueEmptyMessage =>
+      'Play an album, a show, or a playlist and it lands here.';
+
+  @override
+  String get queueEmptyTitle => 'Nothing queued';
+
+  @override
+  String get queueHideHistory => 'Hide what has played';
+
+  @override
+  String get queueMoveDown => 'Move down';
+
+  @override
+  String get queueMoveToBottom => 'Move to bottom';
+
+  @override
+  String get queueMoveToTop => 'Move to top';
+
+  @override
+  String get queueMoveUp => 'Move up';
+
+  @override
+  String get queueNothingUpNext => 'NOTHING UP NEXT';
+
+  @override
+  String queuePlayingFrom(String source) {
+    return 'Playing from $source';
+  }
+
+  @override
+  String queuePreviously(int count) {
+    return 'PREVIOUSLY ($count)';
+  }
+
+  @override
+  String get queueRemove => 'Remove';
+
+  @override
+  String get queueRemoveEntry => 'Remove from queue';
+
+  @override
+  String get queueRepeatAll => 'Repeat all';
+
+  @override
+  String get queueRepeatOff => 'Repeat off';
+
+  @override
+  String get queueRepeatOne => 'Repeat one';
+
+  @override
+  String queueRestoreSession(String name) {
+    return 'Restore $name';
+  }
+
+  @override
+  String queueRestored(String name) {
+    return 'Restored $name';
+  }
+
+  @override
+  String get queueRollingWindow => 'A window over a larger scope';
+
+  @override
+  String queueSelectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count selected',
+      one: '1 selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get queueShowHistory => 'Show what has played';
+
+  @override
+  String get queueShuffleOff => 'Shuffle off';
+
+  @override
+  String get queueShuffleOn => 'Shuffle on';
+
+  @override
+  String get queueUndo => 'Undo';
 
   @override
   String relDaysAgo(int days) {
@@ -1563,4 +4211,116 @@ class AppLocalizationsEn extends AppLocalizations {
   String speedMultiplier(String speed) {
     return '${speed}x';
   }
+
+  @override
+  String get toolsClearFinished => 'Clear finished';
+
+  @override
+  String get toolsDismiss => 'Dismiss';
+
+  @override
+  String get toolsEmptyMessage =>
+      'Merges, splits, downloads, and imports report their progress here while they run and land here when they finish.';
+
+  @override
+  String get toolsEmptyTitle => 'No tool tasks';
+
+  @override
+  String get toolsFinishedTapForReport => 'Finished · tap for the report';
+
+  @override
+  String toolsItemsProduced(int count) {
+    return '$count items produced · tap to open';
+  }
+
+  @override
+  String get toolsLoadError => 'Could not load tool tasks';
+
+  @override
+  String get toolsOpenReviewQueue => 'Open the review queue';
+
+  @override
+  String toolsProduced(String pids) {
+    return 'produced $pids';
+  }
+
+  @override
+  String toolsReadyForReview(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ready for review',
+      one: '1 ready for review',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get toolsStateDone => 'Done';
+
+  @override
+  String get toolsStateFailed => 'Failed';
+
+  @override
+  String get toolsStateQueued => 'Queued';
+
+  @override
+  String get toolsStateRunning => 'Running';
+
+  @override
+  String toolsStateRunningPct(int percent) {
+    return 'Running · $percent%';
+  }
+
+  @override
+  String toolsSummaryListens(String count) {
+    return 'listens $count';
+  }
+
+  @override
+  String toolsSummaryMatched(String count) {
+    return 'matched $count';
+  }
+
+  @override
+  String toolsSummaryUnmatched(String count) {
+    return 'unmatched $count';
+  }
+
+  @override
+  String get toolsTapForReport => 'Tap for the report';
+
+  @override
+  String get toolsTapToOpenResult => 'Tap to open what it produced';
+
+  @override
+  String get toolsTaskAcquire => 'URL download';
+
+  @override
+  String get toolsTaskBookMerge => 'Book merge';
+
+  @override
+  String get toolsTaskBookSplit => 'Book split';
+
+  @override
+  String get toolsTaskCueSplit => 'CUE split';
+
+  @override
+  String toolsTaskImportFrom(String source) {
+    return 'Import from $source';
+  }
+
+  @override
+  String toolsTasksCleared(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Cleared $count tasks',
+      one: 'Cleared 1 task',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get toolsTitle => 'Tool tasks';
 }

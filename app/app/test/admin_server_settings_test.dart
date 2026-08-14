@@ -7,6 +7,7 @@ import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
@@ -18,7 +19,7 @@ ProviderContainer _container(FakeRepository repo) {
 
 Widget _host(ProviderContainer container) => UncontrolledProviderScope(
   container: container,
-  child: const MaterialApp(home: ServerSettingsScreen()),
+  child: localizedHost(const ServerSettingsScreen()),
 );
 
 Future<void> _pump(WidgetTester tester, Widget host) async {

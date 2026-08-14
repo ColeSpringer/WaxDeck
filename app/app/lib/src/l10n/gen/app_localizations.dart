@@ -99,6 +99,2562 @@ abstract class AppLocalizations {
     Locale('es'),
   ];
 
+  /// Empty state of the audit log, saying what will fill it.
+  ///
+  /// In en, this message translates to:
+  /// **'Administrative actions are recorded here as they happen.'**
+  String get adminAuditEmptyMessage;
+
+  /// Empty state of the audit log.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing logged yet'**
+  String get adminAuditEmptyTitle;
+
+  /// Hint in the audit filter, showing two action names. The names themselves are wire tokens and stay as they are; only the word between them is translated.
+  ///
+  /// In en, this message translates to:
+  /// **'user. or backup.create'**
+  String get adminAuditFilterHint;
+
+  /// Field narrowing the audit log to actions starting with what is typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by action'**
+  String get adminAuditFilterLabel;
+
+  /// Title of the error state when the audit log could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the audit log'**
+  String get adminAuditLoadError;
+
+  /// Drawn where an audit event's stored detail would be when it carries none.
+  ///
+  /// In en, this message translates to:
+  /// **'No further detail'**
+  String get adminAuditNoDetail;
+
+  /// One audit row read as a whole for a screen reader: the action's wire name, then who and when.
+  ///
+  /// In en, this message translates to:
+  /// **'{action}, {detail}'**
+  String adminAuditRowSpoken(String action, String detail);
+
+  /// Stands in for the person behind an audit event when the server did it itself. Lower case: it leads a comma-separated line of facts about the event.
+  ///
+  /// In en, this message translates to:
+  /// **'system'**
+  String get adminAuditSystemActor;
+
+  /// Tooltip of the menu holding what can be done with one backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup actions'**
+  String get adminBackupActions;
+
+  /// What the file picker calls the zip it is asking for.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup archive'**
+  String get adminBackupArchiveLabel;
+
+  /// Confirming button of the delete-backup dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get adminBackupDeleteAction;
+
+  /// Body of the dialog confirming that a backup archive is deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'{fileName} is removed for good.'**
+  String adminBackupDeleteBody(String fileName);
+
+  /// Menu item that opens the delete-backup confirmation. The trailing dots say a dialog follows.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete...'**
+  String get adminBackupDeleteMenu;
+
+  /// Title of the dialog confirming that a backup archive is deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete backup?'**
+  String get adminBackupDeleteTitle;
+
+  /// Menu item that downloads a backup archive.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get adminBackupDownload;
+
+  /// Hint drawn over the backups page when a file is dragged onto it.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop a backup archive to import'**
+  String get adminBackupDropHint;
+
+  /// Button that picks a backup archive from disk and uploads it.
+  ///
+  /// In en, this message translates to:
+  /// **'Import archive'**
+  String get adminBackupImportArchive;
+
+  /// Message after an archive finished uploading. Importing only stores it: restoring is a second, deliberate step.
+  ///
+  /// In en, this message translates to:
+  /// **'{fileName} imported; stage its restore'**
+  String adminBackupImported(String fileName);
+
+  /// Line under both retention fields, saying that zero means no limit.
+  ///
+  /// In en, this message translates to:
+  /// **'0 keeps all'**
+  String get adminBackupKeepAll;
+
+  /// Field for how many backup archives the server keeps before deleting the oldest.
+  ///
+  /// In en, this message translates to:
+  /// **'Backups to keep'**
+  String get adminBackupKeepCountLabel;
+
+  /// Field for how many megabytes of backups the server keeps. MB is the unit abbreviation.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup space (MB)'**
+  String get adminBackupKeepMbLabel;
+
+  /// Button that starts a backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up now'**
+  String get adminBackupNow;
+
+  /// Body of the dialog confirming a staged restore.
+  ///
+  /// In en, this message translates to:
+  /// **'The server replaces its database with {fileName} at the next restart. Changes made since the backup are lost.'**
+  String adminBackupRestoreBody(String fileName);
+
+  /// Title of the dialog confirming a staged restore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore this backup?'**
+  String get adminBackupRestoreTitle;
+
+  /// Message after the retention fields were written.
+  ///
+  /// In en, this message translates to:
+  /// **'Retention saved'**
+  String get adminBackupRetentionSaved;
+
+  /// The back-up button while a backup is already running.
+  ///
+  /// In en, this message translates to:
+  /// **'Backing up...'**
+  String get adminBackupRunning;
+
+  /// Button that writes the two retention fields.
+  ///
+  /// In en, this message translates to:
+  /// **'Save retention'**
+  String get adminBackupSaveRetention;
+
+  /// Confirming button of the restore dialog. It stages the restore rather than performing it: the server applies it at its next start.
+  ///
+  /// In en, this message translates to:
+  /// **'Stage restore'**
+  String get adminBackupStageRestore;
+
+  /// Menu item that opens the restore confirmation. The trailing dots say a dialog follows.
+  ///
+  /// In en, this message translates to:
+  /// **'Stage restore...'**
+  String get adminBackupStageRestoreMenu;
+
+  /// Message after a backup was accepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup started'**
+  String get adminBackupStarted;
+
+  /// State of a finished backup. Lower case and agreeing with the word for a backup: it sits in a comma-separated run of facts about one.
+  ///
+  /// In en, this message translates to:
+  /// **'done'**
+  String get adminBackupStateDone;
+
+  /// State of a backup that did not finish. Lower case and agreeing with the word for a backup: it sits in a comma-separated run of facts about one.
+  ///
+  /// In en, this message translates to:
+  /// **'failed'**
+  String get adminBackupStateFailed;
+
+  /// State of a backup being written. Lower case: it sits in a comma-separated run of facts about one backup.
+  ///
+  /// In en, this message translates to:
+  /// **'running'**
+  String get adminBackupStateRunning;
+
+  /// Says a backup arrived as an uploaded archive. Lower case and agreeing with the word for a backup: it sits in a comma-separated run of facts about one.
+  ///
+  /// In en, this message translates to:
+  /// **'imported'**
+  String get adminBackupTriggerImported;
+
+  /// Says a backup was started by a person. Lower case: it sits in a comma-separated run of facts about one backup.
+  ///
+  /// In en, this message translates to:
+  /// **'manual'**
+  String get adminBackupTriggerManual;
+
+  /// Says a backup came from the maintenance timetable. Lower case and agreeing with the word for a backup: it sits in a comma-separated run of facts about one.
+  ///
+  /// In en, this message translates to:
+  /// **'scheduled'**
+  String get adminBackupTriggerScheduled;
+
+  /// Drawn where the backup list would be when the server has made none.
+  ///
+  /// In en, this message translates to:
+  /// **'No backups yet'**
+  String get adminBackupsEmpty;
+
+  /// Heading over the fields saying how many backups the server keeps.
+  ///
+  /// In en, this message translates to:
+  /// **'Retention'**
+  String get adminBackupsRetention;
+
+  /// Title of the backups screen in the admin console.
+  ///
+  /// In en, this message translates to:
+  /// **'Backups'**
+  String get adminBackupsTitle;
+
+  /// Title of the admin console's front page.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin'**
+  String get adminDashboardTitle;
+
+  /// Button that adds a genre to the vocabulary.
+  ///
+  /// In en, this message translates to:
+  /// **'Add genre'**
+  String get adminGenreAdd;
+
+  /// How many alternative spellings fold onto one genre, drawn at the end of its row.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 alias} other{{count} aliases}}'**
+  String adminGenreAliasCount(int count);
+
+  /// Line under the aliases field. The two examples are genre names in English and stay as they are; swap them for spellings that make the same point in this language if better ones exist.
+  ///
+  /// In en, this message translates to:
+  /// **'Case, accents, and punctuation already fold, so list only the spellings folding cannot reach: Rap for Hip Hop, R&B for Rhythm and Blues.'**
+  String get adminGenreAliasesBlurb;
+
+  /// Hint in the aliases field.
+  ///
+  /// In en, this message translates to:
+  /// **'Comma separated'**
+  String get adminGenreAliasesHint;
+
+  /// Field for the alternative spellings that fold onto this genre.
+  ///
+  /// In en, this message translates to:
+  /// **'Aliases'**
+  String get adminGenreAliasesLabel;
+
+  /// Message after a normalization preview started. A dry run changes nothing and only reports.
+  ///
+  /// In en, this message translates to:
+  /// **'Dry run started; the task report says what would change'**
+  String get adminGenreDryRunStarted;
+
+  /// Empty state of the genre tree, naming the two ways out of it.
+  ///
+  /// In en, this message translates to:
+  /// **'Add one, or revert to the tree WaxDeck ships.'**
+  String get adminGenreEmptyMessage;
+
+  /// Empty state of the genre tree.
+  ///
+  /// In en, this message translates to:
+  /// **'No genres'**
+  String get adminGenreEmptyTitle;
+
+  /// Heading over the fields of the one genre being edited.
+  ///
+  /// In en, this message translates to:
+  /// **'Genre'**
+  String get adminGenreGroup;
+
+  /// Field for a genre's canonical name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get adminGenreNameLabel;
+
+  /// Refusal under the genre name field when the typed name belongs to another genre.
+  ///
+  /// In en, this message translates to:
+  /// **'Another genre is already called {name}'**
+  String adminGenreNameTaken(String name);
+
+  /// The name a freshly added genre starts with, before it is renamed. It is stored as written, so it reads in the language the administrator works in.
+  ///
+  /// In en, this message translates to:
+  /// **'New genre'**
+  String get adminGenreNewName;
+
+  /// The name a freshly added genre starts with when one by that name already exists. {number} counts up until the name is free.
+  ///
+  /// In en, this message translates to:
+  /// **'New genre {number}'**
+  String adminGenreNewNameNumbered(int number);
+
+  /// The option in the parent menu meaning the genre belongs to no other. Bracketed because it is not a genre's name but the absence of one.
+  ///
+  /// In en, this message translates to:
+  /// **'(top level)'**
+  String get adminGenreNoParent;
+
+  /// Button that folds every scanned genre in the catalog onto the vocabulary.
+  ///
+  /// In en, this message translates to:
+  /// **'Normalize catalog'**
+  String get adminGenreNormalize;
+
+  /// Line under the normalization buttons, saying that normalizing is a catch-up rather than the usual path.
+  ///
+  /// In en, this message translates to:
+  /// **'A sweeper folds newly scanned genres onto the vocabulary on its own. Normalizing is the catch-up pass, for a catalog older than the change log still holds or a tree you just edited.'**
+  String get adminGenreNormalizeBlurb;
+
+  /// Message after a genre normalization pass started for real.
+  ///
+  /// In en, this message translates to:
+  /// **'Normalizing the catalog'**
+  String get adminGenreNormalizing;
+
+  /// Line under the parent row.
+  ///
+  /// In en, this message translates to:
+  /// **'The top-level genre this one belongs to'**
+  String get adminGenreParentHelp;
+
+  /// Line under the parent row when the genre cannot take a parent because things already group under it.
+  ///
+  /// In en, this message translates to:
+  /// **'Genres group under this one, and the tree is two levels deep'**
+  String get adminGenreParentHelpHasChildren;
+
+  /// Accessible name of the menu choosing a genre's parent.
+  ///
+  /// In en, this message translates to:
+  /// **'Parent genre'**
+  String get adminGenreParentLabel;
+
+  /// Row choosing which top-level genre this one belongs to.
+  ///
+  /// In en, this message translates to:
+  /// **'Groups under'**
+  String get adminGenreParentTitle;
+
+  /// Empty state of the detail pane, saying what it edits.
+  ///
+  /// In en, this message translates to:
+  /// **'Its name, its parent, and its aliases are edited here.'**
+  String get adminGenrePickMessage;
+
+  /// Empty state of the detail pane, before a genre has been picked from the tree.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a genre'**
+  String get adminGenrePickTitle;
+
+  /// Button that starts a normalization pass which changes nothing and only reports what it would do.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview normalization'**
+  String get adminGenrePreviewNormalize;
+
+  /// Button that takes this genre out of the vocabulary. What grouped under it comes up a level.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove genre'**
+  String get adminGenreRemove;
+
+  /// Confirming button of the revert dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Revert'**
+  String get adminGenreRevertAction;
+
+  /// Body of the dialog confirming a revert to the shipped genre vocabulary.
+  ///
+  /// In en, this message translates to:
+  /// **'Your genre vocabulary is replaced by the one WaxDeck ships. Aliases you added are lost, and the catalog re-normalizes onto the default.'**
+  String get adminGenreRevertBody;
+
+  /// Title of the dialog confirming that the stored vocabulary is dropped for the one WaxDeck ships.
+  ///
+  /// In en, this message translates to:
+  /// **'Revert to the default tree?'**
+  String get adminGenreRevertTitle;
+
+  /// Button that drops the stored vocabulary for the one WaxDeck ships.
+  ///
+  /// In en, this message translates to:
+  /// **'Revert to default'**
+  String get adminGenreRevertToDefault;
+
+  /// The word an administrator types to confirm reverting the genre tree. Upper case and short; it is compared against what was typed, so translating it changes what has to be typed.
+  ///
+  /// In en, this message translates to:
+  /// **'REVERT'**
+  String get adminGenreRevertWord;
+
+  /// Message after the stored vocabulary was dropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Back on the default genre tree'**
+  String get adminGenreReverted;
+
+  /// Message after the edited vocabulary was written.
+  ///
+  /// In en, this message translates to:
+  /// **'Genre tree saved'**
+  String get adminGenreSaved;
+
+  /// Line at the top of the genre screen while the server is on the shipped vocabulary.
+  ///
+  /// In en, this message translates to:
+  /// **'Running on the vocabulary WaxDeck ships. Editing it stores a tree of your own.'**
+  String get adminGenreSourceDefault;
+
+  /// Line at the top of the genre screen once a vocabulary of the server's own has been stored.
+  ///
+  /// In en, this message translates to:
+  /// **'Running on a stored vocabulary of your own.'**
+  String get adminGenreSourceStored;
+
+  /// Title of the error state when the genre vocabulary could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the genre tree'**
+  String get adminGenreTreeLoadError;
+
+  /// Title of the screen editing the canonical genre vocabulary.
+  ///
+  /// In en, this message translates to:
+  /// **'Genre tree'**
+  String get adminGenreTreeTitle;
+
+  /// Heading over the genre tree itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Vocabulary'**
+  String get adminGenreVocabulary;
+
+  /// Console group holding what is in the library and what shape it is in.
+  ///
+  /// In en, this message translates to:
+  /// **'Library'**
+  String get adminGroupLibrary;
+
+  /// Console group holding the dashboard alone.
+  ///
+  /// In en, this message translates to:
+  /// **'Overview'**
+  String get adminGroupOverview;
+
+  /// Console group holding accounts, invites, and share links.
+  ///
+  /// In en, this message translates to:
+  /// **'People'**
+  String get adminGroupPeople;
+
+  /// Console group holding the instance's own settings, records, and maintenance.
+  ///
+  /// In en, this message translates to:
+  /// **'Server'**
+  String get adminGroupServer;
+
+  /// Line under the all-libraries switch in the new-invite dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Off picks the libraries this invite can see'**
+  String get adminInviteAccessAllHelp;
+
+  /// Line under the administrator switch in the new-invite dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-wide authority: settings, users, and libraries'**
+  String get adminInviteAdminHelp;
+
+  /// Button that opens the new-invite dialog, and that dialog's own title.
+  ///
+  /// In en, this message translates to:
+  /// **'Create invite'**
+  String get adminInviteCreate;
+
+  /// Confirming button of the new-invite dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get adminInviteCreateAction;
+
+  /// Body of the dialog showing a freshly created invite token, warning that it is not shown again.
+  ///
+  /// In en, this message translates to:
+  /// **'Share this token; it is shown exactly once.'**
+  String get adminInviteCreatedBody;
+
+  /// Title of the dialog showing a freshly created invite token.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite created'**
+  String get adminInviteCreatedTitle;
+
+  /// Leads the line under an expired invite. Lower case and agreeing with the word for an invite: it sits in a comma-separated run of facts about one.
+  ///
+  /// In en, this message translates to:
+  /// **'expired'**
+  String get adminInviteExpired;
+
+  /// Line under the invite expiry field.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty never expires'**
+  String get adminInviteExpiresHelp;
+
+  /// Field for how many days an invite stays usable.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires in (days)'**
+  String get adminInviteExpiresLabel;
+
+  /// Line under one named library in the new-invite dialog's library list.
+  ///
+  /// In en, this message translates to:
+  /// **'Include this library'**
+  String get adminInviteIncludeLibrary;
+
+  /// Field for how many accounts one invite token may create.
+  ///
+  /// In en, this message translates to:
+  /// **'Max uses'**
+  String get adminInviteMaxUsesLabel;
+
+  /// Line under the invite note field.
+  ///
+  /// In en, this message translates to:
+  /// **'Who this invite is for'**
+  String get adminInviteNoteHelp;
+
+  /// Field for the administrator's own note about an invite.
+  ///
+  /// In en, this message translates to:
+  /// **'Note'**
+  String get adminInviteNoteLabel;
+
+  /// Confirming button of the revoke-invite dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get adminInviteRevokeAction;
+
+  /// Body of the dialog confirming that an invite is revoked.
+  ///
+  /// In en, this message translates to:
+  /// **'The token stops working immediately.'**
+  String get adminInviteRevokeBody;
+
+  /// Accessible name of the button that revokes one invite from its row.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke invite'**
+  String get adminInviteRevokeButton;
+
+  /// Title of the dialog confirming that an invite is revoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke invite?'**
+  String get adminInviteRevokeTitle;
+
+  /// Leads the line under a revoked invite. Lower case and agreeing with the word for an invite: it sits in a comma-separated run of facts about one.
+  ///
+  /// In en, this message translates to:
+  /// **'revoked'**
+  String get adminInviteRevoked;
+
+  /// Line under the upload switch in the new-invite dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Whether this account can add files to the library'**
+  String get adminInviteUploadHelp;
+
+  /// How many times an invite has been used, out of how many it allows. Sits in a comma-separated run of facts about one invite, so it is lower case.
+  ///
+  /// In en, this message translates to:
+  /// **'uses {used}/{total}'**
+  String adminInviteUses(int used, int total);
+
+  /// Empty state of the invites tab.
+  ///
+  /// In en, this message translates to:
+  /// **'No invites yet'**
+  String get adminInvitesEmpty;
+
+  /// Column heading for what kind of content a library holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Holds'**
+  String get adminLibrariesColumnHolds;
+
+  /// Column heading for how many items a library holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Items'**
+  String get adminLibrariesColumnItems;
+
+  /// Column heading for what the matching engine does with a library: matching is where WaxDeck decides which release a file belongs to.
+  ///
+  /// In en, this message translates to:
+  /// **'Matching'**
+  String get adminLibrariesColumnMatching;
+
+  /// Column heading for a library's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get adminLibrariesColumnName;
+
+  /// Column heading for a library's directory on the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Path'**
+  String get adminLibrariesColumnPath;
+
+  /// Column heading for whether a library refuses changes.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only'**
+  String get adminLibrariesColumnReadOnly;
+
+  /// Empty state of the library list, pointing at the form below it. A root is the top directory of a library.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a root below and WaxDeck scans what is in it.'**
+  String get adminLibrariesEmptyMessage;
+
+  /// Empty state of the library list.
+  ///
+  /// In en, this message translates to:
+  /// **'No libraries yet'**
+  String get adminLibrariesEmptyTitle;
+
+  /// Title of the error state when the library list could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the libraries'**
+  String get adminLibrariesLoadError;
+
+  /// Title of the screen listing the roots WaxDeck scans.
+  ///
+  /// In en, this message translates to:
+  /// **'Libraries'**
+  String get adminLibrariesTitle;
+
+  /// Heading over the form that registers a new root.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a library'**
+  String get adminLibraryAddGroup;
+
+  /// Accessible name of the menu choosing what a new library holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Content class'**
+  String get adminLibraryContentClass;
+
+  /// Button that registers the root named in the form above it.
+  ///
+  /// In en, this message translates to:
+  /// **'Create library'**
+  String get adminLibraryCreate;
+
+  /// Message after a library was registered. Creating one starts a scan of its root, which is why both halves are said at once.
+  ///
+  /// In en, this message translates to:
+  /// **'Library \"{name}\" created; scanning started'**
+  String adminLibraryCreated(String name);
+
+  /// Line under the holds row in the add-library form.
+  ///
+  /// In en, this message translates to:
+  /// **'What kind of content the root carries'**
+  String get adminLibraryHoldsHelp;
+
+  /// Row in the add-library form choosing what the root holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Holds'**
+  String get adminLibraryHoldsTitle;
+
+  /// Line under the catalog-managed switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Let uploads and organizing place files in this root'**
+  String get adminLibraryManagedHelp;
+
+  /// Switch letting WaxDeck place files into this root itself, rather than only reading what is there.
+  ///
+  /// In en, this message translates to:
+  /// **'Catalog-managed'**
+  String get adminLibraryManagedTitle;
+
+  /// Matching mode where every match waits for an administrator's decision.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask me'**
+  String get adminLibraryMatchingAsk;
+
+  /// Matching mode where WaxDeck decides on its own. Describes the matching, so it agrees with that word in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic'**
+  String get adminLibraryMatchingAuto;
+
+  /// Accessible name of the matching menu on one library's row. {name} is the library's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Matching for {name}'**
+  String adminLibraryMatchingLabel(String name);
+
+  /// Matching mode for a collection that is already curated: not "no matching happens" but "this is how I want it".
+  ///
+  /// In en, this message translates to:
+  /// **'Leave alone'**
+  String get adminLibraryMatchingLeave;
+
+  /// Says a library holds audiobooks.
+  ///
+  /// In en, this message translates to:
+  /// **'Books'**
+  String get adminLibraryMediaBooks;
+
+  /// Says a library holds more than one kind of content. Describes the library, so it agrees with the word for a library in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Mixed'**
+  String get adminLibraryMediaMixed;
+
+  /// Says a library holds music.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get adminLibraryMediaMusic;
+
+  /// Says a library holds podcasts.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcasts'**
+  String get adminLibraryMediaPodcasts;
+
+  /// Hint in the library name field. WaxFlow is the streaming sidecar and serves a root of the same name, so the name is not free-form decoration.
+  ///
+  /// In en, this message translates to:
+  /// **'Also the WaxFlow root name serving this directory'**
+  String get adminLibraryNameHint;
+
+  /// Field for a new library's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get adminLibraryNameLabel;
+
+  /// Refusal shown when the add-library form is submitted with either field empty.
+  ///
+  /// In en, this message translates to:
+  /// **'A name and an absolute path are required'**
+  String get adminLibraryNamePathRequired;
+
+  /// Sample path in the library path field. A path, not prose: keep it a plausible absolute path on a server.
+  ///
+  /// In en, this message translates to:
+  /// **'/srv/media/music'**
+  String get adminLibraryPathHint;
+
+  /// Field for a new library's directory.
+  ///
+  /// In en, this message translates to:
+  /// **'Absolute path on the server'**
+  String get adminLibraryPathLabel;
+
+  /// Line under the create button, saying what the server will refuse.
+  ///
+  /// In en, this message translates to:
+  /// **'The path must be absolute, and must not overlap an existing root, the upload inbox, or the podcast download directory.'**
+  String get adminLibraryPathRule;
+
+  /// Accessible name of the read-only switch on one library's row. {name} is the library's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only: {name}'**
+  String adminLibraryReadOnlyLabel(String name);
+
+  /// Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan libraries'**
+  String get adminLibraryRescan;
+
+  /// Message after a rescan started, saying that it covers every root rather than the row it was pressed on.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning every library root'**
+  String get adminLibraryScanning;
+
+  /// Fills the path cell of a library that has no directory of its own, such as a catalog library. Lower case: it fills a table cell rather than starting a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'unnamed on this filesystem'**
+  String get adminLibraryUnnamedPath;
+
+  /// Line under the dry run switch in the import form.
+  ///
+  /// In en, this message translates to:
+  /// **'Report what would match; change nothing'**
+  String get adminMigrateDryRunHelp;
+
+  /// Switch making an import report what it would do without changing anything.
+  ///
+  /// In en, this message translates to:
+  /// **'Dry run'**
+  String get adminMigrateDryRunTitle;
+
+  /// Line under the listen history switch in the import form.
+  ///
+  /// In en, this message translates to:
+  /// **'What was played there, and when'**
+  String get adminMigrateHistoryHelp;
+
+  /// Switch including what was played in an import.
+  ///
+  /// In en, this message translates to:
+  /// **'Listen history'**
+  String get adminMigrateHistoryTitle;
+
+  /// Field for the password on the server being imported from.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get adminMigratePasswordLabel;
+
+  /// Line under the playback progress switch in the import form.
+  ///
+  /// In en, this message translates to:
+  /// **'How far into each episode and book the listener was'**
+  String get adminMigrateProgressHelp;
+
+  /// Switch including how far into each episode and book the listener had got.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback progress'**
+  String get adminMigrateProgressTitle;
+
+  /// Line under the ratings switch in the import form.
+  ///
+  /// In en, this message translates to:
+  /// **'The star ratings given there'**
+  String get adminMigrateRatingsHelp;
+
+  /// Switch including star ratings in an import.
+  ///
+  /// In en, this message translates to:
+  /// **'Ratings'**
+  String get adminMigrateRatingsTitle;
+
+  /// Sample address in the server URL field. An address, not prose: keep it a plausible one.
+  ///
+  /// In en, this message translates to:
+  /// **'https://music.example'**
+  String get adminMigrateServerUrlHint;
+
+  /// Field for the address of the server being imported from.
+  ///
+  /// In en, this message translates to:
+  /// **'Server URL'**
+  String get adminMigrateServerUrlLabel;
+
+  /// Line under the stars switch in the import form.
+  ///
+  /// In en, this message translates to:
+  /// **'Which tracks and albums the other server had starred'**
+  String get adminMigrateStarsHelp;
+
+  /// Switch including starred tracks and albums in an import. A star is how a listener marks something a favourite.
+  ///
+  /// In en, this message translates to:
+  /// **'Stars'**
+  String get adminMigrateStarsTitle;
+
+  /// Message after an import was accepted. It runs server-side as a task.
+  ///
+  /// In en, this message translates to:
+  /// **'Import started'**
+  String get adminMigrateStarted;
+
+  /// Button that starts the import described by the form above it.
+  ///
+  /// In en, this message translates to:
+  /// **'Start import'**
+  String get adminMigrateSubmit;
+
+  /// One of the servers WaxDeck can import from. Subsonic is a product name and stays as it is; the word beside it is not.
+  ///
+  /// In en, this message translates to:
+  /// **'Subsonic server'**
+  String get adminMigrateSubsonicServer;
+
+  /// Title of the screen that copies stars, ratings, history, and progress out of another music server.
+  ///
+  /// In en, this message translates to:
+  /// **'Import from another server'**
+  String get adminMigrateTitle;
+
+  /// Field for the token that authenticates against the other server.
+  ///
+  /// In en, this message translates to:
+  /// **'API token'**
+  String get adminMigrateTokenLabel;
+
+  /// Field for the account name on the server being imported from.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get adminMigrateUsernameLabel;
+
+  /// Button on a message that opens the task list, where the work it started reports.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get adminOpenTasks;
+
+  /// Banner across the console while read-only mode is on, because every refusal elsewhere says only that something was refused.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only mode is on. Uploads, edits, and deletes are refused server-wide.'**
+  String get adminReadOnlyBanner;
+
+  /// Highlighted line in the staged-restore dialog, saying when the restore happens.
+  ///
+  /// In en, this message translates to:
+  /// **'The restore applies at the next server restart.'**
+  String get adminRestoreAppliesAtRestart;
+
+  /// One sealed secret a restore loses. {kind} is what sort of secret it is and {name} its own name; both come from the server and are not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'• {kind}: {name}'**
+  String adminRestoreCasualty(String kind, String name);
+
+  /// Verdict in the staged-restore dialog when the archive's keyfile is this server's.
+  ///
+  /// In en, this message translates to:
+  /// **'The secrets keyfile matches; sealed secrets survive.'**
+  String get adminRestoreKeyfileMatches;
+
+  /// Verdict in the staged-restore dialog when the archive's keyfile belongs to another server.
+  ///
+  /// In en, this message translates to:
+  /// **'The secrets keyfile does not match this server; the sealed secrets below are lost.'**
+  String get adminRestoreKeyfileMismatch;
+
+  /// Heading over the list of sealed secrets a restore cannot carry across.
+  ///
+  /// In en, this message translates to:
+  /// **'Lost with the restore'**
+  String get adminRestoreLostWithRestore;
+
+  /// Verdict in the staged-restore dialog when the archive carries no keyfile. Sealed secrets are stored credentials the server can only read with the key they were sealed with.
+  ///
+  /// In en, this message translates to:
+  /// **'The archive has no secrets keyfile; sealed secrets are lost.'**
+  String get adminRestoreNoKeyfile;
+
+  /// Banner at the top of the backups page while a restore is staged. {backupId} identifies the backup.
+  ///
+  /// In en, this message translates to:
+  /// **'A restore of {backupId} is staged; it applies at the next server restart.'**
+  String adminRestoreStagedBanner(String backupId);
+
+  /// Title of the dialog shown once a restore has been staged.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore staged'**
+  String get adminRestoreStagedTitle;
+
+  /// Display name of the admin role, drawn in the account and invite lists. The wire token stays "admin"; this is only how it reads. Lower case because it sits in a comma-separated run of roles.
+  ///
+  /// In en, this message translates to:
+  /// **'admin'**
+  String get adminRoleAdmin;
+
+  /// Display name of the ordinary account role, drawn in the account and invite lists. The wire token stays "user"; this is only how it reads. Lower case because it sits in a comma-separated run of roles.
+  ///
+  /// In en, this message translates to:
+  /// **'user'**
+  String get adminRoleUser;
+
+  /// Button that starts a scan of every library root.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan library'**
+  String get adminScanLibrary;
+
+  /// Message after a library scan was accepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan started'**
+  String get adminScanStarted;
+
+  /// Name of the scheduled job that measures loudness, fingerprints, and waveforms.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze audio'**
+  String get adminScheduleAnalyze;
+
+  /// What the analyze job does, and the warning that it is the one pass that decodes audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Measures loudness, fingerprints, and waveforms. Decodes every audio file, so a large library takes hours. Resumable: files already analyzed are skipped.'**
+  String get adminScheduleAnalyzeBlurb;
+
+  /// Name of the scheduled job that writes a backup archive.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup'**
+  String get adminScheduleBackup;
+
+  /// What the scheduled backup does. Sidecars are the small files stored beside the database.
+  ///
+  /// In en, this message translates to:
+  /// **'Writes an archive of the database and its sidecars.'**
+  String get adminScheduleBackupBlurb;
+
+  /// Hint in the cron field, naming its five fields in order. Written as bare words separated by spaces, the way the field itself is.
+  ///
+  /// In en, this message translates to:
+  /// **'minute hour day month weekday'**
+  String get adminScheduleCronHint;
+
+  /// Field for a schedule's five-field cron expression. Cron is the name of the format itself, so most languages keep the word.
+  ///
+  /// In en, this message translates to:
+  /// **'Cron'**
+  String get adminScheduleCronLabel;
+
+  /// Accessible name of the switch turning one scheduled job on. {name} is the job's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} runs on a schedule'**
+  String adminScheduleEnabledLabel(String name);
+
+  /// When a scheduled job last ran. {stamp} is an already-formatted date and time.
+  ///
+  /// In en, this message translates to:
+  /// **'Last run {stamp}'**
+  String adminScheduleLastRun(String stamp);
+
+  /// When a scheduled job last ran and how it went. {stamp} is an already-formatted date and time; {status} is the outcome word.
+  ///
+  /// In en, this message translates to:
+  /// **'Last run {stamp} ({status})'**
+  String adminScheduleLastRunStatus(String stamp, String status);
+
+  /// When a scheduled job runs next. {stamp} is an already-formatted date and time.
+  ///
+  /// In en, this message translates to:
+  /// **'Next {stamp}'**
+  String adminScheduleNextRun(String stamp);
+
+  /// Name of the scheduled job that clears expired staging, spent tokens, and trashed files.
+  ///
+  /// In en, this message translates to:
+  /// **'Prune'**
+  String get adminSchedulePrune;
+
+  /// What the prune job does.
+  ///
+  /// In en, this message translates to:
+  /// **'Clears expired staging, spent tokens, and trashed files past their retention.'**
+  String get adminSchedulePruneBlurb;
+
+  /// Message after one schedule's cron or switch was written. {name} is the job's own name, such as the library scan.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} schedule saved'**
+  String adminScheduleSaved(String name);
+
+  /// Name of the scheduled job that looks for new and changed files.
+  ///
+  /// In en, this message translates to:
+  /// **'Library scan'**
+  String get adminScheduleScan;
+
+  /// What the library scan does, and that it costs little.
+  ///
+  /// In en, this message translates to:
+  /// **'Finds new and changed files, reads their tags, and indexes them. Cheap: it does not decode audio.'**
+  String get adminScheduleScanBlurb;
+
+  /// Outcome of a scheduled run that failed. Lower case and inside brackets, agreeing with the word for a run.
+  ///
+  /// In en, this message translates to:
+  /// **'failed'**
+  String get adminScheduleStatusFailed;
+
+  /// Outcome of a scheduled run that succeeded. Lower case and inside brackets, agreeing with the word for a run.
+  ///
+  /// In en, this message translates to:
+  /// **'ok'**
+  String get adminScheduleStatusOk;
+
+  /// Empty state of the maintenance timetable, saying that the server has no scheduled work at all.
+  ///
+  /// In en, this message translates to:
+  /// **'This server runs nothing on a timetable.'**
+  String get adminSchedulesEmptyMessage;
+
+  /// Empty state of the maintenance timetable.
+  ///
+  /// In en, this message translates to:
+  /// **'No schedules'**
+  String get adminSchedulesEmptyTitle;
+
+  /// Title of the error state when the timetable could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the schedules'**
+  String get adminSchedulesLoadError;
+
+  /// Title of the maintenance timetable screen in the admin console.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedules'**
+  String get adminSchedulesTitle;
+
+  /// Name of the screen recording who did what on this server.
+  ///
+  /// In en, this message translates to:
+  /// **'Audit log'**
+  String get adminSectionAudit;
+
+  /// Line under the audit log in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Who did what, and to what'**
+  String get adminSectionAuditBlurb;
+
+  /// Line under Backups in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Archives, imports, and staged restores'**
+  String get adminSectionBackupsBlurb;
+
+  /// Name of the console's front page in the section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Dashboard'**
+  String get adminSectionDashboard;
+
+  /// Line under the dashboard in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'What needs attention, and what is running'**
+  String get adminSectionDashboardBlurb;
+
+  /// Name of the screen listing files the catalog could not read.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get adminSectionDiagnostics;
+
+  /// Line under Diagnostics in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Files the catalog could not read'**
+  String get adminSectionDiagnosticsBlurb;
+
+  /// Line under the genre tree in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'The canonical vocabulary every genre folds onto'**
+  String get adminSectionGenresBlurb;
+
+  /// Name of the screen listing what is missing, mistagged, or duplicated in the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Health'**
+  String get adminSectionHealth;
+
+  /// Line under Health in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'What is missing, mistagged, or duplicated'**
+  String get adminSectionHealthBlurb;
+
+  /// Line under Libraries in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'The roots WaxDeck scans, and what each one holds'**
+  String get adminSectionLibrariesBlurb;
+
+  /// Line under the import screen in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Bring a library, its stars, and its history across'**
+  String get adminSectionMigrateBlurb;
+
+  /// Name of the screen saying where this server reports operations events.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get adminSectionNotifications;
+
+  /// Line under Notifications in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Where this server reports operations events'**
+  String get adminSectionNotificationsBlurb;
+
+  /// Name of the screen that moves library files into a naming scheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Organize'**
+  String get adminSectionOrganize;
+
+  /// Line under Organize in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Move files into a naming scheme'**
+  String get adminSectionOrganizeBlurb;
+
+  /// Name of the screen holding albums waiting for an identification decision.
+  ///
+  /// In en, this message translates to:
+  /// **'Review queue'**
+  String get adminSectionReview;
+
+  /// Line under the review queue in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Albums waiting for an identification decision'**
+  String get adminSectionReviewBlurb;
+
+  /// Line under Schedules in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'When scans, backups, and pruning run'**
+  String get adminSectionSchedulesBlurb;
+
+  /// Line under server settings in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Signups, read-only mode, transcoding, retention'**
+  String get adminSectionSettingsBlurb;
+
+  /// Name of the screen listing every public link on this server. The listener's own links are a different screen in settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Share links'**
+  String get adminSectionShares;
+
+  /// Line under share links in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Every public link on this server, and who minted it'**
+  String get adminSectionSharesBlurb;
+
+  /// Line under Trash in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted files, until they are purged'**
+  String get adminSectionTrashBlurb;
+
+  /// Line under Users in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts, invites, and what each one may do'**
+  String get adminSectionUsersBlurb;
+
+  /// Heading over the settings deciding who may reach this server and what they may change.
+  ///
+  /// In en, this message translates to:
+  /// **'Access'**
+  String get adminServerAccessGroup;
+
+  /// The caveat under the running-stream count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it; HLS is a streaming format.
+  ///
+  /// In en, this message translates to:
+  /// **'Counts streams the engine is transcoding or remuxing, including a client that forced the source\'s own format; HLS timelines are admitted separately and are not counted here.'**
+  String get adminServerActivityCaveat;
+
+  /// How many streams the audio engine is serving at this moment.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 engine-backed stream right now.} other{{count} engine-backed streams right now.}}'**
+  String adminServerActivityCount(int count);
+
+  /// Drawn in place of the running-stream count while it is being read.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading what is running...'**
+  String get adminServerActivityReading;
+
+  /// Accessible name of the button that re-reads the running-stream count.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh what is running'**
+  String get adminServerActivityRefresh;
+
+  /// The running-stream count and its caveat read as one for a screen reader. Both halves are already-worded sentences.
+  ///
+  /// In en, this message translates to:
+  /// **'{headline} {caveat}'**
+  String adminServerActivitySpoken(String headline, String caveat);
+
+  /// Drawn in place of the running-stream count when that read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'The server did not say what is running.'**
+  String get adminServerActivityUnknown;
+
+  /// Heading over the settings deciding what the server analyzes in the background.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis'**
+  String get adminServerAnalysisGroup;
+
+  /// Hint in the default bitrate field.
+  ///
+  /// In en, this message translates to:
+  /// **'0 means no ceiling'**
+  String get adminServerDefaultKbpsHint;
+
+  /// Field for the highest bitrate a transcode uses unless something asks for less. kbps is the unit.
+  ///
+  /// In en, this message translates to:
+  /// **'Default bitrate ceiling (kbps)'**
+  String get adminServerDefaultKbpsLabel;
+
+  /// Title of the error state when the server settings could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the server settings'**
+  String get adminServerLoadError;
+
+  /// Line under the radio cover-art switch. Says plainly what leaves the server, because the setting is off by default for that reason. MusicBrainz and the Cover Art Archive are service names and stay as they are.
+  ///
+  /// In en, this message translates to:
+  /// **'When a station announces a track this library does not hold, ask MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. Off by default; with it off the player draws the station mark.'**
+  String get adminServerRadioArtHelp;
+
+  /// Switch letting the server ask outside services for the cover of a track a radio station announced.
+  ///
+  /// In en, this message translates to:
+  /// **'Look up cover art online'**
+  String get adminServerRadioArtTitle;
+
+  /// Heading over the settings for internet radio stations.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio'**
+  String get adminServerRadioGroup;
+
+  /// Line under the read-only switch, saying what still works while it is on.
+  ///
+  /// In en, this message translates to:
+  /// **'Refuse every change to library content, server-wide. Playback, stars, and progress keep working'**
+  String get adminServerReadOnlyHelp;
+
+  /// Switch refusing every change to library content across the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only mode'**
+  String get adminServerReadOnlyTitle;
+
+  /// Heading over how long the server keeps things it has stopped needing.
+  ///
+  /// In en, this message translates to:
+  /// **'Retention'**
+  String get adminServerRetention;
+
+  /// Message after the two retention windows were written.
+  ///
+  /// In en, this message translates to:
+  /// **'Retention saved'**
+  String get adminServerRetentionSaved;
+
+  /// Button that writes the two retention windows.
+  ///
+  /// In en, this message translates to:
+  /// **'Save retention'**
+  String get adminServerSaveRetention;
+
+  /// Button that writes the three transcoding fields.
+  ///
+  /// In en, this message translates to:
+  /// **'Save transcoding limits'**
+  String get adminServerSaveTranscoding;
+
+  /// Line under the open-signup switch, saying that a request is not yet an account.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone may request an account; requests wait for approval'**
+  String get adminServerSignupHelp;
+
+  /// Switch letting anybody request an account on this server.
+  ///
+  /// In en, this message translates to:
+  /// **'Open signup'**
+  String get adminServerSignupTitle;
+
+  /// Line under the sonic-analysis switch, naming the three features that need it.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze the library in the background for instant mixes, similar tracks, and sonic paths'**
+  String get adminServerSonicHelp;
+
+  /// Switch letting the server analyze how the library sounds, which is what instant mixes and similar tracks are built from.
+  ///
+  /// In en, this message translates to:
+  /// **'Sonic analysis'**
+  String get adminServerSonicTitle;
+
+  /// Hint in the task retention field.
+  ///
+  /// In en, this message translates to:
+  /// **'0 keeps every finished task'**
+  String get adminServerTaskDaysHint;
+
+  /// Refusal shown when the task retention field holds something that is not a whole number of days. It leads with the field's own name because one save writes two fields.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear finished tasks after: enter a whole number of days (0 keeps every finished task)'**
+  String get adminServerTaskDaysInvalid;
+
+  /// Field for how many days a finished task stays in the task list.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear finished tasks after (days)'**
+  String get adminServerTaskDaysLabel;
+
+  /// Title of the screen holding the decisions that apply to the whole server.
+  ///
+  /// In en, this message translates to:
+  /// **'Server settings'**
+  String get adminServerTitle;
+
+  /// Field for how many transcodes the whole server may run at the same time.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcodes at once, server-wide'**
+  String get adminServerTranscodesMaxLabel;
+
+  /// Field for how many transcodes one account may run at the same time.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcodes at once, per listener'**
+  String get adminServerTranscodesPerUserLabel;
+
+  /// Line under the transcoding heading, saying what a transcode is before the fields that bound it.
+  ///
+  /// In en, this message translates to:
+  /// **'A transcode is what happens when a client cannot play a file as stored. These bound how many run at once, so a busy evening does not become a slow one.'**
+  String get adminServerTranscodingBlurb;
+
+  /// Heading over the limits on how much audio the server re-encodes at once.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcoding'**
+  String get adminServerTranscodingGroup;
+
+  /// Message after the transcoding limits were written.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcoding limits saved'**
+  String get adminServerTranscodingSaved;
+
+  /// Hint in the trash retention field.
+  ///
+  /// In en, this message translates to:
+  /// **'0 keeps them until the trash is emptied by hand'**
+  String get adminServerTrashDaysHint;
+
+  /// Refusal shown when the trash retention field holds something that is not a whole number of days. It leads with the field's own name because one save writes two fields.
+  ///
+  /// In en, this message translates to:
+  /// **'Purge trashed files after: enter a whole number of days (0 keeps them until you empty the trash)'**
+  String get adminServerTrashDaysInvalid;
+
+  /// Field for how many days a trashed file waits before it is deleted for good.
+  ///
+  /// In en, this message translates to:
+  /// **'Purge trashed files after (days)'**
+  String get adminServerTrashDaysLabel;
+
+  /// Message after a share link was copied to the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Link copied'**
+  String get adminShareCopied;
+
+  /// Message after a share link was switched off.
+  ///
+  /// In en, this message translates to:
+  /// **'Link revoked'**
+  String get adminShareRevoked;
+
+  /// Empty state of the server-wide share links screen, saying what would fill it.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody on this server has minted a public link. When somebody does it turns up here, with who made it and a way to switch it off.'**
+  String get adminSharesEmptyMessage;
+
+  /// Empty state of the server-wide share links screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is shared'**
+  String get adminSharesEmptyTitle;
+
+  /// Title of the error state when the server-wide share list could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the share links'**
+  String get adminSharesLoadError;
+
+  /// Caption of the review tile, naming what its number counts. Lower case: it reads as a continuation of the number above it.
+  ///
+  /// In en, this message translates to:
+  /// **'albums to decide'**
+  String get adminTileAlbumsToDecide;
+
+  /// Caption of the health tile, saying how much of the library the score covers.
+  ///
+  /// In en, this message translates to:
+  /// **'{checked} of {total} checked'**
+  String adminTileChecked(int checked, int total);
+
+  /// Caption of the health tile while the first health sweep is running.
+  ///
+  /// In en, this message translates to:
+  /// **'First sweep still running'**
+  String get adminTileFirstSweep;
+
+  /// Tile showing the library's health score.
+  ///
+  /// In en, this message translates to:
+  /// **'Library health'**
+  String get adminTileHealth;
+
+  /// Stands in for the health score while the first sweep is still running. A score of zero would be the console's first lie to a new server.
+  ///
+  /// In en, this message translates to:
+  /// **'Warming up'**
+  String get adminTileHealthWarming;
+
+  /// Caption of the review tile while albums are still being identified.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 still identifying} other{{count} still identifying}}'**
+  String adminTileIdentifying(int count);
+
+  /// Tile counting the server jobs running right now.
+  ///
+  /// In en, this message translates to:
+  /// **'Jobs running'**
+  String get adminTileJobs;
+
+  /// Tile saying when the server last backed itself up.
+  ///
+  /// In en, this message translates to:
+  /// **'Last backup'**
+  String get adminTileLastBackup;
+
+  /// Caption of a tile whose number has not arrived yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading'**
+  String get adminTileLoading;
+
+  /// Caption of the backup tile, saying how long until the next scheduled one. {when} is an already-worded relative phrase like "in 40 min", not a date, so a preposition placed before it will read wrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Next {when}'**
+  String adminTileNextRun(String when);
+
+  /// Caption of the backup tile when the server has never made one.
+  ///
+  /// In en, this message translates to:
+  /// **'No archive yet'**
+  String get adminTileNoArchive;
+
+  /// Stands in for the last backup's age when the server has never made one. Agrees with the word for a backup in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get adminTileNone;
+
+  /// Caption of the backup tile when no backup schedule is on.
+  ///
+  /// In en, this message translates to:
+  /// **'Not scheduled'**
+  String get adminTileNotScheduled;
+
+  /// Caption of the jobs tile when the server is idle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in flight'**
+  String get adminTileNothingRunning;
+
+  /// Tile counting the playback sessions running on this server.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing now'**
+  String get adminTilePlayingNow;
+
+  /// Tile counting albums that need an identification decision.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for review'**
+  String get adminTileReview;
+
+  /// Caption of the jobs tile, naming what its number counts. Lower case: it reads as a continuation of the number above it.
+  ///
+  /// In en, this message translates to:
+  /// **'scans and passes'**
+  String get adminTileScansAndPasses;
+
+  /// Caption of the playing-now tile, naming what its number counts. Lower case: it reads as a continuation of the number above it.
+  ///
+  /// In en, this message translates to:
+  /// **'active playback sessions'**
+  String get adminTileSessions;
+
+  /// Tile saying how much of the library has been analyzed for sonic similarity.
+  ///
+  /// In en, this message translates to:
+  /// **'Similarity coverage'**
+  String get adminTileSimilarity;
+
+  /// Caption of the similarity tile, counting tracks that have been analyzed. Embedding is what the analysis produces.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 track embedded} other{{count} tracks embedded}}'**
+  String adminTileTracksEmbedded(int count);
+
+  /// Caption of the similarity tile while tracks are waiting to be analyzed.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 track queued} other{{count} tracks queued}}'**
+  String adminTileTracksQueued(int count);
+
+  /// Column heading for a trashed file's path.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get adminTrashColumnFile;
+
+  /// Column heading for why a file was deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason'**
+  String get adminTrashColumnReason;
+
+  /// Column heading for a trashed file's size.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get adminTrashColumnSize;
+
+  /// Column heading for the day a file was deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Trashed'**
+  String get adminTrashColumnTrashed;
+
+  /// Message after the trash was emptied. {size} is an already-formatted file size.
+  ///
+  /// In en, this message translates to:
+  /// **'Purged {count, plural, =1{1 file} other{{count} files}}, reclaimed {size}'**
+  String adminTrashEmptied(int count, String size);
+
+  /// Button that empties the trash, in the screen's action bar and as the confirming button of its dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty trash'**
+  String get adminTrashEmptyAction;
+
+  /// Body of the dialog confirming that every trashed file is deleted for good.
+  ///
+  /// In en, this message translates to:
+  /// **'Every trashed file is deleted for good, including the ones still restorable. This cannot be undone.'**
+  String get adminTrashEmptyBody;
+
+  /// Empty state of the trash list, saying what the screen is for.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted files wait here before they are purged.'**
+  String get adminTrashEmptyStateMessage;
+
+  /// Empty state of the trash list.
+  ///
+  /// In en, this message translates to:
+  /// **'The trash is empty'**
+  String get adminTrashEmptyStateTitle;
+
+  /// Title of the dialog confirming that every trashed file is deleted for good.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty the trash?'**
+  String get adminTrashEmptyTitle;
+
+  /// The word an administrator types to confirm emptying the trash. Upper case, short, and different from the word for any other typed confirmation; it is compared against what was typed, so translating it changes what has to be typed.
+  ///
+  /// In en, this message translates to:
+  /// **'EMPTY'**
+  String get adminTrashEmptyWord;
+
+  /// Title of the error state when the trash list could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the trash'**
+  String get adminTrashLoadError;
+
+  /// Confirming button that deletes one trashed file for good.
+  ///
+  /// In en, this message translates to:
+  /// **'Purge'**
+  String get adminTrashPurgeAction;
+
+  /// Body of the dialog confirming that one trashed file is deleted for good.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is deleted for good. This cannot be undone.'**
+  String adminTrashPurgeBody(String name);
+
+  /// Accessible name of the button deleting one trashed file for good. {name} is the file's library-relative path.
+  ///
+  /// In en, this message translates to:
+  /// **'Purge {name}'**
+  String adminTrashPurgeRowAction(String name);
+
+  /// Title of the dialog confirming that one trashed file is deleted for good.
+  ///
+  /// In en, this message translates to:
+  /// **'Purge this file?'**
+  String get adminTrashPurgeTitle;
+
+  /// Message after one trashed file was deleted for good. {size} is an already-formatted file size.
+  ///
+  /// In en, this message translates to:
+  /// **'Purged {name}, reclaimed {size}'**
+  String adminTrashPurged(String name, String size);
+
+  /// Reason for a deletion that was meant to be final. Lower case: it fills a table cell rather than starting a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'permanent'**
+  String get adminTrashReasonPermanent;
+
+  /// Reason for a deletion the server made while tidying the library. Lower case: it fills a table cell rather than starting a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'prune'**
+  String get adminTrashReasonPrune;
+
+  /// Replaces the reason for an entry that has been put back. Lower case: it fills a table cell rather than starting a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'restored'**
+  String get adminTrashReasonRestored;
+
+  /// Reason for a deletion somebody asked for. Lower case: it fills a table cell rather than starting a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'user'**
+  String get adminTrashReasonUser;
+
+  /// Accessible name of the button putting one trashed file back. {name} is the file's library-relative path.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore {name}'**
+  String adminTrashRestoreAction(String name);
+
+  /// Message after one trashed file was put back. {name} is the file's library-relative path.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored {name}'**
+  String adminTrashRestored(String name);
+
+  /// Line under the show-restored switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Entries already put back, for the record'**
+  String get adminTrashShowRestoredHelp;
+
+  /// Switch that keeps already-restored entries in the trash list.
+  ///
+  /// In en, this message translates to:
+  /// **'Show restored entries'**
+  String get adminTrashShowRestoredTitle;
+
+  /// Title of the trash screen in the admin console: files a deletion parked rather than removed.
+  ///
+  /// In en, this message translates to:
+  /// **'Trash'**
+  String get adminTrashTitle;
+
+  /// Line under the "All libraries" switch in the account editor, saying what turning it off does.
+  ///
+  /// In en, this message translates to:
+  /// **'Off grants specific libraries instead'**
+  String get adminUserAccessAllHelp;
+
+  /// Switch in the account editor granting the account every library.
+  ///
+  /// In en, this message translates to:
+  /// **'All libraries'**
+  String get adminUserAccessAllTitle;
+
+  /// Heading over the library-access controls in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Library access'**
+  String get adminUserAccessGroup;
+
+  /// Heading over the buttons that act on the account being edited: set password, sign out, delete.
+  ///
+  /// In en, this message translates to:
+  /// **'Account actions'**
+  String get adminUserActionsGroup;
+
+  /// Line under the administrator switch in the account editor, saying what the role carries.
+  ///
+  /// In en, this message translates to:
+  /// **'Sees the whole library and the admin console'**
+  String get adminUserAdminHelp;
+
+  /// Switch in the account editor making the account an administrator.
+  ///
+  /// In en, this message translates to:
+  /// **'Administrator'**
+  String get adminUserAdminTitle;
+
+  /// Button that approves a pending signup: on the request row, and in the account editor when it opened to approve one.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve'**
+  String get adminUserApproveAction;
+
+  /// Title of the account editor when it is approving a pending signup rather than editing a stored account.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve {username}'**
+  String adminUserApproveTitle(String username);
+
+  /// Stands in for a library's path in the access list when it has none, because the library is a catalog rather than a folder.
+  ///
+  /// In en, this message translates to:
+  /// **'A catalog library'**
+  String get adminUserCatalogLibrary;
+
+  /// Button that fills the editor below with the settings a household means by an account for a child.
+  ///
+  /// In en, this message translates to:
+  /// **'Child account preset'**
+  String get adminUserChildPreset;
+
+  /// Line under the child-account preset button, listing what the preset changes.
+  ///
+  /// In en, this message translates to:
+  /// **'Sets no explicit content, no deleting, downloading, or uploading, and a deny rule for advisory-tagged tracks. Everything below stays editable.'**
+  String get adminUserChildPresetHelp;
+
+  /// Button that opens the confirmation for deleting the account being edited.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get adminUserDeleteAccount;
+
+  /// Confirming button in the delete-account dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get adminUserDeleteAction;
+
+  /// Body of the delete-account dialog. {username} is the account being deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'{username} is removed for good, along with its sessions and preferences. Library files are untouched.'**
+  String adminUserDeleteBody(String username);
+
+  /// Title of the dialog confirming an account deletion.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account?'**
+  String get adminUserDeleteTitle;
+
+  /// Line under the disabled switch in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'A disabled account cannot sign in, and its live sessions are revoked'**
+  String get adminUserDisabledHelp;
+
+  /// Switch in the account editor that disables the account. Describes the account, so it agrees with the word for an account in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get adminUserDisabledTitle;
+
+  /// Accessible name of the switch granting one named library. {library} is the library's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Access to {library}'**
+  String adminUserLibraryAccessLabel(String library);
+
+  /// Hint in the transcode-ceiling field of the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty keeps the server default'**
+  String get adminUserMaxKbpsHint;
+
+  /// Field for the highest bitrate this account may be transcoded to. kbps is the unit.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcode ceiling (kbps)'**
+  String get adminUserMaxKbpsLabel;
+
+  /// Line under the upload switch in the account editor. Uploads wait in a review queue rather than landing directly.
+  ///
+  /// In en, this message translates to:
+  /// **'Add files to the library, through review'**
+  String get adminUserMayUploadHelp;
+
+  /// Switch in the account editor letting the account upload files.
+  ///
+  /// In en, this message translates to:
+  /// **'May upload'**
+  String get adminUserMayUploadTitle;
+
+  /// Field in the dialog where an administrator sets another account's password.
+  ///
+  /// In en, this message translates to:
+  /// **'New password'**
+  String get adminUserNewPasswordLabel;
+
+  /// Message after an administrator set another account's password.
+  ///
+  /// In en, this message translates to:
+  /// **'Password set'**
+  String get adminUserPasswordSet;
+
+  /// Line under the delete permission in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Move catalog files to the trash'**
+  String get adminUserPermDeleteHelp;
+
+  /// Permission switch in the account editor for deleting library files.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete library files'**
+  String get adminUserPermDeleteTitle;
+
+  /// Line under the download permission in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the stored file, not just a stream'**
+  String get adminUserPermDownloadHelp;
+
+  /// Permission switch in the account editor for downloading the stored files.
+  ///
+  /// In en, this message translates to:
+  /// **'Download originals'**
+  String get adminUserPermDownloadTitle;
+
+  /// Line under the explicit-content permission in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Off hides what the deny rules match'**
+  String get adminUserPermExplicitHelp;
+
+  /// Permission switch in the account editor for content marked explicit.
+  ///
+  /// In en, this message translates to:
+  /// **'Explicit content'**
+  String get adminUserPermExplicitTitle;
+
+  /// Line under the manage-podcasts permission in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe, unsubscribe, and change feed settings'**
+  String get adminUserPermManagePodcastsHelp;
+
+  /// Permission switch in the account editor for managing podcast subscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage podcasts'**
+  String get adminUserPermManagePodcastsTitle;
+
+  /// Line under the shared-outputs permission in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'May play to endpoints other people also use'**
+  String get adminUserPermSharedOutputsHelp;
+
+  /// Permission switch in the account editor for playing to playback endpoints other accounts also use.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared outputs'**
+  String get adminUserPermSharedOutputsTitle;
+
+  /// Heading over the permission switches in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions'**
+  String get adminUserPermissionsGroup;
+
+  /// Line under the pending-upload limit in the account editor, saying that the limit bounds the review queue rather than the account's total contribution.
+  ///
+  /// In en, this message translates to:
+  /// **'How much may sit in staging waiting for a decision. Importing an upload into the library frees the space again, so this bounds the queue rather than what the account contributes.'**
+  String get adminUserQuotaHelp;
+
+  /// Hint in the pending-upload limit field of the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty means no limit'**
+  String get adminUserQuotaHint;
+
+  /// Field for how many megabytes of uploads may await review. MB is the unit abbreviation.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending upload limit (MB)'**
+  String get adminUserQuotaLabel;
+
+  /// Confirming button in the dialog that revokes every session of an account.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out'**
+  String get adminUserRevokeAction;
+
+  /// Button that opens the confirmation for revoking every session of the account being edited.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out everywhere'**
+  String get adminUserRevokeAll;
+
+  /// Body of the sign-out-everywhere dialog. {username} is the account being signed out.
+  ///
+  /// In en, this message translates to:
+  /// **'Every session of {username} is revoked immediately.'**
+  String adminUserRevokeBody(String username);
+
+  /// Title of the dialog confirming that every session of an account is revoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out everywhere?'**
+  String get adminUserRevokeTitle;
+
+  /// Heading over the role controls in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Role'**
+  String get adminUserRoleGroup;
+
+  /// Message after every session of an account was revoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Sessions revoked'**
+  String get adminUserSessionsRevoked;
+
+  /// Button that opens the dialog where an administrator sets another account's password, also the dialog's own title and confirming button.
+  ///
+  /// In en, this message translates to:
+  /// **'Set password'**
+  String get adminUserSetPassword;
+
+  /// Button that adds the typed tag rule to the list above it.
+  ///
+  /// In en, this message translates to:
+  /// **'Add rule'**
+  String get adminUserTagAddRule;
+
+  /// Line under the content allow rules, saying that one rule narrows the account to what matches.
+  ///
+  /// In en, this message translates to:
+  /// **'With any rule here, only matching content is visible'**
+  String get adminUserTagAllowHelp;
+
+  /// Heading over the tag rules that admit content for the account.
+  ///
+  /// In en, this message translates to:
+  /// **'Content allow rules'**
+  String get adminUserTagAllowLabel;
+
+  /// Line under the content deny rules.
+  ///
+  /// In en, this message translates to:
+  /// **'Matching content is hidden from this account'**
+  String get adminUserTagDenyHelp;
+
+  /// Heading over the tag rules that hide content from the account.
+  ///
+  /// In en, this message translates to:
+  /// **'Content deny rules'**
+  String get adminUserTagDenyLabel;
+
+  /// Field for the metadata tag name a rule matches on, such as ITUNESADVISORY. The key itself is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag key'**
+  String get adminUserTagKeyLabel;
+
+  /// Field for the value a tag rule matches on. Left empty, the rule matches the tag whatever its value.
+  ///
+  /// In en, this message translates to:
+  /// **'Value (optional)'**
+  String get adminUserTagValueLabel;
+
+  /// Heading over the upload controls in the account editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads'**
+  String get adminUserUploadsGroup;
+
+  /// Column heading for the account's name in the user table.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get adminUsersColumnAccount;
+
+  /// Column heading for an account's roles in the user table.
+  ///
+  /// In en, this message translates to:
+  /// **'Roles'**
+  String get adminUsersColumnRoles;
+
+  /// Column heading for whether an account is active, disabled, or pending.
+  ///
+  /// In en, this message translates to:
+  /// **'State'**
+  String get adminUsersColumnState;
+
+  /// Column heading for an account's pending-upload allowance.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads'**
+  String get adminUsersColumnUploads;
+
+  /// Empty state of the account list, naming the two ways an account comes to exist.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite somebody, or open signup in server settings.'**
+  String get adminUsersEmptyMessage;
+
+  /// Empty state of the account list.
+  ///
+  /// In en, this message translates to:
+  /// **'No accounts'**
+  String get adminUsersEmptyTitle;
+
+  /// An account in the table when it has a display name as well as a username.
+  ///
+  /// In en, this message translates to:
+  /// **'{displayName} ({username})'**
+  String adminUsersNamedAccount(String displayName, String username);
+
+  /// Empty state of the signup requests tab.
+  ///
+  /// In en, this message translates to:
+  /// **'No pending requests'**
+  String get adminUsersNoRequests;
+
+  /// Button that refuses a signup request, on the row and in the confirming dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject'**
+  String get adminUsersRejectAction;
+
+  /// Body of the dialog confirming that a signup request is refused.
+  ///
+  /// In en, this message translates to:
+  /// **'The request is removed; nothing is created.'**
+  String get adminUsersRejectBody;
+
+  /// Title of the dialog confirming that a signup request is refused.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject {username}?'**
+  String adminUsersRejectTitle(String username);
+
+  /// Line under a signup request that carried a display name. {date} is an already-formatted date.
+  ///
+  /// In en, this message translates to:
+  /// **'{displayName}, requested {date}'**
+  String adminUsersRequestedByOn(String displayName, String date);
+
+  /// Line under a signup request, giving the day it arrived. {date} is an already-formatted date.
+  ///
+  /// In en, this message translates to:
+  /// **'Requested {date}'**
+  String adminUsersRequestedOn(String date);
+
+  /// State of an account that can sign in. Describes the account, so it agrees with the word for an account in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get adminUsersStateActive;
+
+  /// State of an account an administrator has disabled. Describes the account, so it agrees with the word for an account in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get adminUsersStateDisabled;
+
+  /// State of an account whose signup has not been approved yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get adminUsersStatePending;
+
+  /// Tab holding invite tokens.
+  ///
+  /// In en, this message translates to:
+  /// **'Invites'**
+  String get adminUsersTabInvites;
+
+  /// Tab holding signup requests waiting for a decision.
+  ///
+  /// In en, this message translates to:
+  /// **'Requests'**
+  String get adminUsersTabRequests;
+
+  /// Tab holding the list of accounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Users'**
+  String get adminUsersTabUsers;
+
+  /// Title of the account administration screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Users'**
+  String get adminUsersTitle;
+
+  /// An account's pending-upload allowance, in whole megabytes, so the column agrees with the field that sets it. MB is the unit abbreviation; translate it only where the language uses another.
+  ///
+  /// In en, this message translates to:
+  /// **'{megabytes} MB'**
+  String adminUsersUploadsMb(int megabytes);
+
+  /// Upload allowance of an account that may not upload at all. Lower case: it sits in a table cell, not at the start of a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'none'**
+  String get adminUsersUploadsNone;
+
+  /// Upload allowance of an account with no cap on what may await review. Lower case: it sits in a table cell, not at the start of a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'unlimited'**
+  String get adminUsersUploadsUnlimited;
+
+  /// Body of the first-hour card. It exists to tell "still working" from "apparently broken" on a new server.
+  ///
+  /// In en, this message translates to:
+  /// **'Files appear as they are indexed. Artwork, matching, and the health score fill in behind that: albums the scan finds are identified on their own, and anything the matcher is unsure of arrives in the review queue.'**
+  String get adminWarmingBlurb;
+
+  /// Heading of the first-hour card while a library scan is running.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning your library'**
+  String get adminWarmingScanning;
+
+  /// Heading of the first-hour card while the server is still filling in after a scan.
+  ///
+  /// In en, this message translates to:
+  /// **'Still warming up'**
+  String get adminWarmingUp;
+
+  /// Button on the first guided step, opening the libraries screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a library'**
+  String get adminWizardAddLibraryAction;
+
+  /// Body of the first guided step.
+  ///
+  /// In en, this message translates to:
+  /// **'A library is a folder WaxDeck reads. Add one and everything else on this page starts having something to say.'**
+  String get adminWizardAddLibraryBlurb;
+
+  /// Title of the first guided step, before any library exists.
+  ///
+  /// In en, this message translates to:
+  /// **'Point WaxDeck at your music'**
+  String get adminWizardAddLibraryTitle;
+
+  /// Button on the third guided step, opening the accounts screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite listeners'**
+  String get adminWizardInvite;
+
+  /// Body of the second guided step.
+  ///
+  /// In en, this message translates to:
+  /// **'A scan indexes the files, pulls their tags, and identifies the albums it recognises. It runs in the background: you can leave this page.'**
+  String get adminWizardScanBlurb;
+
+  /// Title of the second guided step, once a root exists and nothing has read it.
+  ///
+  /// In en, this message translates to:
+  /// **'Read what is there'**
+  String get adminWizardScanTitle;
+
+  /// Button that ends the guided first run for good on this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip the tour'**
+  String get adminWizardSkip;
+
+  /// Position of the guided first run's current card. The tour is three steps long.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {number} of 3'**
+  String adminWizardStepOf(int number);
+
+  /// Body of the third guided step, naming the two things worth doing while waiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Files appear as they are indexed, and artwork, matching, and the health score fill in behind them. Two things worth doing meanwhile: invite the people who will listen, and look in on the albums the matcher was unsure of.'**
+  String get adminWizardWarmingBlurb;
+
+  /// Title of the third guided step, shown while the scan and the first health sweep run.
+  ///
+  /// In en, this message translates to:
+  /// **'While it warms up'**
+  String get adminWizardWarmingTitle;
+
+  /// The reverse of the sleeve.
+  ///
+  /// In en, this message translates to:
+  /// **'Back cover'**
+  String get artSlotBack;
+
+  /// The back cover named inside a sentence. See the note on the front cover's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'back cover'**
+  String get artSlotBackInline;
+
+  /// A wide image, and an artist portrait.
+  ///
+  /// In en, this message translates to:
+  /// **'Background'**
+  String get artSlotBackground;
+
+  /// The background image named inside a sentence. See the note on the front cover's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'background'**
+  String get artSlotBackgroundInline;
+
+  /// A page from the insert.
+  ///
+  /// In en, this message translates to:
+  /// **'Booklet'**
+  String get artSlotBooklet;
+
+  /// The booklet page named inside a sentence. See the note on the front cover's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'booklet'**
+  String get artSlotBookletInline;
+
+  /// The label printed on the disc itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Disc'**
+  String get artSlotDisc;
+
+  /// The disc image named inside a sentence. See the note on the front cover's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'disc'**
+  String get artSlotDiscInline;
+
+  /// The image everything else falls back to.
+  ///
+  /// In en, this message translates to:
+  /// **'Front cover'**
+  String get artSlotFront;
+
+  /// The front cover named inside a sentence. English lower-cases it; a language needing an article or a different case writes that here, because the sentences around it cannot know the gender of the words in this list.
+  ///
+  /// In en, this message translates to:
+  /// **'front cover'**
+  String get artSlotFrontInline;
+
+  /// Confirming button of the clear-artwork dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get artworkClearAction;
+
+  /// Body of the clear dialog for every slot but the front cover.
+  ///
+  /// In en, this message translates to:
+  /// **'The slot becomes empty. Nothing falls back into it.'**
+  String get artworkClearBody;
+
+  /// Body of the clear dialog for the front cover, which is the one slot that falls back to something else.
+  ///
+  /// In en, this message translates to:
+  /// **'The item falls back to its album or artist cover. The image itself is removed from the catalog.'**
+  String get artworkClearFrontBody;
+
+  /// Accessible name of the control that empties one artwork slot. {slot} is the slot's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the {slot}'**
+  String artworkClearSlot(String slot);
+
+  /// Title of the dialog confirming that one artwork slot is emptied. {slot} is the slot's inline form, which carries the article this language needs.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the {slot}?'**
+  String artworkClearTitle(String slot);
+
+  /// The word typed to confirm emptying an artwork slot. Lower case, and compared against what was typed, so translating it changes what has to be typed.
+  ///
+  /// In en, this message translates to:
+  /// **'clear'**
+  String get artworkClearWord;
+
+  /// Message after one artwork slot was emptied. {slot} is the slot's name.
+  ///
+  /// In en, this message translates to:
+  /// **'{slot} cleared'**
+  String artworkCleared(String slot);
+
+  /// Hint drawn over one artwork slot when a file is dragged onto it. {slot} is the slot's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop an image into {slot}'**
+  String artworkDropHint(String slot);
+
+  /// Message after several images were dropped on one slot. {slot} is the slot's name and {file} the one that was taken.
+  ///
+  /// In en, this message translates to:
+  /// **'{slot} takes one image; using {file}'**
+  String artworkOneImageOnly(String slot, String file);
+
+  /// Line above the Artwork heading. A slot is one named place an image can go.
+  ///
+  /// In en, this message translates to:
+  /// **'One image per slot'**
+  String get artworkOverline;
+
+  /// What the file picker calls the image it is asking for.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get artworkPickLabel;
+
+  /// Accessible name of the control that replaces a filled artwork slot. {slot} is the slot's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the {slot}'**
+  String artworkReplaceSlot(String slot);
+
+  /// Message after one artwork slot was filled. {slot} is the slot's name.
+  ///
+  /// In en, this message translates to:
+  /// **'{slot} replaced'**
+  String artworkReplaced(String slot);
+
+  /// Accessible name of the control that fills an empty artwork slot. {slot} is the slot's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'Set the {slot}'**
+  String artworkSetSlot(String slot);
+
+  /// One artwork tile read as a whole: the slot's name, then what is in it.
+  ///
+  /// In en, this message translates to:
+  /// **'{slot}: {state}'**
+  String artworkSlotSpoken(String slot, String state);
+
+  /// Caution over the artwork grid when the slot listing failed. Inherited means the image belongs to the album or artist rather than to this item.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read which slots this item holds; what is drawn below may be inherited.'**
+  String get artworkSlotsUnreadable;
+
+  /// Says an artwork slot holds nothing. Agrees with the word for a slot in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty'**
+  String get artworkStateEmpty;
+
+  /// Stands in for an image's format when the server did not say what it is. Lower case: it leads a comma-separated run of facts about the image.
+  ///
+  /// In en, this message translates to:
+  /// **'image'**
+  String get artworkStateImage;
+
+  /// Says a slot draws the album's or artist's image rather than one of its own. Agrees with the word for an image in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Inherited'**
+  String get artworkStateInherited;
+
+  /// An image's pixel size, in a comma-separated run of facts about it.
+  ///
+  /// In en, this message translates to:
+  /// **'{width} x {height}'**
+  String artworkStateSize(int width, int height);
+
+  /// Heading over an item's images.
+  ///
+  /// In en, this message translates to:
+  /// **'Artwork'**
+  String get artworkTitle;
+
+  /// Refusal for an image over the endpoint's ceiling. The ceiling is fixed at 16 megabytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{file} is larger than the 16 MB an image may be'**
+  String artworkTooLarge(String file);
+
+  /// Refusal for a picked image whose bytes could not be opened.
+  ///
+  /// In en, this message translates to:
+  /// **'{file} could not be read'**
+  String artworkUnreadable(String file);
+
   /// A file size under a kilobyte, drawn as bytes. B is the unit abbreviation; translate it only where the language uses another.
   ///
   /// In en, this message translates to:
@@ -129,6 +2685,30 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get commonCancel;
 
+  /// Button that dismisses a dialog without acting. A true synonym everywhere it appears.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get commonClose;
+
+  /// Button that closes a dialog once its work is read. A true synonym everywhere it appears.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get commonDone;
+
+  /// A control's own label while it is fetching what it was pressed for.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading'**
+  String get commonLoading;
+
+  /// Stands in for a track's name while the row it sits in is still resolving. The trailing character is a single-glyph ellipsis.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading…'**
+  String get commonLoadingTitle;
+
   /// Button that runs the request that just failed again.
   ///
   /// In en, this message translates to:
@@ -141,17 +2721,263 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get commonSave;
 
+  /// Says a cast address was set by the server's operator rather than found.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured address'**
+  String get devicesBaseConfigured;
+
+  /// Says a cast address was found on the network rather than configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Detected on this network'**
+  String get devicesBaseDetected;
+
+  /// One cast address's line: where it came from, then whether it answered. Where the server names a source this build has not heard of, {source} is that word as the server wrote it.
+  ///
+  /// In en, this message translates to:
+  /// **'{source}, {state}'**
+  String devicesBaseLine(String source, String state);
+
+  /// Says a cast address answered. Lower case: it follows a comma on the same line.
+  ///
+  /// In en, this message translates to:
+  /// **'reachable'**
+  String get devicesBaseReachable;
+
+  /// Says a cast address did not answer. Lower case: it follows a comma on the same line.
+  ///
+  /// In en, this message translates to:
+  /// **'not reachable'**
+  String get devicesBaseUnreachable;
+
+  /// Under the connection check heading, saying why the addresses matter.
+  ///
+  /// In en, this message translates to:
+  /// **'A cast device fetches audio from this server by address. These are the addresses it will try, in order.'**
+  String get devicesCastBlurb;
+
+  /// The caveat over the address list: the server checking itself is not the speaker checking, and a reader deciding what to fix needs to know which of the two this is.
+  ///
+  /// In en, this message translates to:
+  /// **'The server checked these itself. An address it cannot reach will not work from a speaker either; one it can may still fail if the speaker is on another network.'**
+  String get devicesCastCaveat;
+
+  /// Line above the connection check heading, naming what it is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Casting'**
+  String get devicesCastingOverline;
+
+  /// Title of the error state when the connection check could not be run.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not check'**
+  String get devicesCheckError;
+
+  /// Opens the sheet listing the addresses a cast device would try, and heads it.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection check'**
+  String get devicesConnectionCheck;
+
+  /// Line above the device list when the sheet was opened over a session running on another device.
+  ///
+  /// In en, this message translates to:
+  /// **'Currently elsewhere'**
+  String get devicesCurrentlyElsewhere;
+
+  /// Heading over the devices running WaxDeck itself.
+  ///
+  /// In en, this message translates to:
+  /// **'WaxDeck apps'**
+  String get devicesGroupApps;
+
+  /// Heading over the endpoints of a kind this build does not recognise. It takes whatever the other groups do not, so an endpoint is never dropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Other devices'**
+  String get devicesGroupOther;
+
+  /// Heading over the server's own audio output, where it has one.
+  ///
+  /// In en, this message translates to:
+  /// **'This server'**
+  String get devicesGroupServer;
+
+  /// Heading over the cast and DLNA devices playback can be sent to.
+  ///
+  /// In en, this message translates to:
+  /// **'Speakers and displays'**
+  String get devicesGroupSpeakers;
+
+  /// Button that closes the remote control without stopping what is playing elsewhere.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave it playing'**
+  String get devicesLeaveItPlaying;
+
+  /// Row in the device sheet when the device list could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not list devices'**
+  String get devicesListError;
+
+  /// Under the device-list error, saying that local playback still works.
+  ///
+  /// In en, this message translates to:
+  /// **'The server did not answer. Playback here is unaffected.'**
+  String get devicesListErrorMessage;
+
+  /// Row in the device sheet while the device list is being read.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for devices'**
+  String get devicesLooking;
+
+  /// Accessible name of the overflow menu in the device sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get devicesMore;
+
   /// Snackbar when handing a multi-part audiobook to a device that cannot play one. {endpoint} is that device's user-chosen name.
   ///
   /// In en, this message translates to:
   /// **'Multi-part audiobooks can\'t play on {endpoint} yet. Play it on this device instead.'**
   String devicesMultiPartAudiobook(String endpoint);
 
+  /// Empty state of the connection check.
+  ///
+  /// In en, this message translates to:
+  /// **'No addresses to try'**
+  String get devicesNoAddresses;
+
+  /// Empty state of the connection check, saying what to do about it.
+  ///
+  /// In en, this message translates to:
+  /// **'This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.'**
+  String get devicesNoAddressesMessage;
+
+  /// Empty state of the remote playback screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing playing elsewhere'**
+  String get devicesNothingElsewhere;
+
+  /// Empty state of the remote playback screen, saying where the device list is.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a device from the now-playing bar to send playback somewhere else.'**
+  String get devicesNothingElsewhereMessage;
+
   /// Snackbar when the device picker is asked to hand playback over with nothing playing.
   ///
   /// In en, this message translates to:
   /// **'Nothing is playing here to send. Start something first.'**
   String get devicesNothingToSend;
+
+  /// Under a session running elsewhere, naming the device. Lower case: it continues the line above it.
+  ///
+  /// In en, this message translates to:
+  /// **'on {endpoint}'**
+  String devicesOnEndpoint(String endpoint);
+
+  /// Opens the list of devices playback can be sent to, and heads that list. Followed by a device name in the reader's mind rather than on screen, so it reads as the start of a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'Play on'**
+  String get devicesPlayOn;
+
+  /// Accessible name of the control that opens the device list from the remote screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Play on another device'**
+  String get devicesPlayOnAnother;
+
+  /// Stands in for what another device is playing when its title is not known.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing'**
+  String get devicesPlaying;
+
+  /// Heading over the sessions running on other devices.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing elsewhere'**
+  String get devicesPlayingElsewhere;
+
+  /// Under this device's row when nothing is playing elsewhere.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing here'**
+  String get devicesPlayingHere;
+
+  /// Message after playback was handed to another device, and the title of the sheet asking what to do about a session already there. {endpoint} is that device's user-chosen name.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing on {endpoint}'**
+  String devicesPlayingOn(String endpoint);
+
+  /// Title of the screen controlling playback running on another device.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote playback'**
+  String get devicesRemoteTitle;
+
+  /// Says who started the session running on another device. Lower case: it follows a comma on the same line.
+  ///
+  /// In en, this message translates to:
+  /// **'started by {name}'**
+  String devicesStartedBy(String name);
+
+  /// Button that stops what is playing on another device. {endpoint} is that device's user-chosen name.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop playback on {endpoint}'**
+  String devicesStopOn(String endpoint);
+
+  /// Body of the dialog asking what to do about playback already running elsewhere.
+  ///
+  /// In en, this message translates to:
+  /// **'This device can take over, or leave it playing where it is.'**
+  String get devicesTakeOverBody;
+
+  /// Under this device's row while something is playing elsewhere.
+  ///
+  /// In en, this message translates to:
+  /// **'Take over, or leave it playing'**
+  String get devicesTakeOverOrLeave;
+
+  /// The row for the device the listener is holding, in the device sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get devicesThisDevice;
+
+  /// Button that moves playback from another device to this one.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer here'**
+  String get devicesTransferHere;
+
+  /// Accessible name of the volume slider for another device. {endpoint} is that device's user-chosen name.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume on {endpoint}'**
+  String devicesVolumeOn(String endpoint);
+
+  /// Accessible name of the download control once the file is on this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get downloadsDownloaded;
+
+  /// Accessible name of the download control while the transfer is running.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading'**
+  String get downloadsDownloading;
 
   /// A wait in whole days, as a picker option: a day reads better than twenty-four hours.
   ///
@@ -357,11 +3183,185 @@ abstract class AppLocalizations {
   /// **'This track is part of a larger file, which another device can\'t play yet. Play it on this one instead.'**
   String get errorWindowedTrack;
 
+  /// Column heading for the entities a merge folds into the survivor.
+  ///
+  /// In en, this message translates to:
+  /// **'Absorbs'**
+  String get healthColumnAbsorbs;
+
+  /// Column heading for what was observed about a file. The values themselves stay as the server wrote them.
+  ///
+  /// In en, this message translates to:
+  /// **'Code'**
+  String get healthColumnCode;
+
+  /// Column heading for how many items fail a rule.
+  ///
+  /// In en, this message translates to:
+  /// **'Failing'**
+  String get healthColumnFailing;
+
+  /// Column heading for a diagnosed file's path.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get healthColumnFile;
+
+  /// Column heading for the copy a resolution keeps.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeping'**
+  String get healthColumnKeeping;
+
+  /// Column heading for what sort of entity a duplicate finding is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Kind'**
+  String get healthColumnKind;
+
+  /// Column heading for which pass recorded a diagnostic. The values themselves stay as the server wrote them.
+  ///
+  /// In en, this message translates to:
+  /// **'Origin'**
+  String get healthColumnOrigin;
+
+  /// Column heading for which recording a quality finding is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get healthColumnRecording;
+
+  /// Column heading for a health rule's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule'**
+  String get healthColumnRule;
+
+  /// Column heading for how serious a diagnostic is.
+  ///
+  /// In en, this message translates to:
+  /// **'Severity'**
+  String get healthColumnSeverity;
+
+  /// Column heading for the entity a merge keeps.
+  ///
+  /// In en, this message translates to:
+  /// **'Survivor'**
+  String get healthColumnSurvivor;
+
+  /// Column heading for the copies a resolution trashes.
+  ///
+  /// In en, this message translates to:
+  /// **'Trashing'**
+  String get healthColumnTrashing;
+
+  /// Column heading for the audit's explanation of a duplicate finding.
+  ///
+  /// In en, this message translates to:
+  /// **'Why'**
+  String get healthColumnWhy;
+
   /// Name of the health rule `corrupt-audio`, which counts files whose audio will not decode.
   ///
   /// In en, this message translates to:
   /// **'Corrupt audio'**
   String get healthCorruptAudio;
+
+  /// One diagnostic code and how many files carry it, on a filter chip. {code} is a wire token and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'{code} ({count})'**
+  String healthDiagnosticsChip(String code, int count);
+
+  /// Empty state of the diagnostics table.
+  ///
+  /// In en, this message translates to:
+  /// **'Every file the catalog has seen decoded cleanly.'**
+  String get healthDiagnosticsEmptyMessage;
+
+  /// Empty state of the diagnostics table.
+  ///
+  /// In en, this message translates to:
+  /// **'No diagnostics recorded'**
+  String get healthDiagnosticsEmptyTitle;
+
+  /// Title of the error state when the file diagnostics could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load diagnostics'**
+  String get healthDiagnosticsLoadError;
+
+  /// Caption under the diagnostics table when the list is longer than what has been fetched.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} shown; there are more'**
+  String healthDiagnosticsMore(int count);
+
+  /// Empty state of the duplicates section.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists, albums, and shows each appear once.'**
+  String get healthDuplicatesEmptyMessage;
+
+  /// Empty state of the duplicates section.
+  ///
+  /// In en, this message translates to:
+  /// **'No duplicates detected'**
+  String get healthDuplicatesEmptyTitle;
+
+  /// Title of the error state when the duplicate findings could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load duplicates'**
+  String get healthDuplicatesError;
+
+  /// Body of the duplicates error state. Clustering is the pass that finds duplicates.
+  ///
+  /// In en, this message translates to:
+  /// **'The clustering pass did not answer.'**
+  String get healthDuplicatesErrorBody;
+
+  /// Line above the Duplicates heading, saying what a duplicate is.
+  ///
+  /// In en, this message translates to:
+  /// **'One thing under two names'**
+  String get healthDuplicatesOverline;
+
+  /// Heading over the duplicate findings.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicates'**
+  String get healthDuplicatesTitle;
+
+  /// Kind of a duplicate finding about two albums. Lower case: it fills a small chip.
+  ///
+  /// In en, this message translates to:
+  /// **'album'**
+  String get healthEntityAlbum;
+
+  /// Kind of a duplicate finding about two artists. Lower case: it fills a small chip.
+  ///
+  /// In en, this message translates to:
+  /// **'artist'**
+  String get healthEntityArtist;
+
+  /// Kind of a duplicate finding about two genres. Lower case: it fills a small chip.
+  ///
+  /// In en, this message translates to:
+  /// **'genre'**
+  String get healthEntityGenre;
+
+  /// Kind of a duplicate finding about two release groups: the same album across its editions. Lower case: it fills a small chip.
+  ///
+  /// In en, this message translates to:
+  /// **'release-group'**
+  String get healthEntityReleaseGroup;
+
+  /// Line under the warming-up headline, saying how far the first sweep has got.
+  ///
+  /// In en, this message translates to:
+  /// **'{total, plural, =1{Evaluated {checked} of 1 item} other{Evaluated {checked} of {total} items}}'**
+  String healthEvaluatedOf(int checked, int total);
 
   /// Accessible name of the button that runs a health rule's bulk fix. {rule} is that rule's own name.
   ///
@@ -375,11 +3375,101 @@ abstract class AppLocalizations {
   /// **'Genre outside the canonical tree'**
   String get healthGenreWhitelist;
 
+  /// Empty state of one rule's list of failing items.
+  ///
+  /// In en, this message translates to:
+  /// **'Every item the sweeper has seen passes it.'**
+  String get healthIssuesEmptyMessage;
+
+  /// Empty state of one rule's list of failing items.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing failing this rule'**
+  String get healthIssuesEmptyTitle;
+
+  /// Title of the error state when a rule's failing items could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load issues'**
+  String get healthIssuesError;
+
+  /// One copy's bitrate, in a comma-separated run of its properties. kbps is the unit.
+  ///
+  /// In en, this message translates to:
+  /// **'{kbps} kbps'**
+  String healthKbps(int kbps);
+
+  /// Accessible name of the button that resolves one quality finding.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the best version'**
+  String get healthKeepBest;
+
   /// Name of the health rule `legacy-tags`, which counts files carrying only an older tag format.
   ///
   /// In en, this message translates to:
   /// **'Legacy-only tags'**
   String get healthLegacyTags;
+
+  /// Title of the error state when the health summary could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load library health'**
+  String get healthLoadError;
+
+  /// Button that fetches the next page of diagnostics.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get healthLoadMore;
+
+  /// Message when paging further into a rule's failing items failed. Scrolling again retries, which is why it says so.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load more; scroll to retry'**
+  String get healthLoadMoreFailed;
+
+  /// Says a copy is stored without losing anything to compression. Lower case: it sits in a comma-separated run of a copy's properties.
+  ///
+  /// In en, this message translates to:
+  /// **'lossless'**
+  String get healthLossless;
+
+  /// Confirming button of the merge dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge'**
+  String get healthMergeAction;
+
+  /// Body of the merge dialog. {losers} is a comma-separated run of quoted names and {survivor} the name they merge into.
+  ///
+  /// In en, this message translates to:
+  /// **'{losers} will merge into \"{survivor}\". Their items move under the survivor, and the merge cannot be undone.'**
+  String healthMergeBody(String losers, String survivor);
+
+  /// Accessible name of the button that merges one duplicate group. {name} is the entity that survives.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge into {name}'**
+  String healthMergeInto(String name);
+
+  /// Title of the dialog confirming that duplicate entities are merged into one.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge duplicates?'**
+  String get healthMergeTitle;
+
+  /// The word typed to confirm a merge. Lower case here, unlike the destructive confirmations elsewhere, because a merge is recoverable work rather than a deletion. It is compared against what was typed, so translating it changes what has to be typed.
+  ///
+  /// In en, this message translates to:
+  /// **'merge'**
+  String get healthMergeWord;
+
+  /// Message after duplicates were merged, saying how many entries went.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Merged 1 entry} other{Merged {count} entries}}'**
+  String healthMerged(int count);
 
   /// Name of the health rule `missing-art`.
   ///
@@ -423,17 +3513,167 @@ abstract class AppLocalizations {
   /// **'Missing release year'**
   String get healthMissingYear;
 
+  /// Stands in for the audit's explanation when it gave none: the finding is a plain name collision.
+  ///
+  /// In en, this message translates to:
+  /// **'Names match'**
+  String get healthNamesMatch;
+
   /// Name of the health rule `path-mismatch`.
   ///
   /// In en, this message translates to:
   /// **'File path does not match the organize profile'**
   String get healthPathMismatch;
 
+  /// Message after a rule's fix was started, saying how many items it will work on.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Queued 1 item} other{Queued {count} items}}'**
+  String healthQueuedItems(int count);
+
+  /// Confirming button of the keep-the-best dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolve'**
+  String get healthResolveAction;
+
+  /// Body of the keep-the-best dialog, saying that the copies are recoverable for a while.
+  ///
+  /// In en, this message translates to:
+  /// **'The other versions move to the server trash and can be restored until the trash window closes.'**
+  String get healthResolveBody;
+
+  /// Title of the dialog confirming that lesser copies of one recording are trashed.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the best version?'**
+  String get healthResolveTitle;
+
+  /// The word typed to confirm keeping the best version. Lower case, and compared against what was typed, so translating it changes what has to be typed.
+  ///
+  /// In en, this message translates to:
+  /// **'resolve'**
+  String get healthResolveWord;
+
+  /// Empty state of the rule table, saying what fills it.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules appear once the sweeper has evaluated the library.'**
+  String get healthRulesEmptyMessage;
+
+  /// Empty state of the rule table.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to check yet'**
+  String get healthRulesEmptyTitle;
+
+  /// Line above the Rules heading, saying what the rules are.
+  ///
+  /// In en, this message translates to:
+  /// **'What the sweeper checks'**
+  String get healthRulesOverline;
+
+  /// Heading over the per-rule failure counts.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules'**
+  String get healthRulesTitle;
+
+  /// Line beside the health score, saying how much of the library it covers.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Library health across 1 evaluated item} other{Library health across {count} evaluated items}}'**
+  String healthScoreBlurb(int count);
+
+  /// Accessible name of the health score, which is drawn as a bare number.
+  ///
+  /// In en, this message translates to:
+  /// **'Health score {score}'**
+  String healthScoreSpoken(int score);
+
+  /// Severity of a diagnostic that means something failed. Lower case: it fills a table cell.
+  ///
+  /// In en, this message translates to:
+  /// **'error'**
+  String get healthSeverityError;
+
+  /// Severity of a diagnostic that is worth knowing and nothing more. Lower case: it fills a table cell.
+  ///
+  /// In en, this message translates to:
+  /// **'info'**
+  String get healthSeverityInfo;
+
+  /// Severity of a diagnostic worth looking at. Lower case: it fills a table cell.
+  ///
+  /// In en, this message translates to:
+  /// **'warn'**
+  String get healthSeverityWarn;
+
   /// Name of the health rule `small-art`.
   ///
   /// In en, this message translates to:
   /// **'Low-resolution cover art'**
   String get healthSmallArt;
+
+  /// Accessible name of the button that re-evaluates the library against every rule.
+  ///
+  /// In en, this message translates to:
+  /// **'Sweep now'**
+  String get healthSweepNow;
+
+  /// Message after a health sweep was started.
+  ///
+  /// In en, this message translates to:
+  /// **'Sweep queued'**
+  String get healthSweepQueued;
+
+  /// A recording named with its artist, in the health tables.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} by {artist}'**
+  String healthTitleByArtist(String title, String artist);
+
+  /// Message after lesser copies were trashed, saying how many went.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Trashed 1 file} other{Trashed {count} files}}'**
+  String healthTrashedFiles(int count);
+
+  /// Empty state of the quality upgrades section.
+  ///
+  /// In en, this message translates to:
+  /// **'Every recording is held once.'**
+  String get healthUpgradesEmptyMessage;
+
+  /// Empty state of the quality upgrades section.
+  ///
+  /// In en, this message translates to:
+  /// **'No duplicate qualities detected'**
+  String get healthUpgradesEmptyTitle;
+
+  /// Title of the error state when the quality findings could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load upgrades'**
+  String get healthUpgradesError;
+
+  /// Body of the quality upgrades error state.
+  ///
+  /// In en, this message translates to:
+  /// **'The quality comparison did not answer.'**
+  String get healthUpgradesErrorBody;
+
+  /// Line above the quality upgrades heading.
+  ///
+  /// In en, this message translates to:
+  /// **'The same recording twice'**
+  String get healthUpgradesOverline;
+
+  /// Heading over the findings where one recording is held at several qualities.
+  ///
+  /// In en, this message translates to:
+  /// **'Quality upgrades'**
+  String get healthUpgradesTitle;
 
   /// Name of the health rule `write-unsynced`.
   ///
@@ -453,11 +3693,365 @@ abstract class AppLocalizations {
   /// **'Most first'**
   String get libraryBrowseSortMostFirst;
 
+  /// The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case.
+  ///
+  /// In en, this message translates to:
+  /// **'album'**
+  String get libraryKindAlbum;
+
+  /// The word for an artist where it stands inside a sentence, such as the star row's accessible names. Lower case.
+  ///
+  /// In en, this message translates to:
+  /// **'artist'**
+  String get libraryKindArtist;
+
   /// Never displayed. Any natural sentence in this language, written the way the language actually is, accents and all: the app scans it for the scripts this locale needs and loads their fonts before the interface draws.
   ///
   /// In en, this message translates to:
   /// **'Music, podcasts, and audiobooks.'**
   String get localeFontSample;
+
+  /// Button that stores the typed custom tag.
+  ///
+  /// In en, this message translates to:
+  /// **'Add tag'**
+  String get metadataAddTag;
+
+  /// Button that removes the item's stored lyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get metadataClearLyrics;
+
+  /// Field for the people in one credit role.
+  ///
+  /// In en, this message translates to:
+  /// **'Names, comma separated'**
+  String get metadataCreditNames;
+
+  /// Accessible name of the menu choosing which credit is being edited.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit role'**
+  String get metadataCreditRole;
+
+  /// Line above the Credits heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Who else is on it'**
+  String get metadataCreditsOverline;
+
+  /// Heading over who else worked on the item.
+  ///
+  /// In en, this message translates to:
+  /// **'Credits'**
+  String get metadataCreditsTitle;
+
+  /// Half of the message after fetching metadata, listing what was taken. {fields} is a comma-separated run of field names from the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Applied: {fields}'**
+  String metadataEnrichApplied(String fields);
+
+  /// Half of the message after fetching metadata, listing what was left alone. {fields} is a comma-separated run of field names from the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped: {fields}'**
+  String metadataEnrichSkipped(String fields);
+
+  /// Button that applies what the metadata providers already agree on.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch metadata'**
+  String get metadataFetch;
+
+  /// Added after the server's own refusal when a save was refused for a locked field. The server names which field; this names the switch on this screen that overrides it, and the quoted word must match that switch's label.
+  ///
+  /// In en, this message translates to:
+  /// **'Check \"Force\" to overwrite locked fields.'**
+  String get metadataFieldLockedHint;
+
+  /// Line above the Fields heading.
+  ///
+  /// In en, this message translates to:
+  /// **'What this item claims to be'**
+  String get metadataFieldsOverline;
+
+  /// Heading over the item's editable metadata fields.
+  ///
+  /// In en, this message translates to:
+  /// **'Fields'**
+  String get metadataFieldsTitle;
+
+  /// Line under the force switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite fields that are already locked'**
+  String get metadataForceHelp;
+
+  /// Switch that lets a save overwrite fields somebody locked. Its name is quoted in the refusal that suggests it, so the two must agree.
+  ///
+  /// In en, this message translates to:
+  /// **'Force'**
+  String get metadataForceTitle;
+
+  /// One entry in the provenance line: how many fields came from one source. {source} is a provider or source name from the server.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} from {source}'**
+  String metadataFromSource(int count, String source);
+
+  /// Line under the Identification heading, telling the two buttons apart.
+  ///
+  /// In en, this message translates to:
+  /// **'Rematch reopens identification and puts the result in the review queue. Fetching metadata applies what the providers already agree on, without asking.'**
+  String get metadataIdentificationBlurb;
+
+  /// Heading over the two ways of asking the providers about this item again.
+  ///
+  /// In en, this message translates to:
+  /// **'Identification'**
+  String get metadataIdentificationTitle;
+
+  /// Heading of the lyrics preview when every line carries a timestamp.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 line, timed} other{{count} lines, all timed}}'**
+  String metadataLinesAllTimed(int count);
+
+  /// Heading of the lyrics preview when only some lines carry a timestamp.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 line, {timed} timed} other{{count} lines, {timed} timed}}'**
+  String metadataLinesSomeTimed(int count, int timed);
+
+  /// Title of the error state when an item's metadata could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the metadata'**
+  String get metadataLoadError;
+
+  /// Accessible name of the control that locks one field. {field} is the field's wire name and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock {field}'**
+  String metadataLockField(String field);
+
+  /// Line under the lock switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep scans and enrichment from overwriting what you type'**
+  String get metadataLockHelp;
+
+  /// Switch that keeps later scans from overwriting what was typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock edited fields'**
+  String get metadataLockTitle;
+
+  /// Hint in the lyrics field, showing one timed line. The bracketed stamp is the format's own and must not change shape.
+  ///
+  /// In en, this message translates to:
+  /// **'[00:12.00] First line'**
+  String get metadataLyricsHint;
+
+  /// Field for the lyrics themselves. LRC is the format's name and stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'LRC'**
+  String get metadataLyricsLabel;
+
+  /// Line above the Lyrics heading. LRC is the timed-lyrics file format and stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'Timed LRC, or plain lines'**
+  String get metadataLyricsOverline;
+
+  /// Heading over the item's lyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics'**
+  String get metadataLyricsTitle;
+
+  /// Drawn in place of the credit editor for a kind of item that declares no roles.
+  ///
+  /// In en, this message translates to:
+  /// **'No credit roles for this kind'**
+  String get metadataNoCreditRoles;
+
+  /// Stands in for the provenance line when nothing recorded where the item's values came from.
+  ///
+  /// In en, this message translates to:
+  /// **'No recorded sources'**
+  String get metadataNoSources;
+
+  /// Message after fetching metadata found nothing to apply or skip.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to fetch'**
+  String get metadataNothingToFetch;
+
+  /// Drawn in place of the lyrics preview while the field is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to preview'**
+  String get metadataNothingToPreview;
+
+  /// Door from the metadata editor to the album this item belongs to.
+  ///
+  /// In en, this message translates to:
+  /// **'Open album'**
+  String get metadataOpenAlbum;
+
+  /// Door from the metadata editor to the artist this item belongs to.
+  ///
+  /// In en, this message translates to:
+  /// **'Open artist'**
+  String get metadataOpenArtist;
+
+  /// Door from the metadata editor to the release group this item belongs to: the album across its editions.
+  ///
+  /// In en, this message translates to:
+  /// **'Open release group'**
+  String get metadataOpenReleaseGroup;
+
+  /// Button on the rematch message that opens the review entry it created.
+  ///
+  /// In en, this message translates to:
+  /// **'Open review'**
+  String get metadataOpenReview;
+
+  /// Message after an item was sent back for matching.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued for identification'**
+  String get metadataQueuedForIdentification;
+
+  /// Heading over whether the item is an official release.
+  ///
+  /// In en, this message translates to:
+  /// **'Release status'**
+  String get metadataReleaseTitle;
+
+  /// Button that reopens identification for the item.
+  ///
+  /// In en, this message translates to:
+  /// **'Rematch'**
+  String get metadataRematch;
+
+  /// Accessible name of the control that deletes one custom tag. {key} is the tag's own name and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove tag {key}'**
+  String metadataRemoveTag(String key);
+
+  /// The save button once fields have been edited, counting them. With nothing edited it says only Save.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Save 1 change} other{Save {count} changes}}'**
+  String metadataSaveChanges(int count);
+
+  /// Button that writes the credit being edited.
+  ///
+  /// In en, this message translates to:
+  /// **'Save credits'**
+  String get metadataSaveCredits;
+
+  /// Button that writes the lyrics as typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save lyrics'**
+  String get metadataSaveLyrics;
+
+  /// Chip beside a field whose value has no recorded source.
+  ///
+  /// In en, this message translates to:
+  /// **'Source unknown'**
+  String get metadataSourceUnknown;
+
+  /// Chip beside a field, naming where its value came from and which provider answered. Both come from the server and are not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'{source} ({provider})'**
+  String metadataSourceWithProvider(String source, String provider);
+
+  /// Field for a custom tag's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Key'**
+  String get metadataTagKey;
+
+  /// Field for a custom tag's values.
+  ///
+  /// In en, this message translates to:
+  /// **'Values, comma separated'**
+  String get metadataTagValues;
+
+  /// Line above the custom tags heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Anything the vocabulary has no field for'**
+  String get metadataTagsOverline;
+
+  /// Heading over the free-form tags an item carries.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom tags'**
+  String get metadataTagsTitle;
+
+  /// Title of the per-item metadata editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit metadata'**
+  String get metadataTitle;
+
+  /// Accessible name of the control that unlocks one field. {field} is the field's wire name and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock {field}'**
+  String metadataUnlockField(String field);
+
+  /// Line under the unofficial switch.
+  ///
+  /// In en, this message translates to:
+  /// **'A bootleg, a promo, or another unofficial issue'**
+  String get metadataUnofficialHelp;
+
+  /// Switch marking the item as something other than an official issue.
+  ///
+  /// In en, this message translates to:
+  /// **'Unofficial release'**
+  String get metadataUnofficialTitle;
+
+  /// Stands in for an item's name when it has none.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled'**
+  String get metadataUntitled;
+
+  /// One file a write-back could not reach, and why. Both halves come from the server and are not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'{file}: {reason}'**
+  String metadataWriteBackFailure(String file, String reason);
+
+  /// Line under the write-tags switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Also rewrite the tags embedded in the backing files'**
+  String get metadataWriteBackHelp;
+
+  /// Switch making a save rewrite the tags stored inside the audio files too.
+  ///
+  /// In en, this message translates to:
+  /// **'Write tags to files'**
+  String get metadataWriteBackTitle;
+
+  /// Banner after a save whose write-back did not reach every file. The catalog holds the edit either way, which is why it is a caution rather than an error.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved, but some files kept their old tags.'**
+  String get metadataWriteBackWarning;
 
   /// What the `backup-completed` notification is about, drawn under its switch.
   ///
@@ -542,6 +4136,816 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Account request'**
   String get notifSignupRequestedTitle;
+
+  /// Button that opens the metadata editor to write lyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'Add lyrics'**
+  String get playerAddLyrics;
+
+  /// Menu item that puts what is playing on a playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to playlist'**
+  String get playerAddToPlaylist;
+
+  /// Menu item that opens the list of saved radio stations.
+  ///
+  /// In en, this message translates to:
+  /// **'All stations'**
+  String get playerAllStations;
+
+  /// Button that bookmarks the position it names. {time} is a timecode.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark {time}'**
+  String playerBookmarkAdd(String time);
+
+  /// Stands in for a bookmark's note where it has none.
+  ///
+  /// In en, this message translates to:
+  /// **'No note'**
+  String get playerBookmarkNoNote;
+
+  /// Field for a word about why a place was marked.
+  ///
+  /// In en, this message translates to:
+  /// **'Note (optional)'**
+  String get playerBookmarkNote;
+
+  /// Accessible name of a bookmark that carries a note. {time} is a timecode.
+  ///
+  /// In en, this message translates to:
+  /// **'{note}, at {time}'**
+  String playerBookmarkNoteAt(String note, String time);
+
+  /// Accessible name of a bookmark with no note on it. {time} is a timecode.
+  ///
+  /// In en, this message translates to:
+  /// **'Play from {time}'**
+  String playerBookmarkPlayFrom(String time);
+
+  /// Accessible name of the control that deletes one bookmark. {time} is its timecode.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the bookmark at {time}'**
+  String playerBookmarkRemove(String time);
+
+  /// The places in a book somebody marked to come back to. Heads the sheet holding them.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmarks'**
+  String get playerBookmarks;
+
+  /// Accessible name of the bookmarks control, with how many the book holds. Drawn without the number when it holds none.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmarks, {count}'**
+  String playerBookmarksCount(int count);
+
+  /// Empty state of the bookmarks sheet, saying that bookmarks are not how listening position is remembered.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing marked yet. A bookmark keeps a place you want to come back to; your listening position is kept for you either way.'**
+  String get playerBookmarksEmpty;
+
+  /// Drawn in the bookmarks sheet when the read failed for a reason the error table has no sentence for.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the bookmarks.'**
+  String get playerBookmarksError;
+
+  /// Stops the running sleep timer.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel timer'**
+  String get playerCancelTimer;
+
+  /// Under the idle heading in car mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Start something and it takes the whole screen.'**
+  String get playerCarIdleMessage;
+
+  /// Opens the large-target playback screen made for a car.
+  ///
+  /// In en, this message translates to:
+  /// **'Car mode'**
+  String get playerCarMode;
+
+  /// Accessible name of the chapter a book is currently in. {chapter} is the chapter's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'{chapter}, playing'**
+  String playerChapterPlaying(String chapter);
+
+  /// Accessible name of the chapter list in the book player.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get playerChapters;
+
+  /// Accessible name of the control that closes the lyrics panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Close lyrics'**
+  String get playerCloseLyrics;
+
+  /// Accessible name of the control that closes the full player.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse player'**
+  String get playerCollapse;
+
+  /// Command that closes the full player, in the command palette and the shortcut sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse the player'**
+  String get playerCollapseCommand;
+
+  /// Menu item that deletes the playing item's files. The trailing dots say a confirmation follows.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete files...'**
+  String get playerDeleteFiles;
+
+  /// Menu item that opens the playing station for editing.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit station'**
+  String get playerEditStation;
+
+  /// Adds ten minutes to the running sleep timer, in the timer sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Extend 10 minutes'**
+  String get playerExtendTimer;
+
+  /// The same as the sleep timer's extend action, worded short for a message that is already a sentence long. min is the abbreviation for minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Extend 10 min'**
+  String get playerExtendTimerShort;
+
+  /// Button that steps playback speed up.
+  ///
+  /// In en, this message translates to:
+  /// **'Faster'**
+  String get playerFaster;
+
+  /// Accessible name of the control that searches the library for the track a radio station announced.
+  ///
+  /// In en, this message translates to:
+  /// **'Find \"{track}\" in the library'**
+  String playerFindInLibrary(String track);
+
+  /// Accessible name of the control that drops a saved radio song.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget this song'**
+  String get playerForgetSong;
+
+  /// Accessible name of the control opening the show a playing episode belongs to. {name} is the show's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to {name}'**
+  String playerGoToName(String name);
+
+  /// Menu item that opens the show the playing episode belongs to.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to show'**
+  String get playerGoToShow;
+
+  /// Under the idle heading on the full player.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick something from your library and it shows up here.'**
+  String get playerIdleMessage;
+
+  /// Menu item that builds a queue around what is playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Instant mix'**
+  String get playerInstantMix;
+
+  /// Button that closes car mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave car mode'**
+  String get playerLeaveCarMode;
+
+  /// Accessible name of the control that closes the visualizer.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave the visualizer'**
+  String get playerLeaveVisualizer;
+
+  /// How many tracks remain after the ones listed under Up next.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 left} other{{count} left}}'**
+  String playerLeftCount(int count);
+
+  /// Opens the lyrics of what is playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics'**
+  String get playerLyrics;
+
+  /// Title of the error state when lyrics could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the lyrics'**
+  String get playerLyricsError;
+
+  /// Under the idle heading on the lyrics panel. It finishes the heading's sentence, which says nothing is playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Words show up here once something is.'**
+  String get playerLyricsIdleMessage;
+
+  /// Menu item that marks the playing episode finished.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as played'**
+  String get playerMarkPlayed;
+
+  /// Sheet row that puts playback in a small always-on-top window.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini player window'**
+  String get playerMiniWindow;
+
+  /// Menu offering the two ways of finding music like what is playing.
+  ///
+  /// In en, this message translates to:
+  /// **'More like this'**
+  String get playerMoreLikeThis;
+
+  /// Accessible name of the control that steps forward a track.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get playerNext;
+
+  /// Heading when the playing track carries no lyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'No lyrics for this track'**
+  String get playerNoLyrics;
+
+  /// Under the no-lyrics heading, for somebody who may edit the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing was found in a sidecar or in the file tags. You can add them in the metadata editor.'**
+  String get playerNoLyricsAdminMessage;
+
+  /// Under the no-lyrics heading. A sidecar is a small file stored beside the audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing was found in a sidecar or in the file tags.'**
+  String get playerNoLyricsMessage;
+
+  /// Heading when the playing file has no measured waveform.
+  ///
+  /// In en, this message translates to:
+  /// **'No shape to draw'**
+  String get playerNoShape;
+
+  /// Under the no-shape heading, saying what would fill it.
+  ///
+  /// In en, this message translates to:
+  /// **'The visualizer draws what the analyze pass measured, and this file has not been measured. Run an analyze pass on the library and it fills in.'**
+  String get playerNoShapeMessage;
+
+  /// Heading of every idle playback surface: the player, car mode, the visualizer, and the lyrics panel. Each says something different underneath it.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is playing'**
+  String get playerNothingPlaying;
+
+  /// Names a queue offered for resuming when its first item has not resolved, so the count is all there is to say.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 queued item} other{{count} queued items}}'**
+  String playerOfferQueued(int count);
+
+  /// Under the offer to resume an earlier queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick up where you left off'**
+  String get playerOfferResume;
+
+  /// Sheet row that opens the full player.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the player'**
+  String get playerOpenPlayer;
+
+  /// Heading over the chapters of one part of a multi-part book.
+  ///
+  /// In en, this message translates to:
+  /// **'Part {number}'**
+  String playerPart(int number);
+
+  /// Accessible name of the control that pauses playback.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get playerPause;
+
+  /// Accessible name of the control that keeps a station among the favourites. The dial is the radio screen's own name for that row.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin to the dial'**
+  String get playerPinStation;
+
+  /// Accessible name of the control that resumes playback.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get playerPlay;
+
+  /// Accessible name of the control that steps back a track.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get playerPrevious;
+
+  /// Opens the queue of what plays next.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue'**
+  String get playerQueue;
+
+  /// Message when a star rating did not reach the server. The control has already moved back, so this is what says why.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save that change'**
+  String get playerRatingFailed;
+
+  /// Accessible name of the control that keeps the song a radio station is playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Save this song'**
+  String get playerSaveSong;
+
+  /// Accessible name of the control choosing whether the seek bar covers the chapter or the whole book.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek bar spans'**
+  String get playerSeekSpans;
+
+  /// Menu item that mints a public link to what is playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Share link'**
+  String get playerShareLink;
+
+  /// Menu item that lists tracks that sound like what is playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Similar tracks'**
+  String get playerSimilarTracks;
+
+  /// Accessible name of the sleep timer control while no timer is running.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer'**
+  String get playerSleepTimer;
+
+  /// Accessible name of the sleep timer control while one is running. {time} is an already-worded duration.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer, {time} left'**
+  String playerSleepTimerLeft(String time);
+
+  /// Button that steps playback speed down.
+  ///
+  /// In en, this message translates to:
+  /// **'Slower'**
+  String get playerSlower;
+
+  /// Seek bar covering the whole book.
+  ///
+  /// In en, this message translates to:
+  /// **'Book'**
+  String get playerSpanBook;
+
+  /// Seek bar covering the current chapter alone.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter'**
+  String get playerSpanChapter;
+
+  /// Heads the sheet setting how fast playback runs.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed'**
+  String get playerSpeed;
+
+  /// Accessible name of the chip showing the current speed, which draws the number alone.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed {speed}'**
+  String playerSpeedAt(String speed);
+
+  /// Under the speed controls, saying the chosen speed is stored against this book rather than lasting only while it plays.
+  ///
+  /// In en, this message translates to:
+  /// **'Remembered for this book'**
+  String get playerSpeedRememberedBook;
+
+  /// Under the speed controls, saying the chosen speed is stored against this show.
+  ///
+  /// In en, this message translates to:
+  /// **'Remembered for this show'**
+  String get playerSpeedRememberedShow;
+
+  /// Under the speed controls for music, where the speed is not stored.
+  ///
+  /// In en, this message translates to:
+  /// **'For this session only'**
+  String get playerSpeedThisSession;
+
+  /// Accessible name of the control that marks the playing track a favourite. Agrees with the word for a track in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Star'**
+  String get playerStar;
+
+  /// Accessible name of one star in the five-star row: the rating it would set.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} star rating'**
+  String playerStarRating(int count);
+
+  /// Accessible name of one star in an album's or artist's rating row. {kind} is the already-worded noun for what it is.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} star {kind} rating'**
+  String playerStarRatingOf(int count, String kind);
+
+  /// Accessible name of the control that marks an album or an artist a favourite. {kind} is the already-worded noun for what it is.
+  ///
+  /// In en, this message translates to:
+  /// **'Star this {kind}'**
+  String playerStarThis(String kind);
+
+  /// Button that starts the typed sleep-timer length.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get playerStart;
+
+  /// Under the player's error heading when the failure came from the audio engine rather than from the server, so there is no code to translate.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback failed to start'**
+  String get playerStartFailed;
+
+  /// Accessible name of the menu holding what can be done with the playing radio station.
+  ///
+  /// In en, this message translates to:
+  /// **'More for {station}'**
+  String playerStationMenu(String station);
+
+  /// Menu item that opens the station's own page in a browser.
+  ///
+  /// In en, this message translates to:
+  /// **'Station website'**
+  String get playerStationWebsite;
+
+  /// Title of the player's error state.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback stopped'**
+  String get playerStopped;
+
+  /// Menu item opening a podcast's own funding page. Only drawn where the feed names one, and the feed's own wording wins when it gives one.
+  ///
+  /// In en, this message translates to:
+  /// **'Support the show'**
+  String get playerSupportShow;
+
+  /// Sleep timer option that stops when the current chapter ends.
+  ///
+  /// In en, this message translates to:
+  /// **'End of chapter'**
+  String get playerTimerChapterEnd;
+
+  /// Field for a sleep-timer length of the listener's own.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom minutes'**
+  String get playerTimerCustom;
+
+  /// Accessible name of the button that starts the typed sleep-timer length.
+  ///
+  /// In en, this message translates to:
+  /// **'Start custom timer'**
+  String get playerTimerCustomStart;
+
+  /// Under the extend row in the sleep timer sheet, saying how much of the timer is left. {time} is an already-worded duration.
+  ///
+  /// In en, this message translates to:
+  /// **'{time} left'**
+  String playerTimerLeft(String time);
+
+  /// One of the offered sleep-timer lengths.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 minute} other{{count} minutes}}'**
+  String playerTimerMinutes(int count);
+
+  /// Drawn in the transcript panel when the read failed for a reason the error table has no sentence for.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the transcript.'**
+  String get playerTranscriptError;
+
+  /// Shown once, the first time silence trimming is turned on.
+  ///
+  /// In en, this message translates to:
+  /// **'Silence trimming skips the mapped quiet parts of an episode. Positions stay honest; the chip counts what it skipped.'**
+  String get playerTrimExplained;
+
+  /// Control that skips the quiet parts of a spoken recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim silence'**
+  String get playerTrimSilence;
+
+  /// The trim control once it has saved some listening time. {saved} is an already-worded duration.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim silence ({saved})'**
+  String playerTrimSilenceSaved(String saved);
+
+  /// Accessible name of the control that drops a station from the favourites.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin from the dial'**
+  String get playerUnpinStation;
+
+  /// Accessible name of the control that unmarks the playing track. Agrees with the word for a track in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Unstar'**
+  String get playerUnstar;
+
+  /// Accessible name of the control that unmarks an album or an artist. {kind} is the already-worded noun for what it is.
+  ///
+  /// In en, this message translates to:
+  /// **'Unstar this {kind}'**
+  String playerUnstarThis(String kind);
+
+  /// Heading over what plays after the current track. Upper case as a typographic style; write it the way small headings are written in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'UP NEXT'**
+  String get playerUpNext;
+
+  /// Accessible name of the up-next peek, naming what plays next.
+  ///
+  /// In en, this message translates to:
+  /// **'Up next, {title}'**
+  String playerUpNextItem(String title);
+
+  /// Accessible name of the up-next peek when the next track has not resolved yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Up next'**
+  String get playerUpNextLabel;
+
+  /// Menu item that opens the screen drawing the track's shape.
+  ///
+  /// In en, this message translates to:
+  /// **'Visualizer'**
+  String get playerVisualizer;
+
+  /// Under the idle heading on the visualizer.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a track and its shape shows up here.'**
+  String get playerVisualizerIdleMessage;
+
+  /// Accessible name of the control choosing how the visualizer draws.
+  ///
+  /// In en, this message translates to:
+  /// **'Visualizer mode'**
+  String get playerVisualizerMode;
+
+  /// Control that lifts speech out of the rest of the sound.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice boost'**
+  String get playerVoiceBoost;
+
+  /// Shown once, the first time voice boost is turned on. It warns that playback restarts, because the server is what applies the effect.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice boost evens out a quiet or uneven recording. The server applies it, so what is playing reopens.'**
+  String get playerVoiceBoostExplained;
+
+  /// Message when a voice-boost toggle did not reach the server. The setting belongs to the show, so it is stored rather than local.
+  ///
+  /// In en, this message translates to:
+  /// **'The settings for this show could not be reached, so voice boost was not changed.'**
+  String get playerVoiceBoostFailed;
+
+  /// Accessible name of the volume slider.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume'**
+  String get playerVolume;
+
+  /// Message after several tracks were dropped onto the queue at once. Never drawn for one, which names the track instead.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {count} tracks to the queue'**
+  String queueAddedMany(int count);
+
+  /// Message after one track was dropped onto the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {title} to the queue'**
+  String queueAddedOne(String title);
+
+  /// Accessible name of the control that empties the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear queue'**
+  String get queueClear;
+
+  /// Command that unselects the queue rows that are selected, in the command palette and the shortcut sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the queue selection'**
+  String get queueClearSelection;
+
+  /// Button that unselects the selected queue rows. It clears the selection, not the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get queueClearSelectionAction;
+
+  /// Accessible name of the handle that reorders queued tracks by dragging.
+  ///
+  /// In en, this message translates to:
+  /// **'Drag to reorder'**
+  String get queueDragToReorder;
+
+  /// Message after something was dragged onto the queue and turned out to hold no tracks. {name} is what was dropped.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} has nothing to play'**
+  String queueDropNothing(String name);
+
+  /// Heading over the queues from earlier listening sessions. Upper case as a typographic style; write it the way small headings are written in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'EARLIER'**
+  String get queueEarlier;
+
+  /// Empty state of the queue, saying what fills it.
+  ///
+  /// In en, this message translates to:
+  /// **'Play an album, a show, or a playlist and it lands here.'**
+  String get queueEmptyMessage;
+
+  /// Empty state of the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing queued'**
+  String get queueEmptyTitle;
+
+  /// Accessible name of the control that folds away the already-played rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide what has played'**
+  String get queueHideHistory;
+
+  /// Screen-reader action that moves one queued track later.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get queueMoveDown;
+
+  /// Button that moves the selected rows to the end of the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to bottom'**
+  String get queueMoveToBottom;
+
+  /// Button that moves the selected rows to the front of the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to top'**
+  String get queueMoveToTop;
+
+  /// Screen-reader action that moves one queued track earlier.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get queueMoveUp;
+
+  /// Heading where the up-next list would be when the queue holds nothing after the current track. Upper case as a typographic style; write it the way small headings are written in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'NOTHING UP NEXT'**
+  String get queueNothingUpNext;
+
+  /// Where a queue came from, over the queue itself. {source} is the album, show, or playlist's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing from {source}'**
+  String queuePlayingFrom(String source);
+
+  /// Heading over the tracks already played in this queue, with how many. Upper case as a typographic style; write it the way small headings are written in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'PREVIOUSLY ({count})'**
+  String queuePreviously(int count);
+
+  /// Button that takes the selected rows out of the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get queueRemove;
+
+  /// Accessible name of the control that takes one row out of the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from queue'**
+  String get queueRemoveEntry;
+
+  /// Accessible name of the repeat control while it repeats the whole queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat all'**
+  String get queueRepeatAll;
+
+  /// Accessible name of the repeat control while it repeats nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat off'**
+  String get queueRepeatOff;
+
+  /// Accessible name of the repeat control while it repeats the current track. Agrees with the word for a track in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat one'**
+  String get queueRepeatOne;
+
+  /// Accessible name of the control that puts an earlier queue back. {name} is what that session was playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore {name}'**
+  String queueRestoreSession(String name);
+
+  /// Message after an earlier queue was put back. It is put back paused, so nothing starts playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored {name}'**
+  String queueRestored(String name);
+
+  /// Under a rolling queue, saying that what is listed is part of something bigger rather than the whole of it.
+  ///
+  /// In en, this message translates to:
+  /// **'A window over a larger scope'**
+  String get queueRollingWindow;
+
+  /// How many queue rows are selected, over the controls that act on them. Agrees with the word for a track in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 selected} other{{count} selected}}'**
+  String queueSelectedCount(int count);
+
+  /// Accessible name of the control that unfolds the already-played rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Show what has played'**
+  String get queueShowHistory;
+
+  /// Accessible name of the shuffle control while shuffle is off.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle off'**
+  String get queueShuffleOff;
+
+  /// Accessible name of the shuffle control while shuffle is on.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle on'**
+  String get queueShuffleOn;
+
+  /// Button on the restore message that puts the previous queue back.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get queueUndo;
 
   /// How long ago something happened, in days, on a dashboard tile with room for a few words.
   ///
@@ -2474,6 +6878,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{speed}x'**
   String speedMultiplier(String speed);
+
+  /// Button that removes every finished task from the list at once.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear finished'**
+  String get toolsClearFinished;
+
+  /// Accessible name of the control that removes one finished task from the list.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get toolsDismiss;
+
+  /// Empty state of the tool task list, naming what turns up in it.
+  ///
+  /// In en, this message translates to:
+  /// **'Merges, splits, downloads, and imports report their progress here while they run and land here when they finish.'**
+  String get toolsEmptyMessage;
+
+  /// Empty state of the tool task list.
+  ///
+  /// In en, this message translates to:
+  /// **'No tool tasks'**
+  String get toolsEmptyTitle;
+
+  /// Line under a finished task that produced no items but stored a report.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished · tap for the report'**
+  String get toolsFinishedTapForReport;
+
+  /// Line under a finished task that produced several items. It is never drawn for one, which has a line of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} items produced · tap to open'**
+  String toolsItemsProduced(int count);
+
+  /// Title of the error state when the task list could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load tool tasks'**
+  String get toolsLoadError;
+
+  /// Line under a finished download, whose results wait in the review queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the review queue'**
+  String get toolsOpenReviewQueue;
+
+  /// Names what a task produced, on the row's identifier line. {pids} is a comma-separated run of item identifiers and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'produced {pids}'**
+  String toolsProduced(String pids);
+
+  /// Line under a finished download, counting what it left in the review queue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 ready for review} other{{count} ready for review}}'**
+  String toolsReadyForReview(int count);
+
+  /// State of a task that finished. Agrees with the word for a task in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get toolsStateDone;
+
+  /// State of a task that did not finish. Agrees with the word for a task in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get toolsStateFailed;
+
+  /// State of a task waiting its turn.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get toolsStateQueued;
+
+  /// State of a task in flight, when it reports no percentage.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get toolsStateRunning;
+
+  /// State of a task in flight that reports how far along it is.
+  ///
+  /// In en, this message translates to:
+  /// **'Running · {percent}%'**
+  String toolsStateRunningPct(int percent);
+
+  /// Headline counter from a task's report, counting listening records it carried across. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'listens {count}'**
+  String toolsSummaryListens(String count);
+
+  /// Headline counter from a task's report. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'matched {count}'**
+  String toolsSummaryMatched(String count);
+
+  /// Headline counter from a task's report. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'unmatched {count}'**
+  String toolsSummaryUnmatched(String count);
+
+  /// Line under a failed task that still stored a report worth reading.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap for the report'**
+  String get toolsTapForReport;
+
+  /// Line under a finished task that produced exactly one item.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to open what it produced'**
+  String get toolsTapToOpenResult;
+
+  /// Name of the task that fetches audio from a web address.
+  ///
+  /// In en, this message translates to:
+  /// **'URL download'**
+  String get toolsTaskAcquire;
+
+  /// Name of the task that joins several audiobook files into one book.
+  ///
+  /// In en, this message translates to:
+  /// **'Book merge'**
+  String get toolsTaskBookMerge;
+
+  /// Name of the task that breaks one audiobook into its parts.
+  ///
+  /// In en, this message translates to:
+  /// **'Book split'**
+  String get toolsTaskBookSplit;
+
+  /// Name of the task that cuts one long audio file into tracks using its CUE sheet. CUE is a file format and stays as it is.
+  ///
+  /// In en, this message translates to:
+  /// **'CUE split'**
+  String get toolsTaskCueSplit;
+
+  /// Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Import from {source}'**
+  String toolsTaskImportFrom(String source);
+
+  /// Message after finished tasks were swept, saying how many went.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Cleared 1 task} other{Cleared {count} tasks}}'**
+  String toolsTasksCleared(int count);
+
+  /// Title of the screen following long-running library work: merges, splits, downloads, imports.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool tasks'**
+  String get toolsTitle;
 }
 
 class _AppLocalizationsDelegate

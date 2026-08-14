@@ -8,6 +8,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
 
 /// Steps the fake clock one second at a time so each delta registers as
@@ -240,7 +241,9 @@ void main() {
     );
 
     expect(find.byKey(const Key('player-error')), findsOneWidget);
-    expect(find.text('no item with that pid'), findsOneWidget);
+    // The code's sentence, not the server's: a start that failed is a
+    // failed operation rather than a refusal of something just typed.
+    expect(find.text('That is not here any more.'), findsOneWidget);
     await harness.endPlayback(tester);
   });
 
@@ -287,7 +290,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: PlayerScreen()),
+        child: localizedHost(const PlayerScreen()),
       ),
     );
     await tester.pumpAndSettle();

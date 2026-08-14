@@ -21,12 +21,13 @@ class BackupsScreen extends ConsumerWidget {
   const BackupsScreen({super.key});
 
   Future<void> _createBackup(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(repositoryProvider).createBackup();
       ref.invalidate(backupsProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -35,7 +36,7 @@ class BackupsScreen extends ConsumerWidget {
     if (picker == null) return;
     final file = await picker.pickFile(
       extensions: const {'zip'},
-      label: 'Backup archive',
+      label: context.l10n.adminBackupArchiveLabel,
     );
     if (file == null || !context.mounted) return;
     await _importArchive(context, ref, file);
@@ -50,6 +51,7 @@ class BackupsScreen extends ConsumerWidget {
     WidgetRef ref,
     PickedAudioFile file,
   ) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final openRead = file.openRead;
     if (openRead == null) return;
@@ -58,19 +60,20 @@ class BackupsScreen extends ConsumerWidget {
           .read(repositoryProvider)
           .importBackup(sizeBytes: file.size, openRead: () => openRead());
       ref.invalidate(backupsProvider);
-      messenger.show('${file.name} imported; stage its restore');
+      messenger.show(l10n.adminBackupImported(file.name));
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
   Future<void> _cancelRestore(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(repositoryProvider).cancelStagedRestore();
       ref.invalidate(stagedRestoreProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -81,8 +84,9 @@ class BackupsScreen extends ConsumerWidget {
     final anyRunning = backups.value?.any((b) => b.state == 'running') ?? false;
     final picker = ref.watch(filePickerProvider);
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     return WaxScaffold(
-      title: 'Backups',
+      title: l10n.adminBackupsTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminBackups,
       onBack: adminBack(context),
@@ -93,7 +97,7 @@ class BackupsScreen extends ConsumerWidget {
         SliverFillRemaining(
           child: AudioDropArea(
             extensions: const {'zip'},
-            hint: 'Drop a backup archive to import',
+            hint: l10n.adminBackupDropHint,
             onDropped: (files) async {
               for (final file in files) {
                 if (!context.mounted) return;
@@ -133,7 +137,9 @@ class BackupsScreen extends ConsumerWidget {
                                   : () => _createBackup(context, ref),
                               icon: const WaxIcon(WaxIcons.archive),
                               label: Text(
-                                anyRunning ? 'Backing up...' : 'Back up now',
+                                anyRunning
+                                    ? l10n.adminBackupRunning
+                                    : l10n.adminBackupNow,
                               ),
                             ),
                           ),
@@ -145,18 +151,17 @@ class BackupsScreen extends ConsumerWidget {
                                 key: const Key(SemanticsIds.backupImport),
                                 onPressed: () => _pickAndImport(context, ref),
                                 icon: const WaxIcon(WaxIcons.upload),
-                                label: const Text('Import archive'),
+                                label: Text(l10n.adminBackupImportArchive),
                               ),
                             ),
                         ],
                       ),
                       const SizedBox(height: WaxSpace.s8),
                       switch (backups) {
-                        AsyncData(:final value) when value.isEmpty =>
-                          const Padding(
-                            padding: EdgeInsets.all(WaxSpace.s16),
-                            child: Text('No backups yet'),
-                          ),
+                        AsyncData(:final value) when value.isEmpty => Padding(
+                          padding: const EdgeInsets.all(WaxSpace.s16),
+                          child: Text(l10n.adminBackupsEmpty),
+                        ),
                         AsyncData(:final value) => Column(
                           children: [
                             for (final backup in value)
@@ -165,16 +170,12 @@ class BackupsScreen extends ConsumerWidget {
                         ),
                         AsyncError(:final error) => Padding(
                           padding: const EdgeInsets.all(WaxSpace.s16),
-                          child: Text(
-                            error is WaxDeckApiException
-                                ? error.message
-                                : 'Could not load backups',
-                          ),
+                          child: Text(context.explain(error)),
                         ),
                         _ => const Center(child: CircularProgressIndicator()),
                       },
                       SizedBox(height: WaxLayout.of(context).sectionGap),
-                      const SectionHeader(title: 'Retention'),
+                      SectionHeader(title: l10n.adminBackupsRetention),
                       const _RetentionFields(),
                     ],
                   ),
@@ -197,6 +198,7 @@ class _RestoreBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     return Semantics(
       identifier: SemanticsIds.restoreBanner,
       child: Card(
@@ -210,8 +212,7 @@ class _RestoreBanner extends StatelessWidget {
               const SizedBox(width: WaxSpace.s12),
               Expanded(
                 child: Text(
-                  'A restore of ${plan.backupId} is staged; it applies at '
-                  'the next server restart.',
+                  l10n.adminRestoreStagedBanner(plan.backupId),
                   style: TextStyle(color: colorScheme.onTertiaryContainer),
                 ),
               ),
@@ -220,7 +221,7 @@ class _RestoreBanner extends StatelessWidget {
                 child: TextButton(
                   key: const Key(SemanticsIds.restoreCancel),
                   onPressed: onCancel,
-                  child: const Text('Cancel'),
+                  child: Text(l10n.commonCancel),
                 ),
               ),
             ],
@@ -237,24 +238,22 @@ class _BackupRow extends ConsumerWidget {
   final Backup backup;
 
   Future<void> _stageRestore(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Restore this backup?'),
-        content: Text(
-          'The server replaces its database with ${backup.fileName} at '
-          'the next restart. Changes made since the backup are lost.',
-        ),
+        title: Text(l10n.adminBackupRestoreTitle),
+        content: Text(l10n.adminBackupRestoreBody(backup.fileName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             key: const Key('backup-restore-confirm'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Stage restore'),
+            child: Text(l10n.adminBackupStageRestore),
           ),
         ],
       ),
@@ -269,26 +268,27 @@ class _BackupRow extends ConsumerWidget {
         builder: (_) => _RestorePlanDialog(plan: plan),
       );
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete backup?'),
-        content: Text('${backup.fileName} is removed for good.'),
+        title: Text(l10n.adminBackupDeleteTitle),
+        content: Text(l10n.adminBackupDeleteBody(backup.fileName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             key: const Key('backup-delete-confirm'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
+            child: Text(l10n.adminBackupDeleteAction),
           ),
         ],
       ),
@@ -298,7 +298,7 @@ class _BackupRow extends ConsumerWidget {
       await ref.read(repositoryProvider).deleteBackup(backup.id);
       ref.invalidate(backupsProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -308,8 +308,8 @@ class _BackupRow extends ConsumerWidget {
     final size = backup.sizeBytes;
     final subtitle = [
       if (size != null) l10n.formatBytes(size),
-      backup.state,
-      backup.trigger,
+      _stateLabel(l10n, backup.state),
+      _triggerLabel(l10n, backup.trigger),
       l10n.formatDate(backup.createdAt),
     ].join(', ');
     return WaxOptionRow(
@@ -322,7 +322,7 @@ class _BackupRow extends ConsumerWidget {
       subtitleMaxLines: 6,
       trailing: PopupMenuButton<String>(
         key: Key('backup-menu-${backup.id}'),
-        tooltip: 'Backup actions',
+        tooltip: l10n.adminBackupActions,
         onSelected: (action) {
           switch (action) {
             case 'download':
@@ -342,24 +342,43 @@ class _BackupRow extends ConsumerWidget {
             PopupMenuItem(
               key: Key('backup-download-${backup.id}'),
               value: 'download',
-              child: const Text('Download'),
+              child: Text(l10n.adminBackupDownload),
             ),
           if (backup.state == 'done')
             PopupMenuItem(
               key: Key('backup-restore-${backup.id}'),
               value: 'restore',
-              child: const Text('Stage restore...'),
+              child: Text(l10n.adminBackupStageRestoreMenu),
             ),
           PopupMenuItem(
             key: Key('backup-delete-${backup.id}'),
             value: 'delete',
-            child: const Text('Delete...'),
+            child: Text(l10n.adminBackupDeleteMenu),
           ),
         ],
       ),
     );
   }
 }
+
+/// The three states a backup can be in, as words. The contract keeps
+/// them open strings, so one this build has not heard of draws as the
+/// server wrote it.
+String _stateLabel(AppLocalizations l10n, String state) => switch (state) {
+  'running' => l10n.adminBackupStateRunning,
+  'done' => l10n.adminBackupStateDone,
+  'failed' => l10n.adminBackupStateFailed,
+  _ => state,
+};
+
+/// What produced a backup, as words. Open strings, same as the state.
+String _triggerLabel(AppLocalizations l10n, String trigger) =>
+    switch (trigger) {
+      'manual' => l10n.adminBackupTriggerManual,
+      'scheduled' => l10n.adminBackupTriggerScheduled,
+      'imported' => l10n.adminBackupTriggerImported,
+      _ => trigger,
+    };
 
 /// The staged plan: keyfile verdict, sealed casualties, and warnings.
 class _RestorePlanDialog extends StatelessWidget {
@@ -371,15 +390,15 @@ class _RestorePlanDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     final keyfileVerdict = !plan.keyfilePresent
-        ? 'The archive has no secrets keyfile; sealed secrets are lost.'
+        ? l10n.adminRestoreNoKeyfile
         : plan.keyfileMatches
-        ? 'The secrets keyfile matches; sealed secrets survive.'
-        : 'The secrets keyfile does not match this server; the sealed '
-              'secrets below are lost.';
+        ? l10n.adminRestoreKeyfileMatches
+        : l10n.adminRestoreKeyfileMismatch;
     return AlertDialog(
       key: const Key('restore-plan-dialog'),
-      title: const Text('Restore staged'),
+      title: Text(l10n.adminRestoreStagedTitle),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -390,7 +409,7 @@ class _RestorePlanDialog extends StatelessWidget {
               padding: const EdgeInsets.all(WaxSpace.s8),
               color: colorScheme.tertiaryContainer,
               child: Text(
-                'The restore applies at the next server restart.',
+                l10n.adminRestoreAppliesAtRestart,
                 style: TextStyle(color: colorScheme.onTertiaryContainer),
               ),
             ),
@@ -399,11 +418,11 @@ class _RestorePlanDialog extends StatelessWidget {
             if (plan.sealedCasualties.isNotEmpty) ...[
               const SizedBox(height: WaxSpace.s12),
               Text(
-                'Lost with the restore',
+                l10n.adminRestoreLostWithRestore,
                 style: WaxType.label.copyWith(color: colors.textPrimary),
               ),
               for (final casualty in plan.sealedCasualties)
-                Text('• ${casualty.kind}: ${casualty.name}'),
+                Text(l10n.adminRestoreCasualty(casualty.kind, casualty.name)),
             ],
             if (plan.warnings.isNotEmpty) ...[
               const SizedBox(height: WaxSpace.s12),
@@ -420,7 +439,7 @@ class _RestorePlanDialog extends StatelessWidget {
         FilledButton(
           key: const Key('restore-plan-done'),
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
+          child: Text(l10n.commonDone),
         ),
       ],
     );
@@ -458,6 +477,7 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
   Future<void> _save(AdminSettings settings) async {
     if (_busy) return;
     setState(() => _busy = true);
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref
@@ -474,9 +494,9 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
                   1024,
             ),
           );
-      messenger.show('Retention saved');
+      messenger.show(l10n.adminBackupRetentionSaved);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -485,6 +505,7 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(adminSettingsProvider).value;
+    final l10n = context.l10n;
     if (settings == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -496,9 +517,9 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
           key: const Key('backup-keep-count'),
           controller: _keepCount,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Backups to keep',
-            helperText: '0 keeps all',
+          decoration: InputDecoration(
+            labelText: l10n.adminBackupKeepCountLabel,
+            helperText: l10n.adminBackupKeepAll,
           ),
         ),
         const SizedBox(height: WaxSpace.s8),
@@ -506,16 +527,16 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
           key: const Key('backup-keep-mb'),
           controller: _keepMb,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Backup space (MB)',
-            helperText: '0 keeps all',
+          decoration: InputDecoration(
+            labelText: l10n.adminBackupKeepMbLabel,
+            helperText: l10n.adminBackupKeepAll,
           ),
         ),
         const SizedBox(height: WaxSpace.s8),
         FilledButton.tonal(
           key: const Key('backup-retention-save'),
           onPressed: _busy ? null : () => _save(settings),
-          child: const Text('Save retention'),
+          child: Text(l10n.adminBackupSaveRetention),
         ),
       ],
     );

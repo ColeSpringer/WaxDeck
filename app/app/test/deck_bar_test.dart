@@ -27,9 +27,10 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
-import 'routed_host.dart';
 import 'queue_persistence_test.dart' show RecordingQueueStore;
+import 'routed_host.dart';
 
 /// The widget carrying one semantics handle. By widget rather than by
 /// semantics node, because these tests do not enable the semantics tree.
@@ -88,7 +89,7 @@ Future<PlayerHarness> _pumpDeck(
       // menu reaches the router, and the player it opens is a real route.
       child: routed
           ? routedHost(_reducedMotion(slot))
-          : MaterialApp(theme: buildWaxTheme(), home: _reducedMotion(slot)),
+          : localizedHost(_reducedMotion(slot), theme: buildWaxTheme()),
     ),
   );
   await tester.pumpAndSettle();
@@ -1104,8 +1105,8 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: harness.container,
-          child: MaterialApp(
-            home: _reducedMotion(const Scaffold(body: QueuePanel())),
+          child: localizedHost(
+            _reducedMotion(const Scaffold(body: QueuePanel())),
           ),
         ),
       );
@@ -1149,8 +1150,8 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: harness.container,
-          child: MaterialApp(
-            home: _reducedMotion(const Scaffold(body: QueuePanel())),
+          child: localizedHost(
+            _reducedMotion(const Scaffold(body: QueuePanel())),
           ),
         ),
       );

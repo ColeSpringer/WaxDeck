@@ -8,6 +8,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
@@ -19,7 +20,7 @@ ProviderContainer _container(FakeRepository repo) {
 
 Widget _host(ProviderContainer container) => UncontrolledProviderScope(
   container: container,
-  child: const MaterialApp(home: LibrariesScreen()),
+  child: localizedHost(const LibrariesScreen()),
 );
 
 /// Wide enough for the table to be a table rather than a card list.

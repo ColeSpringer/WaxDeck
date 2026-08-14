@@ -13,13 +13,18 @@ import 'admin_providers.dart';
 class TrashScreen extends ConsumerWidget {
   const TrashScreen({super.key});
 
-  Future<void> _restore(WidgetRef ref, TrashEntry entry) async {
+  Future<void> _restore(
+    BuildContext context,
+    WidgetRef ref,
+    TrashEntry entry,
+  ) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(trashProvider.notifier).restore(entry.id);
-      messenger.show('Restored ${entry.name}');
+      messenger.show(l10n.adminTrashRestored(entry.name));
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainError(l10n, error));
     }
   }
 
@@ -36,18 +41,16 @@ class TrashScreen extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Purge this file?'),
-        content: Text(
-          '${entry.name} is deleted for good. This cannot be undone.',
-        ),
+        title: Text(l10n.adminTrashPurgeTitle),
+        content: Text(l10n.adminTrashPurgeBody(entry.name)),
         actions: <Widget>[
           WaxButton(
-            label: 'Cancel',
+            label: l10n.commonCancel,
             kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(dialogContext).pop(false),
           ),
           WaxButton(
-            label: 'Purge',
+            label: l10n.adminTrashPurgeAction,
             kind: WaxButtonKind.destructive,
             semanticsId: SemanticsIds.trashPurgeConfirm,
             onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -59,10 +62,10 @@ class TrashScreen extends ConsumerWidget {
     try {
       final reclaimed = await ref.read(trashProvider.notifier).purge(entry.id);
       messenger.show(
-        'Purged ${entry.name}, reclaimed ${l10n.formatBytes(reclaimed)}',
+        l10n.adminTrashPurged(entry.name, l10n.formatBytes(reclaimed)),
       );
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainError(l10n, error));
     }
   }
 
@@ -74,12 +77,10 @@ class TrashScreen extends ConsumerWidget {
     final l10n = context.l10n;
     final confirmed = await showTypedConfirm(
       context,
-      title: 'Empty the trash?',
-      message:
-          'Every trashed file is deleted for good, including the ones '
-          'still restorable. This cannot be undone.',
-      confirmWord: 'EMPTY',
-      confirmLabel: 'Empty trash',
+      title: l10n.adminTrashEmptyTitle,
+      message: l10n.adminTrashEmptyBody,
+      confirmWord: l10n.adminTrashEmptyWord,
+      confirmLabel: l10n.adminTrashEmptyAction,
       fieldSemanticsId: SemanticsIds.confirmField,
       confirmSemanticsId: SemanticsIds.confirmAccept,
       cancelSemanticsId: SemanticsIds.confirmCancel,
@@ -88,11 +89,13 @@ class TrashScreen extends ConsumerWidget {
     try {
       final result = await ref.read(trashProvider.notifier).empty();
       messenger.show(
-        'Purged ${result.purged} files, reclaimed '
-        '${l10n.formatBytes(result.reclaimedBytes)}',
+        l10n.adminTrashEmptied(
+          result.purged,
+          l10n.formatBytes(result.reclaimedBytes),
+        ),
       );
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainError(l10n, error));
     }
   }
 
@@ -104,13 +107,13 @@ class TrashScreen extends ConsumerWidget {
     final trash = ref.watch(trashProvider);
     final includeRestored = ref.watch(trashIncludeRestoredProvider);
     return WaxScaffold(
-      title: 'Trash',
+      title: l10n.adminTrashTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminTrash,
       onBack: adminBack(context),
       actions: <Widget>[
         WaxButton(
-          label: 'Empty trash',
+          label: l10n.adminTrashEmptyAction,
           kind: WaxButtonKind.destructive,
           semanticsId: SemanticsIds.trashEmpty,
           onPressed: () => _empty(context, ref),
@@ -124,10 +127,10 @@ class TrashScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             WaxSettingRow(
-              title: 'Show restored entries',
-              help: 'Entries already put back, for the record',
+              title: l10n.adminTrashShowRestoredTitle,
+              help: l10n.adminTrashShowRestoredHelp,
               control: WaxSwitch(
-                label: 'Show restored entries',
+                label: l10n.adminTrashShowRestoredTitle,
                 value: includeRestored,
                 semanticsId: SemanticsIds.trashIncludeRestored,
                 onChanged: (value) => ref
@@ -142,14 +145,14 @@ class TrashScreen extends ConsumerWidget {
                 rowId: (entry) => entry.id,
                 rowSemanticsId: SemanticsIds.trashRow,
                 rowDetailSemanticsId: SemanticsIds.trashDetail,
-                empty: const EmptyState(
+                empty: EmptyState(
                   glyph: WaxIcons.delete,
-                  title: 'The trash is empty',
-                  message: 'Deleted files wait here before they are purged.',
+                  title: l10n.adminTrashEmptyStateTitle,
+                  message: l10n.adminTrashEmptyStateMessage,
                 ),
                 columns: <WaxColumn<TrashEntry>>[
                   WaxColumn<TrashEntry>(
-                    label: 'File',
+                    label: l10n.adminTrashColumnFile,
                     priority: WaxColumnPriority.primary,
                     text: (entry) => entry.name,
                     cell: (context, entry) => Text(
@@ -163,11 +166,11 @@ class TrashScreen extends ConsumerWidget {
                     ),
                   ),
                   WaxColumn<TrashEntry>(
-                    label: 'Reason',
+                    label: l10n.adminTrashColumnReason,
                     width: 140,
-                    text: (entry) => entry.reason,
+                    text: (entry) => _reasonLabel(l10n, entry),
                     cell: (context, entry) => Text(
-                      entry.restoredAt == null ? entry.reason : 'restored',
+                      _reasonLabel(l10n, entry),
                       style: WaxType.bodySmall.copyWith(
                         color: colors.textSecondary,
                       ),
@@ -175,7 +178,7 @@ class TrashScreen extends ConsumerWidget {
                     ),
                   ),
                   WaxColumn<TrashEntry>(
-                    label: 'Size',
+                    label: l10n.adminTrashColumnSize,
                     width: 92,
                     numeric: true,
                     text: (entry) => l10n.formatBytes(entry.sizeBytes),
@@ -187,7 +190,7 @@ class TrashScreen extends ConsumerWidget {
                     ),
                   ),
                   WaxColumn<TrashEntry>(
-                    label: 'Trashed',
+                    label: l10n.adminTrashColumnTrashed,
                     width: 108,
                     text: (entry) => l10n.formatDate(entry.trashedAt),
                     cell: (context, entry) => Text(
@@ -202,15 +205,13 @@ class TrashScreen extends ConsumerWidget {
                     ? const SizedBox.shrink()
                     : _RowActions(
                         entry: entry,
-                        onRestore: () => _restore(ref, entry),
+                        onRestore: () => _restore(context, ref, entry),
                         onPurge: () => _purge(context, ref, entry),
                       ),
               ),
               AsyncError(:final error) => ErrorState(
-                title: 'Could not load the trash',
-                message: error is WaxDeckApiException
-                    ? error.message
-                    : 'Something went wrong reading it.',
+                title: l10n.adminTrashLoadError,
+                message: context.explain(error),
                 onRetry: () => ref.invalidate(trashProvider),
               ),
               _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -220,6 +221,21 @@ class TrashScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Why a file was trashed, as words - or that it is back, which is
+/// what the row says instead once it has been restored.
+///
+/// The contract keeps the reason an open string, so one this build has
+/// not heard of draws as the server wrote it.
+String _reasonLabel(AppLocalizations l10n, TrashEntry entry) {
+  if (entry.restoredAt != null) return l10n.adminTrashReasonRestored;
+  return switch (entry.reason) {
+    'user' => l10n.adminTrashReasonUser,
+    'prune' => l10n.adminTrashReasonPrune,
+    'permanent' => l10n.adminTrashReasonPermanent,
+    _ => entry.reason,
+  };
 }
 
 class _RowActions extends StatelessWidget {
@@ -244,19 +260,20 @@ class _RowActions extends StatelessWidget {
     // way back is re-downloading; purge still applies, so the row keeps
     // its other action rather than drawing a button that always fails.
     final restorable = !(entry.itemPid?.startsWith(_episodePidPrefix) ?? false);
+    final l10n = context.l10n;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         if (restorable)
           WaxIconButton(
             glyph: WaxIcons.refresh,
-            label: 'Restore ${entry.name}',
+            label: l10n.adminTrashRestoreAction(entry.name),
             semanticsId: SemanticsIds.trashRestore(entry.id),
             onPressed: onRestore,
           ),
         WaxIconButton(
           glyph: WaxIcons.delete,
-          label: 'Purge ${entry.name}',
+          label: l10n.adminTrashPurgeRowAction(entry.name),
           semanticsId: SemanticsIds.trashPurge(entry.id),
           onPressed: onPurge,
         ),

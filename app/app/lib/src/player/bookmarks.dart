@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'playback_session.dart';
@@ -95,7 +96,9 @@ class BookmarkButton extends ConsumerWidget {
     final count = marks?.length ?? 0;
     return WaxIconButton(
       glyph: WaxIcons.bookmark,
-      label: count == 0 ? 'Bookmarks' : 'Bookmarks, $count',
+      label: count == 0
+          ? context.l10n.playerBookmarks
+          : context.l10n.playerBookmarksCount(count),
       badge: count == 0 ? null : '$count',
       semanticsId: SemanticsIds.playerBookmarks,
       onPressed: () => unawaited(
@@ -137,6 +140,7 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
   /// twenty seconds to type a note means the place they are typing
   /// about, not the place they opened the sheet at.
   Future<void> _add() async {
+    final l10n = context.l10n;
     if (_saving) return;
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -155,7 +159,7 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -163,12 +167,13 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
 
   Future<void> _remove(String id) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await ref.read(bookmarksProvider(_pid).notifier).remove(id);
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
     }
   }
 
@@ -180,6 +185,7 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final marks = ref.watch(bookmarksProvider(_pid));
     return SafeArea(
       child: Padding(
@@ -195,7 +201,7 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
           identifier: SemanticsIds.playerBookmarkSheet,
           container: true,
           explicitChildNodes: true,
-          label: 'Bookmarks',
+          label: l10n.playerBookmarks,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -205,17 +211,18 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    const SectionHeader(title: 'Bookmarks'),
+                    SectionHeader(title: l10n.playerBookmarks),
                     WaxTextField(
                       controller: _note,
-                      label: 'Note (optional)',
+                      label: l10n.playerBookmarkNote,
                       semanticsId: SemanticsIds.playerBookmarkNote,
                       onSubmitted: (_) => unawaited(_add()),
                     ),
                     const SizedBox(height: WaxSpace.s8),
                     WaxButton(
-                      label:
-                          'Mark ${formatTimecode(widget.session.displayPosition)}',
+                      label: l10n.playerBookmarkAdd(
+                        formatTimecode(widget.session.displayPosition),
+                      ),
                       semanticsId: SemanticsIds.playerBookmarkAdd,
                       expand: true,
                       onPressed: _saving ? null : () => unawaited(_add()),
@@ -234,9 +241,7 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
                       WaxSpace.s24,
                     ),
                     child: Text(
-                      'Nothing marked yet. A bookmark keeps a place you '
-                      'want to come back to; your listening position is '
-                      'kept for you either way.',
+                      l10n.playerBookmarksEmpty,
                       style: WaxType.caption.copyWith(
                         color: colors.textTertiary,
                       ),
@@ -257,8 +262,8 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
                     padding: const EdgeInsets.all(WaxSpace.s24),
                     child: Text(
                       error is WaxDeckApiException
-                          ? error.message
-                          : 'Could not load the bookmarks.',
+                          ? explainError(l10n, error)
+                          : l10n.playerBookmarksError,
                       style: WaxType.caption.copyWith(color: colors.error),
                     ),
                   ),
@@ -292,6 +297,7 @@ class _BookmarkRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final stamp = formatTimecode(Duration(milliseconds: mark.positionMs));
     final note = mark.note;
     return Row(
@@ -299,7 +305,9 @@ class _BookmarkRow extends StatelessWidget {
         Expanded(
           child: WaxTappable(
             semanticsId: SemanticsIds.playerBookmark(index),
-            label: note == null ? 'Play from $stamp' : '$note, at $stamp',
+            label: note == null
+                ? l10n.playerBookmarkPlayFrom(stamp)
+                : l10n.playerBookmarkNoteAt(note, stamp),
             onPressed: onJump,
             borderRadius: WaxRadius.thumb,
             child: InkWell(
@@ -321,7 +329,7 @@ class _BookmarkRow extends StatelessWidget {
                     const SizedBox(width: WaxSpace.s12),
                     Expanded(
                       child: Text(
-                        note ?? 'No note',
+                        note ?? l10n.playerBookmarkNoNote,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: WaxType.body.copyWith(
@@ -341,7 +349,7 @@ class _BookmarkRow extends StatelessWidget {
           padding: const EdgeInsets.only(right: WaxSpace.s12),
           child: WaxIconButton(
             glyph: WaxIcons.delete,
-            label: 'Remove the bookmark at $stamp',
+            label: context.l10n.playerBookmarkRemove(stamp),
             size: 18,
             semanticsId: SemanticsIds.playerBookmarkDelete(index),
             onPressed: onRemove,

@@ -135,7 +135,7 @@ void main() {
       expect(
         find.bySemanticsIdentifier(section.semanticsId),
         findsOneWidget,
-        reason: '${section.title} must be reachable from the console',
+        reason: '${section.name} must be reachable from the console',
       );
     }
   });
@@ -174,7 +174,7 @@ void main() {
       expect(
         find.bySemanticsIdentifier(section.semanticsId),
         findsOneWidget,
-        reason: '${section.title} must be reachable where there is no rail',
+        reason: '${section.name} must be reachable where there is no rail',
       );
     }
   });

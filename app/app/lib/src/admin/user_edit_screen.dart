@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -108,6 +109,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
+    final l10n = context.l10n;
     final router = GoRouter.of(context);
     final messenger = ref.read(shellMessengerProvider.notifier);
     final repo = ref.read(repositoryProvider);
@@ -135,34 +137,37 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
       }
       router.leave(fallback: WaxRoute.users, result: true);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainRefusal(l10n, e));
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _setPassword() async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final controller = TextEditingController();
     final password = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Set password'),
+        title: Text(l10n.adminUserSetPassword),
         content: TextField(
           key: const Key('user-new-password'),
           controller: controller,
           obscureText: true,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'New password'),
+          decoration: InputDecoration(
+            labelText: l10n.adminUserNewPasswordLabel,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             key: const Key('user-set-password-confirm'),
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('Set password'),
+            child: Text(l10n.adminUserSetPassword),
           ),
         ],
       ),
@@ -173,46 +178,44 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
       await ref
           .read(repositoryProvider)
           .setUserPassword(widget.user.id, password);
-      messenger.show('Password set');
+      messenger.show(l10n.adminUserPasswordSet);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainRefusal(l10n, e));
     }
   }
 
   Future<void> _revokeSessions() async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await _confirm(
-      title: 'Sign out everywhere?',
-      body:
-          'Every session of ${widget.user.username} is revoked '
-          'immediately.',
-      action: 'Sign out',
+      title: l10n.adminUserRevokeTitle,
+      body: l10n.adminUserRevokeBody(widget.user.username),
+      action: l10n.adminUserRevokeAction,
     );
     if (!confirmed) return;
     try {
       await ref.read(repositoryProvider).revokeUserSessions(widget.user.id);
-      messenger.show('Sessions revoked');
+      messenger.show(l10n.adminUserSessionsRevoked);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
   Future<void> _deleteUser() async {
+    final l10n = context.l10n;
     final router = GoRouter.of(context);
     final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await _confirm(
-      title: 'Delete account?',
-      body:
-          '${widget.user.username} is removed for good, along with its '
-          'sessions and preferences. Library files are untouched.',
-      action: 'Delete',
+      title: l10n.adminUserDeleteTitle,
+      body: l10n.adminUserDeleteBody(widget.user.username),
+      action: l10n.adminUserDeleteAction,
     );
     if (!confirmed) return;
     try {
       await ref.read(repositoryProvider).deleteUser(widget.user.id);
       router.leave(fallback: WaxRoute.users, result: true);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -221,6 +224,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
     required String body,
     required String action,
   }) async {
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -229,7 +233,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             key: const Key('user-confirm'),
@@ -272,12 +276,13 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final sizeClass = WaxSizeClass.of(context);
     final colors = WaxColors.of(context);
     final libraries = ref.watch(librariesProvider).value ?? const [];
     return WaxScaffold(
       title: widget.approve
-          ? 'Approve ${widget.user.username}'
+          ? l10n.adminUserApproveTitle(widget.user.username)
           : widget.user.username,
       largeTitle: false,
       onBack: () => context.leave(fallback: WaxRoute.users),
@@ -291,7 +296,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: WaxButton(
-                label: 'Child account preset',
+                label: l10n.adminUserChildPreset,
                 icon: WaxIcons.check,
                 kind: WaxButtonKind.tonal,
                 semanticsId: SemanticsIds.userChildPreset,
@@ -301,20 +306,18 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             Padding(
               padding: const EdgeInsets.only(top: WaxSpace.s4),
               child: Text(
-                'Sets no explicit content, no deleting, downloading, or '
-                'uploading, and a deny rule for advisory-tagged tracks. '
-                'Everything below stays editable.',
+                l10n.adminUserChildPresetHelp,
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ),
             const SizedBox(height: WaxSpace.s16),
 
-            const SectionHeader(title: 'Role'),
+            SectionHeader(title: l10n.adminUserRoleGroup),
             WaxSettingRow(
-              title: 'Administrator',
-              help: 'Sees the whole library and the admin console',
+              title: l10n.adminUserAdminTitle,
+              help: l10n.adminUserAdminHelp,
               control: WaxSwitch(
-                label: 'Administrator',
+                label: l10n.adminUserAdminTitle,
                 value: _admin,
                 semanticsId: SemanticsIds.userAdminRole,
                 onChanged: (value) => setState(() => _admin = value),
@@ -322,12 +325,10 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             ),
             if (!widget.approve)
               WaxSettingRow(
-                title: 'Disabled',
-                help:
-                    'A disabled account cannot sign in, and its live '
-                    'sessions are revoked',
+                title: l10n.adminUserDisabledTitle,
+                help: l10n.adminUserDisabledHelp,
                 control: WaxSwitch(
-                  label: 'Disabled',
+                  label: l10n.adminUserDisabledTitle,
                   value: _disabled,
                   semanticsId: SemanticsIds.userDisabled,
                   onChanged: (value) => setState(() => _disabled = value),
@@ -335,12 +336,12 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
               ),
 
             const SizedBox(height: WaxSpace.s16),
-            const SectionHeader(title: 'Library access'),
+            SectionHeader(title: l10n.adminUserAccessGroup),
             WaxSettingRow(
-              title: 'All libraries',
-              help: 'Off grants specific libraries instead',
+              title: l10n.adminUserAccessAllTitle,
+              help: l10n.adminUserAccessAllHelp,
               control: WaxSwitch(
-                label: 'All libraries',
+                label: l10n.adminUserAccessAllTitle,
                 value: _accessAll,
                 semanticsId: SemanticsIds.userAccessAll,
                 onChanged: (value) => setState(() => _accessAll = value),
@@ -350,9 +351,9 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
               for (final library in libraries)
                 WaxSettingRow(
                   title: library.name,
-                  help: library.path ?? 'A catalog library',
+                  help: library.path ?? l10n.adminUserCatalogLibrary,
                   control: WaxSwitch(
-                    label: 'Access to ${library.name}',
+                    label: l10n.adminUserLibraryAccessLabel(library.name),
                     value: _grantedPids.contains(library.pid),
                     semanticsId: SemanticsIds.userLibrary(library.pid),
                     onChanged: (checked) => setState(() {
@@ -364,12 +365,12 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
                 ),
 
             const SizedBox(height: WaxSpace.s16),
-            const SectionHeader(title: 'Uploads'),
+            SectionHeader(title: l10n.adminUserUploadsGroup),
             WaxSettingRow(
-              title: 'May upload',
-              help: 'Add files to the library, through review',
+              title: l10n.adminUserMayUploadTitle,
+              help: l10n.adminUserMayUploadHelp,
               control: WaxSwitch(
-                label: 'May upload',
+                label: l10n.adminUserMayUploadTitle,
                 value: _uploadEnabled,
                 semanticsId: SemanticsIds.userUploadEnabled,
                 onChanged: (value) => setState(() => _uploadEnabled = value),
@@ -378,8 +379,8 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: WaxTextField(
-                label: 'Pending upload limit (MB)',
-                hint: 'Empty means no limit',
+                label: l10n.adminUserQuotaLabel,
+                hint: l10n.adminUserQuotaHint,
                 controller: _quotaMb,
                 semanticsId: SemanticsIds.userQuota,
               ),
@@ -387,61 +388,58 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             Padding(
               padding: const EdgeInsets.only(top: WaxSpace.s4),
               child: Text(
-                'How much may sit in staging waiting for a decision. '
-                'Importing an upload into the library frees the space '
-                'again, so this bounds the queue rather than what the '
-                'account contributes.',
+                l10n.adminUserQuotaHelp,
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ),
 
             const SizedBox(height: WaxSpace.s16),
-            const SectionHeader(title: 'Permissions'),
+            SectionHeader(title: l10n.adminUserPermissionsGroup),
             WaxSettingRow(
-              title: 'Download originals',
-              help: 'Keep the stored file, not just a stream',
+              title: l10n.adminUserPermDownloadTitle,
+              help: l10n.adminUserPermDownloadHelp,
               control: WaxSwitch(
-                label: 'Download originals',
+                label: l10n.adminUserPermDownloadTitle,
                 value: _download,
                 semanticsId: SemanticsIds.permDownload,
                 onChanged: (value) => setState(() => _download = value),
               ),
             ),
             WaxSettingRow(
-              title: 'Delete library files',
-              help: 'Move catalog files to the trash',
+              title: l10n.adminUserPermDeleteTitle,
+              help: l10n.adminUserPermDeleteHelp,
               control: WaxSwitch(
-                label: 'Delete library files',
+                label: l10n.adminUserPermDeleteTitle,
                 value: _delete,
                 semanticsId: SemanticsIds.permDelete,
                 onChanged: (value) => setState(() => _delete = value),
               ),
             ),
             WaxSettingRow(
-              title: 'Explicit content',
-              help: 'Off hides what the deny rules match',
+              title: l10n.adminUserPermExplicitTitle,
+              help: l10n.adminUserPermExplicitHelp,
               control: WaxSwitch(
-                label: 'Explicit content',
+                label: l10n.adminUserPermExplicitTitle,
                 value: _explicitContent,
                 semanticsId: SemanticsIds.permExplicit,
                 onChanged: (value) => setState(() => _explicitContent = value),
               ),
             ),
             WaxSettingRow(
-              title: 'Shared outputs',
-              help: 'May play to endpoints other people also use',
+              title: l10n.adminUserPermSharedOutputsTitle,
+              help: l10n.adminUserPermSharedOutputsHelp,
               control: WaxSwitch(
-                label: 'Shared outputs',
+                label: l10n.adminUserPermSharedOutputsTitle,
                 value: _sharedOutputs,
                 semanticsId: SemanticsIds.permSharedOutputs,
                 onChanged: (value) => setState(() => _sharedOutputs = value),
               ),
             ),
             WaxSettingRow(
-              title: 'Manage podcasts',
-              help: 'Subscribe, unsubscribe, and change feed settings',
+              title: l10n.adminUserPermManagePodcastsTitle,
+              help: l10n.adminUserPermManagePodcastsHelp,
               control: WaxSwitch(
-                label: 'Manage podcasts',
+                label: l10n.adminUserPermManagePodcastsTitle,
                 value: _managePodcasts,
                 semanticsId: SemanticsIds.permManagePodcasts,
                 onChanged: (value) => setState(() => _managePodcasts = value),
@@ -450,8 +448,8 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: WaxTextField(
-                label: 'Transcode ceiling (kbps)',
-                hint: 'Empty keeps the server default',
+                label: l10n.adminUserMaxKbpsLabel,
+                hint: l10n.adminUserMaxKbpsHint,
                 controller: _maxKbps,
                 semanticsId: SemanticsIds.permMaxKbps,
               ),
@@ -459,16 +457,16 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
 
             const SizedBox(height: WaxSpace.s24),
             _TagRuleEditor(
-              label: 'Content allow rules',
-              help: 'With any rule here, only matching content is visible',
+              label: l10n.adminUserTagAllowLabel,
+              help: l10n.adminUserTagAllowHelp,
               keyPrefix: 'tag-allow',
               rules: _tagAllow,
               onChanged: () => setState(() {}),
             ),
             const SizedBox(height: WaxSpace.s16),
             _TagRuleEditor(
-              label: 'Content deny rules',
-              help: 'Matching content is hidden from this account',
+              label: l10n.adminUserTagDenyLabel,
+              help: l10n.adminUserTagDenyHelp,
               keyPrefix: 'tag-deny',
               rules: _tagDeny,
               onChanged: () => setState(() {}),
@@ -476,31 +474,33 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
 
             const SizedBox(height: WaxSpace.s24),
             WaxButton(
-              label: widget.approve ? 'Approve' : 'Save',
+              label: widget.approve
+                  ? l10n.adminUserApproveAction
+                  : l10n.commonSave,
               semanticsId: SemanticsIds.userSave,
               onPressed: _busy ? null : _save,
             ),
             if (!widget.approve) ...<Widget>[
               const SizedBox(height: WaxSpace.s24),
-              const SectionHeader(title: 'Account actions'),
+              SectionHeader(title: l10n.adminUserActionsGroup),
               Wrap(
                 spacing: WaxSpace.s8,
                 runSpacing: WaxSpace.s8,
                 children: <Widget>[
                   WaxButton(
-                    label: 'Set password',
+                    label: l10n.adminUserSetPassword,
                     kind: WaxButtonKind.tonal,
                     semanticsId: SemanticsIds.userSetPassword,
                     onPressed: _setPassword,
                   ),
                   WaxButton(
-                    label: 'Sign out everywhere',
+                    label: l10n.adminUserRevokeAll,
                     kind: WaxButtonKind.tonal,
                     semanticsId: SemanticsIds.userRevokeSessions,
                     onPressed: _revokeSessions,
                   ),
                   WaxButton(
-                    label: 'Delete account',
+                    label: l10n.adminUserDeleteAccount,
                     kind: WaxButtonKind.destructive,
                     semanticsId: SemanticsIds.userDelete,
                     onPressed: _deleteUser,
@@ -566,6 +566,7 @@ class _TagRuleEditorState extends State<_TagRuleEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -603,7 +604,7 @@ class _TagRuleEditorState extends State<_TagRuleEditor> {
             children: <Widget>[
               Expanded(
                 child: WaxTextField(
-                  label: 'Tag key',
+                  label: l10n.adminUserTagKeyLabel,
                   controller: _key,
                   semanticsId: SemanticsIds.tagRuleKey(widget.keyPrefix),
                 ),
@@ -611,7 +612,7 @@ class _TagRuleEditorState extends State<_TagRuleEditor> {
               const SizedBox(width: WaxSpace.s8),
               Expanded(
                 child: WaxTextField(
-                  label: 'Value (optional)',
+                  label: l10n.adminUserTagValueLabel,
                   controller: _value,
                   semanticsId: SemanticsIds.tagRuleValue(widget.keyPrefix),
                 ),
@@ -619,7 +620,7 @@ class _TagRuleEditorState extends State<_TagRuleEditor> {
               const SizedBox(width: WaxSpace.s8),
               WaxIconButton(
                 glyph: WaxIcons.add,
-                label: 'Add rule',
+                label: l10n.adminUserTagAddRule,
                 semanticsId: SemanticsIds.tagRuleAdd(widget.keyPrefix),
                 onPressed: _add,
               ),

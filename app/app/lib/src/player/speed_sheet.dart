@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import 'playback_session.dart';
 
@@ -23,16 +24,6 @@ const speedMax = 3.5;
 /// presets, large enough that crossing the band does not take forty
 /// presses.
 const speedStep = 0.05;
-
-/// How a speed reads on a control: `1x`, `1.35x`, never `1.00x`.
-String formatPlayerSpeed(double speed) {
-  var text = speed.toStringAsFixed(2);
-  while (text.endsWith('0')) {
-    text = text.substring(0, text.length - 1);
-  }
-  if (text.endsWith('.')) text = text.substring(0, text.length - 1);
-  return '${text}x';
-}
 
 /// The stable handle a preset carries, so a spec names the speed rather
 /// than its position in the row.
@@ -81,7 +72,7 @@ class _SpeedSheet extends StatelessWidget {
         identifier: SemanticsIds.playerSpeedSheet,
         container: true,
         explicitChildNodes: true,
-        label: 'Playback speed',
+        label: context.l10n.playerSpeed,
         child: StreamBuilder<double>(
           stream: session.engine.speedStream,
           initialData: session.engine.speed,
@@ -98,7 +89,7 @@ class _SpeedSheet extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  const SectionHeader(title: 'Playback speed'),
+                  SectionHeader(title: context.l10n.playerSpeed),
                   const SizedBox(height: WaxSpace.s8),
                   _Stepper(speed: speed, onSet: _set),
                   const SizedBox(height: WaxSpace.s20),
@@ -112,7 +103,7 @@ class _SpeedSheet extends StatelessWidget {
                           semanticsId: SemanticsIds.playerSpeedPreset(
                             speedPercent(preset),
                           ),
-                          label: formatPlayerSpeed(preset),
+                          label: context.l10n.formatSpeed(preset),
                           mono: true,
                           // Against the snapped value, not the raw one:
                           // a stepper walked onto 1.2 has to light the
@@ -133,9 +124,14 @@ class _SpeedSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: WaxSpace.s16),
                   Text(
-                    session.isSpokenWord
-                        ? 'Remembered for this ${session.item.mediaType == MediaType.audiobook ? 'book' : 'show'}'
-                        : 'For this session only',
+                    switch ((
+                      session.isSpokenWord,
+                      session.item.mediaType == MediaType.audiobook,
+                    )) {
+                      (false, _) => context.l10n.playerSpeedThisSession,
+                      (true, true) => context.l10n.playerSpeedRememberedBook,
+                      (true, false) => context.l10n.playerSpeedRememberedShow,
+                    },
                     textAlign: TextAlign.center,
                     style: WaxType.caption.copyWith(color: colors.textTertiary),
                   ),
@@ -169,7 +165,7 @@ class _Stepper extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: <Widget>[
         WaxButton(
-          label: 'Slower',
+          label: context.l10n.playerSlower,
           kind: WaxButtonKind.text,
           semanticsId: SemanticsIds.playerSpeedSlower,
           onPressed: current <= speedMin
@@ -179,13 +175,13 @@ class _Stepper extends StatelessWidget {
         SizedBox(
           width: 116,
           child: Text(
-            formatPlayerSpeed(current),
+            context.l10n.formatSpeed(current),
             textAlign: TextAlign.center,
             style: WaxType.display.copyWith(color: colors.textPrimary),
           ),
         ),
         WaxButton(
-          label: 'Faster',
+          label: context.l10n.playerFaster,
           kind: WaxButtonKind.text,
           semanticsId: SemanticsIds.playerSpeedFaster,
           onPressed: current >= speedMax

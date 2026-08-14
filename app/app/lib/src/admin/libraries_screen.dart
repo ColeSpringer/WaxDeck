@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -24,8 +25,9 @@ class LibrariesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final libraries = ref.watch(libraryCountsProvider);
+    final l10n = context.l10n;
     return WaxScaffold(
-      title: 'Libraries',
+      title: l10n.adminLibrariesTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminLibraries,
       // No backSemanticsId: it would put the page's own handle on the
@@ -43,10 +45,8 @@ class LibrariesScreen extends ConsumerWidget {
             switch (libraries) {
               AsyncData(:final value) => _LibraryTable(libraries: value),
               AsyncError(:final error) => ErrorState(
-                title: 'Could not load the libraries',
-                message: error is WaxDeckApiException
-                    ? error.message
-                    : 'Something went wrong reading them.',
+                title: l10n.adminLibrariesLoadError,
+                message: context.explain(error),
                 onRetry: () => ref.invalidate(libraryCountsProvider),
               ),
               _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -68,19 +68,20 @@ class _LibraryTable extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return WaxTable<LibraryInfo>(
       rows: libraries,
       rowId: (library) => library.pid,
       rowSemanticsId: SemanticsIds.libraryRow,
       rowDetailSemanticsId: SemanticsIds.libraryDetail,
-      empty: const EmptyState(
+      empty: EmptyState(
         glyph: WaxIcons.albums,
-        title: 'No libraries yet',
-        message: 'Add a root below and WaxDeck scans what is in it.',
+        title: l10n.adminLibrariesEmptyTitle,
+        message: l10n.adminLibrariesEmptyMessage,
       ),
       columns: <WaxColumn<LibraryInfo>>[
         WaxColumn<LibraryInfo>(
-          label: 'Name',
+          label: l10n.adminLibrariesColumnName,
           priority: WaxColumnPriority.primary,
           text: (library) => library.name,
           cell: (context, library) => Text(
@@ -90,25 +91,25 @@ class _LibraryTable extends ConsumerWidget {
           ),
         ),
         WaxColumn<LibraryInfo>(
-          label: 'Path',
+          label: l10n.adminLibrariesColumnPath,
           text: (library) => library.path ?? '',
           cell: (context, library) => Text(
-            library.path ?? 'unnamed on this filesystem',
+            library.path ?? l10n.adminLibraryUnnamedPath,
             style: WaxType.monoData.copyWith(color: colors.textSecondary),
             overflow: TextOverflow.ellipsis,
           ),
         ),
         WaxColumn<LibraryInfo>(
-          label: 'Holds',
+          label: l10n.adminLibrariesColumnHolds,
           width: 96,
-          text: (library) => library.media ?? 'mixed',
+          text: (library) => _mediaLabel(l10n, library.media),
           cell: (context, library) => Text(
-            _mediaLabel(library.media),
+            _mediaLabel(l10n, library.media),
             style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
           ),
         ),
         WaxColumn<LibraryInfo>(
-          label: 'Items',
+          label: l10n.adminLibrariesColumnItems,
           width: 80,
           numeric: true,
           text: (library) => '${library.itemCount ?? 0}',
@@ -118,12 +119,12 @@ class _LibraryTable extends ConsumerWidget {
           ),
         ),
         WaxColumn<LibraryInfo>(
-          label: 'Matching',
+          label: l10n.adminLibrariesColumnMatching,
           width: 148,
           cell: (context, library) => _MatchingChoice(library: library),
         ),
         WaxColumn<LibraryInfo>(
-          label: 'Read-only',
+          label: l10n.adminLibrariesColumnReadOnly,
           width: 108,
           cell: (context, library) => _ReadOnlySwitch(library: library),
         ),
@@ -132,12 +133,13 @@ class _LibraryTable extends ConsumerWidget {
     );
   }
 
-  static String _mediaLabel(String? media) => switch (media) {
-    'music' => 'Music',
-    'audiobook' => 'Books',
-    'podcast' => 'Podcasts',
-    _ => 'Mixed',
-  };
+  static String _mediaLabel(AppLocalizations l10n, String? media) =>
+      switch (media) {
+        'music' => l10n.adminLibraryMediaMusic,
+        'audiobook' => l10n.adminLibraryMediaBooks,
+        'podcast' => l10n.adminLibraryMediaPodcasts,
+        _ => l10n.adminLibraryMediaMixed,
+      };
 }
 
 /// What the matching engine does with what this root holds.
@@ -149,30 +151,35 @@ class _MatchingChoice extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(libraryMatchingProvider(library.pid));
+    final l10n = context.l10n;
     return WaxChoice<String>(
-      label: 'Matching for ${library.name}',
+      label: l10n.adminLibraryMatchingLabel(library.name),
       value: mode.value ?? 'auto',
       semanticsId: SemanticsIds.libraryMatching(library.pid),
       options: const <String>['auto', 'review', 'off'],
-      labelFor: _matchingLabel,
-      onChanged: mode.value == null ? null : (value) => _set(ref, value),
+      labelFor: (mode) => _matchingLabel(l10n, mode),
+      onChanged: mode.value == null
+          ? null
+          : (value) => _set(context, ref, value),
     );
   }
 
   /// The modes in the words an administrator decides in, not the
   /// contract's. "off" is not "no matching happens" but "this collection
   /// is already curated, leave it as it is".
-  static String _matchingLabel(String mode) => switch (mode) {
-    'review' => 'Ask me',
-    'off' => 'Leave alone',
-    _ => 'Automatic',
-  };
+  static String _matchingLabel(AppLocalizations l10n, String mode) =>
+      switch (mode) {
+        'review' => l10n.adminLibraryMatchingAsk,
+        'off' => l10n.adminLibraryMatchingLeave,
+        _ => l10n.adminLibraryMatchingAuto,
+      };
 
-  Future<void> _set(WidgetRef ref, String mode) async {
+  Future<void> _set(BuildContext context, WidgetRef ref, String mode) async {
+    final l10n = context.l10n;
     try {
       await ref.read(libraryMatchingProvider(library.pid).notifier).set(mode);
     } on WaxDeckApiException catch (error) {
-      ref.read(shellMessengerProvider.notifier).show(error.message);
+      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, error));
     }
   }
 }
@@ -186,20 +193,23 @@ class _ReadOnlySwitch extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final readOnly = ref.watch(libraryReadOnlyProvider(library.pid));
     return WaxSwitch(
-      label: 'Read-only: ${library.name}',
+      label: context.l10n.adminLibraryReadOnlyLabel(library.name),
       value: readOnly.value ?? false,
       semanticsId: SemanticsIds.libraryReadOnly(library.pid),
-      onChanged: readOnly.value == null ? null : (value) => _set(ref, value),
+      onChanged: readOnly.value == null
+          ? null
+          : (value) => _set(context, ref, value),
     );
   }
 
-  Future<void> _set(WidgetRef ref, bool readOnly) async {
+  Future<void> _set(BuildContext context, WidgetRef ref, bool readOnly) async {
+    final l10n = context.l10n;
     try {
       await ref
           .read(libraryReadOnlyProvider(library.pid).notifier)
           .set(readOnly);
     } on WaxDeckApiException catch (error) {
-      ref.read(shellMessengerProvider.notifier).show(error.message);
+      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, error));
     }
   }
 }
@@ -216,13 +226,14 @@ class _RescanButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return WaxIconButton(
       glyph: WaxIcons.refresh,
-      label: 'Rescan libraries',
+      label: context.l10n.adminLibraryRescan,
       semanticsId: SemanticsIds.libraryRescan(library.pid),
-      onPressed: () => _rescan(ref),
+      onPressed: () => _rescan(context, ref),
     );
   }
 
-  Future<void> _rescan(WidgetRef ref) async {
+  Future<void> _rescan(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(repositoryProvider).rescanLibrary();
@@ -230,9 +241,9 @@ class _RescanButton extends ConsumerWidget {
         ..invalidate(adminJobsProvider)
         ..invalidate(librariesProvider)
         ..invalidate(libraryCountsProvider);
-      messenger.show('Scanning every library root');
+      messenger.show(l10n.adminLibraryScanning);
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainError(l10n, error));
     }
   }
 }
@@ -269,11 +280,12 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
 
   Future<void> _create() async {
     if (_busy) return;
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final name = _name.text.trim();
     final path = _path.text.trim();
     if (name.isEmpty || path.isEmpty) {
-      messenger.show('A name and an absolute path are required');
+      messenger.show(l10n.adminLibraryNamePathRequired);
       return;
     }
     setState(() => _busy = true);
@@ -305,9 +317,11 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
         _managed = false;
         _warning = created.streamingWarning;
       });
-      messenger.show('Library "$name" created; scanning started');
+      messenger.show(l10n.adminLibraryCreated(name));
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      // The path somebody just typed: the server names the root that
+      // already covers it, which a translated conflict cannot.
+      messenger.show(explainRefusal(l10n, error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -316,10 +330,11 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Add a library'),
+        SectionHeader(title: l10n.adminLibraryAddGroup),
         if (_warning != null)
           Padding(
             padding: const EdgeInsets.only(bottom: WaxSpace.s12),
@@ -336,38 +351,38 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               WaxTextField(
-                label: 'Name',
-                hint: 'Also the WaxFlow root name serving this directory',
+                label: l10n.adminLibraryNameLabel,
+                hint: l10n.adminLibraryNameHint,
                 controller: _name,
                 semanticsId: SemanticsIds.libraryName,
               ),
               const SizedBox(height: WaxSpace.s12),
               WaxTextField(
-                label: 'Absolute path on the server',
-                hint: '/srv/media/music',
+                label: l10n.adminLibraryPathLabel,
+                hint: l10n.adminLibraryPathHint,
                 controller: _path,
                 semanticsId: SemanticsIds.libraryPath,
               ),
               const SizedBox(height: WaxSpace.s16),
               WaxSettingRow(
-                title: 'Holds',
-                help: 'What kind of content the root carries',
+                title: l10n.adminLibraryHoldsTitle,
+                help: l10n.adminLibraryHoldsHelp,
                 control: WaxChoice<String>(
-                  label: 'Content class',
+                  label: l10n.adminLibraryContentClass,
                   value: _media,
                   semanticsId: SemanticsIds.libraryMedia,
                   options: const <String>['mixed', 'music', 'audiobook'],
-                  labelFor: _LibraryTable._mediaLabel,
+                  labelFor: (media) => _LibraryTable._mediaLabel(l10n, media),
                   onChanged: _busy
                       ? null
                       : (value) => setState(() => _media = value),
                 ),
               ),
               WaxSettingRow(
-                title: 'Catalog-managed',
-                help: 'Let uploads and organizing place files in this root',
+                title: l10n.adminLibraryManagedTitle,
+                help: l10n.adminLibraryManagedHelp,
                 control: WaxSwitch(
-                  label: 'Catalog-managed',
+                  label: l10n.adminLibraryManagedTitle,
                   value: _managed,
                   semanticsId: SemanticsIds.libraryManaged,
                   onChanged: _busy
@@ -377,15 +392,14 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
               ),
               const SizedBox(height: WaxSpace.s16),
               WaxButton(
-                label: 'Create library',
+                label: l10n.adminLibraryCreate,
                 icon: WaxIcons.add,
                 semanticsId: SemanticsIds.librarySubmit,
                 onPressed: _busy ? null : _create,
               ),
               const SizedBox(height: WaxSpace.s8),
               Text(
-                'The path must be absolute, and must not overlap an existing '
-                'root, the upload inbox, or the podcast download directory.',
+                l10n.adminLibraryPathRule,
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ],

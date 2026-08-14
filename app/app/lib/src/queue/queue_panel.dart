@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/side_panel.dart';
 import 'queue_controller.dart';
@@ -31,7 +32,7 @@ class QueuePanel extends ConsumerWidget {
           if (queued)
             WaxIconButton(
               glyph: WaxIcons.delete,
-              label: 'Clear queue',
+              label: context.l10n.queueClear,
               size: 18,
               onPressed: ref.read(queueControllerProvider.notifier).clear,
               semanticsId: SemanticsIds.queueClear,

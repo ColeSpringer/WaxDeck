@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -13,14 +14,21 @@ import 'admin_console.dart';
 /// The importable sources. Podcast feeds move by OPML, which has no
 /// affordance in the podcasts UI yet, so it is not offered here.
 enum _MigrationSource {
-  navidrome('navidrome', 'Navidrome'),
-  subsonic('subsonic', 'Subsonic server'),
-  audiobookshelf('audiobookshelf', 'Audiobookshelf');
+  navidrome('navidrome'),
+  subsonic('subsonic'),
+  audiobookshelf('audiobookshelf');
 
-  const _MigrationSource(this.wireName, this.label);
+  const _MigrationSource(this.wireName);
 
   final String wireName;
-  final String label;
+
+  /// Two of these are bare product names, which read the same in every
+  /// language; the third carries a word that does not.
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    navidrome => 'Navidrome',
+    subsonic => l10n.adminMigrateSubsonicServer,
+    audiobookshelf => 'Audiobookshelf',
+  };
 
   /// Audiobookshelf authenticates with an API token; the subsonic
   /// family with username and password.
@@ -67,6 +75,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
   Future<void> _submit() async {
     if (_busy) return;
     setState(() => _busy = true);
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final router = GoRouter.of(context);
     try {
@@ -88,13 +97,14 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
           );
       ref.invalidate(toolTasksProvider);
       messenger.show(
-        'Import started',
-        actionLabel: 'Tasks',
+        l10n.adminMigrateStarted,
+        actionLabel: l10n.adminOpenTasks,
         actionSemanticsId: SemanticsIds.adminAction('migrate-tasks'),
         onAction: () => router.push<void>(WaxRoute.tasks),
       );
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      // The address and credentials somebody just typed.
+      messenger.show(explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -104,8 +114,9 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
   Widget build(BuildContext context) {
     final url = _serverUrl.text.trim();
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     return WaxScaffold(
-      title: 'Import from another server',
+      title: l10n.adminMigrateTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminMigrate,
       onBack: adminBack(context),
@@ -134,7 +145,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                         for (final source in _MigrationSource.values)
                           DropdownMenuItem(
                             value: source,
-                            child: Text(source.label),
+                            child: Text(source.labelOf(l10n)),
                           ),
                       ],
                     ),
@@ -146,9 +157,9 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                       key: const Key(SemanticsIds.migrateServerUrl),
                       controller: _serverUrl,
                       keyboardType: TextInputType.url,
-                      decoration: const InputDecoration(
-                        labelText: 'Server URL',
-                        hintText: 'https://music.example',
+                      decoration: InputDecoration(
+                        labelText: l10n.adminMigrateServerUrlLabel,
+                        hintText: l10n.adminMigrateServerUrlHint,
                       ),
                     ),
                   ),
@@ -160,8 +171,8 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                         key: const Key(SemanticsIds.migrateToken),
                         controller: _token,
                         obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'API token',
+                        decoration: InputDecoration(
+                          labelText: l10n.adminMigrateTokenLabel,
                         ),
                       ),
                     )
@@ -171,8 +182,8 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                       child: TextField(
                         key: const Key(SemanticsIds.migrateUsername),
                         controller: _username,
-                        decoration: const InputDecoration(
-                          labelText: 'Username',
+                        decoration: InputDecoration(
+                          labelText: l10n.adminMigrateUsernameLabel,
                         ),
                       ),
                     ),
@@ -183,8 +194,8 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                         key: const Key(SemanticsIds.migratePassword),
                         controller: _password,
                         obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
+                        decoration: InputDecoration(
+                          labelText: l10n.adminMigratePasswordLabel,
                         ),
                       ),
                     ),
@@ -192,52 +203,51 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                   const SizedBox(height: WaxSpace.s8),
                   WaxSettingRow(
                     key: const Key('migrate-stars'),
-                    title: 'Stars',
-                    help:
-                        'Which tracks and albums the other server had starred',
+                    title: l10n.adminMigrateStarsTitle,
+                    help: l10n.adminMigrateStarsHelp,
                     control: WaxSwitch(
                       value: _stars,
-                      label: 'Stars',
+                      label: l10n.adminMigrateStarsTitle,
                       onChanged: (value) => setState(() => _stars = value),
                     ),
                   ),
                   WaxSettingRow(
                     key: const Key('migrate-ratings'),
-                    title: 'Ratings',
-                    help: 'The star ratings given there',
+                    title: l10n.adminMigrateRatingsTitle,
+                    help: l10n.adminMigrateRatingsHelp,
                     control: WaxSwitch(
                       value: _ratings,
-                      label: 'Ratings',
+                      label: l10n.adminMigrateRatingsTitle,
                       onChanged: (value) => setState(() => _ratings = value),
                     ),
                   ),
                   WaxSettingRow(
                     key: const Key('migrate-history'),
-                    title: 'Listen history',
-                    help: 'What was played there, and when',
+                    title: l10n.adminMigrateHistoryTitle,
+                    help: l10n.adminMigrateHistoryHelp,
                     control: WaxSwitch(
                       value: _history,
-                      label: 'Listen history',
+                      label: l10n.adminMigrateHistoryTitle,
                       onChanged: (value) => setState(() => _history = value),
                     ),
                   ),
                   WaxSettingRow(
                     key: const Key('migrate-progress'),
-                    title: 'Playback progress',
-                    help: 'How far into each episode and book the listener was',
+                    title: l10n.adminMigrateProgressTitle,
+                    help: l10n.adminMigrateProgressHelp,
                     control: WaxSwitch(
                       value: _progress,
-                      label: 'Playback progress',
+                      label: l10n.adminMigrateProgressTitle,
                       onChanged: (value) => setState(() => _progress = value),
                     ),
                   ),
                   WaxSettingRow(
                     key: const Key('migrate-dry-run'),
-                    title: 'Dry run',
-                    help: 'Report what would match; change nothing',
+                    title: l10n.adminMigrateDryRunTitle,
+                    help: l10n.adminMigrateDryRunHelp,
                     control: WaxSwitch(
                       value: _dryRun,
-                      label: 'Dry run',
+                      label: l10n.adminMigrateDryRunTitle,
                       onChanged: (value) => setState(() => _dryRun = value),
                     ),
                   ),
@@ -247,7 +257,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                     child: FilledButton(
                       key: const Key(SemanticsIds.migrateSubmit),
                       onPressed: _busy || url.isEmpty ? null : _submit,
-                      child: const Text('Start import'),
+                      child: Text(l10n.adminMigrateSubmit),
                     ),
                   ),
                 ],

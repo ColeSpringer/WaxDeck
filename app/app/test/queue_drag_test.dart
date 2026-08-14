@@ -403,9 +403,11 @@ void main() {
     await _dragRowOntoPanel(tester);
 
     expect(container.read(queueControllerProvider).isEmpty, isTrue);
+    // The code's sentence: a bucket that could not be read is a failed
+    // operation, not a refusal of something typed, so the table answers.
     expect(
       container.read(shellMessengerProvider)?.text,
-      'the catalog is being rebuilt',
+      'The library is busy with maintenance. Try again shortly.',
     );
   });
 }

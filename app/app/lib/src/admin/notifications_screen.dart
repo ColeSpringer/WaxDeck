@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../settings/integrations_sections.dart';
 import '../shell/semantics_ids.dart';
 import 'admin_console.dart';
@@ -22,7 +23,7 @@ class AdminNotificationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     return WaxScaffold(
-      title: 'Notifications',
+      title: context.l10n.adminSectionNotifications,
       largeTitle: false,
       semanticsId: SemanticsIds.adminNotifications,
       onBack: adminBack(context),

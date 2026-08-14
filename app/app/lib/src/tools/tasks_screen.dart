@@ -7,6 +7,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../home/item_shelf.dart';
+import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
@@ -129,14 +130,17 @@ final toolTasksProvider =
 /// Whether a task has reached a terminal state.
 bool _finished(ToolTask task) => task.state == 'done' || task.state == 'failed';
 
-String _typeLabel(String type) => switch (type) {
-  'book-merge' => 'Book merge',
-  'book-split' => 'Book split',
-  'cue-split' => 'CUE split',
-  'acquire' => 'URL download',
-  'import-navidrome' => 'Import from Navidrome',
-  'import-subsonic' => 'Import from Subsonic',
-  'import-audiobookshelf' => 'Import from Audiobookshelf',
+/// The kinds in words. The three imports name a product rather than a
+/// kind of work, so the name rides in as a placeholder and the sentence
+/// around it is what gets translated.
+String _typeLabel(AppLocalizations l10n, String type) => switch (type) {
+  'book-merge' => l10n.toolsTaskBookMerge,
+  'book-split' => l10n.toolsTaskBookSplit,
+  'cue-split' => l10n.toolsTaskCueSplit,
+  'acquire' => l10n.toolsTaskAcquire,
+  'import-navidrome' => l10n.toolsTaskImportFrom('Navidrome'),
+  'import-subsonic' => l10n.toolsTaskImportFrom('Subsonic'),
+  'import-audiobookshelf' => l10n.toolsTaskImportFrom('Audiobookshelf'),
   _ => type,
 };
 
@@ -150,6 +154,7 @@ class TasksScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final tasks = ref.watch(toolTasksProvider);
     final anyFinished = switch (tasks) {
       AsyncData(:final value) => value.tasks.any(_finished),
@@ -164,12 +169,12 @@ class TasksScreen extends ConsumerWidget {
         return false;
       },
       child: WaxScaffold(
-        title: 'Tool tasks',
+        title: l10n.toolsTitle,
         actions: <Widget>[
           if (anyFinished)
             WaxIconButton(
               glyph: WaxIcons.delete,
-              label: 'Clear finished',
+              label: l10n.toolsClearFinished,
               semanticsId: SemanticsIds.tasksClearFinished,
               onPressed: () => unawaited(_clearFinished(context, ref)),
             ),
@@ -177,14 +182,11 @@ class TasksScreen extends ConsumerWidget {
         slivers: <Widget>[
           switch (tasks) {
             AsyncData(:final value) when value.tasks.isEmpty =>
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 hasScrollBody: false,
                 child: EmptyState(
-                  title: 'No tool tasks',
-                  message:
-                      'Merges, splits, downloads, and imports report '
-                      'their progress here while they run and land here '
-                      'when they finish.',
+                  title: l10n.toolsEmptyTitle,
+                  message: l10n.toolsEmptyMessage,
                   glyph: WaxIcons.check,
                 ),
               ),
@@ -206,10 +208,8 @@ class TasksScreen extends ConsumerWidget {
             AsyncError(:final error) => SliverFillRemaining(
               hasScrollBody: false,
               child: ErrorState(
-                title: 'Could not load tool tasks',
-                message: error is WaxDeckApiException
-                    ? error.message
-                    : 'The server did not answer.',
+                title: l10n.toolsLoadError,
+                message: context.explain(error),
                 onRetry: () => ref.invalidate(toolTasksProvider),
               ),
             ),
@@ -224,6 +224,7 @@ class TasksScreen extends ConsumerWidget {
 
   Future<void> _clearFinished(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       final deleted = await ref
           .read(toolTasksProvider.notifier)
@@ -231,16 +232,12 @@ class TasksScreen extends ConsumerWidget {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(
-            content: Text(
-              deleted == 1 ? 'Cleared 1 task' : 'Cleared $deleted tasks',
-            ),
-          ),
+          SnackBar(content: Text(l10n.toolsTasksCleared(deleted))),
         );
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 }
@@ -258,13 +255,16 @@ class _TaskRow extends ConsumerWidget {
 
   /// The humanized state, with the running percentage when the engine
   /// reports one.
-  String get _statusLabel {
+  String _statusLabel(AppLocalizations l10n) {
     final pct = task.progressPct;
     return switch (task.state) {
-      'queued' => 'Queued',
-      'running' => pct == null ? 'Running' : 'Running · ${pct.round()}%',
-      'done' => 'Done',
-      'failed' => 'Failed',
+      'queued' => l10n.toolsStateQueued,
+      'running' =>
+        pct == null
+            ? l10n.toolsStateRunning
+            : l10n.toolsStateRunningPct(pct.round()),
+      'done' => l10n.toolsStateDone,
+      'failed' => l10n.toolsStateFailed,
       final other => other,
     };
   }
@@ -278,33 +278,40 @@ class _TaskRow extends ConsumerWidget {
 
   /// What the finished task points at, said in words; null when there
   /// is nowhere to go and nothing to show.
-  String? get _resultLabel {
+  String? _resultLabel(AppLocalizations l10n) {
     if (task.state == 'failed') {
       // A failure can still have written a report worth reading: an
       // import that matched half the library before dying stores what
       // landed, and the error line alone buries it.
-      return task.summary == null ? null : 'Tap for the report';
+      return task.summary == null ? null : l10n.toolsTapForReport;
     }
     if (task.state != 'done') return null;
     final results = task.resultPids;
     if (task.type == 'acquire') {
       return results.isEmpty
-          ? 'Open the review queue'
-          : '${results.length} ready for review';
+          ? l10n.toolsOpenReviewQueue
+          : l10n.toolsReadyForReview(results.length);
     }
     if (results.isEmpty) {
-      return task.summary == null ? null : 'Finished · tap for the report';
+      return task.summary == null ? null : l10n.toolsFinishedTapForReport;
     }
     return results.length == 1
-        ? 'Tap to open what it produced'
-        : '${results.length} items produced · tap to open';
+        ? l10n.toolsTapToOpenResult
+        : l10n.toolsItemsProduced(results.length);
   }
 
   /// One line of the summary's headline counters, when present.
-  static String? summaryLine(Map<String, Object?> summary) {
-    final parts = [
-      for (final key in const ['matched', 'unmatched', 'listens'])
-        if (summary[key] != null) '$key ${summary[key]}',
+  static String? summaryLine(
+    AppLocalizations l10n,
+    Map<String, Object?> summary,
+  ) {
+    final parts = <String>[
+      if (summary['matched'] != null)
+        l10n.toolsSummaryMatched('${summary['matched']}'),
+      if (summary['unmatched'] != null)
+        l10n.toolsSummaryUnmatched('${summary['unmatched']}'),
+      if (summary['listens'] != null)
+        l10n.toolsSummaryListens('${summary['listens']}'),
     ];
     if (parts.isEmpty) return null;
     return parts.join(', ');
@@ -346,6 +353,7 @@ class _TaskRow extends ConsumerWidget {
     String pid,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       final item = await ref.read(repositoryProvider).getItem(pid);
       if (!context.mounted) return;
@@ -353,7 +361,7 @@ class _TaskRow extends ConsumerWidget {
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
@@ -364,6 +372,7 @@ class _TaskRow extends ConsumerWidget {
     List<String> pids,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final List<ItemDetail> items;
     try {
       items = await Future.wait([
@@ -372,7 +381,7 @@ class _TaskRow extends ConsumerWidget {
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
       return;
     }
     if (!context.mounted) return;
@@ -412,13 +421,14 @@ class _TaskRow extends ConsumerWidget {
   }
 
   void _showSummary(BuildContext context, Map<String, Object?> summary) {
+    final l10n = context.l10n;
     showDialog<void>(
       context: context,
       builder: (dialogContext) {
         final colors = WaxColors.of(dialogContext);
         return AlertDialog(
           key: const Key('task-summary-dialog'),
-          title: Text(_typeLabel(task.type)),
+          title: Text(_typeLabel(l10n, task.type)),
           content: SingleChildScrollView(
             child: Text(
               const JsonEncoder.withIndent('  ').convert(summary),
@@ -427,7 +437,7 @@ class _TaskRow extends ConsumerWidget {
           ),
           actions: <Widget>[
             WaxButton(
-              label: 'Close',
+              label: l10n.commonClose,
               kind: WaxButtonKind.text,
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
@@ -439,23 +449,26 @@ class _TaskRow extends ConsumerWidget {
 
   Future<void> _dismiss(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await ref.read(toolTasksProvider.notifier).dismiss(task.id);
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final running = task.state == 'running' || task.state == 'queued';
     final open = _openAction(context, ref);
     final error = task.error;
     final summary = task.summary;
-    final summaryCounters = summary == null ? null : summaryLine(summary);
+    final summaryCounters = summary == null ? null : summaryLine(l10n, summary);
+    final result = _resultLabel(l10n);
     // The pids, plainly: three queued CUE splits are three rows reading
     // "CUE split", and which failed - and what a dismiss is about to
     // remove - needs the source named. The produced list is the same
@@ -470,7 +483,7 @@ class _TaskRow extends ConsumerWidget {
         : results;
     final subject = [
       if (task.itemPid != null) task.itemPid!,
-      if (produced.isNotEmpty) 'produced ${produced.join(', ')}',
+      if (produced.isNotEmpty) l10n.toolsProduced(produced.join(', ')),
     ].join(' · ');
     // A region, not one merged button: the row carries its own dismiss
     // control, and a tappable that swallowed descendant semantics would
@@ -502,7 +515,7 @@ class _TaskRow extends ConsumerWidget {
                       children: <Widget>[
                         Expanded(
                           child: Text(
-                            _typeLabel(task.type),
+                            _typeLabel(l10n, task.type),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: WaxType.titleItem.copyWith(
@@ -512,7 +525,7 @@ class _TaskRow extends ConsumerWidget {
                         ),
                         const SizedBox(width: WaxSpace.s8),
                         Text(
-                          _statusLabel,
+                          _statusLabel(l10n),
                           style: WaxType.overline.copyWith(
                             color: _statusColor(colors),
                           ),
@@ -545,10 +558,10 @@ class _TaskRow extends ConsumerWidget {
                         style: WaxType.caption.copyWith(color: colors.error),
                       ),
                     ],
-                    if (_resultLabel != null) ...<Widget>[
+                    if (result != null) ...<Widget>[
                       const SizedBox(height: WaxSpace.s4),
                       Text(
-                        _resultLabel!,
+                        result,
                         style: WaxType.caption.copyWith(
                           color: colors.textSecondary,
                         ),
@@ -571,7 +584,7 @@ class _TaskRow extends ConsumerWidget {
                 const SizedBox(width: WaxSpace.s8),
                 WaxIconButton(
                   glyph: WaxIcons.close,
-                  label: 'Dismiss',
+                  label: l10n.toolsDismiss,
                   semanticsId: SemanticsIds.taskDismiss(task.id),
                   onPressed: () => unawaited(_dismiss(context, ref)),
                 ),

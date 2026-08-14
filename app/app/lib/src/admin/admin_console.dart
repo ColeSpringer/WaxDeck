@@ -1,26 +1,30 @@
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 
 /// Where a console section sits in the console's own navigation.
 enum AdminGroup {
   /// The dashboard. Not in a group: it is the console's own front page.
-  overview('Overview'),
+  overview,
 
   /// What is in the library and what shape it is in.
-  library('Library'),
+  library,
 
   /// Accounts and the invitations that make them.
-  people('People'),
+  people,
 
   /// The instance itself: what it is set to, what it keeps, what it did.
-  server('Server');
+  server;
 
-  const AdminGroup(this.label);
-
-  final String label;
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    overview => l10n.adminGroupOverview,
+    library => l10n.adminGroupLibrary,
+    people => l10n.adminGroupPeople,
+    server => l10n.adminGroupServer,
+  };
 }
 
 /// Every surface the admin console holds.
@@ -31,136 +35,75 @@ enum AdminGroup {
 /// router would be a page nothing links to; one that existed only here
 /// would be a link to nowhere.
 enum AdminSection {
-  dashboard(
-    'Dashboard',
-    'What needs attention, and what is running',
-    WaxIcons.stats,
-    WaxRoute.admin,
-    AdminGroup.overview,
-  ),
-  libraries(
-    'Libraries',
-    'The roots WaxDeck scans, and what each one holds',
-    WaxIcons.albums,
-    WaxRoute.libraries,
-    AdminGroup.library,
-  ),
-  review(
-    'Review queue',
-    'Albums waiting for an identification decision',
-    WaxIcons.check,
-    WaxRoute.review,
-    AdminGroup.library,
-  ),
-  health(
-    'Health',
-    'What is missing, mistagged, or duplicated',
-    WaxIcons.warning,
-    WaxRoute.health,
-    AdminGroup.library,
-  ),
-  diagnostics(
-    'Diagnostics',
-    'Files the catalog could not read',
-    WaxIcons.info,
-    WaxRoute.diagnostics,
-    AdminGroup.library,
-  ),
-  genres(
-    'Genre tree',
-    'The canonical vocabulary every genre folds onto',
-    WaxIcons.filter,
-    WaxRoute.genres,
-    AdminGroup.library,
-  ),
-  organize(
-    'Organize',
-    'Move files into a naming scheme',
-    WaxIcons.sort,
-    WaxRoute.organize,
-    AdminGroup.library,
-  ),
-  users(
-    'Users',
-    'Accounts, invites, and what each one may do',
-    WaxIcons.artists,
-    WaxRoute.users,
-    AdminGroup.people,
-  ),
-  shares(
-    'Share links',
-    'Every public link on this server, and who minted it',
-    WaxIcons.share,
-    WaxRoute.adminShares,
-    AdminGroup.people,
-  ),
-  settings(
-    'Server settings',
-    'Signups, read-only mode, transcoding, retention',
-    WaxIcons.settings,
-    WaxRoute.adminSettings,
-    AdminGroup.server,
-  ),
-  notifications(
-    'Notifications',
-    'Where this server reports operations events',
-    WaxIcons.bell,
-    WaxRoute.adminNotifications,
-    AdminGroup.server,
-  ),
-  schedules(
-    'Schedules',
-    'When scans, backups, and pruning run',
-    WaxIcons.recent,
-    WaxRoute.schedules,
-    AdminGroup.server,
-  ),
-  backups(
-    'Backups',
-    'Archives, imports, and staged restores',
-    WaxIcons.bookmark,
-    WaxRoute.backups,
-    AdminGroup.server,
-  ),
-  trash(
-    'Trash',
-    'Deleted files, until they are purged',
-    WaxIcons.delete,
-    WaxRoute.trash,
-    AdminGroup.server,
-  ),
-  audit(
-    'Audit log',
-    'Who did what, and to what',
-    WaxIcons.info,
-    WaxRoute.audit,
-    AdminGroup.server,
-  ),
-  migrate(
-    'Import from another server',
-    'Bring a library, its stars, and its history across',
-    WaxIcons.downloads,
-    WaxRoute.migrate,
-    AdminGroup.server,
-  );
+  dashboard(WaxIcons.stats, WaxRoute.admin, AdminGroup.overview),
+  libraries(WaxIcons.albums, WaxRoute.libraries, AdminGroup.library),
+  review(WaxIcons.check, WaxRoute.review, AdminGroup.library),
+  health(WaxIcons.warning, WaxRoute.health, AdminGroup.library),
+  diagnostics(WaxIcons.info, WaxRoute.diagnostics, AdminGroup.library),
+  genres(WaxIcons.filter, WaxRoute.genres, AdminGroup.library),
+  organize(WaxIcons.sort, WaxRoute.organize, AdminGroup.library),
+  users(WaxIcons.artists, WaxRoute.users, AdminGroup.people),
+  shares(WaxIcons.share, WaxRoute.adminShares, AdminGroup.people),
+  settings(WaxIcons.settings, WaxRoute.adminSettings, AdminGroup.server),
+  notifications(WaxIcons.bell, WaxRoute.adminNotifications, AdminGroup.server),
+  schedules(WaxIcons.recent, WaxRoute.schedules, AdminGroup.server),
+  backups(WaxIcons.bookmark, WaxRoute.backups, AdminGroup.server),
+  trash(WaxIcons.delete, WaxRoute.trash, AdminGroup.server),
+  audit(WaxIcons.info, WaxRoute.audit, AdminGroup.server),
+  migrate(WaxIcons.downloads, WaxRoute.migrate, AdminGroup.server);
 
-  const AdminSection(
-    this.title,
-    this.blurb,
-    this.glyph,
-    this.location,
-    this.group,
-  );
-
-  final String title;
-
-  /// The line under the section's name on the compact list. The sidebar
-  /// draws the title alone.
-  final String blurb;
+  const AdminSection(this.glyph, this.location, this.group);
 
   final WaxGlyph glyph;
   final String location;
   final AdminGroup group;
+
+  /// The section's own name.
+  ///
+  /// Most read the same key as the screen they open, so a link and its
+  /// page cannot drift apart. Two do not, and deliberately: the console
+  /// front page is "Dashboard" in a list of sections and "Admin" as a
+  /// page title, and the health screen is "Health" beside its siblings
+  /// and "Library health" at the top of its own page.
+  String titleOf(AppLocalizations l10n) => switch (this) {
+    dashboard => l10n.adminSectionDashboard,
+    libraries => l10n.adminLibrariesTitle,
+    review => l10n.adminSectionReview,
+    health => l10n.adminSectionHealth,
+    diagnostics => l10n.adminSectionDiagnostics,
+    genres => l10n.adminGenreTreeTitle,
+    organize => l10n.adminSectionOrganize,
+    users => l10n.adminUsersTitle,
+    shares => l10n.adminSectionShares,
+    settings => l10n.adminServerTitle,
+    notifications => l10n.adminSectionNotifications,
+    schedules => l10n.adminSchedulesTitle,
+    backups => l10n.adminBackupsTitle,
+    trash => l10n.adminTrashTitle,
+    audit => l10n.adminSectionAudit,
+    migrate => l10n.adminMigrateTitle,
+  };
+
+  /// The line under the section's name on the compact list. The sidebar
+  /// draws the title alone.
+  String blurbOf(AppLocalizations l10n) => switch (this) {
+    dashboard => l10n.adminSectionDashboardBlurb,
+    libraries => l10n.adminSectionLibrariesBlurb,
+    review => l10n.adminSectionReviewBlurb,
+    health => l10n.adminSectionHealthBlurb,
+    diagnostics => l10n.adminSectionDiagnosticsBlurb,
+    genres => l10n.adminSectionGenresBlurb,
+    organize => l10n.adminSectionOrganizeBlurb,
+    users => l10n.adminSectionUsersBlurb,
+    shares => l10n.adminSectionSharesBlurb,
+    settings => l10n.adminSectionSettingsBlurb,
+    notifications => l10n.adminSectionNotificationsBlurb,
+    schedules => l10n.adminSectionSchedulesBlurb,
+    backups => l10n.adminSectionBackupsBlurb,
+    trash => l10n.adminSectionTrashBlurb,
+    audit => l10n.adminSectionAuditBlurb,
+    migrate => l10n.adminSectionMigrateBlurb,
+  };
 
   String get semanticsId => SemanticsIds.adminSection(name);
 
@@ -240,6 +183,7 @@ class _SectionList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final active = AdminSection.forLocation(location);
     return Container(
       width: 224,
@@ -257,7 +201,7 @@ class _SectionList extends StatelessWidget {
                   WaxSpace.s4,
                 ),
                 child: Text(
-                  group.label,
+                  group.labelOf(l10n),
                   style: WaxType.overline.copyWith(color: colors.textTertiary),
                 ),
               ),
@@ -280,11 +224,12 @@ class _SectionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final title = section.titleOf(context.l10n);
     final tint = selected ? colors.accent : colors.textSecondary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
       child: WaxTappable(
-        label: section.title,
+        label: title,
         semanticsId: section.semanticsId,
         selected: selected,
         borderRadius: WaxRadius.chip,
@@ -311,7 +256,7 @@ class _SectionRow extends StatelessWidget {
                   const SizedBox(width: WaxSpace.s12),
                   Expanded(
                     child: Text(
-                      section.title,
+                      title,
                       style: WaxType.label.copyWith(
                         color: selected
                             ? colors.onAccentContainer

@@ -87,6 +87,9 @@ class ConnectBus {
     _pending[id] = completer;
     if (!send(frame)) {
       _pending.remove(id);
+      // Diagnostics, not copy: every surface renders these through
+      // `explainError`, which answers on the code and never reaches the
+      // message.
       completer.completeError(
         const WaxDeckApiException(
           code: 'local-channel-offline',

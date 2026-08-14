@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
@@ -49,7 +50,11 @@ Widget _keyboardHost(Widget player) {
     ],
   );
   addTearDown(router.dispose);
-  return MaterialApp.router(routerConfig: router);
+  return MaterialApp.router(
+    routerConfig: router,
+    localizationsDelegates: waxLocalizationsDelegates,
+    supportedLocales: waxSupportedLocales,
+  );
 }
 
 void main() {

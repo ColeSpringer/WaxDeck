@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../shell/shell_messages.dart';
 import 'queue_controller.dart';
@@ -319,10 +320,11 @@ class _QueueDropTargetState extends ConsumerState<QueueDropTarget> {
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = container.read(shellMessengerProvider.notifier);
     final playing = container.read(nowPlayingProvider.notifier);
+    final l10n = context.l10n;
     try {
       final items = await drop.resolve();
       if (items.isEmpty) {
-        messenger.show('${drop.label} has nothing to play');
+        messenger.show(l10n.queueDropNothing(drop.label));
         return;
       }
       final at = slot == null ? null : _indexOf(container, slot);
@@ -333,13 +335,13 @@ class _QueueDropTargetState extends ConsumerState<QueueDropTarget> {
       }
       messenger.show(
         items.length == 1
-            ? 'Added ${items.first.title} to the queue'
-            : 'Added ${items.length} tracks to the queue',
+            ? l10n.queueAddedOne(items.first.title)
+            : l10n.queueAddedMany(items.length),
       );
     } on WaxDeckApiException catch (error) {
       // A bucket resolves over the network, so this is the one drop
       // that can fail on its way into the queue.
-      messenger.show(error.message);
+      messenger.show(explainError(l10n, error));
     }
   }
 }

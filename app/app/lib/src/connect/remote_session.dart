@@ -240,6 +240,8 @@ class RemoteSessionController extends Notifier<RemoteSession?> {
     if (current == null) return;
     final own = ref.read(connectControllerProvider).endpointId.value;
     if (own == null) {
+      // A diagnostic, not copy: the surface renders this through
+      // `explainError`, which answers on the code.
       throw const WaxDeckApiException(
         code: 'local-unregistered',
         message: 'this device is not registered as a player yet',

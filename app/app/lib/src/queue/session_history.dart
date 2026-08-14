@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
@@ -54,7 +55,7 @@ class SessionHistorySection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text(
-            'EARLIER',
+            context.l10n.queueEarlier,
             style: WaxType.overline.copyWith(color: colors.textTertiary),
           ),
           const SizedBox(height: WaxSpace.s8),
@@ -62,7 +63,7 @@ class SessionHistorySection extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: WaxSpace.s8),
               child: WaxTappable(
-                label: 'Restore ${_title(session)}',
+                label: context.l10n.queueRestoreSession(_title(session)),
                 // Per session: the list holds several, and one
                 // identifier across all of them is ambiguous to a
                 // screen reader walking it and unusable to a test.
@@ -125,6 +126,7 @@ class SessionHistorySection extends ConsumerWidget {
     WidgetRef ref,
     PlaybackSessionHistoryEntry session,
   ) {
+    final l10n = context.l10n;
     final playback = ref.read(nowPlayingProvider.notifier);
     final displaced = ref.read(queueControllerProvider).isNotEmpty;
     playback.restore(queueFromSession(session), offerUndo: displaced);
@@ -135,9 +137,9 @@ class SessionHistorySection extends ConsumerWidget {
         SnackBar(
           // "Restored", because restore's contract is put-it-back,
           // paused: nothing is playing when this shows.
-          content: Text('Restored ${_title(session)}'),
+          content: Text(l10n.queueRestored(_title(session))),
           action: SnackBarAction(
-            label: 'Undo',
+            label: l10n.queueUndo,
             onPressed: playback.undoReplace,
           ),
         ),

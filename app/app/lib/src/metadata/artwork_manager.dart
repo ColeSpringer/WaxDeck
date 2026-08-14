@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -23,21 +24,37 @@ const kArtworkMaxBytes = 16 * 1024 * 1024;
 /// One artwork slot an item can hold. Only `front` walks the album and
 /// artist chain; the rest resolve at the item's own level.
 enum ArtSlot {
-  front('front', 'Front cover', 'The cover everything else falls back to'),
-  back('back', 'Back cover', 'The reverse of the sleeve'),
-  disc('disc', 'Disc', 'The label printed on the disc itself'),
-  booklet('booklet', 'Booklet', 'A page from the insert'),
-  background(
-    'background',
-    'Background',
-    'A wide image, and an artist portrait',
-  );
+  front('front'),
+  back('back'),
+  disc('disc'),
+  booklet('booklet'),
+  background('background');
 
-  const ArtSlot(this.role, this.label, this.blurb);
+  const ArtSlot(this.role);
 
   final String role;
-  final String label;
-  final String blurb;
+
+  /// The slot's name where it stands on its own, over its tile.
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    front => l10n.artSlotFront,
+    back => l10n.artSlotBack,
+    disc => l10n.artSlotDisc,
+    booklet => l10n.artSlotBooklet,
+    background => l10n.artSlotBackground,
+  };
+
+  /// The same name inside a sentence, which English lower-cases and
+  /// other languages may need an article for. A key of its own rather
+  /// than a fold applied to the label: lower-casing is an English rule
+  /// wearing a formatting disguise, and the sentences around it cannot
+  /// know the gender of the words in this list.
+  String inlineOf(AppLocalizations l10n) => switch (this) {
+    front => l10n.artSlotFrontInline,
+    back => l10n.artSlotBackInline,
+    disc => l10n.artSlotDiscInline,
+    booklet => l10n.artSlotBookletInline,
+    background => l10n.artSlotBackgroundInline,
+  };
 }
 
 /// The slots an entity holds at its own level.
@@ -84,7 +101,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
     if (picker == null) return;
     final file = await picker.pickFile(
       extensions: kArtworkExtensions,
-      label: 'Image',
+      label: context.l10n.artworkPickLabel,
     );
     if (file == null) return;
     await _upload(slot, file);
@@ -94,23 +111,29 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
   /// says so rather than dropping the rest without a word.
   Future<void> _uploadDropped(ArtSlot slot, List<PickedAudioFile> files) async {
     if (files.isEmpty) return;
+    final l10n = context.l10n;
     if (files.length > 1) {
       ref
           .read(shellMessengerProvider.notifier)
-          .show('${slot.label} takes one image; using ${files.first.name}');
+          .show(l10n.artworkOneImageOnly(slot.labelOf(l10n), files.first.name));
     }
     await _upload(slot, files.first);
   }
 
   Future<void> _upload(ArtSlot slot, PickedAudioFile file) async {
+    // Reached from `_pick` after the OS file picker has been awaited,
+    // so the screen may be gone: reading an ancestor through a dead
+    // element throws rather than doing nothing.
+    if (!mounted) return;
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     if (file.size > kArtworkMaxBytes) {
-      messenger.show('${file.name} is larger than the 16 MB an image may be');
+      messenger.show(l10n.artworkTooLarge(file.name));
       return;
     }
     final openRead = file.openRead;
     if (openRead == null) {
-      messenger.show('${file.name} could not be read');
+      messenger.show(l10n.artworkUnreadable(file.name));
       return;
     }
     setState(() => _busyRole = slot.role);
@@ -128,24 +151,24 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
             role: slot.role,
           );
       await _refresh(slot);
-      messenger.show('${slot.label} replaced');
+      messenger.show(l10n.artworkReplaced(slot.labelOf(l10n)));
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     } finally {
       if (mounted) setState(() => _busyRole = null);
     }
   }
 
   Future<void> _clear(ArtSlot slot) async {
+    final l10n = context.l10n;
     final confirmed = await showTypedConfirm(
       context,
-      title: 'Clear the ${slot.label.toLowerCase()}?',
+      title: l10n.artworkClearTitle(slot.inlineOf(l10n)),
       message: slot == ArtSlot.front
-          ? 'The item falls back to its album or artist cover. The image '
-                'itself is removed from the catalog.'
-          : 'The slot becomes empty. Nothing falls back into it.',
-      confirmWord: 'clear',
-      confirmLabel: 'Clear',
+          ? l10n.artworkClearFrontBody
+          : l10n.artworkClearBody,
+      confirmWord: l10n.artworkClearWord,
+      confirmLabel: l10n.artworkClearAction,
       fieldSemanticsId: SemanticsIds.confirmField,
       confirmSemanticsId: SemanticsIds.confirmAccept,
       cancelSemanticsId: SemanticsIds.confirmCancel,
@@ -158,9 +181,9 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
           .read(repositoryProvider)
           .clearItemArtwork(widget.pid, role: slot.role);
       await _refresh(slot);
-      messenger.show('${slot.label} cleared');
+      messenger.show(l10n.artworkCleared(slot.labelOf(l10n)));
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     } finally {
       if (mounted) setState(() => _busyRole = null);
     }
@@ -183,15 +206,14 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
       for (final role in roles.value ?? const <ArtRoleInfo>[]) role.role: role,
     };
     final picker = ref.watch(filePickerProvider);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Artwork', overline: 'One image per slot'),
+        SectionHeader(title: l10n.artworkTitle, overline: l10n.artworkOverline),
         if (roles.hasError)
-          const WaxBanner(
-            message:
-                'Could not read which slots this item holds; what is drawn '
-                'below may be inherited.',
+          WaxBanner(
+            message: l10n.artworkSlotsUnreadable,
             tone: WaxBannerTone.caution,
           ),
         Wrap(
@@ -255,19 +277,22 @@ class _SlotTile extends ConsumerWidget {
   final VoidCallback onClear;
   final Future<void> Function(List<PickedAudioFile> files) onDropped;
 
-  String get _state {
-    if (info != null) {
-      final size = (info!.width ?? 0) > 0 && (info!.height ?? 0) > 0
-          ? '${info!.width} x ${info!.height}'
+  String _stateOf(AppLocalizations l10n) {
+    final held = info;
+    if (held != null) {
+      final size = (held.width ?? 0) > 0 && (held.height ?? 0) > 0
+          ? l10n.artworkStateSize(held.width!, held.height!)
           : null;
-      return <String>[info!.format ?? 'image', ?size].join(', ');
+      return <String>[held.format ?? l10n.artworkStateImage, ?size].join(', ');
     }
-    return inherited ? 'Inherited' : 'Empty';
+    return inherited ? l10n.artworkStateInherited : l10n.artworkStateEmpty;
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    final state = _stateOf(l10n);
     final store = ref.watch(artworkStoreProvider);
     // The tile draws whatever the endpoint answers for this slot, which
     // for `front` may be the album's. Every other slot 404s when it is
@@ -279,7 +304,7 @@ class _SlotTile extends ConsumerWidget {
       child: AudioDropArea(
         enabled: !busy,
         extensions: kArtworkExtensions,
-        hint: 'Drop an image into ${slot.label.toLowerCase()}',
+        hint: l10n.artworkDropHint(slot.inlineOf(l10n)),
         semanticsId: SemanticsIds.artSlotDrop(slot.role),
         onDropped: onDropped,
         child: SizedBox(
@@ -293,7 +318,10 @@ class _SlotTile extends ConsumerWidget {
                     size: _size,
                     artwork: artwork,
                     monogram: title,
-                    semanticLabel: '${slot.label}: $_state',
+                    semanticLabel: l10n.artworkSlotSpoken(
+                      slot.labelOf(l10n),
+                      state,
+                    ),
                   ),
                   if (busy)
                     Positioned.fill(
@@ -312,11 +340,11 @@ class _SlotTile extends ConsumerWidget {
               ),
               const SizedBox(height: WaxSpace.s8),
               Text(
-                slot.label,
+                slot.labelOf(l10n),
                 style: WaxType.label.copyWith(color: colors.textPrimary),
               ),
               Text(
-                _state,
+                state,
                 style: WaxType.caption.copyWith(
                   color: info != null
                       ? colors.textSecondary
@@ -331,15 +359,15 @@ class _SlotTile extends ConsumerWidget {
                   WaxIconButton(
                     glyph: WaxIcons.edit,
                     label: info == null
-                        ? 'Set the ${slot.label.toLowerCase()}'
-                        : 'Replace the ${slot.label.toLowerCase()}',
+                        ? l10n.artworkSetSlot(slot.inlineOf(l10n))
+                        : l10n.artworkReplaceSlot(slot.inlineOf(l10n)),
                     size: 16,
                     semanticsId: SemanticsIds.artSlotSet(slot.role),
                     onPressed: busy || !canPick ? null : onPick,
                   ),
                   WaxIconButton(
                     glyph: WaxIcons.delete,
-                    label: 'Clear the ${slot.label.toLowerCase()}',
+                    label: l10n.artworkClearSlot(slot.inlineOf(l10n)),
                     size: 16,
                     semanticsId: SemanticsIds.artSlotClear(slot.role),
                     // Nothing of its own is nothing to clear: an

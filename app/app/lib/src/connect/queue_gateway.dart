@@ -156,6 +156,9 @@ class LocalQueueGateway implements QueueGateway {
     required bool play,
   }) async {
     if (pids.isEmpty) {
+      // Answered over the socket to whoever sent the command, so the
+      // message is the wire's own; the receiving client translates the
+      // code.
       throw const WaxDeckApiException(
         code: 'invalid-request',
         message: 'the load carried no items',

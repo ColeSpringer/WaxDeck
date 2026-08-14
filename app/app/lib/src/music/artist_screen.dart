@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../home/pin_action.dart';
+import '../l10n/l10n.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
@@ -174,7 +175,7 @@ class _Header extends ConsumerWidget {
           onPressed: tracks.isEmpty ? null : () => play(shuffle: true),
           semanticsId: SemanticsIds.entityShuffle,
         ),
-        EntityStarRatingRow(pid: pid, label: 'artist'),
+        EntityStarRatingRow(pid: pid, label: context.l10n.libraryKindArtist),
         WaxMenuButton<String>(
           semanticsId: SemanticsIds.entityOverflow,
           items: <WaxMenuItem<String>>[

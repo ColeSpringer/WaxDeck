@@ -235,6 +235,10 @@ class PluginTray with TrayListener implements TrayPort {
         : '-light';
   }
 
+  /// English until this port learns a locale: a tray menu is drawn by
+  /// the operating system from outside the element tree, so there is no
+  /// `BuildContext` to read one through. Deferred with the media-session
+  /// strings it belongs beside.
   Menu _menu(TrayFace face) {
     final actions = _actions;
     return Menu(

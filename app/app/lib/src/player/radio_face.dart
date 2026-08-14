@@ -7,6 +7,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../providers.dart';
 import '../radio/add_station.dart';
@@ -248,7 +249,7 @@ class _FindInLibrary extends StatelessWidget {
   Widget build(BuildContext context) {
     return WaxIconButton(
       glyph: WaxIcons.search,
-      label: 'Find "$track" in the library',
+      label: context.l10n.playerFindInLibrary(track),
       size: 18,
       semanticsId: SemanticsIds.playerFindInLibrary,
       // `go`, not `push`. A search is a location a stranger can open, so
@@ -279,7 +280,9 @@ class _SaveSong extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return WaxIconButton(
       glyph: WaxIcons.heart,
-      label: saved ? 'Forget this song' : 'Save this song',
+      label: saved
+          ? context.l10n.playerForgetSong
+          : context.l10n.playerSaveSong,
       size: 18,
       active: saved,
       semanticsId: SemanticsIds.playerSaveSong,
@@ -294,12 +297,13 @@ class _SaveSong extends ConsumerWidget {
 /// reading, since nothing else on these surfaces explains it.
 Future<void> saveNowPlayingSong(BuildContext context, WidgetRef ref) async {
   final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
   try {
     await ref.read(radioPlaybackProvider.notifier).toggleSaveNowPlaying();
   } on WaxDeckApiException catch (e) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(e.message)));
+      ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
   }
 }
 
@@ -313,7 +317,9 @@ class _FavoriteButton extends ConsumerWidget {
     final pinned = ref.watch(radioFavoritesProvider).contains(station.pid);
     return WaxIconButton(
       glyph: WaxIcons.star,
-      label: pinned ? 'Unpin from the dial' : 'Pin to the dial',
+      label: pinned
+          ? context.l10n.playerUnpinStation
+          : context.l10n.playerPinStation,
       active: pinned,
       semanticsId: SemanticsIds.radioFavorite(station.pid),
       onPressed: () => unawaited(_pin(context, ref)),
@@ -341,24 +347,25 @@ class _StationMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return WaxMenuButton<String>(
       semanticsId: SemanticsIds.radioMenu(station.pid),
-      label: 'More for ${station.name}',
+      label: l10n.playerStationMenu(station.name),
       items: <WaxMenuItem<String>>[
-        const WaxMenuItem<String>(
+        WaxMenuItem<String>(
           value: 'hub',
-          label: 'All stations',
+          label: l10n.playerAllStations,
           glyph: WaxIcons.radio,
         ),
         if (station.homepageUrl != null)
-          const WaxMenuItem<String>(
+          WaxMenuItem<String>(
             value: 'homepage',
-            label: 'Station website',
+            label: l10n.playerStationWebsite,
             semanticsId: SemanticsIds.playerStationInfo,
           ),
         WaxMenuItem<String>(
           value: 'edit',
-          label: 'Edit station',
+          label: l10n.playerEditStation,
           glyph: WaxIcons.edit,
           semanticsId: SemanticsIds.radioEdit(station.pid),
         ),
@@ -392,7 +399,7 @@ class RadioVolumeRow extends ConsumerWidget {
     final volume = ref.read(outputVolumeProvider.notifier);
     return WaxSlider(
       value: level,
-      label: 'Volume',
+      label: context.l10n.playerVolume,
       glyph: WaxIcons.volume,
       mutedGlyph: WaxIcons.volumeMuted,
       trackWidth: 220,

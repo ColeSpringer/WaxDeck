@@ -312,6 +312,9 @@ class ConnectEndpointController {
   /// the engine) is another.
   WaxDeckApiException _nowhereToGo({required bool forward}) {
     if (queue.snapshot() == null) {
+      // These go out over the socket to whoever sent the command, so
+      // the message is the wire's own and the receiving client is what
+      // translates it - by code, the way every other refusal is read.
       return const WaxDeckApiException(
         code: 'invalid-request',
         message: 'nothing is playing on this device',

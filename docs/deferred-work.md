@@ -382,6 +382,23 @@ here waits on upstream.
   minted across the upgrade walks the rest of its pages in the old
   order - bounded, worth knowing, not worth machinery.
 
+- `[in-repo]` **The surfaces drawn from outside the element tree stay
+  English.** Four of them, and they are one problem: the Android Auto
+  browse tree's folder names (`auto/auto_browse.dart`), the desktop
+  tray menu (`desktop/desktop_ports_io.dart`), the sleep timer's
+  media-session extend button (`player/sleep_timer.dart`), and the
+  notification-channel names and media-session action labels configured
+  at engine init in `waxdeck_player`. Every one is built where there is
+  no `BuildContext` to read a locale through - a port fed a database, a
+  notifier, an operating-system menu - so `context.l10n` cannot reach
+  them and the sweep left them as they are, with a comment at each site
+  saying so. The fix is one mechanism rather than four: resolve
+  `AppLocalizations` for the current locale into a provider (the
+  delegate can `load` a locale off the tree), hand it to each port at
+  construction, and re-hand it when the picker changes the locale.
+  Worth doing with the first of them that somebody actually reads in
+  another language; until then it is a table nobody consults.
+
 ## Infrastructure
 
 - `[upstream]` **Six Go tests are red on a Windows dev box.** Book

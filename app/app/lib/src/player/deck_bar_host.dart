@@ -5,17 +5,18 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/artwork_providers.dart';
 import '../connect/device_picker.dart';
 import '../connect/remote_session.dart';
 import '../desktop/mini_window.dart';
-import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../playlists/add_to_playlist_sheet.dart';
 import '../providers.dart';
 import '../queue/queue_controller.dart';
-import '../queue/queue_view.dart';
 import '../queue/queue_persistence.dart';
 import '../queue/queue_state.dart';
+import '../queue/queue_view.dart';
 import '../radio/radio_controller.dart';
 import '../settings/client_prefs.dart';
 import '../sharing/share_dialog.dart';
@@ -25,10 +26,10 @@ import '../shell/semantics_ids.dart';
 import 'autoplay_gate.dart';
 import 'lyrics.dart';
 import 'now_playing_controller.dart';
-import 'radio_face.dart';
 import 'output_volume.dart';
 import 'play_state_controller.dart';
 import 'playback_session.dart';
+import 'radio_face.dart';
 
 /// How far the spoken-word skips jump, per this device's Playback
 /// settings. Both are read here rather than in the transports, so the
@@ -188,7 +189,7 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
           // An entry that has not resolved yet is still what is
           // playing: the bar names it as soon as it can and never
           // disappears in between.
-          title: item?.title ?? 'Loading…',
+          title: item?.title ?? context.l10n.commonLoadingTitle,
           subtitle: item?.artist,
           artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
           domain: waxDomainOf(item?.mediaType ?? MediaType.music),
@@ -418,7 +419,7 @@ class _RemoteDeckBar extends ConsumerWidget {
     return DeckBar(
       ids: _ids,
       now: NowPlayingData(
-        title: entry?.title ?? 'Playing',
+        title: entry?.title ?? context.l10n.devicesPlaying,
         subtitle: entry?.artist,
         remoteEndpoint: remote.endpointName,
         position: controller.position.value,
@@ -460,12 +461,13 @@ class _RemoteDeckBar extends ConsumerWidget {
   /// message is what a listener reads.
   Future<void> _report(BuildContext context, Future<void> work) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await work;
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
     }
   }
 }
@@ -484,8 +486,8 @@ class _OfferDeckBar extends ConsumerWidget {
     return DeckBarOffer(
       // Offline, or for a queue the mirror never learned about, the
       // count is all there is to say - and it is enough to decide on.
-      title: item?.title ?? '${offer.length} queued items',
-      subtitle: item?.artist ?? 'Pick up where you left off',
+      title: item?.title ?? context.l10n.playerOfferQueued(offer.length),
+      subtitle: item?.artist ?? context.l10n.playerOfferResume,
       artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
       domain: waxDomainOf(item?.mediaType ?? MediaType.music),
       shape: waxShapeOf(item?.mediaType ?? MediaType.music),
@@ -542,6 +544,7 @@ Future<void> _showActions(
   // happens.
   final rootContext = Navigator.of(context, rootNavigator: true).context;
   final router = GoRouter.of(context);
+  final l10n = context.l10n;
   return showModalBottomSheet<void>(
     context: context,
     builder: (sheetContext) => SafeArea(
@@ -550,7 +553,7 @@ Future<void> _showActions(
         children: <Widget>[
           WaxOptionRow(
             glyph: WaxIcons.playlists,
-            title: 'Add to playlist',
+            title: l10n.playerAddToPlaylist,
             onTap: () {
               Navigator.of(sheetContext).pop();
               unawaited(showAddToPlaylistSheet(rootContext, item: item));
@@ -558,7 +561,7 @@ Future<void> _showActions(
           ),
           WaxOptionRow(
             glyph: WaxIcons.share,
-            title: 'Share link',
+            title: l10n.playerShareLink,
             onTap: () {
               Navigator.of(sheetContext).pop();
               unawaited(
@@ -576,7 +579,7 @@ Future<void> _showActions(
           ),
           WaxOptionRow(
             glyph: WaxIcons.expand,
-            title: 'Open the player',
+            title: l10n.playerOpenPlayer,
             onTap: () {
               Navigator.of(sheetContext).pop();
               router.pushOnce(WaxRoute.nowPlaying);
@@ -592,7 +595,7 @@ Future<void> _showActions(
               key: const ValueKey(SemanticsIds.deckMiniWindow),
               semanticsId: SemanticsIds.deckMiniWindow,
               glyph: WaxIcons.collapse,
-              title: 'Mini player window',
+              title: l10n.playerMiniWindow,
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 unawaited(ref.read(miniWindowProvider.notifier).enter());

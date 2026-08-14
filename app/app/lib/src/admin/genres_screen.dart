@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -92,10 +93,11 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
   }
 
   void _add() {
-    var name = 'New genre';
+    final l10n = context.l10n;
+    var name = l10n.adminGenreNewName;
     var n = 2;
     while (_genres.any((g) => g.name.toLowerCase() == name.toLowerCase())) {
-      name = 'New genre $n';
+      name = l10n.adminGenreNewNameNumbered(n);
       n++;
     }
     _mutate(() {
@@ -156,14 +158,18 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(genreTreeProvider.notifier).save(_genres);
       if (!mounted) return;
       setState(() => _dirty = false);
-      messenger.show('Genre tree saved');
+      messenger.show(l10n.adminGenreSaved);
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      // The vocabulary somebody just edited: the server names the node
+      // or the alias it refused, which is what makes a 200-genre tree
+      // searchable.
+      messenger.show(explainRefusal(l10n, error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -174,15 +180,13 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
   /// the shipped list back would store a custom tree identical to the
   /// default and stop tracking it.
   Future<void> _revert() async {
+    final l10n = context.l10n;
     final confirmed = await showTypedConfirm(
       context,
-      title: 'Revert to the default tree?',
-      message:
-          'Your genre vocabulary is replaced by the one WaxDeck ships. '
-          'Aliases you added are lost, and the catalog re-normalizes onto '
-          'the default.',
-      confirmWord: 'REVERT',
-      confirmLabel: 'Revert',
+      title: l10n.adminGenreRevertTitle,
+      message: l10n.adminGenreRevertBody,
+      confirmWord: l10n.adminGenreRevertWord,
+      confirmLabel: l10n.adminGenreRevertAction,
       fieldSemanticsId: SemanticsIds.confirmField,
       confirmSemanticsId: SemanticsIds.confirmAccept,
       cancelSemanticsId: SemanticsIds.confirmCancel,
@@ -198,35 +202,35 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
         _selected = null;
         _dirty = false;
       });
-      messenger.show('Back on the default genre tree');
+      messenger.show(l10n.adminGenreReverted);
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainError(l10n, error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _normalize({required bool dryRun}) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(repositoryProvider).normalizeGenres(dryRun: dryRun);
       if (!mounted) return;
       messenger.show(
-        dryRun
-            ? 'Dry run started; the task report says what would change'
-            : 'Normalizing the catalog',
-        actionLabel: 'Tasks',
+        dryRun ? l10n.adminGenreDryRunStarted : l10n.adminGenreNormalizing,
+        actionLabel: l10n.adminOpenTasks,
         actionSemanticsId: SemanticsIds.adminAction('genre-tasks'),
         onAction: () => context.push(WaxRoute.tasks),
       );
     } on WaxDeckApiException catch (error) {
-      messenger.show(error.message);
+      messenger.show(explainError(l10n, error));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final tree = ref.watch(genreTreeProvider);
     // Adopting inside build rather than through a listener: the draft is
     // this screen's own state, and the stored tree only arrives once
@@ -234,13 +238,13 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
     if (_draft == null && tree.hasValue) _adopt(tree.requireValue);
 
     return WaxScaffold(
-      title: 'Genre tree',
+      title: l10n.adminGenreTreeTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminGenres,
       onBack: adminBack(context),
       actions: <Widget>[
         WaxButton(
-          label: 'Save',
+          label: l10n.commonSave,
           kind: WaxButtonKind.text,
           semanticsId: SemanticsIds.genreSave,
           onPressed: _dirty && !_busy ? _save : null,
@@ -250,10 +254,8 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
         AsyncError(:final error) => Padding(
           padding: sizeClass.gutter,
           child: ErrorState(
-            title: 'Could not load the genre tree',
-            message: error is WaxDeckApiException
-                ? error.message
-                : 'Something went wrong reading it.',
+            title: l10n.adminGenreTreeLoadError,
+            message: context.explain(error),
             onRetry: () => ref.invalidate(genreTreeProvider),
           ),
         ),
@@ -300,20 +302,21 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
 
   Widget _tree() {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(
-          title: 'Vocabulary',
-          actionLabel: 'Add genre',
+          title: l10n.adminGenreVocabulary,
+          actionLabel: l10n.adminGenreAdd,
           semanticsId: SemanticsIds.genreAdd,
           onAction: _busy ? null : _add,
         ),
         if (_genres.isEmpty)
-          const EmptyState(
+          EmptyState(
             glyph: WaxIcons.filter,
-            title: 'No genres',
-            message: 'Add one, or revert to the tree WaxDeck ships.',
+            title: l10n.adminGenreEmptyTitle,
+            message: l10n.adminGenreEmptyMessage,
           )
         else
           Container(
@@ -340,10 +343,11 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
   Widget _detail() {
     final node = _current;
     if (node == null) {
-      return const EmptyState(
+      final l10n = context.l10n;
+      return EmptyState(
         glyph: WaxIcons.info,
-        title: 'Pick a genre',
-        message: 'Its name, its parent, and its aliases are edited here.',
+        title: l10n.adminGenrePickTitle,
+        message: l10n.adminGenrePickMessage,
       );
     }
     return _GenreDetail(
@@ -380,14 +384,14 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
           source == 'default'
-              ? 'Running on the vocabulary WaxDeck ships. Editing it stores '
-                    'a tree of your own.'
-              : 'Running on a stored vocabulary of your own.',
+              ? l10n.adminGenreSourceDefault
+              : l10n.adminGenreSourceStored,
           style: WaxType.body.copyWith(color: colors.textSecondary),
         ),
         const SizedBox(height: WaxSpace.s12),
@@ -396,19 +400,19 @@ class _Header extends StatelessWidget {
           runSpacing: WaxSpace.s8,
           children: <Widget>[
             WaxButton(
-              label: 'Preview normalization',
+              label: l10n.adminGenrePreviewNormalize,
               kind: WaxButtonKind.tonal,
               semanticsId: SemanticsIds.genreNormalizeDryRun,
               onPressed: busy ? null : () => onNormalize(true),
             ),
             WaxButton(
-              label: 'Normalize catalog',
+              label: l10n.adminGenreNormalize,
               kind: WaxButtonKind.tonal,
               semanticsId: SemanticsIds.genreNormalize,
               onPressed: busy ? null : () => onNormalize(false),
             ),
             WaxButton(
-              label: 'Revert to default',
+              label: l10n.adminGenreRevertToDefault,
               kind: WaxButtonKind.destructive,
               semanticsId: SemanticsIds.genreRevert,
               onPressed: busy ? null : onRevert,
@@ -417,9 +421,7 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(height: WaxSpace.s8),
         Text(
-          'A sweeper folds newly scanned genres onto the vocabulary on its '
-          'own. Normalizing is the catch-up pass, for a catalog older than '
-          'the change log still holds or a tree you just edited.',
+          l10n.adminGenreNormalizeBlurb,
           style: WaxType.caption.copyWith(color: colors.textTertiary),
         ),
       ],
@@ -475,8 +477,7 @@ class _GenreRow extends StatelessWidget {
                 ),
                 if (node.aliases.isNotEmpty)
                   Text(
-                    '${node.aliases.length} alias'
-                    '${node.aliases.length == 1 ? '' : 'es'}',
+                    context.l10n.adminGenreAliasCount(node.aliases.length),
                     style: WaxType.caption.copyWith(color: colors.textTertiary),
                   ),
               ],
@@ -555,7 +556,7 @@ class _GenreDetailState extends State<_GenreDetail> {
       return;
     }
     if (widget.isNameTaken(name)) {
-      setState(() => _nameError = 'Another genre is already called $name');
+      setState(() => _nameError = context.l10n.adminGenreNameTaken(name));
       return;
     }
     if (_nameError != null) setState(() => _nameError = null);
@@ -573,13 +574,14 @@ class _GenreDetailState extends State<_GenreDetail> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    const noParent = '(top level)';
+    final l10n = context.l10n;
+    final noParent = l10n.adminGenreNoParent;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionHeader(title: 'Genre'),
+        SectionHeader(title: l10n.adminGenreGroup),
         WaxTextField(
-          label: 'Name',
+          label: l10n.adminGenreNameLabel,
           controller: _name,
           errorText: _nameError,
           semanticsId: SemanticsIds.genreName,
@@ -588,12 +590,12 @@ class _GenreDetailState extends State<_GenreDetail> {
         ),
         const SizedBox(height: WaxSpace.s16),
         WaxSettingRow(
-          title: 'Groups under',
+          title: l10n.adminGenreParentTitle,
           help: widget.hasChildren
-              ? 'Genres group under this one, and the tree is two levels deep'
-              : 'The top-level genre this one belongs to',
+              ? l10n.adminGenreParentHelpHasChildren
+              : l10n.adminGenreParentHelp,
           control: WaxChoice<String>(
-            label: 'Parent genre',
+            label: l10n.adminGenreParentLabel,
             value: widget.node.parent ?? noParent,
             semanticsId: SemanticsIds.genreParent,
             options: <String>[noParent, ...widget.parents],
@@ -609,8 +611,8 @@ class _GenreDetailState extends State<_GenreDetail> {
         ),
         const SizedBox(height: WaxSpace.s16),
         WaxTextField(
-          label: 'Aliases',
-          hint: 'Comma separated',
+          label: l10n.adminGenreAliasesLabel,
+          hint: l10n.adminGenreAliasesHint,
           controller: _aliases,
           semanticsId: SemanticsIds.genreAliases,
           onChanged: _commitAliases,
@@ -618,14 +620,12 @@ class _GenreDetailState extends State<_GenreDetail> {
         ),
         const SizedBox(height: WaxSpace.s8),
         Text(
-          'Case, accents, and punctuation already fold, so list only the '
-          'spellings folding cannot reach: Rap for Hip Hop, R&B for Rhythm '
-          'and Blues.',
+          l10n.adminGenreAliasesBlurb,
           style: WaxType.caption.copyWith(color: colors.textTertiary),
         ),
         const SizedBox(height: WaxSpace.s16),
         WaxButton(
-          label: 'Remove genre',
+          label: l10n.adminGenreRemove,
           kind: WaxButtonKind.destructive,
           semanticsId: SemanticsIds.genreDelete,
           onPressed: widget.onDelete,

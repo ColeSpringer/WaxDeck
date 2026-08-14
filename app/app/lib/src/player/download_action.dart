@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../l10n/l10n.dart';
 import '../sync/sync_providers.dart';
 
 /// Downloads one item's original for offline playback, and pins its cover
@@ -122,8 +123,8 @@ class _DownloadActionState extends ConsumerState<DownloadAction> {
       // control refusing a second tap.
       glyph: complete ? WaxIcons.success : WaxIcons.downloads,
       label: switch ((complete, _inFlight)) {
-        (true, _) => 'Downloaded',
-        (false, true) => 'Downloading',
+        (true, _) => context.l10n.downloadsDownloaded,
+        (false, true) => context.l10n.downloadsDownloading,
         (false, false) => widget.label,
       },
       active: complete,

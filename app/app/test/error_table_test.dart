@@ -148,6 +148,52 @@ void main() {
     });
   });
 
+  group('explainRefusal', () {
+    test('a refused value keeps the sentence naming it', () {
+      // The endpoints that validate say which value refused, and that is
+      // the whole use of a form's error line. Translating the code would
+      // leave a 200-genre tree with nothing to search for.
+      const refused = WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'cron field 4 is not a weekday',
+        statusCode: 400,
+      );
+      expect(explainRefusal(en, refused), 'cron field 4 is not a weekday');
+      expect(explainRefusal(es, refused), 'cron field 4 is not a weekday');
+    });
+
+    test('a claimed path keeps the conflict that names it', () {
+      const taken = WaxDeckApiException(
+        code: 'conflict',
+        message: 'library "Vinyl" already covers /srv/media',
+        statusCode: 409,
+      );
+      expect(explainRefusal(en, taken), contains('/srv/media'));
+    });
+
+    test('anything else reads from the table', () {
+      // Not a refusal of an input: there is nothing for the server to
+      // name, and its own wording is English.
+      const failed = WaxDeckApiException(
+        code: 'catalog-maintenance',
+        message: 'the catalog is being rebuilt',
+        statusCode: 503,
+      );
+      expect(explainRefusal(en, failed), en.errorCatalogMaintenance);
+      expect(explainRefusal(es, failed), es.errorCatalogMaintenance);
+      expect(explainRefusal(en, StateError('x')), en.errorUnexpected);
+    });
+
+    test('a refusal with nothing to say falls back to the table', () {
+      const bare = WaxDeckApiException(
+        code: 'invalid-request',
+        message: '   ',
+        statusCode: 400,
+      );
+      expect(explainRefusal(en, bare), en.errorInvalidRequest);
+    });
+  });
+
   group('health rule labels', () {
     HealthRuleCount rule(String token, {String? label}) =>
         HealthRuleCount(rule: token, failing: 1, fixable: false, label: label);

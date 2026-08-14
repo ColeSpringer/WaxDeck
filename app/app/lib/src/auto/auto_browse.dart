@@ -6,6 +6,11 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 /// works identically offline: Continue for in-progress listening,
 /// per-medium folders, and Downloads for what is guaranteed playable
 /// with no connectivity.
+///
+/// The folder names are English until this port learns a locale. It is
+/// built from a database rather than from an element, so there is no
+/// `BuildContext` to read one through, and it is deferred with the
+/// media-session strings it belongs beside.
 class MirrorBrowseSource implements BrowseSourcePort {
   MirrorBrowseSource(this.db);
 

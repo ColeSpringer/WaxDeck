@@ -132,9 +132,10 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
   @override
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final audit = ref.watch(auditProvider);
     return WaxScaffold(
-      title: 'Audit log',
+      title: l10n.adminSectionAudit,
       largeTitle: false,
       semanticsId: SemanticsIds.adminAudit,
       onBack: adminBack(context),
@@ -151,8 +152,8 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
             child: ReadingColumn(
               maxWidth: 480,
               child: SearchField(
-                label: 'Filter by action',
-                hint: 'user. or backup.create',
+                label: l10n.adminAuditFilterLabel,
+                hint: l10n.adminAuditFilterHint,
                 controller: _filter,
                 semanticsId: SemanticsIds.auditFilter,
                 clearSemanticsId: SemanticsIds.auditFilterClear,
@@ -175,21 +176,18 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
         ),
         switch (audit) {
           AsyncData(:final value) when value.events.isEmpty =>
-            const SliverToBoxAdapter(
+            SliverToBoxAdapter(
               child: EmptyState(
                 glyph: WaxIcons.info,
-                title: 'Nothing logged yet',
-                message:
-                    'Administrative actions are recorded here as they happen.',
+                title: l10n.adminAuditEmptyTitle,
+                message: l10n.adminAuditEmptyMessage,
               ),
             ),
           AsyncData(:final value) => _list(sizeClass, value),
           AsyncError(:final error) => SliverToBoxAdapter(
             child: ErrorState(
-              title: 'Could not load the audit log',
-              message: error is WaxDeckApiException
-                  ? error.message
-                  : 'Something went wrong reading it.',
+              title: l10n.adminAuditLoadError,
+              message: context.explain(error),
               onRetry: () => ref.invalidate(auditProvider),
             ),
           ),
@@ -257,14 +255,17 @@ class _AuditRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final subtitle = StringBuffer(event.actorName ?? 'system');
+    final l10n = context.l10n;
+    final subtitle = StringBuffer(
+      event.actorName ?? l10n.adminAuditSystemActor,
+    );
     if (event.targetName != null) subtitle.write(', ${event.targetName}');
-    subtitle.write(', ${context.l10n.relativeCompact(event.createdAt)}');
+    subtitle.write(', ${l10n.relativeCompact(event.createdAt)}');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         WaxTappable(
-          label: '${event.action}, $subtitle',
+          label: l10n.adminAuditRowSpoken(event.action, subtitle.toString()),
           semanticsId: SemanticsIds.auditRow(event.id),
           selected: expanded,
           borderRadius: WaxRadius.chip,
@@ -329,7 +330,7 @@ class _AuditRow extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Text(
                 event.detail.isEmpty
-                    ? 'No further detail'
+                    ? l10n.adminAuditNoDetail
                     : const JsonEncoder.withIndent('  ').convert(event.detail),
                 style: WaxType.monoData.copyWith(color: colors.textSecondary),
               ),

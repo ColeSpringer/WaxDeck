@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../admin/admin_console.dart';
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 
@@ -114,9 +115,10 @@ class DiagnosticsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.l10n;
     final list = ref.watch(diagnosticsProvider);
     return WaxScaffold(
-      title: 'Diagnostics',
+      title: l10n.adminSectionDiagnostics,
       largeTitle: false,
       semanticsId: SemanticsIds.adminDiagnostics,
       onBack: adminBack(context),
@@ -137,10 +139,8 @@ class DiagnosticsScreen extends ConsumerWidget {
                 switch (list) {
                   AsyncData(:final value) => _Table(state: value),
                   AsyncError(:final error) => ErrorState(
-                    title: 'Could not load diagnostics',
-                    message: error is WaxDeckApiException
-                        ? error.message
-                        : 'The server did not answer.',
+                    title: l10n.healthDiagnosticsLoadError,
+                    message: context.explain(error),
                     onRetry: () => ref.invalidate(diagnosticsProvider),
                   ),
                   _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -187,7 +187,7 @@ class _SummaryChips extends ConsumerWidget {
           for (final code in codes)
             WaxFilterChip(
               name: code,
-              label: '$code (${byCode[code]})',
+              label: context.l10n.healthDiagnosticsChip(code, byCode[code]!),
               semanticsId: SemanticsIds.diagnosticCode(code),
             ),
         ],
@@ -204,6 +204,7 @@ class _Table extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -215,16 +216,16 @@ class _Table extends ConsumerWidget {
           rowSemanticsId: SemanticsIds.diagnosticRow,
           rowDetailSemanticsId: SemanticsIds.diagnosticDetail,
           caption: state.hasMore
-              ? '${state.diagnostics.length} shown; there are more'
+              ? l10n.healthDiagnosticsMore(state.diagnostics.length)
               : null,
-          empty: const EmptyState(
+          empty: EmptyState(
             glyph: WaxIcons.success,
-            title: 'No diagnostics recorded',
-            message: 'Every file the catalog has seen decoded cleanly.',
+            title: l10n.healthDiagnosticsEmptyTitle,
+            message: l10n.healthDiagnosticsEmptyMessage,
           ),
           columns: <WaxColumn<FileDiagnostic>>[
             WaxColumn<FileDiagnostic>(
-              label: 'File',
+              label: l10n.healthColumnFile,
               priority: WaxColumnPriority.primary,
               text: (diagnostic) => diagnostic.path,
               cell: (context, diagnostic) => Text(
@@ -234,7 +235,7 @@ class _Table extends ConsumerWidget {
               ),
             ),
             WaxColumn<FileDiagnostic>(
-              label: 'Code',
+              label: l10n.healthColumnCode,
               width: 180,
               text: (diagnostic) => diagnostic.code,
               cell: (context, diagnostic) => Text(
@@ -244,7 +245,7 @@ class _Table extends ConsumerWidget {
               ),
             ),
             WaxColumn<FileDiagnostic>(
-              label: 'Origin',
+              label: l10n.healthColumnOrigin,
               width: 108,
               text: (diagnostic) => diagnostic.origin,
               cell: (context, diagnostic) => Text(
@@ -253,11 +254,11 @@ class _Table extends ConsumerWidget {
               ),
             ),
             WaxColumn<FileDiagnostic>(
-              label: 'Severity',
+              label: l10n.healthColumnSeverity,
               width: 96,
-              text: (diagnostic) => diagnostic.severity,
+              text: (diagnostic) => _severityLabel(l10n, diagnostic.severity),
               cell: (context, diagnostic) => Text(
-                diagnostic.severity,
+                _severityLabel(l10n, diagnostic.severity),
                 style: WaxType.label.copyWith(
                   color: _severityTone(colors, diagnostic.severity),
                 ),
@@ -268,7 +269,7 @@ class _Table extends ConsumerWidget {
         if (state.hasMore) ...<Widget>[
           const SizedBox(height: WaxSpace.s16),
           WaxButton(
-            label: state.loadingMore ? 'Loading' : 'Load more',
+            label: state.loadingMore ? l10n.commonLoading : l10n.healthLoadMore,
             kind: WaxButtonKind.tonal,
             icon: WaxIcons.expand,
             semanticsId: SemanticsIds.diagnosticsMore,
@@ -280,6 +281,17 @@ class _Table extends ConsumerWidget {
       ],
     );
   }
+
+  /// How serious a finding is, in words. The code and the origin beside
+  /// it stay as the server wrote them: both name things - an observation
+  /// and the pass that recorded it - rather than describing one.
+  static String _severityLabel(AppLocalizations l10n, String severity) =>
+      switch (severity) {
+        'info' => l10n.healthSeverityInfo,
+        'warn' => l10n.healthSeverityWarn,
+        'error' => l10n.healthSeverityError,
+        _ => severity,
+      };
 
   static Color _severityTone(WaxColors colors, String severity) =>
       switch (severity) {

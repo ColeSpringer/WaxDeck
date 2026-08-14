@@ -3068,8 +3068,10 @@ class FakeRepository implements WaxDeckRepository {
     if (force) return;
     final locked = lockedFieldsByPid[pid] ?? const {};
     if (fields.any(locked.contains)) {
+      // The code the server sends for this, not the generic conflict:
+      // the editor answers this one refusal itself.
       throw const WaxDeckApiException(
-        code: 'conflict',
+        code: 'field-locked',
         message: 'field locked',
         statusCode: 409,
       );

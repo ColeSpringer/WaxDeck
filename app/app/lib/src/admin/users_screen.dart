@@ -11,6 +11,21 @@ import '../shell/shell_messages.dart';
 import 'admin_console.dart';
 import 'admin_providers.dart';
 
+/// The roles of an account or an invite, as words.
+///
+/// A role WaxDeck knows reads in the reader's language; one a newer
+/// server adds shows as its own token, which is the only honest thing
+/// to draw for a word this build has never heard of.
+String _roleLabels(AppLocalizations l10n, List<String> roles) => roles
+    .map(
+      (role) => switch (role) {
+        'admin' => l10n.adminRoleAdmin,
+        'user' => l10n.adminRoleUser,
+        _ => role,
+      },
+    )
+    .join(', ');
+
 /// Accumulated pages of accounts.
 class UsersState {
   const UsersState({
@@ -94,7 +109,7 @@ class UsersScreen extends ConsumerWidget {
     return DefaultTabController(
       length: 3,
       child: WaxScaffold(
-        title: 'Users',
+        title: context.l10n.adminUsersTitle,
         largeTitle: false,
         semanticsId: SemanticsIds.adminUsers,
         onBack: adminBack(context),
@@ -120,16 +135,17 @@ class _Tabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return Material(
       color: colors.canvas,
       child: TabBar(
         labelColor: colors.accent,
         unselectedLabelColor: colors.textSecondary,
         indicatorColor: colors.accent,
-        tabs: const <Widget>[
-          Tab(key: Key('users-tab'), text: 'Users'),
-          Tab(key: Key('requests-tab'), text: 'Requests'),
-          Tab(key: Key('invites-tab'), text: 'Invites'),
+        tabs: <Widget>[
+          Tab(key: const Key('users-tab'), text: l10n.adminUsersTabUsers),
+          Tab(key: const Key('requests-tab'), text: l10n.adminUsersTabRequests),
+          Tab(key: const Key('invites-tab'), text: l10n.adminUsersTabInvites),
         ],
       ),
     );
@@ -155,6 +171,7 @@ class _UsersTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final users = ref.watch(adminUsersProvider);
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     return switch (users) {
       AsyncData(:final value) => NotificationListener<ScrollNotification>(
         onNotification: (notification) {
@@ -175,20 +192,23 @@ class _UsersTab extends ConsumerWidget {
               rowSemanticsId: SemanticsIds.userRow,
               rowDetailSemanticsId: SemanticsIds.userDetail,
               onRowTap: (user) => _open(context, ref, user),
-              empty: const EmptyState(
+              empty: EmptyState(
                 glyph: WaxIcons.artists,
-                title: 'No accounts',
-                message: 'Invite somebody, or open signup in server settings.',
+                title: l10n.adminUsersEmptyTitle,
+                message: l10n.adminUsersEmptyMessage,
               ),
               columns: <WaxColumn<UserAccount>>[
                 WaxColumn<UserAccount>(
-                  label: 'Account',
+                  label: l10n.adminUsersColumnAccount,
                   priority: WaxColumnPriority.primary,
                   text: (user) => user.username,
                   cell: (context, user) => Text(
                     user.displayName == null || user.displayName!.isEmpty
                         ? user.username
-                        : '${user.displayName} (${user.username})',
+                        : l10n.adminUsersNamedAccount(
+                            user.displayName!,
+                            user.username,
+                          ),
                     style: WaxType.titleItem.copyWith(
                       color: colors.textPrimary,
                     ),
@@ -196,11 +216,11 @@ class _UsersTab extends ConsumerWidget {
                   ),
                 ),
                 WaxColumn<UserAccount>(
-                  label: 'Roles',
+                  label: l10n.adminUsersColumnRoles,
                   width: 140,
-                  text: (user) => user.roles.join(', '),
+                  text: (user) => _roles(l10n, user),
                   cell: (context, user) => Text(
-                    user.roles.isEmpty ? 'user' : user.roles.join(', '),
+                    _roles(l10n, user),
                     style: WaxType.bodySmall.copyWith(
                       color: colors.textSecondary,
                     ),
@@ -208,11 +228,11 @@ class _UsersTab extends ConsumerWidget {
                   ),
                 ),
                 WaxColumn<UserAccount>(
-                  label: 'State',
+                  label: l10n.adminUsersColumnState,
                   width: 116,
-                  text: _state,
+                  text: (user) => _state(l10n, user),
                   cell: (context, user) => Text(
-                    _state(user),
+                    _state(l10n, user),
                     style: WaxType.bodySmall.copyWith(
                       color: user.disabled
                           ? colors.error
@@ -221,12 +241,12 @@ class _UsersTab extends ConsumerWidget {
                   ),
                 ),
                 WaxColumn<UserAccount>(
-                  label: 'Uploads',
+                  label: l10n.adminUsersColumnUploads,
                   width: 128,
                   priority: WaxColumnPriority.detail,
-                  text: _uploads,
+                  text: (user) => _uploads(l10n, user),
                   cell: (context, user) => Text(
-                    _uploads(user),
+                    _uploads(l10n, user),
                     style: WaxType.monoData.copyWith(
                       color: colors.textSecondary,
                     ),
@@ -250,19 +270,28 @@ class _UsersTab extends ConsumerWidget {
     };
   }
 
-  static String _state(UserAccount user) {
-    if (user.disabled) return 'Disabled';
-    if (user.pending) return 'Pending';
-    return 'Active';
+  /// An account with no role at all is an ordinary account, which is
+  /// what the server means by an empty list and what the row said
+  /// before these words were translated.
+  static String _roles(AppLocalizations l10n, UserAccount user) =>
+      _roleLabels(l10n, user.roles.isEmpty ? const ['user'] : user.roles);
+
+  static String _state(AppLocalizations l10n, UserAccount user) {
+    if (user.disabled) return l10n.adminUsersStateDisabled;
+    if (user.pending) return l10n.adminUsersStatePending;
+    return l10n.adminUsersStateActive;
   }
 
   /// The account's pending-upload allowance, as the console reads it:
   /// what may wait in staging, not what has been contributed.
-  static String _uploads(UserAccount user) {
-    if (!user.uploadEnabled) return 'none';
+  /// Megabytes, not the byte formatter's own choice of unit: the field
+  /// that sets this is labelled in megabytes, and a column answering a
+  /// 2048 with "2.0 GB" is the two halves of one setting disagreeing.
+  static String _uploads(AppLocalizations l10n, UserAccount user) {
+    if (!user.uploadEnabled) return l10n.adminUsersUploadsNone;
     final quota = user.uploadQuotaBytes;
-    if (quota == null || quota == 0) return 'unlimited';
-    return '${quota ~/ (1024 * 1024)} MB';
+    if (quota == null || quota == 0) return l10n.adminUsersUploadsUnlimited;
+    return l10n.adminUsersUploadsMb(quota ~/ (1024 * 1024));
   }
 }
 
@@ -289,21 +318,22 @@ class _RequestsTab extends ConsumerWidget {
     WidgetRef ref,
     UserAccount user,
   ) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Reject ${user.username}?'),
-        content: const Text('The request is removed; nothing is created.'),
+        title: Text(l10n.adminUsersRejectTitle(user.username)),
+        content: Text(l10n.adminUsersRejectBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             key: const Key('request-reject-confirm'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Reject'),
+            child: Text(l10n.adminUsersRejectAction),
           ),
         ],
       ),
@@ -313,7 +343,7 @@ class _RequestsTab extends ConsumerWidget {
       await ref.read(repositoryProvider).rejectSignupRequest(user.id);
       ref.invalidate(signupRequestsProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainRefusal(l10n, e));
     }
   }
 
@@ -325,8 +355,8 @@ class _RequestsTab extends ConsumerWidget {
       identifier: SemanticsIds.signupRequests,
       container: true,
       child: switch (requests) {
-        AsyncData(:final value) when value.isEmpty => const Center(
-          child: Text('No pending requests'),
+        AsyncData(:final value) when value.isEmpty => Center(
+          child: Text(l10n.adminUsersNoRequests),
         ),
         AsyncData(:final value) => ListView(
           padding: WaxSizeClass.of(
@@ -340,9 +370,13 @@ class _RequestsTab extends ConsumerWidget {
                 glyph: WaxIcons.addPerson,
                 title: user.username,
                 subtitle: user.displayName == null
-                    ? 'Requested ${l10n.formatDate(user.createdAt)}'
-                    : '${user.displayName}, requested '
-                          '${l10n.formatDate(user.createdAt)}',
+                    ? l10n.adminUsersRequestedOn(
+                        l10n.formatDate(user.createdAt),
+                      )
+                    : l10n.adminUsersRequestedByOn(
+                        user.displayName!,
+                        l10n.formatDate(user.createdAt),
+                      ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -351,7 +385,7 @@ class _RequestsTab extends ConsumerWidget {
                       child: TextButton(
                         key: Key(SemanticsIds.requestApprove(user.id)),
                         onPressed: () => _approve(context, ref, user),
-                        child: const Text('Approve'),
+                        child: Text(l10n.adminUserApproveAction),
                       ),
                     ),
                     Semantics(
@@ -359,7 +393,7 @@ class _RequestsTab extends ConsumerWidget {
                       child: TextButton(
                         key: Key(SemanticsIds.requestReject(user.id)),
                         onPressed: () => _reject(context, ref, user),
-                        child: const Text('Reject'),
+                        child: Text(l10n.adminUsersRejectAction),
                       ),
                     ),
                   ],
@@ -381,6 +415,7 @@ class _InvitesTab extends ConsumerWidget {
   const _InvitesTab();
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final request = await showDialog<_InviteRequest>(
       context: context,
@@ -403,12 +438,12 @@ class _InvitesTab extends ConsumerWidget {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Invite created'),
+          title: Text(l10n.adminInviteCreatedTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Share this token; it is shown exactly once.'),
+              Text(l10n.adminInviteCreatedBody),
               const SizedBox(height: WaxSpace.s12),
               Semantics(
                 identifier: SemanticsIds.inviteToken,
@@ -423,13 +458,13 @@ class _InvitesTab extends ConsumerWidget {
           actions: [
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Done'),
+              child: Text(l10n.commonDone),
             ),
           ],
         ),
       );
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -438,21 +473,22 @@ class _InvitesTab extends ConsumerWidget {
     WidgetRef ref,
     Invite invite,
   ) async {
+    final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Revoke invite?'),
-        content: const Text('The token stops working immediately.'),
+        title: Text(l10n.adminInviteRevokeTitle),
+        content: Text(l10n.adminInviteRevokeBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             key: const Key('invite-revoke-confirm'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Revoke'),
+            child: Text(l10n.adminInviteRevokeAction),
           ),
         ],
       ),
@@ -462,28 +498,29 @@ class _InvitesTab extends ConsumerWidget {
       await ref.read(repositoryProvider).revokeInvite(invite.id);
       ref.invalidate(invitesProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.show(e.message);
+      messenger.show(explainError(l10n, e));
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final invites = ref.watch(invitesProvider);
+    final l10n = context.l10n;
     return Scaffold(
       floatingActionButton: Semantics(
         identifier: SemanticsIds.inviteCreate,
-        label: 'Create invite',
+        label: l10n.adminInviteCreate,
         button: true,
         child: FloatingActionButton(
           key: const Key(SemanticsIds.inviteCreate),
-          tooltip: 'Create invite',
+          tooltip: l10n.adminInviteCreate,
           onPressed: () => _create(context, ref),
           child: const WaxIcon(WaxIcons.addPerson),
         ),
       ),
       body: switch (invites) {
-        AsyncData(:final value) when value.isEmpty => const Center(
-          child: Text('No invites yet'),
+        AsyncData(:final value) when value.isEmpty => Center(
+          child: Text(l10n.adminInvitesEmpty),
         ),
         AsyncData(:final value) => ListView(
           padding: WaxSizeClass.of(
@@ -515,6 +552,7 @@ class _InviteRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final spent = invite.revoked || invite.expired;
     return WaxOptionRow(
       key: ValueKey(SemanticsIds.inviteRow(invite.id)),
@@ -528,16 +566,19 @@ class _InviteRow extends StatelessWidget {
       // revoke button is what says the invite is done with.
       title: invite.note ?? invite.id,
       subtitle: <String>[
-        if (invite.revoked) 'revoked' else if (invite.expired) 'expired',
-        invite.roles.join(', '),
-        'uses ${invite.usedCount}/${invite.maxUses}',
+        if (invite.revoked)
+          l10n.adminInviteRevoked
+        else if (invite.expired)
+          l10n.adminInviteExpired,
+        _roleLabels(l10n, invite.roles),
+        l10n.adminInviteUses(invite.usedCount, invite.maxUses),
       ].join(', '),
       trailing: spent
           ? null
           : WaxIconButton(
               key: Key(SemanticsIds.inviteRevoke(invite.id)),
               glyph: WaxIcons.delete,
-              label: 'Revoke invite',
+              label: l10n.adminInviteRevokeButton,
               semanticsId: SemanticsIds.inviteRevoke(invite.id),
               onPressed: onRevoke,
             ),
@@ -613,8 +654,9 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
   @override
   Widget build(BuildContext context) {
     final libraries = ref.watch(librariesProvider).value ?? const [];
+    final l10n = context.l10n;
     return AlertDialog(
-      title: const Text('Create invite'),
+      title: Text(l10n.adminInviteCreate),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -622,28 +664,28 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
             TextField(
               key: const Key('invite-note'),
               controller: _note,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                helperText: 'Who this invite is for',
+              decoration: InputDecoration(
+                labelText: l10n.adminInviteNoteLabel,
+                helperText: l10n.adminInviteNoteHelp,
               ),
             ),
             WaxSettingRow(
               key: const Key('invite-admin-role'),
-              title: 'Administrator',
-              help: 'Server-wide authority: settings, users, and libraries',
+              title: l10n.adminUserAdminTitle,
+              help: l10n.adminInviteAdminHelp,
               control: WaxSwitch(
                 value: _admin,
-                label: 'Administrator',
+                label: l10n.adminUserAdminTitle,
                 onChanged: (value) => setState(() => _admin = value),
               ),
             ),
             WaxSettingRow(
               key: const Key('invite-access-all'),
-              title: 'All libraries',
-              help: 'Off picks the libraries this invite can see',
+              title: l10n.adminUserAccessAllTitle,
+              help: l10n.adminInviteAccessAllHelp,
               control: WaxSwitch(
                 value: _accessAll,
-                label: 'All libraries',
+                label: l10n.adminUserAccessAllTitle,
                 onChanged: (value) => setState(() => _accessAll = value),
               ),
             ),
@@ -652,7 +694,7 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
                 WaxSettingRow(
                   key: Key('invite-library-${library.pid}'),
                   title: library.name,
-                  help: 'Include this library',
+                  help: l10n.adminInviteIncludeLibrary,
                   control: WaxSwitch(
                     value: _grantedPids.contains(library.pid),
                     label: library.name,
@@ -665,11 +707,11 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
                 ),
             WaxSettingRow(
               key: const Key('invite-upload-enabled'),
-              title: 'May upload',
-              help: 'Whether this account can add files to the library',
+              title: l10n.adminUserMayUploadTitle,
+              help: l10n.adminInviteUploadHelp,
               control: WaxSwitch(
                 value: _uploadEnabled,
-                label: 'May upload',
+                label: l10n.adminUserMayUploadTitle,
                 onChanged: (value) => setState(() => _uploadEnabled = value),
               ),
             ),
@@ -677,15 +719,17 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
               key: const Key('invite-max-uses'),
               controller: _maxUses,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Max uses'),
+              decoration: InputDecoration(
+                labelText: l10n.adminInviteMaxUsesLabel,
+              ),
             ),
             TextField(
               key: const Key('invite-expires-days'),
               controller: _expiresDays,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Expires in (days)',
-                helperText: 'Empty never expires',
+              decoration: InputDecoration(
+                labelText: l10n.adminInviteExpiresLabel,
+                helperText: l10n.adminInviteExpiresHelp,
               ),
             ),
           ],
@@ -694,12 +738,12 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.commonCancel),
         ),
         FilledButton(
           key: const Key('invite-create-confirm'),
           onPressed: _submit,
-          child: const Text('Create'),
+          child: Text(l10n.adminInviteCreateAction),
         ),
       ],
     );
@@ -714,16 +758,16 @@ class _ErrorRetry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final message = error is WaxDeckApiException
-        ? (error as WaxDeckApiException).message
-        : 'Could not load';
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(message, textAlign: TextAlign.center),
+          Text(context.explain(error), textAlign: TextAlign.center),
           const SizedBox(height: WaxSpace.s12),
-          OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+          OutlinedButton(
+            onPressed: onRetry,
+            child: Text(context.l10n.commonRetry),
+          ),
         ],
       ),
     );

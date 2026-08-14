@@ -6,6 +6,7 @@ import 'package:waxdeck/src/player/entity_star_rating_row.dart';
 import 'package:waxdeck/src/providers.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 // The entity star and rating row: the artist and album twin of the item
 // controls on the player screen. Its own state, never a rollup of its
@@ -13,7 +14,9 @@ import 'fakes.dart';
 
 Widget _host(FakeRepository repo, Widget home) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: MaterialApp(home: Scaffold(body: home)),
+  // The row reaches for the copy table, so a bare host would throw
+  // the moment a save failed: `nullable-getter: false` is the design.
+  child: localizedHost(Scaffold(body: home)),
 );
 
 void main() {

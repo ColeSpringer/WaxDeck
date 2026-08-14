@@ -140,6 +140,10 @@ class SleepTimerController extends Notifier<SleepTimerState> {
   /// knows before the sound starts going, and a control that appears
   /// only in the last ten seconds is one most of them never see. It
   /// costs one button on a notification that is already there.
+  /// The label is English until the media session learns a locale: this
+  /// runs in a notifier with no element to read one from, and the button
+  /// it draws is the operating system's rather than the app's. It is
+  /// deferred with the notification-channel names it sits beside.
   void _showExtend(bool show) {
     _media.showExtra(
       show

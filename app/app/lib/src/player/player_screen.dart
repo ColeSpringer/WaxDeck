@@ -11,10 +11,11 @@ import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../connect/device_picker.dart';
 import '../discovery/discovery_actions.dart';
+import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
 import '../media_view.dart';
-import '../playlists/add_to_playlist_sheet.dart';
 import '../player/play_progress.dart';
+import '../playlists/add_to_playlist_sheet.dart';
 import '../podcasts/episode_actions.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
@@ -94,7 +95,7 @@ class PlayerScreen extends ConsumerWidget {
       commands: <WaxCommand>[
         WaxCommand(
           id: 'player-collapse',
-          label: 'Collapse the player',
+          label: context.l10n.playerCollapseCommand,
           section: WaxCommandSection.view,
           glyph: WaxIcons.collapse,
           // Not on repeats. The binding map fires on every key event the
@@ -147,8 +148,8 @@ class PlayerScreen extends ConsumerWidget {
         child: EmptyState(
           key: const Key('player-idle'),
           glyph: WaxIcons.headphones,
-          title: 'Nothing is playing',
-          message: 'Pick something from your library and it shows up here.',
+          title: context.l10n.playerNothingPlaying,
+          message: context.l10n.playerIdleMessage,
           semanticsId: SemanticsIds.playerSurface,
         ),
       );
@@ -161,10 +162,14 @@ class PlayerScreen extends ConsumerWidget {
         domain: waxDomainOf(item?.mediaType ?? MediaType.music),
         child: ErrorState(
           key: const Key('player-error'),
-          title: 'Playback stopped',
+          title: context.l10n.playerStopped,
+          // `NowPlaying.error` holds whatever the start threw, and the
+          // engine's exceptions are not the contract's: the table has
+          // nothing to say about a codec, so those keep the sentence
+          // that at least says what failed.
           message: error is WaxDeckApiException
-              ? error.message
-              : 'Playback failed to start',
+              ? context.explain(error)
+              : context.l10n.playerStartFailed,
           // The queue still holds the entry, and nothing else will try
           // it again: without this the failure is where playback stops
           // until something rebuilds the queue.
@@ -239,7 +244,7 @@ class _PlayerShell extends ConsumerWidget {
                       ),
                       child: WaxIconButton(
                         glyph: WaxIcons.collapse,
-                        label: 'Collapse player',
+                        label: context.l10n.playerCollapse,
                         onPressed: () => leavePlayer(context),
                         semanticsId: SemanticsIds.playerBack,
                       ),
@@ -362,7 +367,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     return NowPlayingData(
       title: _item.title,
       subtitle: _item.artist,
-      provenance: queueProvenance(source),
+      provenance: queueProvenance(context.l10n, source),
       artwork: waxArtwork(ref.read(artworkStoreProvider), _item.artUrl),
       domain: waxDomainOf(_item.mediaType),
       shape: waxShapeOf(_item.mediaType),
@@ -492,10 +497,11 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     // build, where a widget test mounting the player on its own has no
     // router to find and no reason to need one.
     final router = GoRouter.maybeOf(context);
+    final l10n = context.l10n;
     return <Widget>[
       WaxIconButton(
         glyph: WaxIcons.cast,
-        label: 'Play on',
+        label: context.l10n.devicesPlayOn,
         semanticsId: SemanticsIds.playerDevices,
         onPressed: () => unawaited(
           showDevicePicker(
@@ -517,15 +523,15 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           // The episode rows first: they are what a listener reaches
           // this menu for on a podcast, and 5.3 names them.
           if (_episode != null) ...<WaxMenuItem<_PlayerMenuAction>>[
-            const WaxMenuItem(
+            WaxMenuItem(
               value: _PlayerMenuAction.markPlayed,
-              label: 'Mark as played',
+              label: l10n.playerMarkPlayed,
               glyph: WaxIcons.check,
               semanticsId: SemanticsIds.playerMarkPlayed,
             ),
-            const WaxMenuItem(
+            WaxMenuItem(
               value: _PlayerMenuAction.goToShow,
-              label: 'Go to show',
+              label: l10n.playerGoToShow,
               glyph: WaxIcons.podcasts,
               // Not the overline's handle: the show name above the
               // title is a second control that does the same thing, and
@@ -535,20 +541,20 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             if (_funding != null)
               WaxMenuItem(
                 value: _PlayerMenuAction.funding,
-                label: _funding!.message ?? 'Support the show',
+                label: _funding!.message ?? l10n.playerSupportShow,
                 glyph: WaxIcons.star,
                 semanticsId: SemanticsIds.playerFunding,
               ),
           ],
-          const WaxMenuItem(
+          WaxMenuItem(
             value: _PlayerMenuAction.addToPlaylist,
-            label: 'Add to playlist',
+            label: l10n.playerAddToPlaylist,
             glyph: WaxIcons.playlists,
             semanticsId: SemanticsIds.addToPlaylist,
           ),
-          const WaxMenuItem(
+          WaxMenuItem(
             value: _PlayerMenuAction.share,
-            label: 'Share link',
+            label: l10n.playerShareLink,
             glyph: WaxIcons.share,
             semanticsId: SemanticsIds.shareLink,
           ),
@@ -557,13 +563,13 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           // faces. A row that opened an empty state would be a menu
           // entry that exists to disappoint.
           if (_music)
-            const WaxMenuItem(
+            WaxMenuItem(
               value: _PlayerMenuAction.visualizer,
               // The record, not the waveform: the waveform glyph is the
               // discovery control two rows up, and one page should not
               // wear it twice.
               glyph: WaxIcons.albums,
-              label: 'Visualizer',
+              label: l10n.playerVisualizer,
               semanticsId: SemanticsIds.playerVisualizer,
             ),
           // Gone from the menu once the row above carries it: the verb
@@ -571,19 +577,19 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           // identifier twice in one tree is what a menu row and a
           // button both claiming it would be.
           if (!carMode)
-            const WaxMenuItem(
+            WaxMenuItem(
               value: _PlayerMenuAction.carMode,
               glyph: WaxIcons.car,
-              label: 'Car mode',
+              label: l10n.playerCarMode,
               semanticsId: SemanticsIds.playerCarMode,
             ),
           // Not for episodes: the podcast tree owns its own files and the
           // server refuses this verb there. "Remove download" is the
           // episode's equivalent, and it lives on the episode's surfaces.
           if (canDelete && _item.mediaType != MediaType.podcast)
-            const WaxMenuItem(
+            WaxMenuItem(
               value: _PlayerMenuAction.delete,
-              label: 'Delete files...',
+              label: l10n.playerDeleteFiles,
               glyph: WaxIcons.delete,
               destructive: true,
               semanticsId: SemanticsIds.itemDelete,
@@ -648,6 +654,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   /// bookmarks. The chapter list is no longer a button here: it is the
   /// bottom region, where 5.3 puts it.
   Widget _actionRow(BuildContext context, {required bool carMode}) {
+    final l10n = context.l10n;
     // A wrap rather than a row: the spoken-word faces carry four
     // labelled chips, which do not fit a phone in one line, and a Row
     // answers that by overflowing. The hero above gives up the height a
@@ -664,7 +671,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           // and the queue is what they reach it for between tracks.
           WaxIconButton(
             glyph: WaxIcons.lyrics,
-            label: 'Lyrics',
+            label: l10n.playerLyrics,
             semanticsId: SemanticsIds.playerLyrics,
             // Always the overlay, whatever the width: this screen is a
             // route pushed over the shell, so the panel it would
@@ -673,23 +680,23 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           ),
           WaxIconButton(
             glyph: WaxIcons.queue,
-            label: 'Queue',
+            label: l10n.playerQueue,
             semanticsId: SemanticsIds.playerQueue,
             onPressed: () => openQueue(context, ref, overShell: true),
           ),
           WaxMenuButton<String>(
             glyph: WaxIcons.waveform,
-            label: 'More like this',
+            label: l10n.playerMoreLikeThis,
             semanticsId: SemanticsIds.playerDiscover,
-            items: const <WaxMenuItem<String>>[
+            items: <WaxMenuItem<String>>[
               WaxMenuItem(
                 value: 'mix',
-                label: 'Instant mix',
+                label: l10n.playerInstantMix,
                 semanticsId: SemanticsIds.instantMix,
               ),
               WaxMenuItem(
                 value: 'similar',
-                label: 'Similar tracks',
+                label: l10n.playerSimilarTracks,
                 semanticsId: SemanticsIds.similarTracks,
               ),
             ],
@@ -710,7 +717,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
         if (carMode)
           WaxIconButton(
             glyph: WaxIcons.car,
-            label: 'Car mode',
+            label: l10n.playerCarMode,
             semanticsId: SemanticsIds.playerCarMode,
             onPressed: () => context.push(WaxRoute.carMode),
           ),
@@ -780,6 +787,7 @@ class _UpNextPeek extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final queue = ref.watch(queueControllerProvider);
     // The queue's own answer, not a second reading of it. Repeat-one
     // plays this item again and has no next; repeat-all on the last
@@ -794,11 +802,14 @@ class _UpNextPeek extends ConsumerWidget {
     // "0 left" beside a named track is a count of what has not played,
     // and on a repeating queue that is the honest number.
     final remaining = queue.unplayed;
-    final left = remaining > 0 ? ', $remaining left' : '';
+    final spoken = <String>[
+      item == null ? l10n.playerUpNextLabel : l10n.playerUpNextItem(item.title),
+      if (remaining > 0) l10n.playerLeftCount(remaining),
+    ].join(', ');
 
     return WaxTappable(
       semanticsId: SemanticsIds.playerUpNext,
-      label: item == null ? 'Up next$left' : 'Up next, ${item.title}$left',
+      label: spoken,
       borderRadius: WaxRadius.sheetTop,
       onPressed: () => openQueue(context, ref, overShell: true),
       // Ink outside, InkWell in: the scaffold's only Material is
@@ -835,7 +846,7 @@ class _UpNextPeek extends ConsumerWidget {
                 Row(
                   children: <Widget>[
                     Text(
-                      'UP NEXT',
+                      l10n.playerUpNext,
                       style: WaxType.overline.copyWith(
                         color: colors.textTertiary,
                       ),
@@ -843,7 +854,7 @@ class _UpNextPeek extends ConsumerWidget {
                     const Spacer(),
                     if (remaining > 0)
                       Text(
-                        '$remaining left',
+                        l10n.playerLeftCount(remaining),
                         style: WaxType.caption.copyWith(
                           color: colors.textSecondary,
                         ),
@@ -855,7 +866,7 @@ class _UpNextPeek extends ConsumerWidget {
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        item?.title ?? 'Loading...',
+                        item?.title ?? context.l10n.commonLoadingTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: WaxType.body.copyWith(color: colors.textPrimary),
@@ -909,7 +920,7 @@ class _VolumeRow extends ConsumerWidget {
     final volume = ref.read(outputVolumeProvider.notifier);
     return WaxSlider(
       value: level,
-      label: 'Volume',
+      label: context.l10n.playerVolume,
       glyph: WaxIcons.volume,
       mutedGlyph: WaxIcons.volumeMuted,
       trackWidth: 220,
@@ -937,7 +948,9 @@ class SleepTimerButton extends ConsumerWidget {
     final timer = ref.watch(sleepTimerProvider);
     return WaxIconButton(
       glyph: WaxIcons.sleepTimer,
-      label: timer.active ? 'Sleep timer, ${timer.label} left' : 'Sleep timer',
+      label: timer.active
+          ? context.l10n.playerSleepTimerLeft(timer.label)
+          : context.l10n.playerSleepTimer,
       active: timer.active,
       badge: timer.active ? timer.label : null,
       semanticsId: SemanticsIds.sleepTimerOpen,
@@ -987,6 +1000,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final timer = ref.watch(sleepTimerProvider);
     final chapterEndMs = widget.session?.item.mediaType == MediaType.audiobook
         ? _currentChapterEndMs()
@@ -1006,8 +1020,8 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 key: const Key(SemanticsIds.sleepTimerExtend),
                 semanticsId: SemanticsIds.sleepTimerExtend,
                 glyph: WaxIcons.add,
-                title: 'Extend 10 minutes',
-                subtitle: '${timer.label} left',
+                title: l10n.playerExtendTimer,
+                subtitle: l10n.playerTimerLeft(timer.label),
                 onTap: () {
                   ref.read(sleepTimerProvider.notifier).extend();
                   Navigator.of(context).pop();
@@ -1017,7 +1031,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 key: const Key(SemanticsIds.sleepTimerCancel),
                 semanticsId: SemanticsIds.sleepTimerCancel,
                 glyph: WaxIcons.close,
-                title: 'Cancel timer',
+                title: l10n.playerCancelTimer,
                 onTap: () {
                   ref.read(sleepTimerProvider.notifier).cancel();
                   Navigator.of(context).pop();
@@ -1030,7 +1044,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 key: ValueKey(SemanticsIds.sleepTimer(minutes)),
                 semanticsId: SemanticsIds.sleepTimer(minutes),
                 glyph: WaxIcons.sleepTimer,
-                title: '$minutes minutes',
+                title: l10n.playerTimerMinutes(minutes),
                 onTap: () => _startMinutes(minutes),
               ),
             if (chapterEndMs != null)
@@ -1038,7 +1052,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 key: const Key(SemanticsIds.sleepTimerChapter),
                 semanticsId: SemanticsIds.sleepTimerChapter,
                 glyph: WaxIcons.audiobooks,
-                title: 'End of chapter',
+                title: l10n.playerTimerChapterEnd,
                 onTap: () {
                   ref
                       .read(sleepTimerProvider.notifier)
@@ -1058,8 +1072,8 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                         key: const Key(SemanticsIds.sleepTimerCustomField),
                         controller: _custom,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Custom minutes',
+                        decoration: InputDecoration(
+                          labelText: l10n.playerTimerCustom,
                         ),
                       ),
                     ),
@@ -1067,7 +1081,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                   const SizedBox(width: WaxSpace.s8),
                   Semantics(
                     identifier: SemanticsIds.sleepTimerCustomStart,
-                    label: 'Start custom timer',
+                    label: l10n.playerTimerCustomStart,
                     button: true,
                     child: TextButton(
                       key: const Key(SemanticsIds.sleepTimerCustomStart),
@@ -1077,7 +1091,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                           _startMinutes(minutes);
                         }
                       },
-                      child: const Text('Start'),
+                      child: Text(l10n.playerStart),
                     ),
                   ),
                 ],

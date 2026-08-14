@@ -1,6 +1,7 @@
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/l10n.dart';
 import 'play_state_controller.dart';
 import 'star_rating_row.dart';
 
@@ -25,13 +26,12 @@ class ItemStarRatingRow extends ConsumerWidget {
     // A failed mutation rolls the value back and lands here as an error
     // still carrying that previous value; tell the user the tap did not
     // stick while the row keeps rendering the real state.
+    final l10n = context.l10n;
     ref.listen(playStateControllerProvider(pid), (previous, next) {
       if (next.hasError && !next.isLoading) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(content: Text('Could not save that change')),
-          );
+          ..showSnackBar(SnackBar(content: Text(l10n.playerRatingFailed)));
       }
     });
     final playState = ref.watch(playStateControllerProvider(pid)).value;
@@ -44,8 +44,8 @@ class ItemStarRatingRow extends ConsumerWidget {
       onStar: notifier.setStarred,
       onRate: notifier.rate,
       idPrefix: idPrefix,
-      starLabel: (starred) => starred ? 'Unstar' : 'Star',
-      ratingLabel: (n) => '$n star rating',
+      starLabel: (starred) => starred ? l10n.playerUnstar : l10n.playerStar,
+      ratingLabel: l10n.playerStarRating,
     );
   }
 }

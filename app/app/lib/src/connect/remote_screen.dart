@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'device_picker.dart';
@@ -24,22 +25,21 @@ class RemoteControlScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final remote = ref.watch(remoteSessionProvider);
+    final l10n = context.l10n;
     if (remote == null) {
       // Reached by a session ending while this was open, and by a cold
       // open of the location. Either way there is nothing to control, and
       // saying so beats an empty transport.
       return WaxScaffold(
-        title: 'Remote playback',
+        title: l10n.devicesRemoteTitle,
         largeTitle: false,
         onBack: () => context.leave(),
-        slivers: const <Widget>[
+        slivers: <Widget>[
           SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
-              title: 'Nothing playing elsewhere',
-              message:
-                  'Pick a device from the now-playing bar to send playback '
-                  'somewhere else.',
+              title: l10n.devicesNothingElsewhere,
+              message: l10n.devicesNothingElsewhereMessage,
               glyph: WaxIcons.cast,
             ),
           ),
@@ -59,6 +59,7 @@ class _Remote extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(remoteSessionProvider.notifier);
     final colors = WaxColors.of(context);
+    final l10n = context.l10n;
     final entry = remote.currentEntry;
     final session = remote.session;
 
@@ -69,7 +70,7 @@ class _Remote extends ConsumerWidget {
       actions: <Widget>[
         WaxIconButton(
           glyph: WaxIcons.cast,
-          label: 'Play on another device',
+          label: l10n.devicesPlayOnAnother,
           active: true,
           semanticsId: SemanticsIds.deckCast,
           onPressed: () =>
@@ -97,7 +98,7 @@ class _Remote extends ConsumerWidget {
                 ),
                 const SizedBox(height: WaxSpace.s16),
                 Text(
-                  entry?.title ?? 'Playing',
+                  entry?.title ?? l10n.devicesPlaying,
                   textAlign: TextAlign.center,
                   style: WaxType.titleEntity.copyWith(
                     color: colors.textPrimary,
@@ -111,9 +112,9 @@ class _Remote extends ConsumerWidget {
                   ),
                 Text(
                   <String?>[
-                    'on ${remote.endpointName}',
+                    l10n.devicesOnEndpoint(remote.endpointName),
                     if (session.ownerName != null)
-                      'started by ${session.ownerName}',
+                      l10n.devicesStartedBy(session.ownerName!),
                   ].nonNulls.join(', '),
                   textAlign: TextAlign.center,
                   style: WaxType.caption.copyWith(color: colors.textTertiary),
@@ -126,7 +127,7 @@ class _Remote extends ConsumerWidget {
                   children: <Widget>[
                     WaxIconButton(
                       glyph: WaxIcons.previous,
-                      label: 'Previous',
+                      label: l10n.playerPrevious,
                       size: 24,
                       semanticsId: SemanticsIds.remotePrevious,
                       onPressed: () =>
@@ -134,7 +135,9 @@ class _Remote extends ConsumerWidget {
                     ),
                     WaxIconButton(
                       glyph: session.playing ? WaxIcons.pause : WaxIcons.play,
-                      label: session.playing ? 'Pause' : 'Play',
+                      label: session.playing
+                          ? l10n.playerPause
+                          : l10n.playerPlay,
                       size: 40,
                       active: true,
                       semanticsId: SemanticsIds.remoteToggle,
@@ -143,7 +146,7 @@ class _Remote extends ConsumerWidget {
                     ),
                     WaxIconButton(
                       glyph: WaxIcons.next,
-                      label: 'Next',
+                      label: l10n.playerNext,
                       size: 24,
                       semanticsId: SemanticsIds.remoteNext,
                       onPressed: () =>
@@ -159,7 +162,7 @@ class _Remote extends ConsumerWidget {
                   Center(
                     child: WaxSlider(
                       value: remote.volume ?? 1.0,
-                      label: 'Volume on ${remote.endpointName}',
+                      label: l10n.devicesVolumeOn(remote.endpointName),
                       glyph: WaxIcons.volume,
                       mutedGlyph: WaxIcons.volumeMuted,
                       trackWidth: 200,
@@ -179,7 +182,7 @@ class _Remote extends ConsumerWidget {
                 // the three behind a device list would make "stop the
                 // music in the kitchen" a scavenger hunt.
                 WaxButton(
-                  label: 'Transfer here',
+                  label: l10n.devicesTransferHere,
                   kind: WaxButtonKind.filled,
                   icon: WaxIcons.home,
                   semanticsId: SemanticsIds.remotePlayHere,
@@ -188,7 +191,7 @@ class _Remote extends ConsumerWidget {
                 ),
                 const SizedBox(height: WaxSpace.s8),
                 WaxButton(
-                  label: 'Leave it playing',
+                  label: l10n.devicesLeaveItPlaying,
                   kind: WaxButtonKind.tonal,
                   semanticsId: SemanticsIds.remoteLeave,
                   onPressed: () {
@@ -198,7 +201,7 @@ class _Remote extends ConsumerWidget {
                 ),
                 const SizedBox(height: WaxSpace.s8),
                 WaxButton(
-                  label: 'Stop playback on ${remote.endpointName}',
+                  label: l10n.devicesStopOn(remote.endpointName),
                   kind: WaxButtonKind.destructive,
                   icon: WaxIcons.stop,
                   semanticsId: SemanticsIds.remoteStopThere,
@@ -234,13 +237,14 @@ class _Remote extends ConsumerWidget {
   /// left to say on it.
   Future<bool> _report(BuildContext context, Future<void> work) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await work;
       return true;
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
       return false;
     }
   }
