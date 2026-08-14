@@ -356,6 +356,7 @@ abstract final class SemanticsIds {
   static String indexRailLetter(Object letter) => 'index-rail-$letter';
   static const String indexRailStart = 'index-rail-start';
   static const String indexSort = 'index-sort';
+  static const String indexSortCount = 'index-sort-count';
   static String listingRowMore(Object pid) => 'listing-row-more-$pid';
   static const String listingShuffle = 'listing-shuffle';
   static String musicTile(Object name) => 'music-tile-$name';

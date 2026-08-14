@@ -351,6 +351,7 @@ export const SemanticsIds = {
   indexRailLetter: (letter: string | number) => `index-rail-${letter}`,
   indexRailStart: 'index-rail-start',
   indexSort: 'index-sort',
+  indexSortCount: 'index-sort-count',
   listingRowMore: (pid: string | number) => `listing-row-more-${pid}`,
   listingShuffle: 'listing-shuffle',
   musicTile: (name: string | number) => `music-tile-${name}`,

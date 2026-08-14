@@ -394,6 +394,7 @@ class _Toolbar extends StatelessWidget {
                   name: FacetSort.count.wireName,
                   label: browseSortLabel(context.l10n, FacetSort.count),
                   glyph: WaxIcons.stats,
+                  semanticsId: SemanticsIds.indexSortCount,
                 ),
               ],
               selected: sort.wireName,

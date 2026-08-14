@@ -161,6 +161,13 @@ void main() {
       repository,
     );
 
+    // The e2e driver reaches this chip by identifier rather than by the
+    // copy below, which a translation sweep is free to reword.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.indexSortCount),
+      findsOneWidget,
+    );
+
     // The settings picker's own words for this FacetSort: one order, one
     // name, so a stored default and the chip that arrives selected agree.
     await tester.tap(find.text('Most first'));

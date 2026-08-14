@@ -15,6 +15,7 @@
     "indexRailLetter": "index-rail-{letter}",
     "indexRailStart": "index-rail-start",
     "indexSort": "index-sort",
+    "indexSortCount": "index-sort-count",
     "listingRowMore": "listing-row-more-{pid}",
     "listingShuffle": "listing-shuffle",
     "musicTile": "music-tile-{name}"

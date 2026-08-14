@@ -118,10 +118,9 @@ export class Music extends Surface {
   }
 
   /// Switch the index to biggest-first, a listing of its own with its
-  /// own cursor space. By label, since the chip row publishes an id only
-  /// on the A-to-Z chip - the "no id exists" case the copy rule allows.
+  /// own cursor space.
   async sortByCount(): Promise<void> {
-    await this.ctx.page.getByRole('button', { name: 'Most items' }).click();
+    await this.ctx.page.locator(sem(SemanticsIds.indexSortCount)).click();
   }
 
   /// Any item row on screen, for a spec that means "some track" rather
