@@ -1,0 +1,13 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "prototypeApply": "Aplicar la propuesta",
+  "prototypeColumnArtist": "Artista",
+  "prototypeColumnCurrent": "Título actual",
+  "prototypeColumnMatch": "Coincidencia",
+  "prototypeColumnProposed": "Título propuesto",
+  "prototypeCopyProposed": "Copiar el título propuesto",
+  "prototypeRowActions": "Acciones de la fila",
+  "prototypeTitle": "Prototipo de edición"
+}

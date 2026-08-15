@@ -1,0 +1,486 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "statsBucketDay": "Day",
+  "@statsBucketDay": {
+    "description": "Chart grouping: one bar per day."
+  },
+  "statsBucketDayInline": "day",
+  "@statsBucketDayInline": {
+    "description": "The day grouping named inside a sentence rather than on its own chip, which is why it is a second key and not the chip's label lowercased."
+  },
+  "statsBucketMonth": "Month",
+  "@statsBucketMonth": {
+    "description": "Chart grouping: one bar per month."
+  },
+  "statsBucketMonthInline": "month",
+  "@statsBucketMonthInline": {
+    "description": "The month grouping named inside a sentence; see statsBucketDayInline."
+  },
+  "statsBucketWeek": "Week",
+  "@statsBucketWeek": {
+    "description": "Chart grouping: one bar per week."
+  },
+  "statsBucketWeekInline": "week",
+  "@statsBucketWeekInline": {
+    "description": "The week grouping named inside a sentence; see statsBucketDayInline."
+  },
+  "statsCardDrawFailed": "The card could not be drawn",
+  "@statsCardDrawFailed": {
+    "description": "Said when rendering the card produced nothing."
+  },
+  "statsCardDrawing": "Drawing",
+  "@statsCardDrawing": {
+    "description": "On the export button while the card is being rendered."
+  },
+  "statsCardExportFailed": "The card could not be exported",
+  "@statsCardExportFailed": {
+    "description": "Said when the finished card could not be handed to the platform."
+  },
+  "statsCardFactDayStreak": "day streak",
+  "@statsCardFactDayStreak": {
+    "description": "Caption on the card under the longest run of consecutive listening days. Lower case: it sits under a figure."
+  },
+  "statsCardFactDifferentThings": "different things",
+  "@statsCardFactDifferentThings": {
+    "description": "Caption on the card under how many separate items were played. Lower case: it sits under a figure."
+  },
+  "statsCardFactListeners": "listeners",
+  "@statsCardFactListeners": {
+    "description": "Caption on the server card under how many accounts it covers. Lower case: it sits under a figure."
+  },
+  "statsCardFormatSquare": "Square",
+  "@statsCardFormatSquare": {
+    "description": "The square card shape, meant for a feed post or a message."
+  },
+  "statsCardFormatSquareBlurb": "For a post or a message",
+  "@statsCardFormatSquareBlurb": {
+    "description": "Under the square card, saying what it is for."
+  },
+  "statsCardFormatStory": "Story",
+  "@statsCardFormatStory": {
+    "description": "The tall card shape, meant for a full-screen story post."
+  },
+  "statsCardFormatStoryBlurb": "For a full-screen story",
+  "@statsCardFormatStoryBlurb": {
+    "description": "Under the tall card, saying what it is for."
+  },
+  "statsCardMostPlayed": "MOST PLAYED",
+  "@statsCardMostPlayed": {
+    "description": "Heading on the card over its list of artists. Drawn in capitals; translate it in capitals too where the language has them."
+  },
+  "statsCardNoDestination": "There is nowhere to save images here",
+  "@statsCardNoDestination": {
+    "description": "Snackbar when the desktop reports neither a downloads folder nor a documents folder to write a share card into."
+  },
+  "statsCardNoExport": "This build cannot keep an image, so the cards are preview only.",
+  "@statsCardNoExport": {
+    "description": "Banner on a platform with nowhere to save or share a picture."
+  },
+  "statsCardOverline": "Your year, cut to shape",
+  "@statsCardOverline": {
+    "description": "Overline of the share-card sheet."
+  },
+  "statsCardPreviewSpoken": "{format, select, story{Story card, for a full-screen story} square{Square card, for a post or a message} other{Share card}}",
+  "@statsCardPreviewSpoken": {
+    "description": "A card preview read as a whole: which shape it is and what it is for. One sentence per shape rather than a name and a blurb joined, because only English can lower-case the second half into the first.",
+    "placeholders": {
+      "format": {
+        "type": "String",
+        "example": "story"
+      }
+    }
+  },
+  "statsCardPrivacy": "Cards are drawn here and never sent anywhere: what happens next is up to you.",
+  "@statsCardPrivacy": {
+    "description": "Under the card previews, saying the drawing is local."
+  },
+  "statsCardSaveUnsupported": "This build cannot save images",
+  "@statsCardSaveUnsupported": {
+    "description": "Snackbar on a platform with nowhere at all to keep a rendered share card."
+  },
+  "statsCardSaved": "Saved to {where}",
+  "@statsCardSaved": {
+    "description": "Said when the card was written to a file. {where} is the path the platform chose.",
+    "placeholders": {
+      "where": {
+        "type": "String",
+        "example": "Downloads"
+      }
+    }
+  },
+  "statsCardShareRefused": "The share sheet refused the image",
+  "@statsCardShareRefused": {
+    "description": "Snackbar when the platform's share sheet declined a finished share card and said nothing about why."
+  },
+  "statsCardShareUnsupported": "This build cannot share images",
+  "@statsCardShareUnsupported": {
+    "description": "Snackbar when the platform side of the share channel is older than this app and has no image support."
+  },
+  "statsCardShared": "Card shared",
+  "@statsCardShared": {
+    "description": "Said when the platform took the card to share."
+  },
+  "statsCardSubject": "My {year} in review",
+  "@statsCardSubject": {
+    "description": "The subject line the platform's share sheet opens with.",
+    "placeholders": {
+      "year": {
+        "type": "int",
+        "example": "2026"
+      }
+    }
+  },
+  "statsCardTitle": "Share cards",
+  "@statsCardTitle": {
+    "description": "Heading of the sheet that draws the recap as an image."
+  },
+  "statsChartEmptySummary": "No listening in this range.",
+  "@statsChartEmptySummary": {
+    "description": "Read aloud in place of the chart when there is nothing to draw."
+  },
+  "statsChartSummary": "Listening by {unit}, {bars, plural, =1{1 bar} other{{bars} bars}} from {first} to {last}. The most was {peak} on {peakDay}.",
+  "@statsChartSummary": {
+    "description": "The whole chart read aloud, rather than every bar: how it is grouped, how far it reaches, and where the peak is. {unit} is the grouping word inside a sentence (day, week, month), {peak} is a duration and the three dates are already formatted.",
+    "placeholders": {
+      "unit": {
+        "type": "String",
+        "example": "day"
+      },
+      "bars": {
+        "type": "int",
+        "example": "30"
+      },
+      "first": {
+        "type": "String",
+        "example": "07/14"
+      },
+      "last": {
+        "type": "String",
+        "example": "08/12"
+      },
+      "peak": {
+        "type": "String",
+        "example": "2h 6m"
+      },
+      "peakDay": {
+        "type": "String",
+        "example": "07/29"
+      }
+    }
+  },
+  "statsDoorListenLog": "Listen log",
+  "@statsDoorListenLog": {
+    "description": "The list of every recorded session: the row on the stats screen that opens it, and its own title."
+  },
+  "statsDoorListenLogSubtitle": "Every recorded listen session",
+  "@statsDoorListenLogSubtitle": {
+    "description": "Second line of the row opening the listen log."
+  },
+  "statsDoorYearInReview": "Year in review",
+  "@statsDoorYearInReview": {
+    "description": "The year's recap: the row on the stats screen that opens it, and its own title."
+  },
+  "statsDoorYearInReviewSubtitle": "Your listening year, wrapped up",
+  "@statsDoorYearInReviewSubtitle": {
+    "description": "Second line of the row opening the year's recap."
+  },
+  "statsEmptyMessage": "Pick a longer range, or go and play something.",
+  "@statsEmptyMessage": {
+    "description": "Empty state of the listening chart."
+  },
+  "statsEmptyTitle": "Nothing played in this range",
+  "@statsEmptyTitle": {
+    "description": "Empty state of the listening chart."
+  },
+  "statsGroupBy": "Group by",
+  "@statsGroupBy": {
+    "description": "Accessible name of the picker that sets how wide a chart bar is."
+  },
+  "statsHeatmapOverline": "Every day",
+  "@statsHeatmapOverline": {
+    "description": "Overline over the calendar of the year's listening."
+  },
+  "statsHeatmapSummary": "A calendar of {year}: {days, plural, =1{listening on 1 day} other{listening on {days} days}}. {current, plural, =1{Current streak 1 day} other{Current streak {current} days}}, longest {longest}.",
+  "@statsHeatmapSummary": {
+    "description": "The whole calendar read aloud, rather than 365 cells.",
+    "placeholders": {
+      "year": {
+        "type": "int",
+        "example": "2026"
+      },
+      "days": {
+        "type": "int",
+        "example": "180"
+      },
+      "current": {
+        "type": "int",
+        "example": "4"
+      },
+      "longest": {
+        "type": "int",
+        "example": "21"
+      }
+    }
+  },
+  "statsHeatmapTitle": "This year",
+  "@statsHeatmapTitle": {
+    "description": "Heading over the calendar of the year's listening."
+  },
+  "statsKindAlbums": "Albums",
+  "@statsKindAlbums": {
+    "description": "Chip choosing which ranked list to show."
+  },
+  "statsKindArtists": "Artists",
+  "@statsKindArtists": {
+    "description": "Chip choosing which ranked list to show."
+  },
+  "statsKindGenres": "Genres",
+  "@statsKindGenres": {
+    "description": "Chip choosing which ranked list to show."
+  },
+  "statsKindShows": "Shows",
+  "@statsKindShows": {
+    "description": "Chip choosing which ranked list to show."
+  },
+  "statsListened": "listened",
+  "@statsListened": {
+    "description": "Caption under the total listening time. Lower case: it sits under a figure and reads as one phrase with it."
+  },
+  "statsLoadError": "Could not load your listening stats",
+  "@statsLoadError": {
+    "description": "Title of the error state on the stats screen."
+  },
+  "statsLogAllClients": "All clients",
+  "@statsLogAllClients": {
+    "description": "The listen log's client filter with nothing chosen: every reporting device."
+  },
+  "statsLogEmptyMessage": "Every session a client finishes lands here, whichever device reported it.",
+  "@statsLogEmptyMessage": {
+    "description": "Empty state of the listen log."
+  },
+  "statsLogEmptyTitle": "No listens recorded yet",
+  "@statsLogEmptyTitle": {
+    "description": "Empty state of the listen log."
+  },
+  "statsLogFinished": "Finished",
+  "@statsLogFinished": {
+    "description": "Badge on a session that ran to the end."
+  },
+  "statsLogFinishedSpoken": "{time}, finished",
+  "@statsLogFinishedSpoken": {
+    "description": "A finished session read aloud: how long it ran, then that it completed. {time} is already worded as a duration.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "42m"
+      }
+    }
+  },
+  "statsLogLoadError": "Could not load the listen log",
+  "@statsLogLoadError": {
+    "description": "Title of the error state on the listen log."
+  },
+  "statsLogRemovedItem": "Removed item",
+  "@statsLogRemovedItem": {
+    "description": "Stands in for a session's name when the item it was about has been deleted since. The session still happened."
+  },
+  "statsLogReportedBy": "Reported by",
+  "@statsLogReportedBy": {
+    "description": "Accessible name of the listen log's client filter."
+  },
+  "statsPlays": "{count, plural, =1{1 play} other{{count} plays}}",
+  "@statsPlays": {
+    "description": "How many times a ranked entry was played, under its name.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "statsRange30d": "30 days",
+  "@statsRange30d": {
+    "description": "Range chip: the last month."
+  },
+  "statsRange365d": "A year",
+  "@statsRange365d": {
+    "description": "Range chip: the last year."
+  },
+  "statsRange7d": "7 days",
+  "@statsRange7d": {
+    "description": "Range chip: the last week."
+  },
+  "statsRange90d": "90 days",
+  "@statsRange90d": {
+    "description": "Range chip: the last three months."
+  },
+  "statsRangeAll": "All time",
+  "@statsRangeAll": {
+    "description": "Range chip: every session on record."
+  },
+  "statsRecapLoadError": "Could not load the recap",
+  "@statsRecapLoadError": {
+    "description": "Title over the failure of one year-in-review panel, which retries in place."
+  },
+  "statsSessions": "sessions",
+  "@statsSessions": {
+    "description": "Caption under how many listening sessions were recorded. Lower case: it sits under a figure."
+  },
+  "statsStreaks": "{current, plural, =1{Current streak: 1 day} other{Current streak: {current} days}} · {longest, plural, =1{Longest: 1 day} other{Longest: {longest} days}}",
+  "@statsStreaks": {
+    "description": "Under the calendar: how many days in a row this listener has played something, now and at their best.",
+    "placeholders": {
+      "current": {
+        "type": "int",
+        "example": "4"
+      },
+      "longest": {
+        "type": "int",
+        "example": "21"
+      }
+    }
+  },
+  "statsTimeSaved": "time saved",
+  "@statsTimeSaved": {
+    "description": "Caption under how much time playing faster and trimming silence saved. Lower case: it sits under a figure."
+  },
+  "statsTitle": "Listening stats",
+  "@statsTitle": {
+    "description": "Title of the screen showing what this listener has played."
+  },
+  "statsTopEmptyMessage": "{kind, select, artists{A longer range, or an artist you have actually played.} albums{A longer range, or an album you have actually played.} genres{A longer range, or a genre you have actually played.} shows{A longer range, or a show you have actually played.} other{A longer range, or something you have actually played.}}",
+  "@statsTopEmptyMessage": {
+    "description": "Empty state of a ranked list, naming what it lists. Whole sentences per kind rather than a noun in a frame, because the article follows the noun's gender.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "statsTopEmptyTitle": "Nothing here for this range",
+  "@statsTopEmptyTitle": {
+    "description": "Empty state of a ranked list."
+  },
+  "statsTopOverline": "In this range",
+  "@statsTopOverline": {
+    "description": "Overline over the ranked lists, saying they follow the range chips above."
+  },
+  "statsTopTitle": "Top",
+  "@statsTopTitle": {
+    "description": "Heading over the ranked lists of what was played most."
+  },
+  "statsYearChartEmpty": "No listening recorded in {year}.",
+  "@statsYearChartEmpty": {
+    "description": "Read aloud in place of the recap's chart when the year holds nothing.",
+    "placeholders": {
+      "year": {
+        "type": "int",
+        "example": "2026"
+      }
+    }
+  },
+  "statsYearChartSummary": "Listening month by month through {year}. The most was {peak} in {month}.",
+  "@statsYearChartSummary": {
+    "description": "The recap's chart read aloud: the year it covers and where the peak fell. {peak} is a duration, {month} the month's own short label.",
+    "placeholders": {
+      "year": {
+        "type": "int",
+        "example": "2026"
+      },
+      "peak": {
+        "type": "String",
+        "example": "12h 4m"
+      },
+      "month": {
+        "type": "String",
+        "example": "J"
+      }
+    }
+  },
+  "statsYearDistinct": "different things played",
+  "@statsYearDistinct": {
+    "description": "Caption under how many separate items were played at least once. Lower case: it sits under a figure."
+  },
+  "statsYearListenedTogether": "listened together",
+  "@statsYearListenedTogether": {
+    "description": "Caption under the server-wide listening total. Lower case: it sits under a figure."
+  },
+  "statsYearLongestStreak": "longest streak",
+  "@statsYearLongestStreak": {
+    "description": "Caption under the longest run of consecutive days with listening. Lower case: it sits under a figure."
+  },
+  "statsYearMakeCard": "Make a share card",
+  "@statsYearMakeCard": {
+    "description": "Opens the sheet that draws the recap as a shareable image."
+  },
+  "statsYearMonthByMonth": "Month by month",
+  "@statsYearMonthByMonth": {
+    "description": "Heading over the recap's year-long bar chart."
+  },
+  "statsYearMonthFallback": "month {month}",
+  "@statsYearMonthFallback": {
+    "description": "Stands in for a month's label where the chart has none. {month} is its number.",
+    "placeholders": {
+      "month": {
+        "type": "int",
+        "example": "7"
+      }
+    }
+  },
+  "statsYearNewInLibrary": "new in the library",
+  "@statsYearNewInLibrary": {
+    "description": "Caption under how much the library gained that year. Lower case: it sits under a figure."
+  },
+  "statsYearNext": "Next year",
+  "@statsYearNext": {
+    "description": "Steps the recap forward one year."
+  },
+  "statsYearNothingPlayed": "Nothing played this year",
+  "@statsYearNothingPlayed": {
+    "description": "Drawn in place of a recap for a year with no sessions in it."
+  },
+  "statsYearParticipants": "listeners counted in",
+  "@statsYearParticipants": {
+    "description": "Caption under how many accounts the server-wide recap covers. Lower case: it sits under a figure."
+  },
+  "statsYearPersonal": "My year",
+  "@statsYearPersonal": {
+    "description": "Chip showing the recap of what this listener played."
+  },
+  "statsYearPrev": "Previous year",
+  "@statsYearPrev": {
+    "description": "Steps the recap back one year."
+  },
+  "statsYearServer": "Whole server",
+  "@statsYearServer": {
+    "description": "Chip showing the recap of what everyone on this server played."
+  },
+  "statsYearStreakDays": "{days, plural, =1{1 day} other{{days} days}}",
+  "@statsYearStreakDays": {
+    "description": "The longest-streak figure itself, in days.",
+    "placeholders": {
+      "days": {
+        "type": "int",
+        "example": "21"
+      }
+    }
+  },
+  "statsYearTopArtists": "Top artists",
+  "@statsYearTopArtists": {
+    "description": "Heading over the recap's five most-played artists."
+  },
+  "statsYearTopGenres": "Top genres",
+  "@statsYearTopGenres": {
+    "description": "Heading over the recap's five most-played genres."
+  },
+  "statsYearTopShows": "Top shows",
+  "@statsYearTopShows": {
+    "description": "Heading over the recap's five most-played podcasts."
+  },
+  "statsYearTopTracks": "Top tracks",
+  "@statsYearTopTracks": {
+    "description": "Heading over the recap's five most-played tracks."
+  }
+}

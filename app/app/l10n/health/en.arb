@@ -1,0 +1,430 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "healthColumnAbsorbs": "Absorbs",
+  "@healthColumnAbsorbs": {
+    "description": "Column heading for the entities a merge folds into the survivor."
+  },
+  "healthColumnCode": "Code",
+  "@healthColumnCode": {
+    "description": "Column heading for what was observed about a file. The values themselves stay as the server wrote them."
+  },
+  "healthColumnFailing": "Failing",
+  "@healthColumnFailing": {
+    "description": "Column heading for how many items fail a rule."
+  },
+  "healthColumnFile": "File",
+  "@healthColumnFile": {
+    "description": "Column heading for a diagnosed file's path."
+  },
+  "healthColumnKeeping": "Keeping",
+  "@healthColumnKeeping": {
+    "description": "Column heading for the copy a resolution keeps."
+  },
+  "healthColumnKind": "Kind",
+  "@healthColumnKind": {
+    "description": "Column heading for what sort of entity a duplicate finding is about."
+  },
+  "healthColumnOrigin": "Origin",
+  "@healthColumnOrigin": {
+    "description": "Column heading for which pass recorded a diagnostic. The values themselves stay as the server wrote them."
+  },
+  "healthColumnRecording": "Recording",
+  "@healthColumnRecording": {
+    "description": "Column heading for which recording a quality finding is about."
+  },
+  "healthColumnRule": "Rule",
+  "@healthColumnRule": {
+    "description": "Column heading for a health rule's name."
+  },
+  "healthColumnSeverity": "Severity",
+  "@healthColumnSeverity": {
+    "description": "Column heading for how serious a diagnostic is."
+  },
+  "healthColumnSurvivor": "Survivor",
+  "@healthColumnSurvivor": {
+    "description": "Column heading for the entity a merge keeps."
+  },
+  "healthColumnTrashing": "Trashing",
+  "@healthColumnTrashing": {
+    "description": "Column heading for the copies a resolution trashes."
+  },
+  "healthColumnWhy": "Why",
+  "@healthColumnWhy": {
+    "description": "Column heading for the audit's explanation of a duplicate finding."
+  },
+  "healthCorruptAudio": "Corrupt audio",
+  "@healthCorruptAudio": {
+    "description": "Name of the health rule `corrupt-audio`, which counts files whose audio will not decode."
+  },
+  "healthDiagnosticsChip": "{code} ({count})",
+  "@healthDiagnosticsChip": {
+    "description": "One diagnostic code and how many files carry it, on a filter chip. {code} is a wire token and is not translated.",
+    "placeholders": {
+      "code": {
+        "type": "String",
+        "example": "corrupt_audio"
+      },
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "healthDiagnosticsEmptyMessage": "Every file the catalog has seen decoded cleanly.",
+  "@healthDiagnosticsEmptyMessage": {
+    "description": "Empty state of the diagnostics table."
+  },
+  "healthDiagnosticsEmptyTitle": "No diagnostics recorded",
+  "@healthDiagnosticsEmptyTitle": {
+    "description": "Empty state of the diagnostics table."
+  },
+  "healthDiagnosticsLoadError": "Could not load diagnostics",
+  "@healthDiagnosticsLoadError": {
+    "description": "Title of the error state when the file diagnostics could not be read."
+  },
+  "healthDiagnosticsMore": "{count} shown; there are more",
+  "@healthDiagnosticsMore": {
+    "description": "Caption under the diagnostics table when the list is longer than what has been fetched.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "100"
+      }
+    }
+  },
+  "healthDuplicatesEmptyMessage": "Artists, albums, and shows each appear once.",
+  "@healthDuplicatesEmptyMessage": {
+    "description": "Empty state of the duplicates section."
+  },
+  "healthDuplicatesEmptyTitle": "No duplicates detected",
+  "@healthDuplicatesEmptyTitle": {
+    "description": "Empty state of the duplicates section."
+  },
+  "healthDuplicatesError": "Could not load duplicates",
+  "@healthDuplicatesError": {
+    "description": "Title of the error state when the duplicate findings could not be read."
+  },
+  "healthDuplicatesErrorBody": "The clustering pass did not answer.",
+  "@healthDuplicatesErrorBody": {
+    "description": "Body of the duplicates error state. Clustering is the pass that finds duplicates."
+  },
+  "healthDuplicatesOverline": "One thing under two names",
+  "@healthDuplicatesOverline": {
+    "description": "Line above the Duplicates heading, saying what a duplicate is."
+  },
+  "healthDuplicatesTitle": "Duplicates",
+  "@healthDuplicatesTitle": {
+    "description": "Heading over the duplicate findings."
+  },
+  "healthEntityAlbum": "album",
+  "@healthEntityAlbum": {
+    "description": "Kind of a duplicate finding about two albums. Lower case: it fills a small chip."
+  },
+  "healthEntityArtist": "artist",
+  "@healthEntityArtist": {
+    "description": "Kind of a duplicate finding about two artists. Lower case: it fills a small chip."
+  },
+  "healthEntityGenre": "genre",
+  "@healthEntityGenre": {
+    "description": "Kind of a duplicate finding about two genres. Lower case: it fills a small chip."
+  },
+  "healthEntityReleaseGroup": "release-group",
+  "@healthEntityReleaseGroup": {
+    "description": "Kind of a duplicate finding about two release groups: the same album across its editions. Lower case: it fills a small chip."
+  },
+  "healthEvaluatedOf": "{total, plural, =1{Evaluated {checked} of 1 item} other{Evaluated {checked} of {total} items}}",
+  "@healthEvaluatedOf": {
+    "description": "Line under the warming-up headline, saying how far the first sweep has got.",
+    "placeholders": {
+      "checked": {
+        "type": "int",
+        "example": "1200"
+      },
+      "total": {
+        "type": "int",
+        "example": "1500"
+      }
+    }
+  },
+  "healthFixRule": "Fix {rule}",
+  "@healthFixRule": {
+    "description": "Accessible name of the button that runs a health rule's bulk fix. {rule} is that rule's own name.",
+    "placeholders": {
+      "rule": {
+        "type": "String",
+        "example": "Missing cover art"
+      }
+    }
+  },
+  "healthGenreWhitelist": "Genre outside the canonical tree",
+  "@healthGenreWhitelist": {
+    "description": "Name of the health rule `genre-whitelist`, which counts items tagged with a genre the server's genre tree does not have."
+  },
+  "healthIssuesEmptyMessage": "Every item the sweeper has seen passes it.",
+  "@healthIssuesEmptyMessage": {
+    "description": "Empty state of one rule's list of failing items."
+  },
+  "healthIssuesEmptyTitle": "Nothing failing this rule",
+  "@healthIssuesEmptyTitle": {
+    "description": "Empty state of one rule's list of failing items."
+  },
+  "healthIssuesError": "Could not load issues",
+  "@healthIssuesError": {
+    "description": "Title of the error state when a rule's failing items could not be read."
+  },
+  "healthKbps": "{kbps} kbps",
+  "@healthKbps": {
+    "description": "One copy's bitrate, in a comma-separated run of its properties. kbps is the unit.",
+    "placeholders": {
+      "kbps": {
+        "type": "int",
+        "example": "320"
+      }
+    }
+  },
+  "healthKeepBest": "Keep the best version",
+  "@healthKeepBest": {
+    "description": "Accessible name of the button that resolves one quality finding."
+  },
+  "healthLegacyTags": "Legacy-only tags",
+  "@healthLegacyTags": {
+    "description": "Name of the health rule `legacy-tags`, which counts files carrying only an older tag format."
+  },
+  "healthLoadError": "Could not load library health",
+  "@healthLoadError": {
+    "description": "Title of the error state when the health summary could not be read."
+  },
+  "healthLoadMore": "Load more",
+  "@healthLoadMore": {
+    "description": "Button that fetches the next page of diagnostics."
+  },
+  "healthLoadMoreFailed": "Could not load more; scroll to retry",
+  "@healthLoadMoreFailed": {
+    "description": "Message when paging further into a rule's failing items failed. Scrolling again retries, which is why it says so."
+  },
+  "healthLossless": "lossless",
+  "@healthLossless": {
+    "description": "Says a copy is stored without losing anything to compression. Lower case: it sits in a comma-separated run of a copy's properties."
+  },
+  "healthMergeAction": "Merge",
+  "@healthMergeAction": {
+    "description": "Confirming button of the merge dialog."
+  },
+  "healthMergeBody": "{losers} will merge into \"{survivor}\". Their items move under the survivor, and the merge cannot be undone.",
+  "@healthMergeBody": {
+    "description": "Body of the merge dialog. {losers} is a comma-separated run of quoted names and {survivor} the name they merge into.",
+    "placeholders": {
+      "losers": {
+        "type": "String",
+        "example": "\"The Beatles\", \"Beatles, The\""
+      },
+      "survivor": {
+        "type": "String",
+        "example": "The Beatles"
+      }
+    }
+  },
+  "healthMergeInto": "Merge into {name}",
+  "@healthMergeInto": {
+    "description": "Accessible name of the button that merges one duplicate group. {name} is the entity that survives.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "The Beatles"
+      }
+    }
+  },
+  "healthMergeTitle": "Merge duplicates?",
+  "@healthMergeTitle": {
+    "description": "Title of the dialog confirming that duplicate entities are merged into one."
+  },
+  "healthMergeWord": "merge",
+  "@healthMergeWord": {
+    "description": "The word typed to confirm a merge. Lower case here, unlike the destructive confirmations elsewhere, because a merge is recoverable work rather than a deletion. It is compared against what was typed, so translating it changes what has to be typed."
+  },
+  "healthMerged": "{count, plural, =1{Merged 1 entry} other{Merged {count} entries}}",
+  "@healthMerged": {
+    "description": "Message after duplicates were merged, saying how many entries went.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "healthMissingArt": "Missing cover art",
+  "@healthMissingArt": {
+    "description": "Name of the health rule `missing-art`."
+  },
+  "healthMissingAsin": "Missing ASIN",
+  "@healthMissingAsin": {
+    "description": "Name of the health rule `missing-asin`. ASIN is Amazon's identifier for an audiobook and is not translated."
+  },
+  "healthMissingGenre": "Missing genre",
+  "@healthMissingGenre": {
+    "description": "Name of the health rule `missing-genre`."
+  },
+  "healthMissingLyrics": "Missing lyrics",
+  "@healthMissingLyrics": {
+    "description": "Name of the health rule `missing-lyrics`."
+  },
+  "healthMissingMbid": "Missing MusicBrainz identifier",
+  "@healthMissingMbid": {
+    "description": "Name of the health rule `missing-mbid`. MusicBrainz is a product name and is not translated."
+  },
+  "healthMissingNarrator": "Missing narrator",
+  "@healthMissingNarrator": {
+    "description": "Name of the health rule `missing-narrator`."
+  },
+  "healthMissingYear": "Missing release year",
+  "@healthMissingYear": {
+    "description": "Name of the health rule `missing-year`."
+  },
+  "healthNamesMatch": "Names match",
+  "@healthNamesMatch": {
+    "description": "Stands in for the audit's explanation when it gave none: the finding is a plain name collision."
+  },
+  "healthPathMismatch": "File path does not match the organize profile",
+  "@healthPathMismatch": {
+    "description": "Name of the health rule `path-mismatch`."
+  },
+  "healthQueuedItems": "{count, plural, =1{Queued 1 item} other{Queued {count} items}}",
+  "@healthQueuedItems": {
+    "description": "Message after a rule's fix was started, saying how many items it will work on.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "healthResolveAction": "Resolve",
+  "@healthResolveAction": {
+    "description": "Confirming button of the keep-the-best dialog."
+  },
+  "healthResolveBody": "The other versions move to the server trash and can be restored until the trash window closes.",
+  "@healthResolveBody": {
+    "description": "Body of the keep-the-best dialog, saying that the copies are recoverable for a while."
+  },
+  "healthResolveTitle": "Keep the best version?",
+  "@healthResolveTitle": {
+    "description": "Title of the dialog confirming that lesser copies of one recording are trashed."
+  },
+  "healthResolveWord": "resolve",
+  "@healthResolveWord": {
+    "description": "The word typed to confirm keeping the best version. Lower case, and compared against what was typed, so translating it changes what has to be typed."
+  },
+  "healthRulesEmptyMessage": "Rules appear once the sweeper has evaluated the library.",
+  "@healthRulesEmptyMessage": {
+    "description": "Empty state of the rule table, saying what fills it."
+  },
+  "healthRulesEmptyTitle": "Nothing to check yet",
+  "@healthRulesEmptyTitle": {
+    "description": "Empty state of the rule table."
+  },
+  "healthRulesOverline": "What the sweeper checks",
+  "@healthRulesOverline": {
+    "description": "Line above the Rules heading, saying what the rules are."
+  },
+  "healthRulesTitle": "Rules",
+  "@healthRulesTitle": {
+    "description": "Heading over the per-rule failure counts."
+  },
+  "healthScoreBlurb": "{count, plural, =1{Library health across 1 evaluated item} other{Library health across {count} evaluated items}}",
+  "@healthScoreBlurb": {
+    "description": "Line beside the health score, saying how much of the library it covers.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1500"
+      }
+    }
+  },
+  "healthScoreSpoken": "Health score {score}",
+  "@healthScoreSpoken": {
+    "description": "Accessible name of the health score, which is drawn as a bare number.",
+    "placeholders": {
+      "score": {
+        "type": "int",
+        "example": "87"
+      }
+    }
+  },
+  "healthSeverityError": "error",
+  "@healthSeverityError": {
+    "description": "Severity of a diagnostic that means something failed. Lower case: it fills a table cell."
+  },
+  "healthSeverityInfo": "info",
+  "@healthSeverityInfo": {
+    "description": "Severity of a diagnostic that is worth knowing and nothing more. Lower case: it fills a table cell."
+  },
+  "healthSeverityWarn": "warn",
+  "@healthSeverityWarn": {
+    "description": "Severity of a diagnostic worth looking at. Lower case: it fills a table cell."
+  },
+  "healthSmallArt": "Low-resolution cover art",
+  "@healthSmallArt": {
+    "description": "Name of the health rule `small-art`."
+  },
+  "healthSweepNow": "Sweep now",
+  "@healthSweepNow": {
+    "description": "Accessible name of the button that re-evaluates the library against every rule."
+  },
+  "healthSweepQueued": "Sweep queued",
+  "@healthSweepQueued": {
+    "description": "Message after a health sweep was started."
+  },
+  "healthTitleByArtist": "{title} by {artist}",
+  "@healthTitleByArtist": {
+    "description": "A recording named with its artist, in the health tables.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Blue in Green"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Miles Davis"
+      }
+    }
+  },
+  "healthTrashedFiles": "{count, plural, =1{Trashed 1 file} other{Trashed {count} files}}",
+  "@healthTrashedFiles": {
+    "description": "Message after lesser copies were trashed, saying how many went.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "healthUpgradesEmptyMessage": "Every recording is held once.",
+  "@healthUpgradesEmptyMessage": {
+    "description": "Empty state of the quality upgrades section."
+  },
+  "healthUpgradesEmptyTitle": "No duplicate qualities detected",
+  "@healthUpgradesEmptyTitle": {
+    "description": "Empty state of the quality upgrades section."
+  },
+  "healthUpgradesError": "Could not load upgrades",
+  "@healthUpgradesError": {
+    "description": "Title of the error state when the quality findings could not be read."
+  },
+  "healthUpgradesErrorBody": "The quality comparison did not answer.",
+  "@healthUpgradesErrorBody": {
+    "description": "Body of the quality upgrades error state."
+  },
+  "healthUpgradesOverline": "The same recording twice",
+  "@healthUpgradesOverline": {
+    "description": "Line above the quality upgrades heading."
+  },
+  "healthUpgradesTitle": "Quality upgrades",
+  "@healthUpgradesTitle": {
+    "description": "Heading over the findings where one recording is held at several qualities."
+  },
+  "healthWriteUnsynced": "File tags out of sync with the catalog",
+  "@healthWriteUnsynced": {
+    "description": "Name of the health rule `write-unsynced`."
+  }
+}

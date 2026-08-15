@@ -1,0 +1,112 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "relDaysAgo": "{days, plural, =1{1 d ago} other{{days} d ago}}",
+  "@relDaysAgo": {
+    "description": "How long ago something happened, in days, on a dashboard tile with room for a few words.",
+    "placeholders": {
+      "days": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "relDaysShort": "{days, plural, =1{1d ago} other{{days}d ago}}",
+  "@relDaysShort": {
+    "description": "How long ago something happened, in days, in the audit log's own column - abbreviated hard, because a reader scans a page of these rather than reading one.",
+    "placeholders": {
+      "days": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "relDueNow": "due now",
+  "@relDueNow": {
+    "description": "What a scheduled job's next-run caption says once that time has passed and the run has not started yet."
+  },
+  "relHoursAgo": "{hours, plural, =1{1 h ago} other{{hours} h ago}}",
+  "@relHoursAgo": {
+    "description": "How long ago something happened, in hours, on a dashboard tile with room for a few words.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "relHoursShort": "{hours, plural, =1{1h ago} other{{hours}h ago}}",
+  "@relHoursShort": {
+    "description": "How long ago something happened, in hours, in the audit log's own column - abbreviated hard, because a reader scans a page of these rather than reading one.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "relInDays": "{days, plural, =1{in 1 d} other{in {days} d}}",
+  "@relInDays": {
+    "description": "How long until a scheduled job runs, in days.",
+    "placeholders": {
+      "days": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "relInHours": "{hours, plural, =1{in 1 h} other{in {hours} h}}",
+  "@relInHours": {
+    "description": "How long until a scheduled job runs, in hours.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "relInMinutes": "{minutes, plural, =1{in 1 min} other{in {minutes} min}}",
+  "@relInMinutes": {
+    "description": "How long until a scheduled job runs, in minutes.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "relJustNow": "just now",
+  "@relJustNow": {
+    "description": "How long ago something happened when it happened within the last minute."
+  },
+  "relMinutesAgo": "{minutes, plural, =1{1 min ago} other{{minutes} min ago}}",
+  "@relMinutesAgo": {
+    "description": "How long ago something happened, in minutes, on a dashboard tile with room for a few words.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "relMinutesShort": "{minutes, plural, =1{1m ago} other{{minutes}m ago}}",
+  "@relMinutesShort": {
+    "description": "How long ago something happened, in minutes, in the audit log's own column - abbreviated hard, because a reader scans a page of these rather than reading one.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "relMonthsShort": "{months, plural, =1{1mo ago} other{{months}mo ago}}",
+  "@relMonthsShort": {
+    "description": "How long ago something happened, in months, in the audit log's own column. Anything older than a month reads in months and no further.",
+    "placeholders": {
+      "months": {
+        "type": "int",
+        "example": "4"
+      }
+    }
+  }
+}

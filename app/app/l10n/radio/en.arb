@@ -1,0 +1,322 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "radioAddByUrl": "By URL",
+  "@radioAddByUrl": {
+    "description": "Segment adding a station by pasting its stream address."
+  },
+  "radioAddConfirm": "Add",
+  "@radioAddConfirm": {
+    "description": "Confirming button of the station form when adding a new station."
+  },
+  "radioAddSearch": "Search",
+  "@radioAddSearch": {
+    "description": "Segment adding a station by looking it up in the directory."
+  },
+  "radioAddStation": "Add station",
+  "@radioAddStation": {
+    "description": "Toolbar action opening the dialog that adds a station, and that dialog's own title."
+  },
+  "radioAddedStation": "Added {name}",
+  "@radioAddedStation": {
+    "description": "Snackbar after adding a station from the directory.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
+  "radioCouldNotStop": "Could not stop {name}",
+  "@radioCouldNotStop": {
+    "description": "Snackbar when stopping a station failed for a reason the contract does not name - the engine refusing, say.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
+  "radioCouldNotTune": "Could not tune {name}",
+  "@radioCouldNotTune": {
+    "description": "Snackbar when a station's stream would not open, which is the engine's failure rather than the server's.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
+  "radioDialFull": "{count, plural, =1{The dial holds 1 station. Unpin one to make room.} other{The dial holds {count} stations. Unpin one to make room.}}",
+  "@radioDialFull": {
+    "description": "Refusal when the favourites strip is at its cap and another pin was asked for.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "radioDirectoryBitrate": "{codec} {bitrate} kbps",
+  "@radioDirectoryBitrate": {
+    "description": "What a directory match sounds like: its codec and its bitrate. The unit is international.",
+    "placeholders": {
+      "codec": {
+        "type": "String",
+        "example": "MP3"
+      },
+      "bitrate": {
+        "type": "int"
+      }
+    }
+  },
+  "radioDirectoryStream": "stream",
+  "@radioDirectoryStream": {
+    "description": "Stands in for a directory match's codec where the directory named none. Lower case: it reads mid-line, before the bitrate."
+  },
+  "radioEditStation": "Edit station",
+  "@radioEditStation": {
+    "description": "Row in a station's menu opening its form, and that form's own title."
+  },
+  "radioEmptyAction": "Add a station",
+  "@radioEmptyAction": {
+    "description": "Button on the radio dial's empty state."
+  },
+  "radioEmptyMessage": "Search the directory to add your first, or paste a stream URL if you already have one.",
+  "@radioEmptyMessage": {
+    "description": "Message under the empty state of the radio dial, naming the two ways in."
+  },
+  "radioEmptyTitle": "No stations yet",
+  "@radioEmptyTitle": {
+    "description": "Empty state of the radio dial."
+  },
+  "radioFewerOptions": "Fewer options",
+  "@radioFewerOptions": {
+    "description": "Collapses the optional fields of the station form."
+  },
+  "radioHowToAdd": "How to add",
+  "@radioHowToAdd": {
+    "description": "Segmented control choosing between searching the directory and pasting an address."
+  },
+  "radioLoadError": "Could not load stations",
+  "@radioLoadError": {
+    "description": "Title of the error state when the stations could not be read."
+  },
+  "radioLogoOptional": "Logo URL (optional)",
+  "@radioLogoOptional": {
+    "description": "Field taking the address of a station's logo."
+  },
+  "radioMoreOptions": "Name, website, and logo",
+  "@radioMoreOptions": {
+    "description": "Expands the optional fields of the station form, naming what is behind it."
+  },
+  "radioNameHint": "Taken from the stream address when left blank",
+  "@radioNameHint": {
+    "description": "Hint under the station-name field on the add form."
+  },
+  "radioNeedsName": "A station needs a name.",
+  "@radioNeedsName": {
+    "description": "Refusal when an existing station's name is cleared, where there is no address to fall back to a name from."
+  },
+  "radioNeedsUrl": "A station needs a stream URL.",
+  "@radioNeedsUrl": {
+    "description": "Refusal when the station form is confirmed with no address in it."
+  },
+  "radioNoMatches": "No matches",
+  "@radioNoMatches": {
+    "description": "Said where the directory results would be when the lookup found nothing."
+  },
+  "radioPin": "Pin {name} to the dial",
+  "@radioPin": {
+    "description": "Accessible name of the star that puts a station on the favourites strip.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
+  "radioPlaying": "Playing",
+  "@radioPlaying": {
+    "description": "Under a station's name while it is on, where the stream announces no track."
+  },
+  "radioRemoveStation": "Remove station",
+  "@radioRemoveStation": {
+    "description": "Row in a station's menu deleting it from the dial."
+  },
+  "radioSaveChanges": "Save changes",
+  "@radioSaveChanges": {
+    "description": "Confirming button of the station form when editing an existing station."
+  },
+  "radioSavedAcquire": "Get it from a URL",
+  "@radioSavedAcquire": {
+    "description": "Row in a saved song's menu handing it to the add-from-URL flow."
+  },
+  "radioSavedAcquireHelp": "Download a copy you found; it lands in review",
+  "@radioSavedAcquireHelp": {
+    "description": "Under the get-from-a-URL row."
+  },
+  "radioSavedDoorSubtitle": "Songs you caught on air and mean to hunt down",
+  "@radioSavedDoorSubtitle": {
+    "description": "Under the row on the dial that opens the saved songs."
+  },
+  "radioSavedEmptyMessage": "Tap the heart while a station is playing and the song it named turns up here, with a way to search for it.",
+  "@radioSavedEmptyMessage": {
+    "description": "Message under the empty state of the saved songs, saying how one gets there."
+  },
+  "radioSavedEmptyTitle": "Nothing saved yet",
+  "@radioSavedEmptyTitle": {
+    "description": "Empty state of the songs caught on air."
+  },
+  "radioSavedFind": "Find \"{title}\" in the library",
+  "@radioSavedFind": {
+    "description": "Accessible name of the control searching the library for a saved song.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Ascension Day"
+      }
+    }
+  },
+  "radioSavedForget": "Forget \"{title}\"",
+  "@radioSavedForget": {
+    "description": "Accessible name of the control crossing a saved song off the list.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Ascension Day"
+      }
+    }
+  },
+  "radioSavedHeardOn": "Heard on {station}",
+  "@radioSavedHeardOn": {
+    "description": "Overline above a saved song's menu, naming where it was caught.",
+    "placeholders": {
+      "station": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
+  "radioSavedIdentify": "Identify a review entry as it",
+  "@radioSavedIdentify": {
+    "description": "Row in a saved song's menu handing its name to a pending review entry."
+  },
+  "radioSavedIdentifyHelp": "Hand its name to a pending entry's search",
+  "@radioSavedIdentifyHelp": {
+    "description": "Under the identify-a-review-entry row."
+  },
+  "radioSavedIdentifyOverline": "Pending single tracks in the review queue",
+  "@radioSavedIdentifyOverline": {
+    "description": "Overline above the identify sheet, saying what it lists and why only those."
+  },
+  "radioSavedIdentifyTitle": "Identify as \"{title}\"",
+  "@radioSavedIdentifyTitle": {
+    "description": "Heading of the sheet picking which pending review entry a saved song names.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Ascension Day"
+      }
+    }
+  },
+  "radioSavedInLibrary": "In your library now",
+  "@radioSavedInLibrary": {
+    "description": "Said under a saved song the library has since acquired, which is the ending the list exists to reach."
+  },
+  "radioSavedLoadError": "Could not load your saved songs",
+  "@radioSavedLoadError": {
+    "description": "Title of the error state when the saved songs could not be read."
+  },
+  "radioSavedNoPending": "No pending single tracks to name. Get the song from a URL first and it turns up here while it waits for review.",
+  "@radioSavedNoPending": {
+    "description": "Said in the identify sheet when the review queue holds nothing a radio song could name."
+  },
+  "radioSavedReviewError": "Could not load the review queue.",
+  "@radioSavedReviewError": {
+    "description": "Said in the identify sheet when the review queue could not be read."
+  },
+  "radioSavedTitle": "Saved from the radio",
+  "@radioSavedTitle": {
+    "description": "The songs caught on air: the row that opens them on the dial, and their screen's own title."
+  },
+  "radioSavedUntitled": "Untitled",
+  "@radioSavedUntitled": {
+    "description": "Stands in for a review entry the scan could not name."
+  },
+  "radioSavedWays": "Ways to get \"{title}\"",
+  "@radioSavedWays": {
+    "description": "Accessible name of the control opening the menu of ways to acquire a saved song.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Ascension Day"
+      }
+    }
+  },
+  "radioSearchDirectory": "Search directory",
+  "@radioSearchDirectory": {
+    "description": "Button running the directory lookup."
+  },
+  "radioSearchFailedHint": "{reason} Paste a stream URL instead with \"By URL\".",
+  "@radioSearchFailedHint": {
+    "description": "Said when the directory search failed, naming the way out that manual entry leaves open. The quoted phrase is the other segment of the control above, so it matches that segment's own words.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "The directory service did not answer. Try again later."
+      }
+    }
+  },
+  "radioStationMore": "More for {name}",
+  "@radioStationMore": {
+    "description": "Accessible name of one station's overflow menu.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
+  "radioStationName": "Station name",
+  "@radioStationName": {
+    "description": "Field taking what a station is called, and the one the directory search looks up."
+  },
+  "radioStationWebsite": "Station website",
+  "@radioStationWebsite": {
+    "description": "Row in a station's menu opening the site its feed named."
+  },
+  "radioStreamUrl": "Stream URL",
+  "@radioStreamUrl": {
+    "description": "Field taking a station's stream address."
+  },
+  "radioStreamUrlHint": "https://example.com/stream",
+  "@radioStreamUrlHint": {
+    "description": "Example address in the stream-URL field. An address rather than words, so it stays as it is."
+  },
+  "radioTitle": "Radio",
+  "@radioTitle": {
+    "description": "The radio dial, named on its own title."
+  },
+  "radioTuningIn": "Tuning in",
+  "@radioTuningIn": {
+    "description": "Under a station's name while its stream is opening."
+  },
+  "radioUnpin": "Unpin {name} from the dial",
+  "@radioUnpin": {
+    "description": "Accessible name of the star that takes a station off the favourites strip.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
+  "radioVolume": "Volume",
+  "@radioVolume": {
+    "description": "Accessible name of the level slider for the station that is on."
+  },
+  "radioWebsiteOptional": "Website (optional)",
+  "@radioWebsiteOptional": {
+    "description": "Field taking a station's own site."
+  }
+}

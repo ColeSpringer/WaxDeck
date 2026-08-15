@@ -1,0 +1,228 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "homeAddAction": "Add to library",
+  "@homeAddAction": {
+    "description": "Opens the sheet that adds audio to the library. Both the top-right button on home and the action on its first-run empty state."
+  },
+  "homeContinueOverline": "Where you left off",
+  "@homeContinueOverline": {
+    "description": "Overline above the Continue listening shelf."
+  },
+  "homeContinueTitle": "Continue listening",
+  "@homeContinueTitle": {
+    "description": "Shelf of items with a saved position."
+  },
+  "homeDownloadedOverline": "Plays with no network",
+  "@homeDownloadedOverline": {
+    "description": "Overline above the On this device shelf."
+  },
+  "homeDownloadedTitle": "On this device",
+  "@homeDownloadedTitle": {
+    "description": "Shelf of downloaded items, the only one home draws with no server to ask."
+  },
+  "homeEmptyMessage": "Point a library at your music, follow a show, or drop files in. Everything you add turns up on these shelves.",
+  "@homeEmptyMessage": {
+    "description": "Empty state of home, naming the three ways a library gets filled."
+  },
+  "homeEmptyTitle": "Nothing here yet",
+  "@homeEmptyTitle": {
+    "description": "Empty state of home on a server whose library holds nothing."
+  },
+  "homeEpisodesOverline": "From the shows you follow",
+  "@homeEpisodesOverline": {
+    "description": "Overline above the New episodes shelf."
+  },
+  "homeEpisodesTitle": "New episodes",
+  "@homeEpisodesTitle": {
+    "description": "Shelf of the newest episodes across the shows the listener follows."
+  },
+  "homeLibraryLoadError": "Could not reach the library",
+  "@homeLibraryLoadError": {
+    "description": "Title of the error state when home's probe of the library failed."
+  },
+  "homeMixEmpty": "No mix available for {title}",
+  "@homeMixEmpty": {
+    "description": "Snackbar when a mix card was tapped and the server answered with no tracks. {title} is the card's own name.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Shoegaze"
+      }
+    }
+  },
+  "homeMixMoreLike": "More like {artist}",
+  "@homeMixMoreLike": {
+    "description": "Card for a mix seeded by one artist. {artist} is that artist's own name.",
+    "placeholders": {
+      "artist": {
+        "type": "String",
+        "example": "Beach House"
+      }
+    }
+  },
+  "homeMixesOverline": "Mixes from what you play",
+  "@homeMixesOverline": {
+    "description": "Overline above the Made for you shelf."
+  },
+  "homeMixesTitle": "Made for you",
+  "@homeMixesTitle": {
+    "description": "Shelf of mixes built from what this listener plays."
+  },
+  "homeMostPlayedOverline": "What you come back to",
+  "@homeMostPlayedOverline": {
+    "description": "Overline above the Most played shelf."
+  },
+  "homeMostPlayedTitle": "Most played",
+  "@homeMostPlayedTitle": {
+    "description": "Shelf of the items with the highest play counts."
+  },
+  "homeNeverPlayedOverline": "In your library, still sealed",
+  "@homeNeverPlayedOverline": {
+    "description": "Overline above the Never played shelf. The image is a record still in its shrink wrap."
+  },
+  "homeNeverPlayedTitle": "Never played",
+  "@homeNeverPlayedTitle": {
+    "description": "Shelf of items in the library that have never been played."
+  },
+  "homeOfflineMessage": "Offline. The shelves come back when the server does; what this device holds still plays.",
+  "@homeOfflineMessage": {
+    "description": "Banner across home with no server to ask."
+  },
+  "homePinAction": "Pin to Home",
+  "@homePinAction": {
+    "description": "Menu row on an entity screen that pins it to the home shelf. Home is the landing screen, named here the way the navigation names it."
+  },
+  "homePinNotSaved": "That pin was not saved.",
+  "@homePinNotSaved": {
+    "description": "Said when a pin failed for a reason the error table has no sentence for."
+  },
+  "homePinSheetPin": "{what, select, album{Pin album to Home} artist{Pin artist to Home} book{Pin book to Home} other{Pin to Home}}",
+  "@homePinSheetPin": {
+    "description": "Row in the pin sheet, which can offer more than one target at once, so each says what it is about. {what} is the kind of thing: album, artist or book.",
+    "placeholders": {
+      "what": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "homePinSheetUnpin": "{what, select, album{Unpin album from Home} artist{Unpin artist from Home} book{Unpin book from Home} other{Unpin from Home}}",
+  "@homePinSheetUnpin": {
+    "description": "Row in the pin sheet for a target that is already pinned. {what} is the kind of thing: album, artist or book.",
+    "placeholders": {
+      "what": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "homePinShelfFull": "Home holds {limit} pins. Unpin something to make room.",
+  "@homePinShelfFull": {
+    "description": "Said when a pin was refused because the shelf is at its cap.",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "64"
+      }
+    }
+  },
+  "homePinnedCaption": "{kind} · {artist}",
+  "@homePinnedCaption": {
+    "description": "Line under a pinned card: what the thing is, then whose it is. Only drawn when the artist is known.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "Album"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Beach House"
+      }
+    }
+  },
+  "homePinnedKindAlbum": "Album",
+  "@homePinnedKindAlbum": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindArtist": "Artist",
+  "@homePinnedKindArtist": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindBook": "Book",
+  "@homePinnedKindBook": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindPlaylist": "Playlist",
+  "@homePinnedKindPlaylist": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindPodcast": "Podcast",
+  "@homePinnedKindPodcast": {
+    "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindReleaseGroup": "Release group",
+  "@homePinnedKindReleaseGroup": {
+    "description": "What a pinned card is, on the line under its title. A release group is one album across all its editions."
+  },
+  "homePinnedOverline": "What you keep",
+  "@homePinnedOverline": {
+    "description": "Overline above the Pinned shelf."
+  },
+  "homePinnedTitle": "Pinned",
+  "@homePinnedTitle": {
+    "description": "Shelf of what this listener pinned to home."
+  },
+  "homeRecentOverline": "New to the library",
+  "@homeRecentOverline": {
+    "description": "Overline above the Recently added shelf."
+  },
+  "homeRecentTitle": "Recently added",
+  "@homeRecentTitle": {
+    "description": "Shelf of what the library gained most recently."
+  },
+  "homeRediscoverOverline": "Marked, and not heard in months",
+  "@homeRediscoverOverline": {
+    "description": "Overline above the Rediscover shelf. Marked means starred or otherwise singled out."
+  },
+  "homeRediscoverTitle": "Rediscover",
+  "@homeRediscoverTitle": {
+    "description": "Shelf of items the listener marked and has not played in months."
+  },
+  "homeShelfRemaining": "{span} left",
+  "@homeShelfRemaining": {
+    "description": "How much of a half-finished item is left, under its card on home. {span} arrives already worded as a duration.",
+    "placeholders": {
+      "span": {
+        "type": "String",
+        "example": "12 min"
+      }
+    }
+  },
+  "homeShelfRetry": "Try again",
+  "@homeShelfRetry": {
+    "description": "Action beside a shelf's heading when that one shelf failed to load."
+  },
+  "homeShelfShowAll": "Show all",
+  "@homeShelfShowAll": {
+    "description": "Action beside a shelf's heading that opens the surface listing all of it."
+  },
+  "homeTitle": "Home",
+  "@homeTitle": {
+    "description": "Title of the landing screen, and what the pin affordances call it."
+  },
+  "homeUnpinAction": "Unpin from Home",
+  "@homeUnpinAction": {
+    "description": "Menu row that takes an entity off the home shelf."
+  },
+  "homeUnpinned": "Unpinned {name}",
+  "@homeUnpinned": {
+    "description": "Snackbar confirming an unpin made from the shelf, where the card vanishing is the only other sign. {name} is the thing's own title.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
+  }
+}

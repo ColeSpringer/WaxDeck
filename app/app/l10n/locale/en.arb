@@ -1,0 +1,8 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "localeFontSample": "Music, podcasts, and audiobooks.",
+  "@localeFontSample": {
+    "description": "Never displayed. Any natural sentence in this language, written the way the language actually is, accents and all: the app scans it for the scripts this locale needs and loads their fonts before the interface draws."
+  }
+}

@@ -71,8 +71,11 @@ gen-api-types: spec-bundle
 
 # The app's copy and the design system's, committed rather than built on
 # the fly, so a translation that fails to compile fails here and not in a
-# release. gen-l10n formats what it writes; nothing formats it again.
+# release. The app's table is authored as per-feature fragments in
+# app/app/l10n/, which the bundler merges into the per-locale files
+# gen-l10n reads. gen-l10n formats what it writes; nothing formats it again.
 gen-l10n:
+	dart run tools/gen-l10n-bundle.dart
 	cd app/app && flutter gen-l10n
 	cd app/packages/waxdeck_ui && flutter gen-l10n
 
@@ -162,7 +165,8 @@ drift-check: generate
 	git diff --exit-code -- $(SPEC) server/internal/api app/packages/waxdeck_api_gen \
 		app/app/lib/src/shell/semantics_ids.dart e2e/tests/semantics-ids.ts \
 		e2e/tests/api-types.ts \
-		app/app/lib/src/l10n/gen app/packages/waxdeck_ui/lib/src/l10n/gen \
+		app/app/lib/src/l10n/arb app/app/lib/src/l10n/gen \
+		app/packages/waxdeck_ui/lib/src/l10n/gen \
 		app/app/lib/src/shell/app_version.dart \
 		app/packages/waxdeck_data/lib/src/database.g.dart \
 		server/internal/notices/third_party_notices.txt app/app/LICENSE

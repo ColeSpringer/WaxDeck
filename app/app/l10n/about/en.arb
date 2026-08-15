@@ -1,0 +1,80 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "aboutDefectsSubtitle": "Errors the app caught on its own, newest first, with a way to copy them into a bug report.",
+  "@aboutDefectsSubtitle": {
+    "description": "Second line of the row opening the defect log."
+  },
+  "aboutDiagnosticsTitle": "Diagnostics",
+  "@aboutDiagnosticsTitle": {
+    "description": "Heading over the way into the defect log."
+  },
+  "aboutLicenses": "Open-source licenses",
+  "@aboutLicenses": {
+    "description": "Row opening the bundled licence texts."
+  },
+  "aboutLicensesSubtitle": "WaxDeck is GPL-3.0-only. This page also lists the bundled type and icon notices.",
+  "@aboutLicensesSubtitle": {
+    "description": "Second line of the licences row. GPL-3.0-only is a licence identifier and stays as it is."
+  },
+  "aboutLicensingTitle": "Licensing",
+  "@aboutLicensingTitle": {
+    "description": "Heading over the licence notices."
+  },
+  "aboutRowTitle": "About WaxDeck",
+  "@aboutRowTitle": {
+    "description": "Row in settings opening the About page. WaxDeck is the product name and stays."
+  },
+  "aboutRowVersion": "Version {app}",
+  "@aboutRowVersion": {
+    "description": "Second line of the About row before the server has answered, so only this build's version is known.",
+    "placeholders": {
+      "app": {
+        "type": "String",
+        "example": "1.0.0"
+      }
+    }
+  },
+  "aboutRowVersions": "App {app}, server {server}",
+  "@aboutRowVersions": {
+    "description": "Second line of the About row: this build's version and the one it is talking to.",
+    "placeholders": {
+      "app": {
+        "type": "String",
+        "example": "1.0.0"
+      },
+      "server": {
+        "type": "String",
+        "example": "1.0.2"
+      }
+    }
+  },
+  "aboutServerUnreachable": "unreachable",
+  "@aboutServerUnreachable": {
+    "description": "Stands in for the server's version when it did not answer. Lower case: it sits where a version number would."
+  },
+  "aboutTagline": "A player, library manager, and metadata completer for music, podcasts, and audiobooks.",
+  "@aboutTagline": {
+    "description": "One sentence saying what WaxDeck is, under the wordmark on the About page."
+  },
+  "aboutTitle": "About",
+  "@aboutTitle": {
+    "description": "Title of the About page."
+  },
+  "aboutVersionApi": "API",
+  "@aboutVersionApi": {
+    "description": "Label of the contract version the server answers on. API is a technical term and stays in most languages."
+  },
+  "aboutVersionApp": "App",
+  "@aboutVersionApp": {
+    "description": "Label of this build's own version number."
+  },
+  "aboutVersionServer": "Server",
+  "@aboutVersionServer": {
+    "description": "Label of the version of the server this build is talking to."
+  },
+  "aboutVersionsTitle": "Versions",
+  "@aboutVersionsTitle": {
+    "description": "Heading over the version numbers a bug report is asked for."
+  }
+}

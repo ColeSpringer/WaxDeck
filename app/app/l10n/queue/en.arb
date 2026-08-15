@@ -1,0 +1,184 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "queueAddedMany": "Added {count} tracks to the queue",
+  "@queueAddedMany": {
+    "description": "Message after several tracks were dropped onto the queue at once. Never drawn for one, which names the track instead.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "queueAddedOne": "Added {title} to the queue",
+  "@queueAddedOne": {
+    "description": "Message after one track was dropped onto the queue.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Blue in Green"
+      }
+    }
+  },
+  "queueClear": "Clear queue",
+  "@queueClear": {
+    "description": "Accessible name of the control that empties the queue."
+  },
+  "queueClearSelection": "Clear the queue selection",
+  "@queueClearSelection": {
+    "description": "Command that unselects the queue rows that are selected, in the command palette and the shortcut sheet."
+  },
+  "queueClearSelectionAction": "Clear",
+  "@queueClearSelectionAction": {
+    "description": "Button that unselects the selected queue rows. It clears the selection, not the queue."
+  },
+  "queueDragToReorder": "Drag to reorder",
+  "@queueDragToReorder": {
+    "description": "Accessible name of the handle that reorders queued tracks by dragging."
+  },
+  "queueDropNothing": "{name} has nothing to play",
+  "@queueDropNothing": {
+    "description": "Message after something was dragged onto the queue and turned out to hold no tracks. {name} is what was dropped.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Live at Leeds"
+      }
+    }
+  },
+  "queueEarlier": "EARLIER",
+  "@queueEarlier": {
+    "description": "Heading over the queues from earlier listening sessions. Upper case as a typographic style; write it the way small headings are written in this language."
+  },
+  "queueEmptyMessage": "Play an album, a show, or a playlist and it lands here.",
+  "@queueEmptyMessage": {
+    "description": "Empty state of the queue, saying what fills it."
+  },
+  "queueEmptyTitle": "Nothing queued",
+  "@queueEmptyTitle": {
+    "description": "Empty state of the queue."
+  },
+  "queueHideHistory": "Hide what has played",
+  "@queueHideHistory": {
+    "description": "Accessible name of the control that folds away the already-played rows."
+  },
+  "queueMoveDown": "Move down",
+  "@queueMoveDown": {
+    "description": "Screen-reader action that moves one queued track later."
+  },
+  "queueMoveToBottom": "Move to bottom",
+  "@queueMoveToBottom": {
+    "description": "Button that moves the selected rows to the end of the queue."
+  },
+  "queueMoveToTop": "Move to top",
+  "@queueMoveToTop": {
+    "description": "Button that moves the selected rows to the front of the queue."
+  },
+  "queueMoveUp": "Move up",
+  "@queueMoveUp": {
+    "description": "Screen-reader action that moves one queued track earlier."
+  },
+  "queueNothingUpNext": "NOTHING UP NEXT",
+  "@queueNothingUpNext": {
+    "description": "Heading where the up-next list would be when the queue holds nothing after the current track. Upper case as a typographic style; write it the way small headings are written in this language."
+  },
+  "queuePlayingFrom": "Playing from {source}",
+  "@queuePlayingFrom": {
+    "description": "Where a queue came from, over the queue itself. {source} is the album, show, or playlist's own name.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Kind of Blue"
+      }
+    }
+  },
+  "queuePlayingFromLibrary": "Playing from your library",
+  "@queuePlayingFromLibrary": {
+    "description": "Where a queue shuffled from the whole library came from. Worded from the kind rather than a stored label, which the whole library has none of."
+  },
+  "queuePlayingFromMix": "Playing from a mix",
+  "@queuePlayingFromMix": {
+    "description": "Where the queue came from, for a mix with no seed of its own to name."
+  },
+  "queuePreviously": "PREVIOUSLY ({count})",
+  "@queuePreviously": {
+    "description": "Heading over the tracks already played in this queue, with how many. Upper case as a typographic style; write it the way small headings are written in this language.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "8"
+      }
+    }
+  },
+  "queueRemove": "Remove",
+  "@queueRemove": {
+    "description": "Button that takes the selected rows out of the queue."
+  },
+  "queueRemoveEntry": "Remove from queue",
+  "@queueRemoveEntry": {
+    "description": "Accessible name of the control that takes one row out of the queue."
+  },
+  "queueRepeatAll": "Repeat all",
+  "@queueRepeatAll": {
+    "description": "Accessible name of the repeat control while it repeats the whole queue."
+  },
+  "queueRepeatOff": "Repeat off",
+  "@queueRepeatOff": {
+    "description": "Accessible name of the repeat control while it repeats nothing."
+  },
+  "queueRepeatOne": "Repeat one",
+  "@queueRepeatOne": {
+    "description": "Accessible name of the repeat control while it repeats the current track. Agrees with the word for a track in this language."
+  },
+  "queueRestoreSession": "Restore {name}",
+  "@queueRestoreSession": {
+    "description": "Accessible name of the control that puts an earlier queue back. {name} is what that session was playing.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Kind of Blue"
+      }
+    }
+  },
+  "queueRestored": "Restored {name}",
+  "@queueRestored": {
+    "description": "Message after an earlier queue was put back. It is put back paused, so nothing starts playing.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Kind of Blue"
+      }
+    }
+  },
+  "queueRollingWindow": "A window over a larger scope",
+  "@queueRollingWindow": {
+    "description": "Under a rolling queue, saying that what is listed is part of something bigger rather than the whole of it."
+  },
+  "queueSelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@queueSelectedCount": {
+    "description": "How many queue rows are selected, over the controls that act on them. Agrees with the word for a track in this language.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "queueShowHistory": "Show what has played",
+  "@queueShowHistory": {
+    "description": "Accessible name of the control that unfolds the already-played rows."
+  },
+  "queueShuffleOff": "Shuffle off",
+  "@queueShuffleOff": {
+    "description": "Accessible name of the shuffle control while shuffle is off."
+  },
+  "queueShuffleOn": "Shuffle on",
+  "@queueShuffleOn": {
+    "description": "Accessible name of the shuffle control while shuffle is on."
+  },
+  "queueUndo": "Undo",
+  "@queueUndo": {
+    "description": "Button on the restore message that puts the previous queue back."
+  }
+}

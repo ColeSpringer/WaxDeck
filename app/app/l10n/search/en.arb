@@ -1,0 +1,184 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "searchAction": "Search",
+  "@searchAction": {
+    "description": "App-bar button that opens the search screen. A verb."
+  },
+  "searchAddStation": "Add station",
+  "@searchAddStation": {
+    "description": "Button on a directory result that adds that station to this server."
+  },
+  "searchDirectoryDegraded": "Could not reach the directory, so only your own stations are listed. Adding a station by its stream URL still works.",
+  "@searchDirectoryDegraded": {
+    "description": "Banner under the stations this server already has, when the public directory could not be reached."
+  },
+  "searchDirectoryErrorDetail": "Adding a station by its stream URL still works.",
+  "@searchDirectoryErrorDetail": {
+    "description": "The way out offered beside the station-directory error: a stream URL needs no directory."
+  },
+  "searchDirectoryErrorTitle": "Could not reach the directory",
+  "@searchDirectoryErrorTitle": {
+    "description": "Title of the error state when the station directory would not answer and there are no local stations to fall back on."
+  },
+  "searchDirectoryOverline": "Directory",
+  "@searchDirectoryOverline": {
+    "description": "Overline marking the results that come from a public directory rather than from this server."
+  },
+  "searchDirectoryPromptMessage": "Type a station name to look it up in the public directory, then add it to this server.",
+  "@searchDirectoryPromptMessage": {
+    "description": "Empty state under the Radio chip, saying what typing will do."
+  },
+  "searchDirectoryPromptTitle": "Search the station directory",
+  "@searchDirectoryPromptTitle": {
+    "description": "Empty state under the Radio chip before enough has been typed to look anything up."
+  },
+  "searchEmptyMessage": "Try searching for an artist, show, or book.",
+  "@searchEmptyMessage": {
+    "description": "Empty state of the search screen with nothing typed."
+  },
+  "searchEmptyTitle": "Search your library",
+  "@searchEmptyTitle": {
+    "description": "Empty state of the search screen with nothing typed and no recent searches."
+  },
+  "searchFailedTitle": "Could not search",
+  "@searchFailedTitle": {
+    "description": "Title of the error state when the library search itself failed."
+  },
+  "searchFieldHint": "Artists, albums, shows, books",
+  "@searchFieldHint": {
+    "description": "Placeholder in the search field, naming what can be found. Drawn on the search screen and in the sidebar header alike."
+  },
+  "searchForget": "Forget {query}",
+  "@searchForget": {
+    "description": "Accessible name of the control that drops one query from the recent list. {query} is that query.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "beach house"
+      }
+    }
+  },
+  "searchKindAlbums": "Albums",
+  "@searchKindAlbums": {
+    "description": "Heading over the albums a search matched."
+  },
+  "searchKindArtists": "Artists",
+  "@searchKindArtists": {
+    "description": "Heading over the artists a search matched."
+  },
+  "searchKindBooks": "Audiobooks",
+  "@searchKindBooks": {
+    "description": "Heading over the audiobooks a search matched."
+  },
+  "searchKindEpisodes": "Episodes",
+  "@searchKindEpisodes": {
+    "description": "Heading over the podcast episodes a search matched."
+  },
+  "searchKindTracks": "Tracks",
+  "@searchKindTracks": {
+    "description": "Heading over the tracks a search matched."
+  },
+  "searchLibraryOverline": "Library",
+  "@searchLibraryOverline": {
+    "description": "Overline marking the results that are already on this server."
+  },
+  "searchNoStationsMessage": "The directory lists nothing under that name.",
+  "@searchNoStationsMessage": {
+    "description": "Empty state when the station directory matched nothing."
+  },
+  "searchNoStationsTitle": "No stations for \"{query}\"",
+  "@searchNoStationsTitle": {
+    "description": "Empty state when the station directory matched nothing. {query} is what was typed.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "jazz fm"
+      }
+    }
+  },
+  "searchNothingMessage": "Check the spelling or try fewer words.",
+  "@searchNothingMessage": {
+    "description": "Empty state when a library search matched nothing."
+  },
+  "searchNothingTitle": "Nothing for \"{query}\"",
+  "@searchNothingTitle": {
+    "description": "Empty state when a library search matched nothing at all. {query} is what was typed.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "beach house"
+      }
+    }
+  },
+  "searchPodcastDirectoryDegraded": "The podcast directory did not answer, so only your own episodes are listed. Subscribing by feed URL still works.",
+  "@searchPodcastDirectoryDegraded": {
+    "description": "Banner beside the library's own episodes when the public podcast directory could not be reached."
+  },
+  "searchRecentOverline": "Recent",
+  "@searchRecentOverline": {
+    "description": "Overline above the list of queries this listener ran before."
+  },
+  "searchRecentTitle": "Recent searches",
+  "@searchRecentTitle": {
+    "description": "Heading over the queries this listener ran before."
+  },
+  "searchScopeAll": "All",
+  "@searchScopeAll": {
+    "description": "Filter chip that narrows results to nothing: every kind is shown."
+  },
+  "searchScopeBooks": "Audiobooks",
+  "@searchScopeBooks": {
+    "description": "Filter chip narrowing search results to audiobooks."
+  },
+  "searchScopeMusic": "Music",
+  "@searchScopeMusic": {
+    "description": "Filter chip narrowing search results to artists, albums and tracks."
+  },
+  "searchScopePodcasts": "Podcasts",
+  "@searchScopePodcasts": {
+    "description": "Filter chip narrowing search results to episodes, plus shows from the public directory."
+  },
+  "searchScopeRadio": "Radio",
+  "@searchScopeRadio": {
+    "description": "Filter chip that searches the public station directory instead of the library."
+  },
+  "searchShowAll": "Show all",
+  "@searchShowAll": {
+    "description": "Action beside a result group's heading that expands it past the first few hits."
+  },
+  "searchShowsToSubscribe": "Shows to subscribe to",
+  "@searchShowsToSubscribe": {
+    "description": "Heading over podcast directory results this server is not subscribed to."
+  },
+  "searchStationsToAdd": "Stations to add",
+  "@searchStationsToAdd": {
+    "description": "Heading over directory stations this server does not have yet."
+  },
+  "searchSubscribe": "Subscribe",
+  "@searchSubscribe": {
+    "description": "Button on a podcast directory result that subscribes this server to that show."
+  },
+  "searchSubscribed": "Subscribed to {name}.",
+  "@searchSubscribed": {
+    "description": "Snackbar confirming a subscription made from a directory result. {name} is the show's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Song Exploder"
+      }
+    }
+  },
+  "searchTitle": "Search",
+  "@searchTitle": {
+    "description": "Title of the search screen."
+  },
+  "searchTruncated": "There are more matches than fit here. Refine your search to narrow them down.",
+  "@searchTruncated": {
+    "description": "Note under the results when the server capped how many it answered with."
+  },
+  "searchYourStations": "Your stations",
+  "@searchYourStations": {
+    "description": "Heading over the radio stations this server already has."
+  }
+}

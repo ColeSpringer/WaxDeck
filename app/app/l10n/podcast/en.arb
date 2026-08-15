@@ -1,0 +1,792 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "podcastAddSubscription": "Add subscription",
+  "@podcastAddSubscription": {
+    "description": "Toolbar action opening the dialog that follows a new show, and that dialog's own title."
+  },
+  "podcastAddToQueue": "Add to queue",
+  "@podcastAddToQueue": {
+    "description": "Action appending episodes to what is playing rather than interrupting it."
+  },
+  "podcastAddedToQueue": "Added to the queue",
+  "@podcastAddedToQueue": {
+    "description": "Snackbar after appending one episode to what is playing."
+  },
+  "podcastAutoDownload": "Auto-download new episodes",
+  "@podcastAutoDownload": {
+    "description": "Switch fetching arrivals without being asked."
+  },
+  "podcastAutoDownloadHelp": "Keeps arrivals on this device as the feed refreshes",
+  "@podcastAutoDownloadHelp": {
+    "description": "Help under the auto-download switch."
+  },
+  "podcastBacklogReadError": "Could not read the backlog. {reason}",
+  "@podcastBacklogReadError": {
+    "description": "Snackbar when the walk over a show's episodes failed before anything was written. {reason} is a whole translated sentence.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "The server ran into a problem it could not handle."
+      }
+    }
+  },
+  "podcastChapterFallback": "Chapter {number}",
+  "@podcastChapterFallback": {
+    "description": "Stands in for a chapter the feed named but did not title.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastCheckForNew": "Check for new episodes",
+  "@podcastCheckForNew": {
+    "description": "Row in a show's overflow asking the server to read the feed again."
+  },
+  "podcastClearSelection": "Clear",
+  "@podcastClearSelection": {
+    "description": "Action dropping a batch selection without doing anything to it."
+  },
+  "podcastCredits": "Credits",
+  "@podcastCredits": {
+    "description": "Heading over the people a show's feed credits."
+  },
+  "podcastCueSpoken": "{text}, {stamp}",
+  "@podcastCueSpoken": {
+    "description": "A chapter, highlight, or transcript line read as one thing for a screen reader: what it says, then when.",
+    "placeholders": {
+      "text": {
+        "type": "String",
+        "example": "The interview"
+      },
+      "stamp": {
+        "type": "String",
+        "example": "4:05"
+      }
+    }
+  },
+  "podcastCueStartsAt": "{kind, select, chapter{Chapter starts at {stamp}} clip{Clip starts at {stamp}} cue{Cue starts at {stamp}} other{Starts at {stamp}}}",
+  "@podcastCueStartsAt": {
+    "description": "Snackbar when a timestamp is tapped for an episode that is not the one playing, so there is nothing to seek.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "chapter"
+      },
+      "stamp": {
+        "type": "String",
+        "example": "4:05"
+      }
+    }
+  },
+  "podcastDirectoryEpisodes": "{count, plural, =1{1 episode} other{{count} episodes}}",
+  "@podcastDirectoryEpisodes": {
+    "description": "How many episodes a directory match has, under its name in search.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastDownload": "Download",
+  "@podcastDownload": {
+    "description": "Action asking the server to fetch the chosen episodes."
+  },
+  "podcastDownloadFailed": "Download failed",
+  "@podcastDownloadFailed": {
+    "description": "Fact on an episode row whose server-side fetch did not land."
+  },
+  "podcastEpisodeCount": "{count, plural, =1{1 episode} other{{count} episodes}}",
+  "@podcastEpisodeCount": {
+    "description": "How many episodes a show has, on its card and in the line under its title.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastEpisodeDetails": "Details for {title}",
+  "@podcastEpisodeDetails": {
+    "description": "Accessible name of the control opening one episode's own screen.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "The one about bees"
+      }
+    }
+  },
+  "podcastEpisodeFallbackTitle": "Episode",
+  "@podcastEpisodeFallbackTitle": {
+    "description": "Title of an episode screen opened cold, before the episode it names has loaded."
+  },
+  "podcastEpisodeLoadError": "Could not load the episode",
+  "@podcastEpisodeLoadError": {
+    "description": "Title of the error state when one episode could not be read."
+  },
+  "podcastEpisodeNumber": "E{episode}",
+  "@podcastEpisodeNumber": {
+    "description": "An episode's number, where its feed numbers no seasons.",
+    "placeholders": {
+      "episode": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastEpisodesLoadError": "Could not load the episodes",
+  "@podcastEpisodesLoadError": {
+    "description": "Title of the error state when a show's episode list could not be read."
+  },
+  "podcastExcludeHelp": "Comma separated. Wins where both match.",
+  "@podcastExcludeHelp": {
+    "description": "Help under the exclude field, saying it beats the include one."
+  },
+  "podcastExcludeLabel": "Never titles containing",
+  "@podcastExcludeLabel": {
+    "description": "Field keeping auto-download away from the episodes whose title matches."
+  },
+  "podcastExplicit": "Explicit",
+  "@podcastExplicit": {
+    "description": "Marks a show or an episode the feed flagged as explicit."
+  },
+  "podcastFeedUrlLabel": "Feed or channel URL",
+  "@podcastFeedUrlLabel": {
+    "description": "Field taking the address of a show to follow."
+  },
+  "podcastFetchEpisode": "Fetch {title} to the server",
+  "@podcastFetchEpisode": {
+    "description": "Accessible name of the control asking the server to hold one episode's bytes.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "The one about bees"
+      }
+    }
+  },
+  "podcastFetchFailed": "Last fetch failed: {reason}",
+  "@podcastFetchFailed": {
+    "description": "Chip on an episode whose server-side fetch failed. {reason} is the server's own diagnostic.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "404 from the host"
+      }
+    }
+  },
+  "podcastFetchToPlay": "Fetch to play",
+  "@podcastFetchToPlay": {
+    "description": "Play button on an episode whose feed named no audio, so the server has to hold it first."
+  },
+  "podcastFetchingBeforePlay": "This feed named no audio to stream, so the server is fetching it. It plays once that lands.",
+  "@podcastFetchingBeforePlay": {
+    "description": "Snackbar after pressing play on an episode that has to be fetched first."
+  },
+  "podcastFetchingToServer": "Fetching to server",
+  "@podcastFetchingToServer": {
+    "description": "Snackbar after asking the server to hold one episode's bytes."
+  },
+  "podcastFileUnreadable": "Could not read that file: {reason}",
+  "@podcastFileUnreadable": {
+    "description": "Snackbar when the picked OPML could not be read off the device. {reason} is the platform's own diagnostic and stays in English.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "PathAccessException"
+      }
+    }
+  },
+  "podcastFilterActiveHelp": "Matched against episode titles only, and against new arrivals only: editing this never re-evaluates the backlog or removes anything already fetched.",
+  "@podcastFilterActiveHelp": {
+    "description": "What the auto-download filter does, with the switch on."
+  },
+  "podcastFilterAll": "All",
+  "@podcastFilterAll": {
+    "description": "Chip showing every episode of a show."
+  },
+  "podcastFilterDownloaded": "Downloaded",
+  "@podcastFilterDownloaded": {
+    "description": "Chip narrowing a show to the episodes this server holds."
+  },
+  "podcastFilterInactiveHelp": "Turn auto-download on for these to do anything.",
+  "@podcastFilterInactiveHelp": {
+    "description": "Said in place of the filter help with the switch off."
+  },
+  "podcastFilterUnplayed": "Unplayed",
+  "@podcastFilterUnplayed": {
+    "description": "Chip narrowing a show to the episodes never started."
+  },
+  "podcastFolderSpoken": "{name}, {count, plural, =1{1 show} other{{count} shows}}",
+  "@podcastFolderSpoken": {
+    "description": "A collapsible folder of shows read as one thing for a screen reader.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "News"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastFollow": "Follow",
+  "@podcastFollow": {
+    "description": "Button on a show's header that follows it."
+  },
+  "podcastFollowing": "Following",
+  "@podcastFollowing": {
+    "description": "Button on a show's header saying it is followed, and unfollowing it."
+  },
+  "podcastGoToShow": "Go to {name}",
+  "@podcastGoToShow": {
+    "description": "Accessible name of the show's name above an episode's title, which is the way back to it.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Song Exploder"
+      }
+    }
+  },
+  "podcastHighlightFallback": "Highlight {number}",
+  "@podcastHighlightFallback": {
+    "description": "Stands in for a highlight the feed marked but did not title.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastIncludeHelp": "Comma separated. Empty takes every episode.",
+  "@podcastIncludeHelp": {
+    "description": "Help under the include field. The separator is a comma in every language, since the terms are typed as one line."
+  },
+  "podcastIncludeLabel": "Only titles containing",
+  "@podcastIncludeLabel": {
+    "description": "Field narrowing auto-download to the episodes whose title matches."
+  },
+  "podcastKeepFiles": "Keep files",
+  "@podcastKeepFiles": {
+    "description": "Unfollows the show and leaves the downloads alone."
+  },
+  "podcastLatestOverline": "New",
+  "@podcastLatestOverline": {
+    "description": "Overline above the latest-episodes section."
+  },
+  "podcastLatestPublished": "Latest {date}",
+  "@podcastLatestPublished": {
+    "description": "When a show last published, in the line under its title.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Aug 12, 2026"
+      }
+    }
+  },
+  "podcastLatestTitle": "Latest episodes",
+  "@podcastLatestTitle": {
+    "description": "Section on the podcast hub holding the newest episodes across every followed show."
+  },
+  "podcastLoadMore": "Load more episodes",
+  "@podcastLoadMore": {
+    "description": "Button fetching the next page of a show's episodes, for a filter that scrolling cannot reach."
+  },
+  "podcastLoadingMore": "Loading...",
+  "@podcastLoadingMore": {
+    "description": "The load-more button while a page is on its way."
+  },
+  "podcastMarkOlderAll": "Every episode",
+  "@podcastMarkOlderAll": {
+    "description": "How far back the mark-older dialog reaches: the whole backlog."
+  },
+  "podcastMarkOlderBody": "Clears the unplayed dots on a backlog. Your positions on episodes you actually started are overwritten, and nothing is deleted.",
+  "@podcastMarkOlderBody": {
+    "description": "What the mark-older dialog does, said before it is run."
+  },
+  "podcastMarkOlderMonth": "Older than a month",
+  "@podcastMarkOlderMonth": {
+    "description": "How far back the mark-older dialog reaches: a month."
+  },
+  "podcastMarkOlderPlayed": "Mark older episodes as played",
+  "@podcastMarkOlderPlayed": {
+    "description": "Row in a show's overflow clearing a backlog's unplayed dots, and the title of the dialog it opens."
+  },
+  "podcastMarkOlderProgress": "{done} of {total}",
+  "@podcastMarkOlderProgress": {
+    "description": "How far a mark-older run has got.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastMarkOlderStopped": "{count, plural, =1{Stopped after 1. {reason}} other{Stopped after {count}. {reason}}}",
+  "@podcastMarkOlderStopped": {
+    "description": "Snackbar when a mark-older run was refused partway, counting what landed first. {reason} is a whole translated sentence.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String",
+        "example": "That is not here any more."
+      }
+    }
+  },
+  "podcastMarkOlderWeek": "Older than a week",
+  "@podcastMarkOlderWeek": {
+    "description": "How far back the mark-older dialog reaches: a week."
+  },
+  "podcastMarkPlayed": "Mark played",
+  "@podcastMarkPlayed": {
+    "description": "Action recording episodes as listened to the end."
+  },
+  "podcastMarkedAsPlayed": "Marked as played",
+  "@podcastMarkedAsPlayed": {
+    "description": "Snackbar after recording one episode as finished."
+  },
+  "podcastMarkedPlayedCount": "{count, plural, =1{1 marked played} other{{count} marked played}}",
+  "@podcastMarkedPlayedCount": {
+    "description": "Half of the snackbar after marking a batch played.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastMarkedPlayedTotal": "{count, plural, =1{1 episode marked as played} other{{count} episodes marked as played}}",
+  "@podcastMarkedPlayedTotal": {
+    "description": "Snackbar after a mark-older run finished.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastMore": "More",
+  "@podcastMore": {
+    "description": "Accessible name of the podcast hub's overflow menu."
+  },
+  "podcastNewEpisodes": "{count, plural, =1{1 new episode} other{{count} new episodes}}",
+  "@podcastNewEpisodes": {
+    "description": "Snackbar after a feed check that found something.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastNoAudioCount": "{count, plural, =1{1 had no audio in the feed} other{{count} had no audio in the feed}}",
+  "@podcastNoAudioCount": {
+    "description": "Half of the snackbar after queueing a batch, counting what could not go in.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastNoAudioInFeed": "No audio in the feed",
+  "@podcastNoAudioInFeed": {
+    "description": "Fact on an episode row whose feed named no audio to stream, so it has to be fetched before it plays."
+  },
+  "podcastNoAudioToQueue": "This feed named no audio for that episode, so there is nothing to queue.",
+  "@podcastNoAudioToQueue": {
+    "description": "Snackbar refusing to queue an episode with no audio behind it."
+  },
+  "podcastNoDurationCount": "{count, plural, =1{1 had no duration to finish} other{{count} had no duration to finish}}",
+  "@podcastNoDurationCount": {
+    "description": "Half of the snackbar after marking a batch played, counting the episodes whose feed declared no length.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastNoDurationToFinish": "This feed declared no duration, so there is no position that means finished. Fetching the episode gives it one.",
+  "@podcastNoDurationToFinish": {
+    "description": "Snackbar explaining why an episode cannot be marked played: played is derived from the position reached."
+  },
+  "podcastNoEpisodes": "No episodes yet",
+  "@podcastNoEpisodes": {
+    "description": "Empty state of a show whose feed has published nothing."
+  },
+  "podcastNoEpisodesMessage": "This feed has published nothing this server can see.",
+  "@podcastNoEpisodesMessage": {
+    "description": "Message under the no-episodes state."
+  },
+  "podcastNoNewEpisodes": "No new episodes",
+  "@podcastNoNewEpisodes": {
+    "description": "Snackbar after a feed check that found nothing."
+  },
+  "podcastNothingMatches": "Nothing matches",
+  "@podcastNothingMatches": {
+    "description": "Empty state where a filter or a search left nothing standing."
+  },
+  "podcastNothingMatchesMessage": "Widen the filter, or clear the search, to see the rest.",
+  "@podcastNothingMatchesMessage": {
+    "description": "Message under the nothing-matches state."
+  },
+  "podcastNothingMatchesYet": "Nothing matches yet",
+  "@podcastNothingMatchesYet": {
+    "description": "Empty state where the filter matched nothing among the episodes loaded, and the show has more."
+  },
+  "podcastNothingMatchesYetMessage": "The filter runs over the episodes loaded so far, and this show has more.",
+  "@podcastNothingMatchesYetMessage": {
+    "description": "Why a filter can come up empty on a show with a long back catalogue."
+  },
+  "podcastOpenEpisodePage": "Open the episode page",
+  "@podcastOpenEpisodePage": {
+    "description": "Button opening the web page a feed named for one episode."
+  },
+  "podcastOpmlCopied": "Subscriptions copied as OPML",
+  "@podcastOpmlCopied": {
+    "description": "Snackbar after the OPML reached the clipboard."
+  },
+  "podcastOpmlCopy": "Copy",
+  "@podcastOpmlCopy": {
+    "description": "Button copying the OPML on screen to the clipboard."
+  },
+  "podcastOpmlExport": "Export OPML",
+  "@podcastOpmlExport": {
+    "description": "Row in the hub overflow offering the subscriptions as an OPML document, and the title of the dialog that shows it. OPML is the format's name and stays as it is."
+  },
+  "podcastOpmlImport": "Import OPML",
+  "@podcastOpmlImport": {
+    "description": "Row in the hub overflow reading subscriptions out of an OPML file."
+  },
+  "podcastOpmlImported": "Subscriptions imported",
+  "@podcastOpmlImported": {
+    "description": "Snackbar after an OPML import landed."
+  },
+  "podcastOpmlPickerLabel": "OPML",
+  "@podcastOpmlPickerLabel": {
+    "description": "What the file picker calls the document it is asking for. The format's name, the same everywhere."
+  },
+  "podcastOtherShows": "Other shows",
+  "@podcastOtherShows": {
+    "description": "Heading over the shows that declare no folder, drawn only where some do."
+  },
+  "podcastPlay": "Play",
+  "@podcastPlay": {
+    "description": "Play button on an episode that has not been started."
+  },
+  "podcastPlayed": "Played",
+  "@podcastPlayed": {
+    "description": "The mark-played button on an episode already finished, which is a statement rather than an action."
+  },
+  "podcastQueuedCount": "{count, plural, =1{1 added to the queue} other{{count} added to the queue}}",
+  "@podcastQueuedCount": {
+    "description": "Half of the snackbar after queueing a batch, counting what went in.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastQueuedForDownload": "Queued for download",
+  "@podcastQueuedForDownload": {
+    "description": "Fact on an episode row the server has been asked to fetch."
+  },
+  "podcastQueuedForDownloadCount": "{count, plural, =1{1 queued for download} other{{count} queued for download}}",
+  "@podcastQueuedForDownloadCount": {
+    "description": "Snackbar after asking the server to fetch a batch of episodes.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastQueuedWithFailure": "{count, plural, =1{1 queued. {reason}} other{{count} queued. {reason}}}",
+  "@podcastQueuedWithFailure": {
+    "description": "The same, where one of the batch was refused. {reason} is a whole translated sentence.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String",
+        "example": "That is not here any more."
+      }
+    }
+  },
+  "podcastReadingBacklog": "Reading the backlog...",
+  "@podcastReadingBacklog": {
+    "description": "Shown under an indeterminate bar while the episodes to mark are still being counted."
+  },
+  "podcastRefreshPaused": "Scheduled refresh is paused for this feed after repeated failures. Checking for new episodes turns it back on.",
+  "@podcastRefreshPaused": {
+    "description": "Banner on a show whose feed the server has stopped polling."
+  },
+  "podcastRemoveDownload": "Remove download",
+  "@podcastRemoveDownload": {
+    "description": "Button dropping one episode's downloaded bytes from the server."
+  },
+  "podcastRemoveEpisode": "Remove {title} from the server",
+  "@podcastRemoveEpisode": {
+    "description": "Accessible name of the control dropping one episode's downloaded bytes.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "The one about bees"
+      }
+    }
+  },
+  "podcastRemoveFiles": "Remove files",
+  "@podcastRemoveFiles": {
+    "description": "Unfollows the show and trashes what was downloaded for it."
+  },
+  "podcastRemovedFromServer": "Removed from server; your progress is kept",
+  "@podcastRemovedFromServer": {
+    "description": "Snackbar after dropping one episode's downloaded bytes."
+  },
+  "podcastResume": "Resume {stamp}",
+  "@podcastResume": {
+    "description": "Play button on an episode that was started, naming where it stopped.",
+    "placeholders": {
+      "stamp": {
+        "type": "String",
+        "example": "12:04"
+      }
+    }
+  },
+  "podcastRetentionHelp": "Empty uses the server default; 0 keeps all",
+  "@podcastRetentionHelp": {
+    "description": "Help under the retention field."
+  },
+  "podcastRetentionLabel": "Episodes to keep",
+  "@podcastRetentionLabel": {
+    "description": "Field bounding how many of a show's downloads the server holds."
+  },
+  "podcastSearchShow": "Search this show",
+  "@podcastSearchShow": {
+    "description": "Field narrowing a show's loaded episodes to the ones whose title matches."
+  },
+  "podcastSeasonChip": "Season {season}",
+  "@podcastSeasonChip": {
+    "description": "Chip narrowing a show to one season. Only offered where the feed numbers them.",
+    "placeholders": {
+      "season": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastSeasonEpisode": "S{season} E{episode}",
+  "@podcastSeasonEpisode": {
+    "description": "Where an episode sits in a show, abbreviated: season then episode. The letters are initials of those two words.",
+    "placeholders": {
+      "season": {
+        "type": "int"
+      },
+      "episode": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastSectionChapters": "Chapters",
+  "@podcastSectionChapters": {
+    "description": "Heading over an episode's chapter marks."
+  },
+  "podcastSectionHighlights": "Highlights",
+  "@podcastSectionHighlights": {
+    "description": "Heading over the moments a feed marked as worth hearing."
+  },
+  "podcastSectionNotes": "Notes",
+  "@podcastSectionNotes": {
+    "description": "Heading over what the feed wrote about an episode."
+  },
+  "podcastSectionPeople": "People",
+  "@podcastSectionPeople": {
+    "description": "Heading over the people an episode's feed credits."
+  },
+  "podcastSelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@podcastSelectedCount": {
+    "description": "How many episodes a batch selection holds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastSettingsOverline": "This show",
+  "@podcastSettingsOverline": {
+    "description": "Overline above the per-show settings sheet."
+  },
+  "podcastSettingsSpeed": "Speed {speed}",
+  "@podcastSettingsSpeed": {
+    "description": "The playback rate this show is set to. {speed} arrives already worded, with its multiplier sign.",
+    "placeholders": {
+      "speed": {
+        "type": "String",
+        "example": "1.2x"
+      }
+    }
+  },
+  "podcastSettingsSpeedLabel": "Playback speed",
+  "@podcastSettingsSpeedLabel": {
+    "description": "Accessible name of the speed slider on the per-show settings sheet."
+  },
+  "podcastSettingsTitle": "Subscription settings",
+  "@podcastSettingsTitle": {
+    "description": "The per-show settings: the control that opens them, and the heading of the sheet they open."
+  },
+  "podcastShare": "Share",
+  "@podcastShare": {
+    "description": "Button minting a link to an episode, optionally starting where the listener is."
+  },
+  "podcastShowFallbackTitle": "Show",
+  "@podcastShowFallbackTitle": {
+    "description": "Title of a show screen opened cold, before the show it names has loaded."
+  },
+  "podcastShowLessNotes": "Show less",
+  "@podcastShowLessNotes": {
+    "description": "Collapses a show's or an episode's notes."
+  },
+  "podcastShowLoadError": "Could not load the show",
+  "@podcastShowLoadError": {
+    "description": "Title of the error state when a show could not be read."
+  },
+  "podcastShowMore": "More for this show",
+  "@podcastShowMore": {
+    "description": "Accessible name of a show's overflow menu."
+  },
+  "podcastShowMoreNotes": "Show more",
+  "@podcastShowMoreNotes": {
+    "description": "Expands a show's or an episode's notes past the height they are clamped to."
+  },
+  "podcastSkipIntro": "Skip intro (seconds)",
+  "@podcastSkipIntro": {
+    "description": "Field taking how much of the start of every episode to skip."
+  },
+  "podcastSkipOutro": "Skip outro (seconds)",
+  "@podcastSkipOutro": {
+    "description": "Field taking how much of the end of every episode to skip."
+  },
+  "podcastSortRow": "{sort, select, recent{Sort by recent} title{Sort by title} added{Sort by added} other{Sort by {sort}}}",
+  "@podcastSortRow": {
+    "description": "Row in the hub overflow choosing what order the shows are in.",
+    "placeholders": {
+      "sort": {
+        "type": "String",
+        "example": "recent"
+      }
+    }
+  },
+  "podcastSourceLabel": "Source",
+  "@podcastSourceLabel": {
+    "description": "Segmented control choosing what kind of address was typed."
+  },
+  "podcastSourceRss": "RSS",
+  "@podcastSourceRss": {
+    "description": "Source kind: an ordinary podcast feed. The format's name, the same everywhere."
+  },
+  "podcastSourceYouTube": "YouTube",
+  "@podcastSourceYouTube": {
+    "description": "Source kind: a YouTube channel. The product name stays as it is."
+  },
+  "podcastStop": "Stop",
+  "@podcastStop": {
+    "description": "Stops a mark-older run partway. Whatever landed stays."
+  },
+  "podcastSubscribeAction": "Subscribe",
+  "@podcastSubscribeAction": {
+    "description": "Confirming button of the add-subscription dialog."
+  },
+  "podcastSupportShow": "Support this show",
+  "@podcastSupportShow": {
+    "description": "Button opening a show's funding link, where the feed named one but wrote no message of its own."
+  },
+  "podcastTimeLeft": "{time} left",
+  "@podcastTimeLeft": {
+    "description": "How much of a half-heard episode is unplayed. {time} is a timecode.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "12:04"
+      }
+    }
+  },
+  "podcastTranscript": "Transcript",
+  "@podcastTranscript": {
+    "description": "Heading over an episode's transcript, which loads when it is opened."
+  },
+  "podcastTranscriptError": "Could not load the transcript",
+  "@podcastTranscriptError": {
+    "description": "Said in place of a transcript that could not be read."
+  },
+  "podcastTranscriptSpeaker": "{speaker}: {text}",
+  "@podcastTranscriptSpeaker": {
+    "description": "One transcript line whose cue named who was talking.",
+    "placeholders": {
+      "speaker": {
+        "type": "String",
+        "example": "Hrishikesh"
+      },
+      "text": {
+        "type": "String",
+        "example": "So we started with the drums."
+      }
+    }
+  },
+  "podcastTrimSilence": "Trim silence",
+  "@podcastTrimSilence": {
+    "description": "Switch shortening the gaps in an episode's audio."
+  },
+  "podcastTrimSilenceHelp": "Needs the episode fetched: silence is mapped from the audio this server holds",
+  "@podcastTrimSilenceHelp": {
+    "description": "Help under the trim-silence switch."
+  },
+  "podcastUnfollowBody": "Some episodes are downloaded on the server. Remove those files too? Removed files go to the trash, and your listening progress is kept either way. If someone else subscribes to this show, the files stay regardless.",
+  "@podcastUnfollowBody": {
+    "description": "Body of the unfollow dialog, saying what goes and what stays."
+  },
+  "podcastUnfollowTitle": "Unfollow",
+  "@podcastUnfollowTitle": {
+    "description": "Title of the dialog asking what to do with the downloaded files when a show is unfollowed."
+  },
+  "podcastUnplayedCount": "{count, plural, =1{1 unplayed} other{{count} unplayed}}",
+  "@podcastUnplayedCount": {
+    "description": "What is waiting in a show, on its card. Always more than zero where it is drawn.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastUpNextOverline": "Half heard",
+  "@podcastUpNextOverline": {
+    "description": "Overline above the up-next shelf."
+  },
+  "podcastUpNextTitle": "Up next",
+  "@podcastUpNextTitle": {
+    "description": "Shelf on the podcast hub holding episodes that were started and not finished."
+  },
+  "podcastVoiceBoost": "Voice boost",
+  "@podcastVoiceBoost": {
+    "description": "Switch lifting speech above the rest of an episode's audio."
+  },
+  "podcastVoiceBoostHelp": "Lifts speech over a noisy room",
+  "@podcastVoiceBoostHelp": {
+    "description": "Help under the voice-boost switch."
+  },
+  "podcastsEmptyAction": "Add a show",
+  "@podcastsEmptyAction": {
+    "description": "Button on the podcast hub's empty state."
+  },
+  "podcastsEmptyMessage": "Follow a show and its new episodes turn up here as the feed publishes them.",
+  "@podcastsEmptyMessage": {
+    "description": "Message under the empty state of the podcast hub."
+  },
+  "podcastsEmptyTitle": "No shows yet",
+  "@podcastsEmptyTitle": {
+    "description": "Empty state of the podcast hub."
+  },
+  "podcastsLoadError": "Could not load your shows",
+  "@podcastsLoadError": {
+    "description": "Title of the error state when the subscriptions could not be read."
+  },
+  "podcastsTitle": "Podcasts",
+  "@podcastsTitle": {
+    "description": "The podcast domain's front door, named on its own title."
+  }
+}

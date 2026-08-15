@@ -1,0 +1,60 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "notifBackupCompletedHelp": "A backup archive finished building.",
+  "@notifBackupCompletedHelp": {
+    "description": "What the `backup-completed` notification is about, drawn under its switch."
+  },
+  "notifBackupCompletedTitle": "Backup finished",
+  "@notifBackupCompletedTitle": {
+    "description": "Switch label for the `backup-completed` notification."
+  },
+  "notifBackupFailedHelp": "A backup attempt failed.",
+  "@notifBackupFailedHelp": {
+    "description": "What the `backup-failed` notification is about, drawn under its switch."
+  },
+  "notifBackupFailedTitle": "Backup failed",
+  "@notifBackupFailedTitle": {
+    "description": "Switch label for the `backup-failed` notification."
+  },
+  "notifEpisodeDownloadedHelp": "A new episode of a subscribed show finished downloading.",
+  "@notifEpisodeDownloadedHelp": {
+    "description": "What the `episode-downloaded` notification is about, drawn under its switch."
+  },
+  "notifEpisodeDownloadedTitle": "New episode downloaded",
+  "@notifEpisodeDownloadedTitle": {
+    "description": "Switch label for the `episode-downloaded` notification."
+  },
+  "notifFeedDisabledHelp": "A subscribed feed kept failing and was disabled.",
+  "@notifFeedDisabledHelp": {
+    "description": "What the `feed-disabled` notification is about, drawn under its switch."
+  },
+  "notifFeedDisabledTitle": "Feed switched off",
+  "@notifFeedDisabledTitle": {
+    "description": "Switch label for the `feed-disabled` notification."
+  },
+  "notifImportCompletedHelp": "An upload or acquisition identified confidently enough to file itself, with no review.",
+  "@notifImportCompletedHelp": {
+    "description": "What the `import-completed` notification is about, drawn under its switch."
+  },
+  "notifImportCompletedTitle": "Filed without review",
+  "@notifImportCompletedTitle": {
+    "description": "Switch label for the `import-completed` notification."
+  },
+  "notifReviewReadyHelp": "An upload or acquisition finished identification and waits in the review queue.",
+  "@notifReviewReadyHelp": {
+    "description": "What the `review-ready` notification is about, drawn under its switch."
+  },
+  "notifReviewReadyTitle": "Waiting for review",
+  "@notifReviewReadyTitle": {
+    "description": "Switch label for the `review-ready` notification."
+  },
+  "notifSignupRequestedHelp": "A new account request is waiting for approval.",
+  "@notifSignupRequestedHelp": {
+    "description": "What the `signup-requested` notification is about, drawn under its switch."
+  },
+  "notifSignupRequestedTitle": "Account request",
+  "@notifSignupRequestedTitle": {
+    "description": "Switch label for the `signup-requested` notification."
+  }
+}

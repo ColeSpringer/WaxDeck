@@ -1,0 +1,178 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "downloadsCancel": "Cancel {title}",
+  "@downloadsCancel": {
+    "description": "Accessible name of the control that stops one transfer. {title} is what is being downloaded.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
+  },
+  "downloadsCannotPause": "This transfer cannot be paused; cancel it instead",
+  "@downloadsCannotPause": {
+    "description": "Snackbar when the server behind a transfer does not support resuming it."
+  },
+  "downloadsChecking": "Checking downloads against the server",
+  "@downloadsChecking": {
+    "description": "Snackbar while the re-download sweep runs."
+  },
+  "downloadsChip": "{medium} {size}",
+  "@downloadsChip": {
+    "description": "How much one medium takes up: what it is, then how much. {size} is a formatted size.",
+    "placeholders": {
+      "medium": {
+        "type": "String",
+        "example": "Music"
+      },
+      "size": {
+        "type": "String",
+        "example": "640 MB"
+      }
+    }
+  },
+  "downloadsClearAll": "Clear all",
+  "@downloadsClearAll": {
+    "description": "Removes every download from this device."
+  },
+  "downloadsClearBody": "This frees {size}. Nothing leaves the library: everything here plays again with the server reachable.",
+  "@downloadsClearBody": {
+    "description": "Body of the clear-downloads dialog. {size} is a formatted size.",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "1.5 GB"
+      }
+    }
+  },
+  "downloadsClearConfirm": "Remove all",
+  "@downloadsClearConfirm": {
+    "description": "Confirming button of the clear-downloads dialog."
+  },
+  "downloadsClearKeep": "Keep them",
+  "@downloadsClearKeep": {
+    "description": "Dismissing button of the clear-downloads dialog."
+  },
+  "downloadsClearTitle": "Remove every download?",
+  "@downloadsClearTitle": {
+    "description": "Title of the dialog confirming that every download goes."
+  },
+  "downloadsDownloaded": "Downloaded",
+  "@downloadsDownloaded": {
+    "description": "Accessible name of the download control once the file is on this device."
+  },
+  "downloadsDownloading": "Downloading",
+  "@downloadsDownloading": {
+    "description": "Accessible name of the download control while the transfer is running."
+  },
+  "downloadsEmptyMessage": "Download a book, an album, or an episode and it plays here with the server unreachable. Its cover comes with it.",
+  "@downloadsEmptyMessage": {
+    "description": "Empty state of the downloads screen."
+  },
+  "downloadsEmptyTitle": "Nothing downloaded",
+  "@downloadsEmptyTitle": {
+    "description": "Empty state of the downloads screen."
+  },
+  "downloadsGroupItems": "{count, plural, =1{1 item} other{{count} items}}",
+  "@downloadsGroupItems": {
+    "description": "Overline over one medium's downloads, saying how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "downloadsInFlight": "{count, plural, =1{1 in flight} other{{count} in flight}}",
+  "@downloadsInFlight": {
+    "description": "Overline over the running downloads, saying how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "downloadsLoadError": "Could not read your downloads",
+  "@downloadsLoadError": {
+    "description": "Title of the error state when the on-device download store would not answer."
+  },
+  "downloadsMediumBooks": "Audiobooks",
+  "@downloadsMediumBooks": {
+    "description": "What a group of downloaded audiobooks is called."
+  },
+  "downloadsMediumMusic": "Music",
+  "@downloadsMediumMusic": {
+    "description": "What a group of downloaded music is called."
+  },
+  "downloadsMediumPodcasts": "Podcasts",
+  "@downloadsMediumPodcasts": {
+    "description": "What a group of downloaded episodes is called."
+  },
+  "downloadsNoneFinished": "No finished episodes to remove",
+  "@downloadsNoneFinished": {
+    "description": "Snackbar when the remove-finished sweep found nothing."
+  },
+  "downloadsOverflow": "More",
+  "@downloadsOverflow": {
+    "description": "Tooltip of the menu holding the sweeps that act on every download."
+  },
+  "downloadsPause": "Pause {title}",
+  "@downloadsPause": {
+    "description": "Accessible name of the control that parks one transfer.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
+  },
+  "downloadsRefreshStale": "Re-download stale",
+  "@downloadsRefreshStale": {
+    "description": "Menu row checking every download against the server and fetching what changed."
+  },
+  "downloadsRemove": "Remove {title}",
+  "@downloadsRemove": {
+    "description": "Accessible name of the control that deletes one download from this device.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
+  },
+  "downloadsRemoveFinished": "Remove finished episodes",
+  "@downloadsRemoveFinished": {
+    "description": "Menu row deleting every downloaded episode that was played to the end."
+  },
+  "downloadsRemovedEpisodes": "{count, plural, =1{Removed 1 episode} other{Removed {count} episodes}}",
+  "@downloadsRemovedEpisodes": {
+    "description": "Snackbar after the remove-finished sweep.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
+      }
+    }
+  },
+  "downloadsResume": "Resume {title}",
+  "@downloadsResume": {
+    "description": "Accessible name of the control that restarts one paused transfer.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      }
+    }
+  },
+  "downloadsTitle": "Downloads",
+  "@downloadsTitle": {
+    "description": "Title of the screen managing what this device keeps offline."
+  },
+  "downloadsTransferring": "Transferring",
+  "@downloadsTransferring": {
+    "description": "Heading over the downloads running right now."
+  }
+}

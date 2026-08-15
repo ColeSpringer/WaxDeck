@@ -1,0 +1,470 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "reviewActionApprove": "Approve",
+  "@reviewActionApprove": {
+    "description": "Takes the selected candidate as the match. On the entry's decision bar and on the bulk bar."
+  },
+  "reviewActionAsIs": "Keep as is",
+  "@reviewActionAsIs": {
+    "description": "Files the entry with the tags it already has, matching nothing."
+  },
+  "reviewActionDiscard": "Discard",
+  "@reviewActionDiscard": {
+    "description": "Throws an uploaded entry away. Offered only for uploads, where there is a staged file to remove."
+  },
+  "reviewActionRevert": "Revert",
+  "@reviewActionRevert": {
+    "description": "Undoes a decision that was already applied."
+  },
+  "reviewActionSkip": "Skip",
+  "@reviewActionSkip": {
+    "description": "Leaves the entry undecided and moves on."
+  },
+  "reviewActionUnofficial": "Mark unofficial",
+  "@reviewActionUnofficial": {
+    "description": "Files the entry as a release no catalogue lists: a bootleg, a rip, a demo."
+  },
+  "reviewCandidateLine": "{percent}% {title}, {artist}",
+  "@reviewCandidateLine": {
+    "description": "The best candidate on a queue row: how close it is, then what it is. Spanish puts a space before the percent sign.",
+    "placeholders": {
+      "percent": {
+        "type": "String",
+        "example": "94"
+      },
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewCandidateLineYear": "{percent}% {title}, {artist} ({year})",
+  "@reviewCandidateLineYear": {
+    "description": "The best candidate on a queue row, where the release has a year.",
+    "placeholders": {
+      "percent": {
+        "type": "String",
+        "example": "94"
+      },
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      },
+      "year": {
+        "type": "String",
+        "example": "2019"
+      }
+    }
+  },
+  "reviewCandidateSpoken": "{title} by {artist}",
+  "@reviewCandidateSpoken": {
+    "description": "A candidate tile read as a whole for a screen reader.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewCandidateTitleLine": "{title}, {artist}",
+  "@reviewCandidateTitleLine": {
+    "description": "A candidate tile's own line: what the release is called, then whose it is.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewCandidatesTitle": "Candidates",
+  "@reviewCandidatesTitle": {
+    "description": "Heading over the ranked releases the sources offered for this entry."
+  },
+  "reviewDecidedCount": "{count, plural, =1{Decided 1 entry} other{Decided {count} entries}}",
+  "@reviewDecidedCount": {
+    "description": "Snackbar after a bulk decision where every entry took it.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "8"
+      }
+    }
+  },
+  "reviewDecidedSomeFailed": "{count, plural, =1{Decided 1 entry, {failed} failed} other{Decided {count} entries, {failed} failed}}",
+  "@reviewDecidedSomeFailed": {
+    "description": "Snackbar after a bulk decision some entries refused. {count} is how many took it and {failed} how many did not.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "6"
+      },
+      "failed": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "reviewDecidedStatus": "Decided: {status}",
+  "@reviewDecidedStatus": {
+    "description": "On the decision bar of an entry that has already been decided. {status} is already worded by the caller.",
+    "placeholders": {
+      "status": {
+        "type": "String",
+        "example": "applied"
+      }
+    }
+  },
+  "reviewDiffCurrent": "Current",
+  "@reviewDiffCurrent": {
+    "description": "Column heading over what the files say now."
+  },
+  "reviewDiffExtra": "Extra file, no counterpart",
+  "@reviewDiffExtra": {
+    "description": "A local file the chosen candidate has no track for."
+  },
+  "reviewDiffMissing": "Missing locally",
+  "@reviewDiffMissing": {
+    "description": "A candidate track with no local file to match it."
+  },
+  "reviewDiffProposed": "Proposed",
+  "@reviewDiffProposed": {
+    "description": "Column heading over what the chosen candidate would make them say."
+  },
+  "reviewDiffUnmatched": "Unmatched",
+  "@reviewDiffUnmatched": {
+    "description": "A local file no candidate track was paired with."
+  },
+  "reviewEditMetadata": "Edit metadata",
+  "@reviewEditMetadata": {
+    "description": "Menu row opening the metadata editor on one track."
+  },
+  "reviewEmptyMessage": "Uploads and rematches land here when the match needs a decision.",
+  "@reviewEmptyMessage": {
+    "description": "Empty state of the review queue, saying what fills it."
+  },
+  "reviewEmptyTitle": "Nothing waiting for review",
+  "@reviewEmptyTitle": {
+    "description": "Empty state of the review queue."
+  },
+  "reviewEntryLine": "{title} by {artist}",
+  "@reviewEntryLine": {
+    "description": "A queue row's name where the files name an artist.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Exposure"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewEntryLoadError": "Could not load the entry",
+  "@reviewEntryLoadError": {
+    "description": "Title of the error state when one review entry would not load."
+  },
+  "reviewEntryTitle": "Review entry",
+  "@reviewEntryTitle": {
+    "description": "Title of one review entry drawn as a page of its own."
+  },
+  "reviewFieldAlbum": "Album",
+  "@reviewFieldAlbum": {
+    "description": "Re-identify field: the album to search for."
+  },
+  "reviewFieldArtist": "Artist",
+  "@reviewFieldArtist": {
+    "description": "Re-identify field: the artist to search for."
+  },
+  "reviewFieldTitle": "Track title",
+  "@reviewFieldTitle": {
+    "description": "Re-identify field: the track title to search for. Only drawn where the entry is a single file, since the server ignores it otherwise."
+  },
+  "reviewFilterAutoApplied": "Auto-applied",
+  "@reviewFilterAutoApplied": {
+    "description": "Filter chip: entries the server matched confidently and applied without asking."
+  },
+  "reviewFilterCount": "{label} ({count})",
+  "@reviewFilterCount": {
+    "description": "A filter chip with how many entries it holds. {label} is the chip's own word.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Pending"
+      },
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "reviewFilterDecided": "Decided",
+  "@reviewFilterDecided": {
+    "description": "Filter chip: every entry that is no longer pending."
+  },
+  "reviewFilterPending": "Pending",
+  "@reviewFilterPending": {
+    "description": "Filter chip: entries nobody has decided yet."
+  },
+  "reviewHeaderFacts": "{count, plural, =1{1 track, {origin}} other{{count} tracks, {origin}}}",
+  "@reviewHeaderFacts": {
+    "description": "Under an entry's title: how many files it holds and where it came from. {origin} is already worded by the caller.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "9"
+      },
+      "origin": {
+        "type": "String",
+        "example": "upload"
+      }
+    }
+  },
+  "reviewHeaderFactsBy": "{count, plural, =1{1 track, {origin} by {who}} other{{count} tracks, {origin} by {who}}}",
+  "@reviewHeaderFactsBy": {
+    "description": "The same line where the entry was uploaded by a named account. {origin} is already worded by the caller; {who} is a username.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "9"
+      },
+      "origin": {
+        "type": "String",
+        "example": "upload"
+      },
+      "who": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "reviewIdentifying": "Identifying",
+  "@reviewIdentifying": {
+    "description": "Beside a spinner on a queue row whose candidate lookup is still running."
+  },
+  "reviewIdentifyingLong": "Identifying: candidate lookup is still running",
+  "@reviewIdentifyingLong": {
+    "description": "Beside a spinner on the entry itself, where there is room to say what is happening."
+  },
+  "reviewLoadError": "Could not load the review queue",
+  "@reviewLoadError": {
+    "description": "Title of the error state when the queue would not load."
+  },
+  "reviewLoadMoreFailed": "Could not load more; scroll to retry",
+  "@reviewLoadMoreFailed": {
+    "description": "Snackbar when the next page of the queue failed. The rows already loaded stay, so nothing else would report it."
+  },
+  "reviewMatchingAuto": "Auto-apply confident matches",
+  "@reviewMatchingAuto": {
+    "description": "Matching mode: the server decides for itself where it is sure, and only asks otherwise."
+  },
+  "reviewMatchingMenu": "Matching mode",
+  "@reviewMatchingMenu": {
+    "description": "Tooltip of the menu that sets how hard a library tries to match what it imports."
+  },
+  "reviewMatchingOff": "Never match this library",
+  "@reviewMatchingOff": {
+    "description": "Matching mode: files are filed with the tags they arrive with."
+  },
+  "reviewMatchingReview": "Review everything",
+  "@reviewMatchingReview": {
+    "description": "Matching mode: every import waits on a person."
+  },
+  "reviewMatchingRow": "{library}: {mode}",
+  "@reviewMatchingRow": {
+    "description": "One row of the matching-mode menu: which library, then which mode.",
+    "placeholders": {
+      "library": {
+        "type": "String",
+        "example": "Main"
+      },
+      "mode": {
+        "type": "String",
+        "example": "Review everything"
+      }
+    }
+  },
+  "reviewNoCandidatesMessage": "Nothing in the sources matched what these files claim. Keep them as they are, or skip and try again later.",
+  "@reviewNoCandidatesMessage": {
+    "description": "Empty state where the sources matched nothing."
+  },
+  "reviewNoCandidatesTitle": "No candidates found",
+  "@reviewNoCandidatesTitle": {
+    "description": "Empty state where the sources were searched and matched nothing."
+  },
+  "reviewOriginAcquisition": "Acquired",
+  "@reviewOriginAcquisition": {
+    "description": "Badge on a queue row: this entry came in through a download the server ran."
+  },
+  "reviewOriginUpload": "Upload",
+  "@reviewOriginUpload": {
+    "description": "Badge on a queue row: this entry came in through the upload screen."
+  },
+  "reviewPaneClose": "Close the entry",
+  "@reviewPaneClose": {
+    "description": "Closes the entry pane beside the queue, leaving the queue on screen."
+  },
+  "reviewRowBest": "{count, plural, =1{1 track, {best}} other{{count} tracks, {best}}}",
+  "@reviewRowBest": {
+    "description": "A queue row's second line with its best candidate. {best} is already worded.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "9"
+      },
+      "best": {
+        "type": "String",
+        "example": "94% Long Exposure, Field Notes (2019)"
+      }
+    }
+  },
+  "reviewRowNoCandidates": "{count, plural, =1{1 track, no candidates} other{{count} tracks, no candidates}}",
+  "@reviewRowNoCandidates": {
+    "description": "A queue row's second line where nothing matched.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "9"
+      }
+    }
+  },
+  "reviewSearchAgain": "Search again",
+  "@reviewSearchAgain": {
+    "description": "Re-runs identification with what is in the fields. Empty fields clear the stored override and run the plain derivation."
+  },
+  "reviewSearchStored": "Looked up instead of what the files claim. Nothing here is written to the files.",
+  "@reviewSearchStored": {
+    "description": "Above the re-identify fields when they hold what was last searched for."
+  },
+  "reviewSearchSuggested": "Suggested from the source title. Looked up instead of what the files claim; nothing here is written to the files.",
+  "@reviewSearchSuggested": {
+    "description": "Above the re-identify fields when they opened on a guess parsed from the source title."
+  },
+  "reviewSearchToggle": "Search for something else",
+  "@reviewSearchToggle": {
+    "description": "Opens the fields that re-run identification against typed names instead of the files' own tags."
+  },
+  "reviewSelectEnter": "Select entries",
+  "@reviewSelectEnter": {
+    "description": "Turns on multi-select so several entries can be decided at once."
+  },
+  "reviewSelectLeave": "Leave selection",
+  "@reviewSelectLeave": {
+    "description": "Turns multi-select back off."
+  },
+  "reviewSelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@reviewSelectedCount": {
+    "description": "How many entries the bulk bar is about to act on.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "8"
+      }
+    }
+  },
+  "reviewSkippedDecided": "This submission asked to be taken as delivered, so nothing was searched.",
+  "@reviewSkippedDecided": {
+    "description": "Empty state for a skipped identification that has already been decided."
+  },
+  "reviewSkippedPending": "This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own - keep the files as they are, or skip.",
+  "@reviewSkippedPending": {
+    "description": "Empty state for a skipped identification that is still pending, so it needs telling what to do."
+  },
+  "reviewSkippedTitle": "Identification was skipped",
+  "@reviewSkippedTitle": {
+    "description": "Empty state where nothing was searched for because the submission asked to be taken as delivered."
+  },
+  "reviewStatusApplied": "Applied",
+  "@reviewStatusApplied": {
+    "description": "Review lifecycle state: a person approved a match and it was written."
+  },
+  "reviewStatusAsIs": "Kept as it was",
+  "@reviewStatusAsIs": {
+    "description": "Review lifecycle state: the unit's own metadata was accepted unchanged."
+  },
+  "reviewStatusAutoApplied": "Applied automatically",
+  "@reviewStatusAutoApplied": {
+    "description": "Review lifecycle state: the engine was confident enough to decide on its own."
+  },
+  "reviewStatusDiscarded": "Discarded",
+  "@reviewStatusDiscarded": {
+    "description": "Review lifecycle state: the staged files were thrown away rather than filed."
+  },
+  "reviewStatusPending": "Pending",
+  "@reviewStatusPending": {
+    "description": "Review lifecycle state: waiting for somebody to decide."
+  },
+  "reviewStatusReverted": "Reverted",
+  "@reviewStatusReverted": {
+    "description": "Review lifecycle state: an applied match was undone and the earlier metadata restored."
+  },
+  "reviewStatusSkipped": "Skipped",
+  "@reviewStatusSkipped": {
+    "description": "Review lifecycle state: dismissed without a decision."
+  },
+  "reviewStatusUnofficial": "No canonical release",
+  "@reviewStatusUnofficial": {
+    "description": "Review lifecycle state: kept as it was, and marked as having nothing official to match against."
+  },
+  "reviewTitle": "Review queue",
+  "@reviewTitle": {
+    "description": "Title of the screen listing imports waiting on a decision."
+  },
+  "reviewTrackMenu": "Track actions",
+  "@reviewTrackMenu": {
+    "description": "Tooltip of the menu holding what can be done with one track in the comparison."
+  },
+  "reviewTrackNumbered": "{number}. {title}",
+  "@reviewTrackNumbered": {
+    "description": "One track in the comparison, where its number is known.",
+    "placeholders": {
+      "number": {
+        "type": "String",
+        "example": "3"
+      },
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      }
+    }
+  },
+  "reviewTrackWithArtist": "{track} ({artist})",
+  "@reviewTrackWithArtist": {
+    "description": "One track in the comparison, where it names its own artist. {track} is already worded, with its number if it has one.",
+    "placeholders": {
+      "track": {
+        "type": "String",
+        "example": "3. Nightswimming"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "reviewTracksTitle": "Tracks",
+  "@reviewTracksTitle": {
+    "description": "Heading over the file-by-file comparison between the entry and the chosen candidate."
+  },
+  "reviewUntitled": "Untitled",
+  "@reviewUntitled": {
+    "description": "Stands in for an entry's name when the files carry none."
+  }
+}

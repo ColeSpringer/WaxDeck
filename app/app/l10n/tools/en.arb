@@ -1,0 +1,166 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "toolsClearFinished": "Clear finished",
+  "@toolsClearFinished": {
+    "description": "Button that removes every finished task from the list at once."
+  },
+  "toolsDismiss": "Dismiss",
+  "@toolsDismiss": {
+    "description": "Accessible name of the control that removes one finished task from the list."
+  },
+  "toolsEmptyMessage": "Merges, splits, downloads, and imports report their progress here while they run and land here when they finish.",
+  "@toolsEmptyMessage": {
+    "description": "Empty state of the tool task list, naming what turns up in it."
+  },
+  "toolsEmptyTitle": "No tool tasks",
+  "@toolsEmptyTitle": {
+    "description": "Empty state of the tool task list."
+  },
+  "toolsFinishedTapForReport": "Finished · tap for the report",
+  "@toolsFinishedTapForReport": {
+    "description": "Line under a finished task that produced no items but stored a report."
+  },
+  "toolsItemsProduced": "{count} items produced · tap to open",
+  "@toolsItemsProduced": {
+    "description": "Line under a finished task that produced several items. It is never drawn for one, which has a line of its own.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
+      }
+    }
+  },
+  "toolsLoadError": "Could not load tool tasks",
+  "@toolsLoadError": {
+    "description": "Title of the error state when the task list could not be read."
+  },
+  "toolsOpenReviewQueue": "Open the review queue",
+  "@toolsOpenReviewQueue": {
+    "description": "Line under a finished download, whose results wait in the review queue."
+  },
+  "toolsProduced": "produced {pids}",
+  "@toolsProduced": {
+    "description": "Names what a task produced, on the row's identifier line. {pids} is a comma-separated run of item identifiers and is not translated.",
+    "placeholders": {
+      "pids": {
+        "type": "String",
+        "example": "al-01JZX5N8QW, al-01JZX5N8QX"
+      }
+    }
+  },
+  "toolsReadyForReview": "{count, plural, =1{1 ready for review} other{{count} ready for review}}",
+  "@toolsReadyForReview": {
+    "description": "Line under a finished download, counting what it left in the review queue.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "toolsStateDone": "Done",
+  "@toolsStateDone": {
+    "description": "State of a task that finished. Agrees with the word for a task in this language."
+  },
+  "toolsStateFailed": "Failed",
+  "@toolsStateFailed": {
+    "description": "State of a task that did not finish. Agrees with the word for a task in this language."
+  },
+  "toolsStateQueued": "Queued",
+  "@toolsStateQueued": {
+    "description": "State of a task waiting its turn."
+  },
+  "toolsStateRunning": "Running",
+  "@toolsStateRunning": {
+    "description": "State of a task in flight, when it reports no percentage."
+  },
+  "toolsStateRunningPct": "Running · {percent}%",
+  "@toolsStateRunningPct": {
+    "description": "State of a task in flight that reports how far along it is.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "toolsSummaryListens": "listens {count}",
+  "@toolsSummaryListens": {
+    "description": "Headline counter from a task's report, counting listening records it carried across. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "3204"
+      }
+    }
+  },
+  "toolsSummaryMatched": "matched {count}",
+  "@toolsSummaryMatched": {
+    "description": "Headline counter from a task's report. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "412"
+      }
+    }
+  },
+  "toolsSummaryUnmatched": "unmatched {count}",
+  "@toolsSummaryUnmatched": {
+    "description": "Headline counter from a task's report. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "18"
+      }
+    }
+  },
+  "toolsTapForReport": "Tap for the report",
+  "@toolsTapForReport": {
+    "description": "Line under a failed task that still stored a report worth reading."
+  },
+  "toolsTapToOpenResult": "Tap to open what it produced",
+  "@toolsTapToOpenResult": {
+    "description": "Line under a finished task that produced exactly one item."
+  },
+  "toolsTaskAcquire": "URL download",
+  "@toolsTaskAcquire": {
+    "description": "Name of the task that fetches audio from a web address."
+  },
+  "toolsTaskBookMerge": "Book merge",
+  "@toolsTaskBookMerge": {
+    "description": "Name of the task that joins several audiobook files into one book."
+  },
+  "toolsTaskBookSplit": "Book split",
+  "@toolsTaskBookSplit": {
+    "description": "Name of the task that breaks one audiobook into its parts."
+  },
+  "toolsTaskCueSplit": "CUE split",
+  "@toolsTaskCueSplit": {
+    "description": "Name of the task that cuts one long audio file into tracks using its CUE sheet. CUE is a file format and stays as it is."
+  },
+  "toolsTaskImportFrom": "Import from {source}",
+  "@toolsTaskImportFrom": {
+    "description": "Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Navidrome"
+      }
+    }
+  },
+  "toolsTasksCleared": "{count, plural, =1{Cleared 1 task} other{Cleared {count} tasks}}",
+  "@toolsTasksCleared": {
+    "description": "Message after finished tasks were swept, saying how many went.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "7"
+      }
+    }
+  },
+  "toolsTitle": "Tool tasks",
+  "@toolsTitle": {
+    "description": "Title of the screen following long-running library work: merges, splits, downloads, imports."
+  }
+}

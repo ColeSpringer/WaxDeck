@@ -1,0 +1,16 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "discoveryAdventurous": "Atrevido",
+  "discoveryAdventurousness": "Cuánto arriesgar",
+  "discoveryBasisSpoken": "Respondido por el motor {engine}",
+  "discoveryEmptyMessage": "Esta respuesta ha llegado vacía. Prueba con otra pista.",
+  "discoveryEmptyTitle": "No se ha encontrado nada",
+  "discoveryFamiliar": "Conocido",
+  "discoveryInstantMixFrom": "A partir de \"{title}\"",
+  "discoveryInstantMixTitle": "Mezcla instantánea",
+  "discoveryMixAction": "Mezclar",
+  "discoveryMixEmpty": "No hay ninguna mezcla disponible para esta pista",
+  "discoverySimilarTitle": "Parecido a {title}"
+}

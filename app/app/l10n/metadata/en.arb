@@ -1,0 +1,314 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "metadataAddTag": "Add tag",
+  "@metadataAddTag": {
+    "description": "Button that stores the typed custom tag."
+  },
+  "metadataClearLyrics": "Clear",
+  "@metadataClearLyrics": {
+    "description": "Button that removes the item's stored lyrics."
+  },
+  "metadataCreditNames": "Names, comma separated",
+  "@metadataCreditNames": {
+    "description": "Field for the people in one credit role."
+  },
+  "metadataCreditRole": "Credit role",
+  "@metadataCreditRole": {
+    "description": "Accessible name of the menu choosing which credit is being edited."
+  },
+  "metadataCreditsOverline": "Who else is on it",
+  "@metadataCreditsOverline": {
+    "description": "Line above the Credits heading."
+  },
+  "metadataCreditsTitle": "Credits",
+  "@metadataCreditsTitle": {
+    "description": "Heading over who else worked on the item."
+  },
+  "metadataEnrichApplied": "Applied: {fields}",
+  "@metadataEnrichApplied": {
+    "description": "Half of the message after fetching metadata, listing what was taken. {fields} is a comma-separated run of field names from the server.",
+    "placeholders": {
+      "fields": {
+        "type": "String",
+        "example": "cover, genres"
+      }
+    }
+  },
+  "metadataEnrichSkipped": "Skipped: {fields}",
+  "@metadataEnrichSkipped": {
+    "description": "Half of the message after fetching metadata, listing what was left alone. {fields} is a comma-separated run of field names from the server.",
+    "placeholders": {
+      "fields": {
+        "type": "String",
+        "example": "book"
+      }
+    }
+  },
+  "metadataFetch": "Fetch metadata",
+  "@metadataFetch": {
+    "description": "Button that applies what the metadata providers already agree on."
+  },
+  "metadataFieldLockedHint": "Check \"Force\" to overwrite locked fields.",
+  "@metadataFieldLockedHint": {
+    "description": "Added after the server's own refusal when a save was refused for a locked field. The server names which field; this names the switch on this screen that overrides it, and the quoted word must match that switch's label."
+  },
+  "metadataFieldsOverline": "What this item claims to be",
+  "@metadataFieldsOverline": {
+    "description": "Line above the Fields heading."
+  },
+  "metadataFieldsTitle": "Fields",
+  "@metadataFieldsTitle": {
+    "description": "Heading over the item's editable metadata fields."
+  },
+  "metadataForceHelp": "Overwrite fields that are already locked",
+  "@metadataForceHelp": {
+    "description": "Line under the force switch."
+  },
+  "metadataForceTitle": "Force",
+  "@metadataForceTitle": {
+    "description": "Switch that lets a save overwrite fields somebody locked. Its name is quoted in the refusal that suggests it, so the two must agree."
+  },
+  "metadataFromSource": "{count} from {source}",
+  "@metadataFromSource": {
+    "description": "One entry in the provenance line: how many fields came from one source. {source} is a provider or source name from the server.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      },
+      "source": {
+        "type": "String",
+        "example": "MusicBrainz"
+      }
+    }
+  },
+  "metadataIdentificationBlurb": "Rematch reopens identification and puts the result in the review queue. Fetching metadata applies what the providers already agree on, without asking.",
+  "@metadataIdentificationBlurb": {
+    "description": "Line under the Identification heading, telling the two buttons apart."
+  },
+  "metadataIdentificationTitle": "Identification",
+  "@metadataIdentificationTitle": {
+    "description": "Heading over the two ways of asking the providers about this item again."
+  },
+  "metadataLinesAllTimed": "{count, plural, =1{1 line, timed} other{{count} lines, all timed}}",
+  "@metadataLinesAllTimed": {
+    "description": "Heading of the lyrics preview when every line carries a timestamp.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "24"
+      }
+    }
+  },
+  "metadataLinesSomeTimed": "{count, plural, =1{1 line, {timed} timed} other{{count} lines, {timed} timed}}",
+  "@metadataLinesSomeTimed": {
+    "description": "Heading of the lyrics preview when only some lines carry a timestamp.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "24"
+      },
+      "timed": {
+        "type": "int",
+        "example": "18"
+      }
+    }
+  },
+  "metadataLoadError": "Could not load the metadata",
+  "@metadataLoadError": {
+    "description": "Title of the error state when an item's metadata could not be read."
+  },
+  "metadataLockField": "Lock {field}",
+  "@metadataLockField": {
+    "description": "Accessible name of the control that locks one field. {field} is the field's wire name and is not translated.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "title"
+      }
+    }
+  },
+  "metadataLockHelp": "Keep scans and enrichment from overwriting what you type",
+  "@metadataLockHelp": {
+    "description": "Line under the lock switch."
+  },
+  "metadataLockTitle": "Lock edited fields",
+  "@metadataLockTitle": {
+    "description": "Switch that keeps later scans from overwriting what was typed."
+  },
+  "metadataLyricsHint": "[00:12.00] First line",
+  "@metadataLyricsHint": {
+    "description": "Hint in the lyrics field, showing one timed line. The bracketed stamp is the format's own and must not change shape."
+  },
+  "metadataLyricsLabel": "LRC",
+  "@metadataLyricsLabel": {
+    "description": "Field for the lyrics themselves. LRC is the format's name and stays as it is."
+  },
+  "metadataLyricsOverline": "Timed LRC, or plain lines",
+  "@metadataLyricsOverline": {
+    "description": "Line above the Lyrics heading. LRC is the timed-lyrics file format and stays as it is."
+  },
+  "metadataLyricsTitle": "Lyrics",
+  "@metadataLyricsTitle": {
+    "description": "Heading over the item's lyrics."
+  },
+  "metadataNoCreditRoles": "No credit roles for this kind",
+  "@metadataNoCreditRoles": {
+    "description": "Drawn in place of the credit editor for a kind of item that declares no roles."
+  },
+  "metadataNoSources": "No recorded sources",
+  "@metadataNoSources": {
+    "description": "Stands in for the provenance line when nothing recorded where the item's values came from."
+  },
+  "metadataNothingToFetch": "Nothing to fetch",
+  "@metadataNothingToFetch": {
+    "description": "Message after fetching metadata found nothing to apply or skip."
+  },
+  "metadataNothingToPreview": "Nothing to preview",
+  "@metadataNothingToPreview": {
+    "description": "Drawn in place of the lyrics preview while the field is empty."
+  },
+  "metadataOpenAlbum": "Open album",
+  "@metadataOpenAlbum": {
+    "description": "Door from the metadata editor to the album this item belongs to."
+  },
+  "metadataOpenArtist": "Open artist",
+  "@metadataOpenArtist": {
+    "description": "Door from the metadata editor to the artist this item belongs to."
+  },
+  "metadataOpenReleaseGroup": "Open release group",
+  "@metadataOpenReleaseGroup": {
+    "description": "Door from the metadata editor to the release group this item belongs to: the album across its editions."
+  },
+  "metadataOpenReview": "Open review",
+  "@metadataOpenReview": {
+    "description": "Button on the rematch message that opens the review entry it created."
+  },
+  "metadataQueuedForIdentification": "Queued for identification",
+  "@metadataQueuedForIdentification": {
+    "description": "Message after an item was sent back for matching."
+  },
+  "metadataReleaseTitle": "Release status",
+  "@metadataReleaseTitle": {
+    "description": "Heading over whether the item is an official release."
+  },
+  "metadataRematch": "Rematch",
+  "@metadataRematch": {
+    "description": "Button that reopens identification for the item."
+  },
+  "metadataRemoveTag": "Remove tag {key}",
+  "@metadataRemoveTag": {
+    "description": "Accessible name of the control that deletes one custom tag. {key} is the tag's own name and is not translated.",
+    "placeholders": {
+      "key": {
+        "type": "String",
+        "example": "ITUNESADVISORY"
+      }
+    }
+  },
+  "metadataSaveChanges": "{count, plural, =1{Save 1 change} other{Save {count} changes}}",
+  "@metadataSaveChanges": {
+    "description": "The save button once fields have been edited, counting them. With nothing edited it says only Save.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "metadataSaveCredits": "Save credits",
+  "@metadataSaveCredits": {
+    "description": "Button that writes the credit being edited."
+  },
+  "metadataSaveLyrics": "Save lyrics",
+  "@metadataSaveLyrics": {
+    "description": "Button that writes the lyrics as typed."
+  },
+  "metadataSourceUnknown": "Source unknown",
+  "@metadataSourceUnknown": {
+    "description": "Chip beside a field whose value has no recorded source."
+  },
+  "metadataSourceWithProvider": "{source} ({provider})",
+  "@metadataSourceWithProvider": {
+    "description": "Chip beside a field, naming where its value came from and which provider answered. Both come from the server and are not translated.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "enrichment"
+      },
+      "provider": {
+        "type": "String",
+        "example": "MusicBrainz"
+      }
+    }
+  },
+  "metadataTagKey": "Key",
+  "@metadataTagKey": {
+    "description": "Field for a custom tag's name."
+  },
+  "metadataTagValues": "Values, comma separated",
+  "@metadataTagValues": {
+    "description": "Field for a custom tag's values."
+  },
+  "metadataTagsOverline": "Anything the vocabulary has no field for",
+  "@metadataTagsOverline": {
+    "description": "Line above the custom tags heading."
+  },
+  "metadataTagsTitle": "Custom tags",
+  "@metadataTagsTitle": {
+    "description": "Heading over the free-form tags an item carries."
+  },
+  "metadataTitle": "Edit metadata",
+  "@metadataTitle": {
+    "description": "Title of the per-item metadata editor."
+  },
+  "metadataUnlockField": "Unlock {field}",
+  "@metadataUnlockField": {
+    "description": "Accessible name of the control that unlocks one field. {field} is the field's wire name and is not translated.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "title"
+      }
+    }
+  },
+  "metadataUnofficialHelp": "A bootleg, a promo, or another unofficial issue",
+  "@metadataUnofficialHelp": {
+    "description": "Line under the unofficial switch."
+  },
+  "metadataUnofficialTitle": "Unofficial release",
+  "@metadataUnofficialTitle": {
+    "description": "Switch marking the item as something other than an official issue."
+  },
+  "metadataUntitled": "Untitled",
+  "@metadataUntitled": {
+    "description": "Stands in for an item's name when it has none."
+  },
+  "metadataWriteBackFailure": "{file}: {reason}",
+  "@metadataWriteBackFailure": {
+    "description": "One file a write-back could not reach, and why. Both halves come from the server and are not translated.",
+    "placeholders": {
+      "file": {
+        "type": "String",
+        "example": "Album/01 Track.flac"
+      },
+      "reason": {
+        "type": "String",
+        "example": "read-only file"
+      }
+    }
+  },
+  "metadataWriteBackHelp": "Also rewrite the tags embedded in the backing files",
+  "@metadataWriteBackHelp": {
+    "description": "Line under the write-tags switch."
+  },
+  "metadataWriteBackTitle": "Write tags to files",
+  "@metadataWriteBackTitle": {
+    "description": "Switch making a save rewrite the tags stored inside the audio files too."
+  },
+  "metadataWriteBackWarning": "Saved, but some files kept their old tags.",
+  "@metadataWriteBackWarning": {
+    "description": "Banner after a save whose write-back did not reach every file. The catalog holds the edit either way, which is why it is a caution rather than an error."
+  }
+}

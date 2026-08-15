@@ -1,0 +1,60 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "bytesB": "{bytes, plural, =1{1 B} other{{bytes} B}}",
+  "@bytesB": {
+    "description": "A file size under a kilobyte, drawn as bytes. B is the unit abbreviation; translate it only where the language uses another.",
+    "placeholders": {
+      "bytes": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        },
+        "example": "512"
+      }
+    }
+  },
+  "bytesGb": "{gigabytes} GB",
+  "@bytesGb": {
+    "description": "A file size in gigabytes, to one decimal. GB is the unit abbreviation; translate it only where the language uses another.",
+    "placeholders": {
+      "gigabytes": {
+        "type": "double",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 1
+        },
+        "example": "1.5"
+      }
+    }
+  },
+  "bytesKb": "{kilobytes} KB",
+  "@bytesKb": {
+    "description": "A file size in whole kilobytes. KB is the unit abbreviation; translate it only where the language uses another.",
+    "placeholders": {
+      "kilobytes": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        },
+        "example": "640"
+      }
+    }
+  },
+  "bytesMb": "{megabytes} MB",
+  "@bytesMb": {
+    "description": "A file size in megabytes, to one decimal. MB is the unit abbreviation; translate it only where the language uses another.",
+    "placeholders": {
+      "megabytes": {
+        "type": "double",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 1
+        },
+        "example": "12.4"
+      }
+    }
+  }
+}

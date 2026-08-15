@@ -1,0 +1,64 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "durationDays": "{days, plural, =1{1 day} other{{days} days}}",
+  "@durationDays": {
+    "description": "A wait in whole days, as a picker option: a day reads better than twenty-four hours.",
+    "placeholders": {
+      "days": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        }
+      }
+    }
+  },
+  "durationHours": "{hours, plural, =1{1 hour} other{{hours} hours}}",
+  "@durationHours": {
+    "description": "A wait in hours, as a picker option. The design system's table carries this same message for the durations its own components spell (wax_en.arb, durationHours), and a test holds the two to the same words - so translate them alike or a listener meets one unit spelled two ways on adjacent screens.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "format": "decimalPatternDigits",
+        "optionalParameters": {
+          "decimalDigits": 0
+        }
+      }
+    }
+  },
+  "durationHoursMinutesShort": "{hours}h {minutes}m",
+  "@durationHoursMinutesShort": {
+    "description": "A listening total an hour or more long, in the tightest form a stat tile can hold. Unit letters, not words - keep whatever the language abbreviates hours and minutes to.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "example": "2"
+      },
+      "minutes": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "durationMinutesShort": "{minutes}m",
+  "@durationMinutesShort": {
+    "description": "A listening total under an hour, in the tightest form a stat tile can hold.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "durationSecondsShort": "{seconds}s",
+  "@durationSecondsShort": {
+    "description": "A listening total under a minute, in the tightest form a stat tile can hold.",
+    "placeholders": {
+      "seconds": {
+        "type": "int",
+        "example": "45"
+      }
+    }
+  }
+}

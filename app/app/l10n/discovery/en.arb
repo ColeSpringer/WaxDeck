@@ -1,0 +1,66 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "discoveryAdventurous": "Adventurous",
+  "@discoveryAdventurous": {
+    "description": "The high end of the instant-mix slider: range further from the seed."
+  },
+  "discoveryAdventurousness": "Adventurousness",
+  "@discoveryAdventurousness": {
+    "description": "Accessible name of the instant-mix slider, whose two ends are the Familiar and Adventurous labels beside it."
+  },
+  "discoveryBasisSpoken": "Answered by the {engine} engine",
+  "@discoveryBasisSpoken": {
+    "description": "Read aloud for the chip naming which engine answered a mix. {engine} is a wire word the contract defines, drawn untranslated beside this.",
+    "placeholders": {
+      "engine": {
+        "type": "String",
+        "example": "sonic"
+      }
+    }
+  },
+  "discoveryEmptyMessage": "This answer came back empty. Try another track.",
+  "@discoveryEmptyMessage": {
+    "description": "Empty state of a mix or similar-tracks list."
+  },
+  "discoveryEmptyTitle": "Nothing found",
+  "@discoveryEmptyTitle": {
+    "description": "Empty state of a mix or similar-tracks list that came back with no tracks."
+  },
+  "discoveryFamiliar": "Familiar",
+  "@discoveryFamiliar": {
+    "description": "The low end of the instant-mix slider: stay close to the seed."
+  },
+  "discoveryInstantMixFrom": "From \"{title}\"",
+  "@discoveryInstantMixFrom": {
+    "description": "Under the instant-mix sheet's heading, naming the track the mix is seeded from.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      }
+    }
+  },
+  "discoveryInstantMixTitle": "Instant mix",
+  "@discoveryInstantMixTitle": {
+    "description": "The sheet that builds a mix around one track, the list it produces, and what a mix card on home calls itself."
+  },
+  "discoveryMixAction": "Mix",
+  "@discoveryMixAction": {
+    "description": "Confirming button of the instant-mix sheet. A verb."
+  },
+  "discoveryMixEmpty": "No mix available for this track",
+  "@discoveryMixEmpty": {
+    "description": "Snackbar when the server built a mix with nothing in it."
+  },
+  "discoverySimilarTitle": "Similar to {title}",
+  "@discoverySimilarTitle": {
+    "description": "Title of the list of tracks the server finds similar to one seed. {title} is the seed track's own name.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      }
+    }
+  }
+}

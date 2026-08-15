@@ -1,0 +1,19 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "notifBackupCompletedHelp": "Un archivo de copia de seguridad ha terminado de crearse.",
+  "notifBackupCompletedTitle": "Copia de seguridad terminada",
+  "notifBackupFailedHelp": "Ha fallado un intento de copia de seguridad.",
+  "notifBackupFailedTitle": "Copia de seguridad fallida",
+  "notifEpisodeDownloadedHelp": "Un episodio nuevo de un programa al que estás suscrito ha terminado de descargarse.",
+  "notifEpisodeDownloadedTitle": "Episodio nuevo descargado",
+  "notifFeedDisabledHelp": "Un feed al que estás suscrito ha fallado repetidamente y se ha desactivado.",
+  "notifFeedDisabledTitle": "Feed desactivado",
+  "notifImportCompletedHelp": "Una subida o adquisición se ha identificado con suficiente confianza para archivarse sola, sin revisión.",
+  "notifImportCompletedTitle": "Archivado sin revisión",
+  "notifReviewReadyHelp": "Una subida o adquisición ha terminado de identificarse y espera en la cola de revisión.",
+  "notifReviewReadyTitle": "Pendiente de revisión",
+  "notifSignupRequestedHelp": "Una solicitud de cuenta nueva espera aprobación.",
+  "notifSignupRequestedTitle": "Solicitud de cuenta"
+}

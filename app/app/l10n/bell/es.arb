@@ -1,0 +1,23 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "bellClear": "Vaciar",
+  "bellDownloadFinished": "Ha terminado una descarga.",
+  "bellEmpty": "Todavía no ha pasado nada.",
+  "bellEpisodeDownloaded": "Ha terminado de descargarse un episodio nuevo.",
+  "bellFeedDisabled": "Un programa no ha dejado de fallar al actualizarse y se ha desactivado.",
+  "bellImportCompleted": "Se ha añadido una subida a la biblioteca.",
+  "bellReviewChanged": "La cola de revisión ha cambiado.",
+  "bellRow": "{surface}: {what}",
+  "bellSurfaceDownloads": "Descargas",
+  "bellSurfaceImports": "Importaciones",
+  "bellSurfacePodcasts": "Pódcasts",
+  "bellSurfaceReview": "Cola de revisión",
+  "bellSurfaceTasks": "Tareas en segundo plano",
+  "bellSurfaceUploads": "Subidas",
+  "bellTaskChanged": "Una tarea en segundo plano ha cambiado.",
+  "bellTitle": "Notificaciones",
+  "bellUnread": "{count, plural, =1{Notificaciones, 1 sin leer} other{Notificaciones, {count} sin leer}}",
+  "bellUploadChanged": "Una subida ha cambiado."
+}

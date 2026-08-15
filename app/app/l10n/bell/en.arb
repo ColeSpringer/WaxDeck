@@ -1,0 +1,92 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "bellClear": "Clear",
+  "@bellClear": {
+    "description": "Last row of the open bell, emptying the list."
+  },
+  "bellDownloadFinished": "A download finished.",
+  "@bellDownloadFinished": {
+    "description": "What a bell row says when this device finished keeping something offline."
+  },
+  "bellEmpty": "Nothing has happened yet.",
+  "@bellEmpty": {
+    "description": "Drawn in the open bell when this session has seen nothing. Empty is a legitimate state, not a broken bell."
+  },
+  "bellEpisodeDownloaded": "A new episode finished downloading.",
+  "@bellEpisodeDownloaded": {
+    "description": "What a bell row says when a subscribed show gained an episode on this server."
+  },
+  "bellFeedDisabled": "A show kept failing to refresh and was disabled.",
+  "@bellFeedDisabled": {
+    "description": "What a bell row says when a subscribed feed was switched off."
+  },
+  "bellImportCompleted": "An upload was added to the library.",
+  "@bellImportCompleted": {
+    "description": "What a bell row says when an upload was filed. Deliberately not identified: the same marker covers the path where nothing was matched."
+  },
+  "bellReviewChanged": "The review queue changed.",
+  "@bellReviewChanged": {
+    "description": "What a bell row says. Generic because the marker it comes from carries no detail; the surface it opens has it."
+  },
+  "bellRow": "{surface}: {what}",
+  "@bellRow": {
+    "description": "One row of the bell: which surface moved, then what happened there.",
+    "placeholders": {
+      "surface": {
+        "type": "String",
+        "example": "Uploads"
+      },
+      "what": {
+        "type": "String",
+        "example": "An upload changed."
+      }
+    }
+  },
+  "bellSurfaceDownloads": "Downloads",
+  "@bellSurfaceDownloads": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceImports": "Imports",
+  "@bellSurfaceImports": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfacePodcasts": "Podcasts",
+  "@bellSurfacePodcasts": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceReview": "Review queue",
+  "@bellSurfaceReview": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceTasks": "Background tasks",
+  "@bellSurfaceTasks": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceUploads": "Uploads",
+  "@bellSurfaceUploads": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellTaskChanged": "A background task changed.",
+  "@bellTaskChanged": {
+    "description": "What a bell row says. Generic because the marker carries no detail."
+  },
+  "bellTitle": "Notifications",
+  "@bellTitle": {
+    "description": "Accessible name of the bell in the top app bar with nothing unread."
+  },
+  "bellUnread": "{count, plural, =1{Notifications, 1 unread} other{Notifications, {count} unread}}",
+  "@bellUnread": {
+    "description": "Accessible name of the bell when rows have arrived since it was last opened.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "bellUploadChanged": "An upload changed.",
+  "@bellUploadChanged": {
+    "description": "What a bell row says. Generic because the marker carries no detail."
+  }
+}

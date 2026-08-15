@@ -20,96 +20,216 @@ import 'package:flutter_test/flutter_test.dart';
 ///   placeholder is a sentence with a hole in it;
 /// - no message is blank, which passes every check above and compiles
 ///   to a getter that answers the empty string;
-/// - keys stay sorted, which is what keeps a 1,300-key file navigable
-///   across a sweep landing in six slices.
+/// - keys stay sorted, which is what keeps a table navigable.
+///
+/// The app's table is authored as per-feature fragments in `l10n/`
+/// (`<feature>/<locale>.arb`), which `make generate` merges into the
+/// bundles gen-l10n reads. The checks above run per fragment, so a
+/// failure names the file that takes the fix; on top of them, a key
+/// must live in the longest directory name that prefixes it - placement
+/// is a spelling question, not a judgment call - and the committed bundle
+/// must be exactly the merge of the fragments, which is what makes a
+/// bundler that mis-merged fail here instead of shipping. The design
+/// system's table is small enough to stay one file per locale and keeps
+/// the per-file checks only.
 void main() {
-  for (final bundle in _bundles) {
-    group('${bundle.name} ARB', () {
-      final template = bundle.read(bundle.templateLocale);
+  final features = _features();
+  final appLocales = _appLocales(features);
 
-      test('every key is described and its placeholders typed', () {
-        final missing = <String>[];
-        for (final key in template.keys) {
-          final meta = template.meta[key];
-          final description = meta?['description'];
-          if (description is! String || description.trim().isEmpty) {
-            missing.add('$key: no @$key description');
-            continue;
-          }
-          final declared =
-              (meta?['placeholders'] as Map?)?.cast<String, Object?>() ??
-              const {};
-          for (final name in template.placeholders(key)) {
-            final spec = declared[name];
-            if (spec is! Map || spec['type'] is! String) {
-              missing.add('$key: placeholder {$name} needs a type in @$key');
-            }
-          }
-        }
-        expect(missing, isEmpty, reason: missing.join('\n'));
+  test('l10n/ holds feature directories and README.md only', () {
+    expect(
+      Directory(_fragmentRoot).existsSync(),
+      isTrue,
+      reason: '$_fragmentRoot: the fragment tree the app table is built from',
+    );
+    final strays = Directory(_fragmentRoot)
+        .listSync()
+        .where((e) => e is! Directory)
+        .map((e) => e.path.replaceAll('\\', '/').split('/').last)
+        .where((n) => n != 'README.md' && !n.startsWith('.'))
+        .toList();
+    expect(strays, isEmpty, reason: 'not a feature directory: $strays');
+    final misnamed = features.where((f) => !_dirName.hasMatch(f)).toList();
+    expect(
+      misnamed,
+      isEmpty,
+      reason: 'a feature directory is a key prefix, lower case: $misnamed',
+    );
+    expect(
+      appLocales,
+      contains('en'),
+      reason: 'the template locale; extraction is from English source',
+    );
+  });
+
+  for (final feature in features) {
+    group('app l10n/$feature', () {
+      final dir = '$_fragmentRoot/$feature';
+
+      test('carries exactly the app locales', () {
+        final found = Directory(dir)
+            .listSync()
+            .map((e) => e.path.replaceAll('\\', '/').split('/').last)
+            .where((n) => !n.startsWith('.'))
+            .toList();
+        expect(
+          found.toSet(),
+          appLocales.map((l) => '$l.arb').toSet(),
+          reason: '$dir: one fragment per locale, nothing else',
+        );
       });
 
-      test('keys are sorted', () {
-        for (final locale in bundle.locales) {
-          final keys = bundle.read(locale).keys;
-          expect(
-            keys,
-            orderedEquals(keys.toList()..sort()),
-            reason:
-                '${bundle.fileFor(locale)}: keys are read in prefix-then-'
-                'alphabetical blocks; sort them',
-          );
-        }
-      });
+      _checkTable(
+        read: (locale) => _Arb.parse(File('$dir/$locale.arb')),
+        fileFor: (locale) => '$dir/$locale.arb',
+        locales: appLocales,
+      );
 
-      test('no message is blank', () {
-        // An empty value satisfies every other check here and compiles
-        // to `String get x => ''`, so the only thing that ever reports
-        // it is the button that draws nothing.
-        final blank = <String>[];
-        for (final locale in bundle.locales) {
-          final arb = bundle.read(locale);
+      test('keys carry the directory\'s prefix', () {
+        final misplaced = <String>[];
+        for (final locale in appLocales) {
+          final arb = _Arb.parse(File('$dir/$locale.arb'));
           for (final key in arb.keys) {
-            if (arb.value(key).trim().isEmpty) {
-              blank.add('${bundle.fileFor(locale)}: $key is empty');
+            final home = _dirFor(key, features);
+            if (home != feature) {
+              misplaced.add(
+                '$dir/$locale.arb: $key belongs in '
+                '${home ?? '<a new directory>'}/',
+              );
             }
           }
         }
-        expect(blank, isEmpty, reason: blank.join('\n'));
+        expect(misplaced, isEmpty, reason: misplaced.join('\n'));
       });
 
-      for (final locale in bundle.locales.where(
-        (l) => l != bundle.templateLocale,
-      )) {
-        test('$locale matches the template', () {
-          final translation = bundle.read(locale);
+      test('globals are the locale stamp and x- notes', () {
+        for (final locale in appLocales) {
+          final globals = _Arb.parse(File('$dir/$locale.arb')).globals;
           expect(
-            translation.keys.toSet(),
-            template.keys.toSet(),
-            reason:
-                '${bundle.fileFor(locale)}: a translation lands with the key '
-                'that mints it, so the two files always hold the same set',
+            globals['@@locale'],
+            locale,
+            reason: '$dir/$locale.arb: @@locale names the file\'s locale',
           );
-          final holes = <String>[];
-          for (final key in translation.keys) {
-            if (!template.keys.contains(key)) continue;
-            final want = template.placeholders(key);
-            final got = translation.placeholders(key);
-            if (!setEquals(want, got)) {
-              holes.add('$key: template takes $want, $locale takes $got');
-            }
-          }
-          expect(holes, isEmpty, reason: holes.join('\n'));
-        });
-      }
+          // The ARB Editor extension otherwise checks a fragment against
+          // l10n.yaml's whole-app template; this scopes it to the
+          // directory (and, self-referenced from en.arb, to nothing).
+          expect(
+            globals['@@x-template'],
+            'en.arb',
+            reason:
+                '$dir/$locale.arb: @@x-template points the editor at the '
+                'directory\'s own template',
+          );
+          final foreign = globals.keys
+              .where((g) => g != '@@locale' && !g.startsWith('@@x-'))
+              .toList();
+          expect(
+            foreign,
+            isEmpty,
+            reason:
+                '$dir/$locale.arb: a fragment carries @@locale and @@x- '
+                'notes only: $foreign',
+          );
+        }
+      });
     });
   }
 
-  // The seeded ARBs are brace-free, so nothing above reads an ICU
-  // message until the sweep lands its first plural.
+  test('x- notes read the same in every fragment of a locale', () {
+    // A note like @@x-machine-translated is about the locale, so one
+    // fragment hand-reviewed (or annotated) out of step with the rest
+    // would misstate the whole merged table. @@x-template is per-file
+    // and exempt. The bundler enforces this at generate time; this is
+    // what fails on a tree that has not been through it yet.
+    for (final locale in appLocales) {
+      Map<String, Object?>? first;
+      String? firstWhere;
+      for (final feature in features) {
+        final where = '$_fragmentRoot/$feature/$locale.arb';
+        final notes = Map.of(_Arb.parse(File(where)).globals)
+          ..remove('@@locale')
+          ..remove('@@x-template');
+        if (first == null) {
+          first = notes;
+          firstWhere = where;
+          continue;
+        }
+        expect(
+          _Arb._same(notes, first),
+          isTrue,
+          reason: '$where: @@x- notes disagree with $firstWhere',
+        );
+      }
+    }
+  });
+
+  group('app bundle', () {
+    test('one bundle per fragment locale', () {
+      // A retired locale must take its bundle with it: an untouched
+      // committed app_<locale>.arb is invisible to the drift gate, and
+      // gen-l10n would keep compiling the locale from it.
+      final found = _localesOf('lib/src/l10n/arb', prefix: 'app_');
+      expect(
+        found.toSet(),
+        appLocales.toSet(),
+        reason: 'lib/src/l10n/arb holds a bundle per l10n/ locale',
+      );
+    });
+
+    for (final locale in appLocales) {
+      test('$locale is the merge of the fragments', () {
+        final bundle = _Arb.parse(File('lib/src/l10n/arb/app_$locale.arb'));
+        expect(
+          bundle.keys,
+          orderedEquals(bundle.keys.toList()..sort()),
+          reason: 'app_$locale.arb: the bundler emits sorted keys',
+        );
+        final merged = _Arb.merge(
+          features.map(
+            (f) => _Arb.parse(File('$_fragmentRoot/$f/$locale.arb')),
+          ),
+        );
+        final diff = bundle.diff(merged);
+        expect(
+          diff,
+          isEmpty,
+          reason:
+              'app_$locale.arb is generated from l10n/*/$locale.arb by '
+              '`make generate`; it disagrees:\n${diff.join('\n')}',
+        );
+      });
+    }
+  });
+
+  group('waxdeck_ui ARB', () {
+    const dir = '../packages/waxdeck_ui/lib/src/l10n/arb';
+    final locales = _localesOf(dir, prefix: 'wax_');
+
+    test('carries its table', () {
+      // Derived from the directory, so a wax_<locale>.arb the app does
+      // not have yet still gets checked - and a moved package fails
+      // here by name instead of passing every check against nothing.
+      expect(
+        locales,
+        contains('en'),
+        reason:
+            '$dir: the design system\'s template; if the package moved, '
+            'move this path with it',
+      );
+    });
+
+    _checkTable(
+      read: (locale) => _Arb.parse(File('$dir/wax_$locale.arb')),
+      fileFor: (locale) => '$dir/wax_$locale.arb',
+      locales: locales,
+    );
+  });
+
+  // ICU nests, so the placeholder reader walks the grammar; these pin
+  // the shapes the tables use.
   group('placeholder reading', () {
     Set<String> of(String message) =>
-        _Arb.parse('{"k": ${jsonEncode(message)}}').placeholders('k');
+        _Arb.parseString('{"k": ${jsonEncode(message)}}').placeholders('k');
 
     test('takes a plain interpolation', () {
       expect(of('Playing on {endpoint}'), {'endpoint'});
@@ -141,61 +261,175 @@ void main() {
   });
 }
 
-/// One package's ARB directory.
-class _Bundle {
-  const _Bundle({
-    required this.name,
-    required this.dir,
-    required this.prefix,
-    required this.locales,
-  });
+/// Paths are relative to `app/app`, which is where this test runs.
+const _fragmentRoot = 'l10n';
 
-  final String name;
-  final String dir;
-  final String prefix;
-  final List<String> locales;
+final _dirName = RegExp(r'^[a-z0-9]+$');
 
-  /// The locale the others are checked against; en everywhere, because
-  /// extraction is from English source.
-  String get templateLocale => 'en';
-
-  String fileFor(String locale) => '$dir/${prefix}_$locale.arb';
-
-  _Arb read(String locale) =>
-      _Arb.parse(File(fileFor(locale)).readAsStringSync());
+/// The `<prefix><locale>.arb` stems a directory holds, sorted. Empty
+/// when the directory is missing, which the callers turn into a named
+/// failure rather than a silent one.
+List<String> _localesOf(String dir, {String prefix = ''}) {
+  final d = Directory(dir);
+  if (!d.existsSync()) return const [];
+  return d
+      .listSync()
+      .whereType<File>()
+      .map((f) => f.path.replaceAll('\\', '/').split('/').last)
+      .where((n) => !n.startsWith('.') && n.endsWith('.arb'))
+      .where((n) => n.startsWith(prefix))
+      .map((n) => n.substring(prefix.length, n.length - '.arb'.length))
+      .toList()
+    ..sort();
 }
 
-/// Paths are relative to `app/app`, which is where this test runs.
-const _bundles = <_Bundle>[
-  _Bundle(
-    name: 'app',
-    dir: 'lib/src/l10n/arb',
-    prefix: 'app',
-    locales: <String>['en', 'es'],
-  ),
-  // The design system keeps a table of its own, for the copy no caller
-  // can pass in. Checked from here rather than from that package,
-  // because these are the checks and there is one of them.
-  _Bundle(
-    name: 'waxdeck_ui',
-    dir: '../packages/waxdeck_ui/lib/src/l10n/arb',
-    prefix: 'wax',
-    locales: <String>['en', 'es'],
-  ),
-];
+/// The app's locales, derived from the fragment tree itself so there is
+/// no second list to keep in step: the union of every feature's stems.
+/// A directory out of step with the union fails its own locales test.
+/// The locale the others are checked against is en everywhere, because
+/// extraction is from English source.
+List<String> _appLocales(List<String> features) {
+  final union = <String>{};
+  for (final feature in features) {
+    union.addAll(_localesOf('$_fragmentRoot/$feature'));
+  }
+  return union.toList()..sort();
+}
 
-/// An ARB file split into its messages and their `@` metadata.
+/// The feature a key files under: the longest declared directory name
+/// that prefixes it. `booksTitle` lives in `book/` unless a `books/`
+/// directory exists to claim it, so a list screen's keys shelve with
+/// their medium without renaming either. Null when no directory
+/// matches, which is what a new prefix looks like.
+/// tools/gen-l10n-bundle.dart applies the same reading.
+String? _dirFor(String key, List<String> features) {
+  String? home;
+  for (final feature in features) {
+    if (key.startsWith(feature) && feature.length > (home?.length ?? 0)) {
+      home = feature;
+    }
+  }
+  return home;
+}
+
+List<String> _features() {
+  final root = Directory(_fragmentRoot);
+  if (!root.existsSync()) return const [];
+  return root
+      .listSync()
+      .whereType<Directory>()
+      .map((d) => d.path.replaceAll('\\', '/').split('/').last)
+      .where((n) => !n.startsWith('.'))
+      .toList()
+    ..sort();
+}
+
+/// The per-table checks: content quality, run against whichever files a
+/// table is authored in - a fragment directory or a single-file bundle.
+void _checkTable({
+  required _Arb Function(String locale) read,
+  required String Function(String locale) fileFor,
+  required List<String> locales,
+}) {
+  // Every read happens inside a test body, so a missing or malformed
+  // file fails that test with its path instead of aborting the whole
+  // file's load with zero tests registered.
+  test('every key is described and its placeholders typed', () {
+    final template = read('en');
+    final missing = <String>[];
+    for (final key in template.keys) {
+      final meta = template.meta[key];
+      final description = meta?['description'];
+      if (description is! String || description.trim().isEmpty) {
+        missing.add('$key: no @$key description');
+        continue;
+      }
+      final declared =
+          (meta?['placeholders'] as Map?)?.cast<String, Object?>() ?? const {};
+      for (final name in template.placeholders(key)) {
+        final spec = declared[name];
+        if (spec is! Map || spec['type'] is! String) {
+          missing.add('$key: placeholder {$name} needs a type in @$key');
+        }
+      }
+    }
+    expect(missing, isEmpty, reason: missing.join('\n'));
+  });
+
+  test('keys are sorted', () {
+    for (final locale in locales) {
+      final keys = read(locale).keys;
+      expect(
+        keys,
+        orderedEquals(keys.toList()..sort()),
+        reason:
+            '${fileFor(locale)}: keys are read in alphabetical order; '
+            'sort them',
+      );
+    }
+  });
+
+  test('no message is blank', () {
+    // An empty value satisfies every other check here and compiles
+    // to `String get x => ''`, so the only thing that ever reports
+    // it is the button that draws nothing.
+    final blank = <String>[];
+    for (final locale in locales) {
+      final arb = read(locale);
+      for (final key in arb.keys) {
+        if (arb.value(key).trim().isEmpty) {
+          blank.add('${fileFor(locale)}: $key is empty');
+        }
+      }
+    }
+    expect(blank, isEmpty, reason: blank.join('\n'));
+  });
+
+  for (final locale in locales.where((l) => l != 'en')) {
+    test('$locale matches the template', () {
+      final template = read('en');
+      final translation = read(locale);
+      expect(
+        translation.keys.toSet(),
+        template.keys.toSet(),
+        reason:
+            '${fileFor(locale)}: a translation lands with the key '
+            'that mints it, so the two files always hold the same set',
+      );
+      final holes = <String>[];
+      for (final key in translation.keys) {
+        if (!template.keys.contains(key)) continue;
+        final want = template.placeholders(key);
+        final got = translation.placeholders(key);
+        if (!setEquals(want, got)) {
+          holes.add('$key: template takes $want, $locale takes $got');
+        }
+      }
+      expect(holes, isEmpty, reason: holes.join('\n'));
+    });
+  }
+}
+
+/// An ARB file split into its messages, their `@` metadata, and the
+/// file-level `@@` globals.
 class _Arb {
-  _Arb(this.keys, this.meta);
+  _Arb(this.keys, this.meta, this.globals);
 
-  factory _Arb.parse(String source) {
+  // A missing file throws with its path: parsing an empty table in its
+  // place would let every downstream check pass against nothing.
+  factory _Arb.parse(File file) => _Arb.parseString(file.readAsStringSync());
+
+  factory _Arb.parseString(String source) {
     final json = jsonDecode(source) as Map<String, Object?>;
     final keys = <String>[];
     final meta = <String, Map<String, Object?>>{};
     final values = <String, String>{};
+    final globals = <String, Object?>{};
     for (final entry in json.entries) {
-      // `@@locale` and friends describe the file, not a message.
-      if (entry.key.startsWith('@@')) continue;
+      if (entry.key.startsWith('@@')) {
+        globals[entry.key] = entry.value;
+        continue;
+      }
       if (entry.key.startsWith('@')) {
         meta[entry.key.substring(1)] = (entry.value as Map).cast();
         continue;
@@ -203,15 +437,72 @@ class _Arb {
       keys.add(entry.key);
       values[entry.key] = entry.value as String;
     }
-    return _Arb(keys, meta).._values.addAll(values);
+    return _Arb(keys, meta, globals).._values.addAll(values);
+  }
+
+  /// The union a bundle is expected to hold. Collisions are impossible
+  /// in checked fragments - a key spells its one directory - so this
+  /// merges without looking for them. `@@x-template` stays behind: it
+  /// aims an editor at the fragment's own template file, which is a
+  /// fact about the fragment, not about the locale.
+  factory _Arb.merge(Iterable<_Arb> parts) {
+    final merged = _Arb([], {}, {});
+    for (final part in parts) {
+      merged.keys.addAll(part.keys);
+      merged.meta.addAll(part.meta);
+      merged.globals.addAll(
+        Map.fromEntries(
+          part.globals.entries.where((g) => g.key != '@@x-template'),
+        ),
+      );
+      merged._values.addAll(part._values);
+    }
+    merged.keys.sort();
+    return merged;
   }
 
   final List<String> keys;
   final Map<String, Map<String, Object?>> meta;
+  final Map<String, Object?> globals;
   final _values = <String, String>{};
 
   /// The message a key holds.
   String value(String key) => _values[key] ?? '';
+
+  /// Where this table disagrees with [other], one line each.
+  List<String> diff(_Arb other) {
+    final lines = <String>[];
+    for (final key in {...keys, ...other.keys}) {
+      if (!other.keys.contains(key)) {
+        lines.add('$key: only in the bundle');
+      } else if (!keys.contains(key)) {
+        lines.add('$key: only in the fragments');
+      } else if (value(key) != other.value(key)) {
+        lines.add('$key: messages differ');
+      } else if (!_same(meta[key], other.meta[key])) {
+        lines.add('$key: @$key metadata differs');
+      }
+    }
+    if (!_same(globals, other.globals)) {
+      lines.add('@@ globals differ: $globals vs ${other.globals}');
+    }
+    return lines;
+  }
+
+  static bool _same(Object? a, Object? b) {
+    if (a is Map && b is Map) {
+      return a.length == b.length &&
+          a.keys.every((k) => b.containsKey(k) && _same(a[k], b[k]));
+    }
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!_same(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    return a == b;
+  }
 
   /// The placeholder names a message interpolates, at every depth.
   ///

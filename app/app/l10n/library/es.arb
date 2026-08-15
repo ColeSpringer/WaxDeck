@@ -1,0 +1,21 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "libraryBrowseSortAtoZ": "De la A a la Z",
+  "libraryBrowseSortMostFirst": "Más primero",
+  "libraryDeleteAction": "Eliminar",
+  "libraryDeleteFilesLabel": "Eliminar archivos",
+  "libraryDeleteFilesMenu": "Eliminar archivos...",
+  "libraryDeleteModePermanent": "Eliminar permanentemente",
+  "libraryDeleteModePermanentHelp": "Se pierden para siempre",
+  "libraryDeleteModeTrash": "Mover a la papelera",
+  "libraryDeleteModeTrashHelp": "Se pueden restaurar desde la pantalla de la papelera",
+  "libraryDeleteMore": "Más",
+  "libraryDeletePermanentDone": "{count, plural, =1{Se ha eliminado 1 archivo para siempre} other{Se han eliminado {count} archivos para siempre}}",
+  "libraryDeletePreview": "{count, plural, =1{Esto elimina 1 archivo, {size}.} other{Esto elimina {count} archivos, {size}.}}",
+  "libraryDeleteTitle": "¿Eliminar los archivos?",
+  "libraryDeleteTrashDone": "{count, plural, =1{Se ha movido 1 archivo a la papelera} other{Se han movido {count} archivos a la papelera}}",
+  "libraryKindAlbum": "álbum",
+  "libraryKindArtist": "artista"
+}

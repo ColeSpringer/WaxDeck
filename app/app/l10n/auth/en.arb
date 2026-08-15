@@ -1,0 +1,118 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "authBackToSignIn": "Back to sign-in",
+  "@authBackToSignIn": {
+    "description": "Returns from the sign-up screen to the sign-in screen."
+  },
+  "authChoosePassword": "Choose a password",
+  "@authChoosePassword": {
+    "description": "Said under the password field on the sign-up screen when it is empty."
+  },
+  "authChooseUsername": "Choose a username",
+  "@authChooseUsername": {
+    "description": "Said under the username field on the sign-up screen when it is empty. Choosing, because the account does not exist yet."
+  },
+  "authConfirmPassword": "Confirm password",
+  "@authConfirmPassword": {
+    "description": "The second password field on the first-run screen, which has to match the first."
+  },
+  "authContinueWith": "Continue with {provider}",
+  "@authContinueWith": {
+    "description": "A single-sign-on button. {provider} is the identity provider's own name, configured on the server.",
+    "placeholders": {
+      "provider": {
+        "type": "String",
+        "example": "Authelia"
+      }
+    }
+  },
+  "authCreateAccount": "Create account",
+  "@authCreateAccount": {
+    "description": "The first-run screen's confirming button."
+  },
+  "authDisplayName": "Display name (optional)",
+  "@authDisplayName": {
+    "description": "The field for the name other people see, which need not be the account name."
+  },
+  "authEnterPassword": "Enter a password",
+  "@authEnterPassword": {
+    "description": "Said under the password field on the sign-in screen when it is empty."
+  },
+  "authEnterUsername": "Enter a username",
+  "@authEnterUsername": {
+    "description": "Said under the username field on the sign-in screen when it is empty."
+  },
+  "authFirstAdmin": "Create the first administrator account",
+  "@authFirstAdmin": {
+    "description": "What the first-run screen is for: a fresh server has no accounts at all."
+  },
+  "authHaveInvite": "Have an invite?",
+  "@authHaveInvite": {
+    "description": "The link to the sign-up screen on a server that only takes invited accounts."
+  },
+  "authInviteHelp": "With a valid invite the account works right away",
+  "@authInviteHelp": {
+    "description": "Help under the invite field."
+  },
+  "authInviteToken": "Invite token (optional)",
+  "@authInviteToken": {
+    "description": "The field for an invite code, which skips the wait for approval."
+  },
+  "authLogIn": "Log in",
+  "@authLogIn": {
+    "description": "The sign-in screen's confirming button."
+  },
+  "authOr": "or",
+  "@authOr": {
+    "description": "Between the password form and the single-sign-on buttons. Lower case: it is a divider, not a heading."
+  },
+  "authPassword": "Password",
+  "@authPassword": {
+    "description": "The password field on the sign-in and first-run screens."
+  },
+  "authPasswordTooShort": "Use at least 8 characters",
+  "@authPasswordTooShort": {
+    "description": "Said under the password field on the first-run screen when it is too short."
+  },
+  "authPasswordsDiffer": "Passwords do not match",
+  "@authPasswordsDiffer": {
+    "description": "Said under the confirm-password field when the two do not match."
+  },
+  "authRequestAccount": "Request an account",
+  "@authRequestAccount": {
+    "description": "The link to the sign-up screen, and that screen's own title."
+  },
+  "authRequestPending": "An administrator has to approve your account before you can sign in.",
+  "@authRequestPending": {
+    "description": "Shown after a sign-up that needs approving."
+  },
+  "authRequestReceived": "Request received",
+  "@authRequestReceived": {
+    "description": "Shown after a sign-up that needs approving."
+  },
+  "authRequestSubmit": "Request account",
+  "@authRequestSubmit": {
+    "description": "The sign-up screen's confirming button."
+  },
+  "authSignInRejected": "That username and password do not go together.",
+  "@authSignInRejected": {
+    "description": "Under the sign-in form when the server rejected the credentials just typed."
+  },
+  "authSsoFailed": "Single sign-on did not go through. Try again.",
+  "@authSsoFailed": {
+    "description": "Under the sign-in form when a single-sign-on round trip came back refused, whether the provider is unconfigured or the code was stale."
+  },
+  "authTagline": "Music, podcasts, and audiobooks",
+  "@authTagline": {
+    "description": "Under the wordmark on the sign-in screen, saying what this is for."
+  },
+  "authTimedOut": "Sign-in timed out; try again",
+  "@authTimedOut": {
+    "description": "Said on the sign-in screen when the server did not answer in time."
+  },
+  "authUsername": "Username",
+  "@authUsername": {
+    "description": "The account-name field on the sign-in, sign-up and first-run screens."
+  }
+}

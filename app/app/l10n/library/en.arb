@@ -1,0 +1,87 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "libraryBrowseSortAtoZ": "A to Z",
+  "@libraryBrowseSortAtoZ": {
+    "description": "Library index order: alphabetical by name."
+  },
+  "libraryBrowseSortMostFirst": "Most first",
+  "@libraryBrowseSortMostFirst": {
+    "description": "Library index order: the groups holding the most come first."
+  },
+  "libraryDeleteAction": "Delete",
+  "@libraryDeleteAction": {
+    "description": "Confirming button of the dialog that deletes an item's files."
+  },
+  "libraryDeleteFilesLabel": "Delete files",
+  "@libraryDeleteFilesLabel": {
+    "description": "Accessible name of the overflow control offering to delete an item's files."
+  },
+  "libraryDeleteFilesMenu": "Delete files...",
+  "@libraryDeleteFilesMenu": {
+    "description": "Row in an item's overflow menu that opens the delete dialog. The ellipsis says a dialog follows."
+  },
+  "libraryDeleteModePermanent": "Delete permanently",
+  "@libraryDeleteModePermanent": {
+    "description": "Option deleting the files outright rather than trashing them."
+  },
+  "libraryDeleteModePermanentHelp": "Gone for good",
+  "@libraryDeleteModePermanentHelp": {
+    "description": "Help under the permanent-deletion option."
+  },
+  "libraryDeleteModeTrash": "Move to trash",
+  "@libraryDeleteModeTrash": {
+    "description": "Option moving the files to the trash instead of deleting them."
+  },
+  "libraryDeleteModeTrashHelp": "Restorable from the trash screen",
+  "@libraryDeleteModeTrashHelp": {
+    "description": "Help under the move-to-trash option, saying where the files can be recovered."
+  },
+  "libraryDeleteMore": "More",
+  "@libraryDeleteMore": {
+    "description": "Tooltip of the overflow menu on an item screen."
+  },
+  "libraryDeletePermanentDone": "{count, plural, =1{Deleted 1 file for good} other{Deleted {count} files for good}}",
+  "@libraryDeletePermanentDone": {
+    "description": "Snackbar after a permanent deletion, counting the files that went.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryDeletePreview": "{count, plural, =1{This removes 1 file, {size}.} other{This removes {count} files, {size}.}}",
+  "@libraryDeletePreview": {
+    "description": "What the dry run found, shown in the delete dialog before anything moves. {size} is the total on disk, already formatted.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String",
+        "example": "1.5 GB"
+      }
+    }
+  },
+  "libraryDeleteTitle": "Delete files?",
+  "@libraryDeleteTitle": {
+    "description": "Title of the dialog confirming that an item's files are deleted."
+  },
+  "libraryDeleteTrashDone": "{count, plural, =1{Moved 1 file to the trash} other{Moved {count} files to the trash}}",
+  "@libraryDeleteTrashDone": {
+    "description": "Snackbar after trashing an item's files, counting them.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryKindAlbum": "album",
+  "@libraryKindAlbum": {
+    "description": "The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case."
+  },
+  "libraryKindArtist": "artist",
+  "@libraryKindArtist": {
+    "description": "The word for an artist where it stands inside a sentence, such as the star row's accessible names. Lower case."
+  }
+}

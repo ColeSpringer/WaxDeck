@@ -1,0 +1,324 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "uploadsAcquireQueued": "Downloading. It will appear in the review queue when ready.",
+  "@uploadsAcquireQueued": {
+    "description": "Snackbar after asking the server to download from a URL."
+  },
+  "uploadsAcquireTasks": "Tasks",
+  "@uploadsAcquireTasks": {
+    "description": "Action on the downloading snackbar, opening the background-task screen."
+  },
+  "uploadsAddOverline": "Both routes land in the review queue",
+  "@uploadsAddOverline": {
+    "description": "Overline of the add sheet, saying nothing is filed without a decision."
+  },
+  "uploadsAddTitle": "Add to the library",
+  "@uploadsAddTitle": {
+    "description": "Heading of the sheet offering the ways audio gets in."
+  },
+  "uploadsBatch": "{count, plural, =1{Uploaded together, 1 file} other{Uploaded together, {count} files}}",
+  "@uploadsBatch": {
+    "description": "Header over the files of one batch upload.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uploadsDiscardBody": "\"{fileName}\" and its staged bytes are removed, and the space they hold against your quota is released.",
+  "@uploadsDiscardBody": {
+    "description": "Body of the discard confirmation. {fileName} is the file's own name.",
+    "placeholders": {
+      "fileName": {
+        "type": "String",
+        "example": "01 - Nightswimming.flac"
+      }
+    }
+  },
+  "uploadsDiscardConfirm": "Discard",
+  "@uploadsDiscardConfirm": {
+    "description": "Confirming button of the discard dialog."
+  },
+  "uploadsDiscardRow": "Discard upload",
+  "@uploadsDiscardRow": {
+    "description": "Accessible name of the control that throws one staged upload away."
+  },
+  "uploadsDiscardTitle": "Discard upload?",
+  "@uploadsDiscardTitle": {
+    "description": "Title of the typed confirmation before a staged upload is thrown away."
+  },
+  "uploadsDiscardWord": "discard",
+  "@uploadsDiscardWord": {
+    "description": "The word somebody types to confirm a discard. Lower case, one word, and what the field is checked against - keep it short and easy to type."
+  },
+  "uploadsDownload": "Download",
+  "@uploadsDownload": {
+    "description": "Confirming button of the add-from-URL dialog."
+  },
+  "uploadsDropHint": "Drop audio files to upload",
+  "@uploadsDropHint": {
+    "description": "Overlay caption while audio is dragged over a page-sized drop zone, on Home and on the uploads screen."
+  },
+  "uploadsDuplicate": "Duplicate ({kind}): {what}",
+  "@uploadsDuplicate": {
+    "description": "Banner on an upload the server matched against something already in the library. {kind} says how it matched; {what} names what it matched.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "exact copy"
+      },
+      "what": {
+        "type": "String",
+        "example": "Nightswimming by Field Notes"
+      }
+    }
+  },
+  "uploadsDuplicateBy": "{title} by {artist}",
+  "@uploadsDuplicateBy": {
+    "description": "What a duplicate matched, where the match names an artist.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      },
+      "artist": {
+        "type": "String",
+        "example": "Field Notes"
+      }
+    }
+  },
+  "uploadsDuplicateContent": "exact copy",
+  "@uploadsDuplicateContent": {
+    "description": "How a duplicate matched: the bytes are the same file. Lower case: it sits in brackets inside a sentence."
+  },
+  "uploadsDuplicateFingerprint": "same recording",
+  "@uploadsDuplicateFingerprint": {
+    "description": "How a duplicate matched: a different file of the same audio. Lower case: it sits in brackets."
+  },
+  "uploadsDuplicateName": "name match",
+  "@uploadsDuplicateName": {
+    "description": "How a duplicate matched: only the name is the same. Lower case: it sits in brackets."
+  },
+  "uploadsEmptyMessage": "Pick files from the bar above, or drop them anywhere on this page.",
+  "@uploadsEmptyMessage": {
+    "description": "Empty state of the uploads screen for an account that may upload."
+  },
+  "uploadsEmptyNoPermission": "This account cannot upload. Ask an administrator for the permission.",
+  "@uploadsEmptyNoPermission": {
+    "description": "Empty state of the uploads screen for an account without the upload right."
+  },
+  "uploadsEmptyTitle": "No uploads yet",
+  "@uploadsEmptyTitle": {
+    "description": "Empty state of the uploads screen."
+  },
+  "uploadsFileFailed": "{name}: {reason}",
+  "@uploadsFileFailed": {
+    "description": "One file's failure inside a multi-file upload, which keeps going: the file's own name and the worded reason.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "01 Teardrop.flac"
+      },
+      "reason": {
+        "type": "String",
+        "example": "You are out of space."
+      }
+    }
+  },
+  "uploadsFileTypeAny": "All files",
+  "@uploadsFileTypeAny": {
+    "description": "What the file picker calls the group that accepts anything, which is what keeps a file in a custom accepted-format set reachable."
+  },
+  "uploadsFileTypeAudio": "Audio",
+  "@uploadsFileTypeAudio": {
+    "description": "What the file picker calls the group of audio formats it accepts."
+  },
+  "uploadsFormat": "Download format",
+  "@uploadsFormat": {
+    "description": "Accessible name of the picker choosing what a URL download is converted to."
+  },
+  "uploadsFormatBest": "Best quality (recommended)",
+  "@uploadsFormatBest": {
+    "description": "Download format: keep the source's own audio without re-encoding it. The other choices are codec names and are not translated."
+  },
+  "uploadsFromUrl": "Add from URL",
+  "@uploadsFromUrl": {
+    "description": "Opens the dialog that has the server download from a source URL. The bar button, the sheet row, and the dialog's own title."
+  },
+  "uploadsFromUrlSubtitle": "A video, a playlist, or a channel",
+  "@uploadsFromUrlSubtitle": {
+    "description": "Second line of the add-from-URL row, naming what a source URL may point at."
+  },
+  "uploadsGroupingAlbum": "One album",
+  "@uploadsGroupingAlbum": {
+    "description": "Grouping choice: every file is part of one release."
+  },
+  "uploadsGroupingAlbumHelp": "Review all files as one release",
+  "@uploadsGroupingAlbumHelp": {
+    "description": "Help under the one-album grouping choice."
+  },
+  "uploadsGroupingAuto": "Auto-detect",
+  "@uploadsGroupingAuto": {
+    "description": "Grouping choice: let the server decide from the tags and folders."
+  },
+  "uploadsGroupingAutoHelp": "Group into albums by their tags and folders",
+  "@uploadsGroupingAutoHelp": {
+    "description": "Help under the auto-detect grouping choice."
+  },
+  "uploadsGroupingTitle": "How should these files be grouped?",
+  "@uploadsGroupingTitle": {
+    "description": "Heading over the grouping choice for a multi-file upload."
+  },
+  "uploadsGroupingTracks": "Separate tracks",
+  "@uploadsGroupingTracks": {
+    "description": "Grouping choice: every file stands on its own."
+  },
+  "uploadsGroupingTracksHelp": "Review every file on its own",
+  "@uploadsGroupingTracksHelp": {
+    "description": "Help under the separate-tracks grouping choice."
+  },
+  "uploadsIdentifyMusic": "Identify against MusicBrainz",
+  "@uploadsIdentifyMusic": {
+    "description": "The switch that matches music against the MusicBrainz catalogue before filing it. MusicBrainz is a service name and stays."
+  },
+  "uploadsIdentifyMusicHelp": "Matches it, then waits for your decision. Off adds it with the tags it has",
+  "@uploadsIdentifyMusicHelp": {
+    "description": "Help under the identify switch for music."
+  },
+  "uploadsIdentifyOther": "Review before adding",
+  "@uploadsIdentifyOther": {
+    "description": "The same switch for a podcast or a book, where there is no catalogue to match against, so all it decides is whether the submission waits."
+  },
+  "uploadsIdentifyOtherHelp": "Waits for your decision. Off adds it with the tags it has",
+  "@uploadsIdentifyOtherHelp": {
+    "description": "Help under the review-before-adding switch."
+  },
+  "uploadsLoadError": "Could not load uploads",
+  "@uploadsLoadError": {
+    "description": "Title of the error state on the uploads screen."
+  },
+  "uploadsLoadMore": "Load more",
+  "@uploadsLoadMore": {
+    "description": "Fetches the next page of uploads."
+  },
+  "uploadsMediaBook": "Audiobook",
+  "@uploadsMediaBook": {
+    "description": "Medium choice on the upload dialogs."
+  },
+  "uploadsMediaMusic": "Music",
+  "@uploadsMediaMusic": {
+    "description": "Medium choice on the upload dialogs."
+  },
+  "uploadsMediaPodcast": "Podcast",
+  "@uploadsMediaPodcast": {
+    "description": "Medium choice on the upload dialogs."
+  },
+  "uploadsOpenReview": "Open review entry",
+  "@uploadsOpenReview": {
+    "description": "Opens the review queue on the entry this upload made."
+  },
+  "uploadsPick": "Upload files",
+  "@uploadsPick": {
+    "description": "Opens the file picker. The bar button on the uploads screen and a row in the add sheet."
+  },
+  "uploadsPickFolder": "Upload a folder",
+  "@uploadsPickFolder": {
+    "description": "Opens the folder picker, whose hierarchy rides along as a grouping hint."
+  },
+  "uploadsPickFolderSubtitle": "An album or a collection, hierarchy and all",
+  "@uploadsPickFolderSubtitle": {
+    "description": "Second line of the upload-folder row."
+  },
+  "uploadsPickSubtitle": "One track, or a set you pick yourself",
+  "@uploadsPickSubtitle": {
+    "description": "Second line of the upload-files row in the add sheet."
+  },
+  "uploadsQuotaHelp": "This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.",
+  "@uploadsQuotaHelp": {
+    "description": "Under the staging figure, saying what the cap is a cap on."
+  },
+  "uploadsQuotaHelpUncapped": "Staged files are held until they are imported or discarded.",
+  "@uploadsQuotaHelpUncapped": {
+    "description": "Under the staging figure on a server with no cap."
+  },
+  "uploadsQuotaOf": "{used} of {cap}",
+  "@uploadsQuotaOf": {
+    "description": "How much of the staging cap is in use. Both are formatted sizes.",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "240 MB"
+      },
+      "cap": {
+        "type": "String",
+        "example": "2.0 GB"
+      }
+    }
+  },
+  "uploadsQuotaOverline": "Waiting to be imported",
+  "@uploadsQuotaOverline": {
+    "description": "Overline over how much is staged against the cap. The cap is on what may sit staged, not on what may be contributed."
+  },
+  "uploadsReceivedOf": "{percent}% of {size} received",
+  "@uploadsReceivedOf": {
+    "description": "How far one upload has got. {size} is a formatted size; Spanish puts a space before the percent sign.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "42"
+      },
+      "size": {
+        "type": "String",
+        "example": "48.2 MB"
+      }
+    }
+  },
+  "uploadsReceiving": "Receiving",
+  "@uploadsReceiving": {
+    "description": "Under an upload row while bytes are arriving and the total size is not known."
+  },
+  "uploadsRetry": "Retry upload",
+  "@uploadsRetry": {
+    "description": "Accessible name of the control that sends a failed upload again."
+  },
+  "uploadsSourceUrl": "Source URL",
+  "@uploadsSourceUrl": {
+    "description": "The field taking the address the server downloads from."
+  },
+  "uploadsSourceUrlHint": "A single video, or a playlist or channel",
+  "@uploadsSourceUrlHint": {
+    "description": "Placeholder in the source-URL field."
+  },
+  "uploadsTitle": "Uploads",
+  "@uploadsTitle": {
+    "description": "Title of the screen listing what has been sent to the server and not yet imported."
+  },
+  "uploadsTransferFailed": "Transfer failed",
+  "@uploadsTransferFailed": {
+    "description": "Drawn where an upload row's state chip goes when the bytes did not arrive."
+  },
+  "uploadsUpload": "Upload",
+  "@uploadsUpload": {
+    "description": "Confirming button of the dialog asking what is being uploaded."
+  },
+  "uploadsWhatMany": "What are these {count} files?",
+  "@uploadsWhatMany": {
+    "description": "Title of the dialog asking what several files are.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uploadsWhatOne": "What are you uploading?",
+  "@uploadsWhatOne": {
+    "description": "Title of the dialog asking what one file is."
+  },
+  "uploadsWhatThisIs": "What this is",
+  "@uploadsWhatThisIs": {
+    "description": "Accessible name of the picker choosing which medium is being added."
+  }
+}

@@ -1,0 +1,214 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "devicesBaseConfigured": "Configured address",
+  "@devicesBaseConfigured": {
+    "description": "Says a cast address was set by the server's operator rather than found."
+  },
+  "devicesBaseDetected": "Detected on this network",
+  "@devicesBaseDetected": {
+    "description": "Says a cast address was found on the network rather than configured."
+  },
+  "devicesBaseLine": "{source}, {state}",
+  "@devicesBaseLine": {
+    "description": "One cast address's line: where it came from, then whether it answered. Where the server names a source this build has not heard of, {source} is that word as the server wrote it.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Configured address"
+      },
+      "state": {
+        "type": "String",
+        "example": "reachable"
+      }
+    }
+  },
+  "devicesBaseReachable": "reachable",
+  "@devicesBaseReachable": {
+    "description": "Says a cast address answered. Lower case: it follows a comma on the same line."
+  },
+  "devicesBaseUnreachable": "not reachable",
+  "@devicesBaseUnreachable": {
+    "description": "Says a cast address did not answer. Lower case: it follows a comma on the same line."
+  },
+  "devicesCastBlurb": "A cast device fetches audio from this server by address. These are the addresses it will try, in order.",
+  "@devicesCastBlurb": {
+    "description": "Under the connection check heading, saying why the addresses matter."
+  },
+  "devicesCastCaveat": "The server checked these itself. An address it cannot reach will not work from a speaker either; one it can may still fail if the speaker is on another network.",
+  "@devicesCastCaveat": {
+    "description": "The caveat over the address list: the server checking itself is not the speaker checking, and a reader deciding what to fix needs to know which of the two this is."
+  },
+  "devicesCastingOverline": "Casting",
+  "@devicesCastingOverline": {
+    "description": "Line above the connection check heading, naming what it is about."
+  },
+  "devicesCheckError": "Could not check",
+  "@devicesCheckError": {
+    "description": "Title of the error state when the connection check could not be run."
+  },
+  "devicesConnectionCheck": "Connection check",
+  "@devicesConnectionCheck": {
+    "description": "Opens the sheet listing the addresses a cast device would try, and heads it."
+  },
+  "devicesCurrentlyElsewhere": "Currently elsewhere",
+  "@devicesCurrentlyElsewhere": {
+    "description": "Line above the device list when the sheet was opened over a session running on another device."
+  },
+  "devicesGroupApps": "WaxDeck apps",
+  "@devicesGroupApps": {
+    "description": "Heading over the devices running WaxDeck itself."
+  },
+  "devicesGroupOther": "Other devices",
+  "@devicesGroupOther": {
+    "description": "Heading over the endpoints of a kind this build does not recognise. It takes whatever the other groups do not, so an endpoint is never dropped."
+  },
+  "devicesGroupServer": "This server",
+  "@devicesGroupServer": {
+    "description": "Heading over the server's own audio output, where it has one."
+  },
+  "devicesGroupSpeakers": "Speakers and displays",
+  "@devicesGroupSpeakers": {
+    "description": "Heading over the cast and DLNA devices playback can be sent to."
+  },
+  "devicesLeaveItPlaying": "Leave it playing",
+  "@devicesLeaveItPlaying": {
+    "description": "Button that closes the remote control without stopping what is playing elsewhere."
+  },
+  "devicesListError": "Could not list devices",
+  "@devicesListError": {
+    "description": "Row in the device sheet when the device list could not be read."
+  },
+  "devicesListErrorMessage": "The server did not answer. Playback here is unaffected.",
+  "@devicesListErrorMessage": {
+    "description": "Under the device-list error, saying that local playback still works."
+  },
+  "devicesLooking": "Looking for devices",
+  "@devicesLooking": {
+    "description": "Row in the device sheet while the device list is being read."
+  },
+  "devicesMore": "More",
+  "@devicesMore": {
+    "description": "Accessible name of the overflow menu in the device sheet."
+  },
+  "devicesMultiPartAudiobook": "Multi-part audiobooks can't play on {endpoint} yet. Play it on this device instead.",
+  "@devicesMultiPartAudiobook": {
+    "description": "Snackbar when handing a multi-part audiobook to a device that cannot play one. {endpoint} is that device's user-chosen name.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "devicesNoAddresses": "No addresses to try",
+  "@devicesNoAddresses": {
+    "description": "Empty state of the connection check."
+  },
+  "devicesNoAddressesMessage": "This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.",
+  "@devicesNoAddressesMessage": {
+    "description": "Empty state of the connection check, saying what to do about it."
+  },
+  "devicesNothingElsewhere": "Nothing playing elsewhere",
+  "@devicesNothingElsewhere": {
+    "description": "Empty state of the remote playback screen."
+  },
+  "devicesNothingElsewhereMessage": "Pick a device from the now-playing bar to send playback somewhere else.",
+  "@devicesNothingElsewhereMessage": {
+    "description": "Empty state of the remote playback screen, saying where the device list is."
+  },
+  "devicesNothingToSend": "Nothing is playing here to send. Start something first.",
+  "@devicesNothingToSend": {
+    "description": "Snackbar when the device picker is asked to hand playback over with nothing playing."
+  },
+  "devicesOnEndpoint": "on {endpoint}",
+  "@devicesOnEndpoint": {
+    "description": "Under a session running elsewhere, naming the device. Lower case: it continues the line above it.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "devicesPlayOn": "Play on",
+  "@devicesPlayOn": {
+    "description": "Opens the list of devices playback can be sent to, and heads that list. Followed by a device name in the reader's mind rather than on screen, so it reads as the start of a sentence."
+  },
+  "devicesPlayOnAnother": "Play on another device",
+  "@devicesPlayOnAnother": {
+    "description": "Accessible name of the control that opens the device list from the remote screen."
+  },
+  "devicesPlaying": "Playing",
+  "@devicesPlaying": {
+    "description": "Stands in for what another device is playing when its title is not known."
+  },
+  "devicesPlayingElsewhere": "Playing elsewhere",
+  "@devicesPlayingElsewhere": {
+    "description": "Heading over the sessions running on other devices."
+  },
+  "devicesPlayingHere": "Playing here",
+  "@devicesPlayingHere": {
+    "description": "Under this device's row when nothing is playing elsewhere."
+  },
+  "devicesPlayingOn": "Playing on {endpoint}",
+  "@devicesPlayingOn": {
+    "description": "Message after playback was handed to another device, and the title of the sheet asking what to do about a session already there. {endpoint} is that device's user-chosen name.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "devicesRemoteTitle": "Remote playback",
+  "@devicesRemoteTitle": {
+    "description": "Title of the screen controlling playback running on another device."
+  },
+  "devicesStartedBy": "started by {name}",
+  "@devicesStartedBy": {
+    "description": "Says who started the session running on another device. Lower case: it follows a comma on the same line.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "devicesStopOn": "Stop playback on {endpoint}",
+  "@devicesStopOn": {
+    "description": "Button that stops what is playing on another device. {endpoint} is that device's user-chosen name.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "devicesTakeOverBody": "This device can take over, or leave it playing where it is.",
+  "@devicesTakeOverBody": {
+    "description": "Body of the dialog asking what to do about playback already running elsewhere."
+  },
+  "devicesTakeOverOrLeave": "Take over, or leave it playing",
+  "@devicesTakeOverOrLeave": {
+    "description": "Under this device's row while something is playing elsewhere."
+  },
+  "devicesThisDevice": "This device",
+  "@devicesThisDevice": {
+    "description": "The row for the device the listener is holding, in the device sheet."
+  },
+  "devicesTransferHere": "Transfer here",
+  "@devicesTransferHere": {
+    "description": "Button that moves playback from another device to this one."
+  },
+  "devicesVolumeOn": "Volume on {endpoint}",
+  "@devicesVolumeOn": {
+    "description": "Accessible name of the volume slider for another device. {endpoint} is that device's user-chosen name.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  }
+}

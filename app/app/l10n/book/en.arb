@@ -1,0 +1,330 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "bookBackToBeginning": "Back to the beginning",
+  "@bookBackToBeginning": {
+    "description": "Snackbar after putting a book's position back at zero."
+  },
+  "bookByAuthors": "By {names}",
+  "@bookByAuthors": {
+    "description": "Who wrote a book, under its title. {names} is the authors joined by commas.",
+    "placeholders": {
+      "names": {
+        "type": "String",
+        "example": "Ursula K. Le Guin"
+      }
+    }
+  },
+  "bookChapterFallback": "Chapter {number}",
+  "@bookChapterFallback": {
+    "description": "Stands in for a chapter mark the file numbered but did not title.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "bookChaptersOverline": "{count, plural, =1{1 in this book} other{{count} in this book}}",
+  "@bookChaptersOverline": {
+    "description": "Overline above a book's chapters, counting them.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bookChaptersTitle": "Chapters",
+  "@bookChaptersTitle": {
+    "description": "Heading over a book's chapter list."
+  },
+  "bookDownloadOffline": "Download for offline",
+  "@bookDownloadOffline": {
+    "description": "Control keeping a book's audio on this device."
+  },
+  "bookEditMetadata": "Edit metadata",
+  "@bookEditMetadata": {
+    "description": "Row in a book's overflow opening the metadata editor. Administrators only."
+  },
+  "bookEditionTitle": "About this edition",
+  "@bookEditionTitle": {
+    "description": "Heading over a book's technical rows, behind an expander."
+  },
+  "bookFallbackTitle": "Audiobook",
+  "@bookFallbackTitle": {
+    "description": "Title of a book screen opened cold, before the book it names has loaded."
+  },
+  "bookFieldAbridged": "Abridged",
+  "@bookFieldAbridged": {
+    "description": "Whether an edition is shortened from the full text."
+  },
+  "bookFieldAsin": "ASIN",
+  "@bookFieldAsin": {
+    "description": "A book's Amazon identifier. The identifier's name, the same everywhere."
+  },
+  "bookFieldEdition": "Edition",
+  "@bookFieldEdition": {
+    "description": "Which edition of a book this is."
+  },
+  "bookFieldFiles": "Files",
+  "@bookFieldFiles": {
+    "description": "How many files a book is made of."
+  },
+  "bookFieldIsbn": "ISBN",
+  "@bookFieldIsbn": {
+    "description": "A book's ISBN. The standard's name, the same everywhere."
+  },
+  "bookFieldPublisher": "Publisher",
+  "@bookFieldPublisher": {
+    "description": "Who published an edition of a book."
+  },
+  "bookLoadError": "Could not load this book",
+  "@bookLoadError": {
+    "description": "Title of the error state when one book could not be read."
+  },
+  "bookMarkFinished": "Mark finished",
+  "@bookMarkFinished": {
+    "description": "Row in a book's overflow recording it as heard to the end."
+  },
+  "bookMarkedFinished": "Marked finished",
+  "@bookMarkedFinished": {
+    "description": "Snackbar after recording a book as heard to the end."
+  },
+  "bookMerge": "Merge into one chaptered file",
+  "@bookMerge": {
+    "description": "Row in a book's overflow turning several files into one with chapter marks. Administrators only."
+  },
+  "bookMore": "More",
+  "@bookMore": {
+    "description": "Accessible name of a book's overflow menu."
+  },
+  "bookNo": "No",
+  "@bookNo": {
+    "description": "The other value of a yes-or-no row in a book's edition details."
+  },
+  "bookPartsCount": "{count, plural, other{{count} parts}}",
+  "@bookPartsCount": {
+    "description": "How many files a book is, in the line under its title. Only said where there is more than one.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bookPartsNote": "{count, plural, other{This book is {count} files, played as one timeline. Positions and chapters span all of them.}}",
+  "@bookPartsNote": {
+    "description": "Footnote on a book made of several files, so a listener who wonders why has the answer where they are looking.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bookPercent": "{percent} percent",
+  "@bookPercent": {
+    "description": "How far through a book the listener is, in the line under its title.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "bookPlay": "Play",
+  "@bookPlay": {
+    "description": "Button on a book that has not been started, or has been finished and starts again."
+  },
+  "bookPlaybackSettings": "Playback settings",
+  "@bookPlaybackSettings": {
+    "description": "The per-book playback settings: the control that opens them, and the heading of the sheet they open."
+  },
+  "bookReadBy": "Read by {names}",
+  "@bookReadBy": {
+    "description": "Who narrated a book, under its title. {names} is the narrators joined by commas.",
+    "placeholders": {
+      "names": {
+        "type": "String",
+        "example": "Karen Archer"
+      }
+    }
+  },
+  "bookResume": "Resume",
+  "@bookResume": {
+    "description": "Button picking a book up where it was left, on a book whose chapters the resume point could not name."
+  },
+  "bookResumeChapter": "Resume {chapter}",
+  "@bookResumeChapter": {
+    "description": "The same button naming the chapter the listener stopped in, which is what makes it a promise rather than a guess.",
+    "placeholders": {
+      "chapter": {
+        "type": "String",
+        "example": "Chapter 12"
+      }
+    }
+  },
+  "bookSeriesSequence": "Book {number} of {series}",
+  "@bookSeriesSequence": {
+    "description": "Where a book sits in its series, as a link to the rest of it.",
+    "placeholders": {
+      "number": {
+        "type": "String",
+        "example": "2"
+      },
+      "series": {
+        "type": "String",
+        "example": "Earthsea"
+      }
+    }
+  },
+  "bookSettingsSpeed": "Speed {speed}",
+  "@bookSettingsSpeed": {
+    "description": "The playback rate this book is set to. {speed} arrives already worded, with its multiplier sign.",
+    "placeholders": {
+      "speed": {
+        "type": "String",
+        "example": "1.2x"
+      }
+    }
+  },
+  "bookSettingsSpeedLabel": "Playback speed",
+  "@bookSettingsSpeedLabel": {
+    "description": "Accessible name of the speed slider on the per-book settings sheet."
+  },
+  "bookShareLink": "Share link",
+  "@bookShareLink": {
+    "description": "Row in a book's overflow minting a link somebody outside the server can open."
+  },
+  "bookSplit": "Split at chapters",
+  "@bookSplit": {
+    "description": "Row in a book's overflow cutting one file into a file per chapter. Administrators only."
+  },
+  "bookStartOver": "Start over",
+  "@bookStartOver": {
+    "description": "Row in a book's overflow putting the listener back at the beginning."
+  },
+  "bookToolQueued": "Queued. Follow it in Tasks.",
+  "@bookToolQueued": {
+    "description": "Snackbar after starting a merge or a split, which run as background tasks. The capitalised word is the name of the screen that lists them."
+  },
+  "bookToolTasks": "Tasks",
+  "@bookToolTasks": {
+    "description": "Action on the queued-tool snackbar, opening the screen that lists background tasks."
+  },
+  "bookTrimSilence": "Trim silence",
+  "@bookTrimSilence": {
+    "description": "Switch shortening the gaps in a book's narration."
+  },
+  "bookTrimSilenceHelp": "Shortens the pauses between sentences",
+  "@bookTrimSilenceHelp": {
+    "description": "Help under the trim-silence switch on a book."
+  },
+  "bookUndo": "Undo",
+  "@bookUndo": {
+    "description": "Action on the position snackbars, putting back where the listener was."
+  },
+  "bookVoiceBoost": "Voice boost",
+  "@bookVoiceBoost": {
+    "description": "Switch lifting the narrator above the rest of the audio."
+  },
+  "bookVoiceBoostHelp": "Lifts speech over a noisy room",
+  "@bookVoiceBoostHelp": {
+    "description": "Help under the voice-boost switch on a book."
+  },
+  "bookYes": "Yes",
+  "@bookYes": {
+    "description": "The value of a yes-or-no row in a book's edition details."
+  },
+  "booksAuthorChip": "{name} ({count})",
+  "@booksAuthorChip": {
+    "description": "Chip narrowing the hub to one author, with how many books they have on the shelf.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Ursula K. Le Guin"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "booksContinueOverline": "Part way through",
+  "@booksContinueOverline": {
+    "description": "Overline above the continue-listening shelf."
+  },
+  "booksContinueTitle": "Continue listening",
+  "@booksContinueTitle": {
+    "description": "Shelf on the audiobook hub holding the books part way through."
+  },
+  "booksEmptyMessage": "Books turn up here as the library scans them. Point a library at your audiobook folder and they arrive with their chapters.",
+  "@booksEmptyMessage": {
+    "description": "Message under the empty state of the audiobook hub."
+  },
+  "booksEmptyTitle": "No audiobooks yet",
+  "@booksEmptyTitle": {
+    "description": "Empty state of the audiobook hub."
+  },
+  "booksFilterAll": "All",
+  "@booksFilterAll": {
+    "description": "Chip showing every book."
+  },
+  "booksFilterEmptyMessage": "{filter, select, unfinished{No book here is unfinished.} finished{No book here is finished.} other{No book here matches.}}",
+  "@booksFilterEmptyMessage": {
+    "description": "Why the book grid came up empty, named after the chip that narrowed it.",
+    "placeholders": {
+      "filter": {
+        "type": "String",
+        "example": "finished"
+      }
+    }
+  },
+  "booksFilterFinished": "Finished",
+  "@booksFilterFinished": {
+    "description": "Chip narrowing the hub to the books listened to the end."
+  },
+  "booksFilterUnfinished": "Unfinished",
+  "@booksFilterUnfinished": {
+    "description": "Chip narrowing the hub to the books not listened to the end."
+  },
+  "booksFinished": "Finished",
+  "@booksFinished": {
+    "description": "Said under a book's cover, and in the line under its title, when it has been heard to the end."
+  },
+  "booksLoadError": "Could not load your books",
+  "@booksLoadError": {
+    "description": "Title of the error state when the audiobooks could not be read."
+  },
+  "booksMore": "More",
+  "@booksMore": {
+    "description": "Accessible name of the audiobook hub's overflow menu."
+  },
+  "booksNothingMatches": "Nothing matches",
+  "@booksNothingMatches": {
+    "description": "Empty state where the chips left no book standing, which is different from an empty library."
+  },
+  "booksShowAll": "Show all books",
+  "@booksShowAll": {
+    "description": "Button clearing the finished filter from the empty state it produced."
+  },
+  "booksSortRow": "{sort, select, recent{Sort by recently added} title{Sort by title} author{Sort by author} other{Sort by {sort}}}",
+  "@booksSortRow": {
+    "description": "Row in the hub overflow choosing what order the books are in.",
+    "placeholders": {
+      "sort": {
+        "type": "String",
+        "example": "recent"
+      }
+    }
+  },
+  "booksTimeLeft": "{time} left",
+  "@booksTimeLeft": {
+    "description": "How much of a book is unheard, under its cover. {time} arrives already worded as a span.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "6 hr"
+      }
+    }
+  },
+  "booksTitle": "Audiobooks",
+  "@booksTitle": {
+    "description": "The audiobook domain's front door, named on its own title."
+  }
+}

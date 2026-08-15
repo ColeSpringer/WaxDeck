@@ -1,0 +1,14 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "speedMultiplier": "{speed}x",
+  "@speedMultiplier": {
+    "description": "A playback rate as a picker option. The x is the multiplier convention; {speed} arrives already written for this language, so a locale that separates decimals differently is already handled.",
+    "placeholders": {
+      "speed": {
+        "type": "String",
+        "example": "1.5"
+      }
+    }
+  }
+}

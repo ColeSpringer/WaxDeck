@@ -1,0 +1,10 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "durationDays": "{days, plural, =1{1 día} other{{days} días}}",
+  "durationHours": "{hours, plural, =1{1 hora} other{{hours} horas}}",
+  "durationHoursMinutesShort": "{hours} h {minutes} min",
+  "durationMinutesShort": "{minutes} min",
+  "durationSecondsShort": "{seconds} s"
+}

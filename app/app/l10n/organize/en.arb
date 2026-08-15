@@ -1,0 +1,112 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "organizeApply": "Apply",
+  "@organizeApply": {
+    "description": "Runs the move. Both the confirming button and the button that opens the confirmation."
+  },
+  "organizeColumnFrom": "Now at",
+  "@organizeColumnFrom": {
+    "description": "Column of the dry-run table: where a file is today."
+  },
+  "organizeColumnTo": "Moves to",
+  "@organizeColumnTo": {
+    "description": "Column of the dry-run table: where the profile would put it."
+  },
+  "organizeConfirmMessage": "Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.",
+  "@organizeConfirmMessage": {
+    "description": "Body of the typed confirmation before files are moved."
+  },
+  "organizeConfirmTitle": "Apply organize profile?",
+  "@organizeConfirmTitle": {
+    "description": "Title of the typed confirmation before files are moved."
+  },
+  "organizeEmptyMessage": "Profiles are part of the server configuration. Add one there and it appears here.",
+  "@organizeEmptyMessage": {
+    "description": "Empty state of the organize screen."
+  },
+  "organizeEmptyTitle": "No organize profiles",
+  "@organizeEmptyTitle": {
+    "description": "Empty state where the server configuration defines no profiles."
+  },
+  "organizeFailed": "Failed",
+  "@organizeFailed": {
+    "description": "How many files a finished run could not move."
+  },
+  "organizeHint": "Preview shows where the selected profile would move files before anything happens.",
+  "@organizeHint": {
+    "description": "Drawn where the plan or the report goes, before either exists."
+  },
+  "organizeLoadError": "Could not load organize profiles",
+  "@organizeLoadError": {
+    "description": "Title of the error state when the profile list would not load."
+  },
+  "organizeMoved": "Moved",
+  "@organizeMoved": {
+    "description": "How many files a finished run moved."
+  },
+  "organizeNothingMessage": "This profile would move nothing.",
+  "@organizeNothingMessage": {
+    "description": "Empty state of a dry run that would move nothing."
+  },
+  "organizeNothingTitle": "Everything is already in place",
+  "@organizeNothingTitle": {
+    "description": "Empty state of a dry run that would move nothing."
+  },
+  "organizePlannedMoves": "{count, plural, =1{1 planned move} other{{count} planned moves}}",
+  "@organizePlannedMoves": {
+    "description": "Heading over the dry run, saying how many files it would move.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "412"
+      }
+    }
+  },
+  "organizePreview": "Preview",
+  "@organizePreview": {
+    "description": "Shows where the chosen profile would move files, without moving any."
+  },
+  "organizeProfileLabel": "Organize profile",
+  "@organizeProfileLabel": {
+    "description": "Accessible name of the profile picker."
+  },
+  "organizeProfileOverline": "The naming scheme to move into",
+  "@organizeProfileOverline": {
+    "description": "Overline over the profile picker."
+  },
+  "organizeProfileTitle": "Profile",
+  "@organizeProfileTitle": {
+    "description": "Heading over the profile picker."
+  },
+  "organizeResultTitle": "Result",
+  "@organizeResultTitle": {
+    "description": "Heading over what a finished run actually did."
+  },
+  "organizeShowingFirst": "Showing the first {shown} of {total}",
+  "@organizeShowingFirst": {
+    "description": "Caption on the dry-run table when the server capped how many moves it listed.",
+    "placeholders": {
+      "shown": {
+        "type": "int",
+        "example": "100"
+      },
+      "total": {
+        "type": "int",
+        "example": "412"
+      }
+    }
+  },
+  "organizeSkipped": "Skipped",
+  "@organizeSkipped": {
+    "description": "How many files a finished run left where they were."
+  },
+  "organizeTagWrite": "Tags are rewritten too",
+  "@organizeTagWrite": {
+    "description": "Overline over the dry run for a profile that edits the files as well as moving them."
+  },
+  "organizeTitle": "Organize files",
+  "@organizeTitle": {
+    "description": "Title of the screen that rewrites the library's on-disk layout."
+  }
+}

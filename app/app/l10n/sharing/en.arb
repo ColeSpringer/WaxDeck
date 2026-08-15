@@ -1,0 +1,146 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "sharingAllowDownload": "Allow download",
+  "@sharingAllowDownload": {
+    "description": "The switch letting the shared page offer the original file, and its accessible name."
+  },
+  "sharingAllowDownloadHelp": "The page offers the original file, not just playback",
+  "@sharingAllowDownloadHelp": {
+    "description": "Help under the allow-download switch."
+  },
+  "sharingCopyLink": "Copy link",
+  "@sharingCopyLink": {
+    "description": "Accessible name of the control that copies one share link."
+  },
+  "sharingCreate": "Create link",
+  "@sharingCreate": {
+    "description": "Confirming button of the share dialog."
+  },
+  "sharingDialogBody": "Anyone with the link can play this. It goes on your clipboard as soon as it is made.",
+  "@sharingDialogBody": {
+    "description": "Body of the share dialog, saying what a link is and where it goes."
+  },
+  "sharingDialogTitle": "Share link",
+  "@sharingDialogTitle": {
+    "description": "Title of the dialog that mints a public link."
+  },
+  "sharingDownloadAllowed": "download allowed",
+  "@sharingDownloadAllowed": {
+    "description": "In a share row's caption, for a link that offers the original file. Lower case: the caption is a line of facts."
+  },
+  "sharingEmptyMessage": "Share a track, an episode, a book, or a playlist and the link turns up here, with how often it has been played and a way to switch it off.",
+  "@sharingEmptyMessage": {
+    "description": "Empty state of the share-links screen."
+  },
+  "sharingEmptyTitle": "No share links yet",
+  "@sharingEmptyTitle": {
+    "description": "Empty state of the share-links screen."
+  },
+  "sharingExpiredOn": "expired {date}",
+  "@sharingExpiredOn": {
+    "description": "In a share row's caption, for a link past its expiry. Lower case: the caption is a line of facts. {date} is already formatted.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Aug 12, 2026"
+      }
+    }
+  },
+  "sharingExpires": "Expires",
+  "@sharingExpires": {
+    "description": "The row choosing when a link stops working, and the accessible name of its picker."
+  },
+  "sharingExpiresHelp": "When the link stops working",
+  "@sharingExpiresHelp": {
+    "description": "Help under the expiry picker."
+  },
+  "sharingExpiresOn": "expires {date}",
+  "@sharingExpiresOn": {
+    "description": "In a share row's caption, for a link that still works. Lower case: the caption is a line of facts.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Aug 12, 2026"
+      }
+    }
+  },
+  "sharingExpiryDay": "1 day",
+  "@sharingExpiryDay": {
+    "description": "Expiry choice: the link lasts a day."
+  },
+  "sharingExpiryMonth": "30 days",
+  "@sharingExpiryMonth": {
+    "description": "Expiry choice: the link lasts thirty days."
+  },
+  "sharingExpiryNever": "Never",
+  "@sharingExpiryNever": {
+    "description": "Expiry choice: the link keeps working until it is revoked."
+  },
+  "sharingExpiryWeek": "1 week",
+  "@sharingExpiryWeek": {
+    "description": "Expiry choice: the link lasts a week."
+  },
+  "sharingKind": "{kind, select, track{Track} album{Album} playlist{Playlist} book{Audiobook} episode{Episode} other{{kind}}}",
+  "@sharingKind": {
+    "description": "What a share link opens, in the caption under its title. The vocabulary is open, so an unknown kind falls back to the server's own word.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "track"
+      }
+    }
+  },
+  "sharingLinkCopied": "Link copied",
+  "@sharingLinkCopied": {
+    "description": "Snackbar confirming a share link is on the clipboard."
+  },
+  "sharingLinkRevoked": "Link revoked",
+  "@sharingLinkRevoked": {
+    "description": "Snackbar confirming a share link has been switched off."
+  },
+  "sharingLoadError": "Could not load your share links",
+  "@sharingLoadError": {
+    "description": "Title of the error state on the share-links screen."
+  },
+  "sharingNeverExpires": "never expires",
+  "@sharingNeverExpires": {
+    "description": "In a share row's caption, for a link with no expiry. Lower case: the caption is a comma-separated line of facts."
+  },
+  "sharingPlays": "{count, plural, =1{1 play} other{{count} plays}}",
+  "@sharingPlays": {
+    "description": "How often a shared link has been used, in the line under it.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "7"
+      }
+    }
+  },
+  "sharingRevokeLink": "Revoke link",
+  "@sharingRevokeLink": {
+    "description": "Accessible name of the control that switches one share link off."
+  },
+  "sharingStartAt": "Start at {time}",
+  "@sharingStartAt": {
+    "description": "The switch making the link open where playback is now. {time} is a timecode.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "12:04"
+      }
+    }
+  },
+  "sharingStartAtHelp": "The link opens where you are now",
+  "@sharingStartAtHelp": {
+    "description": "Help under the start-at-position switch."
+  },
+  "sharingStartAtLabel": "Start at this position",
+  "@sharingStartAtLabel": {
+    "description": "Accessible name of the start-at-position switch, which its own row already puts a time on."
+  },
+  "sharingTitle": "Share links",
+  "@sharingTitle": {
+    "description": "Title of the screen listing the links this account has minted."
+  }
+}

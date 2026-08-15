@@ -1,0 +1,220 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "artSlotBack": "Back cover",
+  "@artSlotBack": {
+    "description": "The reverse of the sleeve."
+  },
+  "artSlotBackInline": "back cover",
+  "@artSlotBackInline": {
+    "description": "The back cover named inside a sentence. See the note on the front cover's inline form."
+  },
+  "artSlotBackground": "Background",
+  "@artSlotBackground": {
+    "description": "A wide image, and an artist portrait."
+  },
+  "artSlotBackgroundInline": "background",
+  "@artSlotBackgroundInline": {
+    "description": "The background image named inside a sentence. See the note on the front cover's inline form."
+  },
+  "artSlotBooklet": "Booklet",
+  "@artSlotBooklet": {
+    "description": "A page from the insert."
+  },
+  "artSlotBookletInline": "booklet",
+  "@artSlotBookletInline": {
+    "description": "The booklet page named inside a sentence. See the note on the front cover's inline form."
+  },
+  "artSlotDisc": "Disc",
+  "@artSlotDisc": {
+    "description": "The label printed on the disc itself."
+  },
+  "artSlotDiscInline": "disc",
+  "@artSlotDiscInline": {
+    "description": "The disc image named inside a sentence. See the note on the front cover's inline form."
+  },
+  "artSlotFront": "Front cover",
+  "@artSlotFront": {
+    "description": "The image everything else falls back to."
+  },
+  "artSlotFrontInline": "front cover",
+  "@artSlotFrontInline": {
+    "description": "The front cover named inside a sentence. English lower-cases it; a language needing an article or a different case writes that here, because the sentences around it cannot know the gender of the words in this list."
+  },
+  "artworkClearAction": "Clear",
+  "@artworkClearAction": {
+    "description": "Confirming button of the clear-artwork dialog."
+  },
+  "artworkClearBody": "The slot becomes empty. Nothing falls back into it.",
+  "@artworkClearBody": {
+    "description": "Body of the clear dialog for every slot but the front cover."
+  },
+  "artworkClearFrontBody": "The item falls back to its album or artist cover. The image itself is removed from the catalog.",
+  "@artworkClearFrontBody": {
+    "description": "Body of the clear dialog for the front cover, which is the one slot that falls back to something else."
+  },
+  "artworkClearSlot": "Clear the {slot}",
+  "@artworkClearSlot": {
+    "description": "Accessible name of the control that empties one artwork slot. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkClearTitle": "Clear the {slot}?",
+  "@artworkClearTitle": {
+    "description": "Title of the dialog confirming that one artwork slot is emptied. {slot} is the slot's inline form, which carries the article this language needs.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkClearWord": "clear",
+  "@artworkClearWord": {
+    "description": "The word typed to confirm emptying an artwork slot. Lower case, and compared against what was typed, so translating it changes what has to be typed."
+  },
+  "artworkCleared": "{slot} cleared",
+  "@artworkCleared": {
+    "description": "Message after one artwork slot was emptied. {slot} is the slot's name.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      }
+    }
+  },
+  "artworkDropHint": "Drop an image into {slot}",
+  "@artworkDropHint": {
+    "description": "Hint drawn over one artwork slot when a file is dragged onto it. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkOneImageOnly": "{slot} takes one image; using {file}",
+  "@artworkOneImageOnly": {
+    "description": "Message after several images were dropped on one slot. {slot} is the slot's name and {file} the one that was taken.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      },
+      "file": {
+        "type": "String",
+        "example": "cover.jpg"
+      }
+    }
+  },
+  "artworkOverline": "One image per slot",
+  "@artworkOverline": {
+    "description": "Line above the Artwork heading. A slot is one named place an image can go."
+  },
+  "artworkPickLabel": "Image",
+  "@artworkPickLabel": {
+    "description": "What the file picker calls the image it is asking for."
+  },
+  "artworkReplaceSlot": "Replace the {slot}",
+  "@artworkReplaceSlot": {
+    "description": "Accessible name of the control that replaces a filled artwork slot. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkReplaced": "{slot} replaced",
+  "@artworkReplaced": {
+    "description": "Message after one artwork slot was filled. {slot} is the slot's name.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      }
+    }
+  },
+  "artworkSetSlot": "Set the {slot}",
+  "@artworkSetSlot": {
+    "description": "Accessible name of the control that fills an empty artwork slot. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "front cover"
+      }
+    }
+  },
+  "artworkSlotSpoken": "{slot}: {state}",
+  "@artworkSlotSpoken": {
+    "description": "One artwork tile read as a whole: the slot's name, then what is in it.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      },
+      "state": {
+        "type": "String",
+        "example": "jpeg, 1000 x 1000"
+      }
+    }
+  },
+  "artworkSlotsUnreadable": "Could not read which slots this item holds; what is drawn below may be inherited.",
+  "@artworkSlotsUnreadable": {
+    "description": "Caution over the artwork grid when the slot listing failed. Inherited means the image belongs to the album or artist rather than to this item."
+  },
+  "artworkStateEmpty": "Empty",
+  "@artworkStateEmpty": {
+    "description": "Says an artwork slot holds nothing. Agrees with the word for a slot in this language."
+  },
+  "artworkStateImage": "image",
+  "@artworkStateImage": {
+    "description": "Stands in for an image's format when the server did not say what it is. Lower case: it leads a comma-separated run of facts about the image."
+  },
+  "artworkStateInherited": "Inherited",
+  "@artworkStateInherited": {
+    "description": "Says a slot draws the album's or artist's image rather than one of its own. Agrees with the word for an image in this language."
+  },
+  "artworkStateSize": "{width} x {height}",
+  "@artworkStateSize": {
+    "description": "An image's pixel size, in a comma-separated run of facts about it.",
+    "placeholders": {
+      "width": {
+        "type": "int",
+        "example": "1000"
+      },
+      "height": {
+        "type": "int",
+        "example": "1000"
+      }
+    }
+  },
+  "artworkTitle": "Artwork",
+  "@artworkTitle": {
+    "description": "Heading over an item's images."
+  },
+  "artworkTooLarge": "{file} is larger than the 16 MB an image may be",
+  "@artworkTooLarge": {
+    "description": "Refusal for an image over the endpoint's ceiling. The ceiling is fixed at 16 megabytes.",
+    "placeholders": {
+      "file": {
+        "type": "String",
+        "example": "scan.png"
+      }
+    }
+  },
+  "artworkUnreadable": "{file} could not be read",
+  "@artworkUnreadable": {
+    "description": "Refusal for a picked image whose bytes could not be opened.",
+    "placeholders": {
+      "file": {
+        "type": "String",
+        "example": "cover.jpg"
+      }
+    }
+  }
+}

@@ -1,0 +1,1087 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "playlistAddHint": "Search the library",
+  "@playlistAddHint": {
+    "description": "Hint in the add field on a playlist screen."
+  },
+  "playlistAddLabel": "Add to this playlist",
+  "@playlistAddLabel": {
+    "description": "Field on a playlist screen that searches the library so a hit can be appended."
+  },
+  "playlistAddNothing": "Nothing here to add. Artists and albums are not members of a playlist; their tracks are.",
+  "@playlistAddNothing": {
+    "description": "Said under the add field when a search answered with nothing a playlist can hold."
+  },
+  "playlistAddToTitle": "Add to playlist",
+  "@playlistAddToTitle": {
+    "description": "Title of the sheet picking which playlist an item joins."
+  },
+  "playlistAdded": "Added \"{title}\"",
+  "@playlistAdded": {
+    "description": "Snackbar after appending one item to the open playlist. {title} is that item's title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Desert Island Disk"
+      }
+    }
+  },
+  "playlistAddedTo": "Added \"{title}\" to {playlist}",
+  "@playlistAddedTo": {
+    "description": "Snackbar after adding an item to a playlist chosen from the sheet.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Desert Island Disk"
+      },
+      "playlist": {
+        "type": "String",
+        "example": "Late night"
+      }
+    }
+  },
+  "playlistAlreadyIn": "Already in this list",
+  "@playlistAlreadyIn": {
+    "description": "Under a row in the add-to-playlist sheet whose playlist already holds the item. Said rather than only ticked."
+  },
+  "playlistConflictBanner": "{reason} Nothing was changed; this is the list as it stands.",
+  "@playlistConflictBanner": {
+    "description": "Banner after a reorder the server refused. {reason} is the server's own sentence, which is the only thing that knows which of three refusals it was.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "Somebody else reordered this list first."
+      }
+    }
+  },
+  "playlistCopiedM3u": "Playlist copied as M3U",
+  "@playlistCopiedM3u": {
+    "description": "Snackbar after the M3U reached the clipboard."
+  },
+  "playlistCopiedPortable": "Portable playlist copied",
+  "@playlistCopiedPortable": {
+    "description": "Snackbar after the portable export reached the clipboard."
+  },
+  "playlistCoverImage": "Cover image",
+  "@playlistCoverImage": {
+    "description": "What the file picker calls the image it is asking for as a playlist cover."
+  },
+  "playlistCoverReset": "Back to the cover made from members",
+  "@playlistCoverReset": {
+    "description": "Snackbar after dropping an uploaded playlist cover."
+  },
+  "playlistCoverUnreadable": "Could not read that image: {reason}",
+  "@playlistCoverUnreadable": {
+    "description": "Snackbar when the picked cover could not be read off the device. {reason} is the platform's own diagnostic and stays in English.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "PathAccessException"
+      }
+    }
+  },
+  "playlistCreateAction": "Create",
+  "@playlistCreateAction": {
+    "description": "Confirming button that makes the playlist."
+  },
+  "playlistCreateNext": "Next",
+  "@playlistCreateNext": {
+    "description": "Confirming button of the create dialog when the smart kind is chosen, which opens the rule editor rather than creating anything."
+  },
+  "playlistDelete": "Delete",
+  "@playlistDelete": {
+    "description": "Row in a playlist's overflow menu, and the confirming button of the dialog it opens."
+  },
+  "playlistDeleteBody": "It goes for everyone it is shared with. The items in it are never touched.",
+  "@playlistDeleteBody": {
+    "description": "Body of the delete-playlist dialog, saying what goes and what does not."
+  },
+  "playlistDeleteTitle": "Delete this playlist?",
+  "@playlistDeleteTitle": {
+    "description": "Title of the dialog confirming a playlist is deleted."
+  },
+  "playlistDragToReorder": "Drag to reorder",
+  "@playlistDragToReorder": {
+    "description": "Accessible name of the drag handle on a playlist row."
+  },
+  "playlistEditRules": "Edit rules",
+  "@playlistEditRules": {
+    "description": "Button beside a smart playlist's rule chips, opening the rule editor."
+  },
+  "playlistEditableEmptyMessage": "Search above to add the first track, or use \"Add to playlist\" from anywhere something is playing.",
+  "@playlistEditableEmptyMessage": {
+    "description": "Message under the empty state of a manual playlist this account may edit. The quoted phrase names the sheet, so it matches that sheet's own title."
+  },
+  "playlistEmptyTitle": "Nothing in here",
+  "@playlistEmptyTitle": {
+    "description": "Empty state of a manual playlist."
+  },
+  "playlistEntryRemove": "Remove from playlist",
+  "@playlistEntryRemove": {
+    "description": "Accessible name of the control dropping one row from a playlist."
+  },
+  "playlistExportCopy": "Copy",
+  "@playlistExportCopy": {
+    "description": "Button copying the M3U on screen to the clipboard."
+  },
+  "playlistExportM3u": "Export M3U",
+  "@playlistExportM3u": {
+    "description": "Row in a playlist's overflow menu offering it as an M3U file, and the title of the dialog that shows it."
+  },
+  "playlistExportPortable": "Export portable",
+  "@playlistExportPortable": {
+    "description": "Row in a playlist's overflow menu copying the playlist in the form another WaxDeck server can import."
+  },
+  "playlistFactsManual": "Manual playlist",
+  "@playlistFactsManual": {
+    "description": "First fact in the line under a manual playlist's title."
+  },
+  "playlistFactsSmart": "Smart playlist",
+  "@playlistFactsSmart": {
+    "description": "First fact in the line under a smart playlist's title."
+  },
+  "playlistFallbackTitle": "Playlist",
+  "@playlistFallbackTitle": {
+    "description": "Title of a playlist screen opened cold, before the playlist it names has loaded."
+  },
+  "playlistForeignEmptyMessage": "The owner has not put anything in this list yet.",
+  "@playlistForeignEmptyMessage": {
+    "description": "Message under the empty state of somebody else's playlist, which this account cannot fill."
+  },
+  "playlistImportComplete": "Import complete",
+  "@playlistImportComplete": {
+    "description": "Title of the report after an import that made a playlist."
+  },
+  "playlistImportCreated": "Created \"{name}\" with {resolved} of {requested} entries.",
+  "@playlistImportCreated": {
+    "description": "Body of the import report, counting what resolved out of what was pasted.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Late night"
+      },
+      "resolved": {
+        "type": "int"
+      },
+      "requested": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportHintExport": "Paste the exported playlist here",
+  "@playlistImportHintExport": {
+    "description": "What the paste box wants for an import from another music service."
+  },
+  "playlistImportHintM3u": "Paste the playlist file here",
+  "@playlistImportHintM3u": {
+    "description": "What the paste box wants for an M3U import."
+  },
+  "playlistImportHintPortable": "Paste what Export portable copied",
+  "@playlistImportHintPortable": {
+    "description": "What the paste box wants for a portable import. The quoted action is the menu row on the other server, so it matches that row's own words."
+  },
+  "playlistImportHintText": "One track a line: artist - title",
+  "@playlistImportHintText": {
+    "description": "What the paste box wants for a plain text import."
+  },
+  "playlistImportMenu": "Import playlist",
+  "@playlistImportMenu": {
+    "description": "Accessible name of the menu offering the places a playlist can be imported from."
+  },
+  "playlistImportMissingHeading": "Not in the library:",
+  "@playlistImportMissingHeading": {
+    "description": "Heading over the import report's list of entries that found no match."
+  },
+  "playlistImportMissingRow": "{artist} - {title}",
+  "@playlistImportMissingRow": {
+    "description": "One unmatched entry in the import report, where the export named an artist.",
+    "placeholders": {
+      "artist": {
+        "type": "String",
+        "example": "Talk Talk"
+      },
+      "title": {
+        "type": "String",
+        "example": "Ascension Day"
+      }
+    }
+  },
+  "playlistImportNeedsName": "An M3U import needs a name for the playlist.",
+  "@playlistImportNeedsName": {
+    "description": "Refusal when an M3U import is confirmed with no name, which is the one source that carries none."
+  },
+  "playlistImportNoEntries": "The portable playlist carries no entries",
+  "@playlistImportNoEntries": {
+    "description": "Refusal when the pasted portable playlist is the right shape but empty."
+  },
+  "playlistImportNoMatches": "No entries matched the library, so no playlist was created.",
+  "@playlistImportNoMatches": {
+    "description": "Body of the import report when nothing resolved."
+  },
+  "playlistImportNotJson": "This is not the copied portable JSON",
+  "@playlistImportNotJson": {
+    "description": "Refusal when the pasted portable import is not JSON at all."
+  },
+  "playlistImportNotPortable": "This is not a portable playlist (expected a name and a refs list)",
+  "@playlistImportNotPortable": {
+    "description": "Refusal when the pasted JSON parses but is not the shape the exporter writes. The word in the parenthesis is a key of that JSON and stays as it is."
+  },
+  "playlistImportNothing": "Nothing imported",
+  "@playlistImportNothing": {
+    "description": "Title of the report after an import where nothing resolved, so no playlist was made."
+  },
+  "playlistImportPasteFirst": "Paste the playlist first.",
+  "@playlistImportPasteFirst": {
+    "description": "Refusal when the import dialog is confirmed with an empty paste box."
+  },
+  "playlistImportPayloadLabel": "{source} export",
+  "@playlistImportPayloadLabel": {
+    "description": "Accessible name of the paste box. {source} is the import source's own name.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Spotify CSV"
+      }
+    }
+  },
+  "playlistImportRun": "Import",
+  "@playlistImportRun": {
+    "description": "Confirming button of the import dialog."
+  },
+  "playlistImportSourceAppleMusic": "Apple Music",
+  "@playlistImportSourceAppleMusic": {
+    "description": "Import source: an Apple Music export. The product name stays as it is."
+  },
+  "playlistImportSourceCsv": "Generic CSV",
+  "@playlistImportSourceCsv": {
+    "description": "Import source: any comma-separated export the resolver can read."
+  },
+  "playlistImportSourceM3u": "M3U file",
+  "@playlistImportSourceM3u": {
+    "description": "Import source: the plain playlist file format. M3U is the format's name and stays as it is."
+  },
+  "playlistImportSourcePortable": "Portable JSON",
+  "@playlistImportSourcePortable": {
+    "description": "Import source: what another WaxDeck server's portable export copied."
+  },
+  "playlistImportSourceSpotify": "Spotify CSV",
+  "@playlistImportSourceSpotify": {
+    "description": "Import source: a Spotify export. The product name stays as it is."
+  },
+  "playlistImportSourceText": "Text list",
+  "@playlistImportSourceText": {
+    "description": "Import source: plain lines of text."
+  },
+  "playlistImportSourceYtMusic": "YouTube Music CSV",
+  "@playlistImportSourceYtMusic": {
+    "description": "Import source: a YouTube Music export. The product name stays as it is."
+  },
+  "playlistImportTitle": "Import from {source}",
+  "@playlistImportTitle": {
+    "description": "Title of the paste dialog. {source} is the import source's own name.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Spotify CSV"
+      }
+    }
+  },
+  "playlistImportedAll": "{count, plural, =1{Imported \"{name}\" with 1 item} other{Imported \"{name}\" with {count} items}}",
+  "@playlistImportedAll": {
+    "description": "Snackbar after an M3U import where every line found a match in the library.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Late night"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportedPartial": "Imported \"{name}\": {matched} matched, {unmatched} not in the library",
+  "@playlistImportedPartial": {
+    "description": "Snackbar after an M3U import where some lines found no match.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Late night"
+      },
+      "matched": {
+        "type": "int"
+      },
+      "unmatched": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistItemCount": "{count, plural, =1{1 item} other{{count} items}}",
+  "@playlistItemCount": {
+    "description": "How much a playlist holds: on its card, in the line under its title, and in the rule editor's match count.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistKindManual": "Manual",
+  "@playlistKindManual": {
+    "description": "Chip picking a playlist that holds what is put in it, as opposed to a smart one."
+  },
+  "playlistKindManualHelp": "A manual playlist holds what you put in it, in the order you put it.",
+  "@playlistKindManualHelp": {
+    "description": "Line under the kind chips when the manual kind is chosen."
+  },
+  "playlistKindSmartHelp": "A smart playlist keeps itself: you write the rules next and it evaluates them every time it is opened.",
+  "@playlistKindSmartHelp": {
+    "description": "Line under the kind chips when the smart kind is chosen."
+  },
+  "playlistLoadError": "Could not load this playlist",
+  "@playlistLoadError": {
+    "description": "Title of the error state when one playlist could not be read."
+  },
+  "playlistMakePrivate": "Make private",
+  "@playlistMakePrivate": {
+    "description": "Row in a shared playlist's overflow menu, taking it back from the server."
+  },
+  "playlistMore": "More",
+  "@playlistMore": {
+    "description": "Accessible name of a playlist's overflow menu."
+  },
+  "playlistMoveDown": "Move down",
+  "@playlistMoveDown": {
+    "description": "Screen-reader action moving a playlist row one place later."
+  },
+  "playlistMoveUp": "Move up",
+  "@playlistMoveUp": {
+    "description": "Screen-reader action moving a playlist row one place earlier. The drag handle is not a path for everyone."
+  },
+  "playlistNameLabel": "Playlist name",
+  "@playlistNameLabel": {
+    "description": "Field taking the name of a playlist being made, renamed, or imported."
+  },
+  "playlistNameOptional": "Playlist name (optional)",
+  "@playlistNameOptional": {
+    "description": "The same field on an import whose export already carries a name."
+  },
+  "playlistNameRequired": "A playlist needs a name.",
+  "@playlistNameRequired": {
+    "description": "Refusal under the name field when the create dialog is confirmed with it empty."
+  },
+  "playlistNoManualLists": "No manual playlists yet. Make one below and this goes straight into it.",
+  "@playlistNoManualLists": {
+    "description": "Said in the add-to-playlist sheet when the account owns no list an item could join."
+  },
+  "playlistPlay": "Play",
+  "@playlistPlay": {
+    "description": "Button on a playlist's header that plays it from the start."
+  },
+  "playlistRename": "Rename",
+  "@playlistRename": {
+    "description": "Row in a playlist's overflow menu, and the confirming button of the dialog it opens."
+  },
+  "playlistRenameTitle": "Rename playlist",
+  "@playlistRenameTitle": {
+    "description": "Title of the dialog renaming a playlist."
+  },
+  "playlistResetCover": "Reset cover",
+  "@playlistResetCover": {
+    "description": "Row in a playlist's overflow menu that drops an uploaded cover and goes back to the one made from its members."
+  },
+  "playlistRuleAddCondition": "Condition",
+  "@playlistRuleAddCondition": {
+    "description": "Button adding one condition to a group. Reads after a plus glyph."
+  },
+  "playlistRuleAddGroup": "Group",
+  "@playlistRuleAddGroup": {
+    "description": "Button adding a nested group to a group. Reads after a plus glyph."
+  },
+  "playlistRuleAddSort": "Sort key",
+  "@playlistRuleAddSort": {
+    "description": "Button adding a sort key. Reads after a plus glyph."
+  },
+  "playlistRuleAllOf": "All of",
+  "@playlistRuleAllOf": {
+    "description": "A group of smart-rule conditions that all have to hold."
+  },
+  "playlistRuleAnd": "and",
+  "@playlistRuleAnd": {
+    "description": "Between the two fields of a range condition in the editor."
+  },
+  "playlistRuleAnyOf": "Any of",
+  "@playlistRuleAnyOf": {
+    "description": "A group of smart-rule conditions of which one is enough."
+  },
+  "playlistRuleCondition": "{field} {op} {value}",
+  "@playlistRuleCondition": {
+    "description": "A smart-rule condition as a phrase: \"Genre is Rock\".",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Genre"
+      },
+      "op": {
+        "type": "String",
+        "example": "is"
+      },
+      "value": {
+        "type": "String",
+        "example": "Rock"
+      }
+    }
+  },
+  "playlistRuleConditionRange": "{field} {op} {low} and {high}",
+  "@playlistRuleConditionRange": {
+    "description": "A smart-rule condition between two values: \"Year is between 1990 and 1999\".",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Year"
+      },
+      "op": {
+        "type": "String",
+        "example": "is between"
+      },
+      "low": {
+        "type": "String",
+        "example": "1990"
+      },
+      "high": {
+        "type": "String",
+        "example": "1999"
+      }
+    }
+  },
+  "playlistRuleConditionRelative": "{field} {op} {days}",
+  "@playlistRuleConditionRelative": {
+    "description": "A smart-rule condition counting back from now: \"Added at is in the last 90 days\". {days} arrives already worded.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Added at"
+      },
+      "op": {
+        "type": "String",
+        "example": "is in the last"
+      },
+      "days": {
+        "type": "String",
+        "example": "90 days"
+      }
+    }
+  },
+  "playlistRuleConditionUnary": "{field} {op}",
+  "@playlistRuleConditionUnary": {
+    "description": "A smart-rule condition whose operator takes no value: \"Genre is set\".",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Genre"
+      },
+      "op": {
+        "type": "String",
+        "example": "is set"
+      }
+    }
+  },
+  "playlistRuleDayCount": "{days, plural, =1{1 day} other{{days} days}}",
+  "@playlistRuleDayCount": {
+    "description": "The number of days a relative smart-rule condition looks back over.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistRuleDaysSuffix": "days",
+  "@playlistRuleDaysSuffix": {
+    "description": "Unit after the number in a relative condition's editor."
+  },
+  "playlistRuleEditorTitle": "Rules: {name}",
+  "@playlistRuleEditorTitle": {
+    "description": "Title of the rule editor. {name} is the playlist being written.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Late night"
+      }
+    }
+  },
+  "playlistRuleEmptyAll": "An empty group matches everything.",
+  "@playlistRuleEmptyAll": {
+    "description": "Said inside an all-of group with no conditions in it."
+  },
+  "playlistRuleEmptyAny": "An empty group matches nothing.",
+  "@playlistRuleEmptyAny": {
+    "description": "Said inside an any-of group with no conditions in it."
+  },
+  "playlistRuleEverything": "Everything",
+  "@playlistRuleEverything": {
+    "description": "Chip for a smart rule whose empty group matches the whole library."
+  },
+  "playlistRuleFieldAddedAt": "Added at",
+  "@playlistRuleFieldAddedAt": {
+    "description": "Smart-rule field: when an item entered the library."
+  },
+  "playlistRuleFieldAlbum": "Album",
+  "@playlistRuleFieldAlbum": {
+    "description": "Smart-rule field: an item's album, series, or show."
+  },
+  "playlistRuleFieldAlbumArtist": "Album artist",
+  "@playlistRuleFieldAlbumArtist": {
+    "description": "Smart-rule field: the artist a release is filed under, which differs from the track artist on a compilation."
+  },
+  "playlistRuleFieldAlbumBarcode": "Album barcode",
+  "@playlistRuleFieldAlbumBarcode": {
+    "description": "Smart-rule field: the release's barcode."
+  },
+  "playlistRuleFieldAlbumCatalogNumber": "Album catalog number",
+  "@playlistRuleFieldAlbumCatalogNumber": {
+    "description": "Smart-rule field: the label's own number for the release."
+  },
+  "playlistRuleFieldAlbumCountry": "Album country",
+  "@playlistRuleFieldAlbumCountry": {
+    "description": "Smart-rule field: where the release was issued."
+  },
+  "playlistRuleFieldAlbumLabel": "Album label",
+  "@playlistRuleFieldAlbumLabel": {
+    "description": "Smart-rule field: the record label that issued the release."
+  },
+  "playlistRuleFieldAlbumMedia": "Album media",
+  "@playlistRuleFieldAlbumMedia": {
+    "description": "Smart-rule field: what the release was pressed on."
+  },
+  "playlistRuleFieldArtist": "Artist",
+  "@playlistRuleFieldArtist": {
+    "description": "Smart-rule field: an item's artist, author, or show."
+  },
+  "playlistRuleFieldCodec": "Codec",
+  "@playlistRuleFieldCodec": {
+    "description": "Smart-rule field: the audio codec a file is encoded with."
+  },
+  "playlistRuleFieldContainer": "Container",
+  "@playlistRuleFieldContainer": {
+    "description": "Smart-rule field: the file format holding the audio."
+  },
+  "playlistRuleFieldDiscNumber": "Disc number",
+  "@playlistRuleFieldDiscNumber": {
+    "description": "Smart-rule field: which disc of a release a track sits on."
+  },
+  "playlistRuleFieldDurationMs": "Duration ms",
+  "@playlistRuleFieldDurationMs": {
+    "description": "Smart-rule field: how long an item runs, in milliseconds, which is the unit the rule takes."
+  },
+  "playlistRuleFieldFinished": "Finished",
+  "@playlistRuleFieldFinished": {
+    "description": "Smart-rule field: whether the item was listened to the end."
+  },
+  "playlistRuleFieldGenre": "Genre",
+  "@playlistRuleFieldGenre": {
+    "description": "Smart-rule field: an item's genre."
+  },
+  "playlistRuleFieldLastPlayedAt": "Last played at",
+  "@playlistRuleFieldLastPlayedAt": {
+    "description": "Smart-rule field: when this account last played the item."
+  },
+  "playlistRuleFieldMediaType": "Media type",
+  "@playlistRuleFieldMediaType": {
+    "description": "Smart-rule field: whether an item is music, a podcast, or an audiobook."
+  },
+  "playlistRuleFieldPath": "Path",
+  "@playlistRuleFieldPath": {
+    "description": "Smart-rule field: an item's path on disk."
+  },
+  "playlistRuleFieldPicker": "Field",
+  "@playlistRuleFieldPicker": {
+    "description": "Picker choosing what a condition or a sort key looks at."
+  },
+  "playlistRuleFieldPlayCount": "Play count",
+  "@playlistRuleFieldPlayCount": {
+    "description": "Smart-rule field: how many times this account finished the item."
+  },
+  "playlistRuleFieldPlayed": "Played",
+  "@playlistRuleFieldPlayed": {
+    "description": "Smart-rule field: whether the item reached the played threshold."
+  },
+  "playlistRuleFieldPlaylist": "Playlist",
+  "@playlistRuleFieldPlaylist": {
+    "description": "Smart-rule field: whether the item sits in a given playlist."
+  },
+  "playlistRuleFieldPodcast": "Podcast",
+  "@playlistRuleFieldPodcast": {
+    "description": "Smart-rule field: the show an episode belongs to."
+  },
+  "playlistRuleFieldPublishedAt": "Published at",
+  "@playlistRuleFieldPublishedAt": {
+    "description": "Smart-rule field: when an episode was published."
+  },
+  "playlistRuleFieldRating": "Rating",
+  "@playlistRuleFieldRating": {
+    "description": "Smart-rule field: this account's rating, from 0 to 100."
+  },
+  "playlistRuleFieldSeason": "Season",
+  "@playlistRuleFieldSeason": {
+    "description": "Smart-rule field: an episode's season number."
+  },
+  "playlistRuleFieldSource": "Source",
+  "@playlistRuleFieldSource": {
+    "description": "Smart-rule field: where an item came from - a local file, a feed, manual entry."
+  },
+  "playlistRuleFieldStarred": "Starred",
+  "@playlistRuleFieldStarred": {
+    "description": "Smart-rule field: whether this account starred the item."
+  },
+  "playlistRuleFieldStarredAt": "Starred at",
+  "@playlistRuleFieldStarredAt": {
+    "description": "Smart-rule field: when the star was set."
+  },
+  "playlistRuleFieldState": "State",
+  "@playlistRuleFieldState": {
+    "description": "Smart-rule field: whether an item is present, archived, remote, or missing."
+  },
+  "playlistRuleFieldTitle": "Title",
+  "@playlistRuleFieldTitle": {
+    "description": "Smart-rule field: an item's title."
+  },
+  "playlistRuleFieldTrackNumber": "Track number",
+  "@playlistRuleFieldTrackNumber": {
+    "description": "Smart-rule field: a track's number on its release."
+  },
+  "playlistRuleFieldUpdatedAt": "Updated at",
+  "@playlistRuleFieldUpdatedAt": {
+    "description": "Smart-rule field: when an item last changed."
+  },
+  "playlistRuleFieldWithCount": "{field} ({count})",
+  "@playlistRuleFieldWithCount": {
+    "description": "A custom tag in the field picker, with how many items carry it.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Tag: mood"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistRuleFieldYear": "Year",
+  "@playlistRuleFieldYear": {
+    "description": "Smart-rule field: an item's release or publication year."
+  },
+  "playlistRuleFirstMatches": "First matches",
+  "@playlistRuleFirstMatches": {
+    "description": "Heading over the preview list on a phone, where the count sits in the bar instead."
+  },
+  "playlistRuleHighestFirst": "Highest first",
+  "@playlistRuleHighestFirst": {
+    "description": "Button showing a sort key runs downward, and flipping it."
+  },
+  "playlistRuleLimitAtRandom": "at random",
+  "@playlistRuleLimitAtRandom": {
+    "description": "Limit mode: draw a random sample of what matches."
+  },
+  "playlistRuleLimitByCount": "by count",
+  "@playlistRuleLimitByCount": {
+    "description": "Limit mode: a plain cap on how many members join."
+  },
+  "playlistRuleLimitByMinutes": "by minutes",
+  "@playlistRuleLimitByMinutes": {
+    "description": "Limit mode: take members until the running time is used up."
+  },
+  "playlistRuleLimitBySize": "by size",
+  "@playlistRuleLimitBySize": {
+    "description": "Limit mode: take members until the size on disk is used up."
+  },
+  "playlistRuleLimitCount": "Limit {count}",
+  "@playlistRuleLimitCount": {
+    "description": "Chip for a smart rule bounded by a plain member count.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistRuleLimitHeading": "Limit",
+  "@playlistRuleLimitHeading": {
+    "description": "Heading over the rule editor's limit controls."
+  },
+  "playlistRuleLimitMegabytes": "Up to {count} MB",
+  "@playlistRuleLimitMegabytes": {
+    "description": "Chip for a smart rule bounded by size on disk.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistRuleLimitMinutes": "Up to {count} minutes",
+  "@playlistRuleLimitMinutes": {
+    "description": "Chip for a smart rule bounded by running time.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistRuleLimitNoLimit": "no limit",
+  "@playlistRuleLimitNoLimit": {
+    "description": "Hint in the limit field when leaving it blank means every match joins."
+  },
+  "playlistRuleLimitRandom": "{count} at random",
+  "@playlistRuleLimitRandom": {
+    "description": "Chip for a smart rule that draws a random sample.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistRuleLimitRequired": "required",
+  "@playlistRuleLimitRequired": {
+    "description": "Hint in the limit field for a mode that will not save without a number."
+  },
+  "playlistRuleLimitTake": "Take",
+  "@playlistRuleLimitTake": {
+    "description": "Picker choosing how a smart list is bounded: by count, at random, by minutes, by size."
+  },
+  "playlistRuleLowestFirst": "Lowest first",
+  "@playlistRuleLowestFirst": {
+    "description": "Button showing a sort key runs upward, and flipping it."
+  },
+  "playlistRuleMatches": "{count, plural, =1{Matches 1 item} other{Matches {count} items}}",
+  "@playlistRuleMatches": {
+    "description": "How much the draft rule matches right now.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistRuleMediaType": "{kind, select, music{music} podcast{podcast} audiobook{audiobook} other{{kind}}}",
+  "@playlistRuleMediaType": {
+    "description": "The media types a condition can test for. A kind this client does not know draws as the server's own word.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "music"
+      }
+    }
+  },
+  "playlistRuleNested": "Nested conditions",
+  "@playlistRuleNested": {
+    "description": "Chip standing in for a rule shape too deep to summarise in a row of chips."
+  },
+  "playlistRuleNo": "no",
+  "@playlistRuleNo": {
+    "description": "How a smart rule draws the value false."
+  },
+  "playlistRuleNoMatches": "Nothing in the library answers this yet.",
+  "@playlistRuleNoMatches": {
+    "description": "Said in the preview when the draft rule matches nothing."
+  },
+  "playlistRuleNoPlaylists": "No playlists to choose",
+  "@playlistRuleNoPlaylists": {
+    "description": "Said where the playlist picker would be, when the account can see no manual list a rule could point at."
+  },
+  "playlistRuleNoneOf": "None of",
+  "@playlistRuleNoneOf": {
+    "description": "A group of smart-rule conditions none of which may hold."
+  },
+  "playlistRuleNot": "Not",
+  "@playlistRuleNot": {
+    "description": "Chip inverting the single condition beside it, where a group word would read as a heading."
+  },
+  "playlistRuleNotAllOf": "Not all of",
+  "@playlistRuleNotAllOf": {
+    "description": "A group of smart-rule conditions that must not all hold at once."
+  },
+  "playlistRuleNotPhrase": "Not {phrase}",
+  "@playlistRuleNotPhrase": {
+    "description": "An inverted condition drawn as one chip. {phrase} is the condition read as a sentence.",
+    "placeholders": {
+      "phrase": {
+        "type": "String",
+        "example": "Genre is Rock"
+      }
+    }
+  },
+  "playlistRuleNothing": "Nothing",
+  "@playlistRuleNothing": {
+    "description": "Chip for a smart rule whose empty group matches nothing at all."
+  },
+  "playlistRuleOpAfter": "is after",
+  "@playlistRuleOpAfter": {
+    "description": "Smart-rule operator: later than a date."
+  },
+  "playlistRuleOpBefore": "is before",
+  "@playlistRuleOpBefore": {
+    "description": "Smart-rule operator: earlier than a date."
+  },
+  "playlistRuleOpContains": "contains",
+  "@playlistRuleOpContains": {
+    "description": "Smart-rule operator: the value appears somewhere in the field."
+  },
+  "playlistRuleOpEndsWith": "ends with",
+  "@playlistRuleOpEndsWith": {
+    "description": "Smart-rule operator: the field ends with the value."
+  },
+  "playlistRuleOpGt": "is more than",
+  "@playlistRuleOpGt": {
+    "description": "Smart-rule operator: strictly greater."
+  },
+  "playlistRuleOpGte": "is at least",
+  "@playlistRuleOpGte": {
+    "description": "Smart-rule operator: greater or equal."
+  },
+  "playlistRuleOpInTheLast": "is in the last",
+  "@playlistRuleOpInTheLast": {
+    "description": "Smart-rule operator: within a number of days back from now, which the condition then names."
+  },
+  "playlistRuleOpInTheRange": "is between",
+  "@playlistRuleOpInTheRange": {
+    "description": "Smart-rule operator: between two values, which the condition then names."
+  },
+  "playlistRuleOpIs": "is",
+  "@playlistRuleOpIs": {
+    "description": "Smart-rule operator: exact equality. Reads mid-sentence, after the field's name."
+  },
+  "playlistRuleOpIsMissing": "is not set",
+  "@playlistRuleOpIsMissing": {
+    "description": "Smart-rule operator: the field has no value. Takes no value of its own."
+  },
+  "playlistRuleOpIsNot": "is not",
+  "@playlistRuleOpIsNot": {
+    "description": "Smart-rule operator: not equal."
+  },
+  "playlistRuleOpIsPresent": "is set",
+  "@playlistRuleOpIsPresent": {
+    "description": "Smart-rule operator: the field has any value at all. Takes no value of its own."
+  },
+  "playlistRuleOpLt": "is less than",
+  "@playlistRuleOpLt": {
+    "description": "Smart-rule operator: strictly less."
+  },
+  "playlistRuleOpLte": "is at most",
+  "@playlistRuleOpLte": {
+    "description": "Smart-rule operator: less or equal."
+  },
+  "playlistRuleOpNotInTheLast": "is not in the last",
+  "@playlistRuleOpNotInTheLast": {
+    "description": "Smart-rule operator: outside a number of days back from now."
+  },
+  "playlistRuleOpPicker": "Is",
+  "@playlistRuleOpPicker": {
+    "description": "Picker choosing how a condition compares. Labelled for the commonest operator in English; another language may prefer the general word."
+  },
+  "playlistRuleOpStartsWith": "starts with",
+  "@playlistRuleOpStartsWith": {
+    "description": "Smart-rule operator: the field begins with the value."
+  },
+  "playlistRuleOrderBy": "Order by",
+  "@playlistRuleOrderBy": {
+    "description": "Heading over the rule editor's sort keys."
+  },
+  "playlistRulePickDate": "Pick a date",
+  "@playlistRulePickDate": {
+    "description": "Button opening the date picker for a condition with no date set yet."
+  },
+  "playlistRulePinnedOrder": "A pinned budget draws its own order.",
+  "@playlistRulePinnedOrder": {
+    "description": "Said where the sort card would be, when a pinned budget already decides the order."
+  },
+  "playlistRulePreviewPending": "Preview pending",
+  "@playlistRulePreviewPending": {
+    "description": "The match count before the first preview has come back."
+  },
+  "playlistRuleRandomOrder": "A random limit draws its own order.",
+  "@playlistRuleRandomOrder": {
+    "description": "Said where the sort card would be, when the limit already decides the order."
+  },
+  "playlistRuleReadOnlyMessage": "It uses something this editor cannot draw yet, so it is shown rather than edited. Nothing here will change it.",
+  "@playlistRuleReadOnlyMessage": {
+    "description": "Why the rule editor opened read-only."
+  },
+  "playlistRuleReadOnlyTitle": "This rule opens read-only",
+  "@playlistRuleReadOnlyTitle": {
+    "description": "Shown instead of the rule editor for a rule shape it cannot draw."
+  },
+  "playlistRuleRemoveCondition": "Remove condition",
+  "@playlistRuleRemoveCondition": {
+    "description": "Accessible name of the control dropping one condition."
+  },
+  "playlistRuleRemoveGroup": "Remove group",
+  "@playlistRuleRemoveGroup": {
+    "description": "Accessible name of the control dropping a group of conditions."
+  },
+  "playlistRuleRemoveSort": "Remove sort",
+  "@playlistRuleRemoveSort": {
+    "description": "Accessible name of the control dropping one sort key."
+  },
+  "playlistRuleSeedHelp": "Pins which tracks the budget picks, so the list is the same on the next rebuild",
+  "@playlistRuleSeedHelp": {
+    "description": "Help under the pinned-selection switch."
+  },
+  "playlistRuleSeedTitle": "Keep the same selection each time",
+  "@playlistRuleSeedTitle": {
+    "description": "Switch pinning which members a random or budget draw picks."
+  },
+  "playlistRuleSortBy": "By {field}",
+  "@playlistRuleSortBy": {
+    "description": "Chip naming the order a smart list comes out in. {field} is a rule field's own name.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Year"
+      }
+    }
+  },
+  "playlistRuleSortByDesc": "By {field}, highest first",
+  "@playlistRuleSortByDesc": {
+    "description": "The same chip where the order runs downward.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Year"
+      }
+    }
+  },
+  "playlistRuleTagField": "Tag: {key}",
+  "@playlistRuleTagField": {
+    "description": "A smart-rule field naming a custom tag. {key} is the tag's own key, typed by whoever made it, and stays as it is.",
+    "placeholders": {
+      "key": {
+        "type": "String",
+        "example": "mood"
+      }
+    }
+  },
+  "playlistRuleUnavailableList": "Unavailable list",
+  "@playlistRuleUnavailableList": {
+    "description": "Picker entry for a playlist a rule points at that this account can no longer see. Kept rather than repointed, so a save persists what was there."
+  },
+  "playlistRuleUnitItems": "items",
+  "@playlistRuleUnitItems": {
+    "description": "What the number beside a smart-rule limit counts, where the limit is a plain member cap."
+  },
+  "playlistRuleUnitMegabytes": "MB",
+  "@playlistRuleUnitMegabytes": {
+    "description": "What the number beside a smart-rule limit counts, where the limit is a size on disk. The unit symbol is international."
+  },
+  "playlistRuleUnitMinutes": "minutes",
+  "@playlistRuleUnitMinutes": {
+    "description": "What the number beside a smart-rule limit counts, where the limit is a running time."
+  },
+  "playlistRuleValuePicker": "Value",
+  "@playlistRuleValuePicker": {
+    "description": "The control holding what a condition compares against."
+  },
+  "playlistRuleVocabularyError": "Could not load the rule vocabulary",
+  "@playlistRuleVocabularyError": {
+    "description": "Title of the error state when the list of fields a rule may test could not be read."
+  },
+  "playlistRuleWorking": "Working it out…",
+  "@playlistRuleWorking": {
+    "description": "Said in the preview while the server is answering what the draft rule matches."
+  },
+  "playlistRuleYes": "yes",
+  "@playlistRuleYes": {
+    "description": "How a smart rule draws the value true. Lower case: it stands where a value stands, after an operator."
+  },
+  "playlistRulesLive": "Evaluated live, every time this list is opened.",
+  "@playlistRulesLive": {
+    "description": "Line under a smart playlist's rule chips, saying the membership is not stored."
+  },
+  "playlistRulesSpoken": "Rules: {rules}",
+  "@playlistRulesSpoken": {
+    "description": "The rule chips read as one thing for a screen reader. {rules} is the chips joined by commas.",
+    "placeholders": {
+      "rules": {
+        "type": "String",
+        "example": "Genre is Rock, By year"
+      }
+    }
+  },
+  "playlistSetCover": "Set cover",
+  "@playlistSetCover": {
+    "description": "Row in a playlist's overflow menu that uploads an image as its cover."
+  },
+  "playlistShareLink": "Share link",
+  "@playlistShareLink": {
+    "description": "Row in a playlist's overflow menu that mints a link somebody outside the server can open."
+  },
+  "playlistShareWithEveryone": "Share with everyone",
+  "@playlistShareWithEveryone": {
+    "description": "Row in a private playlist's overflow menu, offering it to the whole server."
+  },
+  "playlistSharedBy": "Shared by {name}",
+  "@playlistSharedBy": {
+    "description": "Byline on a card for somebody else's shared playlist. {name} is that person's display name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "ada"
+      }
+    }
+  },
+  "playlistSharedByYou": "Shared by you",
+  "@playlistSharedByYou": {
+    "description": "Byline on a card for a playlist this account owns and shared with everyone."
+  },
+  "playlistSharedHelp": "Anyone on this server can see and play it",
+  "@playlistSharedHelp": {
+    "description": "Help under the shared switch on the create dialog."
+  },
+  "playlistSharedWithEveryone": "Shared with everyone",
+  "@playlistSharedWithEveryone": {
+    "description": "Switch on the create dialog offering the playlist to the whole server, and the header line saying a playlist is."
+  },
+  "playlistShuffle": "Shuffle",
+  "@playlistShuffle": {
+    "description": "Button on a playlist's header that plays it in random order."
+  },
+  "playlistSmart": "Smart",
+  "@playlistSmart": {
+    "description": "A playlist that writes itself from rules: the badge on its card and the chip that picks that kind when making one."
+  },
+  "playlistSmartEmptyMessage": "No item in the library answers these rules. Loosen one and the list fills itself.",
+  "@playlistSmartEmptyMessage": {
+    "description": "Message under the empty state of a smart playlist."
+  },
+  "playlistSmartEmptyTitle": "Nothing matches yet",
+  "@playlistSmartEmptyTitle": {
+    "description": "Empty state of a smart playlist whose rules match nothing."
+  },
+  "playlistsEmptyMessage": "Make one, or add a track to a new list from anywhere it is playing. A smart playlist writes itself from rules and keeps up as the library grows.",
+  "@playlistsEmptyMessage": {
+    "description": "Message under the empty state of the playlists screen, saying the two ways to fill it."
+  },
+  "playlistsEmptyTitle": "No playlists yet",
+  "@playlistsEmptyTitle": {
+    "description": "Empty state of the playlists screen."
+  },
+  "playlistsLoadError": "Could not load your playlists",
+  "@playlistsLoadError": {
+    "description": "Title of the error state when the playlists could not be read."
+  },
+  "playlistsLoadErrorSentence": "Could not load your playlists.",
+  "@playlistsLoadErrorSentence": {
+    "description": "The same failure as a sentence in the add-to-playlist sheet, which has no room for an error state and says it in a line."
+  },
+  "playlistsNew": "New playlist",
+  "@playlistsNew": {
+    "description": "Action that makes a playlist: the toolbar button, the empty state's button, and the row at the foot of the add-to-playlist sheet."
+  },
+  "playlistsSectionShared": "Shared with the server",
+  "@playlistsSectionShared": {
+    "description": "Heading over the playlists other people shared with everyone."
+  },
+  "playlistsSectionYours": "Yours",
+  "@playlistsSectionYours": {
+    "description": "Heading over the playlists this account owns. Only drawn where there are shared ones too."
+  },
+  "playlistsTitle": "Playlists",
+  "@playlistsTitle": {
+    "description": "The screen holding every playlist, named on its own title and on the music hub tile that opens it."
+  }
+}

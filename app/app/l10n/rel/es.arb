@@ -1,0 +1,17 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "relDaysAgo": "{days, plural, =1{hace 1 d} other{hace {days} d}}",
+  "relDaysShort": "{days, plural, =1{hace 1 d} other{hace {days} d}}",
+  "relDueNow": "ahora",
+  "relHoursAgo": "{hours, plural, =1{hace 1 h} other{hace {hours} h}}",
+  "relHoursShort": "{hours, plural, =1{hace 1 h} other{hace {hours} h}}",
+  "relInDays": "{days, plural, =1{en 1 d} other{en {days} d}}",
+  "relInHours": "{hours, plural, =1{en 1 h} other{en {hours} h}}",
+  "relInMinutes": "{minutes, plural, =1{en 1 min} other{en {minutes} min}}",
+  "relJustNow": "ahora mismo",
+  "relMinutesAgo": "{minutes, plural, =1{hace 1 min} other{hace {minutes} min}}",
+  "relMinutesShort": "{minutes, plural, =1{hace 1 min} other{hace {minutes} min}}",
+  "relMonthsShort": "{months, plural, =1{hace 1 mes} other{hace {months} meses}}"
+}

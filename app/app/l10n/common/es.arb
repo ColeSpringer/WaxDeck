@@ -1,0 +1,12 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "commonCancel": "Cancelar",
+  "commonClose": "Cerrar",
+  "commonDone": "Listo",
+  "commonLoading": "Cargando",
+  "commonLoadingTitle": "Cargando…",
+  "commonRetry": "Reintentar",
+  "commonSave": "Guardar"
+}

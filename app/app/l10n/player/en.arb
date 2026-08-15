@@ -1,0 +1,564 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "playerAddLyrics": "Add lyrics",
+  "@playerAddLyrics": {
+    "description": "Button that opens the metadata editor to write lyrics."
+  },
+  "playerAddToPlaylist": "Add to playlist",
+  "@playerAddToPlaylist": {
+    "description": "Menu item that puts what is playing on a playlist."
+  },
+  "playerAllStations": "All stations",
+  "@playerAllStations": {
+    "description": "Menu item that opens the list of saved radio stations."
+  },
+  "playerBookmarkAdd": "Mark {time}",
+  "@playerBookmarkAdd": {
+    "description": "Button that bookmarks the position it names. {time} is a timecode.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "1:12:40"
+      }
+    }
+  },
+  "playerBookmarkNoNote": "No note",
+  "@playerBookmarkNoNote": {
+    "description": "Stands in for a bookmark's note where it has none."
+  },
+  "playerBookmarkNote": "Note (optional)",
+  "@playerBookmarkNote": {
+    "description": "Field for a word about why a place was marked."
+  },
+  "playerBookmarkNoteAt": "{note}, at {time}",
+  "@playerBookmarkNoteAt": {
+    "description": "Accessible name of a bookmark that carries a note. {time} is a timecode.",
+    "placeholders": {
+      "note": {
+        "type": "String",
+        "example": "the bit about the bridge"
+      },
+      "time": {
+        "type": "String",
+        "example": "1:12:40"
+      }
+    }
+  },
+  "playerBookmarkPlayFrom": "Play from {time}",
+  "@playerBookmarkPlayFrom": {
+    "description": "Accessible name of a bookmark with no note on it. {time} is a timecode.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "1:12:40"
+      }
+    }
+  },
+  "playerBookmarkRemove": "Remove the bookmark at {time}",
+  "@playerBookmarkRemove": {
+    "description": "Accessible name of the control that deletes one bookmark. {time} is its timecode.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "1:12:40"
+      }
+    }
+  },
+  "playerBookmarks": "Bookmarks",
+  "@playerBookmarks": {
+    "description": "The places in a book somebody marked to come back to. Heads the sheet holding them."
+  },
+  "playerBookmarksCount": "Bookmarks, {count}",
+  "@playerBookmarksCount": {
+    "description": "Accessible name of the bookmarks control, with how many the book holds. Drawn without the number when it holds none.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "playerBookmarksEmpty": "Nothing marked yet. A bookmark keeps a place you want to come back to; your listening position is kept for you either way.",
+  "@playerBookmarksEmpty": {
+    "description": "Empty state of the bookmarks sheet, saying that bookmarks are not how listening position is remembered."
+  },
+  "playerBookmarksError": "Could not load the bookmarks.",
+  "@playerBookmarksError": {
+    "description": "Drawn in the bookmarks sheet when the read failed for a reason the error table has no sentence for."
+  },
+  "playerCancelTimer": "Cancel timer",
+  "@playerCancelTimer": {
+    "description": "Stops the running sleep timer."
+  },
+  "playerCarIdleMessage": "Start something and it takes the whole screen.",
+  "@playerCarIdleMessage": {
+    "description": "Under the idle heading in car mode."
+  },
+  "playerCarMode": "Car mode",
+  "@playerCarMode": {
+    "description": "Opens the large-target playback screen made for a car."
+  },
+  "playerChapterPlaying": "{chapter}, playing",
+  "@playerChapterPlaying": {
+    "description": "Accessible name of the chapter a book is currently in. {chapter} is the chapter's own name.",
+    "placeholders": {
+      "chapter": {
+        "type": "String",
+        "example": "Chapter 4"
+      }
+    }
+  },
+  "playerChapters": "Chapters",
+  "@playerChapters": {
+    "description": "Accessible name of the chapter list in the book player."
+  },
+  "playerCloseLyrics": "Close lyrics",
+  "@playerCloseLyrics": {
+    "description": "Accessible name of the control that closes the lyrics panel."
+  },
+  "playerCollapse": "Collapse player",
+  "@playerCollapse": {
+    "description": "Accessible name of the control that closes the full player."
+  },
+  "playerCollapseCommand": "Collapse the player",
+  "@playerCollapseCommand": {
+    "description": "Command that closes the full player, in the command palette and the shortcut sheet."
+  },
+  "playerDeleteFiles": "Delete files...",
+  "@playerDeleteFiles": {
+    "description": "Menu item that deletes the playing item's files. The trailing dots say a confirmation follows."
+  },
+  "playerDownload": "Download",
+  "@playerDownload": {
+    "description": "Action on the player that keeps the playing item on this device."
+  },
+  "playerEditStation": "Edit station",
+  "@playerEditStation": {
+    "description": "Menu item that opens the playing station for editing."
+  },
+  "playerExtendTimer": "Extend 10 minutes",
+  "@playerExtendTimer": {
+    "description": "Adds ten minutes to the running sleep timer, in the timer sheet."
+  },
+  "playerExtendTimerShort": "Extend 10 min",
+  "@playerExtendTimerShort": {
+    "description": "The same as the sleep timer's extend action, worded short for a message that is already a sentence long. min is the abbreviation for minutes."
+  },
+  "playerFaster": "Faster",
+  "@playerFaster": {
+    "description": "Button that steps playback speed up."
+  },
+  "playerFindInLibrary": "Find \"{track}\" in the library",
+  "@playerFindInLibrary": {
+    "description": "Accessible name of the control that searches the library for the track a radio station announced.",
+    "placeholders": {
+      "track": {
+        "type": "String",
+        "example": "Blue in Green"
+      }
+    }
+  },
+  "playerForgetSong": "Forget this song",
+  "@playerForgetSong": {
+    "description": "Accessible name of the control that drops a saved radio song."
+  },
+  "playerGoToName": "Go to {name}",
+  "@playerGoToName": {
+    "description": "Accessible name of the control opening the show a playing episode belongs to. {name} is the show's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Song Exploder"
+      }
+    }
+  },
+  "playerGoToShow": "Go to show",
+  "@playerGoToShow": {
+    "description": "Menu item that opens the show the playing episode belongs to."
+  },
+  "playerIdleMessage": "Pick something from your library and it shows up here.",
+  "@playerIdleMessage": {
+    "description": "Under the idle heading on the full player."
+  },
+  "playerInstantMix": "Instant mix",
+  "@playerInstantMix": {
+    "description": "Menu item that builds a queue around what is playing."
+  },
+  "playerLeaveCarMode": "Leave car mode",
+  "@playerLeaveCarMode": {
+    "description": "Button that closes car mode."
+  },
+  "playerLeaveVisualizer": "Leave the visualizer",
+  "@playerLeaveVisualizer": {
+    "description": "Accessible name of the control that closes the visualizer."
+  },
+  "playerLeftCount": "{count, plural, =1{1 left} other{{count} left}}",
+  "@playerLeftCount": {
+    "description": "How many tracks remain after the ones listed under Up next.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "playerLyrics": "Lyrics",
+  "@playerLyrics": {
+    "description": "Opens the lyrics of what is playing."
+  },
+  "playerLyricsError": "Could not load the lyrics",
+  "@playerLyricsError": {
+    "description": "Title of the error state when lyrics could not be read."
+  },
+  "playerLyricsIdleMessage": "Words show up here once something is.",
+  "@playerLyricsIdleMessage": {
+    "description": "Under the idle heading on the lyrics panel. It finishes the heading's sentence, which says nothing is playing."
+  },
+  "playerMarkPlayed": "Mark as played",
+  "@playerMarkPlayed": {
+    "description": "Menu item that marks the playing episode finished."
+  },
+  "playerMiniWindow": "Mini player window",
+  "@playerMiniWindow": {
+    "description": "Sheet row that puts playback in a small always-on-top window."
+  },
+  "playerMoreLikeThis": "More like this",
+  "@playerMoreLikeThis": {
+    "description": "Menu offering the two ways of finding music like what is playing."
+  },
+  "playerNext": "Next",
+  "@playerNext": {
+    "description": "Accessible name of the control that steps forward a track."
+  },
+  "playerNoLyrics": "No lyrics for this track",
+  "@playerNoLyrics": {
+    "description": "Heading when the playing track carries no lyrics."
+  },
+  "playerNoLyricsAdminMessage": "Nothing was found in a sidecar or in the file tags. You can add them in the metadata editor.",
+  "@playerNoLyricsAdminMessage": {
+    "description": "Under the no-lyrics heading, for somebody who may edit the library."
+  },
+  "playerNoLyricsMessage": "Nothing was found in a sidecar or in the file tags.",
+  "@playerNoLyricsMessage": {
+    "description": "Under the no-lyrics heading. A sidecar is a small file stored beside the audio."
+  },
+  "playerNoShape": "No shape to draw",
+  "@playerNoShape": {
+    "description": "Heading when the playing file has no measured waveform."
+  },
+  "playerNoShapeMessage": "The visualizer draws what the analyze pass measured, and this file has not been measured. Run an analyze pass on the library and it fills in.",
+  "@playerNoShapeMessage": {
+    "description": "Under the no-shape heading, saying what would fill it."
+  },
+  "playerNothingPlaying": "Nothing is playing",
+  "@playerNothingPlaying": {
+    "description": "Heading of every idle playback surface: the player, car mode, the visualizer, and the lyrics panel. Each says something different underneath it."
+  },
+  "playerOfferQueued": "{count, plural, =1{1 queued item} other{{count} queued items}}",
+  "@playerOfferQueued": {
+    "description": "Names a queue offered for resuming when its first item has not resolved, so the count is all there is to say.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "14"
+      }
+    }
+  },
+  "playerOfferResume": "Pick up where you left off",
+  "@playerOfferResume": {
+    "description": "Under the offer to resume an earlier queue."
+  },
+  "playerOpenPlayer": "Open the player",
+  "@playerOpenPlayer": {
+    "description": "Sheet row that opens the full player."
+  },
+  "playerPart": "Part {number}",
+  "@playerPart": {
+    "description": "Heading over the chapters of one part of a multi-part book.",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "playerPause": "Pause",
+  "@playerPause": {
+    "description": "Accessible name of the control that pauses playback."
+  },
+  "playerPinStation": "Pin to the dial",
+  "@playerPinStation": {
+    "description": "Accessible name of the control that keeps a station among the favourites. The dial is the radio screen's own name for that row."
+  },
+  "playerPlay": "Play",
+  "@playerPlay": {
+    "description": "Accessible name of the control that resumes playback."
+  },
+  "playerPrevious": "Previous",
+  "@playerPrevious": {
+    "description": "Accessible name of the control that steps back a track."
+  },
+  "playerQueue": "Queue",
+  "@playerQueue": {
+    "description": "Opens the queue of what plays next."
+  },
+  "playerRatingFailed": "Could not save that change",
+  "@playerRatingFailed": {
+    "description": "Message when a star rating did not reach the server. The control has already moved back, so this is what says why."
+  },
+  "playerSaveSong": "Save this song",
+  "@playerSaveSong": {
+    "description": "Accessible name of the control that keeps the song a radio station is playing."
+  },
+  "playerSeekSpans": "Seek bar spans",
+  "@playerSeekSpans": {
+    "description": "Accessible name of the control choosing whether the seek bar covers the chapter or the whole book."
+  },
+  "playerShareLink": "Share link",
+  "@playerShareLink": {
+    "description": "Menu item that mints a public link to what is playing."
+  },
+  "playerSimilarTracks": "Similar tracks",
+  "@playerSimilarTracks": {
+    "description": "Menu item that lists tracks that sound like what is playing."
+  },
+  "playerSleepTimer": "Sleep timer",
+  "@playerSleepTimer": {
+    "description": "Accessible name of the sleep timer control while no timer is running."
+  },
+  "playerSleepTimerLeft": "Sleep timer, {time} left",
+  "@playerSleepTimerLeft": {
+    "description": "Accessible name of the sleep timer control while one is running. {time} is an already-worded duration.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "12 min"
+      }
+    }
+  },
+  "playerSlower": "Slower",
+  "@playerSlower": {
+    "description": "Button that steps playback speed down."
+  },
+  "playerSpanBook": "Book",
+  "@playerSpanBook": {
+    "description": "Seek bar covering the whole book."
+  },
+  "playerSpanChapter": "Chapter",
+  "@playerSpanChapter": {
+    "description": "Seek bar covering the current chapter alone."
+  },
+  "playerSpeed": "Playback speed",
+  "@playerSpeed": {
+    "description": "Heads the sheet setting how fast playback runs."
+  },
+  "playerSpeedAt": "Playback speed {speed}",
+  "@playerSpeedAt": {
+    "description": "Accessible name of the chip showing the current speed, which draws the number alone.",
+    "placeholders": {
+      "speed": {
+        "type": "String",
+        "example": "1.5x"
+      }
+    }
+  },
+  "playerSpeedRememberedBook": "Remembered for this book",
+  "@playerSpeedRememberedBook": {
+    "description": "Under the speed controls, saying the chosen speed is stored against this book rather than lasting only while it plays."
+  },
+  "playerSpeedRememberedShow": "Remembered for this show",
+  "@playerSpeedRememberedShow": {
+    "description": "Under the speed controls, saying the chosen speed is stored against this show."
+  },
+  "playerSpeedThisSession": "For this session only",
+  "@playerSpeedThisSession": {
+    "description": "Under the speed controls for music, where the speed is not stored."
+  },
+  "playerStar": "Star",
+  "@playerStar": {
+    "description": "Accessible name of the control that marks the playing track a favourite. Agrees with the word for a track in this language."
+  },
+  "playerStarRating": "{count} star rating",
+  "@playerStarRating": {
+    "description": "Accessible name of one star in the five-star row: the rating it would set.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
+      }
+    }
+  },
+  "playerStarRatingOf": "{count} star {kind} rating",
+  "@playerStarRatingOf": {
+    "description": "Accessible name of one star in an album's or artist's rating row. {kind} is the already-worded noun for what it is.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
+      },
+      "kind": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "playerStarThis": "Star this {kind}",
+  "@playerStarThis": {
+    "description": "Accessible name of the control that marks an album or an artist a favourite. {kind} is the already-worded noun for what it is.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "playerStart": "Start",
+  "@playerStart": {
+    "description": "Button that starts the typed sleep-timer length."
+  },
+  "playerStartFailed": "Playback failed to start",
+  "@playerStartFailed": {
+    "description": "Under the player's error heading when the failure came from the audio engine rather than from the server, so there is no code to translate."
+  },
+  "playerStationMenu": "More for {station}",
+  "@playerStationMenu": {
+    "description": "Accessible name of the menu holding what can be done with the playing radio station.",
+    "placeholders": {
+      "station": {
+        "type": "String",
+        "example": "FIP"
+      }
+    }
+  },
+  "playerStationWebsite": "Station website",
+  "@playerStationWebsite": {
+    "description": "Menu item that opens the station's own page in a browser."
+  },
+  "playerStopped": "Playback stopped",
+  "@playerStopped": {
+    "description": "Title of the player's error state."
+  },
+  "playerSupportShow": "Support the show",
+  "@playerSupportShow": {
+    "description": "Menu item opening a podcast's own funding page. Only drawn where the feed names one, and the feed's own wording wins when it gives one."
+  },
+  "playerTimerChapterEnd": "End of chapter",
+  "@playerTimerChapterEnd": {
+    "description": "Sleep timer option that stops when the current chapter ends."
+  },
+  "playerTimerCustom": "Custom minutes",
+  "@playerTimerCustom": {
+    "description": "Field for a sleep-timer length of the listener's own."
+  },
+  "playerTimerCustomStart": "Start custom timer",
+  "@playerTimerCustomStart": {
+    "description": "Accessible name of the button that starts the typed sleep-timer length."
+  },
+  "playerTimerLeft": "{time} left",
+  "@playerTimerLeft": {
+    "description": "Under the extend row in the sleep timer sheet, saying how much of the timer is left. {time} is an already-worded duration.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "12 min"
+      }
+    }
+  },
+  "playerTimerMinutes": "{count, plural, =1{1 minute} other{{count} minutes}}",
+  "@playerTimerMinutes": {
+    "description": "One of the offered sleep-timer lengths.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "playerTranscriptError": "Could not load the transcript.",
+  "@playerTranscriptError": {
+    "description": "Drawn in the transcript panel when the read failed for a reason the error table has no sentence for."
+  },
+  "playerTrimExplained": "Silence trimming skips the mapped quiet parts of an episode. Positions stay honest; the chip counts what it skipped.",
+  "@playerTrimExplained": {
+    "description": "Shown once, the first time silence trimming is turned on."
+  },
+  "playerTrimSilence": "Trim silence",
+  "@playerTrimSilence": {
+    "description": "Control that skips the quiet parts of a spoken recording."
+  },
+  "playerTrimSilenceSaved": "Trim silence ({saved})",
+  "@playerTrimSilenceSaved": {
+    "description": "The trim control once it has saved some listening time. {saved} is an already-worded duration.",
+    "placeholders": {
+      "saved": {
+        "type": "String",
+        "example": "12 min"
+      }
+    }
+  },
+  "playerUnpinStation": "Unpin from the dial",
+  "@playerUnpinStation": {
+    "description": "Accessible name of the control that drops a station from the favourites."
+  },
+  "playerUnstar": "Unstar",
+  "@playerUnstar": {
+    "description": "Accessible name of the control that unmarks the playing track. Agrees with the word for a track in this language."
+  },
+  "playerUnstarThis": "Unstar this {kind}",
+  "@playerUnstarThis": {
+    "description": "Accessible name of the control that unmarks an album or an artist. {kind} is the already-worded noun for what it is.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "album"
+      }
+    }
+  },
+  "playerUpNext": "UP NEXT",
+  "@playerUpNext": {
+    "description": "Heading over what plays after the current track. Upper case as a typographic style; write it the way small headings are written in this language."
+  },
+  "playerUpNextItem": "Up next, {title}",
+  "@playerUpNextItem": {
+    "description": "Accessible name of the up-next peek, naming what plays next.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Blue in Green"
+      }
+    }
+  },
+  "playerUpNextLabel": "Up next",
+  "@playerUpNextLabel": {
+    "description": "Accessible name of the up-next peek when the next track has not resolved yet."
+  },
+  "playerVisualizer": "Visualizer",
+  "@playerVisualizer": {
+    "description": "Menu item that opens the screen drawing the track's shape."
+  },
+  "playerVisualizerIdleMessage": "Start a track and its shape shows up here.",
+  "@playerVisualizerIdleMessage": {
+    "description": "Under the idle heading on the visualizer."
+  },
+  "playerVisualizerMode": "Visualizer mode",
+  "@playerVisualizerMode": {
+    "description": "Accessible name of the control choosing how the visualizer draws."
+  },
+  "playerVoiceBoost": "Voice boost",
+  "@playerVoiceBoost": {
+    "description": "Control that lifts speech out of the rest of the sound."
+  },
+  "playerVoiceBoostExplained": "Voice boost evens out a quiet or uneven recording. The server applies it, so what is playing reopens.",
+  "@playerVoiceBoostExplained": {
+    "description": "Shown once, the first time voice boost is turned on. It warns that playback restarts, because the server is what applies the effect."
+  },
+  "playerVoiceBoostFailed": "The settings for this show could not be reached, so voice boost was not changed.",
+  "@playerVoiceBoostFailed": {
+    "description": "Message when a voice-boost toggle did not reach the server. The setting belongs to the show, so it is stored rather than local."
+  },
+  "playerVolume": "Volume",
+  "@playerVolume": {
+    "description": "Accessible name of the volume slider."
+  }
+}

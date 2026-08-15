@@ -1,0 +1,430 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "musicAlbumDiscHeading": "DISC {disc}",
+  "@musicAlbumDiscHeading": {
+    "description": "Heading separating the sides of a multi-disc release. Upper case, as an overline.",
+    "placeholders": {
+      "disc": {
+        "type": "int"
+      }
+    }
+  },
+  "musicAlbumEditDetails": "Edit album details",
+  "@musicAlbumEditDetails": {
+    "description": "Row in an album's overflow menu that opens the release editor. Administrators only."
+  },
+  "musicAlbumEditorFieldLocked": "{field} is locked",
+  "@musicAlbumEditorFieldLocked": {
+    "description": "Accessible name of the lock mark beside an album-editor field. {field} is that field's label.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "Barcode"
+      }
+    }
+  },
+  "musicAlbumEditorForbiddenMessage": "Barcodes, labels, and catalog numbers are shared by everyone who can see this album, so the server keeps them to administrators.",
+  "@musicAlbumEditorForbiddenMessage": {
+    "description": "Why the album editor is closed to an ordinary account."
+  },
+  "musicAlbumEditorForbiddenTitle": "Only administrators can edit a release",
+  "@musicAlbumEditorForbiddenTitle": {
+    "description": "Empty state shown where the album editor would be, to an account that may not write it."
+  },
+  "musicAlbumEditorFromTags": "From tags",
+  "@musicAlbumEditorFromTags": {
+    "description": "Chip beside an album-editor field whose value came from the files' own tags rather than from somebody typing it."
+  },
+  "musicAlbumEditorSaveChanges": "{count, plural, =1{Save 1 change} other{Save {count} changes}}",
+  "@musicAlbumEditorSaveChanges": {
+    "description": "Save button on the album editor, counting the fields that differ from what is stored.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicAlbumEditorSaved": "Saved",
+  "@musicAlbumEditorSaved": {
+    "description": "Snackbar after the album editor's write landed."
+  },
+  "musicAlbumEditorSectionOverline": "What this edition is",
+  "@musicAlbumEditorSectionOverline": {
+    "description": "Overline above the album editor's fields."
+  },
+  "musicAlbumEditorSectionTitle": "Release identity",
+  "@musicAlbumEditorSectionTitle": {
+    "description": "Heading over the album editor's five fields."
+  },
+  "musicAlbumEditorWriteBackHelp": "Also rewrite the matching tags in every track on this release. Media has no tag form and stays here.",
+  "@musicAlbumEditorWriteBackHelp": {
+    "description": "Help under the write-tags switch on the album editor."
+  },
+  "musicAlbumEmptyMessage": "The tracks that were here have moved or been removed.",
+  "@musicAlbumEmptyMessage": {
+    "description": "Message under the empty state of an album, saying why it is empty."
+  },
+  "musicAlbumEmptyTitle": "Nothing in this album",
+  "@musicAlbumEmptyTitle": {
+    "description": "Empty state of an album whose tracks have all gone."
+  },
+  "musicAlbumLoadError": "Could not load this album",
+  "@musicAlbumLoadError": {
+    "description": "Title of the error state when an album could not be read."
+  },
+  "musicAlbumReleaseOverline": "This edition",
+  "@musicAlbumReleaseOverline": {
+    "description": "Overline above the release-identity block on an album screen."
+  },
+  "musicAlbumReleaseTitle": "Release",
+  "@musicAlbumReleaseTitle": {
+    "description": "Heading over the block naming what edition an album is: its barcode, label, catalog number."
+  },
+  "musicAlbumTitle": "Album",
+  "@musicAlbumTitle": {
+    "description": "Title of the album editor before the album it edits has loaded."
+  },
+  "musicAllMusicSource": "All music",
+  "@musicAllMusicSource": {
+    "description": "What the player calls a queue shuffled from the whole music library."
+  },
+  "musicArtistAppearsOn": "Appears on",
+  "@musicArtistAppearsOn": {
+    "description": "Shelf on an artist's screen holding the releases they are credited on without heading."
+  },
+  "musicArtistAudiobooksSection": "Audiobooks",
+  "@musicArtistAudiobooksSection": {
+    "description": "Heading over an author's books, drawn instead of the tracks heading where a bucket holds no tracks at all."
+  },
+  "musicArtistEmptyMessage": "The items that were here have moved or been removed.",
+  "@musicArtistEmptyMessage": {
+    "description": "Message under the empty state of an artist's screen, saying why it is empty."
+  },
+  "musicArtistEmptyTitle": "Nothing by this artist",
+  "@musicArtistEmptyTitle": {
+    "description": "Empty state of an artist whose items have all gone."
+  },
+  "musicArtistItemCount": "{count, plural, =1{1 item} other{{count} items}}",
+  "@musicArtistItemCount": {
+    "description": "How much an artist's bucket holds, in the line under their name. Items rather than tracks, because a bucket holds whatever carried the artist, audiobooks included.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicArtistItemCountAtLeast": "{count, plural, =1{1+ item} other{{count}+ items}}",
+  "@musicArtistItemCountAtLeast": {
+    "description": "The same count where the listing runs past the page that was read, so the number is a floor rather than a total.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicArtistLoadError": "Could not load this artist",
+  "@musicArtistLoadError": {
+    "description": "Title of the error state when an artist's items could not be read."
+  },
+  "musicArtistReleaseCount": "{count, plural, =1{1 release} other{{count} releases}}",
+  "@musicArtistReleaseCount": {
+    "description": "How many releases an artist heads, in the line under their name.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicArtistReleases": "Releases",
+  "@musicArtistReleases": {
+    "description": "Shelf on an artist's screen holding the releases they head."
+  },
+  "musicArtistShowAll": "Show all",
+  "@musicArtistShowAll": {
+    "description": "Action beside an artist's track heading, opening the full listing where the screen shows only the first few."
+  },
+  "musicArtistTracksSection": "Tracks",
+  "@musicArtistTracksSection": {
+    "description": "Heading over the first few of an artist's tracks."
+  },
+  "musicArtistUnknownName": "Artist",
+  "@musicArtistUnknownName": {
+    "description": "Title of an artist's screen opened cold, before the tracks that name them have loaded."
+  },
+  "musicBucketUnknownTitle": "{dimension, select, artists{No artist} albums{No album} releaseGroups{No release group} genres{No genre} years{No year} other{Unknown}}",
+  "@musicBucketUnknownTitle": {
+    "description": "Title of the bucket holding what a dimension is absent from: the tracks with no artist tagged, the albums with no year.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "musicCommandPlay": "Play {name}",
+  "@musicCommandPlay": {
+    "description": "Command-palette row that plays the album on screen. {name} is the album's title.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Spirit of Eden"
+      }
+    }
+  },
+  "musicCommandShuffle": "Shuffle {name}",
+  "@musicCommandShuffle": {
+    "description": "Command-palette row that plays the album on screen in random order. {name} is the album's title.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Spirit of Eden"
+      }
+    }
+  },
+  "musicDimensionSingularTitle": "{dimension, select, artists{Artist} albums{Album} releaseGroups{Release group} genres{Genre} years{Year} other{Music}}",
+  "@musicDimensionSingularTitle": {
+    "description": "One bucket of a dimension, as the title of its listing, when nothing in the list names it: the artist of an artist's tracks, the genre of a genre's.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "musicDimensionTitle": "{dimension, select, artists{Artists} albums{Albums} releaseGroups{Release groups} genres{Genres} years{Years} other{Music}}",
+  "@musicDimensionTitle": {
+    "description": "What each way of browsing the music library is called, as a heading: the hub tile and the title of the index it opens.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "musicEmptyMessage": "Add music to your library and it shows up here.",
+  "@musicEmptyMessage": {
+    "description": "Message under the empty state of the tracks listing, saying what fills it."
+  },
+  "musicEmptyTitle": "No music yet",
+  "@musicEmptyTitle": {
+    "description": "Empty state of the music library, on the hub and on the tracks listing."
+  },
+  "musicFieldBarcode": "Barcode",
+  "@musicFieldBarcode": {
+    "description": "An album's barcode, on the release editor and on the album screen."
+  },
+  "musicFieldBarcodeHelp": "UPC or EAN, normalized to digits on save",
+  "@musicFieldBarcodeHelp": {
+    "description": "Hint under the barcode field in the release editor."
+  },
+  "musicFieldCatalogNumber": "Catalog number",
+  "@musicFieldCatalogNumber": {
+    "description": "The label's own number for a release, on the release editor and on the album screen."
+  },
+  "musicFieldCatalogNumberHelp": "The label's number for this release",
+  "@musicFieldCatalogNumberHelp": {
+    "description": "Hint under the catalog-number field in the release editor."
+  },
+  "musicFieldCountry": "Country",
+  "@musicFieldCountry": {
+    "description": "Where a release was issued, on the release editor and on the album screen."
+  },
+  "musicFieldCountryHelp": "Two-letter code (GB), an alpha-3 or UK alias, or XW/XE",
+  "@musicFieldCountryHelp": {
+    "description": "Hint under the country field in the release editor. The codes themselves are standards and stay as they are."
+  },
+  "musicFieldLabel": "Label",
+  "@musicFieldLabel": {
+    "description": "The record label that issued an album, on the release editor and on the album screen."
+  },
+  "musicFieldLabelHelp": "The issuing label",
+  "@musicFieldLabelHelp": {
+    "description": "Hint under the label field in the release editor."
+  },
+  "musicFieldMedia": "Media",
+  "@musicFieldMedia": {
+    "description": "What a release was pressed on, on the release editor and on the album screen."
+  },
+  "musicFieldMediaHelp": "What it was pressed on - CD, 2xVinyl, Digital Media",
+  "@musicFieldMediaHelp": {
+    "description": "Hint under the media field in the release editor. The three examples are the values MusicBrainz uses and stay as they are."
+  },
+  "musicHubAddToLibrary": "Add to library",
+  "@musicHubAddToLibrary": {
+    "description": "Button on the music hub's first-run invitation, opening the sheet that adds files."
+  },
+  "musicHubEmptyMessage": "Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.",
+  "@musicHubEmptyMessage": {
+    "description": "First-run invitation on the music hub, drawn when every shelf has answered and none of them holds anything."
+  },
+  "musicHubTileSpoken": "{name}, {count}",
+  "@musicHubTileSpoken": {
+    "description": "One hub tile read as a whole for a screen reader: what it opens, then how much is behind it.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Albums"
+      },
+      "count": {
+        "type": "String",
+        "example": "500+"
+      }
+    }
+  },
+  "musicIndexCount": "{dimension, select, artists{{count, plural, =1{1 artist} other{{count} artists}}} albums{{count, plural, =1{1 album} other{{count} albums}}} releaseGroups{{count, plural, =1{1 release group} other{{count} release groups}}} genres{{count, plural, =1{1 genre} other{{count} genres}}} years{{count, plural, =1{1 year} other{{count} years}}} other{{count, plural, =1{1 entry} other{{count} entries}}}}",
+  "@musicIndexCount": {
+    "description": "Caption over an index saying how much of it is loaded, when the whole dimension is loaded.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicIndexCountAtLeast": "{dimension, select, artists{{count, plural, =1{1+ artist} other{{count}+ artists}}} albums{{count, plural, =1{1+ album} other{{count}+ albums}}} releaseGroups{{count, plural, =1{1+ release group} other{{count}+ release groups}}} genres{{count, plural, =1{1+ genre} other{{count}+ genres}}} years{{count, plural, =1{1+ year} other{{count}+ years}}} other{{count, plural, =1{1+ entry} other{{count}+ entries}}}}",
+  "@musicIndexCountAtLeast": {
+    "description": "The same caption where the index runs past the page that was read, so the number is a floor rather than a total.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicIndexEmptyMessage": "{dimension, select, artists{Add music to your library and its artists show up here.} albums{Add music to your library and its albums show up here.} releaseGroups{Add music to your library and its release groups show up here.} genres{Add music to your library and its genres show up here.} years{Add music to your library and its years show up here.} other{Add music to your library and it shows up here.}}",
+  "@musicIndexEmptyMessage": {
+    "description": "Empty state of a dimension's index, saying what fills it.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "musicIndexEmptyTitle": "{dimension, select, artists{No artists yet} albums{No albums yet} releaseGroups{No release groups yet} genres{No genres yet} years{No years yet} other{Nothing here yet}}",
+  "@musicIndexEmptyTitle": {
+    "description": "Empty state of a dimension's index, on a library that holds nothing yet.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "musicIndexLoadError": "{dimension, select, artists{Could not load artists} albums{Could not load albums} releaseGroups{Could not load release groups} genres{Could not load genres} years{Could not load years} other{Could not load this index}}",
+  "@musicIndexLoadError": {
+    "description": "Title of the error state when one dimension's index could not be read.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "musicIndexStartOf": "{dimension, select, artists{Start of artists} albums{Start of albums} releaseGroups{Start of release groups} genres{Start of genres} years{Start of years} other{Start of the list}}",
+  "@musicIndexStartOf": {
+    "description": "The row at the top of an index that was re-anchored on a letter, offering the way back to the head of the list.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "musicListingBucketEmptyMessage": "The items that were here have moved or been removed.",
+  "@musicListingBucketEmptyMessage": {
+    "description": "Message under the empty state of a drilled bucket, saying why it is empty."
+  },
+  "musicListingBucketEmptyTitle": "{dimension, select, artists{Nothing in this artist} albums{Nothing in this album} releaseGroups{Nothing in this release group} genres{Nothing in this genre} years{Nothing in this year} other{Nothing here}}",
+  "@musicListingBucketEmptyTitle": {
+    "description": "Empty state of a drilled bucket whose items have all gone.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "artists"
+      }
+    }
+  },
+  "musicListingLoadError": "Could not load this list",
+  "@musicListingLoadError": {
+    "description": "Title of the error state when a track listing could not be read."
+  },
+  "musicPlay": "Play",
+  "@musicPlay": {
+    "description": "Button on an album's or an artist's header that plays it from the start."
+  },
+  "musicShelfMostPlayedOverline": "What you come back to",
+  "@musicShelfMostPlayedOverline": {
+    "description": "Overline above the most-played shelf on the music hub."
+  },
+  "musicShelfMostPlayedTitle": "Most played",
+  "@musicShelfMostPlayedTitle": {
+    "description": "Shelf on the music hub holding what has been played most."
+  },
+  "musicShelfRecentOverline": "New to the collection",
+  "@musicShelfRecentOverline": {
+    "description": "Overline above the recently-added shelf on the music hub."
+  },
+  "musicShelfRecentTitle": "Recently added",
+  "@musicShelfRecentTitle": {
+    "description": "Shelf on the music hub holding what arrived in the library most recently."
+  },
+  "musicShelfStarredOverline": "Kept on purpose",
+  "@musicShelfStarredOverline": {
+    "description": "Overline above the starred shelf on the music hub."
+  },
+  "musicShelfStarredTitle": "Starred",
+  "@musicShelfStarredTitle": {
+    "description": "Shelf on the music hub holding what the listener starred."
+  },
+  "musicShuffle": "Shuffle",
+  "@musicShuffle": {
+    "description": "Button on an album's or an artist's header that plays it in random order."
+  },
+  "musicShuffleAllLabel": "Shuffle all music",
+  "@musicShuffleAllLabel": {
+    "description": "Accessible name of the shuffle control over the listing of every track in the library."
+  },
+  "musicShuffleLabel": "Shuffle {name}",
+  "@musicShuffleLabel": {
+    "description": "Accessible name of the shuffle control over one bucket's listing. {name} is what the listing is called.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Talk Talk"
+      }
+    }
+  },
+  "musicShuffleNothingPlayable": "Nothing here plays in sequence.",
+  "@musicShuffleNothingPlayable": {
+    "description": "Snackbar after asking to shuffle a list holding only audiobooks, which open on their own screen instead of joining a queue."
+  },
+  "musicTitle": "Music",
+  "@musicTitle": {
+    "description": "Title of the music hub, the front door to the music library."
+  },
+  "musicTrackCount": "{count, plural, =1{1 track} other{{count} tracks}}",
+  "@musicTrackCount": {
+    "description": "How many tracks a bucket, a release, or an album tile holds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicTracksTitle": "Tracks",
+  "@musicTracksTitle": {
+    "description": "The listing of every track in the library, named on the hub tile that opens it and as its own title."
+  },
+  "musicVariousArtists": "Various artists",
+  "@musicVariousArtists": {
+    "description": "Stands in for an album's artist where its tracks name more than one, which is what a compilation is."
+  }
+}

@@ -1,0 +1,286 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "shellClientOutdated": "WaxDeck was updated. Reload to get the new version.",
+  "@shellClientOutdated": {
+    "description": "Banner when the app itself is behind what the server serves, on a build that can reload itself."
+  },
+  "shellCommandCarMode": "Open car mode",
+  "@shellCommandCarMode": {
+    "description": "Command name: the large-target layout meant for a car."
+  },
+  "shellCommandCast": "Play on another device",
+  "@shellCommandCast": {
+    "description": "Command name: open the device picker."
+  },
+  "shellCommandCreatePlaylist": "Create playlist",
+  "@shellCommandCreatePlaylist": {
+    "description": "Command name."
+  },
+  "shellCommandLyrics": "Show lyrics",
+  "@shellCommandLyrics": {
+    "description": "Command name."
+  },
+  "shellCommandMiniWindow": "Mini player window",
+  "@shellCommandMiniWindow": {
+    "description": "Command name: shrink the desktop window to the mini player."
+  },
+  "shellCommandMute": "Mute or unmute",
+  "@shellCommandMute": {
+    "description": "Command name."
+  },
+  "shellCommandNext": "Next track",
+  "@shellCommandNext": {
+    "description": "Command name: step forward in the queue."
+  },
+  "shellCommandPalette": "Open the command palette",
+  "@shellCommandPalette": {
+    "description": "Command name for the palette itself. It is taught by the shortcut sheet but never listed inside the palette."
+  },
+  "shellCommandPlayPause": "Play or pause",
+  "@shellCommandPlayPause": {
+    "description": "Command name. A verb: every command in this list is one."
+  },
+  "shellCommandPlayer": "Open the player",
+  "@shellCommandPlayer": {
+    "description": "Command name."
+  },
+  "shellCommandPrevious": "Previous track",
+  "@shellCommandPrevious": {
+    "description": "Command name: step back in the queue."
+  },
+  "shellCommandQueue": "Show the queue",
+  "@shellCommandQueue": {
+    "description": "Command name."
+  },
+  "shellCommandRepeat": "Change repeat",
+  "@shellCommandRepeat": {
+    "description": "Command name: step through the repeat modes."
+  },
+  "shellCommandScanLibrary": "Scan library",
+  "@shellCommandScanLibrary": {
+    "description": "Command name, offered to administrators only: start a library scan."
+  },
+  "shellCommandSearch": "Search",
+  "@shellCommandSearch": {
+    "description": "Command name: go to the search screen."
+  },
+  "shellCommandSectionApp": "Everywhere",
+  "@shellCommandSectionApp": {
+    "description": "Heading grouping the commands that work on any screen, in the keyboard-shortcut sheet."
+  },
+  "shellCommandSectionPlayback": "Playback",
+  "@shellCommandSectionPlayback": {
+    "description": "Heading grouping the playback commands in the keyboard-shortcut sheet."
+  },
+  "shellCommandSectionView": "Views",
+  "@shellCommandSectionView": {
+    "description": "Heading grouping the commands that open a surface, in the keyboard-shortcut sheet."
+  },
+  "shellCommandSeekBack": "Skip back 10 seconds",
+  "@shellCommandSeekBack": {
+    "description": "Command name: nudge the playhead back."
+  },
+  "shellCommandSeekForward": "Skip ahead 10 seconds",
+  "@shellCommandSeekForward": {
+    "description": "Command name: nudge the playhead forward. The interval is fixed for the keyboard and is not the spoken-word skip setting."
+  },
+  "shellCommandShortcuts": "Keyboard shortcuts",
+  "@shellCommandShortcuts": {
+    "description": "Command name: open the sheet listing every command and its keys."
+  },
+  "shellCommandShuffle": "Shuffle the queue",
+  "@shellCommandShuffle": {
+    "description": "Command name."
+  },
+  "shellCommandVisualizer": "Open the visualizer",
+  "@shellCommandVisualizer": {
+    "description": "Command name."
+  },
+  "shellCommandVolumeDown": "Volume down",
+  "@shellCommandVolumeDown": {
+    "description": "Command name."
+  },
+  "shellCommandVolumeUp": "Volume up",
+  "@shellCommandVolumeUp": {
+    "description": "Command name."
+  },
+  "shellNavAdmin": "Admin console",
+  "@shellNavAdmin": {
+    "description": "Navigation entry for the administration console."
+  },
+  "shellNavAlbums": "Albums",
+  "@shellNavAlbums": {
+    "description": "Navigation entry for the album index, under Music."
+  },
+  "shellNavArtists": "Artists",
+  "@shellNavArtists": {
+    "description": "Navigation entry for the artist index, under Music."
+  },
+  "shellNavBooks": "Books",
+  "@shellNavBooks": {
+    "description": "Navigation entry for the audiobook domain. Deliberately shorter than the hub's own title: five of these share a phone's width."
+  },
+  "shellNavCuration": "Curation",
+  "@shellNavCuration": {
+    "description": "Sidebar group holding the entries that maintain the library rather than listen to it: uploads, the review queue, tasks, the admin console."
+  },
+  "shellNavDownloads": "Downloads",
+  "@shellNavDownloads": {
+    "description": "Navigation entry for the download manager."
+  },
+  "shellNavGenres": "Genres",
+  "@shellNavGenres": {
+    "description": "Navigation entry for the genre index, under Music."
+  },
+  "shellNavHome": "Home",
+  "@shellNavHome": {
+    "description": "Navigation entry for the landing screen."
+  },
+  "shellNavMusic": "Music",
+  "@shellNavMusic": {
+    "description": "Navigation entry for the music domain."
+  },
+  "shellNavPlaylists": "Playlists",
+  "@shellNavPlaylists": {
+    "description": "Navigation entry for playlists, under Music. Kept short: it shares a sidebar column with six others."
+  },
+  "shellNavPodcasts": "Podcasts",
+  "@shellNavPodcasts": {
+    "description": "Navigation entry for the podcast domain."
+  },
+  "shellNavRadio": "Radio",
+  "@shellNavRadio": {
+    "description": "Navigation entry for the radio domain."
+  },
+  "shellNavReview": "Review queue",
+  "@shellNavReview": {
+    "description": "Navigation entry for the queue of imports waiting on an administrator's decision."
+  },
+  "shellNavSettings": "Settings",
+  "@shellNavSettings": {
+    "description": "Navigation entry for the settings screens."
+  },
+  "shellNavStats": "Listening stats",
+  "@shellNavStats": {
+    "description": "Navigation entry for the listening statistics screen."
+  },
+  "shellNavTasks": "Tasks",
+  "@shellNavTasks": {
+    "description": "Navigation entry for the background-task screen."
+  },
+  "shellNavTracks": "Tracks",
+  "@shellNavTracks": {
+    "description": "Navigation entry for the track listing, under Music."
+  },
+  "shellNavUploads": "Uploads",
+  "@shellNavUploads": {
+    "description": "Navigation entry for the upload screen."
+  },
+  "shellNavYears": "Years",
+  "@shellNavYears": {
+    "description": "Navigation entry for the year index, under Music."
+  },
+  "shellNotFoundAction": "Go home",
+  "@shellNotFoundAction": {
+    "description": "Button on the not-found screen that returns to the landing screen."
+  },
+  "shellNotFoundBody": "That page does not exist.",
+  "@shellNotFoundBody": {
+    "description": "Body of the screen shown for a location the app has no route for."
+  },
+  "shellNotFoundTitle": "Not found",
+  "@shellNotFoundTitle": {
+    "description": "Title bar of the screen shown for a location the app has no route for."
+  },
+  "shellPaletteAllSettings": "All settings",
+  "@shellPaletteAllSettings": {
+    "description": "Palette row opening the settings screen, offered when more settings matched than the palette lists."
+  },
+  "shellPaletteCurationDetail": "Curation",
+  "@shellPaletteCurationDetail": {
+    "description": "The second line of a palette row that is an administrative destination. The same word as the sidebar group they live in."
+  },
+  "shellPaletteEmpty": "Nothing to run",
+  "@shellPaletteEmpty": {
+    "description": "Empty state of the command palette with nothing typed."
+  },
+  "shellPaletteGoToDetail": "Go to",
+  "@shellPaletteGoToDetail": {
+    "description": "The second line of a palette row that is a destination, saying what kind of row it is."
+  },
+  "shellPaletteGroupActions": "Actions",
+  "@shellPaletteGroupActions": {
+    "description": "Command palette group holding the things the app can be told to do."
+  },
+  "shellPaletteGroupAdmin": "Admin areas",
+  "@shellPaletteGroupAdmin": {
+    "description": "Command palette group holding the administrative destinations."
+  },
+  "shellPaletteGroupPlaces": "Go to",
+  "@shellPaletteGroupPlaces": {
+    "description": "Command palette group holding destinations and search hits."
+  },
+  "shellPaletteGroupSettings": "Settings",
+  "@shellPaletteGroupSettings": {
+    "description": "Command palette group holding matching settings."
+  },
+  "shellPaletteNoMatch": "Nothing matches \"{query}\"",
+  "@shellPaletteNoMatch": {
+    "description": "Empty state of the command palette when what was typed matched nothing. {query} is what was typed.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "shuffle"
+      }
+    }
+  },
+  "shellPaletteSearchAll": "Search the library for \"{query}\"",
+  "@shellPaletteSearchAll": {
+    "description": "Palette row that hands what was typed to the full search screen. {query} is what was typed.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "beach house"
+      }
+    }
+  },
+  "shellPaletteSearchAllDetail": "Everything that matches",
+  "@shellPaletteSearchAllDetail": {
+    "description": "The second line of the palette row that opens the full search screen."
+  },
+  "shellPaletteSettingsMore": "{count, plural, =1{1 match for \"{query}\"} other{{count} matches for \"{query}\"}}",
+  "@shellPaletteSettingsMore": {
+    "description": "The second line of the All settings palette row, saying how many settings matched. {query} is what was typed.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "7"
+      },
+      "query": {
+        "type": "String",
+        "example": "volume"
+      }
+    }
+  },
+  "shellPaletteStationDetail": "Radio station",
+  "@shellPaletteStationDetail": {
+    "description": "The second line of a palette row that is a radio station."
+  },
+  "shellReconnecting": "Reconnecting to the server. Anything already playing keeps playing.",
+  "@shellReconnecting": {
+    "description": "Banner across the shell while the live connection is being re-established."
+  },
+  "shellReload": "Reload",
+  "@shellReload": {
+    "description": "Action on the update banner, offered only where the page can reload itself."
+  },
+  "shellServerOutdated": "The server was updated. Restart WaxDeck to catch up.",
+  "@shellServerOutdated": {
+    "description": "Banner when the server moved on and this build cannot reload itself."
+  },
+  "shellSignOut": "Sign out",
+  "@shellSignOut": {
+    "description": "The one verb in the account menu."
+  }
+}

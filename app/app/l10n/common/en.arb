@@ -1,0 +1,32 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "Button that closes a dialog or sheet without doing what it asked about."
+  },
+  "commonClose": "Close",
+  "@commonClose": {
+    "description": "Button that dismisses a dialog without acting. A true synonym everywhere it appears."
+  },
+  "commonDone": "Done",
+  "@commonDone": {
+    "description": "Button that closes a dialog once its work is read. A true synonym everywhere it appears."
+  },
+  "commonLoading": "Loading",
+  "@commonLoading": {
+    "description": "A control's own label while it is fetching what it was pressed for."
+  },
+  "commonLoadingTitle": "Loading…",
+  "@commonLoadingTitle": {
+    "description": "Stands in for a track's name while the row it sits in is still resolving. The trailing character is a single-glyph ellipsis."
+  },
+  "commonRetry": "Retry",
+  "@commonRetry": {
+    "description": "Button that runs the request that just failed again."
+  },
+  "commonSave": "Save",
+  "@commonSave": {
+    "description": "Button that commits an edit. Used across dialogs."
+  }
+}

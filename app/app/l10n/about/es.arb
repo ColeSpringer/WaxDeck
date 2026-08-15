@@ -1,0 +1,20 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "aboutDefectsSubtitle": "Errores que la app ha detectado por su cuenta, los más recientes primero, con una forma de copiarlos a un informe de fallo.",
+  "aboutDiagnosticsTitle": "Diagnóstico",
+  "aboutLicenses": "Licencias de código abierto",
+  "aboutLicensesSubtitle": "WaxDeck es GPL-3.0-only. Esta página también lista los avisos de las tipografías y los iconos incluidos.",
+  "aboutLicensingTitle": "Licencias",
+  "aboutRowTitle": "Acerca de WaxDeck",
+  "aboutRowVersion": "Versión {app}",
+  "aboutRowVersions": "App {app}, servidor {server}",
+  "aboutServerUnreachable": "no disponible",
+  "aboutTagline": "Un reproductor, gestor de biblioteca y completador de metadatos para música, pódcast y audiolibros.",
+  "aboutTitle": "Acerca de",
+  "aboutVersionApi": "API",
+  "aboutVersionApp": "App",
+  "aboutVersionServer": "Servidor",
+  "aboutVersionsTitle": "Versiones"
+}

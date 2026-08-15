@@ -1,0 +1,36 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "defectsClear": "Clear",
+  "@defectsClear": {
+    "description": "Empties the defect log."
+  },
+  "defectsClearSpoken": "Clear the defect log",
+  "@defectsClearSpoken": {
+    "description": "What the Clear button is called for a screen reader."
+  },
+  "defectsCopied": "Defect log copied",
+  "@defectsCopied": {
+    "description": "Snackbar confirming the whole log is on the clipboard."
+  },
+  "defectsCopy": "Copy",
+  "@defectsCopy": {
+    "description": "Puts the whole defect log on the clipboard."
+  },
+  "defectsCopySpoken": "Copy the defect log",
+  "@defectsCopySpoken": {
+    "description": "What the Copy button is called for a screen reader, where the surrounding heading is not in earshot."
+  },
+  "defectsEmptyMessage": "Errors the app catches on its own turn up here, so a bug report can carry them. An empty list is the good outcome.",
+  "@defectsEmptyMessage": {
+    "description": "Empty state of the defect log."
+  },
+  "defectsEmptyTitle": "Nothing has gone wrong",
+  "@defectsEmptyTitle": {
+    "description": "Empty state of the defect log."
+  },
+  "defectsTitle": "Defect log",
+  "@defectsTitle": {
+    "description": "The list of errors the app caught: its own title, and the row on the About page that opens it."
+  }
+}
