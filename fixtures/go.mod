@@ -3,12 +3,12 @@ module github.com/colespringer/waxdeck/fixtures
 go 1.26
 
 require (
-	github.com/colespringer/waxbin v0.0.0-20260807053401-227d33fad6f1
-	github.com/colespringer/waxflow v0.0.0-20260806093739-43cd9685ab82
+	github.com/colespringer/waxbin v0.0.0-20260816064928-6da6296565c1
+	github.com/colespringer/waxflow v0.0.0-20260816051810-ba4adcdb22b9
 )
 
 require (
-	github.com/colespringer/waxlabel v1.4.0 // indirect
+	github.com/colespringer/waxlabel v1.4.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect

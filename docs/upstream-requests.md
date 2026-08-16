@@ -29,19 +29,3 @@ note.
   instead of interleaving them.
 
 ## WaxLabel
-
-- **`SaveBack` holds the source open across its own rename, so an
-  in-place save can never succeed on Windows.** `saveBack` in
-  `destination.go` opens the file and keeps it with `defer src.Close()`
-  while `writeAtomic` renames the temp onto that same path. POSIX does
-  not mind; Windows refuses, because Go's `os.Open` does not ask for
-  `FILE_SHARE_DELETE` and `MoveFileEx` then answers
-  ERROR_ACCESS_DENIED. Closing the source before the rename would fix
-  it - the planned bytes are in the temp by then. Confirmed with a
-  five-line reproduction.
-  Shipped workaround: none available, since the handle is internal to
-  `saveBack`. Every tag write on Windows fails as "writing tags to
-  <file>: rename ... Access is denied", taking book merge, book split,
-  cue split, metadata write-back and acquisition provenance with it.
-  Windows is not a shipped server target, but it is a supported dev
-  box.

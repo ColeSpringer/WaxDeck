@@ -443,9 +443,7 @@ func TestUploadIdentifyReviewImport(t *testing.T) {
 // imported, and the staged bytes deleted.
 func TestDecideImportFailureKeepsEntryAndBytes(t *testing.T) {
 	t.Parallel()
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores directory permissions, so the unwritable-library setup cannot fail")
-	}
+	skipWithoutUnwritablePaths(t)
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		for i := range cfg.Roots {
 			cfg.Roots[i].Managed = true

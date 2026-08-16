@@ -188,9 +188,25 @@ func (p *Provider) stampProvenance(ctx context.Context, path, sourceURL, videoID
 		p.log.Warn("provenance stamp skipped: prepare failed", "path", path, "err", err)
 		return
 	}
-	if _, _, err := plan.Execute(ctx, waxlabel.SaveBack()); err != nil {
-		p.log.Warn("provenance stamp skipped: write failed", "path", path, "err", err)
+	if _, res, err := plan.Execute(ctx, waxlabel.SaveBack()); err != nil {
+		// Committed says the tags landed and a step after the write failed,
+		// so the stamp is on disk and only the sync is worth reporting.
+		if writeLanded(res, err) {
+			p.log.Warn("provenance stamped; post-commit step failed", "path", path, "err", err)
+		} else {
+			p.log.Warn("provenance stamp skipped: write failed", "path", path, "err", err)
+		}
 	}
+}
+
+// writeLanded says whether a SaveBack write reached the file. Committed is
+// what answers that, not the error: an error with Committed set is a landed
+// write whose post-commit step failed, so the bytes are in place and the plan
+// is spent. A clean run with Committed clear is a no-op plan, which writes
+// nothing by contract and is not a failure either. Duplicated from the
+// service package, which this one cannot import.
+func writeLanded(res waxlabel.SaveResult, err error) bool {
+	return err == nil || res.Committed
 }
 
 // transcodeFor maps a caller's format preference to the WaxTap transcode spec

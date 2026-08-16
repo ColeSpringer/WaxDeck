@@ -403,16 +403,6 @@ here waits on upstream.
 
 ## Infrastructure
 
-- `[upstream]` **Six Go tests are red on a Windows dev box.** Book
-  merge, book split, cue split, metadata write-back and the import
-  failure case in `internal/api`, plus provenance stamping in
-  `internal/waxtapsource`, all fail with "rename ... Access is denied".
-  One cause, recorded in `upstream-requests.md`: WaxLabel's `saveBack`
-  holds the source open across its own atomic rename, which Windows
-  refuses. Nothing to do in this repo - the handle is internal to it -
-  so `make test` stays red on Windows until that lands. Linux CI is
-  unaffected, and no shipped target writes tags on Windows.
-
 - `[in-repo]` **The e2e renderer hang is diagnosed: a memory race
   inside multi-threaded skwasm.** The old shape - one suite run in
   about four, a random spec stalls mid-step, page unresponsive,
@@ -599,6 +589,18 @@ here waits on upstream.
   action enum with the cover verbs grouped, so the settings sheet
   (source binding, sync mode, interval, sync-now with the dry run) is
   one more case in it.
+- `[in-repo]` **Stored ALAC bit depth is wrong (16) for files scanned
+  before waxlabel v1.4.2.** The parser now reads the real depth from
+  the magic cookie rather than trusting the sample description, but
+  nothing re-reads an already-scanned file: the incremental scan
+  fast-paths anything whose size and mtime are unchanged, and WaxDeck
+  never sets `waxbin.ScanRequest.Force` (the field exists; all three
+  construction sites leave it zero), so existing rows never heal. The
+  essence digests did not change, so no rescan is forced either. It
+  shows on the upgrades surface (`bitDepth`, `api/spec/health.yaml`),
+  where a 24-bit ALAC reading 16 misranks upgrade candidates. Fix
+  shape when taken: expose a forced rescan - an admin action or a
+  one-time sweep - rather than special-casing ALAC.
 
 ## Discovery and stats
 

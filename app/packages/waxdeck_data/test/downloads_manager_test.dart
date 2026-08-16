@@ -31,6 +31,11 @@ class FakeTransferEngine implements TransferEnginePort {
   /// What [pause] answers; false is a transfer that cannot be parked.
   bool pausable = true;
 
+  /// Awaited by [report] once the event has been delivered, so a test can
+  /// assert against bookkeeping the manager finished rather than
+  /// bookkeeping it merely started. Wired to the manager under test.
+  Future<void> Function()? settle;
+
   var _next = 0;
 
   @override
@@ -56,7 +61,14 @@ class FakeTransferEngine implements TransferEnginePort {
   @override
   Future<void> cancel(List<String> taskIds) async => canceled.addAll(taskIds);
 
-  /// Reports [state] for [taskId] and lets the manager act on it.
+  /// Reports [state] for [taskId] and waits for the manager to act on it.
+  ///
+  /// Three steps, because the event crosses three hops: the first pump
+  /// delivers it to the manager's subscription, [settle] waits for the
+  /// handler that queued behind it, and the second pump delivers whatever
+  /// that handler emitted on to a listening test. Pumping alone raced the
+  /// handler's database and filesystem work, which is only ever a question
+  /// of how loaded the machine is.
   Future<void> report(
     String taskId, {
     TransferState? state,
@@ -71,6 +83,8 @@ class FakeTransferEngine implements TransferEnginePort {
         path: path,
       ),
     );
+    await pumpEventQueue();
+    await settle?.call();
     await pumpEventQueue();
   }
 
@@ -134,6 +148,7 @@ void main() {
       baseUrl: 'https://example.test',
       engine: engine,
     );
+    engine.settle = () => manager.settled;
     tmp = Directory.systemTemp.createTempSync('waxdeck-downloads-test');
   });
 
@@ -445,6 +460,36 @@ void main() {
 
       await manager.remove(sibling);
       expect(shared.existsSync(), isFalse, reason: 'that was the last one');
+    });
+
+    // The sweep above is sequential because it asks whether any other row
+    // still holds the essence. Started together, each would see the other's
+    // row, each would call the file shared, and it would outlive every
+    // record pointing at it. The manager serializes them rather than
+    // trusting its callers to.
+    test('two items removed at once still unlink what they shared', () async {
+      repo.infoByPid[_track] = _info(_track, parts: 1, hashPrefix: 'shared');
+      await manager.download(_track);
+      final shared = File('${tmp.path}/shared0.m4b')..writeAsStringSync('a');
+      await engine.report(
+        engine.ids.first,
+        state: TransferState.complete,
+        path: shared.path,
+      );
+
+      const sibling = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK2';
+      repo.infoByPid[sibling] = _info(sibling, parts: 1, hashPrefix: 'shared');
+      await manager.download(sibling);
+      await engine.report(
+        engine.ids.last,
+        state: TransferState.complete,
+        path: shared.path,
+      );
+
+      await Future.wait([manager.remove(_track), manager.remove(sibling)]);
+
+      expect(shared.existsSync(), isFalse, reason: 'nothing holds it now');
+      expect(await db.select(db.downloadRecords).get(), isEmpty);
     });
   });
 

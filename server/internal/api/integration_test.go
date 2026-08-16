@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,23 @@ type harness struct {
 	backups *service.Backups
 	group   *supervise.Group
 	flowReq struct{ apiKey, format, dynamics, gain string } // captured by the fake sidecar
+}
+
+// skipWithoutUnwritablePaths skips a test that makes a path unwritable to
+// force a write failure, on the platforms where that setup cannot fail.
+// Root ignores the modes. Windows has no POSIX bits at all: os.Chmod only
+// toggles the read-only attribute, which does not stop writes into a
+// directory, and which waxlabel strips off a target before replacing it
+// (destination_windows.go, clearTargetReadOnly) so its rename matches the
+// POSIX one it mirrors. os.Geteuid answers -1 there, so it is checked first.
+func skipWithoutUnwritablePaths(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("windows os.Chmod cannot make a path unwritable, so the setup cannot fail")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores permissions, so the unwritable setup cannot fail")
+	}
 }
 
 func newHarness(t *testing.T, extraRoots ...service.Root) *harness {

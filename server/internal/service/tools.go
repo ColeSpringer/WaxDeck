@@ -768,7 +768,7 @@ func (l *Library) tagToolBookFile(ctx context.Context, path string, bd *model.Bo
 		ed.Set(tag.TrackNumber, strconv.Itoa(trackNo))
 	}
 	l.addToolCover(ctx, ed, bd.Item.PID)
-	return executeToolTagPlan(ctx, ed, path)
+	return l.executeToolTagPlan(ctx, ed, path)
 }
 
 // tagToolTrackFile stamps one cue split piece from its virtual track's
@@ -795,7 +795,7 @@ func (l *Library) tagToolTrackFile(ctx context.Context, path string, seed *model
 		ed.Set(tag.RecordingDate, strconv.Itoa(seed.Year))
 	}
 	l.addToolCover(ctx, ed, seed.PID)
-	return executeToolTagPlan(ctx, ed, path)
+	return l.executeToolTagPlan(ctx, ed, path)
 }
 
 // addToolCover attaches the item's resolved cover art, best effort.
@@ -814,13 +814,28 @@ func (l *Library) addToolCover(ctx context.Context, ed *waxlabel.Editor, pid mod
 	})
 }
 
-func executeToolTagPlan(ctx context.Context, ed *waxlabel.Editor, path string) error {
+// writeLanded says whether a SaveBack write reached the file. Committed is
+// what answers that, not the error: an error with Committed set is a landed
+// write whose post-commit step failed, so the bytes are in place and the plan
+// is spent. A clean run with Committed clear is a no-op plan, which writes
+// nothing by contract and is not a failure either.
+func writeLanded(res waxlabel.SaveResult, err error) bool {
+	return err == nil || res.Committed
+}
+
+func (l *Library) executeToolTagPlan(ctx context.Context, ed *waxlabel.Editor, path string) error {
 	plan, err := ed.Prepare()
 	if err != nil {
 		return fmt.Errorf("%w: preparing tags for %s: %v", errToolPermanent, filepath.Base(path), err)
 	}
-	if _, _, err := plan.Execute(ctx, waxlabel.SaveBack()); err != nil {
-		return fmt.Errorf("%w: writing tags to %s: %v", errToolPermanent, filepath.Base(path), err)
+	if _, res, err := plan.Execute(ctx, waxlabel.SaveBack()); err != nil {
+		if !writeLanded(res, err) {
+			return fmt.Errorf("%w: writing tags to %s: %v", errToolPermanent, filepath.Base(path), err)
+		}
+		// The tags are on disk and the plan is spent, so wrapping this in
+		// errToolPermanent would report a durable success as a dead task.
+		l.log.Warn("tool tags written; post-commit step failed",
+			"file", filepath.Base(path), "err", err)
 	}
 	return nil
 }

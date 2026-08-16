@@ -69,7 +69,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     TransferEnginePort? engine,
     this.wifiOnly = _never,
   }) : engine = engine ?? BackgroundTransferEngine() {
-    _events = this.engine.events.listen(_onEvent);
+    _events = this.engine.events.listen(_enqueue);
   }
 
   static bool _never() => false;
@@ -91,6 +91,36 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   final _progress = StreamController<DownloadProgress>.broadcast();
   late final StreamSubscription<TransferEvent> _events;
+
+  /// The tail of the bookkeeping chain.
+  ///
+  /// Every read-then-write over the records runs through it, one at a
+  /// time. [_discard]'s sharing check is why: it asks whether any *other*
+  /// row still holds an essence before unlinking the file, so two discards
+  /// running together each see the other's row and each leave the bytes on
+  /// disk forever. That check already refuses to run its own rows
+  /// concurrently; this is the same rule one level up, where the discards
+  /// themselves come from - an engine event, a cancel, a remove.
+  Future<void> _work = Future<void>.value();
+
+  /// Runs [work] once everything already queued has finished.
+  ///
+  /// The returned future carries [work]'s error to whoever asked for it,
+  /// while the chain keeps a clean tail: an errored one would fail every
+  /// later caller with a mistake that was never theirs.
+  Future<void> _serialize(Future<void> Function() work) {
+    final queued = _work.then((_) => work());
+    _work = queued.catchError((Object _, StackTrace __) {});
+    return queued;
+  }
+
+  /// Completes once all bookkeeping queued so far has finished.
+  ///
+  /// Transfers report on the engine's schedule rather than the caller's,
+  /// and the work an event drives - discarding an item's records,
+  /// unlinking its files - outlives the event itself. This is what makes
+  /// that work observable to a caller waiting on it.
+  Future<void> get settled => _work;
 
   /// Which item each transfer belongs to, and which transfers each item
   /// has in flight. Two directions of one fact, because both questions get
@@ -170,6 +200,18 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       _taskFiles[taskId] = fileName;
       (_tasks[pid] ??= <String>{}).add(taskId);
     }
+  }
+
+  /// Queues [event] behind the bookkeeping already in flight.
+  ///
+  /// [Stream.listen] discards the future an async handler returns, so
+  /// without this two events arriving together would run [_onEvent]
+  /// concurrently - and nothing would be left holding the error if one
+  /// threw, which is where a handler's error goes today.
+  void _enqueue(TransferEvent event) {
+    _serialize(() => _onEvent(event)).catchError((Object e, StackTrace s) {
+      Zone.current.handleUncaughtError(e, s);
+    });
   }
 
   Future<void> _onEvent(TransferEvent event) async {
@@ -301,10 +343,10 @@ class BackgroundDownloadManager implements DownloadManagerPort {
   /// on a transfer, one on bytes), one operation underneath: a
   /// half-downloaded item is not a downloaded item.
   @override
-  Future<void> cancel(String pid) => _discard(pid);
+  Future<void> cancel(String pid) => _serialize(() => _discard(pid));
 
   @override
-  Future<void> remove(String pid) => _discard(pid);
+  Future<void> remove(String pid) => _serialize(() => _discard(pid));
 
   /// Stops every transfer in flight for [pid] and forgets them. A task
   /// left running would land its file after the unlink and report against

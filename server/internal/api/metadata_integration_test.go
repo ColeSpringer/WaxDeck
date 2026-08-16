@@ -632,9 +632,7 @@ func TestMetadataReleaseGroupAbsentForAnAlbumlessTrack(t *testing.T) {
 // write-back cannot land and clearing when one does.
 func TestMetadataWriteBackIssues(t *testing.T) {
 	t.Parallel()
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores file permissions, so the unwritable-file setup cannot fail")
-	}
+	skipWithoutUnwritablePaths(t)
 	h := newHarness(t)
 
 	// Resolved by the fixture's own name rather than by extension: the
