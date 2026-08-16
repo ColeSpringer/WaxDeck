@@ -288,20 +288,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminGenreRemove => 'Quitar el género';
 
   @override
-  String get adminGenreRevertAction => 'Volver';
+  String get adminGenreRevertAction => 'Revertir';
 
   @override
   String get adminGenreRevertBody =>
       'Tu vocabulario de géneros se sustituye por el que trae WaxDeck. Los alias que hayas añadido se pierden y el catálogo se vuelve a normalizar sobre el predeterminado.';
 
   @override
-  String get adminGenreRevertTitle => '¿Volver al árbol predeterminado?';
+  String get adminGenreRevertTitle => '¿Revertir al árbol predeterminado?';
 
   @override
-  String get adminGenreRevertToDefault => 'Volver al predeterminado';
+  String get adminGenreRevertToDefault => 'Revertir al predeterminado';
 
   @override
-  String get adminGenreRevertWord => 'VOLVER';
+  String get adminGenreRevertWord => 'REVERTIR';
 
   @override
   String get adminGenreReverted =>
@@ -494,7 +494,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminLibraryMediaMusic => 'Música';
 
   @override
-  String get adminLibraryMediaPodcasts => 'Pódcasts';
+  String get adminLibraryMediaPodcasts => 'Pódcast';
 
   @override
   String get adminLibraryNameHint =>
@@ -515,7 +515,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminLibraryPathRule =>
-      'La ruta debe ser absoluta y no puede solaparse con una carpeta raíz existente, con la bandeja de subidas ni con el directorio de descargas de pódcasts.';
+      'La ruta debe ser absoluta y no puede solaparse con una carpeta raíz existente, con la bandeja de subidas ni con el directorio de descargas de pódcast.';
 
   @override
   String adminLibraryReadOnlyLabel(String name) {
@@ -1025,7 +1025,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminTilePlayingNow => 'Sonando ahora';
 
   @override
-  String get adminTileReview => 'Esperando revisión';
+  String get adminTileReview => 'Pendiente de revisión';
 
   @override
   String get adminTileScansAndPasses => 'escaneos y pasadas';
@@ -1135,7 +1135,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminTrashReasonRestored => 'restaurado';
 
   @override
-  String get adminTrashReasonUser => 'persona';
+  String get adminTrashReasonUser => 'usuario';
 
   @override
   String adminTrashRestoreAction(String name) {
@@ -1267,7 +1267,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Suscribirse, cancelar la suscripción y cambiar los ajustes del feed';
 
   @override
-  String get adminUserPermManagePodcastsTitle => 'Gestionar pódcasts';
+  String get adminUserPermManagePodcastsTitle => 'Gestionar pódcast';
 
   @override
   String get adminUserPermSharedOutputsHelp =>
@@ -1503,7 +1503,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get artSlotFrontInline => 'la portada';
 
   @override
-  String get artworkClearAction => 'Vaciar';
+  String get artworkClearAction => 'Borrar';
 
   @override
   String get artworkClearBody =>
@@ -1720,7 +1720,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bellSurfaceImports => 'Importaciones';
 
   @override
-  String get bellSurfacePodcasts => 'Pódcasts';
+  String get bellSurfacePodcasts => 'Pódcast';
 
   @override
   String get bellSurfaceReview => 'Cola de revisión';
@@ -1965,7 +1965,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get booksMore => 'Más';
 
   @override
-  String get booksNothingMatches => 'No coincide nada';
+  String get booksNothingMatches => 'No hay coincidencias';
 
   @override
   String get booksShowAll => 'Ver todos los libros';
@@ -2108,14 +2108,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get devicesCastBlurb =>
-      'Un dispositivo de emisión obtiene el audio de este servidor por dirección. Estas son las direcciones que probará, en orden.';
+      'Un dispositivo de transmisión obtiene el audio de este servidor por dirección. Estas son las direcciones que probará, en orden.';
 
   @override
   String get devicesCastCaveat =>
       'El servidor las ha comprobado por su cuenta. Una dirección a la que él no llega tampoco funcionará desde un altavoz; a la que sí llega puede fallar igualmente si el altavoz está en otra red.';
 
   @override
-  String get devicesCastingOverline => 'Emisión';
+  String get devicesCastingOverline => 'Transmisión';
 
   @override
   String get devicesCheckError => 'No se ha podido comprobar';
@@ -2164,7 +2164,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get devicesNoAddressesMessage =>
-      'A este servidor no se le ha indicado una dirección pública y no ha podido detectar ninguna en la red. La emisión necesita una; configúrala en los ajustes del servidor.';
+      'A este servidor no se le ha indicado una dirección pública y no ha podido detectar ninguna en la red. La transmisión necesita una; configúrala en los ajustes del servidor.';
 
   @override
   String get devicesNothingElsewhere => 'No hay nada sonando en otro sitio';
@@ -2465,6 +2465,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get errorDirectoryUnavailable =>
       'El servicio de directorio no ha respondido. Inténtalo más tarde.';
+
+  @override
+  String get errorEndpointFailed =>
+      'Ese dispositivo no ha podido hacerlo. Sigue conectado, así que merece la pena intentarlo de nuevo.';
 
   @override
   String get errorEndpointOffline =>
@@ -3020,7 +3024,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeRecentOverline => 'Nuevo en la biblioteca';
 
   @override
-  String get homeRecentTitle => 'Añadido hace poco';
+  String get homeRecentTitle => 'Añadido recientemente';
 
   @override
   String get homeRediscoverOverline =>
@@ -3061,10 +3065,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryDeleteAction => 'Eliminar';
 
   @override
-  String get libraryDeleteFilesLabel => 'Eliminar archivos';
+  String get libraryDeleteFilesLabel => 'Eliminar los archivos';
 
   @override
-  String get libraryDeleteFilesMenu => 'Eliminar archivos...';
+  String get libraryDeleteFilesMenu => 'Eliminar los archivos...';
 
   @override
   String get libraryDeleteModePermanent => 'Eliminar permanentemente';
@@ -3125,7 +3129,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryKindArtist => 'artista';
 
   @override
-  String get localeFontSample => 'Música, pódcasts y audiolibros.';
+  String get localeFontSample => 'Música, pódcast y audiolibros.';
 
   @override
   String get metadataAddTag => 'Añadir la etiqueta';
@@ -3943,7 +3947,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerAddLyrics => 'Añadir la letra';
 
   @override
-  String get playerAddToPlaylist => 'Añadir a una lista';
+  String get playerAddToPlaylist => 'Añadir a una lista de reproducción';
 
   @override
   String get playerAllStations => 'Todas las emisoras';
@@ -4087,7 +4091,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerMarkPlayed => 'Marcar como reproducido';
 
   @override
-  String get playerMiniWindow => 'Ventana del reproductor pequeño';
+  String get playerMiniWindow => 'Ventana del reproductor mini';
 
   @override
   String get playerMoreLikeThis => 'Más como esto';
@@ -4163,7 +4167,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerSeekSpans => 'Alcance de la barra de posición';
 
   @override
-  String get playerShareLink => 'Enlace para compartir';
+  String get playerShareLink => 'Compartir un enlace';
 
   @override
   String get playerSimilarTracks => 'Pistas similares';
@@ -4203,7 +4207,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerSpeedThisSession => 'Solo para esta sesión';
 
   @override
-  String get playerStar => 'Marcar como favorita';
+  String get playerStar => 'Añadir a favoritos';
 
   @override
   String playerStarRating(int count) {
@@ -4217,7 +4221,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String playerStarThis(String kind) {
-    return 'Marcar este $kind como favorito';
+    return 'Añadir este $kind a favoritos';
   }
 
   @override
@@ -4285,7 +4289,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerUnpinStation => 'Quitar del dial';
 
   @override
-  String get playerUnstar => 'Quitar de favoritas';
+  String get playerUnstar => 'Quitar de favoritos';
 
   @override
   String playerUnstarThis(String kind) {
@@ -4338,7 +4342,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Aquí no hay nada que añadir. Los artistas y los álbumes no son miembros de una lista; sus pistas sí.';
 
   @override
-  String get playlistAddToTitle => 'Añadir a la lista';
+  String get playlistAddToTitle => 'Añadir a una lista de reproducción';
 
   @override
   String playlistAdded(String title) {
@@ -4400,7 +4404,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistEditableEmptyMessage =>
-      'Busca arriba para añadir la primera pista, o usa \"Añadir a una lista\" desde cualquier sitio donde esté sonando algo.';
+      'Busca arriba para añadir la primera pista, o usa \"Añadir a una lista de reproducción\" desde cualquier sitio donde esté sonando algo.';
 
   @override
   String get playlistEmptyTitle => 'Aquí no hay nada';
@@ -4452,7 +4456,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistImportHintText => 'Una pista por línea: artista - título';
 
   @override
-  String get playlistImportMenu => 'Importar una lista';
+  String get playlistImportMenu => 'Importar una lista de reproducción';
 
   @override
   String get playlistImportMissingHeading => 'No están en la biblioteca:';
@@ -4596,7 +4600,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistRename => 'Cambiar el nombre';
 
   @override
-  String get playlistRenameTitle => 'Cambiar el nombre de la lista';
+  String get playlistRenameTitle =>
+      'Cambiar el nombre de la lista de reproducción';
 
   @override
   String get playlistResetCover => 'Restablecer la portada';
@@ -5121,7 +5126,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastCheckForNew => 'Buscar episodios nuevos';
 
   @override
-  String get podcastClearSelection => 'Borrar';
+  String get podcastClearSelection => 'Deseleccionar';
 
   @override
   String get podcastCredits => 'Créditos';
@@ -5418,7 +5423,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastNoNewEpisodes => 'No hay episodios nuevos';
 
   @override
-  String get podcastNothingMatches => 'No coincide nada';
+  String get podcastNothingMatches => 'No hay coincidencias';
 
   @override
   String get podcastNothingMatchesMessage =>
@@ -5626,7 +5631,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastSourceYouTube => 'YouTube';
 
   @override
-  String get podcastStop => 'Parar';
+  String get podcastStop => 'Detener';
 
   @override
   String get podcastSubscribeAction => 'Suscribirse';
@@ -5703,7 +5708,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastsLoadError => 'No se han podido cargar tus programas';
 
   @override
-  String get podcastsTitle => 'Pódcasts';
+  String get podcastsTitle => 'Pódcast';
 
   @override
   String get prototypeApply => 'Aplicar la propuesta';
@@ -5743,10 +5748,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get queueClear => 'Vaciar la cola';
 
   @override
-  String get queueClearSelection => 'Deshacer la selección de la cola';
+  String get queueClearSelection => 'Quitar la selección de la cola';
 
   @override
-  String get queueClearSelectionAction => 'Deshacer';
+  String get queueClearSelectionAction => 'Deseleccionar';
 
   @override
   String get queueDragToReorder => 'Arrastra para reordenar';
@@ -5761,7 +5766,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get queueEmptyMessage =>
-      'Reproduce un álbum, un programa o una lista y aparecerá aquí.';
+      'Reproduce un álbum, un programa o una lista de reproducción y aparecerá aquí.';
 
   @override
   String get queueEmptyTitle => 'No hay nada en la cola';
@@ -5807,13 +5812,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get queueRemoveEntry => 'Quitar de la cola';
 
   @override
-  String get queueRepeatAll => 'Repetir todo';
+  String get queueRepeatAll => 'Repetición de todo';
 
   @override
   String get queueRepeatOff => 'Repetición desactivada';
 
   @override
-  String get queueRepeatOne => 'Repetir una';
+  String get queueRepeatOne => 'Repetición de una';
 
   @override
   String queueRestoreSession(String name) {
@@ -6196,7 +6201,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reviewActionDiscard => 'Descartar';
 
   @override
-  String get reviewActionRevert => 'Deshacer';
+  String get reviewActionRevert => 'Revertir';
 
   @override
   String get reviewActionSkip => 'Omitir';
@@ -6502,7 +6507,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get searchAction => 'Buscar';
 
   @override
-  String get searchAddStation => 'Añadir emisora';
+  String get searchAddStation => 'Añadir una emisora';
 
   @override
   String get searchDirectoryDegraded =>
@@ -6600,7 +6605,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get searchScopeMusic => 'Música';
 
   @override
-  String get searchScopePodcasts => 'Pódcasts';
+  String get searchScopePodcasts => 'Pódcast';
 
   @override
   String get searchScopeRadio => 'Radio';
@@ -6672,7 +6677,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Contraseña de aplicación creada';
 
   @override
-  String get settingsAppPasswordDone => 'Hecho';
+  String get settingsAppPasswordDone => 'Listo';
 
   @override
   String get settingsAppPasswordLabel => 'Etiqueta';
@@ -6696,7 +6701,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsAppPasswordsBlurb =>
-      'Para aplicaciones de Subsonic y clientes de sincronización de pódcasts. Tu contraseña de inicio de sesión nunca funciona ahí.';
+      'Para aplicaciones de Subsonic y clientes de sincronización de pódcast. Tu contraseña de inicio de sesión nunca funciona ahí.';
 
   @override
   String get settingsAppPasswordsEmpty =>
@@ -6758,7 +6763,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsAutoRemoveFinishedTitle =>
-      'Eliminar los episodios terminados';
+      'Quitar los episodios terminados';
 
   @override
   String get settingsAutoplayHelp =>
@@ -7088,7 +7093,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsGroupThisDevice => 'Este dispositivo';
 
   @override
-  String get settingsGroupWhatGetsScrobbled => 'Qué se envía por scrobble';
+  String get settingsGroupWhatGetsScrobbled => 'De qué se hace scrobble';
 
   @override
   String get settingsGroupWhereSoundComesOut => 'Por dónde sale el sonido';
@@ -7380,7 +7385,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'ritmo, más rápido, predeterminada';
 
   @override
-  String get settingsPodcastSpeedTitle => 'Velocidad de los pódcasts';
+  String get settingsPodcastSpeedTitle => 'Velocidad de los pódcast';
 
   @override
   String get settingsPreloadWifiHelp =>
@@ -7795,7 +7800,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get sharingEmptyMessage =>
-      'Comparte una pista, un episodio, un libro o una lista y el enlace aparece aquí, con cuántas veces se ha reproducido y una forma de desactivarlo.';
+      'Comparte una pista, un episodio, un libro o una lista de reproducción y el enlace aparece aquí, con cuántas veces se ha reproducido y una forma de desactivarlo.';
 
   @override
   String get sharingEmptyTitle => 'Todavía no hay enlaces compartidos';
@@ -7833,7 +7838,7 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.selectLogic(kind, {
       'track': 'Pista',
       'album': 'Álbum',
-      'playlist': 'Lista',
+      'playlist': 'Lista de reproducción',
       'book': 'Audiolibro',
       'episode': 'Episodio',
       'other': '$kind',
@@ -7893,13 +7898,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCommandCast => 'Reproducir en otro dispositivo';
 
   @override
-  String get shellCommandCreatePlaylist => 'Crear una lista';
+  String get shellCommandCreatePlaylist => 'Crear una lista de reproducción';
 
   @override
   String get shellCommandLyrics => 'Mostrar la letra';
 
   @override
-  String get shellCommandMiniWindow => 'Ventana de reproductor pequeña';
+  String get shellCommandMiniWindow => 'Ventana del reproductor mini';
 
   @override
   String get shellCommandMute => 'Silenciar o restablecer el sonido';
@@ -7992,7 +7997,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellNavPlaylists => 'Listas de reproducción';
 
   @override
-  String get shellNavPodcasts => 'Pódcasts';
+  String get shellNavPodcasts => 'Pódcast';
 
   @override
   String get shellNavRadio => 'Radio';
@@ -8681,7 +8686,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get uploadsFromUrl => 'Añadir desde una URL';
 
   @override
-  String get uploadsFromUrlSubtitle => 'Un vídeo, una lista o un canal';
+  String get uploadsFromUrlSubtitle =>
+      'Un vídeo, una lista de reproducción o un canal';
 
   @override
   String get uploadsGroupingAlbum => 'Un solo álbum';
@@ -8782,7 +8788,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get uploadsSourceUrl => 'URL de origen';
 
   @override
-  String get uploadsSourceUrlHint => 'Un solo vídeo, o una lista o un canal';
+  String get uploadsSourceUrlHint =>
+      'Un solo vídeo, o una lista de reproducción o un canal';
 
   @override
   String get uploadsTitle => 'Subidas';

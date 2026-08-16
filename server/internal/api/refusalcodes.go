@@ -24,6 +24,11 @@ import "net/http"
 // endpoint is still online in - which is a loop, not a fix. Those
 // arrive as `invalid-request` carrying the client's own message.
 //
+// `endpoint-failed` is the one thing about the transport an endpoint
+// may say, because it is the only party that knows it: the command
+// arrived, it tried, and it could not. Degrading that to
+// `invalid-request` blames the controller for a well-formed request.
+//
 // Unexported and never written after init: both readers are in this
 // package, and a package-level map that anything could write is a data
 // race waiting for the first goroutine that tries.
@@ -34,6 +39,9 @@ var refusalCodes = map[string]int{
 	"invalid-request":     http.StatusBadRequest,
 	"conflict":            http.StatusConflict,
 	"feature-unavailable": http.StatusNotImplemented,
+	// 409 like `endpoint-offline` and `timeout` beside it: the request
+	// was well formed and the state was not.
+	"endpoint-failed": http.StatusConflict,
 }
 
 // refusalStatus resolves a refusal's code onto the status it answers

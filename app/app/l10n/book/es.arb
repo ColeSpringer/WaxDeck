@@ -57,7 +57,7 @@
   "booksFinished": "Terminado",
   "booksLoadError": "No se han podido cargar tus libros",
   "booksMore": "Más",
-  "booksNothingMatches": "No coincide nada",
+  "booksNothingMatches": "No hay coincidencias",
   "booksShowAll": "Ver todos los libros",
   "booksSortRow": "{sort, select, recent{Ordenar por lo añadido recientemente} title{Ordenar por título} author{Ordenar por autor} other{Ordenar por {sort}}}",
   "booksTimeLeft": "Quedan {time}",

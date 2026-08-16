@@ -141,7 +141,7 @@
   },
   "toolsTaskImportFrom": "Import from {source}",
   "@toolsTaskImportFrom": {
-    "description": "Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated.",
+    "description": "Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated. A task's name is a noun, unlike the playlist import dialog's title of the same English.",
     "placeholders": {
       "source": {
         "type": "String",

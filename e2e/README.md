@@ -61,6 +61,17 @@ tier, so most waits need nothing at all.
 **Copy is yours.** The driver finds a control and hands back a locator;
 whether it says the right thing is the spec's assertion.
 
+**And that copy is English.** The specs assert English sentences and
+look controls up by role and accessible name, both of which the app
+draws from whichever locale it resolved. `playwright.config.ts` pins
+`locale: 'en-US'`, so the runner's own desktop language decides nothing
+and a Spanish machine runs the same suite as a green one. The
+consequence is worth stating in both directions: a translation cannot
+red this suite, and this suite does not gate a translation. What checks
+the tables is `app/app/test/l10n_arb_test.dart`, and what proves a
+second locale draws at all is the Spanish pump in
+`app/app/test/settings_screen_test.dart`.
+
 ## Accounts
 
 Every test mints its own account, named after the test, through the

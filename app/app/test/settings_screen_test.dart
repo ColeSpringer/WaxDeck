@@ -26,12 +26,19 @@ const _user = WaxDeckUser(
   roles: ['admin'],
 );
 
-Widget _host(FakeRepository repo, Widget screen) => ProviderScope(
+/// [locale] reaches `routedHost`, which installs the delegates; pass it
+/// only where the copy is what the test is about, since every other
+/// assertion in this file reads English.
+Widget _host(
+  FakeRepository repo,
+  Widget screen, {
+  Locale locale = const Locale('en'),
+}) => ProviderScope(
   overrides: [
     repositoryProvider.overrideWithValue(repo),
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
   ],
-  child: routedHost(screen),
+  child: routedHost(screen, locale: locale),
 );
 
 Widget _section(FakeRepository repo, SettingsSection section) =>
@@ -107,6 +114,28 @@ void main() {
           reason: section.segment,
         );
       }
+    });
+
+    testWidgets('renders in Spanish when Spanish is the resolved locale', (
+      tester,
+    ) async {
+      // The one proof a locale other than the template actually draws:
+      // the delegates resolve and the es bundle is compiled in. It says
+      // nothing about date symbols - this screen formats none.
+      _tallWindow(tester);
+      await tester.pumpWidget(
+        _host(
+          _signedInRepo(),
+          const SettingsScreen(),
+          locale: const Locale('es'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ajustes'), findsOneWidget);
+      expect(find.text('Apariencia'), findsOneWidget);
+      expect(find.text('Settings'), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('an administrator also gets the server section', (

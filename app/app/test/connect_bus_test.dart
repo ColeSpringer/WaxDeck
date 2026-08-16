@@ -48,6 +48,49 @@ void main() {
     );
   });
 
+  test('a refusal keeps its params over the socket too', () async {
+    // One refusal can arrive over REST or over the socket, and the
+    // picker reads `params` before it reads any phrase - dropping them
+    // here would send this channel down the old-server fallback alone.
+    final bus = ConnectBus(send: (_) => true);
+    final future = bus.sendCmd('ps-1', 'play');
+    bus.handleFrame({
+      'type': 'error',
+      'id': 'c1',
+      'code': 'feature-unavailable',
+      'message': 'this is a multi-part audiobook',
+      'params': {'feature': 'multi-part-audiobook', 'pid': 'tr-x'},
+    });
+    await expectLater(
+      future,
+      throwsA(
+        isA<WaxDeckApiException>().having((e) => e.params, 'params', {
+          'feature': 'multi-part-audiobook',
+          'pid': 'tr-x',
+        }),
+      ),
+    );
+  });
+
+  test('a frame without params carries none', () async {
+    // Null rather than an empty map: the explainer branches on a key
+    // being there, and a pre-params server sends no field at all.
+    final bus = ConnectBus(send: (_) => true);
+    final future = bus.sendCmd('ps-1', 'play');
+    bus.handleFrame({
+      'type': 'error',
+      'id': 'c1',
+      'code': 'conflict',
+      'message': 'busy',
+    });
+    await expectLater(
+      future,
+      throwsA(
+        isA<WaxDeckApiException>().having((e) => e.params, 'params', isNull),
+      ),
+    );
+  });
+
   test('an offline channel rejects immediately', () async {
     final bus = ConnectBus(send: (_) => false);
     await expectLater(

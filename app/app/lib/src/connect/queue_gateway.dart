@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../player/autoplay_gate.dart';
 import '../player/now_playing_controller.dart';
@@ -155,15 +154,11 @@ class LocalQueueGateway implements QueueGateway {
     required int positionMs,
     required bool play,
   }) async {
-    if (pids.isEmpty) {
-      // Answered over the socket to whoever sent the command, so the
-      // message is the wire's own; the receiving client translates the
-      // code.
-      throw const WaxDeckApiException(
-        code: 'invalid-request',
-        message: 'the load carried no items',
-      );
-    }
+    // An empty load is refused by whoever read the frame it came in:
+    // this gateway also answers the media session, which has no sender
+    // to refuse. Asserted rather than checked, so a caller that skips
+    // its own check fails loudly here in debug.
+    assert(pids.isNotEmpty, 'load with no pids');
     final began = _playback.startGeneration;
     // The order in the frame is the order the controlling device is
     // showing, and shuffle is its own verb: a standing local preference
@@ -271,8 +266,12 @@ class LocalQueueGateway implements QueueGateway {
     if (_playback.startGeneration == began) return;
     final error = _ref.read(nowPlayingProvider).error;
     if (error == null) return;
-    if (error is WaxDeckApiException) throw error;
-    throw WaxDeckApiException(code: 'internal', message: error.toString());
+    // Whatever the start threw, unchanged: this gateway answers the
+    // media session as well as a routed command, and only the Connect
+    // side has a wire code to say. An Error is wrapped because it is
+    // not catchable as an Exception, and both callers catch by that.
+    if (error is Exception) throw error;
+    throw Exception(error.toString());
   }
 }
 

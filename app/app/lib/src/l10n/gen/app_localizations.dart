@@ -2607,7 +2607,7 @@ abstract class AppLocalizations {
   /// **'front cover'**
   String get artSlotFrontInline;
 
-  /// Confirming button of the clear-artwork dialog.
+  /// Confirming button of the clear-artwork dialog. It removes stored content rather than emptying a list, which some languages word differently.
   ///
   /// In en, this message translates to:
   /// **'Clear'**
@@ -3663,7 +3663,7 @@ abstract class AppLocalizations {
   /// **'Play on another device'**
   String get devicesPlayOnAnother;
 
-  /// Stands in for what another device is playing when its title is not known.
+  /// Stands in for what another device is playing when its title is not known. Uses this screen's own word for playing, which the rows around it share; it deliberately need not match the design system's state word for the same English.
   ///
   /// In en, this message translates to:
   /// **'Playing'**
@@ -4028,6 +4028,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The directory service did not answer. Try again later.'**
   String get errorDirectoryUnavailable;
+
+  /// Error sentence for the spec code `endpoint-failed`: the other device took the command and failed at it, unlike `endpoint-offline`, where it never got it.
+  ///
+  /// In en, this message translates to:
+  /// **'That device could not carry that out. It is still connected, so it is worth trying again.'**
+  String get errorEndpointFailed;
 
   /// Error sentence for the spec code `endpoint-offline`.
   ///
@@ -5793,7 +5799,7 @@ abstract class AppLocalizations {
   /// **'Starred'**
   String get musicShelfStarredTitle;
 
-  /// Button on an album's or an artist's header that plays it in random order.
+  /// Button on an album's or an artist's header that plays it in random order. It starts playback; it does not toggle the player's shuffle, which the design system words separately.
   ///
   /// In en, this message translates to:
   /// **'Shuffle'**
@@ -6429,7 +6435,7 @@ abstract class AppLocalizations {
   /// **'Seek bar spans'**
   String get playerSeekSpans;
 
-  /// Menu item that mints a public link to what is playing.
+  /// Menu item that mints a public link to what is playing. Names the act, like the other overflow rows that open the same dialog.
   ///
   /// In en, this message translates to:
   /// **'Share link'**
@@ -6501,7 +6507,7 @@ abstract class AppLocalizations {
   /// **'For this session only'**
   String get playerSpeedThisSession;
 
-  /// Accessible name of the control that marks the playing track a favourite. Agrees with the word for a track in this language.
+  /// Accessible name of the control that marks the playing track a favourite. Same words as the design system's own star control.
   ///
   /// In en, this message translates to:
   /// **'Star'**
@@ -6621,7 +6627,7 @@ abstract class AppLocalizations {
   /// **'Unpin from the dial'**
   String get playerUnpinStation;
 
-  /// Accessible name of the control that unmarks the playing track. Agrees with the word for a track in this language.
+  /// Accessible name of the control that unmarks the playing track. Same words as the design system's own star control.
   ///
   /// In en, this message translates to:
   /// **'Unstar'**
@@ -7023,7 +7029,7 @@ abstract class AppLocalizations {
   /// **'YouTube Music CSV'**
   String get playlistImportSourceYtMusic;
 
-  /// Title of the paste dialog. {source} is the import source's own name.
+  /// Title of the paste dialog. {source} is the import source's own name. Reads as an instruction, unlike the task of the same name on the tasks screen, which is a noun.
   ///
   /// In en, this message translates to:
   /// **'Import from {source}'**
@@ -7400,7 +7406,7 @@ abstract class AppLocalizations {
   /// **'Season'**
   String get playlistRuleFieldSeason;
 
-  /// Smart-rule field: where an item came from - a local file, a feed, manual entry.
+  /// Smart-rule field: where an item came from - a local file, a feed, manual entry. Provenance, not the podcast screen's "Source", which picks a kind of address.
   ///
   /// In en, this message translates to:
   /// **'Source'**
@@ -7904,7 +7910,7 @@ abstract class AppLocalizations {
   /// **'Shared with everyone'**
   String get playlistSharedWithEveryone;
 
-  /// Button on a playlist's header that plays it in random order.
+  /// Button on a playlist's header that plays it in random order. It starts playback; it does not toggle the player's shuffle, which the design system words separately.
   ///
   /// In en, this message translates to:
   /// **'Shuffle'**
@@ -8024,7 +8030,7 @@ abstract class AppLocalizations {
   /// **'Check for new episodes'**
   String get podcastCheckForNew;
 
-  /// Action dropping a batch selection without doing anything to it.
+  /// Action dropping a batch selection without doing anything to it. It clears the selection, not the episodes, so it must not read as a delete.
   ///
   /// In en, this message translates to:
   /// **'Clear'**
@@ -8684,7 +8690,7 @@ abstract class AppLocalizations {
   /// **'{sort, select, recent{Sort by recent} title{Sort by title} added{Sort by added} other{Sort by {sort}}}'**
   String podcastSortRow(String sort);
 
-  /// Segmented control choosing what kind of address was typed.
+  /// Segmented control choosing what kind of address was typed. Not the smart-rule field of the same English, which means provenance.
   ///
   /// In en, this message translates to:
   /// **'Source'**
@@ -8900,7 +8906,7 @@ abstract class AppLocalizations {
   /// **'Clear the queue selection'**
   String get queueClearSelection;
 
-  /// Button that unselects the selected queue rows. It clears the selection, not the queue.
+  /// Button that unselects the selected queue rows. It clears the selection, not the queue, so it must not read as a delete.
   ///
   /// In en, this message translates to:
   /// **'Clear'**
@@ -9218,7 +9224,7 @@ abstract class AppLocalizations {
   /// **'Pin {name} to the dial'**
   String radioPin(String name);
 
-  /// Under a station's name while it is on, where the stream announces no track.
+  /// Under a station's name while it is on, where the stream announces no track. Broadcasting has its own idiom in some languages, so this deliberately need not match the player's word for the same English.
   ///
   /// In en, this message translates to:
   /// **'Playing'**
@@ -12061,7 +12067,7 @@ abstract class AppLocalizations {
   /// **'Anyone with the link can play this. It goes on your clipboard as soon as it is made.'**
   String get sharingDialogBody;
 
-  /// Title of the dialog that mints a public link.
+  /// Title of the dialog that mints a public link. A title names the thing; the overflow rows that open it name the act.
   ///
   /// In en, this message translates to:
   /// **'Share link'**
@@ -13286,7 +13292,7 @@ abstract class AppLocalizations {
   /// **'CUE split'**
   String get toolsTaskCueSplit;
 
-  /// Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated.
+  /// Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated. A task's name is a noun, unlike the playlist import dialog's title of the same English.
   ///
   /// In en, this message translates to:
   /// **'Import from {source}'**

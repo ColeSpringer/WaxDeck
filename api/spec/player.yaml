@@ -69,7 +69,8 @@ paths:
         controller can turn into an offer to play it somewhere that
         can, rather than a bare failure. When the target is a client
         endpoint, that client's own refusal code and message are what
-        arrive here.
+        arrive here - `endpoint-failed` where it took the load and
+        could not carry it out.
       tags: [player]
       requestBody:
         required: true
@@ -207,7 +208,8 @@ paths:
         A queue the target cannot play answers `feature-unavailable`
         naming the pid, on the same terms as starting a session there;
         when the target is a client endpoint, that client's own refusal
-        code and message are what arrive here. The tightening above is
+        code and message are what arrive here - `endpoint-failed` where
+        it took the transfer and could not carry it out. The tightening is
         a `forbidden`, not a `not-found`: the session is one the caller
         can see and control, and it is the target endpoint that is out
         of bounds.
@@ -347,14 +349,18 @@ components:
       description: >
         The command could not be completed on the target player
         endpoint. Read `code` rather than the status: this answer
-        carries three, and they call for different things.
+        carries four, and they call for different things.
         `endpoint-offline` means the endpoint is not connected - refresh
         the endpoint list; the device may have left the network or the
         client may have disconnected. `timeout` means it is connected
         but did not answer within the routing deadline, so retrying
         beats refreshing. `conflict` is the endpoint itself refusing
         because of something it is in the middle of, and the message
-        says what.
+        says what. `endpoint-failed` is that endpoint taking the command
+        and failing at it - a part it could not load, a start that did
+        not take - so nothing about the request or the endpoint list
+        needs changing and retrying is reasonable; the message carries
+        whatever the endpoint could say about it.
       content:
         application/json:
           schema:

@@ -31,7 +31,7 @@
   },
   "queueClearSelectionAction": "Clear",
   "@queueClearSelectionAction": {
-    "description": "Button that unselects the selected queue rows. It clears the selection, not the queue."
+    "description": "Button that unselects the selected queue rows. It clears the selection, not the queue, so it must not read as a delete."
   },
   "queueDragToReorder": "Drag to reorder",
   "@queueDragToReorder": {

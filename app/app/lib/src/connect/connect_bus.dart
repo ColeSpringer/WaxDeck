@@ -50,8 +50,13 @@ class ConnectBus {
         final completer = id is String ? _pending.remove(id) : null;
         completer?.completeError(
           WaxDeckApiException(
-            code: frame['code'] as String? ?? 'internal',
+            // `local-protocol`, not `internal`: the server names a code
+            // on every error frame it sends, so a frame without one did
+            // not come from a conforming server, and saying the server
+            // reported a fault would put words in its mouth.
+            code: frame['code'] as String? ?? 'local-protocol',
             message: frame['message'] as String? ?? 'command failed',
+            params: errorParamsFromWire(frame['params']),
           ),
         );
       case 'endpoint-cmd':

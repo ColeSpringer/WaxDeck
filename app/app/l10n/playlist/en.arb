@@ -279,7 +279,7 @@
   },
   "playlistImportTitle": "Import from {source}",
   "@playlistImportTitle": {
-    "description": "Title of the paste dialog. {source} is the import source's own name.",
+    "description": "Title of the paste dialog. {source} is the import source's own name. Reads as an instruction, unlike the task of the same name on the tasks screen, which is a noun.",
     "placeholders": {
       "source": {
         "type": "String",
@@ -626,7 +626,7 @@
   },
   "playlistRuleFieldSource": "Source",
   "@playlistRuleFieldSource": {
-    "description": "Smart-rule field: where an item came from - a local file, a feed, manual entry."
+    "description": "Smart-rule field: where an item came from - a local file, a feed, manual entry. Provenance, not the podcast screen's \"Source\", which picks a kind of address."
   },
   "playlistRuleFieldStarred": "Starred",
   "@playlistRuleFieldStarred": {
@@ -1038,7 +1038,7 @@
   },
   "playlistShuffle": "Shuffle",
   "@playlistShuffle": {
-    "description": "Button on a playlist's header that plays it in random order."
+    "description": "Button on a playlist's header that plays it in random order. It starts playback; it does not toggle the player's shuffle, which the design system words separately."
   },
   "playlistSmart": "Smart",
   "@playlistSmart": {

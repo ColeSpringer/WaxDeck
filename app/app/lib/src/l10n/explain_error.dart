@@ -42,6 +42,7 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   'service-unreachable' => l.errorServiceUnreachable,
   'feature-unavailable' => _featureUnavailable(l, e),
   'endpoint-offline' => l.errorEndpointOffline,
+  'endpoint-failed' => l.errorEndpointFailed,
   'quota-exceeded' => l.errorQuotaExceeded,
   'field-locked' => l.errorFieldLocked,
   'unsupported-format' => l.errorUnsupportedFormat,

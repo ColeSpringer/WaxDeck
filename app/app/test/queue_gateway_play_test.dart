@@ -61,6 +61,53 @@ void main() {
     return playback;
   }
 
+  test(
+    'a start that failed on something else is reported, not swallowed',
+    () async {
+      // The gateway answers the media session as well as a routed
+      // command, so it reports the failure and words no wire code; what a
+      // controller sends back is connect_endpoint_test's. An Error is
+      // wrapped because both callers catch by Exception, and an Error is
+      // not one.
+      const other = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK2';
+      final repo = FakeRepository(items: [testItem(pid), testItem(other)]);
+      final container = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          audioEngineProvider.overrideWithValue(
+            FakeEngine(mediaDuration: const Duration(seconds: 30)),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container
+          .read(queueControllerProvider.notifier)
+          .restore(
+            QueueState.empty.copyWith(
+              entries: const [
+                QueueEntry(queueId: 'q0', pid: pid),
+                QueueEntry(queueId: 'q1', pid: other),
+              ],
+              sourceOrder: const ['q0', 'q1'],
+            ),
+          );
+      await pumpEventQueue();
+      await container.read(nowPlayingProvider.notifier).settled;
+      repo.playInfoError = StateError('no decoder for that file');
+
+      await expectLater(
+        container.read(queueGatewayProvider).jumpTo(1),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('no decoder for that file'),
+          ),
+        ),
+      );
+    },
+  );
+
   test('a play asks a failed start again, as the deck does', () async {
     final h = build();
     final playback = await withFailedStart(h);

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart' show Intl;
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/l10n/locale_warmup.dart';
 import 'package:waxdeck/src/providers.dart';
@@ -117,6 +118,31 @@ void main() {
   });
 
   group('the two tables', () {
+    test('both answer every locale the app offers', () async {
+      // The lookups the delegates call: exhaustive switches over the
+      // ARBs present at generation, falling through to a throw. A bundle
+      // that failed to regenerate raises here rather than at the first
+      // widget that reads a string.
+      for (final locale in waxSupportedLocales) {
+        // Against the generated spelling, not the BCP 47 tag: the
+        // getter is `Intl.canonicalizedLocale(locale.toString())`, so
+        // the first region-qualified ARB answers `en_GB` where the tag
+        // says `en-GB`, and comparing tags would red on a delegate that
+        // resolves perfectly well.
+        final want = Intl.canonicalizedLocale(locale.toString());
+        expect(
+          lookupAppLocalizations(locale).localeName,
+          want,
+          reason: 'no AppLocalizations for $locale',
+        );
+        expect(
+          lookupWaxLocalizations(locale).localeName,
+          want,
+          reason: 'no WaxLocalizations for $locale',
+        );
+      }
+    });
+
     test('spell an hour the same way', () async {
       // `durationHours` is in both: the design system spells the
       // durations its components draw, and the app spells the wait on
@@ -161,7 +187,7 @@ void main() {
 
       await tester.pumpWidget(host(const Locale('es')));
       expect(warmed, hasLength(2));
-      expect(warmed.last, 'Música, pódcasts y audiolibros.');
+      expect(warmed.last, 'Música, pódcast y audiolibros.');
     });
 
     testWidgets('resolves the locale from inside MaterialApp.builder', (
@@ -184,7 +210,7 @@ void main() {
         ),
       );
 
-      expect(warmed, ['Música, pódcasts y audiolibros.']);
+      expect(warmed, ['Música, pódcast y audiolibros.']);
     });
   });
 }

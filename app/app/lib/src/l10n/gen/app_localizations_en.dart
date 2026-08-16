@@ -2432,6 +2432,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'The directory service did not answer. Try again later.';
 
   @override
+  String get errorEndpointFailed =>
+      'That device could not carry that out. It is still connected, so it is worth trying again.';
+
+  @override
   String get errorEndpointOffline =>
       'That device is not connected. Refresh the list of devices.';
 

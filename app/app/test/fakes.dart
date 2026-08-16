@@ -86,7 +86,10 @@ class FakeRepository implements WaxDeckRepository {
   WaxDeckApiException? listError;
 
   /// When set, play-info resolution fails with it.
-  WaxDeckApiException? playInfoError;
+  /// Object, not the API exception: a repository can throw anything a
+  /// codec or a plugin threw, and the gateway words those two cases
+  /// differently.
+  Object? playInfoError;
 
   /// When set, [getPlayInfo] waits on it before answering, so a test can
   /// hold a resolution open and act while it is in flight.

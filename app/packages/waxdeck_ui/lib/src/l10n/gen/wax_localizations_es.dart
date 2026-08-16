@@ -107,13 +107,13 @@ class WaxLocalizationsEs extends WaxLocalizations {
   }
 
   @override
-  String get controlsStar => 'Destacar';
+  String get controlsStar => 'Añadir a favoritos';
 
   @override
   String get controlsUnmute => 'Activar el sonido';
 
   @override
-  String get controlsUnstar => 'Quitar de destacados';
+  String get controlsUnstar => 'Quitar de favoritos';
 
   @override
   String get deckBarCast => 'Reproducir en otro dispositivo';
@@ -160,7 +160,7 @@ class WaxLocalizationsEs extends WaxLocalizations {
   String get deckBarRepeatOne => 'Repetición de una';
 
   @override
-  String get deckBarResume => 'Continuar';
+  String get deckBarResume => 'Reanudar';
 
   @override
   String get deckBarSaveSong => 'Guardar esta canción';

@@ -621,7 +621,7 @@ abstract class WaxLocalizations {
   /// **'Repeat one'**
   String get playerRepeatOne;
 
-  /// Button in the full player that scrambles the queue's order. Names what pressing it does, not the state it is in.
+  /// Button in the full player that scrambles the queue's order. Names what pressing it does, not the state it is in - unlike the headers in the app, whose "Shuffle" starts playback.
   ///
   /// In en, this message translates to:
   /// **'Shuffle'**

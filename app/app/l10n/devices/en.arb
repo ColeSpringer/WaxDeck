@@ -141,7 +141,7 @@
   },
   "devicesPlaying": "Playing",
   "@devicesPlaying": {
-    "description": "Stands in for what another device is playing when its title is not known."
+    "description": "Stands in for what another device is playing when its title is not known. Uses this screen's own word for playing, which the rows around it share; it deliberately need not match the design system's state word for the same English."
   },
   "devicesPlayingElsewhere": "Playing elsewhere",
   "@devicesPlayingElsewhere": {

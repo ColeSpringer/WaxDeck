@@ -182,7 +182,11 @@ frame echoing the `id` on success, or an `error` frame echoing it on
 failure. `error` frames carry the API error vocabulary in `code` (
 `invalid-request`, `not-found`, `forbidden`, `endpoint-offline`, plus
 `timeout` when a routed command's target connection did not answer within
-the server's routing deadline, ten seconds). An `error` frame without an
+the server's routing deadline, ten seconds). A command routed to a client
+endpoint may also come back with what that endpoint answered, from the
+same short vocabulary the REST surface whitelists: `conflict`,
+`feature-unavailable`, and `endpoint-failed` where it took the command
+and could not carry it out. An `error` frame without an
 `id` is connection-level (a malformed frame that could not be parsed far
 enough to find one). A refusal whose code covers several causes may also
 carry `params`, the same flat string map on the same best-effort terms

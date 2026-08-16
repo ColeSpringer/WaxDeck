@@ -137,7 +137,7 @@
   },
   "radioPlaying": "Playing",
   "@radioPlaying": {
-    "description": "Under a station's name while it is on, where the stream announces no track."
+    "description": "Under a station's name while it is on, where the stream announces no track. Broadcasting has its own idiom in some languages, so this deliberately need not match the player's word for the same English."
   },
   "radioRemoveStation": "Remove station",
   "@radioRemoveStation": {

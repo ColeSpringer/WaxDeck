@@ -15,9 +15,6 @@
     "hardcoded-copy": 5
   },
   "lib/src/connect/connect_controller.dart": {
-    "hardcoded-copy": 5
-  },
-  "lib/src/connect/queue_gateway.dart": {
     "hardcoded-copy": 1
   },
   "lib/src/connect/remote_session.dart": {

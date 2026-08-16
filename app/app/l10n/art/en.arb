@@ -43,7 +43,7 @@
   },
   "artworkClearAction": "Clear",
   "@artworkClearAction": {
-    "description": "Confirming button of the clear-artwork dialog."
+    "description": "Confirming button of the clear-artwork dialog. It removes stored content rather than emptying a list, which some languages word differently."
   },
   "artworkClearBody": "The slot becomes empty. Nothing falls back into it.",
   "@artworkClearBody": {

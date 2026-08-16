@@ -110,9 +110,14 @@ info:
       such as the streaming engine's queue timelines or a cast
       integration, that this server is not running),
       `endpoint-offline` (the target player endpoint is not currently
-      connected; refresh the endpoint list), `quota-exceeded` (the
-      upload would exceed the caller's storage quota, or an imported
-      backup archive exceeds the server's size limit), `field-locked`
+      connected; refresh the endpoint list), `endpoint-failed` (the
+      target player endpoint accepted a routed command and could not
+      carry it out - a part it could not load, a start that did not
+      take; the request was well formed and the endpoint is connected,
+      so what failed is neither the caller nor the server),
+      `quota-exceeded` (the upload would exceed the caller's storage
+      quota, or an imported backup archive exceeds the server's size
+      limit), `field-locked`
       (the edit targets a locked metadata field and did not set
       `force`), `unsupported-format` (the uploaded file's format
       is not accepted by this server), `read-only` (the target

@@ -46,7 +46,7 @@
   },
   "podcastClearSelection": "Clear",
   "@podcastClearSelection": {
-    "description": "Action dropping a batch selection without doing anything to it."
+    "description": "Action dropping a batch selection without doing anything to it. It clears the selection, not the episodes, so it must not read as a delete."
   },
   "podcastCredits": "Credits",
   "@podcastCredits": {
@@ -674,7 +674,7 @@
   },
   "podcastSourceLabel": "Source",
   "@podcastSourceLabel": {
-    "description": "Segmented control choosing what kind of address was typed."
+    "description": "Segmented control choosing what kind of address was typed. Not the smart-rule field of the same English, which means provenance."
   },
   "podcastSourceRss": "RSS",
   "@podcastSourceRss": {

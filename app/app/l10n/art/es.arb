@@ -12,7 +12,7 @@
   "artSlotDiscInline": "el disco",
   "artSlotFront": "Portada",
   "artSlotFrontInline": "la portada",
-  "artworkClearAction": "Vaciar",
+  "artworkClearAction": "Borrar",
   "artworkClearBody": "El hueco queda vacío. No se hereda nada en su lugar.",
   "artworkClearFrontBody": "El elemento pasa a usar la portada de su álbum o de su artista. La imagen se elimina del catálogo.",
   "artworkClearSlot": "Vaciar {slot}",

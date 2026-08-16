@@ -5,7 +5,7 @@
   "reviewActionApprove": "Aprobar",
   "reviewActionAsIs": "Dejar como está",
   "reviewActionDiscard": "Descartar",
-  "reviewActionRevert": "Deshacer",
+  "reviewActionRevert": "Revertir",
   "reviewActionSkip": "Omitir",
   "reviewActionUnofficial": "Marcar como no oficial",
   "reviewCandidateLine": "{percent} % {title}, {artist}",

@@ -30,10 +30,16 @@ import { J, T, retryCatalogBusy } from './driver';
 // Written down because rediscovering it costs a soak: two tests sharing
 // a mutable episode is a test waiting sixty seconds for a file a sibling
 // is playing, reported as a broken unfetch.
+// A repeat is a second owner, so the two that unfetch run their first
+// copy only; the soak repeats.
 
 const FEED_URL = 'http://127.0.0.1:4421/feed.xml';
 
-test('subscribe, fetch, and play an episode with silence trimming', async ({ app }) => {
+test('subscribe, fetch, and play an episode with silence trimming', async (
+  { app },
+  testInfo,
+) => {
+  test.skip(testInfo.repeatEachIndex > 0, 'owns episode [2]; one owner, and a repeat is a second');
   test.setTimeout(J.journey);
 
   // Subscribing is the first step of the journey, so it goes through the
@@ -195,7 +201,11 @@ test("an episode's location carries its show", async ({ app }) => {
   await app.podcasts.back(app.podcasts.unsubscribe());
 });
 
-test('an unfetched episode still streams by enclosure passthrough', async ({ app }) => {
+test('an unfetched episode still streams by enclosure passthrough', async (
+  { app },
+  testInfo,
+) => {
+  test.skip(testInfo.repeatEachIndex > 0, 'owns episode [1]; one owner, and a repeat is a second');
   test.setTimeout(J.long);
   const showPid = await app.seed.subscribePodcast(FEED_URL);
   const episodes = await app.seed.episodes(showPid);

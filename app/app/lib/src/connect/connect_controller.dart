@@ -233,8 +233,17 @@ class ConnectEndpointController {
       switch (verb) {
         case 'load':
         case 'set-queue':
+          final pids = _pids(frame);
+          // The sender's frame is this controller's to validate: it is
+          // the half that has a sender to answer.
+          if (pids.isEmpty) {
+            throw const _Refused(
+              'invalid-request',
+              'the load carried no items',
+            );
+          }
           await queue.load(
-            _pids(frame),
+            pids,
             index: (frame['index'] as num?)?.toInt() ?? 0,
             positionMs: (frame['positionMs'] as num?)?.toInt() ?? 0,
             // A set-queue is the controller replacing what plays here,
@@ -296,12 +305,22 @@ class ConnectEndpointController {
       }
       bus.sendCommandResult(id, ok: true);
       _report();
-    } on WaxDeckApiException catch (e) {
-      // The message is rendered by whoever sent the command, so it
-      // travels as itself rather than as a stringified exception.
+    } on _Refused catch (e) {
       bus.sendCommandResult(id, ok: false, code: e.code, message: e.message);
     } on Exception catch (e) {
-      bus.sendCommandResult(id, ok: false, message: e.toString());
+      // Not a refusal this controller decided, so it reached here from
+      // the gateway, the engine, or this device's own server calls.
+      // Whichever it was, the sender asked for something well formed
+      // and this endpoint could not do it, which is one code. The
+      // message is rendered by whoever sent the command, so an API
+      // failure travels as itself rather than as a stringified
+      // exception.
+      bus.sendCommandResult(
+        id,
+        ok: false,
+        code: 'endpoint-failed',
+        message: e is WaxDeckApiException ? e.message : e.toString(),
+      );
     }
   }
 
@@ -310,19 +329,19 @@ class ConnectEndpointController {
   /// verbatim on whoever asked: an end of the queue is one thing, and
   /// no local playback at all (an empty queue, or live radio holding
   /// the engine) is another.
-  WaxDeckApiException _nowhereToGo({required bool forward}) {
+  _Refused _nowhereToGo({required bool forward}) {
     if (queue.snapshot() == null) {
       // These go out over the socket to whoever sent the command, so
       // the message is the wire's own and the receiving client is what
       // translates it - by code, the way every other refusal is read.
-      return const WaxDeckApiException(
-        code: 'invalid-request',
-        message: 'nothing is playing on this device',
+      return const _Refused(
+        'invalid-request',
+        'nothing is playing on this device',
       );
     }
-    return WaxDeckApiException(
-      code: 'invalid-request',
-      message: forward
+    return _Refused(
+      'invalid-request',
+      forward
           ? 'already at the end of the queue'
           : 'already at the start of the queue',
     );
@@ -343,9 +362,9 @@ class ConnectEndpointController {
       // The session announced the failure and is being let go; an ok
       // here would tell the remote its seek worked while this device
       // stands an error pane where the transport was.
-      throw const WaxDeckApiException(
-        code: 'internal',
-        message: 'the seek could not load that part of the item',
+      throw const _Refused(
+        'endpoint-failed',
+        'the seek could not load that part of the item',
       );
     }
   }
@@ -357,4 +376,20 @@ class ConnectEndpointController {
     _playingSub?.cancel();
     endpointId.dispose();
   }
+}
+
+/// A cmd-result this controller words itself: it knows both what
+/// refused and that a controller is reading it, so it names the wire
+/// code. Anything else that reaches the handler is a failure that
+/// happened to this endpoint, and answers `endpoint-failed` - which is
+/// why the gateway below it deals in exceptions and not in codes: the
+/// media session shares it and has no wire to word.
+class _Refused implements Exception {
+  const _Refused(this.code, this.message);
+
+  final String code;
+  final String message;
+
+  @override
+  String toString() => '_Refused($code): $message';
 }

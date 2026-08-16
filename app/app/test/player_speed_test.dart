@@ -80,6 +80,42 @@ void main() {
     await harness.endPlayback(tester);
   });
 
+  testWidgets('a rate picked before the show settings landed still persists', (
+    tester,
+  ) async {
+    // The regression an e2e run caught: the persist rebuilds the whole
+    // settings object, so it read the copy the session had fetched and
+    // gave up when there was none - with the engine already at the new
+    // rate and the sheet's footer promising the show would remember it.
+    // Here the session's own load answers not-found, which is the same
+    // null the race leaves behind, and the write still has to land.
+    final repo = FakeRepository()
+      ..episodesByShow[showPid] = [testEpisode(episodePid)];
+    final engine = FakeEngine();
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testEpisode(episodePid),
+    );
+    repo.addSubscription(testShow(showPid));
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerSpeed));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playerSpeedPreset(175)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(engine.speed, closeTo(1.75, 0.001));
+    expect(repo.putSubscriptionSettingsCalls, hasLength(1));
+    expect(
+      repo.putSubscriptionSettingsCalls.single.settings.speed,
+      closeTo(1.75, 0.001),
+    );
+    await harness.endPlayback(tester);
+  });
+
   testWidgets('the stepper stops at the band the contract allows', (
     tester,
   ) async {

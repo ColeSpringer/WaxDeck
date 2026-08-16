@@ -4462,7 +4462,7 @@ WaxDeckApiException apiExceptionFromDio(DioException e) {
         code: code,
         message: message,
         statusCode: e.response?.statusCode,
-        params: _stringParams(data['params']),
+        params: errorParamsFromWire(data['params']),
       );
     }
   }
@@ -4471,21 +4471,6 @@ WaxDeckApiException apiExceptionFromDio(DioException e) {
     message: e.message ?? 'network error',
     statusCode: e.response?.statusCode,
   );
-}
-
-/// An error's `params` as a plain string map, or null for anything that
-/// is not one. A key or value of another type is dropped rather than
-/// stringified, and an empty result reads as absent: a caller branches
-/// on these, and branching on a guess is worse than taking the fallback.
-Map<String, String>? _stringParams(Object? raw) {
-  if (raw is! Map) return null;
-  final out = <String, String>{};
-  for (final entry in raw.entries) {
-    final key = entry.key;
-    final value = entry.value;
-    if (key is String && value is String) out[key] = value;
-  }
-  return out.isEmpty ? null : out;
 }
 
 /// Builds the generated create body for a notification target. Config

@@ -56,6 +56,26 @@ class WaxDeckApiException implements Exception {
   String toString() => 'WaxDeckApiException($code, $statusCode): $message';
 }
 
+/// An error's `params` as a plain string map, or null for anything that
+/// is not one. A key or value of another type is dropped rather than
+/// stringified, and an empty result reads as absent: a caller branches
+/// on these, and branching on a guess is worse than taking the fallback.
+///
+/// Public because the same field arrives on two transports - an HTTP
+/// body and a socket error frame - and a refusal that read differently
+/// on each would explain itself differently depending on how it got
+/// here.
+Map<String, String>? errorParamsFromWire(Object? raw) {
+  if (raw is! Map) return null;
+  final out = <String, String>{};
+  for (final entry in raw.entries) {
+    final key = entry.key;
+    final value = entry.value;
+    if (key is String && value is String) out[key] = value;
+  }
+  return out.isEmpty ? null : out;
+}
+
 /// The three first-class media types.
 enum MediaType {
   music('music'),

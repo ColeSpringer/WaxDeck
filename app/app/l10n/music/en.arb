@@ -386,7 +386,7 @@
   },
   "musicShuffle": "Shuffle",
   "@musicShuffle": {
-    "description": "Button on an album's or an artist's header that plays it in random order."
+    "description": "Button on an album's or an artist's header that plays it in random order. It starts playback; it does not toggle the player's shuffle, which the design system words separately."
   },
   "musicShuffleAllLabel": "Shuffle all music",
   "@musicShuffleAllLabel": {

@@ -317,7 +317,7 @@
   },
   "playerShareLink": "Share link",
   "@playerShareLink": {
-    "description": "Menu item that mints a public link to what is playing."
+    "description": "Menu item that mints a public link to what is playing. Names the act, like the other overflow rows that open the same dialog."
   },
   "playerSimilarTracks": "Similar tracks",
   "@playerSimilarTracks": {
@@ -377,7 +377,7 @@
   },
   "playerStar": "Star",
   "@playerStar": {
-    "description": "Accessible name of the control that marks the playing track a favourite. Agrees with the word for a track in this language."
+    "description": "Accessible name of the control that marks the playing track a favourite. Same words as the design system's own star control."
   },
   "playerStarRating": "{count} star rating",
   "@playerStarRating": {
@@ -503,7 +503,7 @@
   },
   "playerUnstar": "Unstar",
   "@playerUnstar": {
-    "description": "Accessible name of the control that unmarks the playing track. Agrees with the word for a track in this language."
+    "description": "Accessible name of the control that unmarks the playing track. Same words as the design system's own star control."
   },
   "playerUnstarThis": "Unstar this {kind}",
   "@playerUnstarThis": {

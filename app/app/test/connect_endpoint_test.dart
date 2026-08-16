@@ -311,6 +311,11 @@ void main() {
       isFalse,
       reason: 'a seek that tore the session down must not ack as landed',
     );
+    // The code is what the controller reads. `internal` would send the
+    // listener to report a server bug, and the server never saw this;
+    // `invalid-request` - what an unwhitelisted code degrades to -
+    // would blame a command that was fine.
+    expect(result['code'], 'endpoint-failed');
   });
 
   test('routed skips step the same queue the screen has', () async {
@@ -534,6 +539,11 @@ void main() {
     expect(result['id'], 'e2');
     expect(result['ok'], isFalse);
     expect(result['message'], 'network unreachable');
+    // This device's network, not the sender's command. Forwarding
+    // `transport` would reach the controller as `invalid-request`,
+    // which is the whitelist's answer for a code it does not carry, and
+    // would blame a command that was fine.
+    expect(result['code'], 'endpoint-failed');
   });
 
   test('a burst of edits reports once, where the gesture left it', () async {

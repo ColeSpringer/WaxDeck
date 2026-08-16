@@ -285,7 +285,7 @@ class PlaybackSession {
   /// play.
   Future<void> start({bool autoplay = true}) async {
     _engineOwners[engine] = this;
-    await _loadConfig();
+    await (_configLoad = _loadConfig());
     if (_disposed) return;
     try {
       var resumeMs = initialPositionMs;
@@ -436,7 +436,7 @@ class PlaybackSession {
   /// no counterpart: neither is ever preloaded.
   Future<void> adopt(PlayInfo info) async {
     _engineOwners[engine] = this;
-    await _loadConfig();
+    await (_configLoad = _loadConfig());
     if (_disposed) return;
     await engine.setSpeed(_configuredSpeed());
     if (_disposed) return;
@@ -456,6 +456,31 @@ class PlaybackSession {
     _positionSub = engine.positionStream.listen(_onPosition);
     _playingSub = engine.playingStream.listen(_onPlayingChanged);
     _completedSub = engine.completed.listen((_) => _onCompleted());
+  }
+
+  /// The in-flight (or finished) config load, so a write that arrives
+  /// before it does can wait for it rather than run without it.
+  Future<void>? _configLoad;
+
+  /// The show's stored settings, waited for rather than given up on.
+  ///
+  /// A persist sends the whole object back, so it needs what is stored
+  /// now. Reading the field alone meant a tap that beat the load - or
+  /// one whose load had failed - dropped the choice with the engine
+  /// already at the new rate and the sheet's own footer promising the
+  /// show would remember it. Re-fetched here when the load left nothing
+  /// behind, so the write either lands or throws to the caller's catch.
+  Future<SubscriptionSettings> _storedShowSettings(String showPid) async {
+    await _configLoad;
+    final loaded = _showSettings;
+    if (loaded != null) return loaded;
+    final detail = await repository.getPodcast(showPid);
+    // Defaults where the show carries none, the way the book branch
+    // already reads its own: a show nobody is subscribed to refuses the
+    // write server-side, which is the caller's catch to report.
+    final fetched = detail.settings ?? const SubscriptionSettings();
+    _showSettings = fetched;
+    return fetched;
   }
 
   /// Fetches the per-show or per-book playback config; playback works
@@ -744,8 +769,7 @@ class PlaybackSession {
     try {
       final it = item;
       if (item.mediaType == MediaType.podcast && it is EpisodeSummary) {
-        final current = _showSettings;
-        if (current == null) return;
+        final current = await _storedShowSettings(it.showPid);
         final updated = SubscriptionSettings(
           retentionKeep: current.retentionKeep,
           autoDownload: current.autoDownload,
@@ -818,8 +842,7 @@ class PlaybackSession {
     try {
       final it = item;
       if (item.mediaType == MediaType.podcast && it is EpisodeSummary) {
-        final current = _showSettings;
-        if (current == null) return false;
+        final current = await _storedShowSettings(it.showPid);
         final updated = SubscriptionSettings(
           retentionKeep: current.retentionKeep,
           autoDownload: current.autoDownload,

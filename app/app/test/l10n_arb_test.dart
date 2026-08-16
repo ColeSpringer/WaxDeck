@@ -20,7 +20,9 @@ import 'package:flutter_test/flutter_test.dart';
 ///   placeholder is a sentence with a hole in it;
 /// - no message is blank, which passes every check above and compiles
 ///   to a getter that answers the empty string;
-/// - keys stay sorted, which is what keeps a table navigable.
+/// - keys stay sorted, which is what keeps a table navigable;
+/// - the machine-drafted locale still carries the note saying so, so its
+///   copy is never handed to a translator tool as finished work.
 ///
 /// The app's table is authored as per-feature fragments in `l10n/`
 /// (`<feature>/<locale>.arb`), which `make generate` merges into the
@@ -110,6 +112,7 @@ void main() {
             locale,
             reason: '$dir/$locale.arb: @@locale names the file\'s locale',
           );
+          _expectDraftMarker(globals, locale, '$dir/$locale.arb');
           // The ARB Editor extension otherwise checks a fragment against
           // l10n.yaml's whole-app template; this scopes it to the
           // directory (and, self-referenced from en.arb, to nothing).
@@ -218,6 +221,19 @@ void main() {
       );
     });
 
+    test('globals name the locale and how it was drafted', () {
+      for (final locale in locales) {
+        final where = '$dir/wax_$locale.arb';
+        final globals = _Arb.parse(File(where)).globals;
+        expect(
+          globals['@@locale'],
+          locale,
+          reason: '$where: @@locale names the file\'s locale',
+        );
+        _expectDraftMarker(globals, locale, where);
+      }
+    });
+
     _checkTable(
       read: (locale) => _Arb.parse(File('$dir/wax_$locale.arb')),
       fileFor: (locale) => '$dir/wax_$locale.arb',
@@ -265,6 +281,39 @@ void main() {
 const _fragmentRoot = 'l10n';
 
 final _dirName = RegExp(r'^[a-z0-9]+$');
+
+/// The locale whose copy was drafted by machine alongside extraction and
+/// has not been read by a native speaker yet, and the note that says so.
+const _machineDrafted = 'es';
+const _draftMarker = '@@x-machine-translated';
+
+/// On every fragment of the drafted locale and on none of the template's.
+/// A translator tool reads the note as "needs review", so a file that lost
+/// it would be offered as finished work. It comes off when somebody has
+/// read the locale, and that person edits this test in the same change.
+void _expectDraftMarker(
+  Map<String, Object?> globals,
+  String locale,
+  String where,
+) {
+  if (locale == _machineDrafted) {
+    expect(
+      globals[_draftMarker],
+      isA<String>().having((s) => s.trim(), 'note', isNotEmpty),
+      reason:
+          '$where: $locale is machine-drafted, so every fragment carries '
+          '$_draftMarker saying so; taking it off is a review decision, '
+          'and _machineDrafted in this test moves with it',
+    );
+    return;
+  }
+  expect(
+    globals.containsKey(_draftMarker),
+    isFalse,
+    reason:
+        '$where: $locale is not drafted copy; $_draftMarker is not its note',
+  );
+}
 
 /// The `<prefix><locale>.arb` stems a directory holds, sorted. Empty
 /// when the directory is missing, which the callers turn into a named

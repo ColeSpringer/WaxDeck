@@ -1980,7 +1980,7 @@
   },
   "artworkClearAction": "Clear",
   "@artworkClearAction": {
-    "description": "Confirming button of the clear-artwork dialog."
+    "description": "Confirming button of the clear-artwork dialog. It removes stored content rather than emptying a list, which some languages word differently."
   },
   "artworkClearBody": "The slot becomes empty. Nothing falls back into it.",
   "@artworkClearBody": {
@@ -2938,7 +2938,7 @@
   },
   "devicesPlaying": "Playing",
   "@devicesPlaying": {
-    "description": "Stands in for what another device is playing when its title is not known."
+    "description": "Stands in for what another device is playing when its title is not known. Uses this screen's own word for playing, which the rows around it share; it deliberately need not match the design system's state word for the same English."
   },
   "devicesPlayingElsewhere": "Playing elsewhere",
   "@devicesPlayingElsewhere": {
@@ -3319,6 +3319,10 @@
   "errorDirectoryUnavailable": "The directory service did not answer. Try again later.",
   "@errorDirectoryUnavailable": {
     "description": "Error sentence for the spec code `directory-unavailable`, such as the radio station directory."
+  },
+  "errorEndpointFailed": "That device could not carry that out. It is still connected, so it is worth trying again.",
+  "@errorEndpointFailed": {
+    "description": "Error sentence for the spec code `endpoint-failed`: the other device took the command and failed at it, unlike `endpoint-offline`, where it never got it."
   },
   "errorEndpointOffline": "That device is not connected. Refresh the list of devices.",
   "@errorEndpointOffline": {
@@ -4864,7 +4868,7 @@
   },
   "musicShuffle": "Shuffle",
   "@musicShuffle": {
-    "description": "Button on an album's or an artist's header that plays it in random order."
+    "description": "Button on an album's or an artist's header that plays it in random order. It starts playback; it does not toggle the player's shuffle, which the design system words separately."
   },
   "musicShuffleAllLabel": "Shuffle all music",
   "@musicShuffleAllLabel": {
@@ -5385,7 +5389,7 @@
   },
   "playerShareLink": "Share link",
   "@playerShareLink": {
-    "description": "Menu item that mints a public link to what is playing."
+    "description": "Menu item that mints a public link to what is playing. Names the act, like the other overflow rows that open the same dialog."
   },
   "playerSimilarTracks": "Similar tracks",
   "@playerSimilarTracks": {
@@ -5445,7 +5449,7 @@
   },
   "playerStar": "Star",
   "@playerStar": {
-    "description": "Accessible name of the control that marks the playing track a favourite. Agrees with the word for a track in this language."
+    "description": "Accessible name of the control that marks the playing track a favourite. Same words as the design system's own star control."
   },
   "playerStarRating": "{count} star rating",
   "@playerStarRating": {
@@ -5571,7 +5575,7 @@
   },
   "playerUnstar": "Unstar",
   "@playerUnstar": {
-    "description": "Accessible name of the control that unmarks the playing track. Agrees with the word for a track in this language."
+    "description": "Accessible name of the control that unmarks the playing track. Same words as the design system's own star control."
   },
   "playerUnstarThis": "Unstar this {kind}",
   "@playerUnstarThis": {
@@ -5907,7 +5911,7 @@
   },
   "playlistImportTitle": "Import from {source}",
   "@playlistImportTitle": {
-    "description": "Title of the paste dialog. {source} is the import source's own name.",
+    "description": "Title of the paste dialog. {source} is the import source's own name. Reads as an instruction, unlike the task of the same name on the tasks screen, which is a noun.",
     "placeholders": {
       "source": {
         "type": "String",
@@ -6254,7 +6258,7 @@
   },
   "playlistRuleFieldSource": "Source",
   "@playlistRuleFieldSource": {
-    "description": "Smart-rule field: where an item came from - a local file, a feed, manual entry."
+    "description": "Smart-rule field: where an item came from - a local file, a feed, manual entry. Provenance, not the podcast screen's \"Source\", which picks a kind of address."
   },
   "playlistRuleFieldStarred": "Starred",
   "@playlistRuleFieldStarred": {
@@ -6666,7 +6670,7 @@
   },
   "playlistShuffle": "Shuffle",
   "@playlistShuffle": {
-    "description": "Button on a playlist's header that plays it in random order."
+    "description": "Button on a playlist's header that plays it in random order. It starts playback; it does not toggle the player's shuffle, which the design system words separately."
   },
   "playlistSmart": "Smart",
   "@playlistSmart": {
@@ -6757,7 +6761,7 @@
   },
   "podcastClearSelection": "Clear",
   "@podcastClearSelection": {
-    "description": "Action dropping a batch selection without doing anything to it."
+    "description": "Action dropping a batch selection without doing anything to it. It clears the selection, not the episodes, so it must not read as a delete."
   },
   "podcastCredits": "Credits",
   "@podcastCredits": {
@@ -7385,7 +7389,7 @@
   },
   "podcastSourceLabel": "Source",
   "@podcastSourceLabel": {
-    "description": "Segmented control choosing what kind of address was typed."
+    "description": "Segmented control choosing what kind of address was typed. Not the smart-rule field of the same English, which means provenance."
   },
   "podcastSourceRss": "RSS",
   "@podcastSourceRss": {
@@ -7562,7 +7566,7 @@
   },
   "queueClearSelectionAction": "Clear",
   "@queueClearSelectionAction": {
-    "description": "Button that unselects the selected queue rows. It clears the selection, not the queue."
+    "description": "Button that unselects the selected queue rows. It clears the selection, not the queue, so it must not read as a delete."
   },
   "queueDragToReorder": "Drag to reorder",
   "@queueDragToReorder": {
@@ -7848,7 +7852,7 @@
   },
   "radioPlaying": "Playing",
   "@radioPlaying": {
-    "description": "Under a station's name while it is on, where the stream announces no track."
+    "description": "Under a station's name while it is on, where the stream announces no track. Broadcasting has its own idiom in some languages, so this deliberately need not match the player's word for the same English."
   },
   "radioRemoveStation": "Remove station",
   "@radioRemoveStation": {
@@ -10183,7 +10187,7 @@
   },
   "sharingDialogTitle": "Share link",
   "@sharingDialogTitle": {
-    "description": "Title of the dialog that mints a public link."
+    "description": "Title of the dialog that mints a public link. A title names the thing; the overflow rows that open it name the act."
   },
   "sharingDownloadAllowed": "download allowed",
   "@sharingDownloadAllowed": {
@@ -11217,7 +11221,7 @@
   },
   "toolsTaskImportFrom": "Import from {source}",
   "@toolsTaskImportFrom": {
-    "description": "Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated.",
+    "description": "Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated. A task's name is a noun, unlike the playlist import dialog's title of the same English.",
     "placeholders": {
       "source": {
         "type": "String",

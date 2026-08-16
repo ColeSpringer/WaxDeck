@@ -23,7 +23,7 @@
   },
   "sharingDialogTitle": "Share link",
   "@sharingDialogTitle": {
-    "description": "Title of the dialog that mints a public link."
+    "description": "Title of the dialog that mints a public link. A title names the thing; the overflow rows that open it name the act."
   },
   "sharingDownloadAllowed": "download allowed",
   "@sharingDownloadAllowed": {

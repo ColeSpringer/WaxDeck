@@ -518,7 +518,7 @@
   },
   "playerShuffle": "Shuffle",
   "@playerShuffle": {
-    "description": "Button in the full player that scrambles the queue's order. Names what pressing it does, not the state it is in."
+    "description": "Button in the full player that scrambles the queue's order. Names what pressing it does, not the state it is in - unlike the headers in the app, whose \"Shuffle\" starts playback."
   },
   "playerShuffleOff": "Shuffle off",
   "@playerShuffleOff": {

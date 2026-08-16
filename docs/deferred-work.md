@@ -268,78 +268,20 @@ here waits on upstream.
 
 ## Localization
 
-- `[in-repo]` **The app is not localized, and the language picker the
-  layout blueprint specifies waits on it.** The plumbing is done and the
-  sweep is not. `flutter_localizations` and `intl` are in both pubspecs,
-  `l10n.yaml` and ARBs exist for `app/app` and for the design system, and
-  `make generate` mints both tables under drift-check. `Prefs.locale`
-  (a BCP 47 tag, `api/spec/users.yaml`) is read now: the app resolves
-  system-first with the preference as the override. What is left is the
-  screens - around 1,200 user-facing string literals in `app/app/lib`,
-  which the `hardcoded-copy` ratchet counts per file so a sweep slice
-  cannot stall half-done, and the count is an undercount because the help
-  lines are multi-line concatenations a grep reads as several. Three
-  things the plumbing half already answered, recorded because the
-  original entry guessed otherwise: the design system needed an ARB of
-  its own after all (its components carry ~80 strings no caller can pass
-  in, so `WaxLocalizations` is a package-owned delegate on the
-  `MaterialLocalizations` pattern); the formatting is done, with
-  `format_bytes.dart` and every padLeft date helper folded into
-  `WaxFormats` and the durations into `WaxLocalizations`; and the picker
-  is what still waits, on the same reasoning as before:
-  extraction is code and finishes, translation is people and does not,
-  so a picker offered before there is a second language to pick is an
-  empty control. ARB is what Weblate consumes, which is how a GPL
-  project bound for F-Droid gets its second language. Already paid for
-  or cheap: the e2e suite drives semantics identifiers, not visible
-  labels, so translations cannot break it; the CI goldens block text
-  out and the readable Linux ones render the default locale, so en
-  stays the golden locale; a CJK UI locale needs `ensureScript` at
-  startup for its own script, because the fonts warmup interceptor
-  only sees text arriving in API responses and a static UI string
-  never does (the owned-set mechanism the fonts paragraph under
-  Decided records); and an Arabic or Hebrew UI locale would add a
-  left/right-to-Directional sweep, with the faces themselves already
-  shipped for content. Worth taking when somebody is ready to own the
-  translations, not before.
-- `[in-repo]` **Error surfaces speak the server's English.** The
-  contract splits the roles - `code` is the stable machine value,
-  `message` is "not stable, do not parse" (`api/spec/_shared.yaml`) -
-  and the app inverts them: a couple hundred `.message` reads render
-  the server's sentence verbatim (`SnackBar(content: Text(e.message))`
-  is the dominant shape, the inline `AsyncValue.error` widgets the
-  rest), and `code` picks words nowhere - its five uses are control
-  flow. Localizing errors means moving the boundary to the code: a
-  client table from the spec's code enum to localized sentences, with
-  the server `message` kept as the fallback for a code the table does
-  not know. The server never localizes - no Accept-Language on the
-  API, messages stay developer English for the logs - which is what
-  keeps the backend out of the translation business permanently. Two
-  traps to take deliberately. Where one code covers many causes, a
-  generic per-code sentence loses the specifics: `feature-unavailable`
-  is the umbrella code, and the device picker tells the multi-part
-  refusal apart by phrase-matching the message. The table exists
-  now (`app/app/lib/src/l10n/explain_error.dart`: one sentence per code
-  in both locales, guarded by a test that reads the code list out of the
-  committed bundle rather than out of a second copy of it), the three
-  transport codes `waxdeck_api` mints are worded there beside the
-  server's, and the device picker keys the multi-part refusal on the
-  `params` the schema now carries, with the phrase match demoted to the
-  old-server fallback. What remains is adoption: `Text(e.message)` at
-  some 45 snackbar sites, the `AsyncError` branches, and the
-  `ErrorState` uses all still draw the server's sentence, and each
-  screen slice converts its own as it is swept. Two things that adoption
-  has to take with it. The app mints `internal` for three of its own
-  local failures (`connect_bus.dart` :53's default,
-  `connect_controller.dart` :344, `queue_gateway.dart` :272), and the
-  table words that code as a server fault, so a listener whose seek
-  failed on their own device would be told to report a server bug; those
-  want client codes of their own, the way the transport mints got them,
-  before any of those three surfaces adopts `context.explain`. And the
-  socket's error frames carry `params` server-side while
-  `connect_bus.dart`'s error arm reads only `code` and `message`, so the
-  same refusal keeps its machine key over REST and loses it over the
-  socket - the bus adopts it the way the picker just did.
+- `[in-repo]` **RTL is uncertified.** It rides the first Arabic or
+  Hebrew locale. The design system is Directional-swept and the faces
+  ship, but app code converted only what the sweep touched and nothing
+  ratchets the rest - `EdgeInsets.only(left:/right:)` is still legal in
+  an app screen - so an RTL locale wants a directional sweep of app
+  code and a mirrored-layout pass before it ships.
+- `[in-repo]` **Weblate is not onboarded.** ARB is what Weblate
+  consumes, which is the GPL/F-Droid path to community locales. Two
+  components, app and design system, sharing a vocabulary that only
+  tests hold together (`durationHours` parity, the select-arm walk), so
+  onboarding configures both or the tests catch the drift. The es
+  corpus arrives bulk-marked needs-native-review through
+  `@@x-machine-translated`. No service-side configuration exists in the
+  repo yet.
 - `[in-repo]` **A notification event a newer server adds draws its wire
   token as a heading.** The client maps the seven event names to titles
   and help of its own (`app/app/lib/src/settings/notify_labels.dart`),
@@ -373,13 +315,19 @@ here waits on upstream.
   title a media-session row falls back to when the catalog has not
   answered for a queued pid yet (`auto/media_session_feed.dart`), the
   desktop tray menu (`desktop/desktop_ports_io.dart`), the sleep
-  timer's media-session extend button (`player/sleep_timer.dart`), and
-  the notification-channel names and media-session action labels
-  configured at engine init in `waxdeck_player`. Every one is built where there is
+  timer's media-session extend button (`player/sleep_timer.dart`), the
+  notification-channel names and media-session action labels
+  configured at engine init in `waxdeck_player`, and the download
+  notifications `waxdeck_data` posts (`transfer_engine_io.dart` :20-26,
+  positional `TaskNotification` arguments). Every one is built where there is
   no `BuildContext` to read a locale through - a port fed a database, a
   notifier, an operating-system menu - so `context.l10n` cannot reach
   them and the sweep left them as they are, with a comment at each site
-  saying so. The fix is one mechanism rather than four: resolve
+  saying so. The copy ratchet cannot see any of it either: it reads
+  named arguments whose names end in its suffix list, so a
+  `...Name:` argument (`androidNotificationChannelName`,
+  `audio_service_handler.dart` :291) and a positional constructor
+  argument both sit at a floor of zero while holding English. The fix is one mechanism rather than four: resolve
   `AppLocalizations` for the current locale into a provider (the
   delegate can `load` a locale off the tree), hand it to each port at
   construction, and re-hand it when the picker changes the locale.
