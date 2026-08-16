@@ -13,6 +13,20 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'music_controllers.dart';
 
+/// The rail row a bucket files under: the server's letter when it sent
+/// one the rail can draw, since it owns the fold that ordered the list
+/// and an accented label files under its base letter there. Checked
+/// against the rail's vocabulary and not just for null - an unknown
+/// letter indexes to -1, which reads as before every row in one
+/// comparison and after every row in the other. The client derivation
+/// is the fallback for that and for a server older than the field.
+String _railLetter(FacetBucket b) {
+  final letter = b.letter;
+  return letter != null && fastScrollLetters.contains(letter)
+      ? letter
+      : fastScrollLetter(b.label);
+}
+
 /// A complete, fast enumeration of one dimension.
 ///
 /// Artists and albums lead with an alphabet, because that is how anyone
@@ -91,17 +105,13 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
 
       int indexIn(List<FacetBucket> buckets) => buckets.indexWhere(
         (b) =>
-            !b.unknown &&
-            fastScrollLetters.indexOf(fastScrollLetter(b.label)) >= target,
+            !b.unknown && fastScrollLetters.indexOf(_railLetter(b)) >= target,
       );
 
       // Whether the window opens at or before the letter asked for.
       bool startsAtLetter(MusicIndexState state) =>
           state.buckets.isNotEmpty &&
-          fastScrollLetters.indexOf(
-                fastScrollLetter(state.buckets.first.label),
-              ) <=
-              target;
+          fastScrollLetters.indexOf(_railLetter(state.buckets.first)) <= target;
 
       var state = ref.read(musicIndexProvider(key)).value;
       if (state == null) return;
@@ -241,7 +251,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
                 selected: _letter,
                 available: <String>{
                   for (final bucket in buckets)
-                    if (!bucket.unknown) fastScrollLetter(bucket.label),
+                    if (!bucket.unknown) _railLetter(bucket),
                 },
                 semanticsId: SemanticsIds.indexRail,
                 letterSemanticsId: SemanticsIds.indexRailLetter,

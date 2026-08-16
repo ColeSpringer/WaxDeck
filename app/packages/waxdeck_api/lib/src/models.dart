@@ -580,6 +580,7 @@ class FacetBucket {
     required this.count,
     this.entityPid,
     this.unknown = false,
+    this.letter,
   });
 
   /// Stable handle to drill this bucket. Empty for [unknown].
@@ -598,6 +599,12 @@ class FacetBucket {
   /// True for the bucket holding items the dimension is absent from
   /// (`[Non-Album]` and friends).
   final bool unknown;
+
+  /// The alphabet-rail row this bucket files under, `A`-`Z` or `#`,
+  /// computed by the server from the same fold that ordered the page.
+  /// Null on the unknown bucket, which has no row, and from a server
+  /// older than the field -- derive one from [label] then.
+  final String? letter;
 }
 
 /// One page of a browse dimension's buckets.

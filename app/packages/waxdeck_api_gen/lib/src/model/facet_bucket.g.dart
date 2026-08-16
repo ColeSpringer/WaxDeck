@@ -17,6 +17,8 @@ class _$FacetBucket extends FacetBucket {
   final String? entityPid;
   @override
   final bool? unknown;
+  @override
+  final String? letter;
 
   factory _$FacetBucket([void Function(FacetBucketBuilder)? updates]) =>
       (FacetBucketBuilder()..update(updates))._build();
@@ -27,6 +29,7 @@ class _$FacetBucket extends FacetBucket {
     required this.count,
     this.entityPid,
     this.unknown,
+    this.letter,
   }) : super._();
   @override
   FacetBucket rebuild(void Function(FacetBucketBuilder) updates) =>
@@ -43,7 +46,8 @@ class _$FacetBucket extends FacetBucket {
         label == other.label &&
         count == other.count &&
         entityPid == other.entityPid &&
-        unknown == other.unknown;
+        unknown == other.unknown &&
+        letter == other.letter;
   }
 
   @override
@@ -54,6 +58,7 @@ class _$FacetBucket extends FacetBucket {
     _$hash = $jc(_$hash, count.hashCode);
     _$hash = $jc(_$hash, entityPid.hashCode);
     _$hash = $jc(_$hash, unknown.hashCode);
+    _$hash = $jc(_$hash, letter.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -65,7 +70,8 @@ class _$FacetBucket extends FacetBucket {
           ..add('label', label)
           ..add('count', count)
           ..add('entityPid', entityPid)
-          ..add('unknown', unknown))
+          ..add('unknown', unknown)
+          ..add('letter', letter))
         .toString();
   }
 }
@@ -93,6 +99,10 @@ class FacetBucketBuilder implements Builder<FacetBucket, FacetBucketBuilder> {
   bool? get unknown => _$this._unknown;
   set unknown(bool? unknown) => _$this._unknown = unknown;
 
+  String? _letter;
+  String? get letter => _$this._letter;
+  set letter(String? letter) => _$this._letter = letter;
+
   FacetBucketBuilder() {
     FacetBucket._defaults(this);
   }
@@ -105,6 +115,7 @@ class FacetBucketBuilder implements Builder<FacetBucket, FacetBucketBuilder> {
       _count = $v.count;
       _entityPid = $v.entityPid;
       _unknown = $v.unknown;
+      _letter = $v.letter;
       _$v = null;
     }
     return this;
@@ -144,6 +155,7 @@ class FacetBucketBuilder implements Builder<FacetBucket, FacetBucketBuilder> {
           ),
           entityPid: entityPid,
           unknown: unknown,
+          letter: letter,
         );
     replace(_$result);
     return _$result;

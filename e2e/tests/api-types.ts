@@ -5904,6 +5904,11 @@ export interface components {
             entityPid?: string;
             /** @description True for the bucket holding items the dimension is absent from. Its `label` is the canonical sentinel and its `key` is empty. */
             unknown?: boolean;
+            /**
+             * @description The alphabet-rail row this bucket files under, derived from the same fold that orders `sort=label`: `A` to `Z` when the folded label leads with a Latin letter (accents fold, so "Édith" answers `E`), `#` for everything else. The `#` row has members on both sides of the alphabet: digits and most punctuation sort before A, while `{`, `|`, `}`, `~` and every script beyond Latin sort after Z. Present on every real bucket under either sort; absent on the unknown bucket, which has no rail row. A client talking to an older server that omits it derives a letter from `label` itself.
+             * @example E
+             */
+            letter?: string;
         };
         /** @description One keyset-paginated page of a browse dimension's buckets. */
         FacetPage: {
@@ -11708,12 +11713,12 @@ export interface operations {
                 facet?: components["schemas"]["BrowseDimension"];
                 /** @description The scope bucket, as returned in that dimension's `key`. Send it empty to scope to the dimension's unknown bucket; `kind` and custom tag dimensions have no unknown bucket and reject an empty key. Ignored without `facet`. */
                 facetKey?: string;
-                /** @description Bucket order. `count` (the default) is biggest first, ties broken by label then key. `label` is A to Z by the bucket's display label, ties broken by key; the unknown bucket sorts last under it, since a sentinel has no place in an alphabet. */
+                /** @description Bucket order. `count` (the default) is biggest first, ties broken by label then key. `label` is A to Z by the bucket's display label, folded for ordering (case and accents, so "Édith" files under E), ties broken by key; the unknown bucket sorts last under it, since a sentinel has no place in an alphabet. */
                 sort?: components["schemas"]["FacetSort"];
                 /** @description Opaque cursor from a previous page's `nextCursor`. Omit for the first page. Valid only with the `sort` it was issued under. */
                 cursor?: string;
                 /**
-                 * @description Start the page at the first bucket whose display label sorts at or after this prefix, folded the same way `sort=label` folds (case, and leading whitespace ignored). This is what an alphabet rail taps: `startsAt=m` on a library that jumps from L to N answers the first N bucket rather than nothing, since the comparison is at-or-after and not equality.
+                 * @description Start the page at the first bucket whose display label sorts at or after this prefix, folded the same way `sort=label` folds (case, accents and compatibility forms, and leading whitespace ignored). This is what an alphabet rail taps: `startsAt=m` on a library that jumps from L to N answers the first N bucket rather than nothing, since the comparison is at-or-after and not equality.
                  *     Requires `sort=label`; with the default `count` order it is `invalid-request`, because a prefix names no position in a biggest-first list. Sending it together with `cursor` is `invalid-request` too: a cursor already names a position. A prefix past the last bucket is an empty page with no `nextCursor`, not an error. The unknown bucket is not seekable, since it sorts last whatever its sentinel spells; paging to the end still reaches it.
                  */
                 startsAt?: string;

@@ -147,6 +147,66 @@ func TestFacetedBrowseOverHTTP(t *testing.T) {
 	wantStatus(t, resp, 401, "unauthenticated enumeration")
 }
 
+// TestFacetBucketsCarryRailLetters: the alphabet rail's rows come off
+// the wire, because the server owns the fold that ordered the buckets
+// and a client deriving its own could only agree by accident. The
+// fixture labels are ASCII, so the letter is checkable against the
+// label here; what it pins is that every real bucket has one, in either
+// order, and that the unknown bucket does not.
+func TestFacetBucketsCarryRailLetters(t *testing.T) {
+	t.Parallel()
+	// A second root, as the browse test does: the demo library is one
+	// artist, and one bucket per query would prove nothing about a rail.
+	extra := t.TempDir()
+	if _, err := fixtures.Generate(extra,
+		fixtures.Spec{
+			Name: "echo", Codec: fixtures.CodecFLAC, Duration: 4 * time.Second,
+			Tags: map[string]string{"TITLE": "Echo Song", "ARTIST": "Second Artist", "ALBUM": "Guest Album"},
+		},
+		fixtures.Spec{
+			Name: "foxtrot", Codec: fixtures.CodecFLAC, Duration: 4500 * time.Millisecond,
+			Tags: map[string]string{"TITLE": "Foxtrot Song", "ARTIST": "Third Artist", "ALBUM": "Guest Album"},
+		},
+	); err != nil {
+		t.Fatalf("generating the second root: %v", err)
+	}
+	h := newHarness(t, service.Root{Name: "guests", Path: extra})
+
+	for _, q := range []string{"?dimension=artist&sort=label", "?dimension=artist"} {
+		page := facetPage(t, h, q)
+		if len(page.Buckets) < 2 {
+			t.Fatalf("facets%s enumerated %d buckets; a rail needs several", q, len(page.Buckets))
+		}
+		for _, b := range page.Buckets {
+			// artist has an unknown bucket, and it carries no rail row.
+			if b.Unknown != nil && *b.Unknown {
+				if b.Letter != nil {
+					t.Errorf("facets%s: the unknown bucket files under %q, want none", q, *b.Letter)
+				}
+				continue
+			}
+			if b.Letter == nil {
+				t.Errorf("facets%s: bucket %q carries no letter", q, b.Label)
+				continue
+			}
+			// The fixture labels are ASCII, so the row is checkable against
+			// the label here; the fold's own cases are pinned in service.
+			if want := strings.ToUpper(string([]rune(b.Label)[0])); *b.Letter != want {
+				t.Errorf("facets%s: bucket %q files under %q, want %q", q, b.Label, *b.Letter, want)
+			}
+		}
+	}
+
+	// The unknown bucket has no rail row: it sorts last whatever its
+	// sentinel spells, and the rail cannot seek it.
+	years := facetPage(t, h, "?dimension=year")
+	for _, b := range years.Buckets {
+		if b.Unknown != nil && *b.Unknown && b.Letter != nil {
+			t.Errorf("the unknown year bucket files under %q, want no rail row", *b.Letter)
+		}
+	}
+}
+
 // TestItemEntityHandlesOverHTTP checks that a list row names the same
 // entities the facet dimensions do. A client groups an artist's tracks
 // into albums and links each one to its own screen, and it can only do

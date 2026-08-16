@@ -223,6 +223,7 @@ FacetPage facetPageFromGen(gen.FacetPage page) {
             count: bucket.count,
             entityPid: bucket.entityPid,
             unknown: bucket.unknown ?? false,
+            letter: bucket.letter,
           ),
         )
         .toList(),

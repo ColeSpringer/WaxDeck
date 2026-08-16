@@ -213,16 +213,24 @@ class _RailLetter extends StatelessWidget {
 }
 
 /// The rail letter a label belongs under: its first character upper-cased
-/// for A to Z, and `#` for everything else (digits, brackets, scripts the
-/// Latin alphabet has no row for).
+/// for A to Z, and `#` for everything else (digits, brackets, accented
+/// letters, scripts the Latin alphabet has no row for).
 ///
-/// This is the client half of the server's A-to-Z order, which folds case
-/// the same way. Labels the Latin alphabet has no row for still sort and
-/// still scroll; they simply read as `#`. Digits and brackets land there
-/// and sort ahead of A, which is where the rail puts `#`; scripts beyond
-/// ASCII read as `#` too but sort after Z, so a jump to `#` finds the
-/// first of them rather than all of them. Naming a row per script is a
-/// collation problem, not an index-screen one.
+/// This is the *fallback* derivation, for callers with no letter from
+/// the source that ordered the list: an older server, or a caller that
+/// is not the API at all. A current server sends the row it computed
+/// from the fold its own order uses, and that one supersedes this, so an
+/// accented label files under its base letter there rather than under
+/// `#` here. Reconciling with the real collation is not this package's
+/// to do -- it depends on Flutter and nothing else, and a table here
+/// would drift from the catalog's the moment either moved.
+///
+/// Whichever answers, labels the Latin alphabet has no row for still
+/// sort and still scroll; they simply read as `#`. Digits and brackets
+/// land there and sort ahead of A, which is where the rail puts `#`;
+/// scripts beyond Latin read as `#` too but sort after Z, so a jump to
+/// `#` finds the first of them rather than all of them. Naming a row per
+/// script is a collation problem, not an index-screen one.
 String fastScrollLetter(String label) {
   final trimmed = label.trimLeft();
   if (trimmed.isEmpty) return '#';

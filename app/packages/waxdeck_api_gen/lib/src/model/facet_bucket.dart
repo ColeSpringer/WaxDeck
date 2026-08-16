@@ -16,6 +16,7 @@ part 'facet_bucket.g.dart';
 /// * [count] - Items in this bucket, within the caller's libraries.
 /// * [entityPid] - The catalog entity behind the bucket, for the dimensions that have one (`artist`, `credit-artist`, `album-artist`, `album`, `release-group`). Absent for the unknown bucket and for dimensions that are not entities. It is this bucket's `key` carried with the entity's API type prefix, so a client holding one has the other: a screen addressed by `al-<ulid>` drills with `facetKey=<ulid>`, and the entity endpoints (`/albums/{pid}/play-state` and friends) take the prefixed form. 
 /// * [unknown] - True for the bucket holding items the dimension is absent from. Its `label` is the canonical sentinel and its `key` is empty. 
+/// * [letter] - The alphabet-rail row this bucket files under, derived from the same fold that orders `sort=label`: `A` to `Z` when the folded label leads with a Latin letter (accents fold, so \"Édith\" answers `E`), `#` for everything else. The `#` row has members on both sides of the alphabet: digits and most punctuation sort before A, while `{`, `|`, `}`, `~` and every script beyond Latin sort after Z. Present on every real bucket under either sort; absent on the unknown bucket, which has no rail row. A client talking to an older server that omits it derives a letter from `label` itself. 
 @BuiltValue()
 abstract class FacetBucket implements Built<FacetBucket, FacetBucketBuilder> {
   /// The bucket's stable handle: pass it back as `listItems`' `facetKey` to drill it. Empty for the unknown bucket. 
@@ -37,6 +38,10 @@ abstract class FacetBucket implements Built<FacetBucket, FacetBucketBuilder> {
   /// True for the bucket holding items the dimension is absent from. Its `label` is the canonical sentinel and its `key` is empty. 
   @BuiltValueField(wireName: r'unknown')
   bool? get unknown;
+
+  /// The alphabet-rail row this bucket files under, derived from the same fold that orders `sort=label`: `A` to `Z` when the folded label leads with a Latin letter (accents fold, so \"Édith\" answers `E`), `#` for everything else. The `#` row has members on both sides of the alphabet: digits and most punctuation sort before A, while `{`, `|`, `}`, `~` and every script beyond Latin sort after Z. Present on every real bucket under either sort; absent on the unknown bucket, which has no rail row. A client talking to an older server that omits it derives a letter from `label` itself. 
+  @BuiltValueField(wireName: r'letter')
+  String? get letter;
 
   FacetBucket._();
 
@@ -88,6 +93,13 @@ class _$FacetBucketSerializer implements PrimitiveSerializer<FacetBucket> {
       yield serializers.serialize(
         object.unknown,
         specifiedType: const FullType(bool),
+      );
+    }
+    if (object.letter != null) {
+      yield r'letter';
+      yield serializers.serialize(
+        object.letter,
+        specifiedType: const FullType(String),
       );
     }
   }
@@ -147,6 +159,13 @@ class _$FacetBucketSerializer implements PrimitiveSerializer<FacetBucket> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.unknown = valueDes;
+          break;
+        case r'letter':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.letter = valueDes;
           break;
         default:
           unhandled.add(key);

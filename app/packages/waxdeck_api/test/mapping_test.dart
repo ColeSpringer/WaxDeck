@@ -718,6 +718,41 @@ void main() {
     });
   });
 
+  group('facet pages', () {
+    gen.FacetPage genPage(void Function(gen.FacetBucketBuilder) bucket) {
+      return gen.FacetPage(
+        (b) => b
+          ..dimension = 'artist'
+          ..buckets.add(gen.FacetBucket(bucket)),
+      );
+    }
+
+    test('carry the rail letter the server computed', () {
+      final page = facetPageFromGen(
+        genPage(
+          (b) => b
+            ..key = 'ar-1'
+            ..label = 'Edith Piaf'
+            ..count = 3
+            ..letter = 'E',
+        ),
+      );
+      expect(page.buckets.single.letter, 'E');
+    });
+
+    test('leave it null when the server does not send one', () {
+      final page = facetPageFromGen(
+        genPage(
+          (b) => b
+            ..key = 'ar-1'
+            ..label = 'Edith Piaf'
+            ..count = 3,
+        ),
+      );
+      expect(page.buckets.single.letter, isNull);
+    });
+  });
+
   group('session ids', () {
     test('are 26 Crockford base32 characters and collision free', () {
       final seen = <String>{};

@@ -366,21 +366,6 @@ here waits on upstream.
   though one instance-wide notification locale is probably the honest
   size of the feature. Waits for someone to ask; recorded so the asker
   is not told it is a client gap.
-- `[upstream]` **Name ordering is ASCII-folded codepoint order.**
-  Browse and the indexes ride WaxBin's stored `sort_key`, and
-  `model.SortKey` says exactly what that is: lowercased,
-  article-stripped, digit-padded, compared BINARY - "ASCII-level
-  folding" by its own comment, with "Unicode collation can be added
-  here without changing callers or the stored column" as the standing
-  invitation. So "Édith" sorts after "z", and every non-Latin name
-  sorts by codepoint: stable and grouped, wrong for any library that
-  is not English. The ask lives in upstream-requests.md - Unicode
-  folding in `SortKey`, locale-independent only, since a stored column
-  is one ordering for everyone. What WaxDeck inherits when it lands:
-  stored keys need recomputing (WaxBin's `sortKeyDrift` verifier
-  already counts stale ones, so detection exists), and a keyset cursor
-  minted across the upgrade walks the rest of its pages in the old
-  order - bounded, worth knowing, not worth machinery.
 
 - `[in-repo]` **The surfaces drawn from outside the element tree stay
   English.** Five of them, and they are one problem: the Android Auto

@@ -159,26 +159,67 @@ type FacetBucket struct {
 	// neither do the year, kind, and tag dimensions.
 	EntityPID string
 	Unknown   bool
-	// fold is Label case-folded, held rather than recomputed because the
-	// A-to-Z sort compares it across every pair of a dimension's buckets.
+	// Letter is the alphabet-rail row the bucket files under, taken from
+	// the same fold that orders the buckets: "A" to "Z", or "#" for
+	// everything the fold does not lead with a Latin letter. Empty on the
+	// unknown bucket, which has no rail row; optional on the API, so an
+	// older client that derives its own is unaffected.
+	Letter string
+	// fold is Label reduced by the catalog's own character fold, held
+	// rather than recomputed because the A-to-Z sort compares it across
+	// every pair of a dimension's buckets.
 	fold string
 }
 
-// facetFolded returns a bucket with its case-folded sort key filled in.
+// facetFolded returns a bucket with its folded sort key filled in.
 //
 // Folding is what makes the A-to-Z order read as an alphabet rather than
-// as ASCII: without it "Zebra" sorts ahead of "abba", and an index whose
-// rail says Z would be showing the a's. It is a fold and not a collation
-// scripts outside ASCII still land after z, the same way the catalog's
-// own tie-break does - and a proper locale collation is a bigger change
-// than an index screen justifies.
+// as bytes: without it "Zebra" sorts ahead of "abba", and an index whose
+// rail says Z would be showing the a's. The fold is model.Fold, the same
+// one the catalog derives its sort keys with, so case, diacritics,
+// compatibility width, kana, and Unicode digits are decided here exactly
+// as they are decided there - an accented Latin label files under its
+// base letter rather than landing past Z. It is still a fold and not a
+// collation: scripts outside Latin land after z, the same way the
+// catalog's own tie-break puts them, and a proper locale collation is a
+// bigger change than an index screen justifies.
 //
-// Left-trimmed because fastScrollLetter takes the rail letter after a
-// trim: untrimmed, " Weeknd" sorts before every A while the rail files
-// it under W. One fold decides the sort, the seek, and the letter.
+// Deliberately not model.SortKey, which also strips leading articles:
+// this folds the display label, so "The Beatles" files under T here and
+// under B in catalog order (see the note at facetBuckets).
+//
+// Left-trimmed because the rail letter is taken after a trim:
+// untrimmed, " Weeknd" sorts before every A while the rail files it
+// under W. One fold decides the sort, the seek, and the letter.
+//
+// One deploy-boundary caveat: a label-order facet cursor minted under an
+// older fold re-seeks under this one, so the page it resumes on can skip
+// or repeat the buckets whose neighbors moved. Bounded and silent, not
+// an error - the cursor stores the raw label and folds at seek time.
 func facetFolded(b FacetBucket) FacetBucket {
-	b.fold = strings.ToLower(strings.TrimLeftFunc(b.Label, unicode.IsSpace))
+	b.fold = model.Fold(strings.TrimLeftFunc(b.Label, unicode.IsSpace))
+	// Cleared and then set, so the letter is a function of Label and
+	// Unknown alone and a refold cannot leave a stale row behind.
+	b.Letter = ""
+	if !b.Unknown {
+		b.Letter = facetRailLetter(b.fold)
+	}
 	return b
+}
+
+// facetRailLetter is the rail row a folded label files under: 'A'-'Z'
+// when the fold leads with a Latin letter, "#" otherwise. The fold is
+// lowercase, so a one-byte check covers it (a non-ASCII first rune
+// starts with a byte above 'z').
+//
+// "#" is three-ended: below 'a' the digits and most punctuation, above
+// 'z' the marks '{' '|' '}' '~' and every script beyond Latin. One row,
+// which is why a "#" tap seeks the head rather than a prefix.
+func facetRailLetter(fold string) string {
+	if fold != "" && fold[0] >= 'a' && fold[0] <= 'z' {
+		return string(fold[0] - 'a' + 'A')
+	}
+	return "#"
 }
 
 // FacetPage is one keyset-paginated page of a dimension's buckets.

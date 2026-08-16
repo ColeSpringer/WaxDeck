@@ -576,8 +576,10 @@ void main() {
       expect(fastScrollLetter('4 Non Blondes'), '#');
       expect(fastScrollLetter('[Unknown Artist]'), '#');
       expect(fastScrollLetter(''), '#');
-      // Beyond ASCII there is no row to name, and inventing one per
-      // script is a collation problem.
+      // The fallback has no fold, so anything beyond ASCII reads as `#`.
+      // Under a current server the accented label arrives carrying `O`
+      // and this derivation never runs; inventing a fold here would be
+      // a second one to keep in step with the catalog's.
       expect(fastScrollLetter('Ólafur Arnalds'), '#');
     });
   });

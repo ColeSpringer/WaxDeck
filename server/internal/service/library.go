@@ -558,6 +558,25 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// the event hub's invalidation fan-out.
 	group.Go(ctx, "catalog-feed", l.runCatalogFeed)
 
+	// A waxbin upgrade can change the sort-key fold, and no scan rewrites
+	// an existing key, so every boot sweeps the stale ones; rewritten rows
+	// ride the change feed, so caches and clients invalidate themselves.
+	// It streams every name-bearing row even when none have moved, which
+	// is why it rides a worker and not the startup path. Boot is when the
+	// fewest page cursors are outstanding, not when none are (read.Cursor
+	// embeds the key); one held across it skips or repeats rows --
+	// bounded, not worth machinery.
+	group.GoOnce(ctx, "sortkey-refresh", func(ctx context.Context) error {
+		n, err := l.lib.RefreshSortKeys(ctx)
+		if err != nil {
+			return err // supervise logs it; startup is unaffected.
+		}
+		if n > 0 {
+			log.Info("refreshed stale sort keys", "rows", n)
+		}
+		return nil
+	})
+
 	if cfg.ScanOnStart {
 		group.GoOnce(ctx, "startup-scan", func(ctx context.Context) error {
 			pid, err := l.lib.StartScan(ctx, waxbin.ScanRequest{})

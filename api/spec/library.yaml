@@ -266,8 +266,10 @@ paths:
           description: >
             Bucket order. `count` (the default) is biggest first, ties
             broken by label then key. `label` is A to Z by the bucket's
-            display label, ties broken by key; the unknown bucket sorts
-            last under it, since a sentinel has no place in an alphabet.
+            display label, folded for ordering (case and accents, so
+            "Édith" files under E), ties broken by key; the unknown
+            bucket sorts last under it, since a sentinel has no place in
+            an alphabet.
           schema:
             $ref: "#/components/schemas/FacetSort"
         - name: cursor
@@ -283,10 +285,11 @@ paths:
           description: >
             Start the page at the first bucket whose display label sorts
             at or after this prefix, folded the same way `sort=label`
-            folds (case, and leading whitespace ignored). This is what an
-            alphabet rail taps: `startsAt=m` on a library that jumps from
-            L to N answers the first N bucket rather than nothing, since
-            the comparison is at-or-after and not equality.
+            folds (case, accents and compatibility forms, and leading
+            whitespace ignored). This is what an alphabet rail taps:
+            `startsAt=m` on a library that jumps from L to N answers the
+            first N bucket rather than nothing, since the comparison is
+            at-or-after and not equality.
 
             Requires `sort=label`; with the default `count` order it is
             `invalid-request`, because a prefix names no position in a
@@ -805,6 +808,21 @@ components:
             True for the bucket holding items the dimension is absent
             from. Its `label` is the canonical sentinel and its `key` is
             empty.
+        letter:
+          type: string
+          pattern: "^[A-Z#]$"
+          description: >
+            The alphabet-rail row this bucket files under, derived from
+            the same fold that orders `sort=label`: `A` to `Z` when the
+            folded label leads with a Latin letter (accents fold, so
+            "Édith" answers `E`), `#` for everything else. The `#` row
+            has members on both sides of the alphabet: digits and most
+            punctuation sort before A, while `{`, `|`, `}`, `~` and
+            every script beyond Latin sort after Z. Present on every
+            real bucket under either sort; absent on the unknown
+            bucket, which has no rail row. A client talking to an older
+            server that omits it derives a letter from `label` itself.
+          example: E
 
     FacetPage:
       type: object

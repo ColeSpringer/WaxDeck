@@ -22,12 +22,14 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 
-FacetBucket _artist(String name, {int count = 3}) => FacetBucket(
-  key: '01JZX$name',
-  label: name,
-  count: count,
-  entityPid: 'ar-01JZX$name',
-);
+FacetBucket _artist(String name, {int count = 3, String? letter}) =>
+    FacetBucket(
+      key: '01JZX$name',
+      label: name,
+      count: count,
+      entityPid: 'ar-01JZX$name',
+      letter: letter,
+    );
 
 FacetBucket _album(String name, {int count = 9}) => FacetBucket(
   key: '01JZX$name',
@@ -756,6 +758,49 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'a server letter names the rail row, the label only when absent',
+    (tester) async {
+      // The server owns the fold that ordered the list, so its letter is
+      // the one the rail draws; the client derivation is the fallback for
+      // a server too old to send one. Assertions are set-membership rather
+      // than order because FakeRepository sorts with `toLowerCase`, which
+      // mis-places an accented label -- the real order is the server's, and
+      // teaching the fake to imitate the fold would be the client-authority
+      // design this field exists to avoid.
+      final repository = FakeRepository()
+        ..facets['artist'] = <FacetBucket>[
+          _artist('Abba', letter: 'A'),
+          _artist('Edith Piaf', letter: 'E'),
+          _artist('Olafur', letter: null),
+        ];
+      await _pump(
+        tester,
+        const MusicIndexScreen(dimension: MusicDimension.artists),
+        repository,
+      );
+
+      Set<String> railLetters() =>
+          tester.widget<FastScrollRail>(find.byType(FastScrollRail)).available;
+      expect(railLetters(), containsAll(<String>['A', 'E', 'O']));
+
+      // And an accented label files under its base letter because the
+      // server said so, where the client derivation would answer `#`.
+      repository.facets['artist'] = <FacetBucket>[
+        _artist('Édith Piaf', letter: 'E'),
+      ];
+      await _pump(
+        tester,
+        const MusicIndexScreen(dimension: MusicDimension.artists),
+        repository,
+      );
+      expect(fastScrollLetter('Édith Piaf'), '#');
+      // Exactly {E}, not merely containing it: the first seed offers E
+      // too, so a re-pump that failed to take would pass a weaker match.
+      expect(railLetters(), <String>{'E'});
+    },
+  );
 
   testWidgets('the # row starts at the head rather than seeking', (
     tester,

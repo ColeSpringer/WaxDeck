@@ -349,6 +349,10 @@ func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (L
 			unknown := true
 			bucket.Unknown = &unknown
 		}
+		// Empty only on the unknown bucket, which has no rail row.
+		if b.Letter != "" {
+			bucket.Letter = &b.Letter
+		}
 		out.Buckets = append(out.Buckets, bucket)
 	}
 	if page.Next != "" {

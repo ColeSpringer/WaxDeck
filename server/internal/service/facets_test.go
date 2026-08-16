@@ -695,6 +695,87 @@ func TestFacetFoldTrimsLeadingWhitespace(t *testing.T) {
 	}
 }
 
+// The fold is the catalog's own, not an ASCII one: an accented Latin
+// label files under its base letter instead of landing past Z, and a
+// script beyond Latin still sorts after z, the way the catalog's own
+// tie-break puts it. Same fold as the sort keys the listing is ordered
+// by, which is what keeps the rail, the seek, and the order agreeing.
+func TestFacetFoldIsUnicodeAware(t *testing.T) {
+	t.Parallel()
+	buckets := []FacetBucket{
+		facetFolded(FacetBucket{Key: "z", Label: "Zebra", Count: 1}),
+		facetFolded(FacetBucket{Key: "o", Label: "Ólafur Arnalds", Count: 2}),
+		facetFolded(FacetBucket{Key: "e", Label: "Édith Piaf", Count: 3}),
+		facetFolded(FacetBucket{Key: "m", Label: "Motörhead", Count: 4}),
+		facetFolded(FacetBucket{Key: "a", Label: "Abba", Count: 5}),
+		facetFolded(FacetBucket{Key: "4", Label: "4 Non Blondes", Count: 6}),
+		facetFolded(FacetBucket{Key: "cjk", Label: "山下達郎", Count: 7}),
+		facetFolded(FacetBucket{Key: "tilde", Label: "~Various", Count: 8}),
+	}
+	sortFacetBuckets(buckets, FacetSortLabel)
+
+	// "4" and "~" bracket the letters from both sides and both file under
+	// the one "#" row: the fold is lowercase, so the letters occupy 'a'
+	// to 'z' and punctuation falls on either side of them.
+	var got []string
+	for _, b := range buckets {
+		got = append(got, b.Key)
+	}
+	want := []string{"4", "a", "e", "m", "o", "z", "tilde", "cjk"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("label order = %v; want %v", got, want)
+		}
+	}
+
+	// And the seek folds its prefix the same way, so a rail tap on E
+	// reaches Édith whether the tap sent the plain letter or the accented
+	// one, and O reaches Ólafur.
+	seeks := []struct{ prefix, key string }{{"e", "e"}, {"é", "e"}, {"o", "o"}}
+	for _, s := range seeks {
+		at := facetSeekPrefix(buckets, s.prefix)
+		if at >= len(buckets) || buckets[at].Key != s.key {
+			t.Errorf("startsAt=%q seeked to %d, want the %q bucket", s.prefix, at, s.key)
+		}
+	}
+}
+
+// The rail row comes off the same fold that ordered the bucket, so
+// every label the fold moves is a label whose letter moves with it: the
+// two cannot disagree the way a client-side derivation could. "#" holds
+// everything the fold does not lead with a letter, from both sides of
+// the alphabet; the unknown bucket has no row at all.
+func TestFacetBucketLetters(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ label, want string }{
+		{"Abba", "A"},
+		{" Weeknd", "W"},
+		{"Édith Piaf", "E"},
+		{"Ólafur Arnalds", "O"},
+		{"4 Non Blondes", "#"},
+		{"[Unknown Artist]", "#"},
+		// Above 'z' rather than below it, and still the same row.
+		{"~Various", "#"},
+		{"山下達郎", "#"},
+		{"", "#"},
+	}
+	for _, c := range cases {
+		if got := facetFolded(FacetBucket{Label: c.label}).Letter; got != c.want {
+			t.Errorf("%q files under %q, want %q", c.label, got, c.want)
+		}
+	}
+	if got := facetFolded(FacetBucket{Label: "[No Genre]", Unknown: true}).Letter; got != "" {
+		t.Errorf("the unknown bucket answered rail letter %q, want none", got)
+	}
+	// A letter is a function of the label and the flag, not of whatever
+	// the bucket arrived carrying: refolding an unknown bucket that was
+	// built as a real one clears the row the rail cannot seek.
+	stale := FacetBucket{Label: "[No Genre]", Letter: "N", Unknown: true}
+	if got := facetFolded(stale).Letter; got != "" {
+		t.Errorf("a refolded unknown bucket kept rail letter %q, want none", got)
+	}
+}
+
 // Each rule the parameter's description states; every one is a real
 // case a rail tap produces.
 func TestFacetStartsAtSemantics(t *testing.T) {
