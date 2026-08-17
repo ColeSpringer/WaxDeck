@@ -1,6 +1,20 @@
 # Bugs
 
-List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add it not overly clear.
+List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
+
+- [8-17-2026] Maybe we should gray out the visualizer option if the file has not been analyzed yet. Can have a tooltip that states the reason for the grayout.
+
+- [8-17-2026] [web at least] for the full screen visualizer, we should change the button in the top left to be changed from the downward arrow to the left arrow to indicate the "go back" action it actually takes.
+
+- [8-17-2026] I don't think we have a way to edit metadata for individual tracks.
+
+- [8-17-2026] the editing album metadata screen is worthless. needs an overhaul.
+
+- [8-17-2026] [web] Right click doesn't work at all for anything. Doesn't even show normal browser options. We might want to look into the other platforms to see if this is universal.
+
+- [8-17-2026] For radio, the artwork for the song should also show in the minimized deck. Not just when in fullscreen.
+
+- [8-17-2026] Getting artwork for a song playing on a radio station takes awhile (more than a minute). This was faster before the recent updates.
 
 - [8-16-2026] Connect's routed transport verbs all go straight at the engine (`connect_controller.dart` around 264-276) instead of through `QueueGateway`, which exists for exactly this and which the media session does use. `play` bypasses `QueueGateway.play` and so cannot restart a queue whose start failed - the case that method was written for. `stop` runs `queue.clear(); await engine.stop();` and `pause` runs `engine.pause()`, neither of which lets go of a tuned station, so a routed stop during live radio leaves the face and the deck bar still naming a station nothing is playing. The lock-screen half of that is fixed (`onStop` lands on `QueueGateway.stop`); Connect is not, because a routed verb is a Connect-semantics decision alongside the three entries at the bottom of this file. Note the fix is not a straight substitution: `QueueGateway.stop` deliberately leaves the queue standing, so the routed stop needs both it and the existing `clear`, in the order the surrounding comment requires.
 
