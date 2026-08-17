@@ -301,8 +301,9 @@ class PlayerScaffold extends StatefulWidget {
   /// the place of [NowPlayingData.subtitle].
   final Widget? subtitleOverride;
 
-  /// Star and rating, which sit with the title rather than in the row of
-  /// verbs.
+  /// Star and rating: they grade what is playing rather than driving it,
+  /// so they sit with the title block rather than in the row of verbs -
+  /// on a line of their own under the subtitle.
   final Widget? titleTrailing;
 
   /// This surface's own output level, where the platform gives it one.
@@ -576,7 +577,7 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           // wide window the gutters either side of this box are what a
           // pointer clicks to leave; on a phone the box is the width and
           // the header's stretch is the whole of that region.
-          constraints: const BoxConstraints(maxWidth: 520),
+          constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s24),
             child: LayoutBuilder(
@@ -607,7 +608,7 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
                         // gives its height to the controls, which are what
                         // the surface is for.
                         if (extent < 96) return const SizedBox.shrink();
-                        return Center(child: _hero(extent.clamp(96.0, 420.0)));
+                        return Center(child: _hero(extent));
                       },
                     ),
                   ),
@@ -653,15 +654,30 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
     );
   }
 
-  /// The artwork, at whatever extent the layout has for it.
+  /// The widest the face gets: a player is a fixed-width object, and
+  /// this is the box everything in it lays out inside.
+  static const double _contentMaxWidth = 520;
+
+  /// The largest the artwork goes: as wide as the content box, less the
+  /// gutters it sits in.
   ///
-  /// Podcast art is smaller by design (5.3): a show's cover is the same
-  /// square on every episode, so it says less the larger it gets, and
-  /// the room goes to the episode title and the chapter list instead.
+  /// One cap, not one per arrangement: each already bounds itself, and
+  /// three unrelated numbers had a desktop drawing a phone's square.
+  static const double _heroCap = _contentMaxWidth - WaxSpace.s24 * 2;
+
+  /// A show's cover is the same square on every episode, so it says
+  /// less the larger it gets. A ratio rather than a flat number, so it
+  /// moves with the other faces instead of sitting still.
+  static const double _podcastHeroRatio = 0.48;
+
+  /// The artwork, at whatever extent the layout has for it.
   Widget _hero(double extent) {
-    final size = widget.now.domain == WaxDomain.podcasts
-        ? math.min(extent, 200.0)
-        : extent;
+    final size = math.min(
+      extent,
+      widget.now.domain == WaxDomain.podcasts
+          ? _heroCap * _podcastHeroRatio
+          : _heroCap,
+    );
     final art = Hero(
       tag: 'deck-artwork',
       child: ArtworkImage(
@@ -746,7 +762,7 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
             if (extent >= 96) ...<Widget>[
-              _hero(extent.clamp(96.0, 260.0)),
+              _hero(extent),
               const SizedBox(width: WaxSpace.s24),
             ],
             Expanded(
@@ -783,6 +799,9 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
     );
   }
 
+  /// Each line on its own, centred on its own width. Sharing a row with
+  /// the rating centred the pair, not the title, and it was never
+  /// tunable: the rating row is 272 of the box's 472.
   Widget _titleBlock(WaxColors colors, {bool alignStart = false}) => Column(
     crossAxisAlignment: alignStart
         ? CrossAxisAlignment.start
@@ -793,23 +812,12 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           padding: const EdgeInsets.only(bottom: WaxSpace.s4),
           child: widget.titleOverline!,
         ),
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Flexible(
-            child: Text(
-              widget.now.title,
-              textAlign: alignStart ? TextAlign.start : TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: WaxType.titleEntity.copyWith(color: colors.textPrimary),
-            ),
-          ),
-          if (widget.titleTrailing != null) ...<Widget>[
-            const SizedBox(width: WaxSpace.s8),
-            widget.titleTrailing!,
-          ],
-        ],
+      Text(
+        widget.now.title,
+        textAlign: alignStart ? TextAlign.start : TextAlign.center,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: WaxType.titleEntity.copyWith(color: colors.textPrimary),
       ),
       if (widget.subtitleOverride != null)
         Padding(
@@ -826,6 +834,14 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
             overflow: TextOverflow.ellipsis,
             style: WaxType.body.copyWith(color: colors.textSecondary),
           ),
+        ),
+      // A row of controls, so it takes a control row's gap. Six buttons
+      // on the item faces and two on radio; both shrink-wrap, so the
+      // column's cross-axis alignment places them.
+      if (widget.titleTrailing != null)
+        Padding(
+          padding: const EdgeInsets.only(top: WaxSpace.s8),
+          child: widget.titleTrailing!,
         ),
     ],
   );

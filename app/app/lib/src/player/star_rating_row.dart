@@ -57,7 +57,10 @@ class StarRatingRow extends StatelessWidget {
     final stars = rating == null ? 0 : (rating! / 20).round().clamp(0, 5);
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      // Load-bearing since the player put this on a line of its own: it
+      // is placed by its parent's cross-axis alignment, which can only
+      // place something that shrink-wraps.
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         WaxIconButton(
           key: Key(SemanticsIds.starButton(idPrefix)),

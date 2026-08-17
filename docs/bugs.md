@@ -2,35 +2,7 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add it not overly clear.
 
-- [8-11-2026] **Resolved the same day, two root causes.** The desktop
-  engine failed its conformance suite on linux CI, 9 of 30 (the whole
-  gapless family plus play-after-completion, run 31454998093 - the
-  suite's first execution anywhere linux). Reproduced end to end in an
-  ubuntu:24.04 container with flutter, xvfb, and a pulse null sink,
-  after mpv itself was exonerated: the CLI advances playlists
-  correctly on 0.35, 0.37, 0.40, and 0.41, through the null and pulse
-  outputs, seeks near eof included. Cause one, the eight gapless
-  failures: the real-engine harness's `advance()` waited a fixed 1.5
-  seconds after seeking near the end, and the pulse null sink drains
-  about two - the seam's boundary landed roughly 600ms after every
-  assertion had already run, deterministically, which is why the
-  counts read 0 and positions pegged at exact item lengths. CoreAudio
-  and the emulator drain faster, which is all "passes on macOS and
-  Android" ever meant. `advance()` now waits on evidence instead of
-  the wall clock: the seam's position reset or playback ending for
-  the seek path, and the engine's own position clock for the play-out
-  path (a replay's fresh pipeline spends wall time before the clock
-  moves). Cause two, play-after-completion: just_audio_media_kit
-  never leaves its completed state on a bare seek - media_kit flickers
-  buffering (the state's only exit) solely when a file loads, and
-  libmpv 0.36+ ignores a same-value playlist-pos write, so the
-  same-index jump that happens to work on the bundled macOS libmpv
-  0.35 is a no-op everywhere current. `JustAudioEngine.play()` now
-  gives the seek a 500ms grace and then reloads the held source
-  outright, which walks the state through loading on every backend.
-  Verified 30/30 in ubuntu:24.04 (libmpv 0.37, the CI shape),
-  ubuntu:25.04 (0.40), and macOS via a scratchpad app around
-  waxdeck_player driving media_kit's mpv (bundled 0.35).
+- [8-16-2026] Connect's routed transport verbs all go straight at the engine (`connect_controller.dart` around 264-276) instead of through `QueueGateway`, which exists for exactly this and which the media session does use. `play` bypasses `QueueGateway.play` and so cannot restart a queue whose start failed - the case that method was written for. `stop` runs `queue.clear(); await engine.stop();` and `pause` runs `engine.pause()`, neither of which lets go of a tuned station, so a routed stop during live radio leaves the face and the deck bar still naming a station nothing is playing. The lock-screen half of that is fixed (`onStop` lands on `QueueGateway.stop`); Connect is not, because a routed verb is a Connect-semantics decision alongside the three entries at the bottom of this file. Note the fix is not a straight substitution: `QueueGateway.stop` deliberately leaves the queue standing, so the routed stop needs both it and the existing `clear`, in the order the surrounding comment requires.
 
 - [8-9-2026] I dont think the android app respects system theme. I believe it defaults to light mode.
 
@@ -46,11 +18,7 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 - [8-8-2026] We should also have the addition button in the music section. Currently, its the only section that does not have it. Can be kind of like the home add surface but more music specific?
 
-- [8-8-2026] (Web) We can make the cover art a little bigger (in full screen playing screen). Little small and there is plenty of dead space.
-
 - [8-8-2026] Uploads only accept file selections. Not useful when trying to upload albums or entire music collections. Also need to make sure that the upload surface is up to standard security practices.
-
-- [8-8-2026] There are some alignment issues that you can see under bug_screenshots. 
 
 - [8-8-2026] Under listening stats, when you select the time period to take into account, there is a noticable visual change. It looks like its redrawing the elements. This might not be fixable and I guess it's not really a bug. However, I think it would be worth making it a less jarring transition if we can.
 
@@ -86,13 +54,9 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 - [8-8-2026] A client-side filter over a paged list silently stops at page one. The paged screens load their next page from a scroll listener (`if (position.pixels < position.maxScrollExtent - 600) return;`), so a first page that does not overflow the viewport produces no scroll event and never pages. That is unreachable while a screen draws everything it loaded - fifty rows always overflow - but three screens narrow the accumulated pages in the client before drawing them, and a narrow enough filter leaves a short list that cannot scroll: the books hub's finished/unfinished/author filters (`arrangeBooks` over `loaded`), the search-within-show field on a podcast (`_query`, "matched against the pages already loaded"), and the health screen's rule listing. The show search is the worst of the three because it reads as an answer rather than as a filter: type a term matching two of the fifty loaded episodes and the screen says two, with no indication that pages three onward were never asked for. Fixing it means giving those screens a paging trigger that does not depend on the viewport overflowing - a post-layout check for "nothing to scroll and more to fetch", or filtering server-side where the wire supports it. Found during phase 3 review; the pattern predates it and the saved-radio list shares the trigger but not the hazard, having no client-side filter.
 
-- [8-7-2026] if you hit the stop button for a radio station in full screen it then displays a "nothing is playing" screen. maybe we should default to when hitting that button it minimizes to the deck since, for radio specifically, there is nothing for the user to do once you disconnect from the station.
-
 - [8-7-2026] The artwork retrieved sometimes seems like its low resolution for radio cover art. This might be due to source resolution so may not be fixable.
 
 - [8-7-2026] The artwork for radio cover art sometimes disappears during the song (including the song info artist and title which is probably related to the disappearance). This seems to mostly happen towards the end when there is about 30 seconds to a minute left.
-
-- [8-7-2026] Maybe we should make the fullscreen cover art appearance for radio dynamic (maybe the others too?) to the art it wants to display? currently its circular which results in album artwork being cutoff. I guess circular would be ok for radio station logos or the default artwork we use.
 
 - [8-7-2026] radio station artwork just retrieves from top of list which results in sometimes displaying compilation albums. we should prioritize the album version, then the single version, then whatever version(s) are left.
 

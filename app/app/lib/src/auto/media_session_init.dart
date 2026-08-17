@@ -40,6 +40,9 @@ Future<void> initMediaSession(ProviderContainer container) async {
       // nor a drawer to appear in.
       browse: db == null ? null : MirrorBrowseSource(db),
       onPlay: queue.play,
+      // The engine cannot let go of a tuned station. Pause stays its
+      // own, being a gap rather than an end.
+      onStop: queue.stop,
       onSkipNext: queue.next,
       onSkipPrevious: queue.previous,
       onPlayFromMediaId: queue.playItem,

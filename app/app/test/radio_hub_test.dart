@@ -101,8 +101,9 @@ FakeRepository _repoWithFavorites(List<String> pids) {
 
 /// The window's own metrics with animations off.
 ///
-/// A station tile drawn as playing carries the VU needle, which repeats
-/// forever - that is the point of it and the end of `pumpAndSettle`.
+/// A station tile drawn as playing carries the playing bars, which
+/// repeat forever - that is the point of them and the end of
+/// `pumpAndSettle`.
 /// Replacing the whole [MediaQueryData] instead would wipe the size the
 /// size class reads, and every grid would draw one column.
 Widget _reducedMotion(Widget child) => Builder(

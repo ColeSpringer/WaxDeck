@@ -11,7 +11,6 @@ import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'artwork.dart';
 import 'controls.dart';
-import 'indicators.dart';
 import 'semantics_slots.dart';
 import 'view_data.dart';
 
@@ -299,7 +298,7 @@ class DeckBar extends StatelessWidget {
   /// The right cluster is sized to its contents and the other two zones
   /// share what is left, so the newest thing in the cluster is the thing
   /// that has to give: at 840 px a full-width track took the left zone
-  /// below what its artwork, star, and needle need, and five pixels came
+  /// below what its artwork, title, and star need, and five pixels came
   /// out the side. Measured from the bar's own width rather than the
   /// window's, because the bar sits in a shell slot beside a sidebar.
   static double _volumeTrack(double available) =>
@@ -376,23 +375,6 @@ class DeckBar extends StatelessWidget {
                       active: now.songSaved,
                       semanticsId: ids.saveSong,
                       onPressed: () => actions.onSaveSong!(!now.songSaved),
-                    ),
-                  ],
-                  if (now.playing) ...<Widget>[
-                    const SizedBox(width: WaxSpace.s8),
-                    // The same ticker the progress hairline reads, so the
-                    // arm crosses the record at the rate the track plays
-                    // rather than on a clock of its own. Live radio has no
-                    // end to be a fraction of, so it passes none and the
-                    // arm rests partway in.
-                    _Ticking(
-                      ticker: positionTicker,
-                      fallback: now.position,
-                      builder: (context, position) => PlayingIndicator(
-                        playing: now.playing,
-                        progress: now.live ? null : now.fractionAt(position),
-                        size: 26,
-                      ),
                     ),
                   ],
                 ],
@@ -637,10 +619,9 @@ class DeckBar extends StatelessWidget {
           style: WaxType.titleItem.copyWith(color: colors.textPrimary),
         ),
         Row(
-          // Sized to its content: at max this row stretched the whole
-          // title block to the zone's width, which pushed the star and
-          // the needle beside it to the middle of the bar instead of
-          // beside the text.
+          // Sized to its content: at max this row stretches the whole
+          // title block to the zone's width, stranding the star in the
+          // middle of the bar instead of beside the text.
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             if (now.live) ...<Widget>[

@@ -50,27 +50,31 @@ class RadioFace extends ConsumerWidget {
         final playing =
             ((snapshot.data ?? engine.playing) || playback.starting) &&
             !blocked;
+        // The song's cover when the server matched one, the logo
+        // otherwise. Only here: a bar whose picture changed every few
+        // minutes would read as the station changing.
+        final cover = waxArtwork(
+          ref.watch(artworkStoreProvider),
+          ref.watch(radioNowPlayingArtProvider),
+        );
+        // Which rung answered decides the shape. A circle suits a
+        // station logo and the wordmark; a sleeve cropped to one loses
+        // its corners, which is most of an album cover.
+        final onTheRecord = cover != null;
         return PlayerScaffold(
           ids: radioPlayerIds,
           now: NowPlayingData(
             title: station.name,
             subtitle: playback.nowPlaying,
-            // The song's own cover when the server recognised what is
-            // playing, the station's logo otherwise. Only here: the deck
-            // bar keeps the logo, because a bar whose picture changed
-            // every few minutes would read as the station changing.
             artwork:
-                waxArtwork(
-                  ref.watch(artworkStoreProvider),
-                  ref.watch(radioNowPlayingArtProvider),
-                ) ??
+                cover ??
                 waxStationLogo(
                   ref.watch(artworkStoreProvider),
                   ref.watch(repositoryProvider),
                   station,
                 ),
             domain: WaxDomain.radio,
-            shape: ArtworkShape.circle,
+            shape: onTheRecord ? ArtworkShape.square : ArtworkShape.circle,
             position: Duration.zero,
             duration: Duration.zero,
             live: true,
@@ -81,9 +85,10 @@ class RadioFace extends ConsumerWidget {
             _FavoriteButton(station: station),
             _StationMenu(station: station),
           ],
-          // The platter's ring rides over the artwork the scaffold draws;
-          // the title block keeps the station name and the ICY line.
-          heroOverlay: PlatterRing(playing: playing),
+          // Follows the shape: the ring traces a circle's edge and reads
+          // as a hoop thrown over a square. The LIVE pill still says the
+          // stream is running.
+          heroOverlay: onTheRecord ? null : PlatterRing(playing: playing),
           titleTrailing: playback.nowPlaying == null
               ? null
               : Row(

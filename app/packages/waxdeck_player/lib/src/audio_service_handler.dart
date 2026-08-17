@@ -15,6 +15,7 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     required this.onPlayFromMediaId,
     this.browse,
     this.onPlay,
+    this.onStop,
     this.onSkipNext,
     this.onSkipPrevious,
     this.onSkipToQueueItem,
@@ -55,6 +56,11 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   /// pause off the engine's own transition, so that one from the lock
   /// screen and one from an interruption count alike.
   final Future<void> Function()? onPlay;
+
+  /// How the app stops. A stop is an end rather than a gap, and the app
+  /// holds state the engine does not - live radio keeps a tuned station
+  /// beside it. Absent, this falls through to the engine.
+  final Future<void> Function()? onStop;
 
   /// Queue steps, when the app runs a queue (a Connect load, a
   /// browse-tree folder played through). Absent callbacks hide the
@@ -194,7 +200,7 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   Future<void> pause() => engine.pause();
 
   @override
-  Future<void> stop() => engine.stop();
+  Future<void> stop() => onStop?.call() ?? engine.stop();
 
   @override
   Future<void> seek(Duration position) => engine.seek(position);
@@ -271,6 +277,7 @@ Future<WaxDeckAudioHandler> initWaxDeckAudioService({
   required Future<void> Function(String pid) onPlayFromMediaId,
   BrowseSourcePort? browse,
   Future<void> Function()? onPlay,
+  Future<void> Function()? onStop,
   Future<void> Function()? onSkipNext,
   Future<void> Function()? onSkipPrevious,
   Future<void> Function(int index)? onSkipToQueueItem,
@@ -282,6 +289,7 @@ Future<WaxDeckAudioHandler> initWaxDeckAudioService({
       browse: browse,
       onPlayFromMediaId: onPlayFromMediaId,
       onPlay: onPlay,
+      onStop: onStop,
       onSkipNext: onSkipNext,
       onSkipPrevious: onSkipPrevious,
       onSkipToQueueItem: onSkipToQueueItem,

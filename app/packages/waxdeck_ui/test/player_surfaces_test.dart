@@ -11,6 +11,14 @@ const _music = NowPlayingData(
   playing: true,
 );
 
+const _podcast = NowPlayingData(
+  title: 'What the harbour remembers',
+  domain: WaxDomain.podcasts,
+  position: Duration(minutes: 18, seconds: 6),
+  duration: Duration(minutes: 58, seconds: 12),
+  playing: true,
+);
+
 Future<void> _pumpAt(
   WidgetTester tester,
   Widget child, {
@@ -152,6 +160,108 @@ void main() {
         size: const Size(900, 600),
       );
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the title block centres every line on its own width', (
+      tester,
+    ) async {
+      // Centred as a pair with `titleTrailing`, the title sat left of
+      // centre while the subtitle did not. Every alignment screenshot.
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            // The shape the item faces carry: six 44 px buttons and a
+            // gap, which is most of the content box.
+            titleTrailing: const SizedBox(
+              key: Key('rating'),
+              width: 272,
+              height: 44,
+            ),
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+
+      final title = tester.getRect(find.text('Salt Harbour'));
+      final subtitle = tester.getRect(find.text('Nightjar'));
+      final rating = tester.getRect(find.byKey(const Key('rating')));
+
+      expect(
+        rating.top,
+        greaterThanOrEqualTo(subtitle.bottom),
+        reason: 'its own line, under the subtitle rather than beside the title',
+      );
+      expect(title.center.dx, moreOrLessEquals(subtitle.center.dx, epsilon: 1));
+      expect(title.center.dx, moreOrLessEquals(rating.center.dx, epsilon: 1));
+    });
+
+    group('the hero', () {
+      Future<double> heroAt(
+        WidgetTester tester,
+        Size size, {
+        NowPlayingData now = _music,
+      }) async {
+        await _pumpAt(
+          tester,
+          SizedBox(
+            width: size.width,
+            height: size.height,
+            child: PlayerScaffold(
+              now: now,
+              transport: TransportCluster(playing: true, onPlayPause: () {}),
+              seek: SeekCluster(now: now, onSeek: (_) {}),
+            ),
+          ),
+          size: size,
+        );
+        return tester.widget<ArtworkImage>(find.byType(ArtworkImage)).size;
+      }
+
+      testWidgets('grows with the window rather than sitting at a flat cap', (
+        tester,
+      ) async {
+        final phone = await heroAt(tester, const Size(420, 880));
+        final desktop = await heroAt(tester, const Size(1280, 1000));
+
+        expect(
+          desktop,
+          greaterThan(phone),
+          reason: 'a window with room to fill drew a phone-sized square',
+        );
+      });
+
+      testWidgets('keeps podcasts smaller without shrinking them', (
+        tester,
+      ) async {
+        // One cap, so the ratio is taken once. Against a per-arrangement
+        // cap it was a reduction of a reduction, and landscape - which
+        // has the least room to start with - lost a third of its cover.
+        for (final window in <Size>[
+          const Size(1280, 1000), // portrait, desktop
+          const Size(568, 320), // landscape, phone
+          const Size(1280, 400), // landscape, short desktop window
+        ]) {
+          final music = await heroAt(tester, window);
+          final show = await heroAt(tester, window, now: _podcast);
+
+          expect(
+            show,
+            lessThanOrEqualTo(music),
+            reason: 'a show cover is the same square every episode: $window',
+          );
+          expect(
+            show,
+            greaterThanOrEqualTo(200),
+            reason: 'and never smaller than it was drawn before: $window',
+          );
+        }
+      });
     });
 
     testWidgets('renders the provenance line from the data', (tester) async {
@@ -668,29 +778,25 @@ void main() {
   });
 
   group('deck bar title block', () {
-    testWidgets('the needle sits beside the title, not adrift in the bar', (
+    testWidgets('the star rides with the text, not with the zone edge', (
       tester,
     ) async {
-      // The subtitle row defaulted to MainAxisSize.max, which stretched
-      // the title block to the zone's width and pushed the playing
-      // indicator to the middle of the bar - the stray tonearm both bug
-      // screenshots show.
+      // The subtitle row defaults to MainAxisSize.max, which stretches
+      // the title block to the whole zone and strands whatever follows
+      // it in the middle of the bar.
       await _pumpAt(
         tester,
         DeckBar(
           now: _music,
-          actions: DeckBarActions(onPlayPause: () {}),
+          sizeClass: WaxSizeClass.wide,
+          actions: DeckBarActions(onPlayPause: () {}, onStar: (_) {}),
         ),
         size: const Size(1280, 200),
       );
 
       final title = tester.getRect(find.text('Salt Harbour'));
-      final needle = tester.getRect(find.byType(PlayingIndicator));
-      expect(
-        needle.left - title.right,
-        lessThan(40),
-        reason: 'the needle rides with the text, not with the zone edge',
-      );
+      final star = tester.getRect(find.bySemanticsLabel(RegExp('star|Star')));
+      expect(star.left - title.right, lessThan(40));
     });
   });
 

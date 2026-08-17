@@ -1933,6 +1933,7 @@ class FakeRepository implements WaxDeckRepository {
     return RadioPlayInfo(
       url: '/media/radio/$pid?mt=fake',
       nowPlaying: line,
+      nowPlayingItemPid: radioNowPlayingItemPid[pid],
       nowPlayingSaved: saved != null,
       nowPlayingSavedPid: saved?.pid,
     );
@@ -1941,6 +1942,11 @@ class FakeRepository implements WaxDeckRepository {
   /// What each station's stream announces it is playing, when it
   /// announces anything.
   final Map<String, String> radioNowPlaying = {};
+
+  /// The library item a station's announced line resolved to, where the
+  /// server matched one. What gives a station a cover of its own rather
+  /// than its logo, and so what the face's artwork shape follows.
+  final Map<String, String> radioNowPlayingItemPid = {};
 
   @override
   String radioLogoUrlFor(String pid) => '/api/v1/radio/stations/$pid/logo';

@@ -348,13 +348,11 @@ class _ComponentsPageState extends State<ComponentsPage> {
           runSpacing: WaxSpace.s16,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: <Widget>[
-            const PlayingIndicator(playing: true, size: 40),
-            const PlayingIndicator(playing: false, size: 40),
-            const PlayingIndicator(
-              playing: true,
-              form: PlayingIndicatorForm.bars,
-              size: 16,
-            ),
+            // Both states, at the one size a list row draws it: moving
+            // while it plays, and holding a static profile otherwise,
+            // which is also what reduced motion gets.
+            const PlayingIndicator(playing: true, size: 16),
+            const PlayingIndicator(playing: false, size: 16),
             const ProgressRing(progress: 0.62, size: 40),
             for (final domain in WaxDomain.values) DomainBadge(domain),
             const CodecChip('FLAC 24/96', emphasis: true),

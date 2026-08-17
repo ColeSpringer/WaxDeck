@@ -44,11 +44,9 @@ const _album = QueueSource(
   pid: 'al-1',
 );
 
-/// The window's own metrics with animations off, so a bar with a VU
-/// needle in it settles: the needle repeats forever while something is
-/// playing, which is the point of it and the end of `pumpAndSettle`.
-/// Replacing the whole [MediaQueryData] instead would wipe the size the
-/// size class is read from, and every bar would draw compact.
+/// The window's own metrics with animations off: a playing row's bars
+/// repeat forever, which is the end of `pumpAndSettle`. Replacing the
+/// whole [MediaQueryData] would wipe the size the size class reads.
 Widget _reducedMotion(Widget child) => Builder(
   builder: (context) => MediaQuery(
     data: MediaQuery.of(context).copyWith(disableAnimations: true),

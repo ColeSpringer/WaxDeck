@@ -16,10 +16,9 @@ import 'package:waxdeck_ui_catalog/sample_library.dart';
 /// Decodes the artwork, then pumps a fixed number of frames.
 ///
 /// Alchemist's own image precache finishes with `pumpAndSettle`, which
-/// never returns on a screen with a VU needle on it: the deck bar and the
-/// playing row animate for as long as they are visible. So the decode
-/// happens here and the settle is replaced by a deterministic frame
-/// count.
+/// never returns on a screen holding a playing row: its bars animate for
+/// as long as they are visible. So the decode happens here and the
+/// settle is replaced by a deterministic frame count.
 Future<void> _pump(WidgetTester tester) async {
   await tester.runAsync(() async {
     final decodes = <Future<void>>[];

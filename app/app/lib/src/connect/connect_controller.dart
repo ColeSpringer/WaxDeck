@@ -266,7 +266,7 @@ class ConnectEndpointController {
         case 'pause':
           await engine.pause();
         case 'stop':
-          queue.stop();
+          queue.clear();
           // The engine is silenced here rather than left to the
           // session's teardown, which flushes a checkpoint and a listen
           // report before it gets there: on a slow link that is two

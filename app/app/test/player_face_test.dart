@@ -267,6 +267,52 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    testWidgets('an episode names its show once, not twice', (tester) async {
+      // The overline above the title is the show, and it is a link. An
+      // episode's `artist` is the same string, so passing it through as
+      // the subtitle drew the show's name again one line down.
+      const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
+      final repo = FakeRepository()..addSubscription(testShow(showPid));
+      final episode = testEpisode(
+        'tr-01JZX5N8QW3F4V9T2B7KDEP0001',
+        showPid: showPid,
+        // What a feed actually carries: an episode's artist line is the
+        // show it came from.
+        artist: 'The Prancing Pony Hour',
+      );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(minutes: 30)),
+        item: episode,
+      );
+
+      expect(find.text('The Prancing Pony Hour'), findsOneWidget);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.playerShow),
+        findsOneWidget,
+        reason: 'the one that survives is the tappable one',
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a track still names its artist under the title', (
+      tester,
+    ) async {
+      // The other half of the same rule: a track's maker is named
+      // nowhere else on the face, so the subtitle is where it lives.
+      final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(minutes: 4)),
+        item: _track(_first, 'Salt Harbour'),
+      );
+
+      expect(find.text('Nightjar'), findsOneWidget);
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('a book reaches its chapters', (tester) async {
       final repo = FakeRepository()
         ..books[_bookPid] = testBook(

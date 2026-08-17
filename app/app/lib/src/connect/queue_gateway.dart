@@ -78,9 +78,17 @@ abstract class QueueGateway {
   /// Exists because the play verb is the one that cannot go straight at
   /// the engine. A play arriving after the item ended is a replay, and
   /// only the session resets the per-play bookkeeping and rewinds a
-  /// book to its first part. Pause has no such problem and is read off
-  /// the engine's own transition.
+  /// book to its first part.
   Future<void> play();
+
+  /// Silences what is playing, for a caller that means it deliberately
+  /// (the sleep timer). An item pauses so it resumes where it stood; a
+  /// station has no pause worth the name and is let go of.
+  Future<void> pause();
+
+  /// Ends what is playing, for a stop raised outside the app. Radio is
+  /// let go of; anything else stops at the engine, queue still standing.
+  Future<void> stop();
 
   /// Steps to the next entry. False when the queue has nowhere to go.
   Future<bool> next();
@@ -97,7 +105,9 @@ abstract class QueueGateway {
 
   /// Ends playback and the queue with it: a controller's `stop` ends
   /// the session, and the local queue is what that session is.
-  void stop();
+  /// Named apart from [stop], which silences what is playing and leaves
+  /// the queue standing.
+  void clear();
 
   void setRepeat(QueueRepeat repeat);
 
@@ -245,8 +255,29 @@ class LocalQueueGateway implements QueueGateway {
     _throwOnFailedStart(began);
   }
 
+  /// Lets a tuned station go, if one holds the engine. True when it did,
+  /// so both verbs below share one answer to "what does radio mean here"
+  /// rather than keeping two that can drift apart.
+  Future<bool> _releaseStation() async {
+    if (_ref.read(radioPlaybackProvider).station == null) return false;
+    await _ref.read(radioPlaybackProvider.notifier).stop();
+    return true;
+  }
+
   @override
-  void stop() => _queue.clear();
+  Future<void> pause() async {
+    if (await _releaseStation()) return;
+    await _ref.read(audioEngineProvider).pause();
+  }
+
+  @override
+  Future<void> stop() async {
+    if (await _releaseStation()) return;
+    await _ref.read(audioEngineProvider).stop();
+  }
+
+  @override
+  void clear() => _queue.clear();
 
   @override
   void setRepeat(QueueRepeat repeat) => _queue.setRepeat(repeat);

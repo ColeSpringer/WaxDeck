@@ -85,6 +85,19 @@ class PlayerScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // A stopped station empties the state under a mounted route, so the
+    // face falls to "nothing playing" with no deck bar to minimize to.
+    // On the state, not the button: seven paths reach the same stop.
+    final route = ModalRoute.of(context);
+    ref.listen(radioPlaybackProvider, (previous, next) {
+      if (previous?.station == null || next.station != null) return;
+      // `interrupt` empties it too when an item takes the engine, but
+      // installs its entry first: a face swap, not a stop.
+      if (ref.read(nowPlayingProvider).entry != null) return;
+      // Or the pop takes a dialog open over the player instead.
+      if (!(route?.isCurrent ?? true)) return;
+      leavePlayer(context);
+    });
     return CommandScope(
       // The keyboard's way out, and the third one overall beside the
       // collapse button and the pull-down. Scoped rather than global so
@@ -366,7 +379,9 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   }) {
     return NowPlayingData(
       title: _item.title,
-      subtitle: _item.artist,
+      // An episode's artist is its show, already drawn above as the
+      // tappable overline. Books and tracks name theirs nowhere else.
+      subtitle: _episode == null ? _item.artist : null,
       provenance: queueProvenance(context.l10n, source),
       artwork: waxArtwork(ref.read(artworkStoreProvider), _item.artUrl),
       domain: waxDomainOf(_item.mediaType),

@@ -30,6 +30,24 @@ here waits on upstream.
 
 ## Playback and apps
 
+- `[in-repo]` **The radio face's artwork shape follows a URL, not a
+  picture.** The face draws a square with no platter ring when the
+  server matched the announced title to a library item, and a circle
+  with the ring otherwise (`radio_face.dart`, `onTheRecord`). It decides
+  from `radioNowPlayingArtProvider` being non-null, which only says the
+  server found a match - `integrations.go` sets `NowPlayingItemPid`
+  without checking that the item has cover art. So a matched track with
+  no art draws the station wordmark cropped square with no ring, losing
+  the one ambient cue that the stream is live. The shape is chosen when
+  the widget builds and whether the image exists is known a round trip
+  later, so neither half is a local fix. Two ways out: gate
+  `NowPlayingItemPid` server-side on the item having art, which matches
+  what the field's own description says it is for and is a spec change;
+  or make artwork absence observable, since `ArtworkStore.knownAbsent`
+  already holds the answer but the store is not listenable, so a face
+  reading it flips shape whenever the next title poll happens to rebuild
+  rather than when the 404 lands. The second rung (`nowPlayingArtKey`)
+  is unaffected - the server only sends a key when it has the bytes.
 - `[in-repo]` **Download-notification polish.** The
   minimum is wired: a running/complete/error notification named by the original
   file, a progress bar, and a once-per-process permission request at the

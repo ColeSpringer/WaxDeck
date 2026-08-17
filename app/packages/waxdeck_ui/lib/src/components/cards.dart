@@ -205,11 +205,7 @@ class _MediaCardState extends State<MediaCard> {
                 color: colors.scrim,
                 borderRadius: WaxRadius.chip,
               ),
-              child: PlayingIndicator(
-                playing: true,
-                form: PlayingIndicatorForm.bars,
-                size: 14,
-              ),
+              child: const PlayingIndicator(playing: true, size: 14),
             ),
           ),
         if (data.downloaded)
@@ -549,11 +545,7 @@ class MediaListRow extends StatelessWidget {
           context,
         ).scale(leadingIndex != null ? 28 : 52).ceilToDouble(),
         child: playing
-            ? PlayingIndicator(
-                playing: true,
-                form: PlayingIndicatorForm.bars,
-                size: 14,
-              )
+            ? const PlayingIndicator(playing: true, size: 14)
             : Text(
                 '$value',
                 textAlign: TextAlign.center,

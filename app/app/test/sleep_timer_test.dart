@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
 import 'package:waxdeck/src/player/sleep_timer.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
@@ -105,6 +106,37 @@ void main() {
     );
     expect(engine.playing, isFalse);
     await harness.endPlayback(tester);
+  });
+
+  testWidgets('a timer firing over a station lets the station go', (
+    tester,
+  ) async {
+    // Pausing the engine alone left the face and the deck bar naming a
+    // station nothing was playing.
+    const stationPid = 'rs-01JZX5N8QW3F4V9T2B7KDSTATN1';
+    final station = RadioStation(
+      pid: stationPid,
+      name: 'Coastal FM',
+      streamUrl: 'https://stream.example/coastal',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    final repo = FakeRepository()..radioStationsByPid[stationPid] = station;
+    final engine = FakeEngine();
+    final clock = _FakeClock();
+    final container = _container(repo, engine, clock);
+    await container.read(radioPlaybackProvider.notifier).play(station);
+    expect(engine.playing, isTrue);
+
+    container.read(sleepTimerProvider.notifier).startMinutes(15);
+    clock.advance(const Duration(minutes: 16));
+    await tester.pump(const Duration(minutes: 16));
+    await tester.pump(
+      SleepTimerController.fadeDuration + SleepTimerController.fadeStep,
+    );
+    await tester.pumpAndSettle();
+
+    expect(engine.playing, isFalse);
+    expect(container.read(radioPlaybackProvider).station, isNull);
   });
 
   testWidgets('cancel stops the countdown', (tester) async {

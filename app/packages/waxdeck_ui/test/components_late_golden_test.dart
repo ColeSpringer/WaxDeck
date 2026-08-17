@@ -26,7 +26,7 @@ Widget _themed(WaxThemeVariant variant, Widget child) {
   );
 }
 
-/// The needle, the bars, and the dial's settle never come to rest, so
+/// The playing bars and the dial's settle never come to rest, so
 /// goldens pump a fixed number of frames instead of waiting for a
 /// stillness that will not come.
 final PumpAction _pumpAnimated = pumpNTimes(

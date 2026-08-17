@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
+import 'package:waxdeck/src/player/radio_face.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
@@ -68,6 +69,17 @@ Future<ProviderContainer> _pumpTuned(
 Future<void> _stop(ProviderContainer container) =>
     container.read(radioPlaybackProvider.notifier).stop();
 
+/// The shape the face's own artwork is drawn in. Scoped to the hero,
+/// which is the one piece of artwork the scaffold draws.
+ArtworkShape _heroShape(WidgetTester tester) => tester
+    .widget<ArtworkImage>(
+      find.descendant(
+        of: find.byType(Hero),
+        matching: find.byType(ArtworkImage),
+      ),
+    )
+    .shape;
+
 void main() {
   testWidgets('the player draws the station when radio has the engine', (
     tester,
@@ -112,6 +124,88 @@ void main() {
     // anyway, so the station is let go of entirely.
     expect(engine.playing, isFalse);
     expect(container.read(radioPlaybackProvider).station, isNull);
+  });
+
+  testWidgets('a stopped station leaves the player rather than emptying it', (
+    tester,
+  ) async {
+    // The reason the surface was open has gone, and the deck bar goes
+    // in the same frame, so there is nothing to minimize to either.
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    expect(find.byType(PlayerScaffold), findsOneWidget);
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PlayerScaffold), findsNothing);
+    expect(find.byKey(const Key('player-idle')), findsNothing);
+  });
+
+  testWidgets('a stop under an open dialog leaves the dialog alone', (
+    tester,
+  ) async {
+    // The state can empty from anywhere and does not wait for a dialog.
+    // Popping then takes the dialog and leaves the player behind.
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    unawaited(
+      showDialog<void>(
+        context: tester.element(find.byType(PlayerScreen)),
+        builder: (_) => const AlertDialog(content: Text('half-typed edit')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('half-typed edit'), findsOneWidget);
+
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
+
+    expect(find.text('half-typed edit'), findsOneWidget);
+  });
+
+  testWidgets('a matched cover squares the artwork and takes the ring off', (
+    tester,
+  ) async {
+    // A sleeve cropped to a circle loses its corners, and the ring
+    // reads as a hoop thrown over it.
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio'
+      ..radioNowPlayingItemPid[_stationPid] = 'tr-01JZX5N8QW3F4V9T2B7KDMATCH1';
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    expect(_heroShape(tester), ArtworkShape.square);
+    expect(find.byType(PlatterRing), findsNothing);
+    await _stop(container);
+  });
+
+  testWidgets('a station with only its logo keeps the circle and the ring', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    expect(_heroShape(tester), ArtworkShape.circle);
+    expect(find.byType(PlatterRing), findsOneWidget);
+    await _stop(container);
   });
 
   testWidgets('a named track offers a way into the library', (tester) async {

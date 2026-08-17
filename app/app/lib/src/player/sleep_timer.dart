@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
+import '../connect/queue_gateway.dart';
 import '../providers.dart';
 import 'output_volume.dart';
 
@@ -199,8 +200,13 @@ class SleepTimerController extends Notifier<SleepTimerState> {
 
   void _fire() {
     cancel();
-    ref.read(audioEngineProvider).pause();
+    unawaited(_silence());
   }
+
+  /// An item pauses, a station is let go of. Through the gateway
+  /// because the engine cannot do the second, and the radio face
+  /// carries a sleep-timer button.
+  Future<void> _silence() => ref.read(queueGatewayProvider).pause();
 
   /// Ramps the output down, pauses, and puts the level back.
   ///
@@ -255,8 +261,9 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     if (!ref.mounted) return;
     if (generation != _generation) return unwind();
 
-    // The timer fired, so it pauses however the ramp ended.
-    ref.read(audioEngineProvider).pause();
+    // Awaited, because the line below puts the level back: unawaited,
+    // it returns mid-stop and whoever fell asleep gets a burst of it.
+    await _silence();
     // Or the next play starts silent. A refusal part way down leaves the
     // level lowered and still owned, so it unwinds like any other end.
     await unwind();

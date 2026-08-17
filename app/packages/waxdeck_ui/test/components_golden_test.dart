@@ -424,20 +424,10 @@ void main() {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    // A fixed position, so the arm is pinned somewhere
-                    // rather than resting at the default and drifting the
-                    // day the default changes.
-                    const PlayingIndicator(
-                      playing: false,
-                      progress: 0.4,
-                      size: 40,
-                    ),
-                    const SizedBox(width: 12),
-                    const PlayingIndicator(
-                      playing: false,
-                      form: PlayingIndicatorForm.bars,
-                      size: 16,
-                    ),
+                    // Paused, which is the only pose a golden can hold:
+                    // playing, the bars are wherever the ticker left
+                    // them.
+                    const PlayingIndicator(playing: false, size: 16),
                     const SizedBox(width: 12),
                     const ProgressRing(progress: 0.62, size: 40),
                     const SizedBox(width: 12),

@@ -512,7 +512,7 @@ void main() {
           _track('Bravo', artist: 'Ada Author'),
         ],
       // Playing pushes the player, which needs an engine and then never
-      // settles: the VU needle repeats for as long as something plays.
+      // settles: the playing row's bars repeat for as long as it plays.
       engine: true,
     );
 

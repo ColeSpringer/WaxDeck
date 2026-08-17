@@ -5,19 +5,25 @@ import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 
-/// What a play raised outside the app means: the lock screen, a headset
-/// button, a head unit, a Bluetooth remote.
+/// What the transport verbs raised outside the app mean: the lock
+/// screen, a headset button, a head unit, a Bluetooth remote.
 ///
-/// It has to answer the way the deck's own play button answers, and
+/// A play has to answer the way the deck's own play button answers, and
 /// going straight at the engine does not. The engine restarts a finished
 /// item and starts a station, but a queue standing with no session - a
 /// start that failed, and is waiting to be asked again - is not
 /// something it can begin.
+///
+/// Pause and stop share one case the engine cannot answer: a tuned
+/// station lives beside it, so silencing the engine leaves the radio
+/// surfaces naming a stream that is not playing.
 void main() {
   const pid = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK1';
 
@@ -139,5 +145,63 @@ void main() {
 
     expect(h.engine.loadedUrl, isNull);
     expect(h.engine.playing, isFalse);
+  });
+
+  group('over a station', () {
+    const stationPid = 'rs-01JZX5N8QW3F4V9T2B7KDSTATN1';
+
+    Future<({ProviderContainer container, FakeEngine engine})> tuned() async {
+      final h = build();
+      final station = RadioStation(
+        pid: stationPid,
+        name: 'Coastal FM',
+        streamUrl: 'https://stream.example/coastal',
+        createdAt: DateTime.utc(2026, 7, 1),
+      );
+      h.repo.radioStationsByPid[stationPid] = station;
+      await h.container.read(radioPlaybackProvider.notifier).play(station);
+      expect(h.engine.playing, isTrue);
+      return (container: h.container, engine: h.engine);
+    }
+
+    test('a pause lets the station go rather than muting a lie', () async {
+      // A paused live stream resumes at the live edge anyway, so the
+      // honest answer is the one every other radio surface gives.
+      final h = await tuned();
+
+      await h.container.read(queueGatewayProvider).pause();
+
+      expect(h.engine.playing, isFalse);
+      expect(h.container.read(radioPlaybackProvider).station, isNull);
+    });
+
+    test('a stop lets the station go', () async {
+      final h = await tuned();
+
+      await h.container.read(queueGatewayProvider).stop();
+
+      expect(h.engine.playing, isFalse);
+      expect(h.container.read(radioPlaybackProvider).station, isNull);
+    });
+
+    test('with no station tuned both stay the engine\'s', () async {
+      // The item case, unchanged and deliberately so: a session reads a
+      // pause off the engine's own transition, so one from a lock screen
+      // and one from a phone call count alike.
+      final h = build();
+      PlayerHarness(h.container).play([testItem(pid)]);
+      await pumpEventQueue();
+      await h.container.read(nowPlayingProvider.notifier).settled;
+      expect(h.engine.playing, isTrue);
+
+      await h.container.read(queueGatewayProvider).pause();
+
+      expect(h.engine.playing, isFalse);
+      expect(
+        h.container.read(queueControllerProvider).isNotEmpty,
+        isTrue,
+        reason: 'a pause silences playback; it does not throw the queue away',
+      );
+    });
   });
 }

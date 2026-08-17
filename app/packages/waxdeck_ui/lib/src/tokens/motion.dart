@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 /// (the deck expanding into the full player) and everything else in
 /// support. Read the set for the current context with [WaxMotion.of];
 /// when the platform asks for reduced motion, every duration collapses to
-/// a short fade, the VU needle and row bars freeze, and spins stop.
+/// a short fade, row bars hold a static profile, and spins stop.
 @immutable
 class WaxMotion {
   const WaxMotion({
@@ -21,7 +21,7 @@ class WaxMotion {
     required this.animationsEnabled,
   });
 
-  /// Press and hover states, needle ticks.
+  /// Press and hover states.
   final Duration pressFeedback;
 
   /// Chips, toggles, icon weight flips.
@@ -45,7 +45,7 @@ class WaxMotion {
   final Duration artworkCrossfade;
 
   /// False when the platform asks for reduced motion. Widgets that
-  /// animate continuously (the needle, the platter ring, marquees that
+  /// animate continuously (the row bars, the platter ring, marquees that
   /// do not exist) check this and hold a static pose instead.
   final bool animationsEnabled;
 
