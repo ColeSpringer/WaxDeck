@@ -287,6 +287,21 @@ class QueueState {
     return null;
   }
 
+  /// Whether a skip would do anything, which is what a next button is
+  /// enabled by. Not [nextEntry], which answers for the preload and so
+  /// holds repeat one in place; a skip is the other verb.
+  ///
+  /// Deliberately blind to [QueueSource.rolling]. A window draws again
+  /// ten entries out, so a healthy one is never standing on its last
+  /// entry - only a sealed window and a refill that failed are, and
+  /// trusting the flag there is a lit button that does nothing, which
+  /// is what this exists to remove.
+  bool get canAdvance {
+    if (entries.isEmpty) return false;
+    if (currentIndex + 1 < entries.length) return true;
+    return repeat == QueueRepeat.all;
+  }
+
   QueueState copyWith({
     List<QueueEntry>? entries,
     List<String>? sourceOrder,

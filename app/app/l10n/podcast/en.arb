@@ -431,9 +431,14 @@
   "@podcastNothingMatchesYet": {
     "description": "Empty state where the filter matched nothing among the episodes loaded, and the show has more."
   },
-  "podcastNothingMatchesYetMessage": "The filter runs over the episodes loaded so far, and this show has more.",
+  "podcastNothingMatchesYetMessage": "The filter runs over the {count} episodes loaded so far, and this show has more.",
   "@podcastNothingMatchesYetMessage": {
-    "description": "Why a filter can come up empty on a show with a long back catalogue."
+    "description": "Why a filter can come up empty on a show with a long back catalogue. The count rises with each fetch, so a press that finds nothing is still visibly progress.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "podcastOpenEpisodePage": "Open the episode page",
   "@podcastOpenEpisodePage": {

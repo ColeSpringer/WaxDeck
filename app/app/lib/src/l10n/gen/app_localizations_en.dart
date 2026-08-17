@@ -1928,10 +1928,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get booksLoadError => 'Could not load your books';
 
   @override
+  String get booksLoadMore => 'Load more books';
+
+  @override
+  String get booksLoadingMore => 'Loading...';
+
+  @override
   String get booksMore => 'More';
 
   @override
   String get booksNothingMatches => 'Nothing matches';
+
+  @override
+  String get booksNothingMatchesYet => 'Nothing matches yet';
+
+  @override
+  String booksNothingMatchesYetMessage(int count) {
+    return 'The filters run over the $count books loaded so far, and your library has more.';
+  }
 
   @override
   String get booksShowAll => 'Show all books';
@@ -5363,8 +5377,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastNothingMatchesYet => 'Nothing matches yet';
 
   @override
-  String get podcastNothingMatchesYetMessage =>
-      'The filter runs over the episodes loaded so far, and this show has more.';
+  String podcastNothingMatchesYetMessage(int count) {
+    return 'The filter runs over the $count episodes loaded so far, and this show has more.';
+  }
 
   @override
   String get podcastOpenEpisodePage => 'Open the episode page';

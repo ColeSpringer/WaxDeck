@@ -65,6 +65,7 @@ class CarModeScaffold extends StatelessWidget {
     this.onPrevious,
     this.onNext,
     this.onExit,
+    this.canNext = true,
     this.ids = const PlayerIds(),
     this.exitSemanticsId,
     super.key,
@@ -75,6 +76,11 @@ class CarModeScaffold extends StatelessWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final VoidCallback? onExit;
+
+  /// Whether the next control leads anywhere; see [TransportCluster].
+  /// The swipe answers to it as well, so a gesture cannot reach what the
+  /// button beside it refuses.
+  final bool canNext;
 
   final PlayerIds ids;
   final String? exitSemanticsId;
@@ -116,7 +122,7 @@ class CarModeScaffold extends StatelessWidget {
             if (velocity.abs() < _flingVelocity) return;
             // Swipe left for the next track, which is the direction
             // every carousel in the world moves.
-            (velocity < 0 ? onNext : onPrevious)?.call();
+            (velocity < 0 ? (canNext ? onNext : null) : onPrevious)?.call();
           },
           child: SafeArea(
             child: LayoutBuilder(
@@ -221,6 +227,7 @@ class CarModeScaffold extends StatelessWidget {
           onPlayPause: onPlayPause,
           onPrevious: onPrevious,
           onNext: onNext,
+          canNext: canNext,
         ),
         const SizedBox(height: WaxSpace.s32),
       ],

@@ -1962,10 +1962,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get booksLoadError => 'No se han podido cargar tus libros';
 
   @override
+  String get booksLoadMore => 'Cargar más libros';
+
+  @override
+  String get booksLoadingMore => 'Cargando...';
+
+  @override
   String get booksMore => 'Más';
 
   @override
   String get booksNothingMatches => 'No hay coincidencias';
+
+  @override
+  String get booksNothingMatchesYet => 'Todavía no coincide nada';
+
+  @override
+  String booksNothingMatchesYetMessage(int count) {
+    return 'Los filtros se aplican a los $count libros cargados hasta ahora, y tu biblioteca tiene más.';
+  }
 
   @override
   String get booksShowAll => 'Ver todos los libros';
@@ -5433,8 +5447,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastNothingMatchesYet => 'Todavía no coincide nada';
 
   @override
-  String get podcastNothingMatchesYetMessage =>
-      'El filtro se aplica a los episodios cargados hasta ahora, y este programa tiene más.';
+  String podcastNothingMatchesYetMessage(int count) {
+    return 'El filtro se aplica a los $count episodios cargados hasta ahora, y este programa tiene más.';
+  }
 
   @override
   String get podcastOpenEpisodePage => 'Abrir la página del episodio';

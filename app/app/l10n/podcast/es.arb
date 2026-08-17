@@ -75,7 +75,7 @@
   "podcastNothingMatches": "No hay coincidencias",
   "podcastNothingMatchesMessage": "Amplía el filtro, o borra la búsqueda, para ver el resto.",
   "podcastNothingMatchesYet": "Todavía no coincide nada",
-  "podcastNothingMatchesYetMessage": "El filtro se aplica a los episodios cargados hasta ahora, y este programa tiene más.",
+  "podcastNothingMatchesYetMessage": "El filtro se aplica a los {count} episodios cargados hasta ahora, y este programa tiene más.",
   "podcastOpenEpisodePage": "Abrir la página del episodio",
   "podcastOpmlCopied": "Suscripciones copiadas como OPML",
   "podcastOpmlCopy": "Copiar",

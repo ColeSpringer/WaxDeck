@@ -651,3 +651,11 @@ class QueueController extends Notifier<QueueState> {
 final queueControllerProvider = NotifierProvider<QueueController, QueueState>(
   QueueController.new,
 );
+
+/// Whether a next control leads anywhere, for the five surfaces that
+/// offer one. Derived here rather than at each of them, so two
+/// transports onto one queue cannot disagree about it, and selected so
+/// they rebuild when the answer changes rather than on every edit.
+final queueCanAdvanceProvider = Provider<bool>(
+  (ref) => ref.watch(queueControllerProvider.select((q) => q.canAdvance)),
+);

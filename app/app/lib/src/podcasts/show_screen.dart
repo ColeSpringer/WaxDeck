@@ -69,6 +69,12 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
 
   bool get _selecting => _selected.isNotEmpty;
 
+  /// Whether the list on screen is narrower than the pages behind it.
+  bool get _narrowed =>
+      _query.trim().isNotEmpty ||
+      _filter != EpisodeFilterChoice.all ||
+      _season != null;
+
   @override
   Widget build(BuildContext context) {
     final detail = ref.watch(podcastDetailProvider(widget.pid));
@@ -310,7 +316,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         SliverToBoxAdapter(
           child: EmptyState(
             title: l10n.podcastNothingMatchesYet,
-            message: l10n.podcastNothingMatchesYetMessage,
+            message: l10n.podcastNothingMatchesYetMessage(value.items.length),
             glyph: WaxIcons.podcasts,
             actionLabel: loadingMore
                 ? l10n.podcastLoadingMore
@@ -324,16 +330,25 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         ),
       AsyncData() when visible.isEmpty => SliverToBoxAdapter(
         child: EmptyState(
-          title: _query.isNotEmpty || _filter != EpisodeFilterChoice.all
+          title: _narrowed
               ? l10n.podcastNothingMatches
               : l10n.podcastNoEpisodes,
-          message: _query.isNotEmpty || _filter != EpisodeFilterChoice.all
+          message: _narrowed
               ? l10n.podcastNothingMatchesMessage
               : l10n.podcastNoEpisodesMessage,
           glyph: WaxIcons.podcasts,
         ),
       ),
-      AsyncData() => _rows(visible, progress, loadingMore),
+      // The same trap one step short of empty: two matches of fifty read
+      // as an answer, and are too short to scroll the next page in.
+      // Read off the two lists rather than off the filters, so a list
+      // drawn as long as the pages behind it keeps the plain gesture.
+      AsyncData(:final value) => _rows(
+        visible,
+        progress,
+        loadingMore,
+        loadMore: visible.length < value.items.length && value.hasMore,
+      ),
       _ => const SliverToBoxAdapter(
         child: SkeletonShapes(shape: SkeletonShape.list),
       ),
@@ -343,20 +358,34 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
   Widget _rows(
     List<EpisodeSummary> visible,
     PlayProgressView progress,
-    bool loadingMore,
-  ) {
+    bool loadingMore, {
+    bool loadMore = false,
+  }) {
     final sizeClass = WaxSizeClass.of(context);
+    // Under the rows rather than beside the filters: a list long enough
+    // to scroll has already paged by the time this is reached.
+    final footer = loadingMore || loadMore;
     return SliverPadding(
       padding: EdgeInsets.symmetric(
         horizontal: sizeClass.gutter.horizontal / 2,
       ),
       sliver: SliverList.builder(
-        itemCount: visible.length + (loadingMore ? 1 : 0),
+        itemCount: visible.length + (footer ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= visible.length) {
-            return const Padding(
-              padding: EdgeInsets.all(WaxSpace.s16),
-              child: Center(child: CircularProgressIndicator()),
+            return Padding(
+              padding: const EdgeInsets.all(WaxSpace.s16),
+              child: Center(
+                child: loadingMore
+                    ? const CircularProgressIndicator()
+                    : WaxButton(
+                        label: context.l10n.podcastLoadMore,
+                        kind: WaxButtonKind.text,
+                        onPressed: () => ref
+                            .read(episodesProvider(widget.pid).notifier)
+                            .loadMore(),
+                      ),
+              ),
             );
           }
           final episode = visible[index];

@@ -43,6 +43,17 @@ FakeRepository _repo() => FakeRepository(
   ],
 );
 
+String _volume(int i) =>
+    'bk-01JZX5N8QW3F4V9T2B7KDV${i.toString().padLeft(5, '0')}';
+
+/// One book past a page, so the listing hands back a cursor.
+FakeRepository _paged() => FakeRepository(
+  items: <ItemSummary>[
+    for (var i = 0; i <= BooksController.pageSize; i++)
+      _book(_volume(i), title: 'Volume ${i.toString().padLeft(3, '0')}'),
+  ],
+);
+
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [
     repositoryProvider.overrideWithValue(repo),
@@ -203,6 +214,50 @@ void main() {
       await tester.tap(find.text('Show all books'));
       await tester.pumpAndSettle();
       expect(_order(tester), hasLength(3));
+    });
+
+    testWidgets('a short filtered shelf offers the pages behind it', (
+      tester,
+    ) async {
+      // The chips narrow the loaded pages, so one match of five hundred
+      // is too short to scroll and the scroll listener never pages.
+      final repo = _paged()..finishedPids.add(_volume(0));
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      await _tap(
+        tester,
+        SemanticsIds.bookFinishedFilter(BookFilter.finished.name),
+      );
+      expect(_order(tester), ['Volume 000']);
+
+      await tester.tap(find.text('Load more books'));
+      await tester.pumpAndSettle();
+
+      // The last page landed, so there is nothing left to offer.
+      expect(find.text('Load more books'), findsNothing);
+      expect(_order(tester), ['Volume 000']);
+    });
+
+    testWidgets('an empty filtered shelf offers a fetch before a reset', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(_paged()));
+      await tester.pumpAndSettle();
+
+      await _tap(
+        tester,
+        SemanticsIds.bookFinishedFilter(BookFilter.finished.name),
+      );
+      expect(find.text('Nothing matches yet'), findsOneWidget);
+
+      await tester.tap(find.text('Load more books'));
+      await tester.pumpAndSettle();
+
+      // Out of pages: now it really is an answer, and the way out is the
+      // chips again.
+      expect(find.text('Nothing matches'), findsOneWidget);
+      expect(find.text('Show all books'), findsOneWidget);
     });
 
     testWidgets('one author gets no chip row at all', (tester) async {

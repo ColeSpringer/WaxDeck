@@ -97,13 +97,31 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
 
   /// What the queue this screen builds is a window over.
   ///
-  /// A bucket listing pages at the queue's own cap, so a bucket that
-  /// fits is queued whole and one that does not is queued as far as it
-  /// goes, with the listing's cursor riding along so the queue can draw
-  /// the rest as it drains. The tracks index has no bucket to name, so
-  /// nothing it plays is a window over anything.
-  QueueSource _source(ItemPage page, List<ItemSummary> items) {
-    final dimension = widget.dimension!;
+  /// Either listing pages at the queue's own cap, so one that fits is
+  /// queued whole and one that does not is queued as far as it goes,
+  /// with the listing's cursor riding along so the queue can draw the
+  /// rest as it drains. A bucket names itself; the tracks index is the
+  /// whole library and has no name of its own to give.
+  ///
+  /// [cursor] is where the listing stands at the end of what is queued,
+  /// and null means it ran out. [seed] keeps a refill walking the
+  /// permutation the page came from; null for a plain play.
+  QueueSource _source(
+    List<ItemSummary> items, {
+    required String? cursor,
+    int? seed,
+  }) {
+    final dimension = widget.dimension;
+    if (dimension == null) {
+      return QueueSource(
+        kind: QueueSourceKind.library,
+        // The kind is the whole name; the queue screen words it.
+        label: '',
+        rolling: cursor != null,
+        cursor: cursor ?? '',
+        seed: seed,
+      );
+    }
     return QueueSource(
       kind: switch (dimension) {
         MusicDimension.artists => QueueSourceKind.artist,
@@ -114,17 +132,14 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       },
       label: _sourceName(items),
       pid: widget.segment,
-      rolling: page.hasMore,
-      cursor: page.nextCursor ?? '',
-      // Carried so the refill keeps walking the permutation this page
-      // came from; null for a plain play, which is the bucket's order.
-      seed: page.seed,
+      rolling: cursor != null,
+      cursor: cursor ?? '',
+      seed: seed,
     );
   }
 
   void _play(MusicItemsState state, int index) {
     final items = state.items;
-    final dimension = widget.dimension;
     // A bucket holds whatever carried the artist or the year it counts,
     // and a book is one of those. Books resume on their own screen -
     // chapters, speed, position - so a row that is one opens it rather
@@ -133,44 +148,29 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       context.push(WaxRoute.book(items[index].pid));
       return;
     }
-    // A bucket is a list somebody asked for, so playing a row plays the
-    // list from there. The tracks index is not: it is every track in the
-    // library in title order, and queueing 40,000 of them because
-    // somebody tapped one is not what they asked for.
-    if (dimension == null) {
-      final item = items[index];
-      ref.read(nowPlayingProvider.notifier).play(
-        <ItemSummary>[item],
-        source: QueueSource(
-          kind: QueueSourceKind.single,
-          label: item.title,
-          pid: item.pid,
-        ),
-      );
-    } else {
-      // A bucket counts whatever carries its artist or its year, books
-      // included, so the queue is the part of it that plays in sequence.
-      // Leaving them in would drop twelve-hour files between two tracks
-      // under a caption naming the artist, as though somebody had asked
-      // for that.
-      final playable = <ItemSummary>[];
-      var start = 0;
-      for (final item in items) {
-        if (item.mediaType == MediaType.audiobook) continue;
-        if (identical(item, items[index])) start = playable.length;
-        playable.add(item);
-      }
-      ref
-          .read(nowPlayingProvider.notifier)
-          .play(
-            playable,
-            startIndex: start,
-            source: _source(
-              ItemPage(items: const [], nextCursor: state.nextCursor),
-              items,
-            ),
-          );
+    // A listing is a list somebody asked for, so playing a row plays the
+    // list from there. What is loaded is a window over the rest and the
+    // cursor rides with it, which is how the tracks index plays on
+    // without queueing forty thousand tracks.
+    //
+    // Books are left out of the sequence: a bucket counts whatever
+    // carries its artist or its year, and a twelve-hour file arriving
+    // between two tracks is not what the tap asked for. The tracks index
+    // has none to leave out.
+    final playable = <ItemSummary>[];
+    var start = 0;
+    for (final item in items) {
+      if (item.mediaType == MediaType.audiobook) continue;
+      if (identical(item, items[index])) start = playable.length;
+      playable.add(item);
     }
+    ref
+        .read(nowPlayingProvider.notifier)
+        .play(
+          playable,
+          startIndex: start,
+          source: _source(items, cursor: state.nextCursor),
+        );
     context.push(WaxRoute.nowPlaying);
   }
 
@@ -234,16 +234,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         .play(
           playable,
           shuffle: true,
-          source: dimension == null
-              ? QueueSource(
-                  kind: QueueSourceKind.library,
-                  // The kind is the whole name; the queue screen words it.
-                  label: '',
-                  rolling: page.hasMore,
-                  cursor: page.nextCursor ?? '',
-                  seed: page.seed,
-                )
-              : _source(page, playable),
+          source: _source(playable, cursor: page.nextCursor, seed: page.seed),
         );
     context.push(WaxRoute.nowPlaying);
   }

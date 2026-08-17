@@ -182,6 +182,32 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    testWidgets('offers next only where the queue has one', (tester) async {
+      final repo = FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]);
+      final harness = await _pumpDeck(tester, repo: repo, engine: FakeEngine());
+
+      bool nextEnabled() => tester
+          .widget<Semantics>(_byId(SemanticsIds.deckNext))
+          .properties
+          .enabled!;
+
+      // An explicit source, so the only reason this can be false is the
+      // lone entry: the harness default would answer for it too.
+      harness.play([testItem('tr-A')], source: _album);
+      await tester.pumpAndSettle();
+      expect(nextEnabled(), isFalse, reason: 'nothing behind a lone entry');
+
+      harness.play([testItem('tr-A'), testItem('tr-B')], source: _album);
+      await tester.pumpAndSettle();
+      expect(nextEnabled(), isTrue);
+
+      await tester.tap(find.bySemanticsLabel('Next'));
+      await tester.pumpAndSettle();
+      expect(nextEnabled(), isFalse, reason: 'now standing on the last entry');
+
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('opens the words beside the page, for a track that has any', (
       tester,
     ) async {

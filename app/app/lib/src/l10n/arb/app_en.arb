@@ -2646,6 +2646,14 @@
   "@booksLoadError": {
     "description": "Title of the error state when the audiobooks could not be read."
   },
+  "booksLoadMore": "Load more books",
+  "@booksLoadMore": {
+    "description": "Button fetching the next page of the shelf, for a filter that scrolling cannot reach."
+  },
+  "booksLoadingMore": "Loading...",
+  "@booksLoadingMore": {
+    "description": "The load-more button while a page is on its way."
+  },
   "booksMore": "More",
   "@booksMore": {
     "description": "Accessible name of the audiobook hub's overflow menu."
@@ -2653,6 +2661,19 @@
   "booksNothingMatches": "Nothing matches",
   "@booksNothingMatches": {
     "description": "Empty state where the chips left no book standing, which is different from an empty library."
+  },
+  "booksNothingMatchesYet": "Nothing matches yet",
+  "@booksNothingMatchesYet": {
+    "description": "Empty state where the chips left no book standing among the ones loaded, and the library has more."
+  },
+  "booksNothingMatchesYetMessage": "The filters run over the {count} books loaded so far, and your library has more.",
+  "@booksNothingMatchesYetMessage": {
+    "description": "Why a filter can come up empty on a library with more pages behind it. The count rises with each fetch, so a press that finds nothing is still visibly progress.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "booksShowAll": "Show all books",
   "@booksShowAll": {
@@ -7146,9 +7167,14 @@
   "@podcastNothingMatchesYet": {
     "description": "Empty state where the filter matched nothing among the episodes loaded, and the show has more."
   },
-  "podcastNothingMatchesYetMessage": "The filter runs over the episodes loaded so far, and this show has more.",
+  "podcastNothingMatchesYetMessage": "The filter runs over the {count} episodes loaded so far, and this show has more.",
   "@podcastNothingMatchesYetMessage": {
-    "description": "Why a filter can come up empty on a show with a long back catalogue."
+    "description": "Why a filter can come up empty on a show with a long back catalogue. The count rises with each fetch, so a press that finds nothing is still visibly progress.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "podcastOpenEpisodePage": "Open the episode page",
   "@podcastOpenEpisodePage": {

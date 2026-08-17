@@ -472,6 +472,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             onPlayPause: _session.toggle,
             onPrevious: _music ? () => unawaited(playback.previous()) : null,
             onNext: _music ? () => unawaited(playback.next()) : null,
+            canNext: ref.watch(queueCanAdvanceProvider),
             onSkipBack: _music ? null : () => unawaited(_seekBy(-skips.back)),
             onSkipForward: _music
                 ? null

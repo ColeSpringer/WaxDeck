@@ -162,6 +162,7 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
     final modes = ref.watch(
       queueControllerProvider.select((q) => (q.shuffled, q.repeat)),
     );
+    final canAdvance = ref.watch(queueCanAdvanceProvider);
     final blocked = ref.watch(autoplayBlockedProvider);
     // The star is drawn on the three-zone bar only, so only that bar
     // asks the server for a play state: the compact bar would otherwise
@@ -217,7 +218,7 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
         actions: DeckBarActions(
           // The command, not a copy: the key and the button are one verb.
           onPlayPause: () => togglePlayback(ref),
-          onNext: () => unawaited(playback.next()),
+          onNext: canAdvance ? () => unawaited(playback.next()) : null,
           onPrevious: () => unawaited(playback.previous()),
           onSkipBack: spokenWord && session != null
               ? () => seekBy(ref, -skips.back)

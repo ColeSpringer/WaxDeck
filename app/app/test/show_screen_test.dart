@@ -374,6 +374,44 @@ void main() {
     expect(find.text('Unheard'), findsOneWidget);
   });
 
+  testWidgets('a filter that leaves one of fifty can still reach the rest', (
+    tester,
+  ) async {
+    // One step short of empty, and worse: a row reads as an answer, and
+    // is still too short to scroll the next page in.
+    final repo = FakeRepository()..addSubscription(testShow(showPid));
+    repo.episodesByShow[showPid] = <EpisodeSummary>[
+      for (var i = 0; i < EpisodesController.pageSize; i++)
+        testEpisode('tr-old$i', showPid: showPid, title: 'Cassette $i'),
+      testEpisode('tr-fresh', showPid: showPid, title: 'Cassette later'),
+    ];
+    await _pump(tester, repo);
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.showEpisodeSearch),
+      'sette 7',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Cassette 7'), findsOneWidget);
+
+    await tester.tap(find.text('Load more episodes'));
+    await tester.pumpAndSettle();
+
+    // Out of pages, so the control goes: what is on screen is the whole
+    // answer now.
+    expect(find.text('Load more episodes'), findsNothing);
+  });
+
+  testWidgets('an unnarrowed list pages by scrolling alone', (tester) async {
+    final repo = FakeRepository()..addSubscription(testShow(showPid));
+    repo.episodesByShow[showPid] = <EpisodeSummary>[
+      for (var i = 0; i < EpisodesController.pageSize + 1; i++)
+        testEpisode('tr-$i', showPid: showPid, title: 'Episode $i'),
+    ];
+    await _pump(tester, repo);
+    expect(find.text('Load more episodes'), findsNothing);
+  });
+
   testWidgets('paging reads the play states of the new page only', (
     tester,
   ) async {

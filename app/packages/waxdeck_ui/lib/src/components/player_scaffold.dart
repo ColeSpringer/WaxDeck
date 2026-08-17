@@ -34,6 +34,7 @@ class TransportCluster extends StatelessWidget {
     this.onRepeat,
     this.shuffled = false,
     this.repeat = false,
+    this.canNext = true,
     this.live = false,
     this.skipBackSeconds = 15,
     this.skipForwardSeconds = 30,
@@ -52,6 +53,13 @@ class TransportCluster extends StatelessWidget {
   final VoidCallback? onRepeat;
   final bool shuffled;
   final bool repeat;
+
+  /// Whether the next control leads anywhere. Separate from [onNext],
+  /// which asks whether this surface offers one at all: a spoken-word
+  /// face has no next button, and a music face at the end of its queue
+  /// has one that is greyed rather than gone.
+  final bool canNext;
+
   final bool live;
 
   final int skipBackSeconds;
@@ -143,7 +151,7 @@ class TransportCluster extends StatelessWidget {
             glyph: WaxIcons.next,
             label: l10n.commonNext,
             size: 28,
-            onPressed: onNext,
+            onPressed: canNext ? onNext : null,
             semanticsId: ids.next,
           ),
         if (onRepeat != null)

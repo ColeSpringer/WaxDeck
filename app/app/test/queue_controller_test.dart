@@ -488,6 +488,42 @@ void main() {
       queue.setRepeat(QueueRepeat.all);
       expect(get_().nextEntry!.pid, 'tr-0');
     });
+
+    test('canAdvance answers for the skip, not for the preload', () {
+      expect(get_().canAdvance, isFalse, reason: 'nothing queued');
+
+      queue.playNow(['tr-0'], source: _album);
+      expect(get_().canAdvance, isFalse);
+
+      queue.playNow(_tracks(2), source: _album);
+      expect(get_().canAdvance, isTrue);
+
+      // Repeat one holds an item against its own end, not against a
+      // skip, so the button stays live where the preload goes quiet.
+      queue.setRepeat(QueueRepeat.one);
+      expect(get_().nextEntry, isNull);
+      expect(get_().canAdvance, isTrue);
+
+      queue.skipNext();
+      expect(get_().canAdvance, isFalse);
+      queue.setRepeat(QueueRepeat.all);
+      expect(get_().canAdvance, isTrue);
+    });
+
+    test('a rolling window does not vouch for its own last entry', () {
+      // The refiller draws ten entries out, so a healthy window is never
+      // standing here; a failed draw leaves the flag set, and trusting
+      // it would light a button that skipNext refuses.
+      queue.playNow(
+        _tracks(2),
+        source: _album.copyWith(rolling: true, cursor: 'c1'),
+      );
+      queue.skipNext();
+
+      expect(get_().source.rolling, isTrue);
+      expect(get_().canAdvance, isFalse);
+      expect(queue.skipNext(), QueueAdvance.ended);
+    });
   });
 
   group('editing the queue', () {

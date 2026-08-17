@@ -58,6 +58,13 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
     final progress = PlayProgressView(states);
     final shown = arrangeBooks(loaded, view, progress);
     final l10n = context.l10n;
+    // The chips narrow the loaded pages, so a shelf drawn shorter than
+    // what it pages leaves nothing to scroll and the scroll listener
+    // never fires. Read off the two lists rather than off the chips, so
+    // a filter added later is covered without being remembered here.
+    final narrowed = shown.length < loaded.length;
+    final more = state.value?.hasMore ?? false;
+    final loadingMore = state.value?.loadingMore ?? false;
 
     return WaxScaffold(
       title: l10n.booksTitle,
@@ -85,7 +92,22 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           ),
           // Loaded, but every book is filtered out. Distinct from an
           // empty library and answered differently: the way out is the
-          // chips above, not a scan.
+          // chips above, not a scan - unless there are pages the chips
+          // have not seen, which is a fetch rather than an answer.
+          AsyncData() when shown.isEmpty && more => SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              title: l10n.booksNothingMatchesYet,
+              message: l10n.booksNothingMatchesYetMessage(loaded.length),
+              glyph: WaxIcons.filter,
+              actionLabel: loadingMore
+                  ? l10n.booksLoadingMore
+                  : l10n.booksLoadMore,
+              onAction: loadingMore
+                  ? null
+                  : () => ref.read(booksProvider.notifier).loadMore(),
+            ),
+          ),
           AsyncData() when shown.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
@@ -100,7 +122,32 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
                   ref.read(bookViewProvider.notifier).filterBy(BookFilter.all),
             ),
           ),
-          AsyncData() => _BookGrid(books: shown, progress: progress),
+          // The footer rides with the grid rather than sitting beside
+          // the switch: a load state that keeps its previous value would
+          // otherwise draw a live control under a skeleton.
+          AsyncData() => SliverMainAxisGroup(
+            slivers: <Widget>[
+              _BookGrid(books: shown, progress: progress),
+              // Under the grid, so a shelf long enough to scroll has
+              // already paged by the time this is reached.
+              if (narrowed && more)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: WaxSpace.s16),
+                    child: Center(
+                      child: loadingMore
+                          ? const CircularProgressIndicator()
+                          : WaxButton(
+                              label: l10n.booksLoadMore,
+                              kind: WaxButtonKind.text,
+                              onPressed: () =>
+                                  ref.read(booksProvider.notifier).loadMore(),
+                            ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
           AsyncError(:final error) => SliverFillRemaining(
             hasScrollBody: false,
             child: ErrorState(

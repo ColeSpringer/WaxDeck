@@ -469,22 +469,68 @@ void main() {
     expect(find.text('Gullwing'), findsOneWidget);
   });
 
-  testWidgets('the tracks index plays one row, not the whole library', (
+  testWidgets('the tracks index plays its page, not the row alone', (
     tester,
   ) async {
-    final repository = FakeRepository()
-      ..libraryItems.addAll(<ItemSummary>[
-        _track('Alpha'),
-        _track('Bravo'),
-        _track('Charlie'),
-      ]);
-    await _pump(tester, const MusicListingScreen(), repository);
+    final container = await _pump(
+      tester,
+      const MusicListingScreen(),
+      FakeRepository()
+        ..libraryItems.addAll(<ItemSummary>[
+          _track('Alpha'),
+          _track('Bravo'),
+          _track('Charlie'),
+        ]),
+      engine: true,
+    );
 
-    expect(find.text('Alpha'), findsOneWidget);
-    // Every row is present but none of them is a queue: the index is the
-    // whole library in title order, and tapping one is not a request to
-    // queue forty thousand tracks.
-    expect(find.byType(MediaListRow), findsNWidgets(3));
+    await tester.tap(find.text('Bravo'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final queue = container.read(queueControllerProvider);
+    // A queue of one is a next button that does nothing, which is what
+    // this used to build.
+    expect(queue.entries.map((e) => e.pid).toList(), <String>[
+      'tr-Alpha',
+      'tr-Bravo',
+      'tr-Charlie',
+    ]);
+    expect(queue.currentPid, 'tr-Bravo');
+    expect(queue.canAdvance, isTrue);
+    expect(queue.source.kind, QueueSourceKind.library);
+
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a tracks index with more behind it queues a rolling window', (
+    tester,
+  ) async {
+    // One past the page, so the listing hands back a cursor: the queue
+    // carries it and the refiller draws the rest as this drains.
+    final container = await _pump(
+      tester,
+      const MusicListingScreen(),
+      FakeRepository()
+        ..libraryItems.addAll(<ItemSummary>[
+          for (var i = 0; i <= MusicItemsController.pageSize; i++)
+            _track('T${i.toString().padLeft(4, '0')}'),
+        ]),
+      engine: true,
+    );
+
+    await tester.tap(find.text('T0000'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final queue = container.read(queueControllerProvider);
+    expect(queue.length, MusicItemsController.pageSize);
+    expect(queue.source.rolling, isTrue);
+    expect(queue.source.cursor, '${MusicItemsController.pageSize}');
+
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a mixed bucket queues what plays in sequence', (tester) async {

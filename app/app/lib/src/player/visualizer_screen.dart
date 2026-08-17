@@ -9,6 +9,7 @@ import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../queue/queue_controller.dart';
 import '../shell/semantics_ids.dart';
 import 'now_playing_controller.dart';
 import 'now_playing_view.dart';
@@ -304,6 +305,7 @@ class _VisualizerState extends ConsumerState<_Visualizer> {
                     unawaited(playback.next());
                   }
                 : null,
+            canNext: ref.watch(queueCanAdvanceProvider),
           ),
         ],
       ),

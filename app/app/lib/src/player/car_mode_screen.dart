@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../queue/queue_controller.dart';
 import '../shell/semantics_ids.dart';
 import 'now_playing_controller.dart';
 import 'now_playing_view.dart';
@@ -93,6 +94,7 @@ class CarModeScreen extends ConsumerWidget {
                 // a next button that walks out of an episode.
                 onPrevious: music ? () => unawaited(playback.previous()) : null,
                 onNext: music ? () => unawaited(playback.next()) : null,
+                canNext: ref.watch(queueCanAdvanceProvider),
                 onExit: () => leavePlayer(context),
               );
             },

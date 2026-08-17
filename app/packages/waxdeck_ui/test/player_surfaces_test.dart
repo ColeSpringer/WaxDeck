@@ -201,6 +201,43 @@ void main() {
       expect(title.center.dx, moreOrLessEquals(rating.center.dx, epsilon: 1));
     });
 
+    testWidgets('the end of a queue greys next rather than dropping it', (
+      tester,
+    ) async {
+      // Two questions, one slot before this: onNext asks whether the
+      // surface offers a next at all - a spoken-word face does not - and
+      // answering "nowhere to go" with null would take the button out of
+      // the row and re-centre the transport under the listener's thumb.
+      final semantics = tester.ensureSemantics();
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            transport: TransportCluster(
+              playing: true,
+              onPlayPause: () {},
+              onPrevious: () {},
+              onNext: () {},
+              canNext: false,
+            ),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+
+      final node = tester.getSemantics(find.bySemanticsLabel('Next'));
+      expect(
+        node.getSemanticsData().hasAction(SemanticsAction.tap),
+        isFalse,
+        reason: 'drawn, and reported dead rather than left to its tint',
+      );
+      semantics.dispose();
+    });
+
     group('the hero', () {
       Future<double> heroAt(
         WidgetTester tester,

@@ -3339,6 +3339,18 @@ abstract class AppLocalizations {
   /// **'Could not load your books'**
   String get booksLoadError;
 
+  /// Button fetching the next page of the shelf, for a filter that scrolling cannot reach.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more books'**
+  String get booksLoadMore;
+
+  /// The load-more button while a page is on its way.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading...'**
+  String get booksLoadingMore;
+
   /// Accessible name of the audiobook hub's overflow menu.
   ///
   /// In en, this message translates to:
@@ -3350,6 +3362,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing matches'**
   String get booksNothingMatches;
+
+  /// Empty state where the chips left no book standing among the ones loaded, and the library has more.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing matches yet'**
+  String get booksNothingMatchesYet;
+
+  /// Why a filter can come up empty on a library with more pages behind it. The count rises with each fetch, so a press that finds nothing is still visibly progress.
+  ///
+  /// In en, this message translates to:
+  /// **'The filters run over the {count} books loaded so far, and your library has more.'**
+  String booksNothingMatchesYetMessage(int count);
 
   /// Button clearing the finished filter from the empty state it produced.
   ///
@@ -8420,11 +8444,11 @@ abstract class AppLocalizations {
   /// **'Nothing matches yet'**
   String get podcastNothingMatchesYet;
 
-  /// Why a filter can come up empty on a show with a long back catalogue.
+  /// Why a filter can come up empty on a show with a long back catalogue. The count rises with each fetch, so a press that finds nothing is still visibly progress.
   ///
   /// In en, this message translates to:
-  /// **'The filter runs over the episodes loaded so far, and this show has more.'**
-  String get podcastNothingMatchesYetMessage;
+  /// **'The filter runs over the {count} episodes loaded so far, and this show has more.'**
+  String podcastNothingMatchesYetMessage(int count);
 
   /// Button opening the web page a feed named for one episode.
   ///

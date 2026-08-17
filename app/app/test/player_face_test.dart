@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -126,6 +127,40 @@ void main() {
             .label,
         contains('Gullwing'),
       );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a queue of one greys next here too, not just on the bar', (
+      tester,
+    ) async {
+      // A row tapped off a shelf queues itself alone, and this face is
+      // what the tap opens: gating only the bar behind it left the lit
+      // button on the surface the listener is actually looking at.
+      final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: _track(_first, 'Salt Harbour'),
+      );
+
+      final next = find.bySemanticsIdentifier(SemanticsIds.playerNext);
+      // A dead control is one that takes no tap, which is what a screen
+      // reader and the e2e suite both drive it by.
+      bool live() => tester
+          .getSemantics(next)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap);
+
+      expect(next, findsOneWidget, reason: 'greyed, not gone');
+      expect(live(), isFalse);
+
+      harness.play([
+        _track(_first, 'Salt Harbour'),
+        _track(_second, 'Gullwing'),
+      ]);
+      await tester.pumpAndSettle();
+      expect(live(), isTrue);
       await harness.endPlayback(tester);
     });
 

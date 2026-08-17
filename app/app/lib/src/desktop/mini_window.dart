@@ -11,6 +11,7 @@ import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../player/playback_session.dart';
 import '../providers.dart';
+import '../queue/queue_controller.dart';
 import '../radio/radio_controller.dart';
 import '../shell/commands.dart';
 import '../shell/semantics_ids.dart';
@@ -259,7 +260,7 @@ class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
             // window is a smaller surface onto one playback, not a
             // second transport with rules of its own.
             onPlayPause: () => togglePlayback(ref),
-            onNext: live
+            onNext: live || !ref.watch(queueCanAdvanceProvider)
                 ? null
                 : () => unawaited(ref.read(nowPlayingProvider.notifier).next()),
             onPrevious: live
