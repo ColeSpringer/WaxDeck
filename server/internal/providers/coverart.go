@@ -23,7 +23,8 @@ type CoverArtConfig struct {
 	// MinInterval defaults to 1100ms, the same one-per-second pacing the
 	// MusicBrainz client keeps.
 	MinInterval time.Duration
-	// MaxBytes bounds one downloaded image; defaults to 2 MiB.
+	// MaxBytes bounds one downloaded image; defaults to 4 MiB, which is
+	// an order of magnitude past what the 1200px rendition weighs.
 	MaxBytes int64
 }
 
@@ -58,7 +59,7 @@ func NewCoverArt(cfg CoverArtConfig) *CoverArt {
 	}
 	maxBytes := cfg.MaxBytes
 	if maxBytes == 0 {
-		maxBytes = 2 << 20
+		maxBytes = 4 << 20
 	}
 	client := cfg.HTTPClient
 	if client == nil {
@@ -78,9 +79,12 @@ func NewCoverArt(cfg CoverArtConfig) *CoverArt {
 // nothing there" for far longer than "could not ask".
 var ErrNoCover = errors.New("providers: no front cover for this release")
 
-// FrontCover downloads a release's front cover, at the archive's 500px
-// rendition rather than the original: this ends up behind a station
-// face, and an original scan can be a 20 MB TIFF.
+// FrontCover downloads a release's front cover, at the archive's 1200px
+// rendition rather than the original: this ends up behind a full-screen
+// station face, and an original scan can be a 20 MB TIFF. The archive
+// serves whichever renditions it holds for a release and never upscales,
+// so a small source still answers here at its own size - the resolution
+// somebody uploaded is the bound this cannot lift.
 //
 // The 404 case is ErrNoCover, which is the ordinary answer - most
 // releases have no art - and is what lets the caller tell an empty
@@ -89,7 +93,7 @@ func (c *CoverArt) FrontCover(ctx context.Context, releaseMBID string) ([]byte, 
 	if releaseMBID == "" {
 		return nil, "", ErrNoCover
 	}
-	raw := c.base + "/release/" + url.PathEscape(releaseMBID) + "/front-500"
+	raw := c.base + "/release/" + url.PathEscape(releaseMBID) + "/front-1200"
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, "", err
@@ -184,7 +188,8 @@ func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) ([
 		// not. That is the long-cached outcome, not the short one.
 		return nil, "", missing
 	}
-	// Down the releases in the order the search ranked them. Having a
+	// Down the releases in the order the lookup ranked them - album
+	// before single before the rest, compilations demoted. Having a
 	// release is not having a picture of it: a current single is
 	// routinely entered twice, once for a digital release nobody
 	// uploaded a sleeve for and once for the album that has one, and
@@ -192,6 +197,12 @@ func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) ([
 	// nothing while its cover sat in the archive one release along.
 	var reachErr error
 	for _, mbid := range mbids {
+		// The budget is spent on the walk, so a deadline reached partway
+		// down it ends the walk: every call after this one would fail at
+		// the pacer without asking anybody anything.
+		if err := ctx.Err(); err != nil {
+			return nil, "", err
+		}
 		data, mime, err := r.CAA.FrontCover(ctx, mbid)
 		switch {
 		case err == nil:

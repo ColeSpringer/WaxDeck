@@ -10,6 +10,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
+	"github.com/colespringer/waxbin/art"
+
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
@@ -167,8 +169,14 @@ func (l *Library) SaveRadioSong(ctx context.Context, uc *UserCtx, apiStationPID,
 // the column's cap the row saves artless, so a rung holding an oversize
 // cover has not answered and the one below it gets its turn. Without
 // this a 400 KB library cover took the ladder and left the row drawing a
-// monogram while the announced cover - tens of kilobytes, and a fit -
-// went unasked.
+// monogram while the announced cover went unasked.
+//
+// The cached rungs hold what the face draws, which is a full-screen
+// picture rather than a list row, so they are scaled to the snapshot's
+// own size before being measured - the same thing the matched rung asks
+// the catalog for. Without it the archive's 1200px rendition failed the
+// cap outright and the commonest save of all, a song the library does
+// not hold, kept an artless row.
 func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStationPID, stationName, line, artist, title string) ([]byte, string, string) {
 	fits := func(data []byte) bool {
 		return len(data) > 0 && len(data) <= wdb.RadioSavedArtMaxBytes
@@ -183,8 +191,8 @@ func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStatio
 	// sent, so a rollover between the tap and the save cannot hand this
 	// row the next song's cover.
 	if announced, artURL := l.RadioNowPlayingMeta(apiStationPID); announced == line && artURL != "" {
-		if entry, ok := l.cachedRadioArt(announcedArtKey(artURL, line)); ok && fits(entry.art.Bytes) {
-			return entry.art.Bytes, entry.art.MimeType, entry.art.ETag
+		if data, mime, ok := l.radioSnapshotCover(announcedArtKey(artURL, line), fits); ok {
+			return data, mime, radioSavedETag(data)
 		}
 	}
 	// The external rung, and only while the operator has it switched on.
@@ -197,11 +205,34 @@ func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStatio
 	// its result afterwards.
 	if artist != "" && title != "" && l.RadioExternalArtEnabled() {
 		key := radioArtKey(radioSearchField(artist), radioSearchField(title))
-		if entry, ok := l.cachedRadioArt(key); ok && fits(entry.art.Bytes) {
-			return entry.art.Bytes, entry.art.MimeType, entry.art.ETag
+		if data, mime, ok := l.radioSnapshotCover(key, fits); ok {
+			return data, mime, radioSavedETag(data)
 		}
 	}
 	return nil, "", ""
+}
+
+// radioSnapshotCover answers a cached cover at the snapshot's size, or
+// reports that this rung has nothing to keep.
+//
+// Scaled only when it has to be: the cache holds whatever the face
+// drew, and re-encoding a picture that already fits would cost CPU on
+// every heart to make it slightly worse. A source that cannot be
+// decoded is not a picture this can keep, so the rung below gets its
+// turn rather than the row saving artless.
+func (l *Library) radioSnapshotCover(key string, fits func([]byte) bool) ([]byte, string, bool) {
+	entry, ok := l.cachedRadioArt(key)
+	if !ok || len(entry.art.Bytes) == 0 {
+		return nil, "", false
+	}
+	if fits(entry.art.Bytes) {
+		return entry.art.Bytes, entry.art.MimeType, true
+	}
+	small, format, _, _, err := art.Thumbnail(entry.art.Bytes, radioSavedSnapshotPx)
+	if err != nil || !fits(small) {
+		return nil, "", false
+	}
+	return small, "image/" + format, true
 }
 
 func radioSavedETag(data []byte) string {

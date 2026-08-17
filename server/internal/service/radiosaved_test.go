@@ -1,6 +1,10 @@
 package service
 
 import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"testing"
 	"time"
 
@@ -51,6 +55,77 @@ func TestRadioSavedSnapshotSkipsOversizeAndTheSwitchedOffRung(t *testing.T) {
 	})
 	if data, _, _ := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology"); data != nil {
 		t.Fatalf("snapshot = %d bytes, want the oversize cover skipped", len(data))
+	}
+}
+
+// noisyJPEG encodes a square of incompressible pixels, so the result is
+// a real decodable image reliably past the column's cap.
+func noisyJPEG(t *testing.T, dim int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, dim, dim))
+	seed := uint32(2463534242)
+	next := func() uint8 {
+		seed ^= seed << 13
+		seed ^= seed >> 17
+		seed ^= seed << 5
+		return uint8(seed)
+	}
+	for y := range dim {
+		for x := range dim {
+			img.Set(x, y, color.RGBA{next(), next(), next(), 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95}); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// The cache holds what the full-screen face draws, which is a bigger
+// picture than a list row wants. Measuring it as-is meant the archive's
+// large rendition failed the cap outright, and the commonest save there
+// is - a song the library does not hold - kept an artless row.
+func TestRadioSavedSnapshotScalesAFullSizeCover(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	const line = "Charlie Parker - Ornithology"
+	const station = "rs-01JZX5N8QW3F4V9T2B7KDEXAMPLE"
+	enableRadioExternalArt(t, ctx, svc)
+
+	full := noisyJPEG(t, 1200)
+	if len(full) <= wdb.RadioSavedArtMaxBytes {
+		t.Fatalf("fixture cover is %d bytes, want one past the %d cap",
+			len(full), wdb.RadioSavedArtMaxBytes)
+	}
+	svc.storeRadioArt(
+		radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology")),
+		radioArtEntry{
+			art:     radioLogoFromBytes(full, "image/jpeg"),
+			fetched: time.Now(),
+			fresh:   radioArtFreshFor,
+		})
+
+	data, mime, etag := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
+	if len(data) == 0 {
+		t.Fatal("snapshot kept nothing, want the cover scaled to fit")
+	}
+	if len(data) > wdb.RadioSavedArtMaxBytes {
+		t.Fatalf("snapshot = %d bytes, past the %d cap", len(data), wdb.RadioSavedArtMaxBytes)
+	}
+	if mime != "image/jpeg" {
+		t.Fatalf("mime = %q, want the scaled encoding's own type", mime)
+	}
+	// The etag names these bytes rather than the ones they came from.
+	if etag != radioSavedETag(data) {
+		t.Fatalf("etag = %q, want it over the stored bytes", etag)
+	}
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Width > radioSavedSnapshotPx || cfg.Height > radioSavedSnapshotPx {
+		t.Fatalf("scaled to %dx%d, want it inside %d", cfg.Width, cfg.Height, radioSavedSnapshotPx)
 	}
 }
 

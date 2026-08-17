@@ -548,27 +548,21 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	onBlock := func(block []byte) {
+		// The one thing every block says whatever is in it: the station is
+		// still sending. Unconditional and first, because the blocks that
+		// carry nothing are the ones that arrive every few seconds.
+		s.svc.NoteRadioAlive(pid)
 		meta := icyMetaOf(block)
-		// A spot is not a song, so its title and its banner are kept off
-		// the face: an advertiser must not become what is playing, on
-		// the lock screen or anywhere else. The break still ends the
-		// song before it - see radioSegment for why that matters.
-		if meta.ad {
-			seg.close()
-			return
+		// What the listener is hearing and what the face says are decided
+		// separately: an ad break ends the song without ever becoming one,
+		// so an advertiser reaches neither the face nor the lock screen.
+		seg.observe(meta)
+		// Only a block that names a song moves the face. A picture-only
+		// block and an ident both leave the song that is still playing
+		// exactly where it is.
+		if meta.announcement() {
+			s.svc.NoteRadioMeta(pid, meta.title, meta.artURL)
 		}
-		// A block carrying only a URL is not an announcement. Stations
-		// send these between songs, and treating one as a title change
-		// would clear the song that is still playing.
-		if !meta.titleOK {
-			return
-		}
-		s.svc.NoteRadioMeta(pid, meta.title, meta.artURL)
-		if meta.title == seg.title {
-			return
-		}
-		seg.close()
-		seg.start(meta.title)
 	}
 	// A station is not finite, so neither a size cap nor a rate floor
 	// belongs here: both would eventually cut a healthy listen, which is

@@ -85,6 +85,10 @@ type Config struct {
 	// AllowPrivateRadioHosts disables the private-address guard on
 	// radio stream URLs, for households running their own LAN icecast.
 	AllowPrivateRadioHosts bool
+	// RadioTitleFreshFor is how long a station's observed title outlives
+	// the last metadata block of any kind. Zero means the default of two
+	// minutes; tests set it short to cross the bound without waiting.
+	RadioTitleFreshFor time.Duration
 	// AllowPrivateScrobbleHosts disables the private-address guard on
 	// caller-supplied ListenBrainz API bases, for self-hosted LAN
 	// instances (Maloja and friends).
@@ -241,7 +245,10 @@ type Library struct {
 	radioHTTP              *http.Client
 	radioHTTPOnce          sync.Once
 	allowPrivateRadioHosts bool
-	radioDirectoryBase     string
+	// radioTitleFresh is how long an observed title outlives the last
+	// metadata block; radioTitleFreshFor is its default.
+	radioTitleFresh    time.Duration
+	radioDirectoryBase string
 	// radioDirectoryMirrorList overrides mirror discovery, and
 	// radioMirrors caches what discovery found. radioMirrorCold holds
 	// the mirrors that just failed, which sort last for a few minutes
@@ -478,6 +485,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		retentionInUseWindow:     cfg.RetentionInUseWindow,
 		allowPrivateFeedHosts:    cfg.AllowPrivateFeedHosts,
 		allowPrivateRadioHosts:   cfg.AllowPrivateRadioHosts,
+		radioTitleFresh:          cfg.RadioTitleFreshFor,
 		radioDirectoryBase:       cfg.RadioDirectoryBase,
 		radioDirectoryMirrorList: cfg.RadioDirectoryMirrors,
 		podcastDirectoryBase:     cfg.PodcastDirectoryBase,
@@ -509,6 +517,9 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	l.loadLastfmClient(ctx)
 	if l.retentionInUseWindow == 0 {
 		l.retentionInUseWindow = 2 * time.Minute
+	}
+	if l.radioTitleFresh == 0 {
+		l.radioTitleFresh = radioTitleFreshFor
 	}
 	if cfg.MatchSource != nil {
 		l.engine = match.NewEngine(cfg.MatchSource, cfg.MatchConfig)

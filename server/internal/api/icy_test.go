@@ -60,6 +60,41 @@ func TestICYRelayStripsMetadataAndReportsTitles(t *testing.T) {
 	}
 }
 
+// What a real station's block sequence looks like, and why freshness
+// cannot ride announcements. Captured from SomaFM's Groove Salad
+// (icecast 2.4.0-kh22, metaint 45000): 973,158 bytes of stream carried
+// 21 blocks, of which exactly one named a song - the rest were
+// zero-length. At the stream's 128 kbps that is a block every 2.8
+// seconds against one announcement per track.
+func TestICYRelayReportsTheBlocksThatSayNothing(t *testing.T) {
+	t.Parallel()
+	const metaint = 45000
+	const capturedBlocks = 21
+	audio := bytes.Repeat([]byte("groove salad"), metaint*capturedBlocks/12)
+	wire := icyWire(metaint, audio, map[int]string{
+		0: "StreamTitle='Bluetech - Finding The Future By Looking';" +
+			"StreamUrl='https://somafm.com/logos/512/groovesalad512.png';",
+	})
+
+	relay := newICYRelay(metaint)
+	var blocks, announced int
+	relay.feed(wire, func([]byte) {}, func(block []byte) {
+		blocks++
+		if _, ok := icyStreamTitle(block); ok {
+			announced++
+		}
+	})
+
+	if blocks != capturedBlocks {
+		t.Fatalf("blocks = %d, want %d (one per metaint)", blocks, capturedBlocks)
+	}
+	// The whole point: the other twenty carried nothing, and they are the
+	// only evidence the stream is still running.
+	if announced != 1 {
+		t.Fatalf("announcements = %d, want 1", announced)
+	}
+}
+
 func TestICYStreamTitle(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

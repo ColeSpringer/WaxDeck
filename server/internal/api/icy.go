@@ -25,6 +25,11 @@ func newICYRelay(metaint int) *icyRelay {
 
 // feed walks one read's bytes, calling emit for each audio run and
 // onBlock for each completed metadata block (possibly spanning feeds).
+//
+// Every metaint carries a block and onBlock gets all of them, the
+// zero-length one included: that is what a station sends when nothing
+// has changed, so it is nearly every block and the only thing in the
+// protocol that says the stream is still running.
 func (r *icyRelay) feed(p []byte, emit func([]byte), onBlock func([]byte)) {
 	for len(p) > 0 {
 		switch {
@@ -42,6 +47,7 @@ func (r *icyRelay) feed(p []byte, emit func([]byte), onBlock func([]byte)) {
 			r.needLen = false
 			r.meta = r.meta[:0]
 			if r.metaLeft == 0 {
+				onBlock(r.meta)
 				r.audioLeft = r.metaint
 			}
 		default:
@@ -162,6 +168,12 @@ type icyMeta struct {
 	// ad marks a block announcing a spot rather than a song.
 	ad bool
 }
+
+// announcement reports a block naming what is playing. An absent title
+// key is a picture-only block, an empty one is the ident automation
+// sends between songs, and a spot is an advertiser rather than a song -
+// none of the three says what is on.
+func (m icyMeta) announcement() bool { return m.titleOK && m.title != "" && !m.ad }
 
 // icyMetaOf reads everything this server wants from one block.
 //

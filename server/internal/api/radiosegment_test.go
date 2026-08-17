@@ -24,6 +24,52 @@ func newTestSegment(clock *time.Time) (*radioSegment, *[]reported) {
 	return seg, &out
 }
 
+// An ident is not a song boundary. Automation sends an empty title over
+// station idents and jingles and then announces the same song again;
+// closing on it charged one play as two scrobbles.
+func TestRadioSegmentRidesThroughAnIdent(t *testing.T) {
+	t.Parallel()
+	clock := time.Unix(0, 0)
+	seg, out := newTestSegment(&clock)
+	ident := icyMeta{titleOK: true}
+	song := func(title string) icyMeta { return icyMeta{title: title, titleOK: true} }
+
+	seg.observe(song("Artist - One Song"))
+	clock = clock.Add(service.RadioScrobbleMinListen)
+	seg.observe(ident)
+	if len(*out) != 0 {
+		t.Fatalf("reported = %+v at the ident, want the song still open", *out)
+	}
+	// The same song comes back, which is what makes closing on the ident
+	// wrong rather than merely early.
+	seg.observe(song("Artist - One Song"))
+	clock = clock.Add(service.RadioScrobbleMinListen)
+	seg.observe(song("Artist - Next Song"))
+
+	if len(*out) != 1 || (*out)[0].title != "Artist - One Song" {
+		t.Fatalf("reported = %+v, want one play for the song either side of the ident", *out)
+	}
+	// Timed from where it started, not from where the ident put it back.
+	if !(*out)[0].since.Equal(time.Unix(0, 0)) {
+		t.Fatalf("since = %v, want the start of the first announcement", (*out)[0].since)
+	}
+}
+
+// A block that names nothing at all is the picture-only one stations
+// send between songs, and says as little about the segment as an ident.
+func TestRadioSegmentIgnoresBlocksThatNameNoSong(t *testing.T) {
+	t.Parallel()
+	clock := time.Unix(0, 0)
+	seg, out := newTestSegment(&clock)
+
+	seg.observe(icyMeta{title: "Artist - One Song", titleOK: true})
+	clock = clock.Add(service.RadioScrobbleMinListen)
+	seg.observe(icyMeta{artURL: "https://art.example/c.jpg"})
+	if len(*out) != 0 || seg.title != "Artist - One Song" {
+		t.Fatalf("reported = %+v, title = %q, want the song untouched", *out, seg.title)
+	}
+}
+
 func TestRadioSegmentReportsOnlyWhatPlayedLongEnough(t *testing.T) {
 	t.Parallel()
 	clock := time.Unix(0, 0)

@@ -289,6 +289,19 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   int _saveGen = 0;
   bool _saving = false;
 
+  /// How often play-info is asked what is playing, and how long a run of
+  /// blank answers is ridden out before one is believed: enough to cross
+  /// a server restart, not enough to outlive a title the server let go
+  /// of. Derived rather than counted, so changing the cadence cannot
+  /// silently change the grace.
+  static const _titlePollEvery = Duration(seconds: 15);
+  static const _blankGrace = Duration(minutes: 2);
+  static final _blankPollsBeforeClearing =
+      _blankGrace.inMilliseconds ~/ _titlePollEvery.inMilliseconds;
+
+  /// Consecutive polls answering no title while one is on screen.
+  int _blankPolls = 0;
+
   /// The save this announcement has in flight, so an untap that crosses
   /// it has a row to remove rather than leaving one behind.
   ///
@@ -323,6 +336,11 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     // had not published yet.
     final tuning = ++_tuning;
     _stopTitlePoll();
+    // The count belongs to the station being left. Carried over, a
+    // station that had gone quiet spends the next one's grace for it,
+    // and the first blank poll after a tune empties a title this very
+    // method is about to publish.
+    _blankPolls = 0;
     final engine = ref.read(audioEngineProvider);
     // Whether a station holds the engine right now, asked before the state
     // is replaced with the one being tuned.
@@ -503,10 +521,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   /// proxy sees the stream, so it is polled during playback. The poll
   /// reads metadata only; the open stream is never re-tuned.
   void _startTitlePoll(String pid) {
-    _titlePoll = Timer.periodic(
-      const Duration(seconds: 15),
-      (_) => _refreshTitle(pid),
-    );
+    _titlePoll = Timer.periodic(_titlePollEvery, (_) => _refreshTitle(pid));
     // The first metadata block lands moments after the stream opens;
     // one early refresh beats waiting out a full period. (The station
     // guard in _refreshTitle already makes a stale firing a no-op;
@@ -529,6 +544,14 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     try {
       final info = await ref.read(repositoryProvider).getRadioPlayInfo(pid);
       if (state.station?.pid != pid) return;
+      // Ridden out rather than adopted on sight: a restart loses every
+      // in-memory title until the station next announces, and the art
+      // key empties with it.
+      if ((info.nowPlaying ?? '').isEmpty &&
+          (state.nowPlaying ?? '').isNotEmpty) {
+        if (++_blankPolls < _blankPollsBeforeClearing) return;
+      }
+      _blankPolls = 0;
       // Only when it moved. This asks every fifteen seconds and a station
       // announces every few minutes, and [RadioPlayback] has no value
       // equality, so an identical assignment rebuilds the dial band, every

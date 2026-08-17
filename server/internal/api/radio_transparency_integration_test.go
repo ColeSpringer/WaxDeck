@@ -337,6 +337,76 @@ func TestRadioAdBlocksLeaveTheTitleAlone(t *testing.T) {
 	}
 }
 
+// Neither is an empty announcement. Automation emits an empty
+// StreamTitle over idents and jingles, and clearing on it emptied the
+// face - the title, and with it the artwork the whole block is gated
+// on - for as long as the station was between songs.
+func TestRadioEmptyAnnouncementsLeaveTheTitleAlone(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+	})
+
+	station := icyStationServer(t, icyStation{
+		audio:   synthesizedMP3(t),
+		metaint: 1024,
+		blocks: map[int]string{
+			0: icyTitleBlock("Fixture Artist - Real Song"),
+			3: icyTitleBlock(""),
+		},
+		headers: map[string]string{"icy-name": "Ident FM", "Content-Type": "audio/mpeg"},
+	})
+
+	pid, pi := radioTestStation(t, h, "Ident FM", station.URL+"/stream")
+	streamResp, err := http.Get(h.ts.URL + pi.Url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, streamResp.Body)
+	streamResp.Body.Close()
+
+	info := decode[RadioPlayInfo](t, get(t, h.ts, "/api/v1/radio/stations/"+pid+"/play-info", h.token))
+	if info.NowPlaying == nil || *info.NowPlaying != "Fixture Artist - Real Song" {
+		t.Fatalf("nowPlaying = %v, want the song to stand through the ident", info.NowPlaying)
+	}
+}
+
+// The whole phase in one assertion: a station announces a title once and
+// then sends nothing but the empty blocks ICY fills the gaps with, and
+// the title outlives the freshness bound because those blocks are what
+// the bound is measuring. Read against a bound short enough to cross in
+// a test - at the real two minutes this is a track running long, which
+// is the case that used to go blank mid-play.
+func TestRadioSilentBlocksKeepTheTitleFresh(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+		cfg.RadioTitleFreshFor = 50 * time.Millisecond
+	})
+
+	// One announcement, then eight runs of audio whose blocks say
+	// nothing - exactly what a real station sends between songs.
+	station := icyStationServer(t, icyStation{
+		audio:   synthesizedMP3(t),
+		metaint: 1024,
+		blocks:  map[int]string{0: icyTitleBlock("Fixture Artist - A Long Track")},
+		headers: map[string]string{"icy-name": "Longform FM", "Content-Type": "audio/mpeg"},
+	})
+
+	pid, pi := radioTestStation(t, h, "Longform FM", station.URL+"/stream")
+	streamResp, err := http.Get(h.ts.URL + pi.Url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, streamResp.Body)
+	streamResp.Body.Close()
+
+	info := decode[RadioPlayInfo](t, get(t, h.ts, "/api/v1/radio/stations/"+pid+"/play-info", h.token))
+	if info.NowPlaying == nil || *info.NowPlaying != "Fixture Artist - A Long Track" {
+		t.Fatalf("nowPlaying = %v, want the announced track to outlive the bound", info.NowPlaying)
+	}
+}
+
 // A station that names its logo in its connect headers gets that logo,
 // which beats going looking for one.
 func TestRadioLogoHintFromConnectHeaders(t *testing.T) {

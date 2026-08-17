@@ -283,6 +283,123 @@ void main() {
     await _stop(container);
   });
 
+  testWidgets('a poll that answers nothing leaves the song standing', (
+    tester,
+  ) async {
+    // The server drops a title when it stops hearing from the station,
+    // and a track can outlast that. Adopting the blank emptied the face
+    // mid-song, artwork included.
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio'
+      ..radioNowPlayingItemPid[_stationPid] = 'tr-01JZX5N8QW3F4V9T2B7KDMATCH1';
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+    expect(
+      container.read(radioPlaybackProvider).nowPlaying,
+      'Salt Harbour - The Bree Trio',
+    );
+
+    repo.radioNowPlaying.remove(_stationPid);
+    repo.radioNowPlayingItemPid.remove(_stationPid);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    final held = container.read(radioPlaybackProvider);
+    expect(held.nowPlaying, 'Salt Harbour - The Bree Trio');
+    expect(held.nowPlayingItemPid, 'tr-01JZX5N8QW3F4V9T2B7KDMATCH1');
+
+    // And a real answer still lands: this holds a blank, not the state.
+    repo.radioNowPlaying[_stationPid] = 'Nightjar - Long Way Down';
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(radioPlaybackProvider).nowPlaying,
+      'Nightjar - Long Way Down',
+    );
+    await _stop(container);
+  });
+
+  testWidgets('a blank that keeps coming is eventually believed', (
+    tester,
+  ) async {
+    // The server lets a title go when nobody has renewed it for long
+    // enough, and that is a decision rather than a gap. Riding a blank
+    // out forever would put the client's memory above the server's
+    // answer and leave a song on the face for the rest of the session.
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio';
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    repo.radioNowPlaying.remove(_stationPid);
+    // Well past the grace: the poll runs every fifteen seconds.
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(seconds: 16));
+      await tester.pumpAndSettle();
+    }
+
+    expect(container.read(radioPlaybackProvider).nowPlaying, isNull);
+    await _stop(container);
+  });
+
+  testWidgets('the grace does not carry over to the next station', (
+    tester,
+  ) async {
+    // A station that had gone quiet must not spend the next one's grace:
+    // tuning publishes a title directly, so a carried count empties it on
+    // the first blank poll.
+    const otherPid = 'rs-01JZX5N8QW3F4V9T2B7KDSTATN2';
+    final other = RadioStation(
+      pid: otherPid,
+      name: 'Inland FM',
+      streamUrl: 'https://stream.example/inland',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioStationsByPid[otherPid] = other
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio';
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    // Spend some of the first station's grace, staying inside it.
+    repo.radioNowPlaying.remove(_stationPid);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(seconds: 16));
+      await tester.pumpAndSettle();
+    }
+    expect(
+      container.read(radioPlaybackProvider).nowPlaying,
+      'Salt Harbour - The Bree Trio',
+    );
+
+    // The new station names a song at tune time, and the relay has not
+    // seen a block yet - so its first poll answers blank.
+    repo.radioNowPlaying[otherPid] = 'Nightjar - Long Way Down';
+    await container.read(radioPlaybackProvider.notifier).play(other);
+    await tester.pumpAndSettle();
+    repo.radioNowPlaying.remove(otherPid);
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(radioPlaybackProvider).nowPlaying,
+      'Nightjar - Long Way Down',
+    );
+    await _stop(container);
+  });
+
   testWidgets('an untap that crosses its own save takes the row back', (
     tester,
   ) async {

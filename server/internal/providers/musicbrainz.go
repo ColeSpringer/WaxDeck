@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -99,6 +100,7 @@ type mbMedium struct {
 type mbReleaseGroup struct {
 	ID               string   `json:"id"`
 	FirstReleaseDate string   `json:"first-release-date"`
+	PrimaryType      string   `json:"primary-type"`
 	SecondaryTypes   []string `json:"secondary-types"`
 }
 
@@ -343,6 +345,13 @@ func (m *MusicBrainz) SearchRecordings(ctx context.Context, artist, title string
 // Several rather than one, because having a release is not having a
 // picture of it: the caller asks the archive in this order and stops at
 // the first that answers.
+//
+// Ranked rather than taken in search order, which is what the index
+// happened to store and puts compilations first about as often as not -
+// so a song on the radio drew a greatest-hits sleeve it was never
+// released on. Album, then single, then the rest, compilations behind
+// their own kind; the search order breaks ties, so the best-matching
+// recording still wins between two releases of the same kind.
 func (m *MusicBrainz) ReleaseMBIDsForRecording(ctx context.Context, artist, title string) ([]string, error) {
 	if strings.TrimSpace(title) == "" {
 		return nil, nil
@@ -366,31 +375,74 @@ func (m *MusicBrainz) ReleaseMBIDsForRecording(ctx context.Context, artist, titl
 	default:
 		return nil, fmt.Errorf("providers: musicbrainz recording search: status %d", status)
 	}
+	// The search index embeds each release's group inline, types
+	// included, so the ranking below costs no extra request.
 	var parsed struct {
 		Recordings []struct {
 			Releases []struct {
-				ID string `json:"id"`
+				ID           string          `json:"id"`
+				ReleaseGroup *mbReleaseGroup `json:"release-group"`
 			} `json:"releases"`
 		} `json:"recordings"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		return nil, fmt.Errorf("providers: decode musicbrainz recording search: %w", err)
 	}
+	type candidate struct {
+		id   string
+		rank int
+	}
+	// Every release in the body, not a prefix of it: truncating first
+	// would rank whatever the index happened to list early, which is the
+	// ordering this exists to distrust - a song on two dozen compilations
+	// would fill the cut and the album behind them would never be seen.
+	// The body is already read and capped, so this costs nothing upstream.
 	seen := map[string]bool{}
-	out := make([]string, 0, maxCoverReleases)
+	var pool []candidate
 	for _, rec := range parsed.Recordings {
 		for _, rel := range rec.Releases {
 			if rel.ID == "" || seen[rel.ID] {
 				continue
 			}
 			seen[rel.ID] = true
-			out = append(out, rel.ID)
-			if len(out) == maxCoverReleases {
-				return out, nil
-			}
+			pool = append(pool, candidate{rel.ID, coverReleaseRank(rel.ReleaseGroup)})
 		}
 	}
+	slices.SortStableFunc(pool, func(a, b candidate) int { return a.rank - b.rank })
+	walk := pool[:min(len(pool), maxCoverReleases)]
+	out := make([]string, len(walk))
+	for i, c := range walk {
+		out[i] = c.id
+	}
 	return out, nil
+}
+
+// coverReleaseRank orders one release by how likely it is to carry the
+// picture somebody means by this song: album, single, then everything
+// else, with compilations behind their own kind. An unknown or absent
+// group ranks with the rest rather than being dropped - a release with
+// a cover is still a cover.
+func coverReleaseRank(rg *mbReleaseGroup) int {
+	if rg == nil {
+		return 2
+	}
+	rank := 2
+	switch {
+	case strings.EqualFold(rg.PrimaryType, "Album"):
+		rank = 0
+	case strings.EqualFold(rg.PrimaryType, "Single"):
+		rank = 1
+	}
+	if isCompilation(rg.SecondaryTypes) {
+		rank += 3
+	}
+	return rank
+}
+
+func isCompilation(secondaryTypes []string) bool {
+	return slices.ContainsFunc(secondaryTypes, func(st string) bool {
+		return strings.EqualFold(st, "Compilation")
+	})
 }
 
 // maxCoverReleases bounds how many of a recording's releases are worth
@@ -401,8 +453,8 @@ func (m *MusicBrainz) ReleaseMBIDsForRecording(ctx context.Context, artist, titl
 // release nobody uploaded a sleeve for and once for the album that has
 // one. Taking the first and stopping is why a current chart track drew
 // nothing while its cover sat in the archive one release along. Bounded
-// because the tail is long and each miss is another request.
-const maxCoverReleases = 4
+// because the tail is long and each miss is another paced request.
+const maxCoverReleases = 6
 
 // LookupFingerprint is not a MusicBrainz capability; the composite Source
 // routes fingerprints to AcoustID. Returning an error here keeps a bare
@@ -442,10 +494,8 @@ func mapMBRelease(rel *mbRelease, groupMBID string) *match.Release {
 		if out.Year == 0 {
 			out.Year = yearFromDate(rel.ReleaseGroup.FirstReleaseDate)
 		}
-		for _, st := range rel.ReleaseGroup.SecondaryTypes {
-			if strings.EqualFold(st, "Compilation") {
-				out.Compilation = true
-			}
+		if isCompilation(rel.ReleaseGroup.SecondaryTypes) {
+			out.Compilation = true
 		}
 	}
 	if len(rel.LabelInfo) > 0 {

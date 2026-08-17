@@ -27,6 +27,27 @@ type radioSegment struct {
 	report func(title string, since time.Time)
 }
 
+// observe advances the segment for one metadata block.
+//
+// An ident - a block whose title key is empty - is deliberately not a
+// boundary. Automation sends one over station idents and jingles and
+// then announces the same song again, and closing on it split one play
+// into two scrobbles. Left open, the song is reported once when the
+// next real title arrives, at the cost of the ident's own seconds
+// counting toward it and of a listener who disconnects mid-ident losing
+// the play - which is what disconnecting mid-song already does.
+func (s *radioSegment) observe(meta icyMeta) {
+	switch {
+	case meta.ad:
+		s.close()
+	case !meta.announcement():
+		// A picture-only block or an ident: nothing about the song.
+	case meta.title != s.title:
+		s.close()
+		s.start(meta.title)
+	}
+}
+
 // close ends whatever was playing, reporting it if it ran long enough.
 func (s *radioSegment) close() {
 	if s.title != "" && s.now().Sub(s.since) >= service.RadioScrobbleMinListen {

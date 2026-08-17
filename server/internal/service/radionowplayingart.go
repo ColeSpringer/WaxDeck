@@ -75,9 +75,11 @@ const (
 	// station-logo cache next door bounds and what matters: an entry
 	// count times the fetch cap is a resident ceiling in the gigabytes,
 	// and the key is a title a station chooses, so nothing that grows on
-	// a stranger's input gets to grow unbounded. A front-500 cover runs
-	// tens of kilobytes, so this holds a long dial-sitting.
-	radioArtCacheBytes = 32 << 20
+	// a stranger's input gets to grow unbounded. Raised with the
+	// rendition: a front-1200 cover runs a few hundred kilobytes where a
+	// front-500 ran tens, so the old ceiling had gone from a long
+	// dial-sitting to about a hundred covers.
+	radioArtCacheBytes = 96 << 20
 	// radioArtCacheEntries bounds the cache by count as well as by
 	// bytes, because the byte ceiling cannot see the entries that matter
 	// most here: a miss and a failure are stored with no bytes at all,
@@ -89,7 +91,7 @@ const (
 	// byte bound was making on its own: nothing that grows on a
 	// stranger's input grows without a ceiling.
 	radioArtCacheEntries = 4096
-	// radioArtLookupBudget bounds one lookup. A search plus up to four
+	// radioArtLookupBudget bounds one lookup. A search plus up to six
 	// archive fetches now, not the two this first sized for: covers live
 	// on whichever of a recording's releases somebody uploaded one to, so
 	// the composer walks them. Every call sits behind a per-host pacer at
@@ -98,8 +100,9 @@ const (
 	// other. Too tight and the context dies mid-walk and the title is
 	// filed as a five-minute failure - losing the cover the walk was
 	// added to find. Past this the answer is "not this poll", and the
-	// next one re-asks.
-	radioArtLookupBudget = 45 * time.Second
+	// next one re-asks. Raised with the walk: six fetches is another
+	// couple of seconds of pacing before any of them has answered.
+	radioArtLookupBudget = 60 * time.Second
 )
 
 // radioArtEntry is one cached lookup. Empty Bytes means there is nothing

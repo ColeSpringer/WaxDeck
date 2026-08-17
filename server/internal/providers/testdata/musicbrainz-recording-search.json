@@ -1,0 +1,2313 @@
+{
+ "created": "2026-08-17T04:40:09.090Z",
+ "count": 95,
+ "offset": 0,
+ "recordings": [
+  {
+   "id": "41a84b8b-5bc7-4266-82f5-4d2e6e0f84e6",
+   "score": 100,
+   "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+   "title": "Take On Me",
+   "length": 288840,
+   "video": null,
+   "artist-credit": [
+    {
+     "name": "a‐ha",
+     "artist": {
+      "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+      "name": "a‐ha",
+      "sort-name": "a‐ha",
+      "disambiguation": "Norwegian synth‐pop band",
+      "aliases": [
+       {
+        "sort-name": "A-ha",
+        "name": "A-ha",
+        "locale": null,
+        "type": null,
+        "primary": null,
+        "begin-date": null,
+        "end-date": null
+       },
+       {
+        "sort-name": "A Ha",
+        "name": "A Ha",
+        "locale": null,
+        "type": null,
+        "primary": null,
+        "begin-date": null,
+        "end-date": null
+       },
+       {
+        "sort-name": "Aha",
+        "name": "Aha",
+        "locale": null,
+        "type": null,
+        "primary": null,
+        "begin-date": null,
+        "end-date": null
+       }
+      ]
+     }
+    }
+   ],
+   "first-release-date": "1985",
+   "releases": [
+    {
+     "id": "660d2df8-c59d-48b1-90b6-99342b38dc07",
+     "status-id": "1156806e-d06a-38bd-83f0-cf2284a808b9",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 1,
+     "title": "Lost & Found 12 Inchers",
+     "status": "Bootleg",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "89fc5a93-4b36-4c1d-9bf8-2b96043486bb",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Lost & Found 12 Inchers",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2001",
+     "country": "PH",
+     "release-events": [
+      {
+       "date": "2001",
+       "area": {
+        "id": "786532a5-2e36-315a-bdf2-221dc1b64b72",
+        "name": "Philippines",
+        "sort-name": "Philippines",
+        "iso-3166-1-codes": [
+         "PH"
+        ]
+       }
+      }
+     ],
+     "track-count": 14,
+     "media": [
+      {
+       "id": "c7cea5c1-2df8-352e-81d1-8f8bf205e390",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "839887b0-06fc-40f4-adec-ab1ac2f2d745",
+         "number": "4",
+         "title": "Take On Me (12″ extended version)",
+         "length": 284000
+        }
+       ],
+       "track-count": 14,
+       "track-offset": 3
+      }
+     ]
+    },
+    {
+     "id": "52f88d90-fcc3-4af2-8b02-d0b395588f48",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 1,
+     "title": "Magic 80’s Top 200",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "7c6b8403-cc74-49da-af56-1cc0fb9ce11b",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Magic 80’s Top 200",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "track-count": 200,
+     "media": [
+      {
+       "id": "f3c0a510-3956-3054-8baf-ec3ec9b60140",
+       "position": 1,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "d724cc39-46ec-4c86-a23f-6ccc04078ef2",
+         "number": "90",
+         "title": "Take On Me",
+         "length": 289000
+        }
+       ],
+       "track-count": 200,
+       "track-offset": 89
+      }
+     ]
+    },
+    {
+     "id": "a26f933f-7fce-4117-aea7-b9644a3dda61",
+     "status-id": "518ffc83-5cde-34df-8627-81bff5093d92",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "Take On Me",
+     "status": "Promotion",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "d8aadff5-81d2-3490-b865-ca77e64ad0c1",
+      "type-id": "d6038452-8ee0-3f68-affc-2de9a1ede0b9",
+      "primary-type-id": "d6038452-8ee0-3f68-affc-2de9a1ede0b9",
+      "title": "Take on Me (2017 acoustic)",
+      "primary-type": "Single"
+     },
+     "date": "1985",
+     "country": "US",
+     "release-events": [
+      {
+       "date": "1985",
+       "area": {
+        "id": "489ce91b-6658-3307-9877-795b68554c98",
+        "name": "United States",
+        "sort-name": "United States",
+        "iso-3166-1-codes": [
+         "US"
+        ]
+       }
+      }
+     ],
+     "track-count": 2,
+     "media": [
+      {
+       "id": "6bc0e2d0-6548-376a-8aa1-970863a55db5",
+       "position": 1,
+       "format": "12\" Vinyl",
+       "track": [
+        {
+         "id": "c12eae0f-fefa-41fc-8fc2-899fe21a5fa8",
+         "number": "A",
+         "title": "Take On Me (long version)",
+         "length": 287000
+        }
+       ],
+       "track-count": 2,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "75dc128f-7c3d-411c-abcc-d01e4e1d7f46",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 2,
+     "title": "Summer Klub80",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "4ef593fd-2cf1-4aec-aa5f-0cf8bb970e32",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Summer Klub80",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2007",
+     "country": "PL",
+     "release-events": [
+      {
+       "date": "2007",
+       "area": {
+        "id": "dd7f80c8-f017-3d01-8608-2a8c9c32b954",
+        "name": "Poland",
+        "sort-name": "Poland",
+        "iso-3166-1-codes": [
+         "PL"
+        ]
+       }
+      }
+     ],
+     "track-count": 20,
+     "media": [
+      {
+       "id": "2cd9abed-161c-3fa5-8366-3b93f868eb50",
+       "position": 2,
+       "format": "CD",
+       "track": [
+        {
+         "id": "f80a40e8-6318-4220-a0a8-9881ce56e899",
+         "number": "1",
+         "title": "Take on Me (extended version)",
+         "length": 289000
+        }
+       ],
+       "track-count": 10,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "6d617149-023d-48b7-bf31-abbec68569b0",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 5,
+     "title": "Hunting High and Low",
+     "status": "Official",
+     "disambiguation": "30th anniversary edition",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "af7347df-ef5a-3c41-826d-d884f8916c17",
+      "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Hunting High and Low",
+      "primary-type": "Album"
+     },
+     "date": "2015-09-18",
+     "country": "XE",
+     "release-events": [
+      {
+       "date": "2015-09-18",
+       "area": {
+        "id": "89a675c2-3e37-3518-b83c-418bad59a85a",
+        "name": "Europe",
+        "sort-name": "Europe",
+        "iso-3166-1-codes": [
+         "XE"
+        ]
+       }
+      }
+     ],
+     "track-count": 66,
+     "media": [
+      {
+       "id": "ea7f6604-9ac0-3e51-b9b6-2c5f69f9cfe0",
+       "position": 3,
+       "format": "CD",
+       "track": [
+        {
+         "id": "c3b8964b-b4a2-432f-a0f2-8a3de2b3bab2",
+         "number": "4",
+         "title": "Take on Me (1985 12\" mix)",
+         "length": 288840
+        }
+       ],
+       "track-count": 15,
+       "track-offset": 3
+      }
+     ]
+    },
+    {
+     "id": "2f6f2870-ded9-4b7b-a2de-fc87febb380b",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 1,
+     "title": "80’s Electro Floorfillers",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "2ed0e2fc-c5e8-460f-bd27-334cfcecfd7b",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "80’s Electro Floorfillers",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "track-count": 30,
+     "media": [
+      {
+       "id": "fbf56d11-b767-3f92-b70d-d3ba661448f1",
+       "position": 1,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "760d10c9-989a-49bf-9c3e-719abf4b7190",
+         "number": "25",
+         "title": "Take on Me (1985 12” version)",
+         "length": 288840
+        }
+       ],
+       "track-count": 30,
+       "track-offset": 24
+      }
+     ]
+    },
+    {
+     "id": "fc820ad0-78bf-4ee5-9743-2c3b4b51aa17",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 1,
+     "title": "Never Ending 80’s",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "74c07cf3-6e0a-462d-a816-db0a9b18765e",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Never Ending 80’s",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2022-11-11",
+     "country": "XW",
+     "release-events": [
+      {
+       "date": "2022-11-11",
+       "area": {
+        "id": "525d4e18-3d00-31b9-a58b-a146a916de8f",
+        "name": "[Worldwide]",
+        "sort-name": "[Worldwide]",
+        "iso-3166-1-codes": [
+         "XW"
+        ]
+       }
+      }
+     ],
+     "track-count": 27,
+     "media": [
+      {
+       "id": "1f6cee53-3042-3025-b748-327e40aa4305",
+       "position": 1,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "45eafe42-9ee2-4682-9b80-25cb42d6e7ef",
+         "number": "5",
+         "title": "Take on Me (1985 12” version)",
+         "length": 288840
+        }
+       ],
+       "track-count": 27,
+       "track-offset": 4
+      }
+     ]
+    },
+    {
+     "id": "201d7200-630d-480d-b06e-fe60fa12bea5",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 5,
+     "title": "Hunting High and Low",
+     "status": "Official",
+     "disambiguation": "30th anniversary super deluxe",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "af7347df-ef5a-3c41-826d-d884f8916c17",
+      "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Hunting High and Low",
+      "primary-type": "Album"
+     },
+     "track-count": 66,
+     "media": [
+      {
+       "id": "d754d27c-fcf3-3b60-976e-c28d4aed6948",
+       "position": 3,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "cd4dd6db-a7d1-4bc8-901e-e9db62dd4e84",
+         "number": "4",
+         "title": "Take On Me (1985 12″ mix)",
+         "length": 288840
+        }
+       ],
+       "track-count": 15,
+       "track-offset": 3
+      }
+     ]
+    },
+    {
+     "id": "efb13cf9-7bd2-418e-be2b-b1906c77f955",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 4,
+     "title": "Hunting High and Low",
+     "status": "Official",
+     "disambiguation": "expanded edition",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "af7347df-ef5a-3c41-826d-d884f8916c17",
+      "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Hunting High and Low",
+      "primary-type": "Album"
+     },
+     "date": "2015",
+     "country": "XE",
+     "release-events": [
+      {
+       "date": "2015",
+       "area": {
+        "id": "89a675c2-3e37-3518-b83c-418bad59a85a",
+        "name": "Europe",
+        "sort-name": "Europe",
+        "iso-3166-1-codes": [
+         "XE"
+        ]
+       }
+      }
+     ],
+     "track-count": 60,
+     "media": [
+      {
+       "id": "d53b10f7-086c-3e91-9c49-5d1c0fcec791",
+       "position": 3,
+       "format": "CD",
+       "track": [
+        {
+         "id": "207d23bd-6e80-4bbf-aa29-e361b9b1aa97",
+         "number": "4",
+         "title": "Take On Me (1985 12″ mix)",
+         "length": 288840
+        }
+       ],
+       "track-count": 15,
+       "track-offset": 3
+      }
+     ]
+    },
+    {
+     "id": "7278957c-d2db-45ac-8950-8f07663a79a1",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 4,
+     "title": "Hunting High and Low",
+     "status": "Official",
+     "disambiguation": "30th anniversary edition",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "af7347df-ef5a-3c41-826d-d884f8916c17",
+      "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Hunting High and Low",
+      "primary-type": "Album"
+     },
+     "track-count": 60,
+     "media": [
+      {
+       "id": "3276e6fe-aade-325f-b715-ad44eb93dd4d",
+       "position": 3,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "3f3b5181-a02b-4439-a848-76fbdc782f0f",
+         "number": "4",
+         "title": "Take On Me (1985 single mix)",
+         "length": 288840
+        }
+       ],
+       "track-count": 15,
+       "track-offset": 3
+      }
+     ]
+    },
+    {
+     "id": "5328b5be-84db-433b-b502-7f47eb2396ff",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 4,
+     "title": "Now 12\" 80s: 1985 (Part One)",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "e4368551-3c09-4775-b9b8-8bfe660c15c5",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Now 12\" 80s: 1985 (Part One)",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2025-07-11",
+     "country": "GB",
+     "release-events": [
+      {
+       "date": "2025-07-11",
+       "area": {
+        "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+        "name": "United Kingdom",
+        "sort-name": "United Kingdom",
+        "iso-3166-1-codes": [
+         "GB"
+        ]
+       }
+      }
+     ],
+     "track-count": 46,
+     "media": [
+      {
+       "id": "a860a991-672b-4ca1-89a3-ab7c93b42f58",
+       "position": 2,
+       "format": "CD",
+       "track": [
+        {
+         "id": "84b400fe-57b4-4f54-a754-26c00c04d78f",
+         "number": "2",
+         "title": "Take on Me (extended mix)",
+         "length": 287346
+        }
+       ],
+       "track-count": 12,
+       "track-offset": 1
+      }
+     ]
+    },
+    {
+     "id": "60f53ee1-9944-4c28-bc73-84f14c6e5622",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "45 R.P.M. Club",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "eb9b80f0-16c5-40f0-8aca-935657d92930",
+      "type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "primary-type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "title": "45 R.P.M. Club",
+      "primary-type": "EP"
+     },
+     "date": "1986-02-25",
+     "country": "JP",
+     "release-events": [
+      {
+       "date": "1986-02-25",
+       "area": {
+        "id": "2db42837-c832-3c27-b4a3-08198f75693c",
+        "name": "Japan",
+        "sort-name": "Japan",
+        "iso-3166-1-codes": [
+         "JP"
+        ]
+       }
+      }
+     ],
+     "track-count": 4,
+     "media": [
+      {
+       "id": "2424d818-db92-3b50-bcd3-27ef7c366d1a",
+       "position": 1,
+       "format": "12\" Vinyl",
+       "track": [
+        {
+         "id": "e39fb75f-fae2-4b82-8cb7-47dfff805d6d",
+         "number": "B1",
+         "title": "Take on Me (extended version)",
+         "length": 287000
+        }
+       ],
+       "track-count": 4,
+       "track-offset": 2
+      }
+     ]
+    },
+    {
+     "id": "9bea68a5-4ff8-4eb4-9f51-1f6a320567cf",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "45 R.P.M. Club",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "eb9b80f0-16c5-40f0-8aca-935657d92930",
+      "type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "primary-type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "title": "45 R.P.M. Club",
+      "primary-type": "EP"
+     },
+     "date": "1986-06-25",
+     "country": "JP",
+     "release-events": [
+      {
+       "date": "1986-06-25",
+       "area": {
+        "id": "2db42837-c832-3c27-b4a3-08198f75693c",
+        "name": "Japan",
+        "sort-name": "Japan",
+        "iso-3166-1-codes": [
+         "JP"
+        ]
+       }
+      }
+     ],
+     "track-count": 4,
+     "media": [
+      {
+       "id": "e7071d23-d23a-3768-b3a7-dc2c56812c57",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "cf2e5124-e7dd-488d-9d02-1c060f638a0b",
+         "number": "3",
+         "title": "Take On Me (extended version)",
+         "length": 290000
+        }
+       ],
+       "track-count": 4,
+       "track-offset": 2
+      }
+     ]
+    },
+    {
+     "id": "075eaa55-34b3-45b9-9eaf-b6a08a400ca4",
+     "status-id": "1156806e-d06a-38bd-83f0-cf2284a808b9",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "Remix Collection 1985-2005",
+     "status": "Bootleg",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "4f44404a-fb72-45e0-92f6-73c6807df8a9",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Remix Collection 1985-2005",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation",
+       "Remix"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+       "0c60f497-ff81-3818-befd-abfc84a4858b"
+      ]
+     },
+     "track-count": 24,
+     "media": [
+      {
+       "id": "76063e5b-3ddf-3654-b654-96e7571aaef3",
+       "position": 1,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "ac5acc45-2bbb-4919-940c-a3c9612fb220",
+         "number": "1",
+         "title": "Take on Me (extended version)",
+         "length": 288809
+        }
+       ],
+       "track-count": 24,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "36c20f84-7e69-436e-aa38-61d836ae9bf3",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 4,
+     "title": "Now That’s What I Call 12″ 80s: Extended",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "3cfc8dec-b281-4dd3-ab9f-71690bd794f4",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Now That’s What I Call 12″ 80s: Extended",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2021-08-27",
+     "country": "XE",
+     "release-events": [
+      {
+       "date": "2021-08-27",
+       "area": {
+        "id": "89a675c2-3e37-3518-b83c-418bad59a85a",
+        "name": "Europe",
+        "sort-name": "Europe",
+        "iso-3166-1-codes": [
+         "XE"
+        ]
+       }
+      }
+     ],
+     "track-count": 45,
+     "media": [
+      {
+       "id": "08819ef5-39f1-3bb4-a75f-038a0abb6509",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "6eb32b7b-195f-4432-a14f-155807b45340",
+         "number": "5",
+         "title": "Take on Me (extended version)",
+         "length": 286000
+        }
+       ],
+       "track-count": 12,
+       "track-offset": 4
+      }
+     ]
+    },
+    {
+     "id": "d9cc3cfd-d49a-4c67-a0a8-d6aeb982638a",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 5,
+     "title": "NOW Presents Electronic",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "0fd05828-7618-4582-9add-301d5c3790fd",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "NOW Presents Electronic",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2022-08-19",
+     "country": "GB",
+     "release-events": [
+      {
+       "date": "2022-08-19",
+       "area": {
+        "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+        "name": "United Kingdom",
+        "sort-name": "United Kingdom",
+        "iso-3166-1-codes": [
+         "GB"
+        ]
+       }
+      }
+     ],
+     "track-count": 67,
+     "media": [
+      {
+       "id": "ae21dd8b-346e-37e4-a46b-bfd758765ffb",
+       "position": 1,
+       "format": "12\" Vinyl",
+       "track": [
+        {
+         "id": "d91facce-40c0-49f0-b180-1f3615384394",
+         "number": "B1",
+         "title": "Take On Me (extended mix)"
+        }
+       ],
+       "track-count": 13,
+       "track-offset": 5
+      }
+     ]
+    },
+    {
+     "id": "83c3f1c3-f46c-473c-93ab-a0b3bfd15f33",
+     "status-id": "1156806e-d06a-38bd-83f0-cf2284a808b9",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "Extended Mixes",
+     "status": "Bootleg",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "cc25b774-e3c6-4022-ab04-2941fae9caca",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Extended Mixes",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation",
+       "Remix"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+       "0c60f497-ff81-3818-befd-abfc84a4858b"
+      ]
+     },
+     "track-count": 15,
+     "media": [
+      {
+       "id": "00bd48b2-81b5-3299-9225-50c3de4abe9e",
+       "position": 1,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "900e5115-b17d-4d1e-8d30-ca3632acba13",
+         "number": "5",
+         "title": "Take on Me (extended version)",
+         "length": 290092
+        }
+       ],
+       "track-count": 15,
+       "track-offset": 4
+      }
+     ]
+    },
+    {
+     "id": "b13fc552-6fc8-44c3-b459-f21777a7c424",
+     "status-id": "1156806e-d06a-38bd-83f0-cf2284a808b9",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "The Remix Album",
+     "status": "Bootleg",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "5d368307-a45e-42ba-8fba-bf2c9e0c8406",
+      "title": "The Remix Album"
+     },
+     "track-count": 38,
+     "media": [
+      {
+       "id": "d318270d-cdf3-33e2-821d-0149366686ab",
+       "position": 1,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "f3a7ba55-1216-4b17-bcb0-7b261a69f895",
+         "number": "30",
+         "title": "Take on Me (extended mix)",
+         "length": 290074
+        }
+       ],
+       "track-count": 38,
+       "track-offset": 29
+      }
+     ]
+    },
+    {
+     "id": "850399dc-c5b0-4f03-bbf5-e744d44cde89",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 2,
+     "title": "I Love Disco Crash 80’s, Vol. 2",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "dc6a4969-4e17-43c6-bc2b-ac1287bbe96f",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "I Love Disco Crash 80’s, Vol. 2",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2009-01-22",
+     "country": "ES",
+     "release-events": [
+      {
+       "date": "2009-01-22",
+       "area": {
+        "id": "471c46a7-afc5-31c4-923c-d0444f5053a4",
+        "name": "Spain",
+        "sort-name": "Spain",
+        "iso-3166-1-codes": [
+         "ES"
+        ]
+       }
+      }
+     ],
+     "track-count": 24,
+     "media": [
+      {
+       "id": "b42a4e0a-695d-3a99-89f7-57f57c4e1f2d",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "59f90118-000b-43e2-8abf-f0b4ed5f9cbb",
+         "number": "1",
+         "title": "Take on Me (extended version)",
+         "length": 288853
+        }
+       ],
+       "track-count": 12,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "9baaada5-6760-4043-9a5d-d0621abc9584",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "4433e15e-9c54-3140-b70d-b5db77437851",
+     "count": 3,
+     "title": "So80s (Soeighties) 2",
+     "status": "Official",
+     "disambiguation": "Remastered",
+     "artist-credit": [
+      {
+       "name": "Blank & Jones",
+       "artist": {
+        "id": "6606c527-376a-47b4-bb35-748d01e14f6d",
+        "name": "Blank & Jones",
+        "sort-name": "Blank & Jones",
+        "disambiguation": "German electronic music duo"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "97af2ade-5568-4834-b600-40fc6224cae7",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Blank & Jones Present So80s (SoEighties) 2",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2015-02",
+     "country": "DE",
+     "release-events": [
+      {
+       "date": "2015-02",
+       "area": {
+        "id": "85752fda-13c4-31a3-bee5-0e5cb1f51dad",
+        "name": "Germany",
+        "sort-name": "Germany",
+        "iso-3166-1-codes": [
+         "DE"
+        ]
+       }
+      }
+     ],
+     "track-count": 44,
+     "media": [
+      {
+       "id": "a9eef29c-5002-3916-a57f-dd5137fcc46c",
+       "position": 2,
+       "format": "CD",
+       "track": [
+        {
+         "id": "5a9a38c2-bce4-4b31-ac86-7e46e281bc67",
+         "number": "4",
+         "title": "Take On Me (extended mix)",
+         "length": 288786
+        }
+       ],
+       "track-count": 15,
+       "track-offset": 3
+      }
+     ]
+    },
+    {
+     "id": "13815348-ea05-49a5-8ab3-599e062d4493",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "Take On Me",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "d8aadff5-81d2-3490-b865-ca77e64ad0c1",
+      "type-id": "d6038452-8ee0-3f68-affc-2de9a1ede0b9",
+      "primary-type-id": "d6038452-8ee0-3f68-affc-2de9a1ede0b9",
+      "title": "Take on Me (2017 acoustic)",
+      "primary-type": "Single"
+     },
+     "date": "1985",
+     "country": "GB",
+     "release-events": [
+      {
+       "date": "1985",
+       "area": {
+        "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+        "name": "United Kingdom",
+        "sort-name": "United Kingdom",
+        "iso-3166-1-codes": [
+         "GB"
+        ]
+       }
+      }
+     ],
+     "track-count": 3,
+     "media": [
+      {
+       "id": "b775c3f7-53b6-3ce4-a8b4-b608349f55cc",
+       "position": 1,
+       "format": "12\" Vinyl",
+       "track": [
+        {
+         "id": "b00d1818-f693-42d8-ad1e-da02cd458052",
+         "number": "A1",
+         "title": "Take On Me (extended version)",
+         "length": 285000
+        }
+       ],
+       "track-count": 3,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "8cb529df-62aa-431c-93e7-b5b7e7bb34c0",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 2,
+     "title": "80’s/12″: The Extended Collection",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "e53ab5a6-8085-4d6c-885a-07323da43cd1",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "80’s/12″: The Extended Collection",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2008-11-25",
+     "country": "US",
+     "release-events": [
+      {
+       "date": "2008-11-25",
+       "area": {
+        "id": "489ce91b-6658-3307-9877-795b68554c98",
+        "name": "United States",
+        "sort-name": "United States",
+        "iso-3166-1-codes": [
+         "US"
+        ]
+       }
+      }
+     ],
+     "track-count": 20,
+     "media": [
+      {
+       "id": "9fcd45d5-e684-3f4b-92c2-d1d8df2aee5a",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "9856b342-0558-344e-90ee-c95be1844fa0",
+         "number": "1",
+         "title": "Take On Me (extended version)",
+         "length": 288000
+        }
+       ],
+       "track-count": 10,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "6cbd6470-d1f9-43a1-9995-838e7c4ab55c",
+     "status-id": "1156806e-d06a-38bd-83f0-cf2284a808b9",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "Extended Hits (Bradypus Series)",
+     "status": "Bootleg",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "ef138efb-1880-3037-bb3b-89322d6a6d1a",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Extended Hits (Bradypus Series)",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "track-count": 12,
+     "media": [
+      {
+       "id": "74d9d8f1-a10f-3538-ad43-8a6896e0e47e",
+       "position": 1,
+       "track": [
+        {
+         "id": "871fa1a1-c15e-349f-8447-e42b73d0342b",
+         "number": "10",
+         "title": "Take On Me",
+         "length": 287440
+        }
+       ],
+       "track-count": 12,
+       "track-offset": 9
+      }
+     ]
+    },
+    {
+     "id": "f3d531c0-d9f8-4336-a385-7352350736c7",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 1,
+     "title": "12 Inch Dance: 80s Synthpop",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "c0df89a2-3777-46ba-ab27-02357bee6e91",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "12 Inch Dance: 80s Synthpop",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2014-09-05",
+     "country": "XE",
+     "release-events": [
+      {
+       "date": "2014-09-05",
+       "area": {
+        "id": "89a675c2-3e37-3518-b83c-418bad59a85a",
+        "name": "Europe",
+        "sort-name": "Europe",
+        "iso-3166-1-codes": [
+         "XE"
+        ]
+       }
+      }
+     ],
+     "track-count": 31,
+     "media": [
+      {
+       "id": "bc4897b1-856b-3c86-9b6a-6c38254f031b",
+       "position": 1,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "04a71f4b-2022-4122-9303-1fa0d30c21e9",
+         "number": "21",
+         "title": "Take On Me (extended mix)",
+         "length": 284331
+        }
+       ],
+       "track-count": 31,
+       "track-offset": 20
+      }
+     ]
+    },
+    {
+     "id": "7f0118a6-b859-4139-8aa5-72fd9e1206f9",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "45 R.P.M. Club",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "eb9b80f0-16c5-40f0-8aca-935657d92930",
+      "type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "primary-type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "title": "45 R.P.M. Club",
+      "primary-type": "EP"
+     },
+     "date": "1985",
+     "country": "JP",
+     "release-events": [
+      {
+       "date": "1985",
+       "area": {
+        "id": "2db42837-c832-3c27-b4a3-08198f75693c",
+        "name": "Japan",
+        "sort-name": "Japan",
+        "iso-3166-1-codes": [
+         "JP"
+        ]
+       }
+      }
+     ],
+     "track-count": 4,
+     "media": [
+      {
+       "id": "2ee9cf52-2bea-3459-a545-84130c50a5e9",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "ac4c2c29-8ec5-3fc5-bd9a-f1bcb39c8600",
+         "number": "3",
+         "title": "Take On Me (extended version)",
+         "length": 291000
+        }
+       ],
+       "track-count": 4,
+       "track-offset": 2
+      }
+     ]
+    },
+    {
+     "id": "3f8fa320-9db1-4ab9-9d5a-bda1fca259eb",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "b1242b0a-a496-395a-8bd9-f374ef5d45fa",
+     "count": 1,
+     "title": "Cyber God Party",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Grand Fucker",
+       "artist": {
+        "id": "8e54eb02-a6da-437f-aa72-1989047a61ef",
+        "name": "Grand Fucker",
+        "sort-name": "Grand Fucker",
+        "disambiguation": "French Goregrind/Slamming Death Metal Band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "ddce2793-8198-40e1-8ad4-19872da7a44f",
+      "type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "primary-type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "title": "Cyber God Party",
+      "primary-type": "EP"
+     },
+     "date": "2019-11-19",
+     "country": "XW",
+     "release-events": [
+      {
+       "date": "2019-11-19",
+       "area": {
+        "id": "525d4e18-3d00-31b9-a58b-a146a916de8f",
+        "name": "[Worldwide]",
+        "sort-name": "[Worldwide]",
+        "iso-3166-1-codes": [
+         "XW"
+        ]
+       }
+      }
+     ],
+     "track-count": 9,
+     "media": [
+      {
+       "id": "5b01ba61-42ed-3ce7-9be9-3d3f682cf9d2",
+       "position": 1,
+       "format": "Digital Media",
+       "track": [
+        {
+         "id": "5b2f9bd4-1f21-49be-8f9d-12cd87aaa81b",
+         "number": "5",
+         "title": "Take On Me"
+        }
+       ],
+       "track-count": 9,
+       "track-offset": 4
+      }
+     ]
+    },
+    {
+     "id": "8dd42c90-e01b-46f9-b35f-96dae3d55bcc",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 2,
+     "title": "Pearls of the 80s: Maxis, Vol. 3",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "c36a5909-103a-4520-a967-292b1c3d1ab0",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Pearls of the 80s: Maxis, Vol. 3",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2010-09-24",
+     "country": "DE",
+     "release-events": [
+      {
+       "date": "2010-09-24",
+       "area": {
+        "id": "85752fda-13c4-31a3-bee5-0e5cb1f51dad",
+        "name": "Germany",
+        "sort-name": "Germany",
+        "iso-3166-1-codes": [
+         "DE"
+        ]
+       }
+      }
+     ],
+     "track-count": 20,
+     "media": [
+      {
+       "id": "d18e839a-8179-31d3-a9ef-88e3841dc3a9",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "bcb581d1-98d9-4924-9a9d-05e39be75127",
+         "number": "7",
+         "title": "Take On Me (extended mix)",
+         "length": 288000
+        }
+       ],
+       "track-count": 10,
+       "track-offset": 6
+      }
+     ]
+    },
+    {
+     "id": "66aa01ec-a75e-4b0e-87cf-6335b631a708",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "Road Club",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "996af5b2-00c7-47de-9542-72bf47a364ee",
+      "type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "primary-type-id": "6d0c5bf6-7a33-3420-a519-44fc63eedebf",
+      "title": "Road Club",
+      "primary-type": "EP"
+     },
+     "date": "1988",
+     "country": "JP",
+     "release-events": [
+      {
+       "date": "1988",
+       "area": {
+        "id": "2db42837-c832-3c27-b4a3-08198f75693c",
+        "name": "Japan",
+        "sort-name": "Japan",
+        "iso-3166-1-codes": [
+         "JP"
+        ]
+       }
+      }
+     ],
+     "track-count": 5,
+     "media": [
+      {
+       "id": "d1198ffd-3d2a-328d-a4b4-bd3beae58022",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "38b85eb0-e305-3a93-947d-c8c43e31e2bc",
+         "number": "2",
+         "title": "Take On Me (extended version)",
+         "length": 291000
+        }
+       ],
+       "track-count": 5,
+       "track-offset": 1
+      }
+     ]
+    },
+    {
+     "id": "d487421f-4c2e-4f92-9d62-4002d2f0c5c2",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+     "count": 1,
+     "title": "Take On Me",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "a‐ha",
+       "artist": {
+        "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+        "name": "a‐ha",
+        "sort-name": "a‐ha",
+        "disambiguation": "Norwegian synth‐pop band"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "d8aadff5-81d2-3490-b865-ca77e64ad0c1",
+      "type-id": "d6038452-8ee0-3f68-affc-2de9a1ede0b9",
+      "primary-type-id": "d6038452-8ee0-3f68-affc-2de9a1ede0b9",
+      "title": "Take on Me (2017 acoustic)",
+      "primary-type": "Single"
+     },
+     "date": "1985",
+     "country": "GB",
+     "release-events": [
+      {
+       "date": "1985",
+       "area": {
+        "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+        "name": "United Kingdom",
+        "sort-name": "United Kingdom",
+        "iso-3166-1-codes": [
+         "GB"
+        ]
+       }
+      }
+     ],
+     "track-count": 3,
+     "media": [
+      {
+       "id": "faa80d61-2540-3cb4-a2f1-6846d0fdc54c",
+       "position": 1,
+       "track": [
+        {
+         "id": "060da5db-5e89-38cb-83d7-00af95e58e6a",
+         "number": "1",
+         "title": "Take On Me (extended version)",
+         "length": 285000
+        }
+       ],
+       "track-count": 3,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "66e40e60-a7f2-49f5-b3cb-14b349f6a854",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 3,
+     "title": "Dance Classics: Pop Edition, Vol. 2",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "27adab32-5e9b-4461-9ea5-258c946ec7f5",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Dance Classics: Pop Edition, Vol. 2",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2010-05-21",
+     "country": "NL",
+     "release-events": [
+      {
+       "date": "2010-05-21",
+       "area": {
+        "id": "ef1b7cc0-cd26-36f4-8ea0-04d9623786c7",
+        "name": "Netherlands",
+        "sort-name": "Netherlands",
+        "iso-3166-1-codes": [
+         "NL"
+        ]
+       }
+      }
+     ],
+     "track-count": 30,
+     "media": [
+      {
+       "id": "0c56e29a-5dd2-3a2a-8c43-ec1a738b5d01",
+       "position": 2,
+       "format": "CD",
+       "track": [
+        {
+         "id": "c1570599-2f3c-31fb-911f-1b67c97f240c",
+         "number": "1",
+         "title": "Take On Me (extended version)",
+         "length": 290000
+        }
+       ],
+       "track-count": 10,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "fb367d3d-666c-4d48-8f06-315f01637b78",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 1,
+     "title": "Retro:Active 1: Rare and Remixed",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "1859d1f6-792f-3c69-94de-7017a04e5909",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Retro:Active 1: Rare and Remixed",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation",
+       "Remix"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+       "0c60f497-ff81-3818-befd-abfc84a4858b"
+      ]
+     },
+     "date": "2004-01-26",
+     "country": "CA",
+     "release-events": [
+      {
+       "date": "2004-01-26",
+       "area": {
+        "id": "71bbafaa-e825-3e15-8ca9-017dcad1748b",
+        "name": "Canada",
+        "sort-name": "Canada",
+        "iso-3166-1-codes": [
+         "CA"
+        ]
+       }
+      }
+     ],
+     "track-count": 13,
+     "media": [
+      {
+       "id": "8a5072cc-12d7-3038-a03c-d56110ba8651",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "c708ebe3-dffd-3510-b831-a80f8b244ab7",
+         "number": "1",
+         "title": "Take On Me (extended version)",
+         "length": 288000
+        }
+       ],
+       "track-count": 13,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "79c099c7-42fa-408a-bf2f-13fe7ae80ce7",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 3,
+     "title": "12 Inch Dance: 80s Synthpop",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "c0df89a2-3777-46ba-ab27-02357bee6e91",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "12 Inch Dance: 80s Synthpop",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2014-09-08",
+     "country": "GB",
+     "release-events": [
+      {
+       "date": "2014-09-08",
+       "area": {
+        "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+        "name": "United Kingdom",
+        "sort-name": "United Kingdom",
+        "iso-3166-1-codes": [
+         "GB"
+        ]
+       }
+      }
+     ],
+     "track-count": 30,
+     "media": [
+      {
+       "id": "38e1042a-5143-36c3-8193-9ef3258fa472",
+       "position": 3,
+       "format": "CD",
+       "track": [
+        {
+         "id": "8b946b2e-4528-4449-bbba-88baf4913a37",
+         "number": "1",
+         "title": "Take On Me (extended mix)",
+         "length": 284320
+        }
+       ],
+       "track-count": 10,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "c7978071-76f0-4107-95f7-a9f819a6d7db",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 2,
+     "title": "Fantastic 80s! Extended",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "1a1df19d-d9d5-3823-b7a8-aff383eefe94",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Fantastic 80s! Extended",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2006-08-28",
+     "country": "GB",
+     "release-events": [
+      {
+       "date": "2006-08-28",
+       "area": {
+        "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+        "name": "United Kingdom",
+        "sort-name": "United Kingdom",
+        "iso-3166-1-codes": [
+         "GB"
+        ]
+       }
+      }
+     ],
+     "track-count": 26,
+     "media": [
+      {
+       "id": "873d4f93-131f-3f56-8e20-7e9ca00fd549",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "a6f9fd8d-ce2c-3f05-91a4-2b32756bd27e",
+         "number": "1",
+         "title": "Take On Me (extended mix)",
+         "length": 289453
+        }
+       ],
+       "track-count": 13,
+       "track-offset": 0
+      }
+     ]
+    },
+    {
+     "id": "dde9eb1d-5810-4f34-9bf8-521396df42ce",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "4433e15e-9c54-3140-b70d-b5db77437851",
+     "count": 3,
+     "title": "Blank & Jones Present So80s (SoEighties) 2",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Blank & Jones",
+       "artist": {
+        "id": "6606c527-376a-47b4-bb35-748d01e14f6d",
+        "name": "Blank & Jones",
+        "sort-name": "Blank & Jones",
+        "disambiguation": "German electronic music duo"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "97af2ade-5568-4834-b600-40fc6224cae7",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Blank & Jones Present So80s (SoEighties) 2",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "2010-03-26",
+     "country": "DE",
+     "release-events": [
+      {
+       "date": "2010-03-26",
+       "area": {
+        "id": "85752fda-13c4-31a3-bee5-0e5cb1f51dad",
+        "name": "Germany",
+        "sort-name": "Germany",
+        "iso-3166-1-codes": [
+         "DE"
+        ]
+       }
+      }
+     ],
+     "track-count": 44,
+     "media": [
+      {
+       "id": "debcfbe4-5213-3d89-acc8-179962db778e",
+       "position": 2,
+       "format": "CD",
+       "track": [
+        {
+         "id": "727a67e0-ebf2-3d32-a15f-c4aafe4c5e4f",
+         "number": "4",
+         "title": "Take On Me (extended mix)",
+         "length": 289000
+        }
+       ],
+       "track-count": 15,
+       "track-offset": 3
+      }
+     ]
+    }
+   ],
+   "isrcs": [
+    "USWB11506531",
+    "USWB10303001"
+   ],
+   "tags": [
+    {
+     "count": 1,
+     "name": "electronic"
+    },
+    {
+     "count": 4,
+     "name": "pop"
+    },
+    {
+     "count": 2,
+     "name": "new wave"
+    },
+    {
+     "count": 1,
+     "name": "synth-pop"
+    },
+    {
+     "count": 1,
+     "name": "disco"
+    },
+    {
+     "count": 1,
+     "name": "european pop"
+    }
+   ]
+  },
+  {
+   "id": "2aa37a8b-e90f-4d6f-8075-46a0c2d21470",
+   "score": 100,
+   "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+   "title": "Take on Me",
+   "video": true,
+   "artist-credit": [
+    {
+     "name": "a‐ha",
+     "artist": {
+      "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+      "name": "a‐ha",
+      "sort-name": "a‐ha",
+      "disambiguation": "Norwegian synth‐pop band",
+      "aliases": [
+       {
+        "sort-name": "A-ha",
+        "name": "A-ha",
+        "locale": null,
+        "type": null,
+        "primary": null,
+        "begin-date": null,
+        "end-date": null
+       },
+       {
+        "sort-name": "A Ha",
+        "name": "A Ha",
+        "locale": null,
+        "type": null,
+        "primary": null,
+        "begin-date": null,
+        "end-date": null
+       },
+       {
+        "sort-name": "Aha",
+        "name": "Aha",
+        "locale": null,
+        "type": null,
+        "primary": null,
+        "begin-date": null,
+        "end-date": null
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "620400bc-fc5e-4f59-8cba-033695e3eda4",
+     "status-id": "1156806e-d06a-38bd-83f0-cf2284a808b9",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 1,
+     "title": "Crazy Times: 80s Music Videos",
+     "status": "Bootleg",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "cff3ac7e-117e-4ec3-b3df-820366b228c9",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Crazy Times: 80s Music Videos",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "track-count": 30,
+     "media": [
+      {
+       "id": "2749b57a-264a-32f3-a8df-8a53846cb043",
+       "position": 1,
+       "format": "DVD-Video",
+       "track": [
+        {
+         "id": "8ee7eca7-0dfc-4252-9cc0-d0c8b727e13b",
+         "number": "11",
+         "title": "Take on Me"
+        }
+       ],
+       "track-count": 30,
+       "track-offset": 10
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "aae02086-2f27-42bb-a926-c5f65659cef9",
+   "score": 100,
+   "artist-credit-id": "07885c4d-864e-30be-ba2b-541c03409c3b",
+   "title": "Take on Me",
+   "video": null,
+   "artist-credit": [
+    {
+     "name": "a‐ha",
+     "artist": {
+      "id": "7364dea6-ca9a-48e3-be01-b44ad0d19897",
+      "name": "a‐ha",
+      "sort-name": "a‐ha",
+      "disambiguation": "Norwegian synth‐pop band",
+      "aliases": [
+       {
+        "sort-name": "A-ha",
+        "name": "A-ha",
+        "locale": null,
+        "type": null,
+        "primary": null,
+        "begin-date": null,
+        "end-date": null
+       },
+       {
+        "sort-name": "A Ha",
+        "name": "A Ha",
+        "locale": null,
+        "type": null,
+        "primary": null,
+        "begin-date": null,
+        "end-date": null
+       },
+       {
+        "sort-name": "Aha",
+        "name": "Aha",
+        "locale": null,
+        "type": null,
+        "primary": null,
+        "begin-date": null,
+        "end-date": null
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "9e29c374-7ecb-4dab-858f-4b415728a1a8",
+     "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+     "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+     "count": 2,
+     "title": "Solid Gold No1 Hits",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists",
+        "disambiguation": "add compilations to this artist"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "edf162ef-87de-467b-ab4c-e74911a5fce0",
+      "type-id": "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1",
+      "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+      "title": "Solid Gold No1 Hits",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ],
+      "secondary-type-ids": [
+       "dd2a21e1-0c00-3729-a7a0-de60b84eb5d1"
+      ]
+     },
+     "date": "",
+     "country": "AU",
+     "release-events": [
+      {
+       "date": "",
+       "area": {
+        "id": "106e0bec-b638-3b37-b731-f53d507dc00e",
+        "name": "Australia",
+        "sort-name": "Australia",
+        "iso-3166-1-codes": [
+         "AU"
+        ]
+       }
+      }
+     ],
+     "track-count": 28,
+     "media": [
+      {
+       "id": "6724f5ca-d907-3c13-ad63-8dd3baab51d0",
+       "position": 1,
+       "format": "CD",
+       "track": [
+        {
+         "id": "77f08d2b-f051-4869-8c7b-9aeb81f04d4d",
+         "number": "1",
+         "title": "Take on Me"
+        }
+       ],
+       "track-count": 14,
+       "track-offset": 0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

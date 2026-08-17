@@ -148,6 +148,7 @@ func (l *Library) DeleteRadioStation(ctx context.Context, apiStationPID string) 
 	// PIDs are ULIDs and never reused, so this reclaims the bytes rather
 	// than preventing a stale hit.
 	l.forgetRadioLogo(apiStationPID)
+	l.forgetRadioTitle(apiStationPID)
 	return nil
 }
 
@@ -911,16 +912,50 @@ func (l *Library) dropRadioLogoOrder(apiStationPID string) {
 	}
 }
 
-// radioTitleFreshFor bounds how long an observed in-stream title
-// stays reportable: metadata blocks recur every few seconds while a
-// proxied listener is connected, so anything older means the stream
-// closed and the title is stale.
+// radioTitleFreshFor bounds how long an observed in-stream title stays
+// reportable: metadata blocks recur every few seconds while a proxied
+// listener is connected, so anything older means the stream closed.
+//
+// A bound on the stream rather than on the song, and only because
+// NoteRadioAlive rides the blocks that carry nothing. Announcements
+// come once a track, so reading those alone expired the title mid-play
+// on every song over two minutes.
 const radioTitleFreshFor = 2 * time.Minute
 
+// radioTitleHoldFor bounds a title standing on nothing but the
+// station's silence, since a stream outlives the automation narrating
+// it. Sized against the longest thing announced once - a classical work
+// - rather than against a song; a DJ mix outlasts it and falls back to
+// the station mark, which is the honest answer by then.
+const radioTitleHoldFor = 45 * time.Minute
+
 // NoteRadioTitle records the in-stream ICY title the proxy just
-// observed for a station; an empty title is the station clearing it.
+// observed for a station.
 func (l *Library) NoteRadioTitle(apiStationPID, title string) {
 	l.NoteRadioMeta(apiStationPID, title, "")
+}
+
+// NoteRadioAlive records that the proxy saw a metadata block, whatever
+// it said. Titles arrive once a song; these arrive every metaint, so
+// this is what freshness above is actually measuring. A refresh only -
+// a station with no observed title has nothing to keep fresh.
+func (l *Library) NoteRadioAlive(apiStationPID string) {
+	l.radioTitlesMu.Lock()
+	defer l.radioTitlesMu.Unlock()
+	t, ok := l.radioTitles[apiStationPID]
+	if !ok {
+		return
+	}
+	t.seenNS = time.Now().UnixNano()
+	l.radioTitles[apiStationPID] = t
+}
+
+// forgetRadioTitle drops a station's observed title, for a station that
+// no longer exists.
+func (l *Library) forgetRadioTitle(apiStationPID string) {
+	l.radioTitlesMu.Lock()
+	defer l.radioTitlesMu.Unlock()
+	delete(l.radioTitles, apiStationPID)
 }
 
 // NoteRadioMeta records a title and the picture the station announced
@@ -931,13 +966,17 @@ func (l *Library) NoteRadioTitle(apiStationPID, title string) {
 // un-annotated track announced with no picture clears the last one and
 // the ladder falls to the rungs below, which is the honest answer; the
 // alternative is a cover that sticks to whatever plays next.
+//
+// An empty title is not a clear: automation sends an empty StreamTitle
+// over idents and jingles, and honouring it emptied the face mid-song.
+// A block with no title key at all is already ignored; an empty one says
+// as much. radioTitleHoldFor is what bounds a title gone wrong.
 func (l *Library) NoteRadioMeta(apiStationPID, title, artURL string) {
-	l.radioTitlesMu.Lock()
 	if title == "" {
-		delete(l.radioTitles, apiStationPID)
-		l.radioTitlesMu.Unlock()
+		l.NoteRadioAlive(apiStationPID)
 		return
 	}
+	l.radioTitlesMu.Lock()
 	prev, had := l.radioTitles[apiStationPID]
 	// The same picture announced against a different song is the
 	// station's own mark, not that song's cover. Stations do this - a
@@ -950,11 +989,13 @@ func (l *Library) NoteRadioMeta(apiStationPID, title, artURL string) {
 	if had && artURL != "" && prev.title != title && prev.artURL != "" {
 		fixed = prev.artURL == artURL
 	}
+	now := time.Now().UnixNano()
 	l.radioTitles[apiStationPID] = radioTitle{
-		title:    title,
-		artURL:   artURL,
-		artFixed: fixed,
-		seenNS:   time.Now().UnixNano(),
+		title:       title,
+		artURL:      artURL,
+		artFixed:    fixed,
+		seenNS:      now,
+		announcedNS: now,
 	}
 	l.radioTitlesMu.Unlock()
 	// Demoted rather than discarded: a station mark is exactly what the
@@ -974,11 +1015,23 @@ func (l *Library) RadioNowPlaying(apiStationPID string) string {
 // RadioNowPlayingMeta reports the last observed title and the picture
 // announced with it, both read under one lock so the two describe the
 // same song: a second read could land the other side of a rollover.
+//
+// Two clocks, because the stream stopping and the station going quiet
+// are different failures.
 func (l *Library) RadioNowPlayingMeta(apiStationPID string) (string, string) {
 	l.radioTitlesMu.Lock()
 	defer l.radioTitlesMu.Unlock()
 	t, ok := l.radioTitles[apiStationPID]
-	if !ok || time.Now().UnixNano()-t.seenNS > int64(radioTitleFreshFor) {
+	if !ok {
+		return "", ""
+	}
+	now := time.Now().UnixNano()
+	if now-t.seenNS > int64(l.radioTitleFresh) || now-t.announcedNS > int64(radioTitleHoldFor) {
+		// Dropped where it is found rather than left for a write that may
+		// never come, the same rule the art cache next door keeps: a
+		// station stops being relayed and nothing else would ever revisit
+		// its entry.
+		delete(l.radioTitles, apiStationPID)
 		return "", ""
 	}
 	// A mark the station repeats on every song is not this song's cover,
@@ -1028,7 +1081,10 @@ type radioTitle struct {
 	// artFixed marks a picture the station announces whatever is
 	// playing, which makes it the station's mark rather than a cover.
 	artFixed bool
-	seenNS   int64
+	// seenNS is the last block of any kind, announcedNS the last one that
+	// named a song. Freshness needs both.
+	seenNS      int64
+	announcedNS int64
 }
 
 // RadioHTTP is the guarded client the stream proxy uses: private
