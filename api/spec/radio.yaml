@@ -327,19 +327,22 @@ paths:
         sniffing them.
 
 
-        Last comes MusicBrainz and the Cover Art Archive, resolved from
-        the announced artist and title. That rung is **off by default**
-        (`radioExternalArt` in the server settings): it sends a string a
-        station chose from a self-hosted server to a third party, which
-        is the operator's call to make. With it off, a station that
+        Last comes an external lookup from the announced artist and
+        title - `api.deezer.com` first, then `musicbrainz.org` and
+        `coverartarchive.org` where metadata matching is enabled (the
+        default) - stopping at the first that answers. That
+        rung is **on by default** and switchable off (`radioExternalArt`
+        in the server settings): it sends a string a station chose from a
+        self-hosted server to a third party, which is the operator's call
+        to make. With it off, a station that
         announces no picture of its own leaves this endpoint answering
         404 and the client draws the station mark, which is a designed
         state rather than a gap.
 
 
         Never blocking, and a client should expect that. The lookup is
-        started by the play-info poll and runs against a service paced at
-        roughly one request per second, so the first poll after a title
+        started by the play-info poll and runs against paced third-party
+        services, so the first poll after a title
         changes answers 404 here and a later one answers the image - on
         the same fifteen-second cadence the play-info contract already
         asks for. A miss is remembered for a day rather than forever,

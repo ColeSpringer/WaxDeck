@@ -843,7 +843,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminServerRadioArtHelp =>
-      'When a station announces a track this library does not hold, ask MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. Off by default; with it off the player draws the station mark.';
+      'When a station announces a track this library does not hold, ask Deezer, MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. On by default; with it off the player draws the station mark.';
 
   @override
   String get adminServerRadioArtTitle => 'Look up cover art online';

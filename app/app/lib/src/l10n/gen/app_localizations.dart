@@ -1551,10 +1551,10 @@ abstract class AppLocalizations {
   /// **'Could not load the server settings'**
   String get adminServerLoadError;
 
-  /// Line under the radio cover-art switch. Says plainly what leaves the server, because the setting is off by default for that reason. MusicBrainz and the Cover Art Archive are service names and stay as they are.
+  /// Line under the radio cover-art switch. Says plainly what leaves the server, because the setting is on by default. Deezer, MusicBrainz and the Cover Art Archive are service names and stay as they are.
   ///
   /// In en, this message translates to:
-  /// **'When a station announces a track this library does not hold, ask MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. Off by default; with it off the player draws the station mark.'**
+  /// **'When a station announces a track this library does not hold, ask Deezer, MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. On by default; with it off the player draws the station mark.'**
   String get adminServerRadioArtHelp;
 
   /// Switch letting the server ask outside services for the cover of a track a radio station announced.

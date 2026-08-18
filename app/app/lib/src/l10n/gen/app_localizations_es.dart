@@ -861,7 +861,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminServerRadioArtHelp =>
-      'Cuando una emisora anuncia una pista que esta biblioteca no tiene, pregunta a MusicBrainz y a Cover Art Archive por su carátula. Esto envía fuera del servidor el artista y el título que anunció la emisora. Desactivado de forma predeterminada; con la opción desactivada el reproductor dibuja el logotipo de la emisora.';
+      'Cuando una emisora anuncia una pista que esta biblioteca no tiene, pregunta a Deezer, MusicBrainz y Cover Art Archive por su carátula. Esto envía fuera del servidor el artista y el título que anunció la emisora. Activado de forma predeterminada; con la opción desactivada el reproductor dibuja el logotipo de la emisora.';
 
   @override
   String get adminServerRadioArtTitle => 'Buscar carátulas en internet';

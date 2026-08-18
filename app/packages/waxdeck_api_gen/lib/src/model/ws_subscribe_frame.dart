@@ -14,7 +14,7 @@ part 'ws_subscribe_frame.g.dart';
 /// Properties:
 /// * [catalogSince] - The client's opaque catalog change cursor.
 /// * [serverSince] - The client's opaque server change cursor.
-/// * [topics] - Topics to receive (`catalog`, `user`, `player`). Omit for all topics. Unknown topic names are ignored. The `player` topic has no cursor (it invalidates ephemeral lists, not a mirrored stream), so subscribing never prompts an initial `player` invalidate; clients that render endpoint or session lists pull them on connect. 
+/// * [topics] - Topics to receive (`catalog`, `user`, `player`, `radio`). Omit for all topics. Unknown topic names are ignored. The `player` and `radio` topics have no cursor (they invalidate ephemeral state, not a mirrored stream), so subscribing never prompts an initial invalidate for either; clients that render endpoint or session lists pull them on connect. 
 @BuiltValue()
 abstract class WsSubscribeFrame implements Built<WsSubscribeFrame, WsSubscribeFrameBuilder> {
   /// The client's opaque catalog change cursor.
@@ -25,7 +25,7 @@ abstract class WsSubscribeFrame implements Built<WsSubscribeFrame, WsSubscribeFr
   @BuiltValueField(wireName: r'serverSince')
   String? get serverSince;
 
-  /// Topics to receive (`catalog`, `user`, `player`). Omit for all topics. Unknown topic names are ignored. The `player` topic has no cursor (it invalidates ephemeral lists, not a mirrored stream), so subscribing never prompts an initial `player` invalidate; clients that render endpoint or session lists pull them on connect. 
+  /// Topics to receive (`catalog`, `user`, `player`, `radio`). Omit for all topics. Unknown topic names are ignored. The `player` and `radio` topics have no cursor (they invalidate ephemeral state, not a mirrored stream), so subscribing never prompts an initial invalidate for either; clients that render endpoint or session lists pull them on connect. 
   @BuiltValueField(wireName: r'topics')
   BuiltList<String>? get topics;
 

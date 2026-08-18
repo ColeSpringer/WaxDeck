@@ -3166,9 +3166,9 @@ export interface paths {
          *
          *     On its miss comes the picture the **station itself announced**, where it announced one: many carry a per-track cover (or a channel logo) in the `StreamArtwork` or `StreamUrl` field of the same in-stream metadata the title arrives in. That is not a third-party lookup - the URL came down the stream this listener is already receiving - so `radioExternalArt` does not gate it, and neither does switching that setting off drop what has already been fetched. The bytes are fetched through the SSRF-guarded client the station logo uses, capped, and typed by sniffing them.
          *
-         *     Last comes MusicBrainz and the Cover Art Archive, resolved from the announced artist and title. That rung is **off by default** (`radioExternalArt` in the server settings): it sends a string a station chose from a self-hosted server to a third party, which is the operator's call to make. With it off, a station that announces no picture of its own leaves this endpoint answering 404 and the client draws the station mark, which is a designed state rather than a gap.
+         *     Last comes an external lookup from the announced artist and title - `api.deezer.com` first, then `musicbrainz.org` and `coverartarchive.org` where metadata matching is enabled (the default) - stopping at the first that answers. That rung is **on by default** and switchable off (`radioExternalArt` in the server settings): it sends a string a station chose from a self-hosted server to a third party, which is the operator's call to make. With it off, a station that announces no picture of its own leaves this endpoint answering 404 and the client draws the station mark, which is a designed state rather than a gap.
          *
-         *     Never blocking, and a client should expect that. The lookup is started by the play-info poll and runs against a service paced at roughly one request per second, so the first poll after a title changes answers 404 here and a later one answers the image - on the same fifteen-second cadence the play-info contract already asks for. A miss is remembered for a day rather than forever, because a track released this week can have no archive entry today and one tomorrow, and a service that could not be reached is remembered for minutes only.
+         *     Never blocking, and a client should expect that. The lookup is started by the play-info poll and runs against paced third-party services, so the first poll after a title changes answers 404 here and a later one answers the image - on the same fifteen-second cadence the play-info contract already asks for. A miss is remembered for a day rather than forever, because a track released this week can have no archive entry today and one tomorrow, and a service that could not be reached is remembered for minutes only.
          *
          *     The bytes go through the same raster-only check the station logo does, decided by inspecting them rather than by trusting the upstream `Content-Type`, and carry the same hardening headers.
          */
@@ -4665,11 +4665,11 @@ export interface components {
              */
             enrichmentWriteTags?: boolean;
             /**
-             * @description Whether radio may look a station's announced title up against MusicBrainz and the Cover Art Archive when nothing in this library matches it, so the full-screen player can draw the song's cover instead of the station's mark.
+             * @description Whether radio may look a station's announced title up externally when nothing in this library matches it, so the full-screen player can draw the song's cover instead of the station's mark. The hosts it may reach are `api.deezer.com`, then `musicbrainz.org` and `coverartarchive.org` where metadata matching is enabled (the default), asked in that order and stopping at the first that answers.
              *
              *     On by default, and the only setting here that governs whether this server talks to a third party at all: it sends a string a station chose - an artist and a track title - off this machine. Only about one station in twenty announces a picture of its own, so a server with this off draws the station mark for the rest and nothing says why; the opt-out is here for the households that want it. Turned off, radio still draws a library match when it finds one, then the picture the station announced, then the station logo, then the station mark, and makes no outbound request.
              *
-             *     The lookup is paced at the etiquette MusicBrainz asks for (one request per second, an identifying agent) and its answers are cached server-side, so it costs no per-device traffic. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
+             *     Each host is paced separately, at the etiquette it asks for (MusicBrainz allows one request per second, and wants an identifying agent), and answers are cached server-side, so the rung costs no per-device traffic. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
              */
             radioExternalArt?: boolean;
             /** @description How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. */
@@ -5394,10 +5394,10 @@ export interface components {
             catalogSince?: string;
             /** @description The client's opaque server change cursor. */
             serverSince?: string;
-            /** @description Topics to receive (`catalog`, `user`, `player`). Omit for all topics. Unknown topic names are ignored. The `player` topic has no cursor (it invalidates ephemeral lists, not a mirrored stream), so subscribing never prompts an initial `player` invalidate; clients that render endpoint or session lists pull them on connect. */
+            /** @description Topics to receive (`catalog`, `user`, `player`, `radio`). Omit for all topics. Unknown topic names are ignored. The `player` and `radio` topics have no cursor (they invalidate ephemeral state, not a mirrored stream), so subscribing never prompts an initial invalidate for either; clients that render endpoint or session lists pull them on connect. */
             topics?: string[];
         };
-        /** @description One server-to-client frame on the WebSocket event channel (transport in `api/events.md`). An `invalidate` frame tells the client the named topic moved: for `catalog` pull `/sync/catalog` and for `user` pull `/sync/server` from the client's own cursor; for `player` pull `/player/endpoints` and `/player/sessions`, which always return current truth (no cursor). Invalidations are coalesced server-side, so one frame can cover many changes, and carry no data, so a redundant pull is harmless. A `resync` frame means continuity was lost for the named stream, or for every stream when `topic` is absent (client queue overflow, pruned history): drop the affected mirror halves, re-mirror through the sync endpoints, then close the socket, reconnect, and resubscribe with the fresh cursors. `resync` never names `player` (there is nothing to replay). `type` and `topic` are strings, not closed enums; clients must ignore frames whose `type` they do not recognize. */
+        /** @description One server-to-client frame on the WebSocket event channel (transport in `api/events.md`). An `invalidate` frame tells the client the named topic moved: for `catalog` pull `/sync/catalog` and for `user` pull `/sync/server` from the client's own cursor; for `player` pull `/player/endpoints` and `/player/sessions`, and for `radio` - artwork for an announced title landed - re-read `/radio/stations/{pid}/play-info` for the station being listened to, all of which always return current truth (no cursor); a client tuned to nothing ignores `radio`. Invalidations are coalesced server-side, so one frame can cover many changes, and carry no data, so a redundant pull is harmless. A `resync` frame means continuity was lost for the named stream, or for every stream when `topic` is absent (client queue overflow, pruned history): drop the affected mirror halves, re-mirror through the sync endpoints, then close the socket, reconnect, and resubscribe with the fresh cursors. `resync` never names `player` or `radio` (there is nothing to replay). `type` and `topic` are strings, not closed enums; clients must ignore frames whose `type` they do not recognize. */
         WsEventFrame: {
             /**
              * @description Frame discriminator: `invalidate` or `resync`.
@@ -5405,7 +5405,7 @@ export interface components {
              */
             type: string;
             /**
-             * @description Which topic the frame is about (`catalog`, `user`, or `player`). Always present on `invalidate`; on `resync` its absence means every stream.
+             * @description Which topic the frame is about (`catalog`, `user`, `player`, or `radio`). Always present on `invalidate`; on `resync` its absence means every stream.
              * @example catalog
              */
             topic?: string;

@@ -1363,10 +1363,13 @@ components:
         radioExternalArt:
           type: boolean
           description: >
-            Whether radio may look a station's announced title up against
-            MusicBrainz and the Cover Art Archive when nothing in this
-            library matches it, so the full-screen player can draw the
-            song's cover instead of the station's mark.
+            Whether radio may look a station's announced title up
+            externally when nothing in this library matches it, so the
+            full-screen player can draw the song's cover instead of the
+            station's mark. The hosts it may reach are `api.deezer.com`,
+            then `musicbrainz.org` and `coverartarchive.org` where
+            metadata matching is enabled (the default), asked in that
+            order and stopping at the first that answers.
 
 
             On by default, and the only setting here that governs
@@ -1381,10 +1384,10 @@ components:
             the station mark, and makes no outbound request.
 
 
-            The lookup is paced at the etiquette MusicBrainz asks for
-            (one request per second, an identifying agent) and its
-            answers are cached server-side, so it costs no per-device
-            traffic. Optional on PUT so settings writers predating this
+            Each host is paced separately, at the etiquette it asks for
+            (MusicBrainz allows one request per second, and wants an
+            identifying agent), and answers are cached server-side, so
+            the rung costs no per-device traffic. Optional on PUT so settings writers predating this
             field never change it: absent keeps the current value. Always
             present in responses.
         backupKeepCount:

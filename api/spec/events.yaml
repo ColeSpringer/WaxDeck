@@ -23,12 +23,12 @@ components:
         topics:
           type: array
           description: >
-            Topics to receive (`catalog`, `user`, `player`). Omit for
-            all topics. Unknown topic names are ignored. The `player`
-            topic has no cursor (it invalidates ephemeral lists, not a
-            mirrored stream), so subscribing never prompts an initial
-            `player` invalidate; clients that render endpoint or
-            session lists pull them on connect.
+            Topics to receive (`catalog`, `user`, `player`, `radio`).
+            Omit for all topics. Unknown topic names are ignored. The
+            `player` and `radio` topics have no cursor (they invalidate
+            ephemeral state, not a mirrored stream), so subscribing
+            never prompts an initial invalidate for either; clients that
+            render endpoint or session lists pull them on connect.
           items:
             type: string
             example: catalog
@@ -41,15 +41,19 @@ components:
         client the named topic moved: for `catalog` pull `/sync/catalog`
         and for `user` pull `/sync/server` from the client's own
         cursor; for `player` pull `/player/endpoints` and
-        `/player/sessions`, which always return current truth (no
-        cursor). Invalidations are coalesced server-side, so one frame
+        `/player/sessions`, and for `radio` - artwork for an announced
+        title landed - re-read `/radio/stations/{pid}/play-info` for the
+        station being listened to, all of which always return current
+        truth (no cursor); a client tuned to nothing ignores `radio`.
+        Invalidations are coalesced server-side, so one frame
         can cover many changes, and carry no data, so a redundant pull
         is harmless. A `resync` frame means continuity was lost for the
         named stream, or for every stream when `topic` is absent
         (client queue overflow, pruned history): drop the affected
         mirror halves, re-mirror through the sync endpoints, then close
         the socket, reconnect, and resubscribe with the fresh cursors.
-        `resync` never names `player` (there is nothing to replay).
+        `resync` never names `player` or `radio` (there is nothing to
+        replay).
         `type` and `topic` are strings, not closed enums; clients must
         ignore frames whose `type` they do not recognize.
       required: [type]
@@ -61,8 +65,8 @@ components:
         topic:
           type: string
           description: >
-            Which topic the frame is about (`catalog`, `user`, or
-            `player`). Always present on `invalidate`; on `resync` its
+            Which topic the frame is about (`catalog`, `user`, `player`,
+            or `radio`). Always present on `invalidate`; on `resync` its
             absence means every stream.
           example: catalog
 

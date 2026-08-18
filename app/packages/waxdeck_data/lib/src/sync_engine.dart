@@ -172,6 +172,11 @@ class SyncEngine {
   /// truth, so the hint is all there is.
   void Function()? onPlayerInvalidate;
 
+  /// Radio-topic invalidations: artwork the server was fetching for an
+  /// announced title landed. No cursor and no mirror half; a listener
+  /// re-reads play-info, and one not tuned to a station ignores it.
+  void Function()? onRadioInvalidate;
+
   /// Fires after each successful (re)connect, once the subscribe frame
   /// is on the wire; the Connect layer re-registers its endpoint and
   /// re-watches here.
@@ -238,6 +243,8 @@ class SyncEngine {
             _serialized(pullServer);
           case 'player':
             onPlayerInvalidate?.call();
+          case 'radio':
+            onRadioInvalidate?.call();
         }
       case 'resync':
         final topic = frame['topic'];

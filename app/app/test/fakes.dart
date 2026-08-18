@@ -1927,6 +1927,7 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<RadioPlayInfo> getRadioPlayInfo(String pid) async {
+    radioPlayInfoReads++;
     await radioPlayInfoGates[pid]?.future;
     final line = radioNowPlaying[pid];
     final saved = line == null ? null : _savedByLine[line];
@@ -1934,10 +1935,20 @@ class FakeRepository implements WaxDeckRepository {
       url: '/media/radio/$pid?mt=fake',
       nowPlaying: line,
       nowPlayingItemPid: radioNowPlayingItemPid[pid],
+      nowPlayingArtKey: radioNowPlayingArtKey[pid],
       nowPlayingSaved: saved != null,
       nowPlayingSavedPid: saved?.pid,
     );
   }
+
+  /// The external-artwork key the server is holding, if any. Absent
+  /// until a detached lookup lands, which is what makes the wakeup
+  /// worth having.
+  final Map<String, String> radioNowPlayingArtKey = {};
+
+  /// How many times play-info has been asked for, which is the only way
+  /// a test can see a request that was never made.
+  int radioPlayInfoReads = 0;
 
   /// What each station's stream announces it is playing, when it
   /// announces anything.

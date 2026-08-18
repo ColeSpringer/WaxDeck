@@ -247,7 +247,15 @@ type Library struct {
 	allowPrivateRadioHosts bool
 	// radioTitleFresh is how long an observed title outlives the last
 	// metadata block; radioTitleFreshFor is its default.
-	radioTitleFresh    time.Duration
+	radioTitleFresh time.Duration
+	// radioArtBudget bounds one external artwork lookup;
+	// radioArtLookupBudget is its default and its only production value.
+	// Tests set it short to reach the deadline without waiting a minute.
+	radioArtBudget time.Duration
+	// radioWake wakes listening clients when a cover lands, so the face
+	// fills on the fetch rather than on the next poll boundary. Set by
+	// SetRadioInvalidator; unset is a no-op.
+	radioWake          atomic.Pointer[func()]
 	radioDirectoryBase string
 	// radioDirectoryMirrorList overrides mirror discovery, and
 	// radioMirrors caches what discovery found. radioMirrorCold holds
@@ -520,6 +528,9 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	}
 	if l.radioTitleFresh == 0 {
 		l.radioTitleFresh = radioTitleFreshFor
+	}
+	if l.radioArtBudget == 0 {
+		l.radioArtBudget = radioArtLookupBudget
 	}
 	if cfg.MatchSource != nil {
 		l.engine = match.NewEngine(cfg.MatchSource, cfg.MatchConfig)

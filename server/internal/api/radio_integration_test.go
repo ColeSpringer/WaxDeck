@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -741,5 +745,49 @@ func TestSubsonicRadioParity(t *testing.T) {
 	subsonicJSON(t, h, "deleteInternetRadioStation", secret, "&id="+first.Pid, &delEnv)
 	if delEnv.Status != "failed" || delEnv.Error == nil || delEnv.Error.Code != 70 {
 		t.Fatalf("delete of a missing station = %+v, want error 70", delEnv)
+	}
+}
+
+// The wiring main() does, end to end. The service half and the hub half
+// have unit tests; neither fails if the line joining them is deleted.
+func TestRadioArtworkWakesAListeningSocket(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+	})
+	art := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0}, 64)...))
+	}))
+	t.Cleanup(art.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(h.ts.URL, "http")+"/api/v1/ws",
+		&websocket.DialOptions{HTTPHeader: http.Header{"Authorization": []string{"Bearer " + h.token}}})
+	if err != nil {
+		t.Fatalf("dialing event channel: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"topics":["radio"]}`)); err != nil {
+		t.Fatalf("subscribing: %v", err)
+	}
+
+	// Subscribed to radio alone, so nothing else can answer for it.
+	h.svc.EnsureRadioAnnouncedArt(art.URL+"/nowplaying.png", "Charlie Parker - Ornithology")
+
+	deadline := time.Now().Add(10 * time.Second)
+	rctx, rcancel := context.WithDeadline(ctx, deadline)
+	defer rcancel()
+	_, data, err := conn.Read(rctx)
+	if err != nil {
+		t.Fatalf("waiting for the radio invalidation: %v", err)
+	}
+	var frame struct{ Type, Topic string }
+	if err := json.Unmarshal(data, &frame); err != nil {
+		t.Fatalf("frame %s: %v", data, err)
+	}
+	if frame.Type != "invalidate" || frame.Topic != "radio" {
+		t.Fatalf("frame = %+v, want an invalidate on the radio topic", frame)
 	}
 }

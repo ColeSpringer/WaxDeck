@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -252,6 +253,36 @@ func enableRadioExternalArt(t *testing.T, ctx context.Context, svc *Library) {
 	}
 }
 
+// setRadioExternalArt flips the toggle the way the admin endpoint does,
+// forget and all, so a test sees what an operator's switch does.
+func setRadioExternalArt(t *testing.T, ctx context.Context, svc *Library, on bool) {
+	t.Helper()
+	if err := svc.db.SettingSet(ctx, settingRadioExternalArt, strconv.FormatBool(on), time.Now().UnixNano()); err != nil {
+		t.Fatalf("setting the external rung: %v", err)
+	}
+	svc.loadRuntimeToggles(ctx)
+	if !on {
+		svc.forgetRadioArt()
+	}
+}
+
+// gatedRadioArt holds its answer until the test lets it go, which is how
+// a lookup gets to still be running when the toggle moves.
+type gatedRadioArt struct {
+	gate <-chan struct{}
+	data []byte
+	mime string
+}
+
+func (g *gatedRadioArt) FrontCover(ctx context.Context, _, _ string) ([]byte, string, error) {
+	select {
+	case <-g.gate:
+		return g.data, g.mime, nil
+	case <-ctx.Done():
+		return nil, "", ctx.Err()
+	}
+}
+
 // TestRadioArtQueriesWhatItKeysOn is the normalization seam. The key is
 // built from the normalized artist and title; the upstream query has to
 // be built from the same values, or two spellings of one track collapse
@@ -366,5 +397,180 @@ func TestRadioArtIsNotServedWhileOff(t *testing.T) {
 	// And the bytes are gone, not merely unreachable.
 	if len(svc.radioArtCache.entries) != 0 {
 		t.Errorf("%d cached covers survived the switch", len(svc.radioArtCache.entries))
+	}
+}
+
+// deadlineRadioArt stands in for a walk that runs out of budget: it
+// holds until its context ends and answers with that.
+type deadlineRadioArt struct{ calls atomic.Int64 }
+
+func (d *deadlineRadioArt) FrontCover(ctx context.Context, _, _ string) ([]byte, string, error) {
+	d.calls.Add(1)
+	<-ctx.Done()
+	return nil, "", ctx.Err()
+}
+
+// waitForRadioArtLookupToSettle blocks until the detached worker has
+// released its claim, so a test asserts on what it left rather than
+// racing it.
+func waitForRadioArtLookupToSettle(t *testing.T, svc *Library, key string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		svc.radioArtCache.mu.Lock()
+		inFlight := svc.radioArtCache.inFlight[key]
+		svc.radioArtCache.mu.Unlock()
+		if !inFlight {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the artwork lookup never released its claim")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// An upstream that cannot answer inside the budget is upstream failing,
+// and is remembered for as long: shorter, and a doomed title spends half
+// its wall clock walking a service that paces at a request a second.
+func TestRadioArtBacksOffWhenTheBudgetIsSpent(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	enableRadioExternalArt(t, ctx, svc)
+	svc.radioArtBudget = 20 * time.Millisecond
+	resolver := &deadlineRadioArt{}
+	svc.radioArtResolver = resolver
+
+	key := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
+	svc.EnsureRadioNowPlayingArt("Test FM", "Charlie Parker - Ornithology")
+	waitForRadioArtLookupToSettle(t, svc, key)
+
+	entry, ok := svc.cachedRadioArt(key)
+	if !ok {
+		t.Fatal("a budget timeout cached nothing, so every poll starts another walk")
+	}
+	if entry.fresh != radioArtFailureFreshFor {
+		t.Errorf("a budget timeout cached for %v, want %v", entry.fresh, radioArtFailureFreshFor)
+	}
+	if entry.fresh <= radioArtLookupBudget {
+		t.Errorf("the backoff is %v against a %v budget, so a doomed title spends "+
+			"half its wall clock walking", entry.fresh, radioArtLookupBudget)
+	}
+	// The backoff holds the retry off while it stands, so the poll behind
+	// it does not start a second walk.
+	svc.EnsureRadioNowPlayingArt("Test FM", "Charlie Parker - Ornithology")
+	if got := resolver.calls.Load(); got != 1 {
+		t.Fatalf("upstream was asked %d times, want 1 while the backoff stands", got)
+	}
+}
+
+// The distinction that stands: upstream answering badly is remembered for
+// minutes, upstream answering emptily for a day.
+func TestRadioArtBacksOffWhenUpstreamFails(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	enableRadioExternalArt(t, ctx, svc)
+	svc.radioArtResolver = &fakeRadioArt{err: errors.New("502 from the archive")}
+
+	svc.EnsureRadioNowPlayingArt("Test FM", "Nobody - Unreachable")
+	failed := waitForRadioArt(t, svc, "Nobody", "Unreachable")
+	if failed.fresh != radioArtFailureFreshFor {
+		t.Errorf("a reach failure cached for %v, want %v", failed.fresh, radioArtFailureFreshFor)
+	}
+}
+
+// A worker outlives the toggle it started under, so it asks again on the
+// way out: without that, bytes fetched from a third party sit resident
+// for a week past the operator saying stop, and nothing evicts them.
+func TestRadioArtStoresNothingWhenTheToggleWentOffMidLookup(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	enableRadioExternalArt(t, ctx, svc)
+	gate := make(chan struct{})
+	svc.radioArtResolver = &gatedRadioArt{gate: gate, data: coverPNG(t, 40), mime: "image/png"}
+	var woke atomic.Int64
+	svc.SetRadioInvalidator(func() { woke.Add(1) })
+
+	key := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
+	svc.EnsureRadioNowPlayingArt("Test FM", "Charlie Parker - Ornithology")
+	setRadioExternalArt(t, ctx, svc, false)
+	close(gate)
+	waitForRadioArtLookupToSettle(t, svc, key)
+
+	if entry, ok := svc.cachedRadioArt(key); ok {
+		t.Fatalf("%d bytes landed after the rung was switched off", len(entry.art.Bytes))
+	}
+	if got := woke.Load(); got != 0 {
+		t.Errorf("woke listeners %d times for a cover nothing may serve, want 0", got)
+	}
+}
+
+// A cover that lands wakes listening clients, which is what saves the
+// face a poll interval: the lookup finishes seconds after the poll that
+// started it, and without this the key waits out the next one.
+func TestRadioArtWakesListenersWhenACoverLands(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	enableRadioExternalArt(t, ctx, svc)
+	var woke atomic.Int64
+	svc.SetRadioInvalidator(func() { woke.Add(1) })
+	svc.radioArtResolver = &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
+
+	key := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
+	svc.EnsureRadioNowPlayingArt("Test FM", "Charlie Parker - Ornithology")
+	// Settled rather than cached: the store and the wake are two
+	// statements, and a wait on the first can read the counter before the
+	// second runs. The claim is released after both.
+	waitForRadioArtLookupToSettle(t, svc, key)
+	if entry, _ := svc.cachedRadioArt(key); len(entry.art.Bytes) == 0 {
+		t.Fatal("the cover never landed")
+	}
+	if got := woke.Load(); got != 1 {
+		t.Fatalf("woke listeners %d times, want 1", got)
+	}
+}
+
+// A miss changes nothing a client could draw, so it wakes nobody: the
+// frame is broadcast to every connection, and one per fruitless lookup
+// would be a poll storm across listeners it does not concern.
+func TestRadioArtDoesNotWakeListenersOnAMiss(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	enableRadioExternalArt(t, ctx, svc)
+	var woke atomic.Int64
+	svc.SetRadioInvalidator(func() { woke.Add(1) })
+	svc.radioArtResolver = &fakeRadioArt{err: ErrNoRadioArt}
+
+	key := radioArtKey(radioSearchField("Nobody"), radioSearchField("Unreleased"))
+	svc.EnsureRadioNowPlayingArt("Test FM", "Nobody - Unreleased")
+	waitForRadioArtLookupToSettle(t, svc, key)
+	if got := woke.Load(); got != 0 {
+		t.Fatalf("woke listeners %d times on a miss, want 0", got)
+	}
+}
+
+// forgetfulRadioArt is a resolver that keeps a memory of its own, which
+// is what the operator's purge has to be able to reach.
+type forgetfulRadioArt struct {
+	fakeRadioArt
+	forgot atomic.Int64
+}
+
+func (f *forgetfulRadioArt) ForgetMisses() { f.forgot.Add(1) }
+
+// Switching the rung off purges the resolver's memory too. Without it
+// the service cache empties, the search re-runs, and a day-old private
+// map answers for every release before anything reaches the network.
+func TestRadioArtForgetReachesTheResolver(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	enableRadioExternalArt(t, ctx, svc)
+	resolver := &forgetfulRadioArt{}
+	svc.radioArtResolver = resolver
+
+	setRadioExternalArt(t, ctx, svc, false)
+
+	if got := resolver.forgot.Load(); got != 1 {
+		t.Fatalf("the resolver was purged %d times, want 1", got)
 	}
 }

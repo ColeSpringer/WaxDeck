@@ -3,6 +3,7 @@ package providers
 import (
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Defaults shared by the enrichment providers. The keyed and key-free
@@ -36,4 +37,31 @@ func imageFormat(mediaType string) string {
 	default:
 		return sub
 	}
+}
+
+// coverNameMatch compares an upstream display name against an already
+// normalized query. Looser than nameMatch because the query side has had
+// its punctuation collapsed already: "Hello, Goodbye" is "hello goodbye".
+func coverNameMatch(upstream, normalized string) bool {
+	return foldCoverName(upstream) == foldCoverName(normalized)
+}
+
+// foldCoverName lowercases and reduces everything that is not a letter
+// or a digit to single spaces, so the two sides meet in one shape
+// whichever of them carries the apostrophes and commas.
+func foldCoverName(s string) string {
+	var b strings.Builder
+	space := false
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if space && b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			space = false
+			b.WriteRune(r)
+			continue
+		}
+		space = true
+	}
+	return b.String()
 }

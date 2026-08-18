@@ -35,6 +35,11 @@ const radioSavedLineMax = 400
 // than the original masters.
 const radioSavedSnapshotPx = 512
 
+// radioSnapshotFloorPx is the smallest a snapshot may be shrunk to
+// before the rung gives up. Past this a row would keep a picture too
+// coarse to read, which is worse than the monogram it falls back to.
+const radioSnapshotFloorPx = 128
+
 // RadioSavedSong is the API-facing shape of one kept announcement.
 type RadioSavedSong struct {
 	PID         string
@@ -171,12 +176,10 @@ func (l *Library) SaveRadioSong(ctx context.Context, uc *UserCtx, apiStationPID,
 // this a 400 KB library cover took the ladder and left the row drawing a
 // monogram while the announced cover went unasked.
 //
-// The cached rungs hold what the face draws, which is a full-screen
-// picture rather than a list row, so they are scaled to the snapshot's
-// own size before being measured - the same thing the matched rung asks
-// the catalog for. Without it the archive's 1200px rendition failed the
-// cap outright and the commonest save of all, a song the library does
-// not hold, kept an artless row.
+// The cached rungs hold what the face draws rather than a list row, so
+// they are scaled to the snapshot's size before being measured: what
+// they hold is bounded well above this column's cap - 512 KB for a
+// station's announced cover, twice what a row may keep.
 func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStationPID, stationName, line, artist, title string) ([]byte, string, string) {
 	fits := func(data []byte) bool {
 		return len(data) > 0 && len(data) <= wdb.RadioSavedArtMaxBytes
@@ -200,9 +203,7 @@ func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStatio
 	// reason - turning the rung off means "stop serving third-party
 	// covers from this origin" - and a snapshot outlives both the toggle
 	// and the forget that comes with it, so copying one here would put
-	// that decision permanently out of reach. Reachable despite the
-	// forget: a lookup already in flight when the switch goes off stores
-	// its result afterwards.
+	// that decision permanently out of reach.
 	if artist != "" && title != "" && l.RadioExternalArtEnabled() {
 		key := radioArtKey(radioSearchField(artist), radioSearchField(title))
 		if data, mime, ok := l.radioSnapshotCover(key, fits); ok {
@@ -228,11 +229,19 @@ func (l *Library) radioSnapshotCover(key string, fits func([]byte) bool) ([]byte
 	if fits(entry.art.Bytes) {
 		return entry.art.Bytes, entry.art.MimeType, true
 	}
-	small, format, _, _, err := art.Thumbnail(entry.art.Bytes, radioSavedSnapshotPx)
-	if err != nil || !fits(small) {
-		return nil, "", false
+	// Halved until it fits rather than tried at two fixed sizes: Thumbnail
+	// never upscales, so a source at or inside the box comes back its own
+	// size, and a noisy one can still miss the cap several rungs down.
+	for px := radioSavedSnapshotPx; px >= radioSnapshotFloorPx; px /= 2 {
+		small, format, _, _, err := art.Thumbnail(entry.art.Bytes, px)
+		if err != nil {
+			return nil, "", false
+		}
+		if fits(small) {
+			return small, "image/" + format, true
+		}
 	}
-	return small, "image/" + format, true
+	return nil, "", false
 }
 
 func radioSavedETag(data []byte) string {

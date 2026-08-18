@@ -23,6 +23,9 @@ class LiveInvalidations {
   /// Player-topic invalidations: endpoint and session lists changed.
   void Function()? onPlayer;
 
+  /// Radio-topic invalidations: artwork for an announced title landed.
+  void Function()? onRadio;
+
   /// Control-plane frames (the player command bus) hand off here.
   void Function(Map<String, Object?> frame)? onControlFrame;
 
@@ -112,7 +115,7 @@ class LiveInvalidations {
       return;
     }
     switch (frame['type']) {
-      case 'invalidate' || 'resync':
+      case 'invalidate':
         switch (frame['topic']) {
           case 'catalog':
             onCatalog();
@@ -120,9 +123,19 @@ class LiveInvalidations {
             onUser();
           case 'player':
             onPlayer?.call();
+          case 'radio':
+            onRadio?.call();
+        }
+      case 'resync':
+        // Continuity was lost, and refetching is the only catch-up there
+        // is here. A topic this build does not know refreshes everything
+        // rather than nothing: recovery must not narrow as topics grow.
+        switch (frame['topic']) {
+          case 'catalog':
+            onCatalog();
+          case 'user':
+            onUser();
           default:
-            // A resync with no topic: refresh everything; refetching
-            // is the only catch-up there is here.
             onCatalog();
             onUser();
         }

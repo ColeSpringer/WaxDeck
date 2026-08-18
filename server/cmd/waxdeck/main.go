@@ -108,7 +108,7 @@ func run() error {
 
 		matchingOn   = flag.Bool("matching", envOr("WAXDECK_MATCHING", "true") == "true", "identify new and uploaded music against MusicBrainz (paced background lookups)")
 		mbBase       = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override (a local mirror, or a stub in tests)")
-		coverArtBase = flag.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override (a mirror, or a stub in tests)")
+		coverArtBase = flag.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override (a mirror, or a stub in tests); the archive rung only exists when matching is on")
 		trustedProxy = flag.String("trusted-proxies", envOr("WAXDECK_TRUSTED_PROXIES", ""), "comma-separated CIDRs or addresses of reverse proxies whose X-Forwarded-For may be believed; empty counts the socket address")
 		corsOrigins  = flag.String("cors-origins", envOr("WAXDECK_CORS_ORIGINS", ""), "comma-separated origins allowed to call this server from a browser on another origin (a self-hosted Feishin, say); empty serves same-origin only")
 		acoustidKey  = flag.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")
@@ -291,8 +291,11 @@ func run() error {
 			}),
 		}
 	}
+	// One Deezer client, shared: radio's artwork rung and enrichment both
+	// go at api.deezer.com, and two would be two unpaced callers.
+	deezer := waxproviders.NewDeezer(waxproviders.DeezerConfig{})
 	enrichProviders := []enrich.Provider{
-		waxproviders.NewDeezer(waxproviders.DeezerConfig{}),
+		deezer,
 		waxproviders.NewITunes(waxproviders.ITunesConfig{}),
 		waxproviders.NewAudnexus(waxproviders.AudnexusConfig{}),
 	}
@@ -330,23 +333,28 @@ func run() error {
 		EnrichmentMatchReleases:   *enrichMatch,
 		Logger:                    log,
 	}
+	// Radio's external artwork rung, Deezer first: it answers a title in a
+	// third of a second against the archive's tens. Whether it reaches out
+	// at all is the admin toggle's call.
+	radioArt := waxproviders.CoverChain{
+		Sources: []waxproviders.TitleCover{deezer},
+		NoCover: service.ErrNoRadioArt,
+	}
 	if matchSource != nil {
 		svcCfg.MatchSource = matchSource
-		// The playlist importer's ISRC upgrade rides the same paced,
-		// cached MusicBrainz client as matching.
+		// The ISRC upgrade and the archive half of the rung above ride the
+		// same paced client as matching: a second would be an unthrottled
+		// caller against a service that allows one request a second.
 		svcCfg.ISRCResolver = matchSource.MB
-		// So does radio's external artwork rung, for the same reason and
-		// more urgently: a second MusicBrainz client would be an
-		// unthrottled second caller against a service that rate-limits at
-		// one request a second. Wired whenever matching is on; whether it
-		// ever reaches out is the admin toggle's call, and that is off by
-		// default.
-		svcCfg.RadioArtResolver = waxproviders.RecordingCover{
-			MB:      matchSource.MB,
-			CAA:     waxproviders.NewCoverArt(waxproviders.CoverArtConfig{BaseURL: *coverArtBase}),
-			NoCover: service.ErrNoRadioArt,
-		}
+		// Behind Deezer because its licensing is the unambiguous one and it
+		// holds the obscure and non-commercial releases Deezer has no entry
+		// for, not because it is the better first ask.
+		radioArt.Sources = append(radioArt.Sources, waxproviders.RecordingCover{
+			MB:  matchSource.MB,
+			CAA: waxproviders.NewCoverArt(waxproviders.CoverArtConfig{BaseURL: *coverArtBase}),
+		})
 	}
+	svcCfg.RadioArtResolver = radioArt
 	svc, err := service.Open(ctx, svcCfg, store, group)
 	if err != nil {
 		return err
@@ -356,6 +364,9 @@ func run() error {
 	// The event hub fans the service's change wakeups out to WebSocket
 	// subscribers as coalesced invalidation frames.
 	hub := events.New(svc)
+	// Radio artwork lands on a detached worker seconds after the poll
+	// that started it; this is what saves the face a poll interval.
+	svc.SetRadioInvalidator(hub.MarkRadioAll)
 	group.Go(ctx, "event-hub", hub.Run)
 
 	// One media-token instance signs both streaming and download URLs.

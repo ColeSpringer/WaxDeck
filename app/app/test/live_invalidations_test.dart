@@ -150,4 +150,74 @@ void main() {
     );
     expect(user, 1);
   });
+
+  test('a resync naming an unknown topic still refreshes everything', () async {
+    final gate = Completer<void>()..complete();
+    var catalog = 0, user = 0, radio = 0;
+    late void Function(String) deliver;
+    final live = LiveInvalidations(
+      channelFactory:
+          ({required onFrame, required onDone, required subscribe}) {
+            deliver = onFrame;
+            return _GatedChannel(
+              gate: gate,
+              onFrame: onFrame,
+              onDone: onDone,
+              subscribe: subscribe,
+            );
+          },
+      onCatalog: () => catalog++,
+      onUser: () => user++,
+    );
+    live.onRadio = () => radio++;
+    live.start();
+    addTearDown(live.stop);
+    await gate.future;
+    await Future<void>.delayed(Duration.zero);
+    catalog = 0;
+    user = 0;
+
+    // Continuity recovery must not narrow as cursorless topics are added.
+    deliver(jsonEncode({'type': 'resync', 'topic': 'radio'}));
+
+    expect(catalog, 1);
+    expect(user, 1);
+    expect(radio, 0, reason: 'a resync is not a nudge');
+  });
+
+  test('a radio frame nudges only the radio listener', () async {
+    final gate = Completer<void>()..complete();
+    var catalog = 0, user = 0, player = 0, radio = 0;
+    late void Function(String) deliver;
+    final live = LiveInvalidations(
+      channelFactory:
+          ({required onFrame, required onDone, required subscribe}) {
+            deliver = onFrame;
+            return _GatedChannel(
+              gate: gate,
+              onFrame: onFrame,
+              onDone: onDone,
+              subscribe: subscribe,
+            );
+          },
+      onCatalog: () => catalog++,
+      onUser: () => user++,
+    );
+    live.onPlayer = () => player++;
+    live.onRadio = () => radio++;
+    live.start();
+    addTearDown(live.stop);
+    await gate.future;
+    await Future<void>.delayed(Duration.zero);
+    // The connect itself catches up once; only the frame is under test.
+    catalog = 0;
+    user = 0;
+
+    deliver(jsonEncode({'type': 'invalidate', 'topic': 'radio'}));
+
+    expect(radio, 1);
+    expect(player, 0, reason: 'a radio frame is not a player frame');
+    expect(catalog, 0);
+    expect(user, 0, reason: 'and pulls no mirrored stream');
+  });
 }

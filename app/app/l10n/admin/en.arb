@@ -1049,9 +1049,9 @@
   "@adminServerLoadError": {
     "description": "Title of the error state when the server settings could not be read."
   },
-  "adminServerRadioArtHelp": "When a station announces a track this library does not hold, ask MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. Off by default; with it off the player draws the station mark.",
+  "adminServerRadioArtHelp": "When a station announces a track this library does not hold, ask Deezer, MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. On by default; with it off the player draws the station mark.",
   "@adminServerRadioArtHelp": {
-    "description": "Line under the radio cover-art switch. Says plainly what leaves the server, because the setting is off by default for that reason. MusicBrainz and the Cover Art Archive are service names and stay as they are."
+    "description": "Line under the radio cover-art switch. Says plainly what leaves the server, because the setting is on by default. Deezer, MusicBrainz and the Cover Art Archive are service names and stay as they are."
   },
   "adminServerRadioArtTitle": "Look up cover art online",
   "@adminServerRadioArtTitle": {

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,14 +20,23 @@ type CoverArtConfig struct {
 	// UserAgent is required by MusicBrainz etiquette (the archive is
 	// theirs); defaults to the WaxDeck identifying string.
 	UserAgent string
-	// HTTPClient defaults to a 15s-timeout client.
+	// HTTPClient defaults to a client bounded by RequestTimeout.
 	HTTPClient *http.Client
 	// MinInterval defaults to 1100ms, the same one-per-second pacing the
 	// MusicBrainz client keeps.
 	MinInterval time.Duration
-	// MaxBytes bounds one downloaded image; defaults to 4 MiB, which is
-	// an order of magnitude past what the 1200px rendition weighs.
+	// MaxBytes bounds one downloaded image; defaults to 2 MiB, an order
+	// of magnitude past what the 500px rendition weighs.
 	MaxBytes int64
+	// RequestTimeout bounds one archive fetch, pacing excluded; defaults
+	// to 15s and is what the default client's own timeout is built from,
+	// so raising it raises the bound rather than colliding with it.
+	RequestTimeout time.Duration
+	// MissTTL is how long a 404 is remembered; defaults to 24h. Finite
+	// because a release entered this week can have a cover next week.
+	MissTTL time.Duration
+	// MaxMisses bounds that memory by entry count; defaults to 4096.
+	MaxMisses int
 }
 
 // CoverArt fetches release front covers from the Cover Art Archive.
@@ -40,6 +51,17 @@ type CoverArt struct {
 	client   *http.Client
 	agent    string
 	core     *core
+
+	// misses remembers the releases the archive answered 404 for; not
+	// core's response cache, which keeps 200 bodies. The TTL is uniform,
+	// so missOrder is expiry order and both bound and sweep read the front.
+	missTTL   time.Duration
+	maxMisses int
+	missMu    sync.Mutex
+	misses    map[string]time.Time
+	missOrder []string
+
+	reqTimeout time.Duration
 }
 
 // NewCoverArt builds a client from cfg, applying defaults for zero
@@ -59,18 +81,34 @@ func NewCoverArt(cfg CoverArtConfig) *CoverArt {
 	}
 	maxBytes := cfg.MaxBytes
 	if maxBytes == 0 {
-		maxBytes = 4 << 20
+		maxBytes = 2 << 20
+	}
+	reqTimeout := cfg.RequestTimeout
+	if reqTimeout == 0 {
+		reqTimeout = 15 * time.Second
 	}
 	client := cfg.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: defaultTimeout}
+		client = &http.Client{Timeout: reqTimeout}
+	}
+	missTTL := cfg.MissTTL
+	if missTTL == 0 {
+		missTTL = 24 * time.Hour
+	}
+	maxMisses := cfg.MaxMisses
+	if maxMisses <= 0 {
+		maxMisses = maxCacheEntries
 	}
 	return &CoverArt{
-		base:     strings.TrimRight(base, "/"),
-		maxBytes: maxBytes,
-		client:   client,
-		agent:    ua,
-		core:     newCore(client, ua, interval),
+		base:       strings.TrimRight(base, "/"),
+		maxBytes:   maxBytes,
+		client:     client,
+		agent:      ua,
+		core:       newCore(client, ua, interval),
+		missTTL:    missTTL,
+		maxMisses:  maxMisses,
+		misses:     map[string]time.Time{},
+		reqTimeout: reqTimeout,
 	}
 }
 
@@ -79,12 +117,15 @@ func NewCoverArt(cfg CoverArtConfig) *CoverArt {
 // nothing there" for far longer than "could not ask".
 var ErrNoCover = errors.New("providers: no front cover for this release")
 
-// FrontCover downloads a release's front cover, at the archive's 1200px
-// rendition rather than the original: this ends up behind a full-screen
-// station face, and an original scan can be a 20 MB TIFF. The archive
-// serves whichever renditions it holds for a release and never upscales,
-// so a small source still answers here at its own size - the resolution
-// somebody uploaded is the bound this cannot lift.
+// errNotAnImage is a 200 whose body is not a raster - the archive's
+// storage answers an HTML error page with one under load, and reading
+// that as ErrNoCover files a release that has a cover as bare.
+var errNotAnImage = errors.New("providers: the archive answered with something that is not an image")
+
+// FrontCover downloads a release's front cover, at the archive's 500px
+// rendition rather than the original: an original scan can be a 20 MB
+// TIFF, and the archive's storage is slow enough that the bytes are the
+// wait. 500px is what a station face needs.
 //
 // The 404 case is ErrNoCover, which is the ordinary answer - most
 // releases have no art - and is what lets the caller tell an empty
@@ -93,7 +134,12 @@ func (c *CoverArt) FrontCover(ctx context.Context, releaseMBID string) ([]byte, 
 	if releaseMBID == "" {
 		return nil, "", ErrNoCover
 	}
-	raw := c.base + "/release/" + url.PathEscape(releaseMBID) + "/front-1200"
+	// Asked and answered. Releases with nothing on file are the bulk of
+	// any walk, so this is what makes a second walk cheap.
+	if c.knownBare(releaseMBID) {
+		return nil, "", ErrNoCover
+	}
+	raw := c.base + "/release/" + url.PathEscape(releaseMBID) + "/front-500"
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, "", err
@@ -101,6 +147,10 @@ func (c *CoverArt) FrontCover(ctx context.Context, releaseMBID string) ([]byte, 
 	if err := c.core.pace(ctx, u.Host); err != nil {
 		return nil, "", err
 	}
+	// After the pacer, so queueing is not charged as request time. One
+	// unresponsive release must not spend the whole walk's budget.
+	ctx, cancel := context.WithTimeout(ctx, c.reqTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
 		return nil, "", err
@@ -114,6 +164,9 @@ func (c *CoverArt) FrontCover(ctx context.Context, releaseMBID string) ([]byte, 
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
+		// The only outcome that is about this release rather than about
+		// the archive's afternoon, so the only one remembered.
+		c.rememberBare(releaseMBID)
 		return nil, "", ErrNoCover
 	default:
 		return nil, "", fmt.Errorf("providers: cover art archive: status %d", resp.StatusCode)
@@ -128,9 +181,68 @@ func (c *CoverArt) FrontCover(ctx context.Context, releaseMBID string) ([]byte, 
 	// path settled on.
 	mime, ok := coverArtMimes[http.DetectContentType(data)]
 	if !ok {
-		return nil, "", ErrNoCover
+		return nil, "", errNotAnImage
 	}
 	return data, mime, nil
+}
+
+// knownBare reports whether the archive has already said it holds no
+// front cover for this release. Expired entries drop where they are
+// found, so a server that went quiet does not hold them for its life.
+func (c *CoverArt) knownBare(releaseMBID string) bool {
+	c.missMu.Lock()
+	defer c.missMu.Unlock()
+	at, ok := c.misses[releaseMBID]
+	if !ok {
+		return false
+	}
+	if time.Since(at) >= c.missTTL {
+		delete(c.misses, releaseMBID)
+		return false
+	}
+	return true
+}
+
+// rememberBare files a release the archive answered 404 for. Bounded
+// oldest-first: the ids come from searches for titles a station chooses.
+func (c *CoverArt) rememberBare(releaseMBID string) {
+	c.missMu.Lock()
+	defer c.missMu.Unlock()
+	if c.misses == nil {
+		c.misses = map[string]time.Time{}
+	}
+	if _, exists := c.misses[releaseMBID]; exists {
+		c.misses[releaseMBID] = time.Now()
+		return
+	}
+	// The expired go first, because a release the walk never revisits is
+	// never passed to knownBare and would otherwise hold its slot for the
+	// life of the process.
+	drop := 0
+	for drop < len(c.missOrder) {
+		at, ok := c.misses[c.missOrder[drop]]
+		if ok && time.Since(at) < c.missTTL {
+			break
+		}
+		delete(c.misses, c.missOrder[drop])
+		drop++
+	}
+	for len(c.missOrder)-drop >= c.maxMisses {
+		delete(c.misses, c.missOrder[drop])
+		drop++
+	}
+	c.missOrder = append(slices.Delete(c.missOrder, 0, drop), releaseMBID)
+	c.misses[releaseMBID] = time.Now()
+}
+
+// ForgetMisses drops the bare-release memory, for an operator switching
+// the rung off: without it a purge upstream of this leaves a day-old
+// private map deciding what gets asked about after the rung comes back.
+func (c *CoverArt) ForgetMisses() {
+	c.missMu.Lock()
+	defer c.missMu.Unlock()
+	c.misses = map[string]time.Time{}
+	c.missOrder = nil
 }
 
 // coverArtMimes is the raster allow-list, keyed by what the sniffer
@@ -199,7 +311,9 @@ func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) ([
 	for _, mbid := range mbids {
 		// The budget is spent on the walk, so a deadline reached partway
 		// down it ends the walk: every call after this one would fail at
-		// the pacer without asking anybody anything.
+		// the pacer without asking anybody anything. Either way the
+		// caller hears an error rather than a miss, which is what decides
+		// how long the outcome is remembered.
 		if err := ctx.Err(); err != nil {
 			return nil, "", err
 		}
@@ -220,4 +334,66 @@ func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) ([
 		return nil, "", reachErr
 	}
 	return nil, "", missing
+}
+
+// ForgetMisses drops the archive's bare-release memory, so the caller's
+// own purge reaches all of what this composite remembers.
+func (r RecordingCover) ForgetMisses() {
+	if r.CAA != nil {
+		r.CAA.ForgetMisses()
+	}
+}
+
+// TitleCover answers a front cover for an announced artist and title.
+// Deezer and RecordingCover both implement it.
+type TitleCover interface {
+	FrontCover(ctx context.Context, artist, title string) ([]byte, string, error)
+}
+
+// CoverChain asks its sources in order and takes the first cover, so a
+// fast one can sit in front of a thorough one. A source that could not be
+// reached is held, and surfaces only if nothing below it answers either.
+type CoverChain struct {
+	Sources []TitleCover
+	// NoCover is returned when every source answered and none held a
+	// picture. The caller sets it to its own sentinel so it can tell that
+	// from an unreachable service; nil falls back to ErrNoCover.
+	NoCover error
+}
+
+// FrontCover walks the sources in order.
+func (c CoverChain) FrontCover(ctx context.Context, artist, title string) ([]byte, string, error) {
+	missing := c.NoCover
+	if missing == nil {
+		missing = ErrNoCover
+	}
+	var reachErr error
+	for _, src := range c.Sources {
+		if err := ctx.Err(); err != nil {
+			return nil, "", err
+		}
+		data, mime, err := src.FrontCover(ctx, artist, title)
+		switch {
+		case err == nil && len(data) > 0:
+			return data, mime, nil
+		case err == nil, errors.Is(err, ErrNoCover), errors.Is(err, missing):
+			continue
+		default:
+			reachErr = err
+		}
+	}
+	if reachErr != nil {
+		return nil, "", reachErr
+	}
+	return nil, "", missing
+}
+
+// ForgetMisses passes an operator's purge down to whichever sources keep
+// a memory of their own.
+func (c CoverChain) ForgetMisses() {
+	for _, src := range c.Sources {
+		if forgetful, ok := src.(interface{ ForgetMisses() }); ok {
+			forgetful.ForgetMisses()
+		}
+	}
 }

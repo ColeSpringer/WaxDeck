@@ -207,6 +207,19 @@ func (c *core) store(key string, body []byte) {
 	c.cache[key] = cacheEntry{body: body, fetchedAt: time.Now()}
 }
 
+// forgetPrefix drops every cached response whose url starts with prefix,
+// so one caller's queries can be purged without emptying the cache a
+// provider shares with its other callers.
+func (c *core) forgetPrefix(prefix string) {
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+	for k := range c.cache {
+		if strings.HasPrefix(k, prefix) {
+			delete(c.cache, k)
+		}
+	}
+}
+
 // fetchImage downloads cover art. Unlike the API endpoints, image URLs
 // are dynamic hosts chosen by the remote service, so the fetch requires
 // https, refuses redirects to non-https, caps the body at maxImageBytes,

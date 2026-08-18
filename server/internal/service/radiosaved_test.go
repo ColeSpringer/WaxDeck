@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"image/png"
 	"testing"
 	"time"
 
@@ -178,5 +179,92 @@ func TestRadioSavedIdentity(t *testing.T) {
 	}
 	if punct != radioSavedIdentity("", "", "!!! - ???") {
 		t.Fatal("an announcement whose halves normalize away is not keyed by its raw line")
+	}
+}
+
+// noisyPNG is a source the same size cannot re-encode smaller, which is
+// what a 500px archive rendition over the cap behaves like.
+func noisyPNG(t *testing.T, dim int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, dim, dim))
+	seed := uint32(2463534242)
+	next := func() uint8 {
+		seed ^= seed << 13
+		seed ^= seed >> 17
+		seed ^= seed << 5
+		return uint8(seed)
+	}
+	for y := range dim {
+		for x := range dim {
+			img.Set(x, y, color.RGBA{next(), next(), next(), 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// The snapshot box is 512px and the archive's rendition is 500, so
+// scaling to the box is a no-op and an oversize cover has to go smaller
+// than it or the commonest save of all keeps an artless row.
+func TestRadioSavedSnapshotScalesACoverSmallerThanTheBox(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	const line = "Charlie Parker - Ornithology"
+	const station = "rs-01JZX5N8QW3F4V9T2B7KDEXAMPLE"
+	enableRadioExternalArt(t, ctx, svc)
+
+	rendition := noisyPNG(t, 500)
+	if len(rendition) <= wdb.RadioSavedArtMaxBytes {
+		t.Fatalf("fixture cover is %d bytes, want one past the %d cap",
+			len(rendition), wdb.RadioSavedArtMaxBytes)
+	}
+	svc.storeRadioArt(
+		radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology")),
+		radioArtEntry{
+			art:     radioLogoFromBytes(rendition, "image/png"),
+			fetched: time.Now(),
+			fresh:   radioArtFreshFor,
+		})
+
+	data, _, _ := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
+	if len(data) == 0 {
+		t.Fatal("the row saved artless, want the cover scaled under the cap")
+	}
+	if len(data) > wdb.RadioSavedArtMaxBytes {
+		t.Fatalf("snapshot = %d bytes, past the %d cap", len(data), wdb.RadioSavedArtMaxBytes)
+	}
+}
+
+// A station's announced cover is capped at 512 KB at any dimensions, so
+// a large noisy one can miss the row's cap at more than one rung down.
+func TestRadioSavedSnapshotKeepsHalvingUntilItFits(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	const line = "Charlie Parker - Ornithology"
+	const station = "rs-01JZX5N8QW3F4V9T2B7KDEXAMPLE"
+	enableRadioExternalArt(t, ctx, svc)
+
+	announced := noisyPNG(t, 1500)
+	if len(announced) <= wdb.RadioSavedArtMaxBytes {
+		t.Fatalf("fixture cover is %d bytes, want one past the %d cap",
+			len(announced), wdb.RadioSavedArtMaxBytes)
+	}
+	svc.storeRadioArt(
+		radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology")),
+		radioArtEntry{
+			art:     radioLogoFromBytes(announced, "image/png"),
+			fetched: time.Now(),
+			fresh:   radioArtFreshFor,
+		})
+
+	data, _, _ := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
+	if len(data) == 0 {
+		t.Fatal("the row saved artless, want the cover shrunk under the cap")
+	}
+	if len(data) > wdb.RadioSavedArtMaxBytes {
+		t.Fatalf("snapshot = %d bytes, past the %d cap", len(data), wdb.RadioSavedArtMaxBytes)
 	}
 }

@@ -1,24 +1,27 @@
 // Package events is the WebSocket event hub: it turns the service's
 // lossy change-wakeup hints into coalesced, per-connection invalidation
 // frames. Frames carry no data (clients pull the sync endpoints), so a
-// connection's pending state is three booleans instead of a queue:
-// overflow is impossible by construction, and a slow client costs three
-// flags, not memory.
+// connection's pending state is a handful of booleans instead of a
+// queue: overflow is impossible by construction, and a slow client
+// costs those flags, not memory.
 package events
 
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-// Topics the hub fans out. The player topic has no cursor: it
-// invalidates ephemeral endpoint and session lists, which always
-// answer current truth.
+// Topics the hub fans out. The player and radio topics have no cursor:
+// they invalidate ephemeral state, which always answers current truth.
 const (
 	TopicCatalog = "catalog"
 	TopicUser    = "user"
 	TopicPlayer  = "player"
+	// TopicRadio says artwork for an announced title has landed. A
+	// client not tuned to a station ignores it.
+	TopicRadio = "radio"
 )
 
 // Frame is one server-to-client event frame, JSON-shaped per the
@@ -49,6 +52,11 @@ const coalesceWindow = 250 * time.Millisecond
 type Hub struct {
 	src wakeSource
 
+	// radioDirty is a cover landing waiting for the next tick. A flag
+	// rather than a channel because the frame carries no data: many
+	// landings inside one window are one invalidation.
+	radioDirty atomic.Bool
+
 	mu    sync.Mutex
 	conns map[*Conn]struct{}
 }
@@ -69,6 +77,7 @@ type Conn struct {
 		catalog bool
 		user    bool
 		player  bool
+		radio   bool
 		resync  bool
 	}
 	wake chan struct{}
@@ -84,7 +93,7 @@ func (h *Hub) Register(userID string, topics []string) *Conn {
 	if len(topics) > 0 {
 		c.topics = make(map[string]bool, len(topics))
 		for _, t := range topics {
-			if t == TopicCatalog || t == TopicUser || t == TopicPlayer {
+			if t == TopicCatalog || t == TopicUser || t == TopicPlayer || t == TopicRadio {
 				c.topics[t] = true
 			}
 		}
@@ -126,6 +135,8 @@ func (c *Conn) Mark(frameType, topic string) {
 		c.pending.user = true
 	case topic == TopicPlayer:
 		c.pending.player = true
+	case topic == TopicRadio:
+		c.pending.radio = true
 	}
 	c.mu.Unlock()
 	select {
@@ -154,7 +165,11 @@ func (c *Conn) TakePending() []Frame {
 	if c.pending.player {
 		out = append(out, Frame{Type: TypeInvalidate, Topic: TopicPlayer})
 	}
-	c.pending.catalog, c.pending.user, c.pending.player, c.pending.resync = false, false, false, false
+	if c.pending.radio {
+		out = append(out, Frame{Type: TypeInvalidate, Topic: TopicRadio})
+	}
+	c.pending.catalog, c.pending.user, c.pending.player = false, false, false
+	c.pending.radio, c.pending.resync = false, false
 	return out
 }
 
@@ -175,10 +190,11 @@ func (h *Hub) Run(ctx context.Context) error {
 		case uid := <-h.src.UserEventWakeups():
 			dirtyUsers[uid] = struct{}{}
 		case <-ticker.C:
-			if !catalogDirty && len(dirtyUsers) == 0 {
+			radioDirty := h.radioDirty.Swap(false)
+			if !catalogDirty && len(dirtyUsers) == 0 && !radioDirty {
 				continue
 			}
-			h.flush(catalogDirty, dirtyUsers)
+			h.flush(catalogDirty, dirtyUsers, radioDirty)
 			catalogDirty = false
 			clear(dirtyUsers)
 		}
@@ -188,7 +204,14 @@ func (h *Hub) Run(ctx context.Context) error {
 // MarkPlayerAll queues a player-topic invalidation on every
 // connection. Lifecycle changes are rare and the pull applies
 // visibility, so fanning to everyone is cheap and leaks nothing.
-func (h *Hub) MarkPlayerAll() {
+func (h *Hub) MarkPlayerAll() { h.markAll(TopicPlayer) }
+
+// MarkRadioAll queues a radio-topic invalidation on every connection at
+// the next tick. Coalesced rather than sent on the spot: covers land one
+// detached worker at a time, and every landing reaches every connection.
+func (h *Hub) MarkRadioAll() { h.radioDirty.Store(true) }
+
+func (h *Hub) markAll(topic string) {
 	h.mu.Lock()
 	conns := make([]*Conn, 0, len(h.conns))
 	for c := range h.conns {
@@ -196,11 +219,11 @@ func (h *Hub) MarkPlayerAll() {
 	}
 	h.mu.Unlock()
 	for _, c := range conns {
-		c.Mark(TypeInvalidate, TopicPlayer)
+		c.Mark(TypeInvalidate, topic)
 	}
 }
 
-func (h *Hub) flush(catalog bool, users map[string]struct{}) {
+func (h *Hub) flush(catalog bool, users map[string]struct{}, radio bool) {
 	h.mu.Lock()
 	conns := make([]*Conn, 0, len(h.conns))
 	for c := range h.conns {
@@ -213,6 +236,9 @@ func (h *Hub) flush(catalog bool, users map[string]struct{}) {
 		}
 		if _, ok := users[c.userID]; ok {
 			c.Mark(TypeInvalidate, TopicUser)
+		}
+		if radio {
+			c.Mark(TypeInvalidate, TopicRadio)
 		}
 	}
 }

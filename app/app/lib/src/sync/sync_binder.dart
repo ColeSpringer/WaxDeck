@@ -18,6 +18,7 @@ import '../playlists/playlists_controller.dart';
 import '../podcasts/podcast_shelves.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
+import '../radio/radio_controller.dart';
 import '../review/review_controller.dart';
 import '../settings/prefs_controller.dart';
 import '../shell/adaptive_shell.dart';
@@ -144,9 +145,22 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     retry: catalogFanOut.retry,
   );
   final user = PacedRefresh(fanOut: userFanOut.sweep, retry: userFanOut.retry);
+  // Paced like the other two, and for a sharper reason: the server has no
+  // record of who is tuned to what, so a cover landing for anyone marks
+  // this topic on every connection - unpaced, each frame is a round trip.
+  final radio = PacedRefresh(
+    fanOut: () {
+      if (ref.mounted) {
+        ref.read(radioPlaybackProvider.notifier).refreshNowPlaying();
+      }
+      return true;
+    },
+  );
+
   ref.onDispose(() {
     catalog.dispose();
     user.dispose();
+    radio.dispose();
   });
 
   final engine = ref.watch(syncEngineProvider);
@@ -193,6 +207,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     );
     engine.onConnected = connect.onConnected;
     engine.onPlayerInvalidate = connect.onPlayerInvalidate;
+    engine.onRadioInvalidate = radio.hint;
     engine.start();
     ref.onDispose(() {
       catalogSub.cancel();
@@ -231,6 +246,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     );
     live.onConnected = connect.onConnected;
     live.onPlayer = connect.onPlayerInvalidate;
+    live.onRadio = radio.hint;
     // The web listener has no status of its own to read, so it reports
     // one: the shell's reconnecting banner is downstream of this.
     live.onConnectionChanged = (connected) =>

@@ -549,4 +549,127 @@ void main() {
     expect(container.read(radioFavoritesProvider), contains(_stationPid));
     await _stop(container);
   });
+
+  testWidgets('a radio wakeup collects a cover without waiting a poll', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    repo.radioNowPlaying[_stationPid] = 'Charlie Parker - Ornithology';
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+    expect(
+      container.read(radioPlaybackProvider).nowPlayingArtKey,
+      isNull,
+      reason: 'the lookup has not landed yet',
+    );
+
+    // The server's detached lookup lands, and it wakes the client rather
+    // than leaving the key for the next fifteen-second poll.
+    repo.radioNowPlayingArtKey[_stationPid] = 'artkey-1';
+    container.read(radioPlaybackProvider.notifier).refreshNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(radioPlaybackProvider).nowPlayingArtKey,
+      'artkey-1',
+      reason: 'the nudge re-read play-info off the poll schedule',
+    );
+    await _stop(container);
+  });
+
+  testWidgets('a radio wakeup mid-tune leaves the station buffering', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    repo.radioPlayInfoGates[_stationPid] = Completer<void>();
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        clientSettingsStoreProvider.overrideWithValue(
+          MemoryClientSettingsStore(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final tune = container
+        .read(radioPlaybackProvider.notifier)
+        .play(_station());
+    await tester.pump();
+    expect(container.read(radioPlaybackProvider).starting, isTrue);
+
+    // A cover landing for somebody else's station reaches every client,
+    // so this arrives mid-tune. It must not answer for the tune.
+    container.read(radioPlaybackProvider.notifier).refreshNowPlaying();
+    await tester.pump();
+
+    expect(
+      container.read(radioPlaybackProvider).starting,
+      isTrue,
+      reason: 'the transport control flipped to play over a buffering stream',
+    );
+    expect(repo.radioPlayInfoReads, 1, reason: 'only the tune asked');
+    repo.radioPlayInfoGates[_stationPid]!.complete();
+    await tune;
+    await _stop(container);
+  });
+
+  testWidgets('radio wakeups do not spend the blank-title grace', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    repo.radioNowPlaying[_stationPid] = 'Charlie Parker - Ornithology';
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    // The server restarted and lost the title. The grace rides that out
+    // for two minutes of polling, and a burst of wakeups - which is what
+    // a busy server sends - must not spend it in a few frames.
+    repo.radioNowPlaying.remove(_stationPid);
+    for (var i = 0; i < 12; i++) {
+      container.read(radioPlaybackProvider.notifier).refreshNowPlaying();
+      await tester.pumpAndSettle();
+    }
+
+    expect(
+      container.read(radioPlaybackProvider).nowPlaying,
+      'Charlie Parker - Ornithology',
+      reason: 'the wakeups counted against a grace measured in polls',
+    );
+    await _stop(container);
+  });
+
+  testWidgets('a radio wakeup with no station tuned does nothing', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        clientSettingsStoreProvider.overrideWithValue(
+          MemoryClientSettingsStore(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(radioPlaybackProvider.notifier).refreshNowPlaying();
+    await tester.pump();
+
+    expect(
+      repo.radioPlayInfoReads,
+      0,
+      reason: 'a wakeup with nothing tuned asks the server nothing',
+    );
+    expect(container.read(radioPlaybackProvider).station, isNull);
+  });
 }

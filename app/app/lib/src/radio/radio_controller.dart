@@ -299,8 +299,15 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   static final _blankPollsBeforeClearing =
       _blankGrace.inMilliseconds ~/ _titlePollEvery.inMilliseconds;
 
-  /// Consecutive polls answering no title while one is on screen.
+  /// Consecutive polls answering no title while one is on screen. The
+  /// poll's alone: a wakeup is not on the cadence the grace is derived
+  /// from, and a burst of them would spend two minutes of it in seconds.
   int _blankPolls = 0;
+
+  /// Which read of play-info owns the state. A wakeup lands between poll
+  /// ticks, so two are routinely in flight and answer in completion
+  /// order; without this the older one overwrites the newer one's cover.
+  int _titleRead = 0;
 
   /// The save this announcement has in flight, so an untap that crosses
   /// it has a row to remove rather than leaving one behind.
@@ -539,19 +546,43 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     _firstTitleTick = null;
   }
 
-  Future<void> _refreshTitle(String pid) async {
+  /// Re-reads play-info now, off the poll's schedule: artwork lands on
+  /// a detached worker, and without this the cover waits out a whole
+  /// period. A no-op untuned, which is what makes a broadcast cheap.
+  void refreshNowPlaying() {
+    final pid = state.station?.pid;
+    // Nothing to re-read untuned, and nothing worth re-reading over a
+    // tune still in flight: that one publishes its own answer, and this
+    // would land underneath it.
+    if (pid == null || state.starting) return;
+    unawaited(_refreshTitle(pid, counted: false));
+  }
+
+  /// [counted] says whether a blank answer belongs to the run of them
+  /// the grace is measured in. Only the poll's do.
+  Future<void> _refreshTitle(String pid, {bool counted = true}) async {
     if (state.station?.pid != pid) return;
+    final read = ++_titleRead;
+    // A tune publishes its own answer, and it does not bump this counter,
+    // so an older read has to be dropped by the tune's generation too.
+    final tuning = _tuning;
     try {
       final info = await ref.read(repositoryProvider).getRadioPlayInfo(pid);
-      if (state.station?.pid != pid) return;
+      if (state.station?.pid != pid || tuning != _tuning) return;
       // Ridden out rather than adopted on sight: a restart loses every
-      // in-memory title until the station next announces, and the art
-      // key empties with it.
-      if ((info.nowPlaying ?? '').isEmpty &&
-          (state.nowPlaying ?? '').isNotEmpty) {
+      // in-memory title until the station next announces. Counted before
+      // the generation guard, or a wakeup mid-poll voids the poll's turn.
+      final blank =
+          (info.nowPlaying ?? '').isEmpty &&
+          (state.nowPlaying ?? '').isNotEmpty;
+      if (!counted) {
+        if (blank) return;
+      } else if (blank) {
         if (++_blankPolls < _blankPollsBeforeClearing) return;
+      } else {
+        _blankPolls = 0;
       }
-      _blankPolls = 0;
+      if (read != _titleRead) return;
       // Only when it moved. This asks every fifteen seconds and a station
       // announces every few minutes, and [RadioPlayback] has no value
       // equality, so an identical assignment rebuilds the dial band, every
@@ -577,6 +608,10 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
       final holdHeart = _saving && info.nowPlaying == state.nowPlaying;
       state = RadioPlayback(
         station: state.station,
+        // Carried, never assumed: a wakeup can land inside a tune, and
+        // the default flips the transport control to "play" over a
+        // station that is still buffering.
+        starting: state.starting,
         nowPlaying: info.nowPlaying,
         nowPlayingItemPid: info.nowPlayingItemPid,
         nowPlayingArtKey: info.nowPlayingArtKey,

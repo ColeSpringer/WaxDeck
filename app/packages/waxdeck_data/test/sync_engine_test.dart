@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -155,6 +157,23 @@ class ScriptedRepository implements WaxDeckRepository {
 /// test is driven directly, not over a socket.
 EventsChannelFactory neverConnects() {
   return ({required onFrame, required onDone, required subscribe}) {
+    return EventsChannel(
+      url: 'ws://unused',
+      authToken: null,
+      onFrame: onFrame,
+      onDone: onDone,
+      subscribe: subscribe,
+    );
+  };
+}
+
+/// Same, but hands the frame sink back so a test can deliver one: the
+/// engine's frame routing is otherwise reachable only over a socket.
+EventsChannelFactory capturingFrames(
+  void Function(void Function(String)) sink,
+) {
+  return ({required onFrame, required onDone, required subscribe}) {
+    sink(onFrame);
     return EventsChannel(
       url: 'ws://unused',
       authToken: null,
@@ -583,5 +602,28 @@ void main() {
     expect(await db.select(db.mirrorPlayStates).get(), isEmpty);
     final cursors = await db.select(db.syncCursors).getSingle();
     expect(cursors.serverSince, 'scur-2');
+  });
+
+  test('a radio frame nudges the radio listener and nothing else', () async {
+    late void Function(String) deliver;
+    final radioEngine = SyncEngine(
+      db: db,
+      repository: repo,
+      channelFactory: capturingFrames((sink) => deliver = sink),
+    );
+    addTearDown(radioEngine.dispose);
+    var radio = 0, player = 0;
+    radioEngine.onRadioInvalidate = () => radio++;
+    radioEngine.onPlayerInvalidate = () => player++;
+    radioEngine.start();
+
+    deliver(jsonEncode({'type': 'invalidate', 'topic': 'radio'}));
+    await pumpEventQueue();
+
+    expect(radio, 1);
+    expect(player, 0, reason: 'a radio frame is not a player frame');
+    // No cursor and no mirror half: the frame says a cover landed, and
+    // the listener re-reads play-info rather than pulling a stream.
+    expect(repo.catalogCalls, 0);
   });
 }

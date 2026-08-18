@@ -99,7 +99,7 @@ continuously in tests.
 ## Topics and cursors
 
 Two ordered streams, replayable independently through the sync endpoints,
-plus one cursorless topic:
+plus two cursorless topics:
 
 - `catalog` (`catalogSeq`): WaxBin catalog changes, item-granular, plus
   podcast show rows (a show is list-level metadata every subscriber's UI
@@ -124,6 +124,14 @@ plus one cursorless topic:
   both always return current truth, so there is nothing to replay and no
   cursor to carry. Position movement and play/pause flips do not
   invalidate this topic; watchers get those as `session` frames.
+- `radio` (no cursor): artwork the server was fetching for a station's
+  announced title landed. The lookup runs on a detached worker seconds
+  after the play-info poll that started it, and this is what fills a
+  tuned face on the fetch rather than on its next fifteen-second poll.
+  Re-read `/radio/stations/{pid}/play-info` for the station being
+  listened to; a client tuned to nothing ignores the frame. Fanned out
+  to every connection, because the hub holds no record of who is tuned
+  to what.
 
 Cursors are opaque strings. Internally they bind a stream generation, so a
 rebuilt catalog or restored database invalidates stale cursors instead of

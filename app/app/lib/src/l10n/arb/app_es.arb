@@ -243,7 +243,7 @@
   "adminServerDefaultKbpsHint": "0 significa sin límite",
   "adminServerDefaultKbpsLabel": "Límite de bitrate predeterminado (kbps)",
   "adminServerLoadError": "No se han podido cargar los ajustes del servidor",
-  "adminServerRadioArtHelp": "Cuando una emisora anuncia una pista que esta biblioteca no tiene, pregunta a MusicBrainz y a Cover Art Archive por su carátula. Esto envía fuera del servidor el artista y el título que anunció la emisora. Desactivado de forma predeterminada; con la opción desactivada el reproductor dibuja el logotipo de la emisora.",
+  "adminServerRadioArtHelp": "Cuando una emisora anuncia una pista que esta biblioteca no tiene, pregunta a Deezer, MusicBrainz y Cover Art Archive por su carátula. Esto envía fuera del servidor el artista y el título que anunció la emisora. Activado de forma predeterminada; con la opción desactivada el reproductor dibuja el logotipo de la emisora.",
   "adminServerRadioArtTitle": "Buscar carátulas en internet",
   "adminServerRadioGroup": "Radio",
   "adminServerReadOnlyHelp": "Rechaza cualquier cambio en el contenido de la biblioteca, en todo el servidor. La reproducción, las valoraciones y el progreso siguen funcionando",

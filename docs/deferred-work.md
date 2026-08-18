@@ -30,6 +30,96 @@ here waits on upstream.
 
 ## Playback and apps
 
+- `[in-repo]` **Nothing tells a listener where a picture or a field came
+  from.** Scalar fields already carry it end to end - waxbin stores a
+  `model.FieldProvenance` row with a `Provider` id, `/items/{pid}/editor`
+  returns it, and the metadata editor reads it - but that is the only
+  surface, and it is the one place somebody is least likely to be
+  looking. Two gaps under it. **Artwork has no provenance at all**:
+  `model.ArtImage` is data, format, dimensions and a hash, with no
+  provider field, so a cover fetched by enrichment is indistinguishable
+  from one read out of the file's tags - filed as an upstream ask in
+  `docs/upstream-requests.md`. And **radio throws the answer away**:
+  `CoverChain.FrontCover` knows exactly which rung answered - the local
+  catalog, the station's own announcement, Deezer, the Cover Art Archive
+  - and returns only bytes and a mime type, so `radioArtEntry` could not
+  record it even if something wanted to draw it.
+
+  What this is for: a small source mark under the cover on the radio
+  face, and the same mark wherever metadata arrived from somewhere other
+  than the file - a YouTube acquisition, an upload the user then ran
+  `enrichItem` against. It answers "why is this the cover" and "is this
+  the right album" without opening an editor, and it is the honest thing
+  to do about art this server fetched from a third party rather than
+  found in the media. Three decisions before it can be built: whether
+  the mark is a logo (which means vendoring trademarked assets under
+  each service's brand rules) or a worded label; whether radio's rung
+  identity travels as a plain string or as something the contract
+  closes; and whether the mark is always on or lives behind a setting,
+  since a permanent badge on every cover is a busy answer to a question
+  most listeners ask once.
+
+- `[in-repo]` **Every injected enrichment provider is cover-only.**
+  Deezer, iTunes and Fanart.tv all advertise `enrich.CapCover` and
+  nothing else, and all three refuse anything but `TargetReleaseGroup`,
+  so the Service only ever asks them for an album cover. Two things
+  follow. **Their fields go unused**: a Deezer track carries an ISRC, a
+  BPM, a duration, a track position, an explicit flag and a release
+  date, and a Deezer album carries a label, genres and a UPC - and the
+  port already has the slots, `Candidate.Fields` (documented as
+  "reserved for injected providers") and `Candidate.Genres`. We fill
+  neither, so MusicBrainz is the only field source by omission rather
+  than by decision. **And the per-edition cover rung has no injected
+  producer**: with `MatchReleases` on, `enrich.go` asks for
+  `TargetRelease` art once an album is matched to a pressing, every
+  injected provider declines, and the Cover Art Archive takes it
+  uncontested - the source measured at 24-37s per lookup with no hit
+  when radio was leaning on it. Declining is what the port asks of a
+  provider that only knows groups, so the fix is not simply to answer:
+  it is to decide whether a Deezer or iTunes album is close enough to a
+  named edition to answer for it, and to say so.
+
+  Not a gap: there is no track-level cover search, and there should not
+  be. `CapCover` is defined as release-group cover-art bytes and a track
+  draws its album's picture, so an album search is the right query for a
+  catalog cover. Radio is the exception that proves it - it searches by
+  track because a station announces a song and nothing else, and it
+  wants the album carrying it.
+
+- `[in-repo]` **The enrichment source set has never been designed as a
+  set.** It grew one provider at a time - Deezer, iTunes, Audnexus,
+  Fanart.tv behind a key, MusicBrainz and the Cover Art Archive through
+  matching - and what exists is a list, not an order. Nothing states
+  which source is authoritative for which field, what happens when two
+  disagree, or which one a self-hoster gets when they have no keys; the
+  confidence numbers (Deezer 0.7, and friends) were picked one at a time
+  and have never been compared against each other. Radio's artwork rung
+  now has an explicit chain with a stated order and a documented reason
+  for it (`CoverChain` in `server/internal/providers/coverart.go`,
+  Deezer first for speed, the archive behind it for coverage and
+  licensing); enrichment has no equivalent. Worth a pass that decides
+  the defaults, the fallbacks, and the per-field precedence, and that
+  revisits whether the set is the right one - iTunes in particular sits
+  awkwardly, since its terms restrict artwork use to promoting store
+  content and it shares a per-IP budget with the radio path if both
+  ever ask it. Also unanswered: whether an operator should be able to
+  order or disable sources individually rather than through one
+  all-or-nothing toggle per subsystem.
+
+- `[in-repo]` **The radio artwork wake is broadcast, not addressed.**
+  A cover landing marks the `radio` topic on every connection
+  (`hub.MarkRadioAll`), because the hub holds no record of who is tuned
+  to what: the guard is the client's `if (pid == null) return`. Station
+  identity exists at every producing layer - `radioTitles` is keyed by
+  station pid, `GetRadioPlayInfo` holds both the pid and the caller -
+  and is thrown away on the way to the hub. The cost is a socket write
+  for listeners it does not concern, plus a mobile radio wakeup, and it
+  is worst for a station that mints a fresh announced-art key on every
+  poll. Blunted at both ends for now (never woken on a miss; paced on
+  the client through `PacedRefresh`), and the fix is a per-connection
+  interest registry the socket layer does not have yet - the same one a
+  future per-station or per-user topic would want.
+
 - `[in-repo]` **The radio face's artwork shape follows a URL, not a
   picture.** The face draws a square with no platter ring when the
   server matched the announced title to a library item, and a circle
