@@ -16,7 +16,8 @@ import 'adaptive_shell.dart';
 ///
 /// It carries the secondary destinations with it, because below rail
 /// width the tab bar holds the domains and nothing else and this is the
-/// only route to settings, downloads, stats, and curation.
+/// only route to the rest: the listening stats, downloads, notifications,
+/// app settings, and the administrative three.
 ///
 /// Compact only, and that is the whole of the deviation from 3.2 that
 /// remains: the rail's footer and the sidebar's already draw an account

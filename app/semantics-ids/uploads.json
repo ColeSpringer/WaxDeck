@@ -9,6 +9,7 @@
     "addFromUrl": "add-from-url",
     "addUploadFile": "add-upload-file",
     "addUploadFolder": "add-upload-folder",
+    "addUploadSessions": "add-upload-sessions",
     "uploadBatch": "upload-batch-{batchId}",
     "uploadDelete": "upload-delete-{id}",
     "uploadDropTarget": "upload-drop-target",

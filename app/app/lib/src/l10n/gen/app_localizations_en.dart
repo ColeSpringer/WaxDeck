@@ -192,6 +192,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminDashboardTitle => 'Admin';
 
   @override
+  String get adminForbiddenMessage =>
+      'The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.';
+
+  @override
+  String get adminForbiddenTitle => 'This area is for administrators';
+
+  @override
   String get adminGenreAdd => 'Add genre';
 
   @override
@@ -769,10 +776,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminSectionReview => 'Review queue';
-
-  @override
-  String get adminSectionReviewBlurb =>
-      'Albums waiting for an identification decision';
 
   @override
   String get adminSectionSchedulesBlurb =>
@@ -1654,6 +1657,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authUsername => 'Username';
 
   @override
+  String get bellActivityBlurb =>
+      'What this device has seen since the app opened. There is no history from before that.';
+
+  @override
+  String get bellActivityTitle => 'Recent activity';
+
+  @override
   String get bellClear => 'Clear';
 
   @override
@@ -1661,6 +1671,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bellEmpty => 'Nothing has happened yet.';
+
+  @override
+  String get bellEmptyTitle => 'Nothing to report';
 
   @override
   String get bellEpisodeDownloaded => 'A new episode finished downloading.';
@@ -1678,6 +1691,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String bellRow(String surface, String what) {
     return '$surface: $what';
+  }
+
+  @override
+  String bellRowWhen(String surface, String when) {
+    return '$surface · $when';
   }
 
   @override
@@ -6322,6 +6340,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewNoCandidatesTitle => 'No candidates found';
 
   @override
+  String get reviewOpenUploads => 'Open uploads';
+
+  @override
   String get reviewOriginAcquisition => 'Acquired';
 
   @override
@@ -7879,9 +7900,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellNavBooks => 'Books';
 
   @override
-  String get shellNavCuration => 'Curation';
-
-  @override
   String get shellNavDownloads => 'Downloads';
 
   @override
@@ -7892,6 +7910,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellNavMusic => 'Music';
+
+  @override
+  String get shellNavNotifications => 'Notifications';
 
   @override
   String get shellNavPlaylists => 'Playlists';
@@ -7906,7 +7927,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellNavReview => 'Review queue';
 
   @override
-  String get shellNavSettings => 'Settings';
+  String get shellNavSettings => 'App settings';
 
   @override
   String get shellNavStats => 'Listening stats';
@@ -7916,9 +7937,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellNavTracks => 'Tracks';
-
-  @override
-  String get shellNavUploads => 'Uploads';
 
   @override
   String get shellNavYears => 'Years';
@@ -7936,9 +7954,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellPaletteAllSettings => 'All settings';
 
   @override
-  String get shellPaletteCurationDetail => 'Curation';
-
-  @override
   String get shellPaletteEmpty => 'Nothing to run';
 
   @override
@@ -7946,9 +7961,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellPaletteGroupActions => 'Actions';
-
-  @override
-  String get shellPaletteGroupAdmin => 'Admin areas';
 
   @override
   String get shellPaletteGroupPlaces => 'Go to';
@@ -8668,6 +8680,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsRetry => 'Retry upload';
+
+  @override
+  String get uploadsSessionsSubtitle =>
+      'Quota, what is still going up, and what to retry';
+
+  @override
+  String get uploadsSessionsTitle => 'Past uploads';
 
   @override
   String get uploadsSourceUrl => 'Source URL';

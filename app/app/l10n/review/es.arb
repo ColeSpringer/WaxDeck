@@ -47,6 +47,7 @@
   "reviewMatchingRow": "{library}: {mode}",
   "reviewNoCandidatesMessage": "Nada en las fuentes coincide con lo que dicen estos archivos. Déjalos como están, u omítelos y vuelve a intentarlo más tarde.",
   "reviewNoCandidatesTitle": "No se ha encontrado ningún candidato",
+  "reviewOpenUploads": "Abrir las subidas",
   "reviewOriginAcquisition": "Adquirido",
   "reviewOriginUpload": "Subida",
   "reviewPaneClose": "Cerrar la entrada",

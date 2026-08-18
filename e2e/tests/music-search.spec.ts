@@ -54,10 +54,12 @@ test('search answers a typed query and opens what it finds', async ({ app }) => 
   await app.nav.enter('home');
 
   // The sidebar header is where the layout system puts search at this
-  // width, and it is a real field: clicking it opens the screen and
-  // keeps the caret, where the launcher it replaces opened a screen and
-  // abandoned the field the cursor was already in. One field throughout,
-  // because the screen draws none of its own while this one is showing.
+  // width, and it is a real field: Enter opens the screen and the caret
+  // stays put, where the launcher it replaces opened a screen and
+  // abandoned the field the cursor was already in - and where focusing
+  // it, for a while after that, carried a visitor off whatever they were
+  // reading. One field throughout, because the screen draws none of its
+  // own while this one is showing.
   await app.search.open();
   await app.nav.expectAt('search');
   await expect(app.search.field()).toHaveCount(1);

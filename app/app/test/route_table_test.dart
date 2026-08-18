@@ -28,6 +28,7 @@ import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/music/music_hub_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
+import 'package:waxdeck/src/notifications/notifications_screen.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/player/car_mode_screen.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
@@ -143,6 +144,13 @@ final _locations = <String, Type>{
   WaxRoute.shares: SharesScreen,
   WaxRoute.uploads: UploadsScreen,
   WaxRoute.tasks: TasksScreen,
+  WaxRoute.notifications: NotificationsScreen,
+  // Its own destination rather than a console section, so it is declared
+  // out here with the rest of what is not a domain.
+  WaxRoute.review: ReviewSurface,
+  // The same surface: the entry is a pane beside the queue where there
+  // is room for one and the page itself where there is not.
+  WaxRoute.reviewEntry('re-1'): ReviewSurface,
   WaxRoute.metadata('tr-1'): MetadataScreen,
   // The admin console. Every section is a location a stranger can open,
   // which is what makes "it is under Backups" a link rather than a set
@@ -150,10 +158,6 @@ final _locations = <String, Type>{
   WaxRoute.admin: AdminDashboardScreen,
   WaxRoute.libraries: LibrariesScreen,
   WaxRoute.genres: GenreTreeScreen,
-  WaxRoute.review: ReviewSurface,
-  // The same surface: the entry is a pane beside the queue where there
-  // is room for one and the page itself where there is not.
-  WaxRoute.reviewEntry('re-1'): ReviewSurface,
   WaxRoute.health: HealthScreen,
   WaxRoute.healthRule('missing-artwork'): HealthIssuesScreen,
   WaxRoute.diagnostics: DiagnosticsScreen,
@@ -167,6 +171,14 @@ final _locations = <String, Type>{
   WaxRoute.backups: BackupsScreen,
   WaxRoute.trash: TrashScreen,
   WaxRoute.migrate: MigrateScreen,
+};
+
+/// Locations this app used to mint and no longer does, and where each
+/// one lands now. Every console location is shareable and the web build
+/// puts it in the URL, so a path that moves owes its old links an answer.
+final _movedRoutes = <String, String>{
+  WaxRoute.legacyReview: WaxRoute.review,
+  '${WaxRoute.legacyReview}/re-1': WaxRoute.reviewEntry('re-1'),
 };
 
 /// The routes that carry an in-memory payload, and where each sends a
@@ -255,6 +267,23 @@ void main() {
         _stackedInShell.contains(entry.key),
         reason: '${entry.key} back affordance',
       );
+    }
+  });
+
+  testWidgets('a location that moved still answers where it was', (
+    tester,
+  ) async {
+    final router = await _pumpApp(tester);
+    for (final entry in _movedRoutes.entries) {
+      router.go(entry.key);
+      await tester.pumpAndSettle();
+
+      expect(
+        router.routerDelegate.currentConfiguration.uri.toString(),
+        entry.value,
+        reason: '${entry.key} should redirect',
+      );
+      expect(find.byType(ReviewSurface), findsOneWidget);
     }
   });
 

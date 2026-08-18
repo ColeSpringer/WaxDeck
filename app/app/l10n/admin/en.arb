@@ -189,6 +189,14 @@
   "@adminDashboardTitle": {
     "description": "Title of the admin console's front page."
   },
+  "adminForbiddenMessage": "The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.",
+  "@adminForbiddenMessage": {
+    "description": "Body of the refusal an account without the role gets at a console location it followed a link to."
+  },
+  "adminForbiddenTitle": "This area is for administrators",
+  "@adminForbiddenTitle": {
+    "description": "Heading of the refusal an account without the role gets at a console location it followed a link to."
+  },
   "adminGenreAdd": "Add genre",
   "@adminGenreAdd": {
     "description": "Button that adds a genre to the vocabulary."
@@ -960,10 +968,6 @@
   "adminSectionReview": "Review queue",
   "@adminSectionReview": {
     "description": "Name of the screen holding albums waiting for an identification decision."
-  },
-  "adminSectionReviewBlurb": "Albums waiting for an identification decision",
-  "@adminSectionReviewBlurb": {
-    "description": "Line under the review queue in the console's section list."
   },
   "adminSectionSchedulesBlurb": "When scans, backups, and pruning run",
   "@adminSectionSchedulesBlurb": {

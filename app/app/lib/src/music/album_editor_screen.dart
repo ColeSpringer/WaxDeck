@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/forbidden_page.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -114,20 +115,12 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
         false;
     final l10n = context.l10n;
     if (!isAdmin) {
-      return WaxScaffold(
-        title: l10n.musicAlbumTitle,
-        largeTitle: false,
-        onBack: () => context.leave(fallback: WaxRoute.music),
-        slivers: <Widget>[
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: EmptyState(
-              title: l10n.musicAlbumEditorForbiddenTitle,
-              message: l10n.musicAlbumEditorForbiddenMessage,
-              glyph: WaxIcons.edit,
-            ),
-          ),
-        ],
+      return ForbiddenPage(
+        pageTitle: l10n.musicAlbumTitle,
+        heading: l10n.musicAlbumEditorForbiddenTitle,
+        message: l10n.musicAlbumEditorForbiddenMessage,
+        glyph: WaxIcons.edit,
+        fallback: WaxRoute.music,
       );
     }
     final async = ref.watch(albumDetailProvider(widget.pid));

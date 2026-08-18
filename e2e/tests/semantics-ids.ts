@@ -14,6 +14,7 @@ export const SemanticsIds = {
   adminBackups: 'admin-backups',
   adminConsole: 'admin-console',
   adminDashboard: 'admin-dashboard',
+  adminForbidden: 'admin-forbidden',
   adminGenres: 'admin-genres',
   adminLibraries: 'admin-libraries',
   adminMigrate: 'admin-migrate',
@@ -281,7 +282,7 @@ export const SemanticsIds = {
   upgradeGroup: (itemPid: string | number) => `upgrade-group-${itemPid}`,
   upgradeResolve: (itemPid: string | number) => `upgrade-resolve-${itemPid}`,
 
-  // home: Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.
+  // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   homeAdd: 'home-add',
   homeMix: (index: string | number) => `home-mix-${index}`,
   homeScreen: 'home-screen',
@@ -289,6 +290,7 @@ export const SemanticsIds = {
   notificationRowPlain: (kind: string | number) => `notification-row-${kind}-none`,
   notificationsBell: 'notifications-bell',
   notificationsClear: 'notifications-clear',
+  notificationsScreen: 'notifications-screen',
   pinSheetTarget: (pid: string | number) => `pin-sheet-target-${pid}`,
   shelf: (shelf: string | number) => `shelf-${shelf}`,
   shelfAll: (shelf: string | number) => `shelf-${shelf}-all`,
@@ -609,6 +611,7 @@ export const SemanticsIds = {
   reviewIdentifySkipped: 'review-identify-skipped',
   reviewIdentifySubmit: 'review-identify-submit',
   reviewIdentifyToggle: 'review-identify-toggle',
+  reviewOpenUploads: 'review-open-uploads',
   reviewPane: 'review-pane',
   reviewPaneClose: 'review-pane-close',
   reviewRevert: 'review-revert',
@@ -683,7 +686,6 @@ export const SemanticsIds = {
   navAccountAction: (name: string | number) => `nav-account-${name}`,
   navDestination: (name: string | number) => `nav-${name}`,
   navDisclose: (name: string | number) => `nav-disclose-${name}`,
-  navGroup: (name: string | number) => `nav-group-${name}`,
   navOverflow: 'nav-overflow',
   navRegion: 'nav-region',
   navSidebarCollapse: 'nav-sidebar-collapse',
@@ -719,6 +721,7 @@ export const SemanticsIds = {
   addFromUrl: 'add-from-url',
   addUploadFile: 'add-upload-file',
   addUploadFolder: 'add-upload-folder',
+  addUploadSessions: 'add-upload-sessions',
   uploadBatch: (batchId: string | number) => `upload-batch-${batchId}`,
   uploadDelete: (id: string | number) => `upload-delete-${id}`,
   uploadDropTarget: 'upload-drop-target',
@@ -829,7 +832,7 @@ export const SemanticsIdPrefixes = {
   upgradeGroup: 'upgrade-group-',
   upgradeResolve: 'upgrade-resolve-',
 
-  // home: Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.
+  // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   homeMix: 'home-mix-',
   notificationRow: 'notification-row-',
   notificationRowPlain: 'notification-row-',
@@ -975,7 +978,6 @@ export const SemanticsIdPrefixes = {
   navAccountAction: 'nav-account-',
   navDestination: 'nav-',
   navDisclose: 'nav-disclose-',
-  navGroup: 'nav-group-',
 
   // stats: Listening stats and year in review.
   shareCardExport: 'share-card-export-',

@@ -138,7 +138,7 @@ class _CommandPaletteDialog extends ConsumerWidget {
     );
   }
 
-  /// Actions, then places, then settings, then the admin areas.
+  /// Actions, then places, then settings.
   /// [runners] is filled as rows are built, so a row can be reported by
   /// id rather than carrying a closure through the design system.
   List<WaxPaletteGroup> _groups(
@@ -184,10 +184,15 @@ class _CommandPaletteDialog extends ConsumerWidget {
         ),
     ];
 
+    // Role-gated by construction: the chrome carries only what this
+    // account may be offered. Administrative destinations sit among the
+    // rest rather than in a group of their own, which is the same answer
+    // the sidebar gives now that they are rows there too - "Admin areas"
+    // was one heading over a set whose only shared property was that the
+    // sidebar had folded it away.
     final places = <WaxPaletteEntry>[
       for (final target in chrome.visible)
-        if (target.section != WaxNavSection.curation &&
-            _matches(target.labelOf(l10n), needle))
+        if (_matches(target.labelOf(l10n), needle))
           entry(
             id: 'go-${target.name}',
             label: target.labelOf(l10n),
@@ -260,26 +265,10 @@ class _CommandPaletteDialog extends ConsumerWidget {
         ),
     ];
 
-    // Role-gated by construction: the chrome carries only what this
-    // account may be offered.
-    final admin = <WaxPaletteEntry>[
-      for (final target in chrome.visible)
-        if (target.section == WaxNavSection.curation &&
-            _matches(target.labelOf(l10n), needle))
-          entry(
-            id: 'go-${target.name}',
-            label: target.labelOf(l10n),
-            detail: l10n.shellPaletteCurationDetail,
-            glyph: target.glyph,
-            run: () => host.go(target.location),
-          ),
-    ];
-
     return <WaxPaletteGroup>[
       WaxPaletteGroup(title: l10n.shellPaletteGroupActions, entries: actions),
       WaxPaletteGroup(title: l10n.shellPaletteGroupPlaces, entries: places),
       WaxPaletteGroup(title: l10n.shellPaletteGroupSettings, entries: settings),
-      WaxPaletteGroup(title: l10n.shellPaletteGroupAdmin, entries: admin),
     ];
   }
 

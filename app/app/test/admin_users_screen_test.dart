@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/users_screen.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -9,10 +10,22 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: routedHost(const UsersScreen()),
-);
+/// The editor is a console location, and the console refuses an account
+/// without the role, so the fake has to hold an administrator's session
+/// for a row to open into anything.
+Widget _host(FakeRepository repo) {
+  repo.sessionState = const SessionState(
+    authenticated: true,
+    user: WaxDeckUser(id: 'us-0', username: 'admin', roles: ['admin']),
+  );
+  return ProviderScope(
+    overrides: [
+      repositoryProvider.overrideWithValue(repo),
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    ],
+    child: routedHost(const UsersScreen()),
+  );
+}
 
 UserAccount _account(
   String id, {

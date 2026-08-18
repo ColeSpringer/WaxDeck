@@ -283,6 +283,14 @@
   "@uploadsRetry": {
     "description": "Accessible name of the control that sends a failed upload again."
   },
+  "uploadsSessionsSubtitle": "Quota, what is still going up, and what to retry",
+  "@uploadsSessionsSubtitle": {
+    "description": "Second line of the row in the add sheet that opens the upload sessions list."
+  },
+  "uploadsSessionsTitle": "Past uploads",
+  "@uploadsSessionsTitle": {
+    "description": "Row in the add sheet that opens the upload sessions list. The list is not a navigation destination, so this is its lasting door."
+  },
   "uploadsSourceUrl": "Source URL",
   "@uploadsSourceUrl": {
     "description": "The field taking the address the server downloads from."

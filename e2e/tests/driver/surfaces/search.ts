@@ -4,7 +4,7 @@ import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickThrough, typeInto } from '../gestures';
+import { clickThrough, submitThrough, typeInto } from '../gestures';
 
 export class Search extends Surface {
   /// The field itself. At sidebar width it lives in the chrome header
@@ -23,8 +23,12 @@ export class Search extends Surface {
   }
 
   /// Open the search screen from wherever the app is.
+  ///
+  /// Enter, not a click: focusing the field leaves the visitor where they
+  /// were, which is the whole of that fix. An empty submit is the way in
+  /// with nothing typed, which is how the Radio chip is reached.
   async open(): Promise<void> {
-    await clickThrough(this.field(), this.filter('all'));
+    await submitThrough(this.ctx.page, this.field(), this.filter('all'));
   }
 
   /// Type a query and wait for the group that should answer it.

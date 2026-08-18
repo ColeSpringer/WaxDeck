@@ -2,6 +2,18 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
+- [8-18-2026] when you change a track and then go back it keeps playing from the spot that you were at. It should restart? We shouldn't be remembering positions of old tracks? at most we remember the position of the last track that was playing so users can continue if they needed to stop.
+
+- [8-18-2026] [web] music track changes repaint the entire screen when in fullscreen.
+
+- [8-18-2026] when in full screen and listening to a playlist or anything with a queue, the upcoming song's artist name is on the far right. it should be next to the song name on the left. we can keep the number of items remaining on the right.
+
+- [8-18-2026] when using the instant mix button, while listening to a song, it changes songs to the new mix instead of adding songs to your queue. should keep playing the song your listening to.
+
+- [8-18-2026] Radio page -> hit search button top right -> hit back button -> goes to home page and not back to the radio page. Need to add back awareness or page history.
+
+- [8-18-2026] Radio has a hickup in audio in the first couple of seconds of each song? !!! After furth investigating its not every song. However, it does happen occasionally. Need to check if this is on our end or from the radio stations / network issues that we can't control.
+
 - [8-17-2026] [web] We have nothing that shows when you mouse over cover art. Maybe add a play button (transparent? not overly intrusive) when mousing over playable artwork?  
 
 - [8-17-2026] Maybe we should gray out the visualizer option if the file has not been analyzed yet. Can have a tooltip that states the reason for the grayout.
@@ -33,8 +45,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 - [8-8-2026] Uploads only accept file selections. Not useful when trying to upload albums or entire music collections. Also need to make sure that the upload surface is up to standard security practices.
 
 - [8-8-2026] Under listening stats, when you select the time period to take into account, there is a noticable visual change. It looks like its redrawing the elements. This might not be fixable and I guess it's not really a bug. However, I think it would be worth making it a less jarring transition if we can.
-
-- [8-8-2026] Under curation, the review queue and admin console bring you to the same page (just to their respective section). The admin console is a pretty accurate name we can continue to use. On a related note, does it make sense to have this under curation along with uploads and review queue? The admin console has a lot of reponsbility outside of curation. So we either need to rename curation or bring out the admin console. My thought right now might be to remove the uploads section under curation as there are already ways to upload files in home with the addition button on the top right. Then we can have a dedicated notifcation tab and admin console. (consider also renaming "settings" to "App Settings" or something similar). Then we can have the admin console only be visible to admins.
 
 - [8-8-2026] I believe we implemented the ability to search for podcasts by name to add but it doesnt show in the UI.
 

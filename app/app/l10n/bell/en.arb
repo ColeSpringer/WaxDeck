@@ -1,9 +1,17 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "bellActivityBlurb": "What this device has seen since the app opened. There is no history from before that.",
+  "@bellActivityBlurb": {
+    "description": "Line under the activity heading on the notifications screen, saying plainly that the list is this session's."
+  },
+  "bellActivityTitle": "Recent activity",
+  "@bellActivityTitle": {
+    "description": "Heading over the list of what happened while the app was open."
+  },
   "bellClear": "Clear",
   "@bellClear": {
-    "description": "Last row of the open bell, emptying the list."
+    "description": "Empties the list: the last row of the open bell, and the action on the notifications screen."
   },
   "bellDownloadFinished": "A download finished.",
   "@bellDownloadFinished": {
@@ -11,7 +19,11 @@
   },
   "bellEmpty": "Nothing has happened yet.",
   "@bellEmpty": {
-    "description": "Drawn in the open bell when this session has seen nothing. Empty is a legitimate state, not a broken bell."
+    "description": "Drawn in the open bell and under the notifications screen's own heading when this session has seen nothing. Empty is a legitimate state, not a broken bell."
+  },
+  "bellEmptyTitle": "Nothing to report",
+  "@bellEmptyTitle": {
+    "description": "Heading of the empty state on the notifications screen. The bell's own menu needs no heading, so it draws the message alone."
   },
   "bellEpisodeDownloaded": "A new episode finished downloading.",
   "@bellEpisodeDownloaded": {
@@ -40,6 +52,20 @@
       "what": {
         "type": "String",
         "example": "An upload changed."
+      }
+    }
+  },
+  "bellRowWhen": "{surface} · {when}",
+  "@bellRowWhen": {
+    "description": "The line under a row on the notifications screen: which surface moved, then how long ago.",
+    "placeholders": {
+      "surface": {
+        "type": "String",
+        "example": "Uploads"
+      },
+      "when": {
+        "type": "String",
+        "example": "12 min ago"
       }
     }
   },
@@ -73,7 +99,7 @@
   },
   "bellTitle": "Notifications",
   "@bellTitle": {
-    "description": "Accessible name of the bell in the top app bar with nothing unread."
+    "description": "The word for notifications: the accessible name of the bell in the top app bar with nothing unread, and the title of the screen that holds the same list."
   },
   "bellUnread": "{count, plural, =1{Notifications, 1 unread} other{Notifications, {count} unread}}",
   "@bellUnread": {

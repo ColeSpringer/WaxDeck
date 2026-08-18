@@ -784,6 +784,25 @@ here waits on upstream.
   buttons, and no per-target rate limiting (a noisy event source
   rides the outbox's global pacing). Each is an isolated extension
   of one provider file when wanted.
+- `[in-repo]` **A role granted mid-session is not seen until the next
+  sign-in.** `authControllerProvider` is written at launch, login,
+  bootstrap and sign-out and nowhere else, and no server event carries an
+  account change, so a promotion reaches this client only when it reads
+  the session again. Everything role-gated inherits it - the nav rows,
+  the Server settings section, the album editor - and the admin console's
+  refusal page is where it now reads as an answer rather than as a
+  missing row. The fix is server-side: an account-changed marker on the
+  sync stream, which the redirect listener already has a shape for.
+- `[in-repo]` **There is no durable notification inbox.** The
+  Notifications screen and the bell both draw the same session-local
+  list: what this client saw while it was running, emptied by a
+  relaunch. `api/spec/notifications.yaml` is the event catalog and the
+  delivery targets, not a history, so nothing on the server holds what
+  happened to an account - which makes the list complete on the device
+  that was open and empty on the one that was not. A real inbox is a
+  server feature (a per-user table, a keyset-paged read, a read
+  marker), and the screen that would draw it is already there and would
+  swap its source.
 - `[in-repo]` **Radio scrobbling is off per account, not per station.**
   The account-wide switch ships (`Prefs.radioScrobbleOptOut`),
   which covers the listener who wants none of it. What the original entry

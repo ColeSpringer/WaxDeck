@@ -33,10 +33,6 @@ enum WaxNavSection {
   /// Not a tab. Listed in the sidebar under a rule, and behind the icon
   /// rail's overflow.
   secondary,
-
-  /// Inside the curation group, and hidden from accounts that cannot use
-  /// it.
-  curation,
 }
 
 /// Every place the shell's chrome can send a visitor.
@@ -97,42 +93,54 @@ enum WaxNavTarget {
     WaxNavSection.secondary,
     needsDownloads: true,
   ),
+  // What happened and how this account hears about it. The bell in the
+  // top app bar is the peek; this is the topic, and the only place that
+  // answers the second half.
+  notifications(WaxIcons.bell, WaxRoute.notifications, WaxNavSection.secondary),
   settings(WaxIcons.settings, WaxRoute.settings, WaxNavSection.secondary),
 
-  uploads(
-    WaxIcons.add,
-    WaxRoute.uploads,
-    WaxNavSection.curation,
-    needsUpload: true,
-  ),
-  // The review queue keeps a shell entry of its own as well as a place
-  // in the console: it is the surface an administrator opens daily, and
-  // burying the keyboard-first screen one level deeper to tidy the group
-  // would cost more than the tidiness is worth.
+  // The last three are the ones that maintain the library rather than
+  // listen to it. They were a Curation group, which was a label over a
+  // set nothing but the label held together - the console alone carries
+  // accounts, backups and the audit log, none of which is curation - and
+  // a disclosure to open before any of them could be clicked. They are
+  // rows now, in the order somebody meets them, and the account that
+  // cannot use one is still not offered it.
+  //
+  // The review queue keeps an entry of its own rather than living in the
+  // console: it is the surface an administrator opens daily, and it is
+  // the one of the three an uploader has their own half of. Gated on the
+  // upload right rather than the role for exactly that reason - the
+  // endpoint scopes the queue rather than refusing it
+  // (`service/review.go` hands a non-admin the entries their own uploads
+  // opened), and the one control on the screen that is administration
+  // hides itself. It was admin-only while it lived in the console, which
+  // made "an uploader sees their own entries there" false wherever it
+  // was written down.
   review(
     WaxIcons.check,
     WaxRoute.review,
-    WaxNavSection.curation,
-    adminOnly: true,
+    WaxNavSection.secondary,
+    needsUpload: true,
   ),
-  // Gated on the upload right rather than the role: the endpoint serves
+  // The same gate, for the same reason: the endpoint serves
   // administrators every task and everyone else their own, and starting
   // one (an upload, an acquisition) is what needs the right. A listener
   // who can start none is the only account with nothing to see here.
   tasks(
     WaxIcons.refresh,
     WaxRoute.tasks,
-    WaxNavSection.curation,
+    WaxNavSection.secondary,
     needsUpload: true,
   ),
-  // One entry for the console, which is where the other nine
-  // administrative surfaces live now. They were nine sidebar rows in a
-  // Curation group that told nobody how they related; the console's own
-  // section list groups them and says what each is for.
+  // Last, and one entry for the console, which is where the other nine
+  // administrative surfaces live. They were nine sidebar rows that told
+  // nobody how they related; the console's own section list groups them
+  // and says what each is for.
   admin(
     WaxIcons.admin,
     WaxRoute.admin,
-    WaxNavSection.curation,
+    WaxNavSection.secondary,
     adminOnly: true,
   );
 
@@ -222,8 +230,8 @@ enum WaxNavTarget {
     WaxNavTarget.radio => l10n.shellNavRadio,
     WaxNavTarget.stats => l10n.shellNavStats,
     WaxNavTarget.downloads => l10n.shellNavDownloads,
+    WaxNavTarget.notifications => l10n.shellNavNotifications,
     WaxNavTarget.settings => l10n.shellNavSettings,
-    WaxNavTarget.uploads => l10n.shellNavUploads,
     WaxNavTarget.review => l10n.shellNavReview,
     WaxNavTarget.tasks => l10n.shellNavTasks,
     WaxNavTarget.admin => l10n.shellNavAdmin,
@@ -286,8 +294,8 @@ bool _isUnder(String location, String base) =>
 /// this one sits under, with the branch on screen breaking the tie.
 ///
 /// `/podcasts/pc-1` is Podcasts and `/books/bk-1` is Books, each claimed
-/// by prefix. A curation area lights its own row rather than the tab whose
-/// branch happens to declare it.
+/// by prefix. A location that is not a domain lights its own row rather
+/// than the tab whose branch happens to declare it.
 ///
 /// Home is the only target that claims a location by being home; every
 /// other match is a prefix, which is the stronger signal. So a location
@@ -399,21 +407,13 @@ class ShellChrome {
   ShellChrome({
     required this.visible,
     required this.byName,
-    required this.curation,
     required this.accountName,
   });
-
-  /// The stable handle of the curation group, in the vocabulary every
-  /// destination name and every semantics identifier already uses.
-  static const String _curationGroup = 'curation';
 
   /// Every target this account may be offered, in declaration order.
   final List<WaxNavTarget> visible;
 
   final Map<String, WaxNavTarget> byName;
-
-  /// The curation targets, which the sidebar draws under one group.
-  final List<WaxNavTarget> curation;
 
   /// Who is signed in. A username rather than copy.
   final String accountName;
@@ -446,22 +446,17 @@ class ShellChrome {
   }
 
   /// Everything that is not a domain, as menu entries.
+  ///
+  /// Flat, in declaration order. The administrative half used to sit
+  /// under a Curation disclosure, which cost a click to reach the queue
+  /// somebody opens every morning and put one label over a set that had
+  /// no single name - and wore the console's own glyph while it did it.
   List<WaxNavEntry> secondaryOf(AppLocalizations l10n) {
     _reword(l10n);
     return _secondary ??= <WaxNavEntry>[
       for (final target in visible)
         if (target.section == WaxNavSection.secondary)
           WaxNavLink(target.destinationOf(l10n)),
-      if (curation.isNotEmpty)
-        WaxNavGroup(
-          name: _curationGroup,
-          label: l10n.shellNavCuration,
-          glyph: WaxIcons.admin,
-          semanticsId: SemanticsIds.navGroup(_curationGroup),
-          children: <WaxDestination>[
-            for (final target in curation) target.destinationOf(l10n),
-          ],
-        ),
     ];
   }
 
@@ -498,15 +493,11 @@ final shellChromeProvider = Provider.autoDispose<ShellChrome>((ref) {
         ),
       )
       .toList();
-  final curation = visible
-      .where((target) => target.section == WaxNavSection.curation)
-      .toList();
   return ShellChrome(
     visible: visible,
     byName: <String, WaxNavTarget>{
       for (final target in visible) target.name: target,
     },
-    curation: curation,
     accountName: user?.username ?? '',
   );
 });
@@ -567,7 +558,6 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   @override
   void initState() {
     super.initState();
-    _searchFocus.addListener(_onSearchFocus);
     // Seeded, not left empty: `_listenForQuery` below only fires on a
     // change, so a shell built over a query that was already set - a deep
     // link the router resolved before this State existed - would draw an
@@ -577,33 +567,9 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
 
   @override
   void dispose() {
-    _searchFocus.removeListener(_onSearchFocus);
     _searchField.dispose();
     _searchFocus.dispose();
     super.dispose();
-  }
-
-  /// Opens the search screen when the field takes the caret.
-  ///
-  /// On focus rather than on the first keystroke, which is the whole
-  /// answer to the bug: the header used to be a launcher that navigated
-  /// on click and left the field somebody was already aiming at behind,
-  /// so the click and the typing landed in different places. The field
-  /// lives above the routed navigator, so it keeps the caret across the
-  /// navigation it triggers, and typing carries on into results that
-  /// swap in underneath. Focusing it is also the only way to reach the
-  /// screen with nothing typed, which the Radio chip needs.
-  void _onSearchFocus() {
-    if (!_searchFocus.hasFocus || !mounted) return;
-    if (widget.location.startsWith(WaxRoute.search)) return;
-    // Carrying whatever is already in the field, not a bare `/search`.
-    // The arriving screen adopts the location's query as the one being
-    // answered, so a bare arrival submits an empty one - and the listener
-    // below then writes that emptiness back into the field, clearing the
-    // text under the caret that just landed there. Which is the failure
-    // this whole change exists to stop, on the way in instead of the way
-    // out. An empty field yields a bare `/search` anyway.
-    context.go(WaxRoute.searchFor(_searchField.text.trim()));
   }
 
   @override
@@ -629,11 +595,9 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   /// after this shell rebuilds, and a scope that finds nothing focused
   /// inside itself claims the focus. Asking any earlier is asking and
   /// then losing it a frame later.
-  /// The location is re-checked with the other two, and it is the one
-  /// that matters most: two frames is long enough to tap a nav-rail
-  /// destination, and focusing the field after leaving search calls
-  /// `_onSearchFocus` with its own guard now false, which navigates
-  /// straight back to the screen the visitor just left.
+  /// The location is re-checked with the other two: two frames is long
+  /// enough to tap a nav-rail destination, and asking for the caret after
+  /// that pulls it out of wherever the arriving screen put it.
   Future<void> _focusHeaderField() async {
     await WidgetsBinding.instance.endOfFrame;
     await WidgetsBinding.instance.endOfFrame;
@@ -665,36 +629,59 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
 
   /// Takes a keystroke from the header field.
   ///
-  /// No navigation here: focusing the field already did it, so by the
-  /// time anything is typed the screen is up and the settled query
-  /// reaches the URL through the screen's own debounced `replace`. Going
-  /// per keystroke would mint a browser history entry per character on
-  /// web, which turns "nightjar" into eight back presses.
+  /// Feeds the shared query and navigates nowhere. Navigating is what it
+  /// used to do - from here on the first character, and from a focus
+  /// listener before that - so a caret landing in the field carried a
+  /// visitor off whatever they were reading; the report this answers is
+  /// somebody clicking the field on Radio and losing the dial.
   ///
-  /// The guard covers the one case focus does not: text set into the
-  /// field without the caret ever landing in it. It carries the query, so
-  /// the arriving screen adopts what was typed instead of adopting an
-  /// empty location and wiping it.
+  /// The query is still written from everywhere, and that is what keeps
+  /// the two in step: the field follows the provider through
+  /// `_listenForQuery`, and a provider that stopped hearing about
+  /// keystrokes off the search screen would leave text in the field that
+  /// nothing could clear - arriving at a bare `/search` submits the empty
+  /// query it already holds, which is no change, so no listener fires and
+  /// the field keeps a word the screen is not answering.
+  ///
+  /// On the search screen it is also the live path, and the only one at
+  /// sidebar width: the screen draws no field there, watches the query,
+  /// and puts the settled one in the address bar with its own debounced
+  /// `replace`. Going per keystroke would mint a browser history entry
+  /// per character on web, which turns "nightjar" into eight back
+  /// presses.
   void _onSearchChanged(String value) {
     ref.read(searchQueryProvider.notifier).type(value);
-    final query = value.trim();
-    if (query.isEmpty) return;
-    if (widget.location.startsWith(WaxRoute.search)) return;
-    context.go(WaxRoute.searchFor(query));
   }
 
-  /// Takes a submit from the header field.
+  /// Takes a submit from the header field: the one gesture that moves.
   ///
-  /// The same two steps the search screen's own field takes, because at
-  /// sidebar width the screen draws no field and this is the only one
-  /// there is: without the second, a desktop session never accumulates a
-  /// recent search and the surface that offers them back stays empty
-  /// forever. Library queries only, matching the screen: recents are
-  /// offered under the library chips and not the Radio one, so an entry
-  /// stored here would be a shortcut that runs a library search for a
-  /// station name.
+  /// Empty submits too, and deliberately - it is the way to reach the
+  /// screen with nothing typed, which the Radio chip needs and which
+  /// focusing the field used to be. The query travels in the location
+  /// rather than only in the provider, because the arriving screen adopts
+  /// what the location says: handed a bare `/search` it would submit an
+  /// empty query, and the listener below would write that emptiness
+  /// straight back into the field under the caret.
+  ///
+  /// Then the same two steps the search screen's own field takes, because
+  /// at sidebar width the screen draws no field and this is the only one
+  /// there is: without them a desktop session never accumulates a recent
+  /// search and the surface that offers them back stays empty forever.
+  /// Library queries only, matching the screen: recents are offered under
+  /// the library chips and not the Radio one, so an entry stored here
+  /// would be a shortcut that runs a library search for a station name.
   void _onSearchSubmitted(String value) {
     final query = value.trim();
+    if (!widget.location.startsWith(WaxRoute.search)) {
+      // The scope with it. The screen puts every arrival back to All in
+      // a post-frame callback, which is a frame later than the submit
+      // below: without this the query is published under whichever chip
+      // the last search ended on, so a library query typed on Home after
+      // a station search asks the station directory and is never
+      // remembered as a recent.
+      ref.read(searchScopeProvider.notifier).select(SearchScope.all);
+      context.go(WaxRoute.searchFor(query));
+    }
     ref.read(searchQueryProvider.notifier).submit(query);
     if (query.isEmpty) return;
     if (ref.read(searchScopeProvider).source.asksLibrary) {
@@ -793,9 +780,10 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       // The search field, where the layout system puts it, and a real one:
       // it was a launcher that only opened the screen, so the field
       // somebody had just clicked went dead under the cursor and the
-      // typing started somewhere else. The screen draws no field of its
-      // own while this one is showing, so there is still exactly one
-      // field holding the query.
+      // typing started somewhere else. It stays where the caret lands
+      // now - Enter is what opens the screen - and the screen draws no
+      // field of its own while this one is showing, so there is still
+      // exactly one field holding the query.
       sidebarHeader: SearchField(
         controller: _searchField,
         focusNode: _searchFocus,

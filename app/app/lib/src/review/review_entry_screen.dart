@@ -510,6 +510,29 @@ class _Header extends StatelessWidget {
                       ),
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
+              // The way back to where the files came from. The origin
+              // line named the upload and stopped there, and the uploads
+              // screen has linked forward to its entry all along - so
+              // this was the one direction a curator had to navigate by
+              // hand, from the surface they are actually standing on.
+              // The sessions list rather than one session: the entry
+              // carries no upload id, and the list is where a batch's
+              // several sessions are together anyway.
+              //
+              // Pushed, which is the mirror of the link pointing this
+              // way: the sessions list is not declared under the queue,
+              // so `go` would drop whatever the entry was opened from
+              // and leave back with nothing to answer.
+              if (detail.origin == 'upload')
+                Padding(
+                  padding: const EdgeInsets.only(top: WaxSpace.s4),
+                  child: WaxButton(
+                    label: l10n.reviewOpenUploads,
+                    kind: WaxButtonKind.text,
+                    semanticsId: SemanticsIds.reviewOpenUploads,
+                    onPressed: () => context.pushOnce(WaxRoute.uploads),
+                  ),
+                ),
             ],
           ),
         ),

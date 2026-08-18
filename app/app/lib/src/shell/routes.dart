@@ -177,12 +177,40 @@ abstract final class WaxRoute {
   /// over it, the same way [settingsAbout] is.
   static const shares = '$settings/shares';
 
+  /// The upload sessions list. No longer a nav destination: adding audio
+  /// is the + control on the screen somebody is already on, and this is
+  /// the oversight surface behind it - reached from a notification about
+  /// an upload and from a review entry's own origin line. Still a
+  /// location a stranger can open, which is what keeps both links
+  /// working.
   static const uploads = '/uploads';
 
   /// Background tool tasks. Not under [admin]: whoever starts a task is
   /// offered this list by the snackbar that starts it, and uploading
   /// and acquiring are not administrator-only.
   static const tasks = '/tasks';
+
+  /// What happened, and how this account is told about it. The bell is
+  /// the quick peek at the first half; this is the surface that holds
+  /// both, so "turn that off" is somewhere to go rather than a setting
+  /// to hunt for.
+  static const notifications = '/notifications';
+
+  /// The queue of imports waiting on a decision. Its own location rather
+  /// than a console section: an uploader sees their own entries here,
+  /// which is not administration, and the screen an administrator opens
+  /// daily should not be a level deeper than the ones they open monthly.
+  static const review = '/review';
+  static String reviewEntry(String entryId) => '$review/$entryId';
+
+  /// Where the queue was declared while it was a console section. Kept
+  /// because every console location is shareable and the web build puts
+  /// it in the URL, so links minted then are somebody's bookmarks; the
+  /// router answers both with a redirect onto [review]. Nothing builds
+  /// one - it is here rather than in the table for the same reason
+  /// [episodePrefix] is: a location this app used to mint is still a
+  /// location, and they live in one place.
+  static const legacyReview = '/admin/review';
 
   /// Preserved deep link into the metadata editor.
   static const metadataPrefix = '/metadata/';
@@ -193,10 +221,14 @@ abstract final class WaxRoute {
   /// no session of its own, and the e2e suite opens it cold.
   static const editingPrototype = '/prototype/editing';
 
-  /// Curation and administration: the admin console, and one location
-  /// per section. No role redirect lives on these paths: the chrome that
-  /// leads here already hides what an account cannot use, and the server
-  /// refuses the calls regardless.
+  /// Administration: the admin console, and one location per section.
+  /// Still no role redirect on these paths - a redirect would answer a
+  /// pasted link by silently landing somebody somewhere else, which
+  /// reads as a broken link rather than as a refusal. The console frame
+  /// refuses in its own build instead, with an `EmptyState` that says so
+  /// and a way back, so the location keeps its meaning for the account
+  /// that shares it and stops offering panels that all 403 to the one
+  /// that follows it.
   ///
   /// Every one of these is a place a stranger can open, which is what
   /// makes "it is under Backups" a link rather than a set of directions;
@@ -205,8 +237,6 @@ abstract final class WaxRoute {
   static const admin = '/admin';
   static const libraries = '$admin/libraries';
   static const genres = '$admin/genres';
-  static const review = '$admin/review';
-  static String reviewEntry(String entryId) => '$review/$entryId';
   static const health = '$admin/health';
   static String healthRule(String rule) => '$health/$rule';
   static const diagnostics = '$admin/diagnostics';

@@ -176,8 +176,10 @@ Then, in the web UI, the **+** button on the library adds audio: **Add
 from URL** acquires from a video, playlist, or channel, and **Upload a
 file** sends one from your device. The button uses the media type of
 the section you are in (Music, Audiobooks), and podcasts are added by
-subscribing to a feed instead. The **Uploads** screen (under the
-curation menu) lists in-progress and past sessions. Either way the
+subscribing to a feed instead. **Past uploads**, in the same **+**
+sheet, lists in-progress and past sessions with the quota they are
+spending; a notification about an upload opens the same list, as does
+the origin line on a review entry. Either way the
 download runs as a background task: the files arrive with the source's
 own title, thumbnail, and provenance tags, cluster into album units,
 and wait in the review queue where you approve a match, keep them as

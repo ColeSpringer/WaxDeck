@@ -1,7 +1,10 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../settings/settings_registry.dart';
+import '../shell/forbidden_page.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 
@@ -37,7 +40,6 @@ enum AdminGroup {
 enum AdminSection {
   dashboard(WaxIcons.stats, WaxRoute.admin, AdminGroup.overview),
   libraries(WaxIcons.albums, WaxRoute.libraries, AdminGroup.library),
-  review(WaxIcons.check, WaxRoute.review, AdminGroup.library),
   health(WaxIcons.warning, WaxRoute.health, AdminGroup.library),
   diagnostics(WaxIcons.info, WaxRoute.diagnostics, AdminGroup.library),
   genres(WaxIcons.filter, WaxRoute.genres, AdminGroup.library),
@@ -68,7 +70,6 @@ enum AdminSection {
   String titleOf(AppLocalizations l10n) => switch (this) {
     dashboard => l10n.adminSectionDashboard,
     libraries => l10n.adminLibrariesTitle,
-    review => l10n.adminSectionReview,
     health => l10n.adminSectionHealth,
     diagnostics => l10n.adminSectionDiagnostics,
     genres => l10n.adminGenreTreeTitle,
@@ -89,7 +90,6 @@ enum AdminSection {
   String blurbOf(AppLocalizations l10n) => switch (this) {
     dashboard => l10n.adminSectionDashboardBlurb,
     libraries => l10n.adminSectionLibrariesBlurb,
-    review => l10n.adminSectionReviewBlurb,
     health => l10n.adminSectionHealthBlurb,
     diagnostics => l10n.adminSectionDiagnosticsBlurb,
     genres => l10n.adminSectionGenresBlurb,
@@ -133,7 +133,7 @@ enum AdminSection {
 /// screen, so the section list keeps its scroll position and its
 /// highlight across a move between sections, and a screen only has to
 /// know how to be a page.
-class AdminConsole extends StatelessWidget {
+class AdminConsole extends ConsumerWidget {
   const AdminConsole({required this.child, required this.location, super.key});
 
   final Widget child;
@@ -143,7 +143,14 @@ class AdminConsole extends StatelessWidget {
   final String location;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Refused here rather than redirected in the router, which is the
+    // decision this frame exists to hold: the chrome already hides what
+    // an account cannot use and the server refuses every call behind it,
+    // but neither covers a pasted link, and a member following one used
+    // to get the whole console with panels that all answer 403.
+    // `ForbiddenPage` carries the rest of the argument.
+    if (!ref.watch(isAdminProvider)) return const _AdminForbidden();
     final sizeClass = WaxSizeClass.of(context);
     // Below sidebar width the console is one screen at a time: the
     // dashboard is the list of sections, and a section is a page with a
@@ -170,6 +177,30 @@ class AdminConsole extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// What an account without the role gets at a console location.
+///
+/// A whole screen rather than an empty console: the section list beside
+/// it would be a set of rows that all refuse, which is a worse answer
+/// than one sentence.
+class _AdminForbidden extends StatelessWidget {
+  const _AdminForbidden();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return ForbiddenPage(
+      // The area's name rather than the page's: the refusal is the same
+      // one at every console location, and "Dashboard" would name a
+      // screen that is not being shown.
+      pageTitle: l10n.shellNavAdmin,
+      heading: l10n.adminForbiddenTitle,
+      message: l10n.adminForbiddenMessage,
+      glyph: WaxIcons.admin,
+      semanticsId: SemanticsIds.adminForbidden,
     );
   }
 }

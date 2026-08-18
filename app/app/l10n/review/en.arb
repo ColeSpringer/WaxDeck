@@ -309,6 +309,10 @@
   "@reviewNoCandidatesTitle": {
     "description": "Empty state where the sources were searched and matched nothing."
   },
+  "reviewOpenUploads": "Open uploads",
+  "@reviewOpenUploads": {
+    "description": "Link on an uploaded entry's origin line, back to the upload sessions list. The only route from a review entry to where its files came from."
+  },
   "reviewOriginAcquisition": "Acquired",
   "@reviewOriginAcquisition": {
     "description": "Badge on a queue row: this entry came in through a download the server ran."

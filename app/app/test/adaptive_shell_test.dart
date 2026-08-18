@@ -18,6 +18,7 @@ import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
+import 'package:waxdeck/src/search/search_screen.dart';
 import 'package:waxdeck/src/settings/settings_screen.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
 import 'package:waxdeck/src/shell/adaptive_shell.dart';
@@ -271,11 +272,10 @@ void main() {
     // Tall enough that the whole list is built: the sidebar scrolls, and
     // a lazily-built row that is off screen is not the thing under test.
     final container = await _pumpShell(tester, size: const Size(1000, 1400));
-    // Both sections start closed away from what they hold, so their
-    // children are not built until they are opened; every one of them has
-    // to carry a handle once they are.
-    await tester.tap(find.text('Curation'));
-    await tester.pumpAndSettle();
+    // Music's indexes start closed away from what they hold, so their
+    // children are not built until it is opened; every one of them has to
+    // carry a handle once they are. Nothing else discloses: the
+    // administrative rows are rows.
     await tester.tap(find.bySemanticsLabel('Expand Music'));
     await tester.pumpAndSettle();
 
@@ -465,7 +465,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('admin'), findsOneWidget, reason: 'who is signed in');
 
-    await tester.tap(find.text('Settings'));
+    await tester.tap(find.text('App settings'));
     await tester.pumpAndSettle();
 
     expect(find.byType(SettingsScreen), findsOneWidget);
@@ -493,30 +493,39 @@ void main() {
     expect(_location(container), WaxRoute.login);
   });
 
-  testWidgets('the curation group is hidden from an account without it', (
+  testWidgets('the administrative rows are hidden from an account without', (
     tester,
   ) async {
+    // They were folded into one Curation group, which meant one row to
+    // hide; they are rows of their own now, so each carries its own gate
+    // and this is what says so.
     await _pumpShell(tester, user: _listener);
 
-    expect(find.text('Curation'), findsNothing);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Review queue'), findsNothing);
+    expect(find.text('Tasks'), findsNothing);
+    expect(find.text('Admin console'), findsNothing);
+    expect(find.text('App settings'), findsOneWidget);
+    expect(find.text('Notifications'), findsOneWidget);
   });
 
-  testWidgets('the curation group opens on the area a visitor is in', (
-    tester,
-  ) async {
+  testWidgets('a console location lights the console row', (tester) async {
     final container = await _pumpShell(tester, size: const Size(1000, 1400));
     container.read(routerProvider).go(WaxRoute.trash);
     await tester.pumpAndSettle();
 
-    // Arriving by URL must never hide where you are: the group opens on
-    // the console entry that claims the location.
+    // Arriving by URL must never hide where you are, and there is no
+    // disclosure to open on the way any more: the row is simply there,
+    // and lit.
     expect(
       find.descendant(
         of: find.byType(WaxSidebar),
         matching: find.text('Admin console'),
       ),
       findsOneWidget,
+    );
+    expect(
+      tester.widget<WaxShellFrame>(find.byType(WaxShellFrame)).selected,
+      WaxNavTarget.admin.name,
     );
   });
 
@@ -723,9 +732,10 @@ void main() {
       expect(field, findsOne);
       expect(_location(container), WaxRoute.home);
 
-      // Focusing it is what opens the screen, and the caret stays put
+      // Submitting is what opens the screen, and the caret stays put
       // because the field is in the shell frame rather than in the route.
-      await tester.tap(field);
+      await tester.enterText(field, 'night');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
       expect(_location(container), startsWith(WaxRoute.search));
       expect(
@@ -733,13 +743,99 @@ void main() {
         isTrue,
       );
 
-      await tester.enterText(field, 'night');
+      // And from there it is live: typing over it swaps the results
+      // underneath without another navigation.
+      await tester.enterText(field, 'nightjar');
       await tester.pump(SearchQuery.debounce);
       await tester.pumpAndSettle();
 
       // Still one field: the screen brings none of its own.
       expect(find.bySemanticsIdentifier(SemanticsIds.searchField), findsOne);
+      expect(container.read(searchQueryProvider), 'nightjar');
+    });
+
+    testWidgets('typing carries nobody anywhere', (tester) async {
+      // The report this answers: clicking the field on Radio and typing
+      // took the dial off screen mid-word. Focus used to navigate and so
+      // did the first keystroke, so a caret landing in the header was
+      // enough to leave whatever was being read.
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      final router = container.read(routerProvider);
+      router.go(WaxRoute.radio);
+      await tester.pumpAndSettle();
+      final depth = router.routerDelegate.currentConfiguration.matches.length;
+      final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
+
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(_location(container), WaxRoute.radio, reason: 'focus alone');
+
+      for (final prefix in <String>['n', 'ni', 'nig', 'nigh', 'night']) {
+        await tester.enterText(field, prefix);
+        await tester.pump(SearchQuery.debounce);
+      }
+      await tester.pumpAndSettle();
+
+      expect(_location(container), WaxRoute.radio);
+      expect(
+        router.routerDelegate.currentConfiguration.matches,
+        hasLength(depth),
+      );
+      // The query is still written, which is what keeps the field and
+      // the provider in step: a provider that stopped hearing keystrokes
+      // off search would leave text here that nothing could clear, since
+      // arriving at a bare `/search` submits the empty query it already
+      // holds and no listener fires on a value that did not change.
       expect(container.read(searchQueryProvider), 'night');
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'night',
+      );
+    });
+
+    testWidgets('a bare arrival clears what was typed and not submitted', (
+      tester,
+    ) async {
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
+      await tester.enterText(field, 'night');
+      await tester.pump(SearchQuery.debounce);
+      await tester.pumpAndSettle();
+
+      // The app-bar control and the palette both open a bare `/search`,
+      // whose query is empty. The screen answers that, so the field has
+      // to say it too - it read "night" over a nothing-typed screen
+      // while the provider was left out of the keystrokes.
+      container.read(routerProvider).go(WaxRoute.search);
+      await tester.pumpAndSettle();
+
+      expect(container.read(searchQueryProvider), isEmpty);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        isEmpty,
+      );
+    });
+
+    testWidgets('a submit from elsewhere is answered under All', (
+      tester,
+    ) async {
+      // The screen resets the chip on every arrival, but in a post-frame
+      // callback - a frame later than the submit that carries the query.
+      // Without the reset here the query is published under whichever
+      // chip the last search ended on: a library query asking the
+      // station directory, and never remembered as a recent.
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      container.read(searchScopeProvider.notifier).select(SearchScope.radio);
+      container.read(routerProvider).go(WaxRoute.radio);
+      await tester.pumpAndSettle();
+
+      final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
+      await tester.enterText(field, 'nightjar');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(container.read(searchScopeProvider), SearchScope.all);
+      expect(container.read(recentSearchesProvider), contains('nightjar'));
     });
 
     testWidgets('navigates once, however many characters are typed', (
@@ -748,14 +844,15 @@ void main() {
       final container = await _pumpShell(tester, size: const Size(1000, 900));
       final router = container.read(routerProvider);
       final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
-      await tester.tap(field);
+      await tester.enterText(field, 'n');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
       final depth = router.routerDelegate.currentConfiguration.matches.length;
 
       // On web every `go` mints a history entry, so routing per keystroke
       // would make one word several back presses. The one navigation this
-      // feature makes is the focus one, already spent above.
-      for (final prefix in <String>['n', 'ni', 'nig', 'nigh', 'night']) {
+      // feature makes is the submit, already spent above.
+      for (final prefix in <String>['ni', 'nig', 'nigh', 'night']) {
         await tester.enterText(field, prefix);
         await tester.pump(SearchQuery.debounce);
       }
@@ -768,26 +865,41 @@ void main() {
       );
     });
 
-    testWidgets('takes its text with it when focus opens the screen', (
+    testWidgets('an empty submit still opens the screen', (tester) async {
+      // Focusing the field used to be the only way to reach search with
+      // nothing typed, which is how the Radio chip is reached. Enter has
+      // to keep that door open now that focus does not.
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
+
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(_location(container), WaxRoute.search);
+      expect(find.byType(SearchScreen), findsOneWidget);
+    });
+
+    testWidgets('takes its text with it when submit opens the screen', (
       tester,
     ) async {
       final container = await _pumpShell(tester, size: const Size(1000, 900));
       final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
 
-      // Typed here, then carried away and back: the search screen adopts
-      // the location's query as the one being answered, so opening it
-      // with a bare `/search` would submit an empty query and the shell
-      // would write that emptiness straight back into the field - the
-      // same class of failure as the launcher this replaced.
-      await tester.enterText(field, 'nightjar');
-      await tester.pump(SearchQuery.debounce);
-      await tester.pumpAndSettle();
+      // The query travels in the location, not only in the provider: the
+      // search screen adopts what the location says, so opening it with a
+      // bare `/search` would submit an empty query and the shell would
+      // write that emptiness straight back into the field - the same
+      // class of failure as the launcher this replaced.
       container.read(routerProvider).go(WaxRoute.music);
       await tester.pumpAndSettle();
-
-      await tester.tap(field);
+      await tester.enterText(field, 'nightjar');
+      await tester.pump(SearchQuery.debounce);
+      await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
-      expect(_location(container), startsWith(WaxRoute.search));
+
+      expect(_location(container), WaxRoute.searchFor('nightjar'));
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller?.text,
         'nightjar',
@@ -907,8 +1019,9 @@ void main() {
       // Arriving at search asks for the caret two frames later, which is
       // long enough to tap a rail destination. The continuation used to
       // re-check `mounted` and the header's presence but not the
-      // location, so `requestFocus` fired `_onSearchFocus` with its own
-      // guard now false and navigated straight back.
+      // location, so `requestFocus` pulled the caret out of the screen
+      // the visitor had just arrived at - and, while focus still
+      // navigated, took them back to the one they had left.
       final container = await _pumpShell(tester, size: const Size(1000, 900));
       container.read(routerProvider).go(WaxRoute.search);
       await tester.pump();

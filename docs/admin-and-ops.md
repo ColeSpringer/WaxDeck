@@ -8,12 +8,19 @@ trash, upload oversight, read-only mode, transcoding limits,
 Prometheus metrics, and moving in from another server.
 
 Everything here lives in the **admin console** at `/admin`, reached from
-the sidebar's Curation group or from Settings > Server. The console has a
-dashboard (health, the review queue's depth, jobs in flight, the last
-backup, and the two long operations you start by hand) and a section per
-area, each with a location of its own so "it is under Backups" is a link
-rather than a set of directions. On a phone the console is a list of
-those sections.
+the Admin console row in the sidebar or from Settings > Server. The
+console has a dashboard (health, the review queue's depth, jobs in
+flight, the last backup, and the two long operations you start by hand)
+and a section per area, each with a location of its own so "it is under
+Backups" is a link rather than a set of directions. On a phone the
+console is a list of those sections. An account without the
+administrator role that opens a console location gets a page saying so
+rather than the console: the link keeps its meaning, and nobody is left
+pressing controls that all refuse.
+
+The **review queue** is not in the console. It has its own row and its
+own location at `/review`: it is the surface an administrator opens
+daily, and an uploader sees their own entries there.
 
 ## Accounts, roles, and permissions
 
@@ -232,7 +239,7 @@ scrape_configs:
 
 ## Moving in from another server
 
-The migration assistant (curation menu > Import from another server)
+The migration assistant (Admin console > Import from another server)
 pulls listening state from a running server and matches it onto your
 library through the same identifier-first resolve ladder the rest of
 WaxDeck uses (MusicBrainz IDs, then fingerprints, then descriptive

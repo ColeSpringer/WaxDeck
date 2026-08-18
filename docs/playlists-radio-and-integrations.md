@@ -138,8 +138,11 @@ the slate.
 
 ## Notifications
 
-Every user picks where their events go under Settings, Integrations, My
-notifications. A target is one destination: native Pushover, ntfy,
+Every user picks where their events go on the **Notifications** screen,
+which the sidebar carries a row for and which also holds what this
+device has seen since the app opened (the same list the bell in the top
+app bar peeks at). The targets are on Settings, Integrations, My
+notifications as well. A target is one destination: native Pushover, ntfy,
 or Gotify delivery, a Discord or generic webhook, an
 [Apprise](https://github.com/caronc/apprise) API server (one
 integration, most notification services), or the UnifiedPush endpoint

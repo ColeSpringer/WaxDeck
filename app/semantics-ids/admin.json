@@ -7,6 +7,7 @@
     "adminBackups": "admin-backups",
     "adminConsole": "admin-console",
     "adminDashboard": "admin-dashboard",
+    "adminForbidden": "admin-forbidden",
     "adminGenres": "admin-genres",
     "adminLibraries": "admin-libraries",
     "adminMigrate": "admin-migrate",

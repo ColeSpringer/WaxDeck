@@ -50,7 +50,7 @@ test('two picked files group as one album and import through review', async ({ a
   }).toPass({ timeout: T.fetch });
 
   // The uploads screen shows the quota header and the batch group.
-  await app.nav.to('uploads');
+  await app.nav.enter('uploads');
   await expect(app.uploads.quota()).toBeVisible();
 
   // The entry settles (matching is off) and holds both tracks.
@@ -138,10 +138,18 @@ test('accounts without upload rights see no upload affordances', async ({
   // meant.
   await viewer.nav.enter('home');
 
-  // No add button, and no way into uploads.
+  // No add button, and none of the rows an account without the upload
+  // right has nothing behind. They were one Curation group to hide
+  // before the nav was flattened; each is its own row now, gated on its
+  // own predicate - the upload right for uploads' two lists, the role
+  // for the console - so each is its own assertion.
   await expect(viewer.uploads.add()).toHaveCount(0);
-  await expect(viewer.shell.navGroup('curation')).toHaveCount(0);
-  await expect(viewer.shell.destination('uploads')).toHaveCount(0);
+  await expect(viewer.shell.destination('tasks')).toHaveCount(0);
+  await expect(viewer.shell.destination('review')).toHaveCount(0);
+  await expect(viewer.shell.destination('admin')).toHaveCount(0);
+  // And the console refuses the location rather than drawing panels that
+  // all answer 403 - the chrome is not the only gate.
+  await viewer.nav.open('/admin', viewer.shell.adminForbidden());
 });
 
 test('an upload that declines identification goes straight in', async ({ app }) => {

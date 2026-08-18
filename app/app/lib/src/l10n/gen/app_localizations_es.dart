@@ -194,6 +194,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminDashboardTitle => 'Administración';
 
   @override
+  String get adminForbiddenMessage =>
+      'La consola de administración es para las cuentas con el rol de administrador. Pide lo que necesites de ella a una persona administradora.';
+
+  @override
+  String get adminForbiddenTitle => 'Esta área es para administradores';
+
+  @override
   String get adminGenreAdd => 'Añadir género';
 
   @override
@@ -782,10 +789,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminSectionReview => 'Cola de revisión';
-
-  @override
-  String get adminSectionReviewBlurb =>
-      'Álbumes que esperan una decisión de identificación';
 
   @override
   String get adminSectionSchedulesBlurb =>
@@ -1686,6 +1689,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authUsername => 'Nombre de usuario';
 
   @override
+  String get bellActivityBlurb =>
+      'Lo que este dispositivo ha visto desde que se abrió la aplicación. No hay historial anterior a eso.';
+
+  @override
+  String get bellActivityTitle => 'Actividad reciente';
+
+  @override
   String get bellClear => 'Vaciar';
 
   @override
@@ -1693,6 +1703,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bellEmpty => 'Todavía no ha pasado nada.';
+
+  @override
+  String get bellEmptyTitle => 'Nada que contar';
 
   @override
   String get bellEpisodeDownloaded =>
@@ -1711,6 +1724,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String bellRow(String surface, String what) {
     return '$surface: $what';
+  }
+
+  @override
+  String bellRowWhen(String surface, String when) {
+    return '$surface · $when';
   }
 
   @override
@@ -6400,6 +6418,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reviewNoCandidatesTitle => 'No se ha encontrado ningún candidato';
 
   @override
+  String get reviewOpenUploads => 'Abrir las subidas';
+
+  @override
   String get reviewOriginAcquisition => 'Adquirido';
 
   @override
@@ -7994,9 +8015,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellNavBooks => 'Libros';
 
   @override
-  String get shellNavCuration => 'Gestión';
-
-  @override
   String get shellNavDownloads => 'Descargas';
 
   @override
@@ -8007,6 +8025,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shellNavMusic => 'Música';
+
+  @override
+  String get shellNavNotifications => 'Notificaciones';
 
   @override
   String get shellNavPlaylists => 'Listas de reproducción';
@@ -8021,7 +8042,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellNavReview => 'Cola de revisión';
 
   @override
-  String get shellNavSettings => 'Ajustes';
+  String get shellNavSettings => 'Ajustes de la aplicación';
 
   @override
   String get shellNavStats => 'Estadísticas de escucha';
@@ -8031,9 +8052,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shellNavTracks => 'Pistas';
-
-  @override
-  String get shellNavUploads => 'Subidas';
 
   @override
   String get shellNavYears => 'Años';
@@ -8051,9 +8069,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellPaletteAllSettings => 'Todos los ajustes';
 
   @override
-  String get shellPaletteCurationDetail => 'Gestión';
-
-  @override
   String get shellPaletteEmpty => 'No hay nada que ejecutar';
 
   @override
@@ -8061,9 +8076,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shellPaletteGroupActions => 'Acciones';
-
-  @override
-  String get shellPaletteGroupAdmin => 'Áreas de administración';
 
   @override
   String get shellPaletteGroupPlaces => 'Ir a';
@@ -8798,6 +8810,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get uploadsRetry => 'Reintentar la subida';
+
+  @override
+  String get uploadsSessionsSubtitle =>
+      'Cuota, lo que sigue subiendo y lo que hay que reintentar';
+
+  @override
+  String get uploadsSessionsTitle => 'Subidas anteriores';
 
   @override
   String get uploadsSourceUrl => 'URL de origen';

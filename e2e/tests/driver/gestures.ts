@@ -36,6 +36,38 @@ export async function typeInto(page: Page, field: Locator, text: string) {
   }).toPass({ timeout: T.action });
 }
 
+// Submit a flutter text field and wait for what Enter opens, as one
+// retried unit.
+//
+// The shell's search field navigates on submit and not on focus - a
+// caret landing in it used to carry a visitor off whatever they were
+// reading - so clicking it is not a way in. Empty submits are legal and
+// are how the screen is reached with nothing typed.
+export async function submitThrough(
+  page: Page,
+  field: Locator,
+  appears: Locator,
+) {
+  await field.waitFor({ timeout: T.nav });
+  await expect(async () => {
+    if (await appears.isVisible()) return;
+    // The DOM input flutter parents under the node, when there is one:
+    // keys go to whatever holds the editing session.
+    const inner = field.locator('input, textarea');
+    const input = (await inner.count()) > 0 ? inner.first() : field;
+    await input.click();
+    // Focus first, and let the attempt fail here if the click was
+    // swallowed. A page-level Enter goes to whatever holds focus, which
+    // in the smoke walk is the nav row clicked a moment ago - so a
+    // refused click would navigate somewhere else and every retry after
+    // it would run from the wrong screen. typeInto asserts the same
+    // thing for the same reason.
+    await expect(input).toBeFocused({ timeout: T.step });
+    await page.keyboard.press('Enter');
+    await appears.waitFor({ timeout: T.step });
+  }).toPass({ timeout: T.nav });
+}
+
 // The retried-click attempt everything below shares: unless the goal is
 // already met, fire a bounded forced click and hold to the goal.
 //

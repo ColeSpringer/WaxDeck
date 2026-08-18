@@ -14,6 +14,7 @@ abstract final class SemanticsIds {
   static const String adminBackups = 'admin-backups';
   static const String adminConsole = 'admin-console';
   static const String adminDashboard = 'admin-dashboard';
+  static const String adminForbidden = 'admin-forbidden';
   static const String adminGenres = 'admin-genres';
   static const String adminLibraries = 'admin-libraries';
   static const String adminMigrate = 'admin-migrate';
@@ -284,7 +285,7 @@ abstract final class SemanticsIds {
   static String upgradeGroup(Object itemPid) => 'upgrade-group-$itemPid';
   static String upgradeResolve(Object itemPid) => 'upgrade-resolve-$itemPid';
 
-  // home: Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.
+  // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   static const String homeAdd = 'home-add';
   static String homeMix(Object index) => 'home-mix-$index';
   static const String homeScreen = 'home-screen';
@@ -294,6 +295,7 @@ abstract final class SemanticsIds {
       'notification-row-$kind-none';
   static const String notificationsBell = 'notifications-bell';
   static const String notificationsClear = 'notifications-clear';
+  static const String notificationsScreen = 'notifications-screen';
   static String pinSheetTarget(Object pid) => 'pin-sheet-target-$pid';
   static String shelf(Object shelf) => 'shelf-$shelf';
   static String shelfAll(Object shelf) => 'shelf-$shelf-all';
@@ -622,6 +624,7 @@ abstract final class SemanticsIds {
   static const String reviewIdentifySkipped = 'review-identify-skipped';
   static const String reviewIdentifySubmit = 'review-identify-submit';
   static const String reviewIdentifyToggle = 'review-identify-toggle';
+  static const String reviewOpenUploads = 'review-open-uploads';
   static const String reviewPane = 'review-pane';
   static const String reviewPaneClose = 'review-pane-close';
   static const String reviewRevert = 'review-revert';
@@ -703,7 +706,6 @@ abstract final class SemanticsIds {
   static String navAccountAction(Object name) => 'nav-account-$name';
   static String navDestination(Object name) => 'nav-$name';
   static String navDisclose(Object name) => 'nav-disclose-$name';
-  static String navGroup(Object name) => 'nav-group-$name';
   static const String navOverflow = 'nav-overflow';
   static const String navRegion = 'nav-region';
   static const String navSidebarCollapse = 'nav-sidebar-collapse';
@@ -739,6 +741,7 @@ abstract final class SemanticsIds {
   static const String addFromUrl = 'add-from-url';
   static const String addUploadFile = 'add-upload-file';
   static const String addUploadFolder = 'add-upload-folder';
+  static const String addUploadSessions = 'add-upload-sessions';
   static String uploadBatch(Object batchId) => 'upload-batch-$batchId';
   static String uploadDelete(Object id) => 'upload-delete-$id';
   static const String uploadDropTarget = 'upload-drop-target';

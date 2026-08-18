@@ -5,7 +5,6 @@
     "navAccountAction": "nav-account-{name}",
     "navDestination": "nav-{name}",
     "navDisclose": "nav-disclose-{name}",
-    "navGroup": "nav-group-{name}",
     "navOverflow": "nav-overflow",
     "navRegion": "nav-region",
     "navSidebarCollapse": "nav-sidebar-collapse",

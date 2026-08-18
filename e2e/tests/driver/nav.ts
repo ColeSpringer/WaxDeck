@@ -25,7 +25,7 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { SemanticsIds, sem } from '../semantics-ids';
 import { T } from './budgets';
-import { clickThrough, openMenu } from './gestures';
+import { clickThrough, openMenu, submitThrough } from './gestures';
 
 /// A destination: the location a stranger can open, the control that
 /// proves the screen is up, and - when the chrome can reach it - the
@@ -60,33 +60,14 @@ const railTo = (destination: string, arrival: (page: Page) => Locator) =>
     );
   };
 
-/// Uploads, the review queue, tasks and the admin console are the
-/// sidebar's curation group, which is a disclosure rather than a row.
-/// clickThrough makes opening it idempotent, so a walk that is already
-/// there costs nothing.
-const openCuration = async (page: Page, reveals: string) => {
-  await clickThrough(
-    page.locator(sem(SemanticsIds.navGroup('curation'))),
-    page.locator(sem(SemanticsIds.navDestination(reveals))),
-  );
-};
-
-const curationTo = (destination: string, arrival: (page: Page) => Locator) =>
-  async (page: Page) => {
-    await openCuration(page, destination);
-    await clickThrough(
-      page.locator(sem(SemanticsIds.navDestination(destination))),
-      arrival(page),
-    );
-  };
-
 /// A section of the admin console, reached the way a person reaches it:
-/// the console first, then its own section list.
+/// the console first, then its own section list. The console is a rail
+/// row like any other now - it was behind a Curation disclosure, and
+/// this walk opened it first.
 const adminSection = (name: string, path: string, marker: string): Dest => ({
   path,
   arrival: at(marker),
   walk: async (page: Page) => {
-    await openCuration(page, 'admin');
     await clickThrough(
       page.locator(sem(SemanticsIds.navDestination('admin'))),
       page.locator(sem(SemanticsIds.adminSection(name))),
@@ -109,9 +90,11 @@ export const DEST = {
     arrival: (page) => page.locator(sem(SemanticsIds.searchFilter('all'))),
     walk: async (page) => {
       // Search is a field in the sidebar header at this width, not a
-      // rail destination: clicking it opens the screen and keeps the
-      // caret, which is the whole reason it is a field.
-      await clickThrough(
+      // rail destination, and Enter is what opens the screen: the caret
+      // landing in it leaves you where you are, which is the whole
+      // reason it is a field and not a launcher.
+      await submitThrough(
+        page,
         page.locator(sem(SemanticsIds.searchField)),
         page.locator(sem(SemanticsIds.searchFilter('all'))),
       );
@@ -231,26 +214,32 @@ export const DEST = {
     arrival: at(SemanticsIds.settingsScreen),
     walk: railTo('settings', at(SemanticsIds.settingsScreen)),
   },
+  notifications: {
+    path: '/notifications',
+    arrival: at(SemanticsIds.notificationsScreen),
+    walk: railTo('notifications', at(SemanticsIds.notificationsScreen)),
+  },
   uploads: {
     path: '/uploads',
     arrival: at(SemanticsIds.uploadsScreen),
-    walk: curationTo('uploads', at(SemanticsIds.uploadsScreen)),
+    // No rail row any more: adding audio is the + control on the screen
+    // you are already on, and the sessions list behind it is reached
+    // from a notification about an upload and from a review entry's
+    // origin line. notifications.spec.ts walks the first of those.
+    walkNeeds: 'no chrome row; reached from a notification row or a review entry',
   },
   admin: {
     path: '/admin',
     arrival: at(SemanticsIds.adminConsole),
-    walk: curationTo('admin', at(SemanticsIds.adminConsole)),
+    walk: railTo('admin', at(SemanticsIds.adminConsole)),
   },
-  // The review queue keeps a curation row of its own as well as a place
-  // in the console's section list: it is the surface an administrator
-  // opens daily, and burying the keyboard-first screen a level deeper
-  // would cost more than the tidiness is worth. Two doors to one
-  // location, so the smoke walk opens both - this entry is the rail's,
-  // `adminReview` below is the console's.
+  // Its own destination rather than a console section: it is the surface
+  // an administrator opens daily, and an uploader has their own half of
+  // it. One door now, so this is the whole of its coverage.
   review: {
-    path: '/admin/review',
+    path: '/review',
     arrival: at(SemanticsIds.adminReview),
-    walk: curationTo('review', at(SemanticsIds.adminReview)),
+    walk: railTo('review', at(SemanticsIds.adminReview)),
   },
   // The console's own sections. Their walk is the console's section
   // list rather than the nav rail, so it goes through /admin first -
@@ -258,7 +247,6 @@ export const DEST = {
   adminUsers: adminSection('users', '/admin/users', SemanticsIds.adminUsers),
   adminShares: adminSection('shares', '/admin/shares', SemanticsIds.adminShares),
   adminLibraries: adminSection('libraries', '/admin/libraries', SemanticsIds.adminLibraries),
-  adminReview: adminSection('review', '/admin/review', SemanticsIds.adminReview),
   adminSettings: adminSection('settings', '/admin/settings', SemanticsIds.adminSettingsSection),
   adminAudit: adminSection('audit', '/admin/audit', SemanticsIds.adminAudit),
   adminTrash: adminSection('trash', '/admin/trash', SemanticsIds.adminTrash),

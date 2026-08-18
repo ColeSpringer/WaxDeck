@@ -16,9 +16,22 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 
-ProviderContainer _container(FakeRepository repo) {
+/// An administrator's session, which is what the console frame asks for
+/// before it draws anything. Only the tests that mount the frame plant
+/// one: the dashboard hands its whole page to the first-run wizard on a
+/// server with an empty library, so a session the test does not need
+/// changes what the screen under it is.
+const _admin = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
+
+ProviderContainer _container(FakeRepository repo, {WaxDeckUser? user}) {
+  if (user != null) {
+    repo.sessionState = SessionState(authenticated: true, user: user);
+  }
   final container = ProviderContainer(
-    overrides: [repositoryProvider.overrideWithValue(repo)],
+    overrides: [
+      repositoryProvider.overrideWithValue(repo),
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    ],
   );
   addTearDown(container.dispose);
   return container;
@@ -75,7 +88,7 @@ void main() {
   testWidgets('the console draws its section list where there is room', (
     tester,
   ) async {
-    final container = _container(FakeRepository());
+    final container = _container(FakeRepository(), user: _admin);
     await _pump(
       tester,
       container,
@@ -91,6 +104,36 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Libraries'), findsOneWidget);
+  });
+
+  testWidgets('the console refuses an account without the role', (
+    tester,
+  ) async {
+    // In the frame's own build rather than in a redirect. Every console
+    // location is shareable and the web build puts it in the URL, so a
+    // member following a pasted link used to get the whole console with
+    // panels that all answer 403; a redirect would land them elsewhere
+    // without saying why, which reads as a broken link.
+    final container = _container(
+      FakeRepository(),
+      user: const WaxDeckUser(id: 'us-2', username: 'sam', roles: ['user']),
+    );
+    await _pump(
+      tester,
+      container,
+      const AdminConsole(location: WaxRoute.trash, child: SizedBox.shrink()),
+    );
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.adminForbidden),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsIdentifier(SemanticsIds.adminConsole), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(AdminSection.trash.semanticsId),
+      findsNothing,
+      reason: 'a list of rows that all refuse is worse than one sentence',
+    );
   });
 
   // Through the real table: a stub child carries no `ModalBarrier`, and
@@ -143,7 +186,7 @@ void main() {
   testWidgets('below sidebar width the console is the page alone', (
     tester,
   ) async {
-    final container = _container(FakeRepository());
+    final container = _container(FakeRepository(), user: _admin);
     await _pump(
       tester,
       container,

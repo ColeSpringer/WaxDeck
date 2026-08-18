@@ -73,6 +73,19 @@ Future<void> showAddToLibrarySheet(
                 semanticsId: SemanticsIds.addUploadFolder,
                 onTap: () => Navigator.of(sheetContext).pop('folder'),
               ),
+            // What was added before, and the quota it is spending. This
+            // sheet is the + control the uploads list stopped being a
+            // navigation destination in favour of, so it is where the
+            // lasting door to that list belongs: the other two ways in -
+            // a notification about an upload, a review entry's origin
+            // line - are news, and news is gone by the next launch.
+            WaxOptionRow(
+              title: sheetContext.l10n.uploadsSessionsTitle,
+              subtitle: sheetContext.l10n.uploadsSessionsSubtitle,
+              glyph: WaxIcons.recent,
+              semanticsId: SemanticsIds.addUploadSessions,
+              onTap: () => Navigator.of(sheetContext).pop('sessions'),
+            ),
           ],
         ),
       ),
@@ -90,6 +103,11 @@ Future<void> showAddToLibrarySheet(
       if (picker != null) {
         await pickFolderAndUpload(context, ref, picker, initial: defaultType);
       }
+    case 'sessions':
+      // Pushed, so back returns to the screen the sheet was opened over:
+      // the list is not declared under any of them, and `go` would
+      // strand a visitor who only wanted to check a quota.
+      context.pushOnce(WaxRoute.uploads);
   }
 }
 

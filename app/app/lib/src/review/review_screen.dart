@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../admin/admin_console.dart';
 import '../admin/admin_providers.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
@@ -17,7 +16,7 @@ import 'review_controller.dart';
 import 'review_entry_screen.dart';
 
 /// The review surface: the queue, with one entry beside it where there
-/// is room and in place of it where there is not. Both `/admin/review`
+/// is room and in place of it where there is not. Both `/review`
 /// locations land here, so an entry keeps its own URL either way.
 class ReviewSurface extends StatelessWidget {
   const ReviewSurface({super.key, this.openEntryId});
@@ -275,7 +274,6 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         title: l10n.reviewTitle,
         largeTitle: false,
         semanticsId: SemanticsIds.adminReview,
-        onBack: adminBack(context),
         actions: <Widget>[
           const _MatchingModeMenu(),
           WaxIconButton(

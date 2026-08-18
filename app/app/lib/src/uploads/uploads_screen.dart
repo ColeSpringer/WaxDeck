@@ -70,6 +70,12 @@ class UploadsScreen extends ConsumerWidget {
         title: l10n.uploadsTitle,
         largeTitle: false,
         semanticsId: SemanticsIds.uploadsScreen,
+        // A way out, which a destination does not need and this is not
+        // one any more: it is opened from the add sheet, from a
+        // notification, and from a review entry's origin line, and it
+        // lights no row for a visitor to press again. Popping where
+        // something pushed it, home where a link did.
+        onBack: () => context.leave(),
         actions: <Widget>[
           if (picker != null && canUpload)
             WaxIconButton(

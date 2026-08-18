@@ -112,10 +112,11 @@ export class Shell extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.navDestination(name)));
   }
 
-  /// A disclosure group in the sidebar. Offered only to an account that
-  /// has something in it, which is itself an assertion.
-  navGroup(name: string): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.navGroup(name)));
+  /// What the admin console draws for an account without the role. The
+  /// location stays what it was and says why, rather than redirecting a
+  /// pasted link somewhere else without a word.
+  adminForbidden(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.adminForbidden));
   }
 
   /// The avatar that opens the account menu. Returned rather than

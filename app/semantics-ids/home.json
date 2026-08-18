@@ -1,5 +1,5 @@
 {
-  "doc": "Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.",
+  "doc": "Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.",
   "ids": {
     "homeAdd": "home-add",
     "homeMix": "home-mix-{index}",
@@ -8,6 +8,7 @@
     "notificationRowPlain": "notification-row-{kind}-none",
     "notificationsBell": "notifications-bell",
     "notificationsClear": "notifications-clear",
+    "notificationsScreen": "notifications-screen",
     "pinSheetTarget": "pin-sheet-target-{pid}",
     "shelf": "shelf-{shelf}",
     "shelfAll": "shelf-{shelf}-all",

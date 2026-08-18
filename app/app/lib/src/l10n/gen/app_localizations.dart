@@ -429,6 +429,18 @@ abstract class AppLocalizations {
   /// **'Admin'**
   String get adminDashboardTitle;
 
+  /// Body of the refusal an account without the role gets at a console location it followed a link to.
+  ///
+  /// In en, this message translates to:
+  /// **'The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.'**
+  String get adminForbiddenMessage;
+
+  /// Heading of the refusal an account without the role gets at a console location it followed a link to.
+  ///
+  /// In en, this message translates to:
+  /// **'This area is for administrators'**
+  String get adminForbiddenTitle;
+
   /// Button that adds a genre to the vocabulary.
   ///
   /// In en, this message translates to:
@@ -1442,12 +1454,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Review queue'**
   String get adminSectionReview;
-
-  /// Line under the review queue in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Albums waiting for an identification decision'**
-  String get adminSectionReviewBlurb;
 
   /// Line under Schedules in the console's section list.
   ///
@@ -2907,7 +2913,19 @@ abstract class AppLocalizations {
   /// **'Username'**
   String get authUsername;
 
-  /// Last row of the open bell, emptying the list.
+  /// Line under the activity heading on the notifications screen, saying plainly that the list is this session's.
+  ///
+  /// In en, this message translates to:
+  /// **'What this device has seen since the app opened. There is no history from before that.'**
+  String get bellActivityBlurb;
+
+  /// Heading over the list of what happened while the app was open.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent activity'**
+  String get bellActivityTitle;
+
+  /// Empties the list: the last row of the open bell, and the action on the notifications screen.
   ///
   /// In en, this message translates to:
   /// **'Clear'**
@@ -2919,11 +2937,17 @@ abstract class AppLocalizations {
   /// **'A download finished.'**
   String get bellDownloadFinished;
 
-  /// Drawn in the open bell when this session has seen nothing. Empty is a legitimate state, not a broken bell.
+  /// Drawn in the open bell and under the notifications screen's own heading when this session has seen nothing. Empty is a legitimate state, not a broken bell.
   ///
   /// In en, this message translates to:
   /// **'Nothing has happened yet.'**
   String get bellEmpty;
+
+  /// Heading of the empty state on the notifications screen. The bell's own menu needs no heading, so it draws the message alone.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to report'**
+  String get bellEmptyTitle;
 
   /// What a bell row says when a subscribed show gained an episode on this server.
   ///
@@ -2954,6 +2978,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{surface}: {what}'**
   String bellRow(String surface, String what);
+
+  /// The line under a row on the notifications screen: which surface moved, then how long ago.
+  ///
+  /// In en, this message translates to:
+  /// **'{surface} · {when}'**
+  String bellRowWhen(String surface, String when);
 
   /// Which surface a bell row is about.
   ///
@@ -2997,7 +3027,7 @@ abstract class AppLocalizations {
   /// **'A background task changed.'**
   String get bellTaskChanged;
 
-  /// Accessible name of the bell in the top app bar with nothing unread.
+  /// The word for notifications: the accessible name of the bell in the top app bar with nothing unread, and the title of the screen that holds the same list.
   ///
   /// In en, this message translates to:
   /// **'Notifications'**
@@ -9799,6 +9829,12 @@ abstract class AppLocalizations {
   /// **'No candidates found'**
   String get reviewNoCandidatesTitle;
 
+  /// Link on an uploaded entry's origin line, back to the upload sessions list. The only route from a review entry to where its files came from.
+  ///
+  /// In en, this message translates to:
+  /// **'Open uploads'**
+  String get reviewOpenUploads;
+
   /// Badge on a queue row: this entry came in through a download the server ran.
   ///
   /// In en, this message translates to:
@@ -12409,12 +12445,6 @@ abstract class AppLocalizations {
   /// **'Books'**
   String get shellNavBooks;
 
-  /// Sidebar group holding the entries that maintain the library rather than listen to it: uploads, the review queue, tasks, the admin console.
-  ///
-  /// In en, this message translates to:
-  /// **'Curation'**
-  String get shellNavCuration;
-
   /// Navigation entry for the download manager.
   ///
   /// In en, this message translates to:
@@ -12438,6 +12468,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Music'**
   String get shellNavMusic;
+
+  /// Navigation entry for the notifications screen: what happened, and where this account is told about it.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get shellNavNotifications;
 
   /// Navigation entry for playlists, under Music. Kept short: it shares a sidebar column with six others.
   ///
@@ -12463,10 +12499,10 @@ abstract class AppLocalizations {
   /// **'Review queue'**
   String get shellNavReview;
 
-  /// Navigation entry for the settings screens.
+  /// Navigation entry for the settings screens. Named against the admin console's server settings, which sit one row below it: one is what this account prefers, the other is what this instance does.
   ///
   /// In en, this message translates to:
-  /// **'Settings'**
+  /// **'App settings'**
   String get shellNavSettings;
 
   /// Navigation entry for the listening statistics screen.
@@ -12486,12 +12522,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tracks'**
   String get shellNavTracks;
-
-  /// Navigation entry for the upload screen.
-  ///
-  /// In en, this message translates to:
-  /// **'Uploads'**
-  String get shellNavUploads;
 
   /// Navigation entry for the year index, under Music.
   ///
@@ -12523,12 +12553,6 @@ abstract class AppLocalizations {
   /// **'All settings'**
   String get shellPaletteAllSettings;
 
-  /// The second line of a palette row that is an administrative destination. The same word as the sidebar group they live in.
-  ///
-  /// In en, this message translates to:
-  /// **'Curation'**
-  String get shellPaletteCurationDetail;
-
   /// Empty state of the command palette with nothing typed.
   ///
   /// In en, this message translates to:
@@ -12546,12 +12570,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Actions'**
   String get shellPaletteGroupActions;
-
-  /// Command palette group holding the administrative destinations.
-  ///
-  /// In en, this message translates to:
-  /// **'Admin areas'**
-  String get shellPaletteGroupAdmin;
 
   /// Command palette group holding destinations and search hits.
   ///
@@ -13663,6 +13681,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry upload'**
   String get uploadsRetry;
+
+  /// Second line of the row in the add sheet that opens the upload sessions list.
+  ///
+  /// In en, this message translates to:
+  /// **'Quota, what is still going up, and what to retry'**
+  String get uploadsSessionsSubtitle;
+
+  /// Row in the add sheet that opens the upload sessions list. The list is not a navigation destination, so this is its lasting door.
+  ///
+  /// In en, this message translates to:
+  /// **'Past uploads'**
+  String get uploadsSessionsTitle;
 
   /// The field taking the address the server downloads from.
   ///

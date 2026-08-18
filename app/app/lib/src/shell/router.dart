@@ -45,6 +45,7 @@ import '../music/listing_screen.dart';
 import '../music/music_controllers.dart';
 import '../music/music_hub_screen.dart';
 import '../notifications/notifications_binder.dart';
+import '../notifications/notifications_screen.dart';
 import '../organize/organize_screen.dart';
 import '../player/autoplay_gate.dart';
 import '../player/car_mode_screen.dart';
@@ -585,6 +586,42 @@ List<RouteBase> shellRoutes() => <RouteBase>[
             path: WaxRoute.tasks,
             builder: (context, state) => const TasksScreen(),
           ),
+          GoRoute(
+            path: WaxRoute.notifications,
+            builder: (context, state) => const NotificationsScreen(),
+          ),
+          // A shell, so one ReviewSurface spans both locations and the
+          // queue keeps its rows, its scroll, and its cursor when an
+          // entry opens beside it. Nested routes would stack a second
+          // surface over the first.
+          ShellRoute(
+            builder: (context, state, child) =>
+                ReviewSurface(openEntryId: _reviewEntryOf(state.uri.path)),
+            routes: <RouteBase>[
+              GoRoute(
+                path: WaxRoute.review,
+                builder: (context, state) => const SizedBox.shrink(),
+              ),
+              GoRoute(
+                path: '${WaxRoute.review}/:entryId',
+                builder: (context, state) => const SizedBox.shrink(),
+              ),
+            ],
+          ),
+          // Where the queue used to live. Redirects rather than 404s:
+          // the web build puts locations in the URL, so every link
+          // minted while it was a console section is somebody's
+          // bookmark, and an entry's own location is what the console
+          // and the bell both handed out.
+          GoRoute(
+            path: WaxRoute.legacyReview,
+            redirect: (context, state) => WaxRoute.review,
+          ),
+          GoRoute(
+            path: '${WaxRoute.legacyReview}/:entryId',
+            redirect: (context, state) =>
+                WaxRoute.reviewEntry(state.pathParameters['entryId']!),
+          ),
           // One location, two editors, chosen by what the pid names. An
           // album's identity is entity-scoped and writes through a
           // different endpoint than an item's fields, so it is its own
@@ -621,24 +658,6 @@ List<RouteBase> shellRoutes() => <RouteBase>[
               GoRoute(
                 path: WaxRoute.genres,
                 builder: (context, state) => const GenreTreeScreen(),
-              ),
-              // A shell, so one ReviewSurface spans both locations and
-              // the queue keeps its rows, its scroll, and its cursor
-              // when an entry opens beside it. Nested routes would
-              // stack a second surface over the first.
-              ShellRoute(
-                builder: (context, state, child) =>
-                    ReviewSurface(openEntryId: _reviewEntryOf(state.uri.path)),
-                routes: <RouteBase>[
-                  GoRoute(
-                    path: WaxRoute.review,
-                    builder: (context, state) => const SizedBox.shrink(),
-                  ),
-                  GoRoute(
-                    path: '${WaxRoute.review}/:entryId',
-                    builder: (context, state) => const SizedBox.shrink(),
-                  ),
-                ],
               ),
               GoRoute(
                 path: WaxRoute.health,

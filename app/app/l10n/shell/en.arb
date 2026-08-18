@@ -121,10 +121,6 @@
   "@shellNavBooks": {
     "description": "Navigation entry for the audiobook domain. Deliberately shorter than the hub's own title: five of these share a phone's width."
   },
-  "shellNavCuration": "Curation",
-  "@shellNavCuration": {
-    "description": "Sidebar group holding the entries that maintain the library rather than listen to it: uploads, the review queue, tasks, the admin console."
-  },
   "shellNavDownloads": "Downloads",
   "@shellNavDownloads": {
     "description": "Navigation entry for the download manager."
@@ -140,6 +136,10 @@
   "shellNavMusic": "Music",
   "@shellNavMusic": {
     "description": "Navigation entry for the music domain."
+  },
+  "shellNavNotifications": "Notifications",
+  "@shellNavNotifications": {
+    "description": "Navigation entry for the notifications screen: what happened, and where this account is told about it."
   },
   "shellNavPlaylists": "Playlists",
   "@shellNavPlaylists": {
@@ -157,9 +157,9 @@
   "@shellNavReview": {
     "description": "Navigation entry for the queue of imports waiting on an administrator's decision."
   },
-  "shellNavSettings": "Settings",
+  "shellNavSettings": "App settings",
   "@shellNavSettings": {
-    "description": "Navigation entry for the settings screens."
+    "description": "Navigation entry for the settings screens. Named against the admin console's server settings, which sit one row below it: one is what this account prefers, the other is what this instance does."
   },
   "shellNavStats": "Listening stats",
   "@shellNavStats": {
@@ -172,10 +172,6 @@
   "shellNavTracks": "Tracks",
   "@shellNavTracks": {
     "description": "Navigation entry for the track listing, under Music."
-  },
-  "shellNavUploads": "Uploads",
-  "@shellNavUploads": {
-    "description": "Navigation entry for the upload screen."
   },
   "shellNavYears": "Years",
   "@shellNavYears": {
@@ -197,10 +193,6 @@
   "@shellPaletteAllSettings": {
     "description": "Palette row opening the settings screen, offered when more settings matched than the palette lists."
   },
-  "shellPaletteCurationDetail": "Curation",
-  "@shellPaletteCurationDetail": {
-    "description": "The second line of a palette row that is an administrative destination. The same word as the sidebar group they live in."
-  },
   "shellPaletteEmpty": "Nothing to run",
   "@shellPaletteEmpty": {
     "description": "Empty state of the command palette with nothing typed."
@@ -212,10 +204,6 @@
   "shellPaletteGroupActions": "Actions",
   "@shellPaletteGroupActions": {
     "description": "Command palette group holding the things the app can be told to do."
-  },
-  "shellPaletteGroupAdmin": "Admin areas",
-  "@shellPaletteGroupAdmin": {
-    "description": "Command palette group holding the administrative destinations."
   },
   "shellPaletteGroupPlaces": "Go to",
   "@shellPaletteGroupPlaces": {

@@ -57,6 +57,8 @@
   "uploadsReceivedOf": "{percent} % de {size} recibido",
   "uploadsReceiving": "Recibiendo",
   "uploadsRetry": "Reintentar la subida",
+  "uploadsSessionsSubtitle": "Cuota, lo que sigue subiendo y lo que hay que reintentar",
+  "uploadsSessionsTitle": "Subidas anteriores",
   "uploadsSourceUrl": "URL de origen",
   "uploadsSourceUrlHint": "Un solo vídeo, o una lista de reproducción o un canal",
   "uploadsTitle": "Subidas",

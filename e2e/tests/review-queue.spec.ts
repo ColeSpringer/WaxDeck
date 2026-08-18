@@ -36,9 +36,9 @@ test('review a queued match with the keyboard', async ({ app }) => {
     )
     .toBe('pending');
 
-  // The queue has a curation row of its own in the chrome; walked
-  // rather than entered, because reaching a daily surface in one click
-  // is part of what it is.
+  // The queue has a row of its own in the chrome; walked rather than
+  // entered, because reaching a daily surface in one click is part of
+  // what it is.
   await app.nav.to('review');
 
   // The cursor is put on this spec's own row by opening it, never

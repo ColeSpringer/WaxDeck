@@ -264,6 +264,14 @@
   "@adminDashboardTitle": {
     "description": "Title of the admin console's front page."
   },
+  "adminForbiddenMessage": "The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.",
+  "@adminForbiddenMessage": {
+    "description": "Body of the refusal an account without the role gets at a console location it followed a link to."
+  },
+  "adminForbiddenTitle": "This area is for administrators",
+  "@adminForbiddenTitle": {
+    "description": "Heading of the refusal an account without the role gets at a console location it followed a link to."
+  },
   "adminGenreAdd": "Add genre",
   "@adminGenreAdd": {
     "description": "Button that adds a genre to the vocabulary."
@@ -1035,10 +1043,6 @@
   "adminSectionReview": "Review queue",
   "@adminSectionReview": {
     "description": "Name of the screen holding albums waiting for an identification decision."
-  },
-  "adminSectionReviewBlurb": "Albums waiting for an identification decision",
-  "@adminSectionReviewBlurb": {
-    "description": "Line under the review queue in the console's section list."
   },
   "adminSectionSchedulesBlurb": "When scans, backups, and pruning run",
   "@adminSectionSchedulesBlurb": {
@@ -2268,9 +2272,17 @@
   "@authUsername": {
     "description": "The account-name field on the sign-in, sign-up and first-run screens."
   },
+  "bellActivityBlurb": "What this device has seen since the app opened. There is no history from before that.",
+  "@bellActivityBlurb": {
+    "description": "Line under the activity heading on the notifications screen, saying plainly that the list is this session's."
+  },
+  "bellActivityTitle": "Recent activity",
+  "@bellActivityTitle": {
+    "description": "Heading over the list of what happened while the app was open."
+  },
   "bellClear": "Clear",
   "@bellClear": {
-    "description": "Last row of the open bell, emptying the list."
+    "description": "Empties the list: the last row of the open bell, and the action on the notifications screen."
   },
   "bellDownloadFinished": "A download finished.",
   "@bellDownloadFinished": {
@@ -2278,7 +2290,11 @@
   },
   "bellEmpty": "Nothing has happened yet.",
   "@bellEmpty": {
-    "description": "Drawn in the open bell when this session has seen nothing. Empty is a legitimate state, not a broken bell."
+    "description": "Drawn in the open bell and under the notifications screen's own heading when this session has seen nothing. Empty is a legitimate state, not a broken bell."
+  },
+  "bellEmptyTitle": "Nothing to report",
+  "@bellEmptyTitle": {
+    "description": "Heading of the empty state on the notifications screen. The bell's own menu needs no heading, so it draws the message alone."
   },
   "bellEpisodeDownloaded": "A new episode finished downloading.",
   "@bellEpisodeDownloaded": {
@@ -2307,6 +2323,20 @@
       "what": {
         "type": "String",
         "example": "An upload changed."
+      }
+    }
+  },
+  "bellRowWhen": "{surface} · {when}",
+  "@bellRowWhen": {
+    "description": "The line under a row on the notifications screen: which surface moved, then how long ago.",
+    "placeholders": {
+      "surface": {
+        "type": "String",
+        "example": "Uploads"
+      },
+      "when": {
+        "type": "String",
+        "example": "12 min ago"
       }
     }
   },
@@ -2340,7 +2370,7 @@
   },
   "bellTitle": "Notifications",
   "@bellTitle": {
-    "description": "Accessible name of the bell in the top app bar with nothing unread."
+    "description": "The word for notifications: the accessible name of the bell in the top app bar with nothing unread, and the title of the screen that holds the same list."
   },
   "bellUnread": "{count, plural, =1{Notifications, 1 unread} other{Notifications, {count} unread}}",
   "@bellUnread": {
@@ -8476,6 +8506,10 @@
   "@reviewNoCandidatesTitle": {
     "description": "Empty state where the sources were searched and matched nothing."
   },
+  "reviewOpenUploads": "Open uploads",
+  "@reviewOpenUploads": {
+    "description": "Link on an uploaded entry's origin line, back to the upload sessions list. The only route from a review entry to where its files came from."
+  },
   "reviewOriginAcquisition": "Acquired",
   "@reviewOriginAcquisition": {
     "description": "Badge on a queue row: this entry came in through a download the server ran."
@@ -10453,10 +10487,6 @@
   "@shellNavBooks": {
     "description": "Navigation entry for the audiobook domain. Deliberately shorter than the hub's own title: five of these share a phone's width."
   },
-  "shellNavCuration": "Curation",
-  "@shellNavCuration": {
-    "description": "Sidebar group holding the entries that maintain the library rather than listen to it: uploads, the review queue, tasks, the admin console."
-  },
   "shellNavDownloads": "Downloads",
   "@shellNavDownloads": {
     "description": "Navigation entry for the download manager."
@@ -10472,6 +10502,10 @@
   "shellNavMusic": "Music",
   "@shellNavMusic": {
     "description": "Navigation entry for the music domain."
+  },
+  "shellNavNotifications": "Notifications",
+  "@shellNavNotifications": {
+    "description": "Navigation entry for the notifications screen: what happened, and where this account is told about it."
   },
   "shellNavPlaylists": "Playlists",
   "@shellNavPlaylists": {
@@ -10489,9 +10523,9 @@
   "@shellNavReview": {
     "description": "Navigation entry for the queue of imports waiting on an administrator's decision."
   },
-  "shellNavSettings": "Settings",
+  "shellNavSettings": "App settings",
   "@shellNavSettings": {
-    "description": "Navigation entry for the settings screens."
+    "description": "Navigation entry for the settings screens. Named against the admin console's server settings, which sit one row below it: one is what this account prefers, the other is what this instance does."
   },
   "shellNavStats": "Listening stats",
   "@shellNavStats": {
@@ -10504,10 +10538,6 @@
   "shellNavTracks": "Tracks",
   "@shellNavTracks": {
     "description": "Navigation entry for the track listing, under Music."
-  },
-  "shellNavUploads": "Uploads",
-  "@shellNavUploads": {
-    "description": "Navigation entry for the upload screen."
   },
   "shellNavYears": "Years",
   "@shellNavYears": {
@@ -10529,10 +10559,6 @@
   "@shellPaletteAllSettings": {
     "description": "Palette row opening the settings screen, offered when more settings matched than the palette lists."
   },
-  "shellPaletteCurationDetail": "Curation",
-  "@shellPaletteCurationDetail": {
-    "description": "The second line of a palette row that is an administrative destination. The same word as the sidebar group they live in."
-  },
   "shellPaletteEmpty": "Nothing to run",
   "@shellPaletteEmpty": {
     "description": "Empty state of the command palette with nothing typed."
@@ -10544,10 +10570,6 @@
   "shellPaletteGroupActions": "Actions",
   "@shellPaletteGroupActions": {
     "description": "Command palette group holding the things the app can be told to do."
-  },
-  "shellPaletteGroupAdmin": "Admin areas",
-  "@shellPaletteGroupAdmin": {
-    "description": "Command palette group holding the administrative destinations."
   },
   "shellPaletteGroupPlaces": "Go to",
   "@shellPaletteGroupPlaces": {
@@ -11550,6 +11572,14 @@
   "uploadsRetry": "Retry upload",
   "@uploadsRetry": {
     "description": "Accessible name of the control that sends a failed upload again."
+  },
+  "uploadsSessionsSubtitle": "Quota, what is still going up, and what to retry",
+  "@uploadsSessionsSubtitle": {
+    "description": "Second line of the row in the add sheet that opens the upload sessions list."
+  },
+  "uploadsSessionsTitle": "Past uploads",
+  "@uploadsSessionsTitle": {
+    "description": "Row in the add sheet that opens the upload sessions list. The list is not a navigation destination, so this is its lasting door."
   },
   "uploadsSourceUrl": "Source URL",
   "@uploadsSourceUrl": {

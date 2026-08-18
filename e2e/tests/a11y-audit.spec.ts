@@ -45,7 +45,7 @@ test('login, browse, and play are completable through roles and names', async ({
   // declaring itself focusable: web turns that flag into a tabindex, and
   // without one `focus()` is a silent no-op and the key goes nowhere.
   // Space rather than Enter, which is the key a role=button takes here.
-  const settings = page.getByRole('button', { name: 'Settings', exact: true });
+  const settings = page.getByRole('button', { name: 'App settings', exact: true });
   await settings.waitFor({ timeout: T.nav });
   await settings.focus();
   await page.keyboard.press(' ');
