@@ -247,7 +247,14 @@ Future<void> uploadPickedFiles(
             identify: choice.identify,
           );
     } on WaxDeckApiException catch (e) {
-      messenger.show(l10n.uploadsFileFailed(file.name, explainError(l10n, e)));
+      // explainRefusal, not explainError: a size or a format the server
+      // will not take is a refusal of the file this person just picked,
+      // and its sentence names which limit and by how much. The table's
+      // own words would say "over the storage limit" for a file no
+      // allowance can ever admit.
+      messenger.show(
+        l10n.uploadsFileFailed(file.name, explainRefusal(l10n, e)),
+      );
     }
   }
   if (batchId != null) {

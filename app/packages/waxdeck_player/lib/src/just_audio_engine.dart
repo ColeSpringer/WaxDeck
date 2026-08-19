@@ -110,6 +110,24 @@ class JustAudioEngine implements AudioEnginePort {
     }
   }
 
+  /// No window on the web, where one was never worth having.
+  ///
+  /// just_audio's web platform is a single `HTMLAudioElement` whose
+  /// `src` is re-pointed at every boundary, so a crossing there is a
+  /// load and a gap however the window is arranged - there is no
+  /// gapless to lose by declining. What the window did cost was real:
+  /// its insert reloads the *playing* source unconditionally
+  /// (`concatenatingInsertAll` awaits `_currentAudioSourcePlayer.load()`
+  /// even when the insert lands past the current index), which resets
+  /// that item to zero, never fetches the appended one, and leaves a
+  /// player that can no longer end - no `completed`, no index change,
+  /// position pinned at the duration with `playing` still true. The
+  /// queue stopped dead on the track it was on and the listen went
+  /// unreported. Same defect [load] stops first for, one call on. Every
+  /// other engine here keeps its window and its gapless crossing.
+  @override
+  bool get canPreload => !kIsWeb;
+
   @override
   Future<void> preloadNext(
     String url, {
@@ -117,6 +135,7 @@ class JustAudioEngine implements AudioEnginePort {
     Duration? clipStart,
     Duration? clipEnd,
   }) {
+    if (!canPreload) return Future<void>.value();
     return _edit((generation) async {
       // Nothing loaded means nothing to follow: appending here would
       // make the preloaded item the one that plays.

@@ -13,7 +13,7 @@ part 'upload_create.g.dart';
 ///
 /// Properties:
 /// * [fileName] - The file's name (base name only; any path is rejected). The extension picks the accepted-format check. 
-/// * [sizeBytes] - Total file size in bytes.
+/// * [sizeBytes] - Total file size in bytes. The maximum is the largest single file WaxDeck accepts - 16 GiB, clear of even a long hi-res or DSD single-file release - and a session declaring more answers `invalid-request` rather than opening. What is actually accepted is still bounded by the caller's quota and by the room on the server's staging volume. 
 /// * [mediaType] 
 /// * [libraryPid] - Target library; required when several libraries of the media type are visible to the caller. 
 /// * [sha256] - Lowercase hex SHA-256 of the file, for the up-front exact duplicate warning and the completion integrity check. 
@@ -26,7 +26,7 @@ abstract class UploadCreate implements Built<UploadCreate, UploadCreateBuilder> 
   @BuiltValueField(wireName: r'fileName')
   String get fileName;
 
-  /// Total file size in bytes.
+  /// Total file size in bytes. The maximum is the largest single file WaxDeck accepts - 16 GiB, clear of even a long hi-res or DSD single-file release - and a session declaring more answers `invalid-request` rather than opening. What is actually accepted is still bounded by the caller's quota and by the room on the server's staging volume. 
   @BuiltValueField(wireName: r'sizeBytes')
   int get sizeBytes;
 

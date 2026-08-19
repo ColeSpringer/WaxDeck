@@ -71,6 +71,10 @@ type Server struct {
 	// no one caller can pin goroutines and upstream sockets against
 	// remote files this server does not control.
 	relayStreams relayGate
+	// uploads paces the upload surface per account, so a client that
+	// has stopped waiting for its own answers cannot loop the server
+	// through work the byte ceilings never see.
+	uploads uploadGate
 	// trusted is the reverse-proxy hop list the client-IP walk begins
 	// from. Empty is today's behaviour exactly: the socket address, and
 	// no header believed.
@@ -1092,6 +1096,11 @@ const (
 	// render HTML negotiate it, and they are strict-server methods with
 	// no *http.Request to read it from themselves.
 	ctxAcceptLanguage
+	// What the request declared its body to be, for the one handler
+	// that has to refuse an over-large one before reading it. Same
+	// reason as the header above: a strict-server method is handed a
+	// reader, never the request that carried it.
+	ctxContentLength
 )
 
 // publicPaths are reachable without a session (per the spec's per-operation
@@ -1133,6 +1142,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), ctxRemoteIP, s.trusted.clientIP(r))
 		ctx = context.WithValue(ctx, ctxClient, clientHint(r))
 		ctx = context.WithValue(ctx, ctxAcceptLanguage, r.Header.Get("Accept-Language"))
+		ctx = context.WithValue(ctx, ctxContentLength, r.ContentLength)
 		if pageVaryPaths[r.URL.Path] {
 			w.Header().Set("Vary", "Accept-Language")
 		}
@@ -1243,6 +1253,16 @@ func remoteIPFromContext(ctx context.Context) string {
 	return ip
 }
 
+// declaredBodyBytes is what the request said it was sending, or -1
+// when it said nothing (a chunked body).
+func declaredBodyBytes(ctx context.Context) int64 {
+	n, ok := ctx.Value(ctxContentLength).(int64)
+	if !ok {
+		return -1
+	}
+	return n
+}
+
 func clientFromContext(ctx context.Context) string {
 	c, _ := ctx.Value(ctxClient).(string)
 	return c
@@ -1318,6 +1338,8 @@ func ResponseErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 		writeError(w, http.StatusBadGateway, "service-unreachable", kindMessage(err, "an external service could not be reached"))
 	case service.KindQuota:
 		writeError(w, http.StatusRequestEntityTooLarge, "quota-exceeded", kindMessage(err, "the upload would exceed your storage quota"))
+	case service.KindStorageFull:
+		writeError(w, http.StatusInsufficientStorage, "storage-full", kindMessage(err, "the server has no room to stage this"))
 	case service.KindLocked:
 		writeError(w, http.StatusConflict, "field-locked", kindMessage(err, "the field is locked; pass force to override"))
 	case service.KindFormat:

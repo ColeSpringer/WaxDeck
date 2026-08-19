@@ -55,6 +55,17 @@ paths:
         session without spending bandwidth (a fingerprint-level
         duplicate check still runs at completion). Bytes then flow
         through the data endpoint in any number of chunks.
+
+        Three ceilings answer before any of that: a `sizeBytes` past
+        the schema's maximum answers `invalid-request` and names the
+        limit, since no allowance anybody can change moves it; a
+        staging volume with no room for the declared size - counting
+        what the sessions already receiving still owe it - answers
+        `storage-full`, which is the server's disk rather than the
+        caller's allowance; and opening a session is paced per account,
+        which answers `rate-limited`. Sending bytes and abandoning a
+        session are not paced: one is bounded by the ceilings above and
+        the other is what releases them.
       tags: [uploads]
       requestBody:
         required: true
@@ -81,8 +92,12 @@ paths:
           $ref: "#/components/responses/QuotaExceeded"
         "415":
           $ref: "#/components/responses/UnsupportedFormat"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
+        "507":
+          $ref: "#/components/responses/StorageFull"
 
   /uploads/{uploadId}:
     parameters:
@@ -136,8 +151,12 @@ paths:
         equal the session's current `receivedBytes` (an interrupted
         client re-reads the session and resumes; a mismatched offset
         answers `conflict` and nothing is written). Chunks may be any
-        size up to 32 MiB. Bytes past the declared total size answer
-        `invalid-request`.
+        size up to 32 MiB; a longer body answers `invalid-request`
+        without reading it, as do bytes past the declared total size.
+        Deliberately not paced: a transfer is many chunks and a pace
+        per request would be a throughput ceiling, so this endpoint's
+        bounds are the chunk cap, the session's declared size, and the
+        room on the server's staging volume.
       tags: [uploads]
       parameters:
         - name: offset
@@ -204,6 +223,8 @@ paths:
           $ref: "#/components/responses/Conflict"
         "415":
           $ref: "#/components/responses/UnsupportedFormat"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -245,6 +266,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/ReadOnly"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -283,6 +306,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /acquisitions:
     post:
@@ -327,6 +352,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/ReadOnly"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "501":
           $ref: "#/components/responses/SourceUnavailable"
         "503":
@@ -380,7 +407,14 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Total file size in bytes.
+          maximum: 17179869184
+          description: >
+            Total file size in bytes. The maximum is the largest single
+            file WaxDeck accepts - 16 GiB, clear of even a long hi-res
+            or DSD single-file release - and a session declaring more
+            answers `invalid-request` rather than opening. What is
+            actually accepted is still bounded by the caller's quota
+            and by the room on the server's staging volume.
         mediaType:
           $ref: "#/components/schemas/MediaType"
         libraryPid:

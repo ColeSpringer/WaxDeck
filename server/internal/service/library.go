@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/diskspace"
 	"github.com/colespringer/waxdeck/server/internal/match"
 	"github.com/colespringer/waxdeck/server/internal/providers"
 	"github.com/colespringer/waxdeck/server/internal/scrobble"
@@ -330,6 +332,13 @@ type Library struct {
 	stagingDir      string
 	uploadFormats   map[string]bool
 	uploadRetention time.Duration
+	// stagingFree answers how much room the staging volume has left,
+	// for the check a new session runs. A field rather than a direct
+	// call so a test can hand it a full disk; nothing configures it.
+	stagingFree func(string) (int64, bool)
+	// admitUpload serializes the allowance checks a new session runs
+	// against the insert that spends them.
+	admitUpload sync.Mutex
 	// fpcalcPath is the fingerprint binary, empty when absent (matching
 	// then runs on tag and search evidence only).
 	fpcalcPath string
@@ -539,6 +548,16 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	if l.stagingDir == "" {
 		l.stagingDir = filepath.Join(cfg.DataDir, "staging")
 	}
+	// Made here rather than by the first writer, so the free-space
+	// probe a new session runs has a directory on the staging volume to
+	// ask about. A server nobody uploads to carries an empty directory,
+	// which the janitor already expects to find.
+	if err := os.MkdirAll(l.stagingDir, 0o755); err != nil {
+		paths.Close()
+		lib.Close()
+		return nil, fmt.Errorf("service: staging directory: %w", err)
+	}
+	l.stagingFree = diskspace.Free
 	l.uploadFormats = uploadFormatSet(cfg.UploadFormats)
 	l.uploadRetention = cfg.UploadRetention
 	if l.uploadRetention == 0 {

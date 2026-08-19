@@ -34,6 +34,10 @@ type harness struct {
 	ts      *httptest.Server
 	token   string
 	library string
+	// srv is the API server behind ts, for the few tests whose subject
+	// is a bound the server holds in memory rather than an endpoint's
+	// answer (the upload pacer's clock).
+	srv *Server
 	// podcastDir is the episode download root, set only by
 	// newPodcastHarness. Tests that need to interfere with a downloaded
 	// file on disk reach it here.
@@ -197,6 +201,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 			Middlewares: []MiddlewareFunc{srv.AuthMiddleware},
 		},
 	)
+	h.srv = srv
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/", apiHandler)
 	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))

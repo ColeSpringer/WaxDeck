@@ -34,8 +34,39 @@ const (
 	uploadDiscarded = "discarded"
 )
 
-// MaxUploadChunk bounds one data request's body.
+// MaxUploadChunk bounds one data request's body, as the contract
+// promises. Without it a session's own declared size is the only bound
+// on a single PUT, so one request could legitimately stream gigabytes.
 const MaxUploadChunk = 32 << 20
+
+// MaxUploadSize bounds one session's declared size. It is the schema's
+// own maximum, and the reason the quota arithmetic further down is safe
+// to do in int64 at all: an unbounded sizeBytes overflows `used + size`
+// and wraps past the very limit it is being checked against.
+//
+// 16 GiB clears the largest single file anybody uploads - a long
+// hi-res or DSD single-file release, a hundred-hour audiobook - by
+// enough that it refuses nothing real. What actually decides whether a
+// big upload is accepted is the caller's quota and the room on the
+// staging volume, both of which move; this one does not.
+const MaxUploadSize = 16 << 30
+
+// stagingReserve is the room checkStagingRoom leaves free after an
+// upload it accepts. Staging shares its volume with the catalog, its
+// write-ahead log, and the archive a scheduled backup builds beside
+// them, and a volume driven to zero fails in ways a refused upload does
+// not.
+//
+// It does not cover the import: that renames within the volume when the
+// library lives on it (`Copy: false`), and copies onto a different one
+// when it does not - a volume this check never probes. Nor does it
+// scale: it is a floor for the databases, not a fraction of the disk.
+const stagingReserve = 512 << 20
+
+// stagingReservationWindow is how long a session's unwritten bytes keep
+// holding room. See db.UploadBytesOutstanding for why a promise needs
+// an expiry at all, and which way the error runs.
+const stagingReservationWindow = time.Hour
 
 // uploadFormatSet builds the accepted-extension set (lowercase, no
 // dot). The default is every format the catalog scans and the decode
@@ -170,6 +201,16 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 	if p.SizeBytes <= 0 {
 		return UploadDTO{}, errInvalid("sizeBytes must be positive")
 	}
+	if p.SizeBytes > MaxUploadSize {
+		// Invalid rather than over-quota: nothing the caller or the
+		// operator can free moves a compile-time ceiling, and
+		// `quota-exceeded` reads as "clear some space and retry" in
+		// every client that words it. A refused declaration keeps the
+		// server's own sentence, which is the one that names the size.
+		return UploadDTO{}, errInvalid(fmt.Sprintf(
+			"one upload may declare at most %d bytes; this one declares %d",
+			MaxUploadSize, p.SizeBytes))
+	}
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
 	if !l.uploadFormats[ext] {
 		return UploadDTO{}, &Error{Kind: KindFormat, Msg: fmt.Sprintf("files of type %q are not accepted", ext)}
@@ -183,6 +224,14 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 	if err := l.batchForMember(ctx, uc, &p); err != nil {
 		return UploadDTO{}, err
 	}
+	// The two allowance checks and the insert that spends them run one
+	// caller at a time. Both read a total and then add to it, so
+	// concurrent creates otherwise all read the same pre-insert figure,
+	// all pass, and all insert - which is the overrun the staging check
+	// exists to stop, arriving by a different door. Creates are paced
+	// and never hot, so the cost of serializing them is nothing.
+	l.admitUpload.Lock()
+	defer l.admitUpload.Unlock()
 	if uc.UploadQuotaBytes > 0 {
 		used, err := l.db.UploadBytesInUse(ctx, uc.ID)
 		if err != nil {
@@ -193,6 +242,13 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 				"uploads waiting for review may total %d bytes, %d in use; this one needs %d more. Importing or discarding what is staged frees the room",
 				uc.UploadQuotaBytes, used, p.SizeBytes)}
 		}
+	}
+	// Last of the three ceilings, and the only one the caller cannot
+	// clear by deciding their own staged uploads: it is the server's
+	// disk. Checked after the quota so somebody who is simply over their
+	// own allowance hears that instead.
+	if err := l.checkStagingRoom(ctx, p.SizeBytes); err != nil {
+		return UploadDTO{}, err
 	}
 
 	u := wdb.Upload{
@@ -229,6 +285,45 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 	}
 	l.emitUserEvent(ctx, uc.ID, eventUpload, u.ID)
 	return l.hydrateUploadDuplicate(ctx, u), nil
+}
+
+// checkStagingRoom refuses a session the staging volume cannot hold.
+//
+// Free space alone is not the answer. It already reflects the bytes
+// that landed, and says nothing about the bytes every session still
+// receiving has been promised room for, so those are counted against it
+// here - without them, a hundred sessions that each fit are each
+// accepted and together overrun the volume.
+//
+// A platform that cannot answer, or a staging directory that has gone
+// missing underneath the server, skips the check: refusing every upload
+// on a number nobody could read is worse than the hole it closes.
+func (l *Library) checkStagingRoom(ctx context.Context, size int64) error {
+	// Absent in a Library built by hand rather than opened, which is how
+	// several tests reach the surfaces around this one.
+	if l.stagingFree == nil {
+		return nil
+	}
+	free, ok := l.stagingFree(l.stagingDir)
+	if !ok {
+		return nil
+	}
+	since := time.Now().Add(-stagingReservationWindow).UnixNano()
+	owed, err := l.db.UploadBytesOutstanding(ctx, since)
+	if err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	if free-owed-size < stagingReserve {
+		// The figures stay in the log. Free space on the host and the
+		// bytes every other account has in flight are the operator's to
+		// see, and answering them to any caller with an upload grant
+		// makes this endpoint an oracle for both.
+		l.log.Warn("refusing an upload for want of staging room",
+			"free", free, "promised", owed, "reserve", stagingReserve, "needs", size)
+		return &Error{Kind: KindStorageFull,
+			Msg: "the server has no room to stage this upload"}
+	}
+	return nil
 }
 
 // findContentDuplicate resolves a byte-identical content hash to an
@@ -349,16 +444,27 @@ func (l *Library) AppendUploadData(ctx context.Context, uc *UserCtx, id string, 
 		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
 	remaining := u.SizeBytes - u.ReceivedBytes
-	n, err := io.Copy(f, io.LimitReader(body, remaining+1))
+	// Two bounds, and reading one byte past whichever binds first is how
+	// they are told apart from a body that fits. The chunk cap is the
+	// contract's promise about a single request; the remainder is this
+	// session's own. Nothing is read past either, so a client streaming
+	// an endless body gets one chunk's worth of disk and a refusal.
+	limit := min(remaining, MaxUploadChunk)
+	n, err := io.Copy(f, io.LimitReader(body, limit+1))
 	if err != nil {
 		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	if n > remaining {
+	if n > limit {
 		// The over-length bytes already hit disk at this offset; truncate back
 		// to the last good length so a corrected retry cannot leave a stray
 		// trailing byte past the declared size.
 		if terr := f.Truncate(offset); terr != nil {
 			l.log.Warn("truncating over-length upload chunk", "upload", u.ID, "err", terr)
+		}
+		if limit < remaining {
+			return UploadDTO{}, errInvalid(fmt.Sprintf(
+				"a chunk may carry at most %d bytes; resume at this offset with a shorter one",
+				MaxUploadChunk))
 		}
 		return UploadDTO{}, errInvalid("more bytes than the declared size")
 	}

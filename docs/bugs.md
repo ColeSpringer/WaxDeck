@@ -36,8 +36,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 - [8-8-2026] We should also have the addition button in the music section. Currently, its the only section that does not have it. Can be kind of like the home add surface but more music specific?
 
-- [8-8-2026] Uploads only accept file selections. Not useful when trying to upload albums or entire music collections. Also need to make sure that the upload surface is up to standard security practices.
-
 - [8-8-2026] Under listening stats, when you select the time period to take into account, there is a noticable visual change. It looks like its redrawing the elements. This might not be fixable and I guess it's not really a bug. However, I think it would be worth making it a less jarring transition if we can.
 
 - [8-8-2026] I believe we implemented the ability to search for podcasts by name to add but it doesnt show in the UI.

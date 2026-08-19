@@ -109,6 +109,11 @@ test('a set of up-next rows can be picked, moved, and dropped', async ({
   await app.nav.enter('albums');
   await app.music.openBucket(0);
   await app.music.playEntry(0);
+  // Paused before anything is counted: this is about what a selection
+  // does to a queue, and the fixture tracks are seconds long, so a
+  // running clock drains the up-next rows out from under the assertions
+  // while they are being made.
+  await app.player.pause();
   await app.queue.openFromPlayer();
 
   const handles = app.queue.dragHandles();

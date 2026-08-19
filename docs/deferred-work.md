@@ -495,6 +495,39 @@ here waits on upstream.
   carrying it is the specific trigger to re-check, sharper than "when
   the issue closes": the issue can close on the PR alone, which changes
   nothing here until the pinned engine ships it.
+- `[in-repo]` **`make test-app-chrome` cannot run on Windows.**
+  flutter_tools' own test server answers every CanvasKit request with a
+  404: `_localCanvasKitHandler` gates on
+  `path.fromUri(request.url).startsWith('canvaskit/')`, and `fromUri`
+  hands back backslashes on Windows. The web engine never boots and the
+  suite never connects - a bare `flutter create` project fails the same
+  way, so there is nothing in this repo to fix and no workaround short
+  of patching the SDK. CI runs the browser suites on Linux, which is
+  where they ratchet; the Makefile target carries the same note. Worth
+  filing upstream (`path.posix.fromUri` is the one-line fix) if it is
+  still there on the next Flutter bump.
+- `[in-repo]` **The web has no gapless crossing, and a preload window
+  is not the way to get one.** just_audio's web platform is a single
+  `HTMLAudioElement` whose `src` is re-pointed on every source change,
+  so a boundary there is a load and an audible gap no matter how the
+  window is arranged. WaxDeck preloaded into it anyway until
+  `JustAudioEngine.canPreload` was set false on the web, and that cost
+  rather than bought: `concatenatingInsertAll` awaits
+  `_currentAudioSourcePlayer.load()` unconditionally - even for an
+  insert past the current index - which resets the playing item to
+  zero, never fetches the appended one, and leaves a player that can
+  never end, so the queue stopped dead on the track it was on and the
+  listen was never reported. Two separate things could change, and only
+  one of them is about gapless. The bug is a plausible upstream fix
+  (reload only when the insert moved the current index, which is the
+  `if` the call already sits outside of); real gapless needs a
+  different web backend - two elements swapped at the boundary, or
+  MSE/Web Audio - which is a plugin-sized piece of work and the only
+  thing that would make `canPreload` worth flipping back. Do not flip
+  it for the bug fix alone: without a backend that can cross without
+  reloading, a working window still delivers a gap and still costs
+  three round trips and a stream token a track. `now_playing_test.dart`'s
+  no-window case and `ui.spec.ts:16` are what say whether a flip took.
 
 ## Curation and metadata
 
@@ -520,8 +553,11 @@ here waits on upstream.
   `file_selector_android` implementation covers in-app file picks),
   but Android folder access means SAF tree URIs, which the
   `FilePickerPort` deliberately does not speak; the "Upload a folder"
-  tile hides there (`canPickFolders`). Multi-select plus auto
-  grouping covers the album case on Android meanwhile.
+  tile hides there (`canPickFolders`). It is now the only platform it
+  hides on - the web build picks folders through an
+  `<input webkitdirectory>` - so this is the last of the exclusion.
+  Multi-select plus auto grouping covers the album case on Android
+  meanwhile.
 - `[in-repo]` **Reading one permission bit costs a whole editor
   document.** `mayCurate` is only carried by `GET /items/{pid}/metadata`,
   which assembles provenance, credits, tags, lyrics, write-back issues,

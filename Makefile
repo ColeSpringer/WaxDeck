@@ -143,6 +143,12 @@ test: test-server test-fixtures test-app
 
 # Browser-only suites, matched by suffix so new ones run when written.
 # Not in `test`: it needs a local Chrome, and CI is where it ratchets.
+# Linux or macOS only, and not by choice: on Windows flutter_tools'
+# own test server answers every CanvasKit request with a 404, because
+# `_localCanvasKitHandler` gates on `path.fromUri(...).startsWith
+# ('canvaskit/')` and fromUri hands back backslashes there. The web
+# engine never boots, so the suite never connects - a bare `flutter
+# create` project fails the same way, so there is nothing here to fix.
 test-app-chrome:
 	cd app/app && flutter test --platform chrome test/*_web_test.dart
 

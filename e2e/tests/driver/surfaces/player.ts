@@ -35,6 +35,38 @@ export class Player extends Surface {
     await this.toggle().waitFor({ timeout: T.nav });
   }
 
+  /// Stop the clock, and settle when the transport agrees it has.
+  ///
+  /// A method rather than a click in a spec, because the forced click
+  /// belongs to the driver - and because "paused" is the button's own
+  /// accessible name here (it announces the action, so a paused player
+  /// offers Play), not something appearing or disappearing that
+  /// `clickToward` could wait on.
+  ///
+  /// Read, click and assert are one retried unit, for two reasons that
+  /// both bite. Flutter web swallows a click while its handlers are
+  /// still attaching, which is why every other gesture here retries;
+  /// and the name is only trustworthy once something is playing, so a
+  /// single read against a player that has not started yet says "Play"
+  /// and would leave this returning with the clock still running - the
+  /// flake it exists to remove. Waiting for /Pause/ first is what makes
+  /// the guard mean "already paused" rather than "not started".
+  async pause(): Promise<void> {
+    await this.ready();
+    await expect(this.toggle()).toHaveAccessibleName(/Pause/i, {
+      timeout: T.nav,
+    });
+    await expect(async () => {
+      if (/Play/i.test((await this.toggle().getAttribute('aria-label')) ?? '')) {
+        return;
+      }
+      await this.toggle().click({ force: true });
+      await expect(this.toggle()).toHaveAccessibleName(/Play/i, {
+        timeout: T.step,
+      });
+    }).toPass({ timeout: T.nav });
+  }
+
   /// Choose a playback rate from the speed sheet. One tap to any rate,
   /// where the cycling button this replaced could only walk to it.
   ///

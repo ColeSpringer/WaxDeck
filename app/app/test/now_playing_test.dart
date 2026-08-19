@@ -358,6 +358,38 @@ void main() {
     });
 
     test(
+      'an engine with no preload window still advances and reports',
+      () async {
+        // just_audio on the web has no window: appending behind the item
+        // playing breaks it, so the port declines and every item ends by
+        // running off the end. That path used to be reached only by a
+        // queue's last entry - a queue with more to play stopped dead on
+        // the track it was on and never reported the listen.
+        final h = _harness();
+        h.engine.canPreloadWindow = false;
+        h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+        await pumpEventQueue();
+        // Some of it actually listened to, so the session it reports is a
+        // real one, then inside the lead a windowed engine would have
+        // prepared on - and nothing was: the app does not pay for a
+        // window that is not there.
+        await _play(h.engine, 4000);
+        await _skipTo(h.engine, 190000);
+        expect(h.engine.preloadedUrl, isNull);
+        expect(h.repo.playInfoCalls.where((c) => c.pid == _b), isEmpty);
+
+        await _runOut(h.engine);
+
+        expect(h.container.queueState.currentPid, _b);
+        expect(h.engine.loadedUrl, contains(_b));
+        expect(h.engine.playing, isTrue);
+        final finished = h.repo.reportedSessions.where((s) => s.pid == _a);
+        expect(finished, hasLength(1));
+        expect(finished.single.finished, isTrue);
+      },
+    );
+
+    test(
       'the last entry ends the queue and keeps showing what played',
       () async {
         final h = _harness();

@@ -2,12 +2,9 @@
 # Temporary by construction: this file rides the change that makes the
 # break and is deleted once the base ref contains it.
 #
-# The now-playing-art `v` token gains the shape it has always had:
-# 32 lowercase hex characters, minted only by this server (a truncated
-# SHA-256 of either the normalized artist and title or the announced
-# artwork URL). Nothing outside the server can derive one, so no real
-# client sent anything else and nothing that worked stops working; the
-# pattern documents the token and lets a client tell it from a stray
-# query value. Pinning it is a break only in the formal sense, and this
-# is pre-1.0.
-GET /radio/stations/{pid}/now-playing-art added the pattern '^[0-9a-f]{32}$' to the 'query' request parameter 'v'
+# `sizeBytes` gains the ceiling the server now enforces. Nothing that
+# worked stops working: 16 GiB clears the largest single file anybody
+# uploads, and an unbounded declaration was never accepted in practice
+# either - it overflowed the quota arithmetic it was checked against.
+# Formally a narrowed request schema, which is why it is here.
+POST /uploads the 'sizeBytes' request property's max was set to '17179869184.00'

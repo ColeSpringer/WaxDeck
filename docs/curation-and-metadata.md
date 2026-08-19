@@ -77,11 +77,13 @@ The limit caps what may sit in staging awaiting a decision, so
 importing an upload frees the room it held.
 
 Files reach the flow three ways: a file picker on every platform, a
-folder picker on desktop (Linux, Windows - Android folder
-access means SAF tree URIs, which the picker port does not speak),
-and drag-and-drop onto the library or uploads screen on web and
-desktop. Web transfers read the browser's file handles in windows, so
-picking a multi-hundred-megabyte album never loads it into memory.
+folder picker everywhere but Android (whose folder access means SAF
+tree URIs, which the picker port does not speak), and drag-and-drop
+onto the library or uploads screen on web and desktop. A picked folder
+is walked recursively and its shape rides along, so disc subfolders
+survive to the grouping step. Web transfers read the browser's file
+handles in windows, so picking a multi-hundred-megabyte album never
+loads it into memory.
 
 Uploading several files at once asks a grouping question so an album
 folder does not flood the review queue with per-file entries:
@@ -100,6 +102,16 @@ The client's pick dialogs filter to the default accepted-format set
 `WAXDECK_UPLOAD_FORMATS` still accepts its formats through the
 dialogs' "All files" group, and the server-side format check at
 session create is the real gate either way.
+
+Three ceilings sit on a session before a byte moves, alongside the
+per-account pending-upload limit: one file may declare at most 16 GiB,
+one request may carry at most 32 MiB of it, and a session is refused
+outright when the staging volume has no room for what it declared -
+counting what the transfers already running have been promised and
+leaving half a gigabyte spare. Opening sessions is paced per account
+too, generously enough that no real transfer meets it; sending bytes
+is not, so a folder of any size moves at whatever the link does. See
+[upload oversight](admin-and-ops.md).
 
 Imports move files into the library, so at least one library root
 must be opted into managed placement with `WAXDECK_MANAGED_ROOTS`

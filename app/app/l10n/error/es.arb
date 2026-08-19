@@ -25,6 +25,7 @@
   "errorReadOnly": "La biblioteca está en modo de solo lectura, así que no se puede cambiar nada.",
   "errorServiceUnreachable": "Un servicio externo necesario no ha respondido. Inténtalo más tarde.",
   "errorSourceUnavailable": "Este servidor no tiene activa la fuente que hace falta.",
+  "errorStorageFull": "El servidor no tiene espacio para esto ahora mismo. Avisa a quien lo administra.",
   "errorStreamStale": "Este archivo ha cambiado en el servidor. Ábrelo otra vez para reproducirlo.",
   "errorSyncReset": "Este dispositivo está demasiado desactualizado, así que se sincronizará desde cero.",
   "errorTimeout": "El dispositivo no ha respondido a tiempo. Inténtalo de nuevo.",

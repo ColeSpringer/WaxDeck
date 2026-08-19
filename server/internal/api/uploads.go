@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -45,6 +46,19 @@ func uploadJSON(u service.UploadDTO) Upload {
 	return out
 }
 
+// tooFast reports whether the caller has spent this account's share of
+// the upload surface for now. See uploadbounds.go for what is charged
+// and what is deliberately not.
+func (s *Server) tooFast(uc *service.UserCtx) bool {
+	return !s.uploads.allow(uc.ID)
+}
+
+// pacedOut is the body every paced endpoint answers with, so the next
+// one added reaches for this rather than pasting the sentence again.
+func pacedOut() Error {
+	return errObj("rate-limited", "too many upload requests; retry shortly")
+}
+
 func (s *Server) ListUploads(ctx context.Context, req ListUploadsRequestObject) (ListUploadsResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
@@ -81,6 +95,9 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 	if err != nil {
 		return nil, err
 	}
+	if s.tooFast(uc) {
+		return CreateUpload429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
+	}
 	if req.Body == nil {
 		return CreateUpload400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an upload body is required"))}, nil
 	}
@@ -102,6 +119,8 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 			return CreateUpload403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindQuota:
 			return CreateUpload413JSONResponse{QuotaExceededJSONResponse(errObj("quota-exceeded", err.Error()))}, nil
+		case service.KindStorageFull:
+			return CreateUpload507JSONResponse{StorageFullJSONResponse(errObj("storage-full", err.Error()))}, nil
 		case service.KindFormat:
 			return CreateUpload415JSONResponse{UnsupportedFormatJSONResponse(errObj("unsupported-format", err.Error()))}, nil
 		}
@@ -150,6 +169,16 @@ func (s *Server) PutUploadData(ctx context.Context, req PutUploadDataRequestObje
 	if req.Body == nil {
 		return PutUploadData400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a chunk body is required"))}, nil
 	}
+	// Refused at the header, where refusing is free. Reading an
+	// over-cap body to find out how big it is writes a chunk's worth to
+	// the very volume the staging check protects and then throws it
+	// away - and the answer would not arrive either, since a caller
+	// still streaming hundreds of megabytes is cut off long before the
+	// server's own drain gives up on the rest of the body.
+	if n := declaredBodyBytes(ctx); n > service.MaxUploadChunk {
+		return PutUploadData400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", fmt.Sprintf(
+			"a chunk may carry at most %d bytes; this one declares %d", service.MaxUploadChunk, n)))}, nil
+	}
 	u, err := s.svc.AppendUploadData(ctx, uc, string(req.UploadId), req.Params.Offset, req.Body)
 	if err != nil {
 		switch service.KindOf(err) {
@@ -169,6 +198,9 @@ func (s *Server) CompleteUpload(ctx context.Context, req CompleteUploadRequestOb
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if s.tooFast(uc) {
+		return CompleteUpload429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
 	}
 	u, err := s.svc.CompleteUpload(ctx, uc, string(req.UploadId))
 	if err != nil {
@@ -208,6 +240,9 @@ func (s *Server) CreateUploadBatch(ctx context.Context, req CreateUploadBatchReq
 	if err != nil {
 		return nil, err
 	}
+	if s.tooFast(uc) {
+		return CreateUploadBatch429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
+	}
 	if req.Body == nil {
 		return CreateUploadBatch400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a batch body is required"))}, nil
 	}
@@ -234,6 +269,9 @@ func (s *Server) CompleteUploadBatch(ctx context.Context, req CompleteUploadBatc
 	if err != nil {
 		return nil, err
 	}
+	if s.tooFast(uc) {
+		return CompleteUploadBatch429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
+	}
 	b, err := s.svc.CompleteUploadBatch(ctx, uc, string(req.BatchId))
 	if err != nil {
 		switch service.KindOf(err) {
@@ -251,6 +289,9 @@ func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionReq
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if s.tooFast(uc) {
+		return CreateAcquisition429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
 	}
 	if req.Body == nil {
 		return CreateAcquisition400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an acquisition body is required"))}, nil

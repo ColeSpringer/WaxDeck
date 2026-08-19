@@ -20,7 +20,9 @@ test('two picked files group as one album and import through review', async ({ a
   // week and the account outlives the run, so a stack this test has used
   // before carries a staged pair per earlier run - and "exactly two of
   // these files are staged" would then be counting all of them. What is
-  // this run's is the batch that was not here a moment ago.
+  // this run's is the batch that was not here a moment ago and holds
+  // these files: the folder journey opens a batch of its own beside this
+  // one, so "the newest batch" is somebody else's half the time.
   const uploads = async () =>
     (await app.api.get('/uploads', { query: { limit: 100 } })).uploads ?? [];
   const before = new Set((await uploads()).map((r) => r.batchId));
@@ -37,7 +39,10 @@ test('two picked files group as one album and import through review', async ({ a
   let entryId = '';
   await expect(async () => {
     const fresh = (await uploads()).filter(
-      (r) => r.batchId !== undefined && !before.has(r.batchId),
+      (r) =>
+        r.batchId !== undefined &&
+        !before.has(r.batchId) &&
+        LANTERNS.includes(r.fileName),
     );
     const batchId = fresh[0]?.batchId;
     expect(batchId, 'the picked pair should stage under a batch of its own').toBeTruthy();
@@ -92,6 +97,55 @@ test('two picked files group as one album and import through review', async ({ a
       { timeout: T.fetch, message: 'the uploaded album should reach the library' },
     )
     .toEqual(['Paper Lanterns', 'River Static']);
+});
+
+test('a picked folder uploads its audio and leaves the rest', async ({ app }) => {
+  test.setTimeout(J.journey);
+
+  // The folder pick is the web's own: browsers have no folder dialog
+  // except an <input webkitdirectory>, so this is the one journey that
+  // proves the tile is drawn there, that the chooser's answer reaches
+  // the upload flow, and that what is not audio is left behind.
+  //
+  // It does not prove the hierarchy survived. Nothing on the wire
+  // carries `batchPath` back - `ReviewTrack.path` is staging-relative -
+  // and `auto` clusters on the album tag folded with the disc folder,
+  // so these two land in one entry whether the path rode along or was
+  // dropped. The half this cannot see is pinned a layer down, where
+  // `file_picker_web_test.dart` reads `webkitRelativePath` into
+  // `relativeDir` against real browser files.
+  //
+  // The album is this test's own, or it would race the file journey's
+  // for the destination - and the rows are read back by file name for
+  // the same reason, since the two batches open side by side.
+  const HARBOUR = ['harbour-one.mp3', 'harbour-two.mp3'];
+  const uploads = async () =>
+    (await app.api.get('/uploads', { query: { limit: 100 } })).uploads ?? [];
+  const before = new Set((await uploads()).map((r) => r.batchId));
+
+  await app.nav.enter('home');
+  await app.uploads.pickFolder(uploadSrc('Harbour Lights'));
+  // Auto-detect, which is what a folder is picked for: the disc
+  // subfolder rides along as the clustering hint.
+  await app.uploads.groupAs('auto');
+
+  await expect(async () => {
+    const fresh = (await uploads()).filter(
+      (r) =>
+        r.batchId !== undefined &&
+        !before.has(r.batchId) &&
+        HARBOUR.includes(r.fileName),
+    );
+    const batchId = fresh[0]?.batchId;
+    expect(batchId, 'the picked folder should stage under a batch of its own').toBeTruthy();
+    const members = fresh.filter((r) => r.batchId === batchId && r.state === 'staged');
+    // Two, not three: the folder holds a text file the dialog could not
+    // filter out, so the picker's own filtering is what left it behind.
+    expect(members).toHaveLength(2);
+    expect(members.map((r) => r.fileName).sort()).toEqual([...HARBOUR].sort());
+    expect(members[0].reviewEntryId, 'finalize linked the entry').toBeTruthy();
+    expect(members[1].reviewEntryId).toBe(members[0].reviewEntryId);
+  }).toPass({ timeout: T.fetch });
 });
 
 test('a dropped file uploads through the drag-and-drop area', async ({ app }) => {

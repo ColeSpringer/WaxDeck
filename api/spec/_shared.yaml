@@ -102,6 +102,28 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+
+    RateLimited:
+      description: >
+        Too many requests from this caller (code `rate-limited`): the
+        sign-in limiter's lockout, or the upload surface's per-account
+        request ceiling. Back off and retry later; nothing was done.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    StorageFull:
+      description: >
+        The server has no room to stage what the request declared
+        (code `storage-full`). Unlike `quota-exceeded` this is the
+        server's own disk rather than the caller's allowance, so
+        clearing the caller's staged uploads need not help; it is the
+        operator's to fix.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     Error:
       type: object

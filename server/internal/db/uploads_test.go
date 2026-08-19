@@ -104,3 +104,69 @@ func TestUploadBytesInUseChargesOnlyStagedSessions(t *testing.T) {
 		t.Fatalf("us-2 bytesInUse = %d (%v), want 16000", used, err)
 	}
 }
+
+// Free space says what landed, never what is coming, so the staging
+// check reads this: every byte a session still receiving has been
+// promised and has not written yet, across all accounts.
+func TestUploadBytesOutstandingCountsOnlyWhatIsStillComing(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	if err := d.CreateUser(ctx, mkUser("us-1", "u1", nil), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.CreateUser(ctx, mkUser("us-2", "u2", nil), false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Opened "now" for the window's sake; the stale one below is what
+	// the window is there to drop.
+	const now = 1_000_000_000_000
+	ins := func(id, userID, state string, size, received int64) {
+		t.Helper()
+		if err := d.InsertUpload(ctx, Upload{
+			ID: id, UserID: userID, FileName: id + ".flac", MediaType: "music",
+			SizeBytes: size, ReceivedBytes: received, State: state, CreatedAtNS: now,
+		}); err != nil {
+			t.Fatalf("insert %s: %v", id, err)
+		}
+	}
+
+	// Half arrived, so half is still owed.
+	ins("up-half", "us-1", "receiving", 1000, 400)
+	// Nothing yet, so all of it is.
+	ins("up-fresh", "us-2", "receiving", 250, 0)
+	// Everything arrived: the bytes are on the volume, and free space
+	// already counts them.
+	ins("up-full", "us-1", "receiving", 90, 90)
+	// Past receiving entirely, whichever way it went.
+	ins("up-staged", "us-1", "staged", 5000, 5000)
+	ins("up-imported", "us-1", "imported", 7000, 7000)
+	ins("up-discarded", "us-2", "discarded", 9000, 0)
+
+	owed, err := d.UploadBytesOutstanding(ctx, now)
+	if err != nil {
+		t.Fatalf("summing: %v", err)
+	}
+	if owed != 850 {
+		t.Fatalf("outstanding = %d, want 850 (600 + 250)", owed)
+	}
+
+	// A session that opened before the window is not counted, however
+	// much it still owes: a promise made by a transfer nobody is
+	// running would otherwise reserve the volume until a janitor swept
+	// it, which is a week under the default retention.
+	if err := d.InsertUpload(ctx, Upload{
+		ID: "up-stale", UserID: "us-1", FileName: "stale.flac", MediaType: "music",
+		SizeBytes: 1 << 30, State: "receiving", CreatedAtNS: now - 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if owed, err := d.UploadBytesOutstanding(ctx, now); err != nil || owed != 850 {
+		t.Fatalf("outstanding with a stale session = %d (%v), want 850", owed, err)
+	}
+	// And is counted again by a window wide enough to reach it, which
+	// is what says the bound is the window rather than the row.
+	if owed, err := d.UploadBytesOutstanding(ctx, now-1); err != nil || owed != 850+(1<<30) {
+		t.Fatalf("outstanding over a wider window = %d (%v)", owed, err)
+	}
+}

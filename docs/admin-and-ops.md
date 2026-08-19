@@ -167,6 +167,26 @@ them. Granting upload rights and setting quotas is covered above;
 the upload flow itself, grouping, and the review pipeline are in the
 [curation guide](curation-and-metadata.md).
 
+Three bounds apply whatever the per-account quota says, and none of
+them is configurable: one upload may declare at most 16 GiB, one
+request may carry at most 32 MiB of it, and a session is refused with
+`storage-full` when the staging volume cannot hold what it declared
+alongside what the transfers already running were promised, keeping
+512 MiB spare for the databases and the backup archive that is written
+beside them. A session's unwritten bytes stop being counted an hour
+after it opened, so a transfer somebody abandoned reserves the volume
+for an hour rather than for the retention window. That bound is the
+server's disk rather than anybody's allowance, so it is yours: free
+space on the data volume, or decide what is staged.
+
+Opening a session, sealing one, opening or finalizing a batch and
+starting an acquisition are paced per account - a burst of 600
+refilling at 60 a second, which no real transfer approaches. Sending
+bytes and abandoning a session are deliberately not: a transfer is
+many chunks, so pacing those would be a throughput ceiling rather than
+a pace, and pacing the discard would stop a client releasing the very
+staging its failures reserved.
+
 ## Read-only mode
 
 For media mounted read-only on principle: per library, or server-wide

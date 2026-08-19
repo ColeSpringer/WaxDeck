@@ -4203,6 +4203,12 @@ abstract class AppLocalizations {
   /// **'This server is not running the source that request needs.'**
   String get errorSourceUnavailable;
 
+  /// Error sentence for the spec code `storage-full`: the server's own disk, not the reader's allowance, so there is nothing they can clear.
+  ///
+  /// In en, this message translates to:
+  /// **'The server has no room for this right now. Ask whoever runs it.'**
+  String get errorStorageFull;
+
   /// Error sentence for the spec code `stream-stale`: a minted media URL no longer matches the file it points at.
   ///
   /// In en, this message translates to:

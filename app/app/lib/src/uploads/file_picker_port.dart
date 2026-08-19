@@ -65,9 +65,9 @@ abstract interface class FilePickerPort {
     required String anyLabel,
   });
 
-  /// Whether [pickAudioFolder] works here (desktop only: Android
+  /// Whether [pickAudioFolder] works here (desktop and web; Android
   /// folder access means SAF tree URIs, which this port does not
-  /// speak, and web has no folder dialog).
+  /// speak).
   bool get canPickFolders;
 
   /// Picks a folder and returns its audio files recursively, with

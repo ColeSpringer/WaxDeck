@@ -57,14 +57,24 @@ abstract interface class AudioEnginePort {
   /// Preloading is best effort. An engine that cannot do it leaves this
   /// a no-op and runs off the end normally, so a caller that advances on
   /// [completed] keeps working, with an audible gap instead of a
-  /// gapless one. Preloading before the first [load] does nothing: there
-  /// is no item to follow.
+  /// gapless one - and says so through [canPreload], so a caller can
+  /// skip the work of preparing an item nothing will take. Preloading
+  /// before the first [load] does nothing: there is no item to follow.
   Future<void> preloadNext(
     String url, {
     String? mimeType,
     Duration? clipStart,
     Duration? clipEnd,
   });
+
+  /// Whether [preloadNext] does anything here.
+  ///
+  /// False is not a failure and needs no handling: the engine runs off
+  /// the end and answers [completed], which is the path an advance
+  /// takes anyway. It is here so a caller does not pay to resolve,
+  /// authorize, and mint a stream for an item that will be dropped -
+  /// per track, for as long as a queue plays.
+  bool get canPreload;
 
   /// Drops the preloaded item, so the loaded one ends the queue.
   ///

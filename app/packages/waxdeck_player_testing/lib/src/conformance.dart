@@ -42,9 +42,14 @@ abstract class AudioEngineHarness {
   /// assert is the crossing, not which file is playing.
   String get nextMediaUrl => mediaUrl;
 
-  /// Whether the engine actually preloads. The port lets an engine that
+  /// Whether the engine actually preloads, which must be what its
+  /// [AudioEnginePort.canPreload] answers. The port lets an engine that
   /// cannot degrade to load-on-advance, so a harness that says `false`
   /// gets the degraded contract asserted instead of the gapless one.
+  ///
+  /// Asked of the harness rather than of the engine because it selects
+  /// which tests are declared, and the engine does not exist until
+  /// `setUp` has built one.
   bool get preloads => true;
 
   /// Advances playback by [amount] of media time and lets events settle.

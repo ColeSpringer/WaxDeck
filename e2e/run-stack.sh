@@ -18,6 +18,13 @@ mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,fe
 # Source files for the manual-upload journey: outside the scanned
 # library, so they only ever enter it through the upload pipeline.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset upload >/dev/null)
+# The folder-pick journey's own album, written under a disc subdirectory
+# so what the picker walks is a tree. The stray text file is there to be
+# left behind: a folder pick cannot filter by type in the dialog, so the
+# filtering it does afterwards is what this proves.
+mkdir -p "$RUN_DIR/upload-src/Harbour Lights/Disc 1"
+(cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src/Harbour Lights/Disc 1" -preset upload-folder >/dev/null)
+echo "not audio" >"$RUN_DIR/upload-src/Harbour Lights/notes.txt"
 (cd "$E2E_DIR/../server" && go build -o "$RUN_DIR_NATIVE/waxflow-catalog" ./cmd/waxflow-catalog)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/testidp" ./cmd/testidp)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/feedserv" ./cmd/feedserv)

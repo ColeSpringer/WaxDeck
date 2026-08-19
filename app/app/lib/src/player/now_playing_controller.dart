@@ -897,6 +897,11 @@ class NowPlayingController extends Notifier<NowPlaying> {
     // engine while the record here goes on claiming it.
     if (session == null || !session.isLoaded) return;
     if (!_admitsPreload(session.item)) return;
+    // An engine with no window drops whatever this prepares, and
+    // preparing it is three round trips and a minted stream token per
+    // track. It advances on `completed` instead, which is the same path
+    // a queue's last item takes.
+    if (!_engine.canPreload) return;
     // Too early to mint a stream URL, or no length to measure against.
     final remaining = session.mediaDuration - session.displayPosition;
     if (remaining <= Duration.zero || remaining > kPreloadLead) return;

@@ -3451,6 +3451,10 @@
   "@errorSourceUnavailable": {
     "description": "Error sentence for the spec code `source-unavailable`: an acquisition integration this server does not run."
   },
+  "errorStorageFull": "The server has no room for this right now. Ask whoever runs it.",
+  "@errorStorageFull": {
+    "description": "Error sentence for the spec code `storage-full`: the server's own disk, not the reader's allowance, so there is nothing they can clear."
+  },
   "errorStreamStale": "This file changed on the server. Open it again to play it.",
   "@errorStreamStale": {
     "description": "Error sentence for the spec code `stream-stale`: a minted media URL no longer matches the file it points at."

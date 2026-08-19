@@ -4020,6 +4020,7 @@ export interface paths {
         /**
          * Start an upload
          * @description Creates a resumable upload session for one audio file. The caller must hold upload rights; the declared size counts against the caller's pending-upload limit up front so a full one fails fast, and the file name's extension is checked against the server's accepted formats. The required media type label routes the file to the matching library kind; `libraryPid` pins a specific library (required when several libraries of that kind are visible to the caller). Passing the file's SHA-256 up front lets the server warn about an exact duplicate before any bytes move: the response's `duplicate` names the existing item and the client can abandon the session without spending bandwidth (a fingerprint-level duplicate check still runs at completion). Bytes then flow through the data endpoint in any number of chunks.
+         *     Three ceilings answer before any of that: a `sizeBytes` past the schema's maximum answers `invalid-request` and names the limit, since no allowance anybody can change moves it; a staging volume with no room for the declared size - counting what the sessions already receiving still owe it - answers `storage-full`, which is the server's disk rather than the caller's allowance; and opening a session is paced per account, which answers `rate-limited`. Sending bytes and abandoning a session are not paced: one is bounded by the ceilings above and the other is what releases them.
          */
         post: operations["createUpload"];
         delete?: never;
@@ -4068,7 +4069,7 @@ export interface paths {
         get?: never;
         /**
          * Send upload bytes
-         * @description Appends one chunk of raw file bytes at `offset`, which must equal the session's current `receivedBytes` (an interrupted client re-reads the session and resumes; a mismatched offset answers `conflict` and nothing is written). Chunks may be any size up to 32 MiB. Bytes past the declared total size answer `invalid-request`.
+         * @description Appends one chunk of raw file bytes at `offset`, which must equal the session's current `receivedBytes` (an interrupted client re-reads the session and resumes; a mismatched offset answers `conflict` and nothing is written). Chunks may be any size up to 32 MiB; a longer body answers `invalid-request` without reading it, as do bytes past the declared total size. Deliberately not paced: a transfer is many chunks and a pace per request would be a throughput ceiling, so this endpoint's bounds are the chunk cap, the session's declared size, and the room on the server's staging volume.
          */
         put: operations["putUploadData"];
         post?: never;
@@ -9045,7 +9046,7 @@ export interface components {
             fileName: string;
             /**
              * Format: int64
-             * @description Total file size in bytes.
+             * @description Total file size in bytes. The maximum is the largest single file WaxDeck accepts - 16 GiB, clear of even a long hi-res or DSD single-file release - and a session declaring more answers `invalid-request` rather than opening. What is actually accepted is still bounded by the caller's quota and by the room on the server's staging volume.
              */
             sizeBytes: number;
             mediaType: components["schemas"]["MediaType"];
@@ -9658,8 +9659,17 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Too many attempts (code `rate-limited`). Back off and retry later. */
+        /** @description Too many requests from this caller (code `rate-limited`): the sign-in limiter's lockout, or the upload surface's per-account request ceiling. Back off and retry later; nothing was done. */
         RateLimited: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The server has no room to stage what the request declared (code `storage-full`). Unlike `quota-exceeded` this is the server's own disk rather than the caller's allowance, so clearing the caller's staged uploads need not help; it is the operator's to fix. */
+        StorageFull: {
             headers: {
                 [name: string]: unknown;
             };
@@ -16346,7 +16356,9 @@ export interface operations {
             409: components["responses"]["ReadOnly"];
             413: components["responses"]["QuotaExceeded"];
             415: components["responses"]["UnsupportedFormat"];
+            429: components["responses"]["RateLimited"];
             503: components["responses"]["CatalogMaintenance"];
+            507: components["responses"]["StorageFull"];
         };
     };
     getUpload: {
@@ -16457,6 +16469,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             415: components["responses"]["UnsupportedFormat"];
+            429: components["responses"]["RateLimited"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -16486,6 +16499,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["ReadOnly"];
+            429: components["responses"]["RateLimited"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -16513,6 +16527,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
         };
     };
     createAcquisition: {
@@ -16541,6 +16556,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["ReadOnly"];
+            429: components["responses"]["RateLimited"];
             501: components["responses"]["SourceUnavailable"];
             503: components["responses"]["CatalogMaintenance"];
         };

@@ -2576,6 +2576,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Este servidor no tiene activa la fuente que hace falta.';
 
   @override
+  String get errorStorageFull =>
+      'El servidor no tiene espacio para esto ahora mismo. Avisa a quien lo administra.';
+
+  @override
   String get errorStreamStale =>
       'Este archivo ha cambiado en el servidor. Ábrelo otra vez para reproducirlo.';
 

@@ -18,6 +18,12 @@ export class Uploads extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.addUploadFile));
   }
 
+  /// The folder row beside it, which the web build only draws because
+  /// the picker port answers `canPickFolders` there.
+  fromFolder(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.addUploadFolder));
+  }
+
   /// The quota header the uploads screen draws.
   quota(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.uploadQuota));
@@ -59,6 +65,19 @@ export class Uploads extends Surface {
       this.fromFile().click({ force: true }),
     ]);
     await chooser.setFiles([...files]);
+  }
+
+  /// Pick a whole folder through the real chooser, armed the same way
+  /// as [pickFiles]. Chromium answers a `webkitdirectory` chooser with
+  /// one directory path and hands the page every file beneath it.
+  async pickFolder(dir: string): Promise<void> {
+    const page = this.ctx.page;
+    await clickThrough(this.add(), this.fromFolder());
+    const [chooser] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      this.fromFolder().click({ force: true }),
+    ]);
+    await chooser.setFiles(dir);
   }
 
   /// Declare what several picked files are to each other. Only asked

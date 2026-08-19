@@ -44,6 +44,7 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   'endpoint-offline' => l.errorEndpointOffline,
   'endpoint-failed' => l.errorEndpointFailed,
   'quota-exceeded' => l.errorQuotaExceeded,
+  'storage-full' => l.errorStorageFull,
   'field-locked' => l.errorFieldLocked,
   'unsupported-format' => l.errorUnsupportedFormat,
   'read-only' => l.errorReadOnly,

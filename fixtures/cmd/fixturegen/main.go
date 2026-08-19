@@ -1,7 +1,7 @@
 // Command fixturegen writes a synthesized fixture library to a
 // directory and prints the file list, one path per line.
 //
-//	fixturegen -out <dir> [-preset default|demo|conformance|upload|podcast|book|all] [-base-url <url>]
+//	fixturegen -out <dir> [-preset default|demo|conformance|upload|upload-folder|podcast|book|all] [-base-url <url>]
 package main
 
 import (
@@ -15,7 +15,7 @@ import (
 func main() {
 	out := flag.String("out", "", "output directory (required)")
 	preset := flag.String("preset", "default",
-		"spec preset: default (the codec/container matrix), demo (a titled album), conformance (the engine-suite tone), upload (the manual-upload album), podcast (the default feed), book (the audiobook fixtures), all")
+		"spec preset: default (the codec/container matrix), demo (a titled album), conformance (the engine-suite tone), upload (the manual-upload album), upload-folder (the folder-pick album), podcast (the default feed), book (the audiobook fixtures), all")
 	baseURL := flag.String("base-url", "http://127.0.0.1:4421",
 		"base URL podcast enclosure links point at (the podcast preset; 'all' includes the feed only when this flag is set explicitly)")
 	flag.Parse()
@@ -48,6 +48,8 @@ func run(out, preset, baseURL string, baseURLSet bool) error {
 		specs = fixtures.ConformanceMedia()
 	case "upload":
 		specs = fixtures.UploadSources()
+	case "upload-folder":
+		specs = fixtures.UploadFolderSources()
 	case "all":
 		specs = append(fixtures.DefaultLibrary(), fixtures.DemoLibrary()...)
 	case "podcast":

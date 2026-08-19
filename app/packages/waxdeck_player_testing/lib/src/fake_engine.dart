@@ -203,6 +203,15 @@ class FakeEngine implements AudioEnginePort {
     if (gate != null) await gate.future;
   }
 
+  /// Whether this fake keeps a preload window. True by default, which
+  /// is the engine the app is written against; a test sets it false to
+  /// stand in for one with no window (just_audio on the web), where an
+  /// item ends by running off the end rather than by a boundary.
+  bool canPreloadWindow = true;
+
+  @override
+  bool get canPreload => canPreloadWindow;
+
   @override
   Future<void> preloadNext(
     String url, {
@@ -210,6 +219,7 @@ class FakeEngine implements AudioEnginePort {
     Duration? clipStart,
     Duration? clipEnd,
   }) async {
+    if (!canPreload) return;
     // Nothing loaded means nothing to follow, exactly as the real engine
     // treats an empty source list.
     if (loadedUrl == null) return;

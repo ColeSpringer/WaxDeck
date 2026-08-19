@@ -262,6 +262,36 @@ func (d *DB) UploadBytesInUse(ctx context.Context, userID string) (int64, error)
 	return n.Int64, nil
 }
 
+// UploadBytesOutstanding sums, across every account, the bytes that
+// sessions opened since sinceNS have been promised room for and have
+// not yet written.
+//
+// Free space already accounts for what landed on disk; what it cannot
+// see is what is coming. Without this a hundred sessions that each fit
+// the volume are each accepted and together overrun it.
+//
+// sinceNS is what keeps a promise from outliving the transfer that made
+// it. A session holds its whole declared size the moment it opens and
+// releases it only by finishing or being deleted, so without a bound a
+// closed tab five minutes into a 16 GiB upload reserves the rest of it
+// for the retention window - a week by default - and a caller who opens
+// many and sends nothing reserves the volume out from under every other
+// account for as long. The error runs the safe way: a transfer still
+// running past the bound stops being counted, which risks admitting
+// one upload too many into the reserve, where counting a dead one
+// refuses every upload on the server until a janitor sweeps it.
+func (d *DB) UploadBytesOutstanding(ctx context.Context, sinceNS int64) (int64, error) {
+	var n sql.NullInt64
+	err := d.r.QueryRowContext(ctx, `
+		SELECT SUM(size_bytes - received_bytes) FROM uploads
+		WHERE state = 'receiving' AND size_bytes > received_bytes
+		  AND created_at_ns >= ?`, sinceNS).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("db: summing outstanding upload bytes: %w", err)
+	}
+	return n.Int64, nil
+}
+
 // ExpiredUploads returns sessions past their expiry that still hold
 // staged bytes, for the janitor to reclaim. Members of a still-open
 // batch are exempt: under the default retention this never bites

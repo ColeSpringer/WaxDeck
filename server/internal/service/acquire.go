@@ -177,6 +177,17 @@ func (l *Library) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 				break
 			}
 		}
+		// The same volume an upload session is checked against, asked
+		// the only question this path can answer: an acquisition never
+		// declares a size, so what it can refuse is starting an item
+		// with no room left at all. Raised as it is rather than wrapped
+		// permanent: a full disk and a database that would not answer
+		// are both conditions that clear without the caller changing
+		// anything, which is what a retryable task failure means.
+		if err := l.checkStagingRoom(ctx, 0); err != nil {
+			fetchErr = err
+			break
+		}
 		doc, uploadID, err := l.fetchAcquireItem(ctx, provider, t, p, item, i)
 		if err != nil {
 			fetchErr = err

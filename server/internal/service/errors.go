@@ -43,6 +43,11 @@ const (
 	// KindQuota marks an upload the caller's storage quota refuses
 	// (413 quota-exceeded at the API).
 	KindQuota ErrorKind = "quota-exceeded"
+	// KindStorageFull marks a request the server has no room to stage
+	// (507 storage-full at the API). Unlike KindQuota it is the
+	// server's own disk rather than the caller's allowance, so the
+	// caller has nothing to clear.
+	KindStorageFull ErrorKind = "storage-full"
 	// KindLocked marks an edit against a locked metadata field made
 	// without force (409 field-locked at the API).
 	KindLocked ErrorKind = "field-locked"

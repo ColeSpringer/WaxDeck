@@ -377,6 +377,35 @@ func UploadSources() []Spec {
 	}
 }
 
+// UploadFolderSources is the folder-pick journey's source material,
+// which has to be its own album: the folder test and the file test run
+// against one server, and reusing UploadSources would have each one
+// importing the other's release and racing it for the destination.
+// Distinct durations again, for the fingerprint-dedup reason.
+//
+// Written under a disc subdirectory by the e2e stack, so what the pick
+// walks is a tree rather than a flat folder - which is the half of a
+// folder upload a flat one would never prove.
+func UploadFolderSources() []Spec {
+	track := func(name, title, trackNo string, d time.Duration) Spec {
+		return Spec{
+			Name:     name,
+			Codec:    CodecMP3,
+			Duration: d,
+			Tags: map[string]string{
+				"TITLE":       title,
+				"ARTIST":      "Tin Compass",
+				"ALBUM":       "Harbour Lights",
+				"TRACKNUMBER": trackNo,
+			},
+		}
+	}
+	return []Spec{
+		track("harbour-one", "Harbour Lights", "1", 6100*time.Millisecond),
+		track("harbour-two", "Breakwater", "2", 6600*time.Millisecond),
+	}
+}
+
 // ConformanceMedia returns the single tone the audio-engine conformance
 // suite plays against real engines: long enough that mid-file seek
 // targets are meaningfully far apart, still under the duration cap.

@@ -2541,6 +2541,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This server is not running the source that request needs.';
 
   @override
+  String get errorStorageFull =>
+      'The server has no room for this right now. Ask whoever runs it.';
+
+  @override
   String get errorStreamStale =>
       'This file changed on the server. Open it again to play it.';
 

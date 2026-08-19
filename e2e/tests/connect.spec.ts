@@ -24,13 +24,21 @@ test('a session mirrors to the server and relays remote control', async ({ app, 
 
   // A's playback reaches the server as a mirror session, and this
   // account plays nothing else, so it is the only one listed.
+  //
+  // Found by the queue holding the track, not by any one position in
+  // it. Playing a row in a listing queues the listing from there, so
+  // entry zero is whatever the index happens to open with - and the
+  // index itself moves, because this test never pauses and a fixture
+  // track is a few seconds long, so a predicate reading the current
+  // entry stops matching at the first boundary and reports a mirroring
+  // failure that never happened.
   let sessionId = '';
   await expect
     .poll(
       async () => {
         const listed = await app.api.tryGet('/player/sessions');
-        const found = (listed?.sessions ?? []).find(
-          (s) => s.entries?.[0]?.pid === target.pid,
+        const found = (listed?.sessions ?? []).find((s) =>
+          (s.entries ?? []).some((e) => e.pid === target.pid),
         );
         if (found === undefined) return undefined;
         sessionId = found.id;
