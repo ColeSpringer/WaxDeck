@@ -19,6 +19,7 @@
     "metadataEditor": "metadata-editor",
     "metadataEnrich": "metadata-enrich",
     "metadataField": "metadata-field-{name}",
+    "metadataForbidden": "metadata-forbidden",
     "metadataForce": "metadata-force",
     "metadataLock": "metadata-lock",
     "metadataOpenAlbum": "metadata-open-album",

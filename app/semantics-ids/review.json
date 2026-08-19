@@ -28,6 +28,7 @@
     "reviewRow": "review-row-{id}",
     "reviewSelectToggle": "review-select-toggle",
     "reviewSkip": "review-skip",
+    "reviewSplitter": "review-splitter",
     "reviewUnofficial": "review-unofficial",
     "trackMenu": "track-menu-{pid}"
   }

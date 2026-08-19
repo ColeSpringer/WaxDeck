@@ -327,6 +327,7 @@ abstract final class SemanticsIds {
   static const String metadataEditor = 'metadata-editor';
   static const String metadataEnrich = 'metadata-enrich';
   static String metadataField(Object name) => 'metadata-field-$name';
+  static const String metadataForbidden = 'metadata-forbidden';
   static const String metadataForce = 'metadata-force';
   static const String metadataLock = 'metadata-lock';
   static const String metadataOpenAlbum = 'metadata-open-album';
@@ -631,6 +632,7 @@ abstract final class SemanticsIds {
   static String reviewRow(Object id) => 'review-row-$id';
   static const String reviewSelectToggle = 'review-select-toggle';
   static const String reviewSkip = 'review-skip';
+  static const String reviewSplitter = 'review-splitter';
   static const String reviewUnofficial = 'review-unofficial';
   static String trackMenu(Object pid) => 'track-menu-$pid';
 

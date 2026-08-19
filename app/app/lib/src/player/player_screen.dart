@@ -14,6 +14,7 @@ import '../discovery/discovery_actions.dart';
 import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
 import '../media_view.dart';
+import '../metadata/metadata_controller.dart';
 import '../player/play_progress.dart';
 import '../playlists/add_to_playlist_sheet.dart';
 import '../podcasts/episode_actions.dart';
@@ -51,6 +52,7 @@ enum _PlayerMenuAction {
   funding,
   visualizer,
   carMode,
+  editMetadata,
 }
 
 /// The e2e handles the player's own controls carry. One place, because
@@ -98,6 +100,26 @@ class PlayerScreen extends ConsumerWidget {
       if (!(route?.isCurrent ?? true)) return;
       leavePlayer(context);
     });
+    // What the palette can offer here, which is the second half of the
+    // overflow row below: a listener who cannot find a menu can type
+    // the verb. Scoped rather than standing, because a standing command
+    // would need a "current item" concept the registry does not have.
+    //
+    // Offered on exactly the face that draws the row, which is the one
+    // arm of `_body` below holding both a session and an item: a
+    // station has taken the engine, a failed start draws a retry, and a
+    // resolving entry draws a spinner - all three still name an item,
+    // and none of them is a surface to be offered an editor from.
+    final nowPlaying = ref.watch(nowPlayingProvider);
+    final editing =
+        ref.watch(radioPlaybackProvider).station == null &&
+            nowPlaying.error == null &&
+            nowPlaying.session != null
+        ? nowPlaying.item?.pid
+        : null;
+    final mayCurate =
+        editing != null &&
+        (ref.watch(mayCurateItemProvider(editing)).value ?? false);
     return CommandScope(
       // The keyboard's way out, and the third one overall beside the
       // collapse button and the pull-down. Scoped rather than global so
@@ -122,6 +144,25 @@ class PlayerScreen extends ConsumerWidget {
           ],
           run: (context, ref) => leavePlayer(context),
         ),
+        if (mayCurate)
+          WaxCommand(
+            id: 'edit-metadata',
+            label: context.l10n.reviewEditMetadata,
+            section: WaxCommandSection.app,
+            glyph: WaxIcons.edit,
+            // Read when it runs rather than captured when it is
+            // registered. `CommandScope` republishes on a changed
+            // *offer* - id, name, place, keys - and this command's offer
+            // is the same for every track, so a closure over the pid
+            // registered on one track could still be standing on the
+            // next. The overflow row below has no such problem: it is
+            // rebuilt with the face.
+            run: (context, ref) {
+              final pid = ref.read(nowPlayingProvider).item?.pid;
+              // `go` for the same reason the row above uses it.
+              if (pid != null) context.go(WaxRoute.metadata(pid));
+            },
+          ),
       ],
       // A Scaffold with nothing in it but the body, for the thing a
       // Scaffold does that no other widget does: it is what
@@ -416,6 +457,10 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     // Same reason, and it decides two things at once: whether the action
     // row carries car mode, and whether the overflow still offers it.
     final carMode = ref.watch(carModeButtonProvider);
+    // Same reason again. One read for the one item on screen, which is
+    // what makes this affordable here and not on a list of rows.
+    final mayCurate =
+        ref.watch(mayCurateItemProvider(_item.pid)).value ?? false;
     final playback = ref.read(nowPlayingProvider.notifier);
     final queue = ref.read(queueControllerProvider.notifier);
 
@@ -437,6 +482,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             context,
             canDelete: canDelete,
             carMode: carMode,
+            mayCurate: mayCurate,
           ),
           // The show an episode is from, above its title and tappable
           // (5.3). Books and tracks name their maker under the title
@@ -506,6 +552,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     BuildContext context, {
     required bool canDelete,
     required bool carMode,
+    required bool mayCurate,
   }) {
     // Captured while the surface is still standing: a delete finishes
     // when the server answers, and what it leaves behind is a player
@@ -600,6 +647,19 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
               label: l10n.playerCarMode,
               semanticsId: SemanticsIds.playerCarMode,
             ),
+          // The way to the editor for an ordinary track. Everywhere else
+          // it is reached from a review row, a book, or an empty lyrics
+          // panel - none of which a listener passes on the way to a song
+          // they want to fix. The permission is the server's own answer
+          // for this item rather than an administrator check, which is
+          // what lets the person whose upload brought it in keep it.
+          if (mayCurate)
+            WaxMenuItem(
+              value: _PlayerMenuAction.editMetadata,
+              glyph: WaxIcons.edit,
+              label: l10n.reviewEditMetadata,
+              semanticsId: SemanticsIds.editMetadata(_item.pid),
+            ),
           // Not for episodes: the podcast tree owns its own files and the
           // server refuses this verb there. "Remove download" is the
           // episode's equivalent, and it lives on the episode's surfaces.
@@ -642,6 +702,15 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           // the face somebody opened it from.
           _PlayerMenuAction.visualizer => Future<void>.sync(
             () => context.push(WaxRoute.visualizer),
+          ),
+          // `go`, not `push`, and for the reason `lyrics.dart` writes
+          // out where it opens the same editor: the player is an
+          // overlay on the root navigator and `/metadata/:pid` lives
+          // inside the shell, so pushing one over the other builds a
+          // second shell beside the mounted one and loses the
+          // navigation. Same verb as "Go to show" two rows up.
+          _PlayerMenuAction.editMetadata => Future<void>.sync(
+            () => context.go(WaxRoute.metadata(_item.pid)),
           ),
           _PlayerMenuAction.carMode => Future<void>.sync(
             () => context.push(WaxRoute.carMode),

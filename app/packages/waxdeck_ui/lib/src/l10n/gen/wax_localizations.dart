@@ -603,6 +603,12 @@ abstract class WaxLocalizations {
   /// **'Close panel'**
   String get panelClose;
 
+  /// A proportion, as a screen reader hears it from a slider or a splitter. Some languages put a space before the sign.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String percentOf(int percent);
+
   /// Button that closes the full-window player and leaves the bar behind.
   ///
   /// In en, this message translates to:
@@ -674,6 +680,12 @@ abstract class WaxLocalizations {
   /// In en, this message translates to:
   /// **'{minutes, plural, =1{1 min} other{{minutes} min}}'**
   String spanMinutes(int minutes);
+
+  /// Accessible name of the draggable seam between two side-by-side panes. It reports how far along its travel it sits, as a percentage.
+  ///
+  /// In en, this message translates to:
+  /// **'Resize panes'**
+  String get splitterLabel;
 
   /// Heading of the pane shown when a screen's data failed to arrive. No apologies and no error codes: the technical line has a channel of its own.
   ///

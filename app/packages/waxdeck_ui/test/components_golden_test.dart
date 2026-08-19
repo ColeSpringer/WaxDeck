@@ -27,6 +27,18 @@ final PumpAction _pumpAnimated = pumpNTimes(
   const Duration(milliseconds: 120),
 );
 
+/// A field that arrives already carrying a value, which is what the
+/// label is for.
+///
+/// One per variant, because a group mounts all three scenarios in one
+/// tree: a single controller would be attached to three live fields at
+/// once, which is an anti-pattern that holds only for as long as
+/// nothing types into any of them.
+final _filled = <WaxThemeVariant, TextEditingController>{
+  for (final variant in WaxThemeVariant.values)
+    variant: TextEditingController(text: '3'),
+};
+
 const _tile = MediaTileData(
   title: 'Salt Harbour',
   subtitle: 'Nightjar',
@@ -647,6 +659,56 @@ void main() {
                   ),
                 ),
               ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a field says what it holds, and what an empty one would mean',
+      fileName: 'text_fields',
+      builder: () => GoldenTestGroup(
+        columns: 3,
+        children: <Widget>[
+          for (final variant in WaxThemeVariant.values)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 320,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      // Pre-filled, which is the case the label exists
+                      // for: a hint is gone the moment there is a value.
+                      WaxTextField(
+                        label: 'Transcodes at once',
+                        controller: _filled[variant],
+                      ),
+                      const SizedBox(height: WaxSpace.s12),
+                      const WaxTextField(
+                        label: 'Keep backups',
+                        helperText: 'Leave blank to keep every one',
+                      ),
+                      const SizedBox(height: WaxSpace.s12),
+                      const WaxTextField(
+                        label: 'Server URL',
+                        hint: 'https://waxdeck.example',
+                        errorText: 'That is not a URL',
+                      ),
+                      const SizedBox(height: WaxSpace.s12),
+                      // The one shape that keeps its label to itself,
+                      // beside the three that do not.
+                      SearchField(
+                        hint: 'Search your library',
+                        onChanged: (_) {},
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

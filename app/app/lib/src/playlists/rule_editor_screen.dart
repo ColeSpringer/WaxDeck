@@ -1370,6 +1370,12 @@ class _RuleValueFieldState extends State<_RuleValueField> {
   @override
   Widget build(BuildContext context) => WaxTextField(
     label: widget.label ?? context.l10n.playlistRuleValuePicker,
+    // Named by its row rather than over the box. A condition reads
+    // "Artist / is / ___" across one line, and a caption per input
+    // turns five conditions into five "Value"s; the limit row draws its
+    // unit beside the box already, so a label there is that unit twice.
+    // The string stays the accessible name, which is where it is needed.
+    showLabel: false,
     hint: widget.hint,
     controller: _controller,
     textInputAction: TextInputAction.done,

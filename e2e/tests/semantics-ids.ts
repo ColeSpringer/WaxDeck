@@ -322,6 +322,7 @@ export const SemanticsIds = {
   metadataEditor: 'metadata-editor',
   metadataEnrich: 'metadata-enrich',
   metadataField: (name: string | number) => `metadata-field-${name}`,
+  metadataForbidden: 'metadata-forbidden',
   metadataForce: 'metadata-force',
   metadataLock: 'metadata-lock',
   metadataOpenAlbum: 'metadata-open-album',
@@ -618,6 +619,7 @@ export const SemanticsIds = {
   reviewRow: (id: string | number) => `review-row-${id}`,
   reviewSelectToggle: 'review-select-toggle',
   reviewSkip: 'review-skip',
+  reviewSplitter: 'review-splitter',
   reviewUnofficial: 'review-unofficial',
   trackMenu: (pid: string | number) => `track-menu-${pid}`,
 

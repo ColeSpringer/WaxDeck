@@ -182,6 +182,10 @@
   "@adminBackupKeepMbLabel": {
     "description": "Field for how many megabytes of backups the server keeps. MB is the unit abbreviation."
   },
+  "adminBackupKeepNeedsNumber": "A whole number, or 0 to keep every backup",
+  "@adminBackupKeepNeedsNumber": {
+    "description": "Refusal under a backup retention field whose text is not a whole number, including an empty one. Saving is what surfaces it."
+  },
   "adminBackupNow": "Back up now",
   "@adminBackupNow": {
     "description": "Button that starts a backup."
@@ -4272,9 +4276,129 @@
   "@metadataFetch": {
     "description": "Button that applies what the metadata providers already agree on."
   },
+  "metadataFieldAlbum": "Album",
+  "@metadataFieldAlbum": {
+    "description": "Name of the editable metadata field the server calls `album`."
+  },
+  "metadataFieldAlbumArtist": "Album artist",
+  "@metadataFieldAlbumArtist": {
+    "description": "Name of the editable metadata field the server calls `album_artist`."
+  },
+  "metadataFieldArtist": "Artist",
+  "@metadataFieldArtist": {
+    "description": "Name of the editable metadata field the server calls `artist`."
+  },
+  "metadataFieldAsin": "ASIN",
+  "@metadataFieldAsin": {
+    "description": "Name of the editable metadata field the server calls `asin`."
+  },
+  "metadataFieldAuthor": "Author",
+  "@metadataFieldAuthor": {
+    "description": "Name of the editable metadata field the server calls `author`."
+  },
+  "metadataFieldAuthorSort": "Author, for sorting",
+  "@metadataFieldAuthorSort": {
+    "description": "Name of the editable metadata field the server calls `author_sort`."
+  },
+  "metadataFieldComment": "Comment",
+  "@metadataFieldComment": {
+    "description": "Name of the editable metadata field the server calls `comment`."
+  },
+  "metadataFieldCompilation": "Compilation",
+  "@metadataFieldCompilation": {
+    "description": "Name of the editable metadata field the server calls `compilation`."
+  },
+  "metadataFieldComposer": "Composer",
+  "@metadataFieldComposer": {
+    "description": "Name of the editable metadata field the server calls `composer`."
+  },
+  "metadataFieldComposerSort": "Composer, for sorting",
+  "@metadataFieldComposerSort": {
+    "description": "Name of the editable metadata field the server calls `composer_sort`."
+  },
+  "metadataFieldDescription": "Description",
+  "@metadataFieldDescription": {
+    "description": "Name of the editable metadata field the server calls `description`."
+  },
+  "metadataFieldDiscNo": "Disc number",
+  "@metadataFieldDiscNo": {
+    "description": "Name of the editable metadata field the server calls `disc_no`."
+  },
+  "metadataFieldEdition": "Edition",
+  "@metadataFieldEdition": {
+    "description": "Name of the editable metadata field the server calls `edition`."
+  },
+  "metadataFieldEpisodeNo": "Episode number",
+  "@metadataFieldEpisodeNo": {
+    "description": "Name of the editable metadata field the server calls `episode_no`."
+  },
+  "metadataFieldEpisodeType": "Episode type",
+  "@metadataFieldEpisodeType": {
+    "description": "Name of the editable metadata field the server calls `episode_type`."
+  },
+  "metadataFieldExplicit": "Explicit",
+  "@metadataFieldExplicit": {
+    "description": "Name of the editable metadata field the server calls `explicit`."
+  },
+  "metadataFieldGenre": "Genre",
+  "@metadataFieldGenre": {
+    "description": "Name of the editable metadata field the server calls `genre`."
+  },
+  "metadataFieldIsbn": "ISBN",
+  "@metadataFieldIsbn": {
+    "description": "Name of the editable metadata field the server calls `isbn`."
+  },
+  "metadataFieldIsrc": "ISRC",
+  "@metadataFieldIsrc": {
+    "description": "Name of the editable metadata field the server calls `isrc`."
+  },
+  "metadataFieldLink": "Link",
+  "@metadataFieldLink": {
+    "description": "Name of the editable metadata field the server calls `link`."
+  },
   "metadataFieldLockedHint": "Check \"Force\" to overwrite locked fields.",
   "@metadataFieldLockedHint": {
     "description": "Added after the server's own refusal when a save was refused for a locked field. The server names which field; this names the switch on this screen that overrides it, and the quoted word must match that switch's label."
+  },
+  "metadataFieldMbid": "MusicBrainz ID",
+  "@metadataFieldMbid": {
+    "description": "Name of the editable metadata field the server calls `mbid`."
+  },
+  "metadataFieldNarrator": "Narrator",
+  "@metadataFieldNarrator": {
+    "description": "Name of the editable metadata field the server calls `narrator`."
+  },
+  "metadataFieldPinned": "Pinned",
+  "@metadataFieldPinned": {
+    "description": "Name of the editable metadata field the server calls `pinned`."
+  },
+  "metadataFieldPublisher": "Publisher",
+  "@metadataFieldPublisher": {
+    "description": "Name of the editable metadata field the server calls `publisher`."
+  },
+  "metadataFieldSeason": "Season",
+  "@metadataFieldSeason": {
+    "description": "Name of the editable metadata field the server calls `season`."
+  },
+  "metadataFieldSeries": "Series",
+  "@metadataFieldSeries": {
+    "description": "Name of the editable metadata field the server calls `series`."
+  },
+  "metadataFieldSubtitle": "Subtitle",
+  "@metadataFieldSubtitle": {
+    "description": "Name of the editable metadata field the server calls `subtitle`."
+  },
+  "metadataFieldTitle": "Title",
+  "@metadataFieldTitle": {
+    "description": "Name of the editable metadata field the server calls `title`."
+  },
+  "metadataFieldTrackNo": "Track number",
+  "@metadataFieldTrackNo": {
+    "description": "Name of the editable metadata field the server calls `track_no`."
+  },
+  "metadataFieldYear": "Year",
+  "@metadataFieldYear": {
+    "description": "Name of the editable metadata field the server calls `year`."
   },
   "metadataFieldsOverline": "What this item claims to be",
   "@metadataFieldsOverline": {
@@ -4283,6 +4407,14 @@
   "metadataFieldsTitle": "Fields",
   "@metadataFieldsTitle": {
     "description": "Heading over the item's editable metadata fields."
+  },
+  "metadataForbiddenMessage": "Editing a track changes it for everyone on this server, so the people who can are administrators and whoever's upload brought it in.",
+  "@metadataForbiddenMessage": {
+    "description": "Body of the refusal page shown when the signed-in account may not edit this item's metadata."
+  },
+  "metadataForbiddenTitle": "This one is not yours to edit",
+  "@metadataForbiddenTitle": {
+    "description": "Heading of the refusal page shown when the signed-in account may not edit this item's metadata."
   },
   "metadataForceHelp": "Overwrite fields that are already locked",
   "@metadataForceHelp": {

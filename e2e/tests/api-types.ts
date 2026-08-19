@@ -1513,7 +1513,7 @@ export interface paths {
         };
         /**
          * Read an item's full metadata
-         * @description Everything the editor shows for one item: the scalar fields, credits by role, lyrics presence, chapters (books), custom tags, locks and per-field provenance (who set a value: file tags, a user, enrichment, or organize), release status, file write-back health (out-of-sync and lost-value diagnostics), and whether the item is a virtual track carved from a shared file (whose edits are always database-only by upstream design). Readable by any user who can see the item; the item-scoped mutations below require `admin`, or ownership of the upload or acquisition that brought the item in.
+         * @description Everything the editor shows for one item: the scalar fields, credits by role, lyrics presence, chapters (books), custom tags, locks and per-field provenance (who set a value: file tags, a user, enrichment, or organize), release status, file write-back health (out-of-sync and lost-value diagnostics), and whether the item is a virtual track carved from a shared file (whose edits are always database-only by upstream design). Readable by any user who can see the item; the item-scoped mutations below require `admin`, or ownership of the upload or acquisition that brought the item in, which is what `mayCurate` on the response answers - so a client can tell an editor it may save from one every save would be refused.
          */
         get: operations["getItemMetadata"];
         put?: never;
@@ -6222,6 +6222,8 @@ export interface components {
             releaseGroupPid?: string;
             /** @description Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store). */
             writeBackIssues: components["schemas"]["WriteBackIssue"][];
+            /** @description Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. */
+            mayCurate?: boolean;
         };
         /** @description Who set one field's current value. */
         FieldProvenance: {

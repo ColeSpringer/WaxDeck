@@ -1011,7 +1011,7 @@ class _WaxSliderState extends State<WaxSlider> {
   /// separate mute with a level behind it still sets [WaxSlider.muted].
   bool get _muted => widget.muted || _value == 0;
 
-  String _announce(double value) => '${(value.clamp(0.0, 1.0) * 100).round()}%';
+  String _announce(double value) => context.waxL10n.spellPercent(value);
 
   double _stepped(double delta) => (_value + delta).clamp(0.0, 1.0);
 

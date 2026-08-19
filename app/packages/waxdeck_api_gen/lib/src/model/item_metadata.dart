@@ -36,6 +36,7 @@ part 'item_metadata.g.dart';
 /// * [artistPid] - The item's artist entity, when any.
 /// * [releaseGroupPid] - The item's release group entity, when any.
 /// * [writeBackIssues] - Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store). 
+/// * [mayCurate] - Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. 
 @BuiltValue()
 abstract class ItemMetadata implements Built<ItemMetadata, ItemMetadataBuilder> {
   /// The item.
@@ -104,6 +105,10 @@ abstract class ItemMetadata implements Built<ItemMetadata, ItemMetadataBuilder> 
   /// Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store). 
   @BuiltValueField(wireName: r'writeBackIssues')
   BuiltList<WriteBackIssue> get writeBackIssues;
+
+  /// Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. 
+  @BuiltValueField(wireName: r'mayCurate')
+  bool? get mayCurate;
 
   ItemMetadata._();
 
@@ -223,6 +228,13 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
       object.writeBackIssues,
       specifiedType: const FullType(BuiltList, [FullType(WriteBackIssue)]),
     );
+    if (object.mayCurate != null) {
+      yield r'mayCurate';
+      yield serializers.serialize(
+        object.mayCurate,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -364,6 +376,13 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
             specifiedType: const FullType(BuiltList, [FullType(WriteBackIssue)]),
           ) as BuiltList<WriteBackIssue>;
           result.writeBackIssues.replace(valueDes);
+          break;
+        case r'mayCurate':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.mayCurate = valueDes;
           break;
         default:
           unhandled.add(key);

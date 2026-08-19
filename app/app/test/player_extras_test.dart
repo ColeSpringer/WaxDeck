@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/metadata/metadata_controller.dart';
+import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/player/car_mode_screen.dart';
 import 'package:waxdeck/src/player/visualizer_screen.dart';
 import 'package:waxdeck/src/player/wake_port.dart';
@@ -346,6 +349,52 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byType(VisualizerScreen), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('the metadata door follows the server, not a role', (
+      tester,
+    ) async {
+      _phone(tester);
+      final repo = FakeRepository()..mayCurateItems = false;
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: testItem(_pid),
+        host: (player) => routedHost(player),
+      );
+
+      final door = find.bySemanticsIdentifier(SemanticsIds.editMetadata(_pid));
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerMore));
+      await tester.pumpAndSettle();
+      expect(door, findsNothing);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      // The same listener on an item their own upload brought in: the
+      // permission is a fact about this item, so the row appears for
+      // the item and not for the account.
+      repo.mayCurateItems = true;
+      harness.container.invalidate(mayCurateItemProvider(_pid));
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerMore));
+      await tester.pumpAndSettle();
+      expect(door, findsOneWidget);
+      await tester.tap(door);
+      await tester.pumpAndSettle();
+
+      // The location, not the widget: this host mounts the player with
+      // no shell standing, so a `push` into the shell would build one
+      // here and look like it worked. What the app has underneath is an
+      // already-mounted shell, which is why the row uses `go` - and a
+      // `go` is visible in the address the router reports either way.
+      expect(
+        GoRouter.of(
+          tester.element(find.byType(MetadataScreen)),
+        ).state.uri.toString(),
+        WaxRoute.metadata(_pid),
+      );
       await harness.endPlayback(tester);
     });
   });

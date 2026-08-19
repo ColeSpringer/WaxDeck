@@ -149,6 +149,15 @@ type ItemMetadataDTO struct {
 	ArtistPID       string
 	AlbumPID        string
 	ReleaseGroupPID string
+	// Whether the caller may edit any of this. The read is visible to
+	// everyone who can see the item and the edits are not, so the
+	// answer travels with the document rather than being re-derived
+	// from a role by whoever drew the form.
+	//
+	// Nil where the ownership lookup failed: unanswered rather than
+	// refused, because a client that turns a no into a refusal screen
+	// must not be handed one by a transient database error.
+	MayCurate *bool
 }
 
 // MetadataEditParams carries the shared edit switches.
@@ -1256,6 +1265,14 @@ func (l *Library) ItemMetadataFor(ctx context.Context, uc *UserCtx, apiPID strin
 		AlbumPID:        entityAPIPID(PrefixAlbum, it.AlbumPID),
 		ReleaseGroupPID: entityAPIPID(PrefixReleaseGroup, it.ReleaseGroupPID),
 		WriteBackIssues: issues,
+	}
+	// The same predicate the twelve item-scoped mutations gate on, so
+	// the form the client draws and the answer it gets back cannot
+	// drift; a lookup that fails says nothing rather than no.
+	if may, err := l.MayCurateItem(ctx, uc, out.PID); err == nil {
+		out.MayCurate = &may
+	} else {
+		l.log.Warn("describing curate permission", "item", out.PID, "err", err)
 	}
 	for _, r := range prov {
 		dto := FieldProvenanceDTO{

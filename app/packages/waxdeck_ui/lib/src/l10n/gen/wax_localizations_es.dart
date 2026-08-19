@@ -335,6 +335,11 @@ class WaxLocalizationsEs extends WaxLocalizations {
   String get panelClose => 'Cerrar el panel';
 
   @override
+  String percentOf(int percent) {
+    return '$percent %';
+  }
+
+  @override
   String get playerCollapse => 'Contraer el reproductor';
 
   @override
@@ -405,6 +410,9 @@ class WaxLocalizationsEs extends WaxLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get splitterLabel => 'Redimensionar los paneles';
 
   @override
   String get statesErrorTitle => 'Algo no se ha cargado';

@@ -381,15 +381,10 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
               child: WaxTextField(
                 label: l10n.adminUserQuotaLabel,
                 hint: l10n.adminUserQuotaHint,
+                helperText: l10n.adminUserQuotaHelp,
+                keyboardType: TextInputType.number,
                 controller: _quotaMb,
                 semanticsId: SemanticsIds.userQuota,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: WaxSpace.s4),
-              child: Text(
-                l10n.adminUserQuotaHelp,
-                style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ),
 
@@ -450,6 +445,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
               child: WaxTextField(
                 label: l10n.adminUserMaxKbpsLabel,
                 hint: l10n.adminUserMaxKbpsHint,
+                keyboardType: TextInputType.number,
                 controller: _maxKbps,
                 semanticsId: SemanticsIds.permMaxKbps,
               ),
@@ -600,7 +596,9 @@ class _TagRuleEditorState extends State<_TagRuleEditor> {
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            // Bottom-aligned so the add control lines up with the two
+            // boxes rather than with the labels now over them.
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
               Expanded(
                 child: WaxTextField(

@@ -26,31 +26,38 @@ class WaxTextField extends StatefulWidget {
     this.onSubmitted,
     this.autofocus = false,
     this.textInputAction,
+    this.keyboardType,
     this.obscureText = false,
     this.maxLines = 1,
     this.errorText,
+    this.helperText,
     this.semanticsId,
     this.clearSemanticsId,
-    this.showLabel = false,
+    this.showLabel = true,
     super.key,
   }) : assert(maxLines >= 1, 'a field has at least one line');
 
-  /// The accessible name. Fields with a visible label pass the same
-  /// string; fields whose meaning is carried by their placement (a search
-  /// box in a sidebar header) pass what a screen reader should hear.
+  /// The accessible name, and by default the visible one. Fields whose
+  /// meaning is carried by their placement (a search box in a sidebar
+  /// header) turn [showLabel] off and pass what a screen reader should
+  /// hear instead.
   final String label;
 
   /// Draws [label] above the box.
   ///
-  /// Off by default, which is not an opinion that fields should be
-  /// unlabelled - it is that turning it on for the whole app at once
-  /// changes the height of 38 existing fields, and that is a look to
-  /// decide rather than a side effect of fixing one screen. Reach for it
-  /// on any field that arrives already carrying a value: [hint] is the
-  /// only thing this component paints otherwise, and Material takes a
-  /// hint away as soon as there is text, so a pre-filled field with
-  /// neither is a box with a number in it and nothing saying which
-  /// number.
+  /// On by default. It was opt-in while the flip was pending, because
+  /// turning it on for the whole app at once moves the height of forty
+  /// fields and the goldens under them, and that is a look to decide
+  /// rather than a side effect of fixing one screen. The decision went
+  /// the way the component's own contract already pointed: a field that
+  /// arrives carrying a value has nothing else saying what the value is,
+  /// since [hint] is all this paints otherwise and Material takes a hint
+  /// away at the first keystroke.
+  ///
+  /// Off is for a field whose surroundings name it - a search box under
+  /// a magnifier, a confirmation box directly under the sentence asking
+  /// for the word. Those still pass a [label], which is what a screen
+  /// reader gets.
   final bool showLabel;
 
   final TextEditingController? controller;
@@ -65,6 +72,12 @@ class WaxTextField extends StatefulWidget {
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
   final TextInputAction? textInputAction;
+
+  /// Which keyboard a touch device raises. Null takes the platform's
+  /// default, which is right for prose; a field that only ever holds a
+  /// number says so, or a phone asks for one with a full alphabet in
+  /// the way.
+  final TextInputType? keyboardType;
 
   /// Hides what is typed, for passwords and tokens. Also suppresses the
   /// clear button: a secret field's contents are not something to glance
@@ -81,6 +94,16 @@ class WaxTextField extends StatefulWidget {
   /// colour. Beneath rather than as a toast, because an error about a
   /// field belongs where the field is.
   final String? errorText;
+
+  /// The line under the field: what the value means, what an empty one
+  /// does, what unit it is in. Replaced by [errorText] while there is
+  /// one, because two lines under one box is a field arguing with
+  /// itself and the refusal is the more urgent half.
+  ///
+  /// Not a substitute for [label], and not a place for a sentence: this
+  /// is the "leave it blank to keep every backup" that a labelled
+  /// number field cannot say on its own.
+  final String? helperText;
 
   final String? semanticsId;
 
@@ -183,11 +206,20 @@ class _WaxTextFieldState extends State<WaxTextField> {
               child: Semantics(
                 identifier: widget.semanticsId,
                 label: widget.label,
+                // The lines under the box belong to the box: drawn as
+                // siblings they are separate nodes a screen reader
+                // reaches after the field, if at all, so "0 keeps all"
+                // and "That is not a URL" would be spoken by nothing
+                // the caret is in. Material puts both inside the
+                // field's own subtree, which is what the raw
+                // `InputDecoration` this component replaced was doing.
+                hint: error ?? widget.helperText,
                 child: TextField(
                   controller: _controller,
                   focusNode: _focus,
                   autofocus: widget.autofocus,
                   textInputAction: widget.textInputAction,
+                  keyboardType: widget.keyboardType,
                   obscureText: widget.obscureText,
                   maxLines: widget.maxLines,
                   onChanged: widget.onChanged,
@@ -239,7 +271,8 @@ class _WaxTextFieldState extends State<WaxTextField> {
         ),
       ),
     );
-    if (error == null && !widget.showLabel) return field;
+    final helper = widget.helperText;
+    if (error == null && helper == null && !widget.showLabel) return field;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -261,15 +294,22 @@ class _WaxTextFieldState extends State<WaxTextField> {
             ),
           ),
         field,
-        if (error != null)
+        if (error != null || helper != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(
               top: WaxSpace.s4,
               start: WaxSpace.s12,
             ),
-            child: Text(
-              error,
-              style: WaxType.bodySmall.copyWith(color: colors.error),
+            // Excluded for the same reason the label above is: the
+            // field carries this string as its hint, and a second node
+            // repeating it is one more stop reading the same words.
+            child: ExcludeSemantics(
+              child: Text(
+                error ?? helper!,
+                style: WaxType.bodySmall.copyWith(
+                  color: error != null ? colors.error : colors.textTertiary,
+                ),
+              ),
             ),
           ),
       ],
@@ -319,6 +359,11 @@ class SearchField extends StatelessWidget {
     return WaxTextField(
       label: label ?? context.waxL10n.inputsSearchLabel,
       hint: hint ?? context.waxL10n.inputsSearchHint,
+      // The one field in the app that keeps its label to itself: a
+      // magnifier and a placeholder already say what this is, and every
+      // search box in the app is this widget - a header, a sidebar, a
+      // filter row - none of which has a spare line above it.
+      showLabel: false,
       glyph: WaxIcons.search,
       controller: controller,
       focusNode: focusNode,

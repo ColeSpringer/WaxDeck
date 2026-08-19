@@ -107,6 +107,10 @@
   "@adminBackupKeepMbLabel": {
     "description": "Field for how many megabytes of backups the server keeps. MB is the unit abbreviation."
   },
+  "adminBackupKeepNeedsNumber": "A whole number, or 0 to keep every backup",
+  "@adminBackupKeepNeedsNumber": {
+    "description": "Refusal under a backup retention field whose text is not a whole number, including an empty one. Saving is what surfaces it."
+  },
   "adminBackupNow": "Back up now",
   "@adminBackupNow": {
     "description": "Button that starts a backup."

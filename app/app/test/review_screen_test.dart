@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -282,5 +283,155 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsIdentifier(SemanticsIds.matchingMenu), findsNothing);
+  });
+
+  group('the two panes', () {
+    /// The width the report came from: a 1020-pixel window, less the
+    /// shell rail and the console list that used to sit in front of
+    /// this screen, is about what it gets to lay itself out in.
+    Future<WaxSplitter> pumpSurface(
+      WidgetTester tester,
+      ProviderContainer container, {
+      double width = 900,
+    }) async {
+      tester.view.physicalSize = Size(width, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: localizedHost(const ReviewSurface(openEntryId: 'rv-1')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return tester.widget<WaxSplitter>(find.byType(WaxSplitter));
+    }
+
+    testWidgets('leave the majority to the entry somebody opened', (
+      tester,
+    ) async {
+      final repo = FakeRepository()..reviewEntries = [testReviewEntry('rv-1')];
+      final container = _container(repo);
+      final seam = await pumpSurface(tester, container);
+
+      // A third of the room, bounded, which is well under half of it.
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewSplitter),
+        findsOneWidget,
+      );
+      expect(seam.position, greaterThanOrEqualTo(ReviewSurface.listMin));
+      expect(seam.position, lessThanOrEqualTo(ReviewSurface.listMax));
+      expect(seam.min, ReviewSurface.listMin);
+
+      // The point of the whole arrangement: the submission being read
+      // gets more than the queue of one-line rows beside it, and never
+      // less than the diff table's own minimum. It used to get 343
+      // against the list's 380.
+      final pane = tester
+          .getSize(find.bySemanticsIdentifier(SemanticsIds.reviewPane))
+          .width;
+      expect(pane, greaterThanOrEqualTo(ReviewSurface.paneMin));
+      expect(pane, greaterThan(seam.position));
+      // Which is also the seam's own limit: dragging can take room from
+      // the entry, but not the room the table needs to be read at all.
+      expect(
+        seam.max,
+        lessThanOrEqualTo(seam.position + pane - ReviewSurface.paneMin),
+      );
+    });
+
+    testWidgets('remember where the seam was dragged to, and reset', (
+      tester,
+    ) async {
+      final repo = FakeRepository()..reviewEntries = [testReviewEntry('rv-1')];
+      final container = _container(repo);
+      // Wider than the threshold by enough to have somewhere to drag
+      // to: at the narrowest two-pane width the seam is pinned between
+      // the two floors, which is what those floors are for.
+      await pumpSurface(tester, container, width: 1100);
+
+      double seamAt() =>
+          tester.widget<WaxSplitter>(find.byType(WaxSplitter)).position;
+
+      // Two moves rather than one: the first crosses the drag slop the
+      // arena withholds, and the second is what the seam has to follow
+      // one for one - a splitter that lags the pointer by a constant is
+      // a splitter nobody can put anywhere on purpose.
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(WaxSplitter)),
+      );
+      await gesture.moveBy(const Offset(60, 0));
+      await tester.pump();
+      final grabbed = seamAt();
+      await gesture.moveBy(const Offset(40, 0));
+      await tester.pump();
+      expect(seamAt(), grabbed + 40);
+      // Nothing is written down yet: a preference is what somebody
+      // settled on, and a drag has not settled on anything.
+      expect(container.read(reviewListWidthProvider), 0);
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(container.read(reviewListWidthProvider), seamAt().round());
+      expect(seamAt(), greaterThan(ReviewSurface.listMin));
+
+      // A double tap hands it back to the layout, which is the only way
+      // out of a width somebody dragged and then regretted.
+      await tester.tap(find.byType(WaxSplitter));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.byType(WaxSplitter));
+      await tester.pumpAndSettle();
+      expect(container.read(reviewListWidthProvider), 0);
+    });
+
+    testWidgets('give the whole page to the entry rather than a squeezed '
+        'pair', (tester) async {
+      final repo = FakeRepository()..reviewEntries = [testReviewEntry('rv-1')];
+      final container = _container(repo);
+      // The width the report came from: a 1020-pixel window, less the
+      // shell rail and the console list that used to sit in front of
+      // this screen. Two panes here would leave the diff table 398 of
+      // the 420 it declares, so the answer is one pane at 724 rather
+      // than a split that brings the scrollbar back - and the
+      // submission still goes from the 343 it had to the whole width.
+      tester.view.physicalSize = const Size(724, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: localizedHost(const ReviewSurface(openEntryId: 'rv-1')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(WaxSplitter), findsNothing);
+      expect(
+        tester.getSize(find.byType(ReviewEntryScreen)).width,
+        greaterThan(ReviewSurface.paneMin),
+      );
+    });
+
+    testWidgets('are not drawn where the entry could not be read', (
+      tester,
+    ) async {
+      final repo = FakeRepository()..reviewEntries = [testReviewEntry('rv-1')];
+      final container = _container(repo);
+      tester.view.physicalSize = const Size(600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: localizedHost(const ReviewSurface(openEntryId: 'rv-1')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The entry takes the screen, so there is nothing to divide - the
+      // same answer a phone gets, and the reason the seam is not a
+      // control anybody has to find on one.
+      expect(find.byType(WaxSplitter), findsNothing);
+    });
   });
 }

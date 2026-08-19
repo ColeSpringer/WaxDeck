@@ -810,7 +810,7 @@ class MetadataApi {
   }
 
   /// Read an item&#39;s full metadata
-  /// Everything the editor shows for one item: the scalar fields, credits by role, lyrics presence, chapters (books), custom tags, locks and per-field provenance (who set a value: file tags, a user, enrichment, or organize), release status, file write-back health (out-of-sync and lost-value diagnostics), and whether the item is a virtual track carved from a shared file (whose edits are always database-only by upstream design). Readable by any user who can see the item; the item-scoped mutations below require &#x60;admin&#x60;, or ownership of the upload or acquisition that brought the item in. 
+  /// Everything the editor shows for one item: the scalar fields, credits by role, lyrics presence, chapters (books), custom tags, locks and per-field provenance (who set a value: file tags, a user, enrichment, or organize), release status, file write-back health (out-of-sync and lost-value diagnostics), and whether the item is a virtual track carved from a shared file (whose edits are always database-only by upstream design). Readable by any user who can see the item; the item-scoped mutations below require &#x60;admin&#x60;, or ownership of the upload or acquisition that brought the item in, which is what &#x60;mayCurate&#x60; on the response answers - so a client can tell an editor it may save from one every save would be refused. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

@@ -3513,7 +3513,9 @@ paths:
         file (whose edits are always database-only by upstream
         design). Readable by any user who can see the item; the
         item-scoped mutations below require `admin`, or ownership of
-        the upload or acquisition that brought the item in.
+        the upload or acquisition that brought the item in, which is
+        what `mayCurate` on the response answers - so a client can tell
+        an editor it may save from one every save would be refused.
       tags: [metadata]
       responses:
         "200":
@@ -13330,6 +13332,18 @@ components:
             (failed write-backs, values the format cannot store).
           items:
             $ref: "#/components/schemas/WriteBackIssue"
+        mayCurate:
+          type: boolean
+          description: >
+            Whether the caller may run the item-scoped edits this
+            document describes: administrators always, everyone else
+            exactly for the items their own uploads brought in. The
+            read answers anyone who can see the item, so without this
+            a client has no way to tell an editor it can save from one
+            every save will be refused. Optional for compatibility;
+            absent reads as unknown, and a client that treats it as
+            false only withholds a door the server would have refused
+            anyway.
 
     FieldProvenance:
       type: object

@@ -745,20 +745,36 @@ func importFailureReason(plan *inbox.Plan, report *inbox.Report) string {
 // metadata mutations on the item: administrators always, everyone
 // else exactly for the items their own uploads and acquisitions
 // brought into the library.
+//
+// A lookup that fails reads as no, which is the only safe answer for a
+// gate. Callers that are describing the permission rather than
+// enforcing it want the failure itself, and take [MayCurateItem].
 func (l *Library) CanCurateItem(ctx context.Context, uc *UserCtx, apiItemPID string) bool {
-	if uc.Admin {
-		return true
-	}
-	_, pid, ok := parseAPIPID(apiItemPID)
-	if !ok {
-		return false
-	}
-	owns, err := l.db.UploadOwnsItem(ctx, uc.ID, string(pid))
+	may, err := l.MayCurateItem(ctx, uc, apiItemPID)
 	if err != nil {
 		l.log.Warn("checking upload ownership", "item", apiItemPID, "err", err)
 		return false
 	}
-	return owns
+	return may
+}
+
+// MayCurateItem is [CanCurateItem] with a failed lookup kept rather
+// than folded into a no.
+//
+// The metadata read wants that difference. A gate that cannot answer
+// must refuse; a document that says "you may not" when the truth is
+// "the database did not answer" sends the person whose upload brought
+// the item in to a refusal screen for an item their next save would be
+// given - and a 200 carrying it is not something a client retries.
+func (l *Library) MayCurateItem(ctx context.Context, uc *UserCtx, apiItemPID string) (bool, error) {
+	if uc.Admin {
+		return true, nil
+	}
+	_, pid, ok := parseAPIPID(apiItemPID)
+	if !ok {
+		return false, nil
+	}
+	return l.db.UploadOwnsItem(ctx, uc.ID, string(pid))
 }
 
 // resolveImportedItem finds the item an applied import produced for a

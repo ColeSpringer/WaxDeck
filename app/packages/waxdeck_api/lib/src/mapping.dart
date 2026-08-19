@@ -1479,6 +1479,7 @@ ItemMetadata itemMetadataFromGen(gen.ItemMetadata meta) {
           ),
         )
         .toList(),
+    mayCurate: meta.mayCurate,
   );
 }
 

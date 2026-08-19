@@ -461,6 +461,10 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
   var _seeded = false;
   var _busy = false;
 
+  /// What each box is refusing, once a save has looked at it.
+  String? _countError;
+  String? _mbError;
+
   @override
   void dispose() {
     _keepCount.dispose();
@@ -475,8 +479,29 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
     _keepMb.text = '${settings.backupKeepBytes ~/ (1024 * 1024)}';
   }
 
+  /// A whole number at or above zero, or null for anything else -
+  /// including an empty box, which the field's clear button makes one
+  /// tap away.
+  static int? _whole(String text) {
+    final parsed = int.tryParse(text.trim());
+    return parsed == null || parsed < 0 ? null : parsed;
+  }
+
   Future<void> _save(AdminSettings settings) async {
     if (_busy) return;
+    // Refused rather than quietly kept. Both values used to fall back to
+    // what was already stored, so a typo or a cleared box saved the old
+    // number and reported success - a retention policy silently not
+    // changed is the kind of thing nobody checks twice.
+    final count = _whole(_keepCount.text);
+    final mb = _whole(_keepMb.text);
+    setState(() {
+      _countError = count == null
+          ? context.l10n.adminBackupKeepNeedsNumber
+          : null;
+      _mbError = mb == null ? context.l10n.adminBackupKeepNeedsNumber : null;
+    });
+    if (count == null || mb == null) return;
     setState(() => _busy = true);
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
@@ -485,14 +510,8 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
           .read(adminSettingsProvider.notifier)
           .save(
             settings.copyWith(
-              backupKeepCount:
-                  int.tryParse(_keepCount.text.trim()) ??
-                  settings.backupKeepCount,
-              backupKeepBytes:
-                  (int.tryParse(_keepMb.text.trim()) ??
-                      settings.backupKeepBytes ~/ (1024 * 1024)) *
-                  1024 *
-                  1024,
+              backupKeepCount: count,
+              backupKeepBytes: mb * 1024 * 1024,
             ),
           );
       messenger.show(l10n.adminBackupRetentionSaved);
@@ -514,26 +533,29 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextField(
+        // The house field rather than a bare Material one: this pair
+        // and the retention pair on Server settings are the same
+        // control, and they were drawn two different ways because this
+        // one wanted a helper line and the component had no slot for
+        // one.
+        WaxTextField(
           key: const Key('backup-keep-count'),
+          label: l10n.adminBackupKeepCountLabel,
+          helperText: l10n.adminBackupKeepAll,
+          errorText: _countError,
           controller: _keepCount,
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: l10n.adminBackupKeepCountLabel,
-            helperText: l10n.adminBackupKeepAll,
-          ),
         ),
-        const SizedBox(height: WaxSpace.s8),
-        TextField(
+        const SizedBox(height: WaxSpace.s12),
+        WaxTextField(
           key: const Key('backup-keep-mb'),
+          label: l10n.adminBackupKeepMbLabel,
+          helperText: l10n.adminBackupKeepAll,
+          errorText: _mbError,
           controller: _keepMb,
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: l10n.adminBackupKeepMbLabel,
-            helperText: l10n.adminBackupKeepAll,
-          ),
         ),
-        const SizedBox(height: WaxSpace.s8),
+        const SizedBox(height: WaxSpace.s12),
         FilledButton.tonal(
           key: const Key('backup-retention-save'),
           onPressed: _busy ? null : () => _save(settings),

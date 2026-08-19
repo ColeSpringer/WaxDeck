@@ -226,29 +226,32 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
           constraints: const BoxConstraints(maxWidth: 420),
           child: Column(
             children: <Widget>[
-              // Labelled rather than hinted: all three are seeded from
-              // the server, so a hint would never be on screen, and
-              // three identical boxes reading "0" is a good way to
-              // throttle everybody by putting the per-listener number
-              // in the server-wide field.
+              // These three are what made the label the default: all
+              // are seeded from the server, so a hint is never on
+              // screen, and three identical boxes reading "0" is a good
+              // way to throttle everybody by putting the per-listener
+              // number in the server-wide field. What the third one has
+              // to say about zero is a helper line for the same reason:
+              // a placeholder on a field that always arrives filled is
+              // a sentence nobody ever reads.
               WaxTextField(
                 label: l10n.adminServerTranscodesMaxLabel,
-                showLabel: true,
+                keyboardType: TextInputType.number,
                 controller: _maxConcurrent,
                 semanticsId: SemanticsIds.transcodingMaxConcurrent,
               ),
               const SizedBox(height: WaxSpace.s12),
               WaxTextField(
                 label: l10n.adminServerTranscodesPerUserLabel,
-                showLabel: true,
+                keyboardType: TextInputType.number,
                 controller: _maxPerUser,
                 semanticsId: SemanticsIds.transcodingMaxPerUser,
               ),
               const SizedBox(height: WaxSpace.s12),
               WaxTextField(
                 label: l10n.adminServerDefaultKbpsLabel,
-                showLabel: true,
-                hint: l10n.adminServerDefaultKbpsHint,
+                helperText: l10n.adminServerDefaultKbpsHint,
+                keyboardType: TextInputType.number,
                 controller: _defaultKbps,
                 semanticsId: SemanticsIds.transcodingDefaultKbps,
               ),
@@ -415,14 +418,14 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               // Seeded from the settings on the first frame, like the
-              // transcoding three above, so the same rule applies: a
-              // hint on a field that is never empty is never drawn, and
-              // two boxes reading 30 and 7 under one header is how the
-              // task window gets typed into the trash purge.
+              // transcoding three above, so both say what zero means
+              // under the box rather than inside it - two boxes reading
+              // 30 and 7 under one header is how the task window gets
+              // typed into the trash purge.
               WaxTextField(
                 label: l10n.adminServerTrashDaysLabel,
-                showLabel: true,
-                hint: l10n.adminServerTrashDaysHint,
+                helperText: l10n.adminServerTrashDaysHint,
+                keyboardType: TextInputType.number,
                 controller: _days,
                 semanticsId: SemanticsIds.trashRetentionDays,
               ),
@@ -432,8 +435,8 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
               // its use.
               WaxTextField(
                 label: l10n.adminServerTaskDaysLabel,
-                showLabel: true,
-                hint: l10n.adminServerTaskDaysHint,
+                helperText: l10n.adminServerTaskDaysHint,
+                keyboardType: TextInputType.number,
                 controller: _taskDays,
                 semanticsId: SemanticsIds.taskRetentionDays,
               ),

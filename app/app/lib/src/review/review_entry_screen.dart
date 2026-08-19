@@ -47,6 +47,21 @@ class ReviewEntryView extends ConsumerStatefulWidget {
   /// scaffold's own back control and passes null.
   final VoidCallback? onClose;
 
+  /// The narrowest this reads at, which is what a caller drawing it
+  /// beside something else has to leave it.
+  ///
+  /// The diff table's own minimum plus everything between it and the
+  /// pane's edge: this body's padding on both sides and the table's
+  /// border. Measured here rather than guessed by the caller, because
+  /// the caller sizes the outer box and the table measures the inner
+  /// one - and 34 pixels of difference is the whole gap between a table
+  /// that fits and a table that brings back the horizontal scrollbar.
+  static const minWidth =
+      _DiffTable.minWidth + _bodyPadding * 2 + _tableBorder * 2;
+
+  static const _bodyPadding = WaxSpace.s16;
+  static const _tableBorder = 1.0;
+
   @override
   ConsumerState<ReviewEntryView> createState() => _ReviewEntryViewState();
 }
@@ -116,7 +131,7 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
     final l10n = context.l10n;
     final candidate = _selectedCandidate(detail);
     return ListView(
-      padding: const EdgeInsets.all(WaxSpace.s16),
+      padding: const EdgeInsets.all(ReviewEntryView._bodyPadding),
       children: <Widget>[
         _Header(detail: detail, onClose: widget.onClose),
         if (detail.identifying) ...<Widget>[
@@ -717,7 +732,9 @@ class _DiffTable extends StatelessWidget {
   final ReviewEntryDetail detail;
   final ReviewCandidate? candidate;
 
-  static const _minWidth = 420.0;
+  /// What the two columns and the row menu need before the header
+  /// stops reading. Below it the scroller below takes over.
+  static const minWidth = 420.0;
 
   @override
   Widget build(BuildContext context) {
@@ -731,7 +748,10 @@ class _DiffTable extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: WaxRadius.card,
-        border: Border.all(color: colors.hairline),
+        border: Border.all(
+          color: colors.hairline,
+          width: ReviewEntryView._tableBorder,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       // Measured outside the scroll view, where the width is still
@@ -742,9 +762,9 @@ class _DiffTable extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minWidth: _minWidth,
-              maxWidth: constraints.maxWidth < _minWidth
-                  ? _minWidth
+              minWidth: minWidth,
+              maxWidth: constraints.maxWidth < minWidth
+                  ? minWidth
                   : constraints.maxWidth,
             ),
             child: Column(
@@ -868,8 +888,12 @@ class _TrackDiffRow extends StatelessWidget {
                       ),
                     ),
             ),
+            // The same token the header reserves for this column: the
+            // two are one column, and the pane is narrow enough at the
+            // two-pane threshold that a few pixels of drift between
+            // them shows as a misaligned edge.
             SizedBox(
-              width: 40,
+              width: WaxSpace.s40,
               child: pid == null
                   ? null
                   : WaxMenuButton<String>(

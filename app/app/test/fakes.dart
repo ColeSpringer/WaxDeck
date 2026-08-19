@@ -3031,6 +3031,13 @@ class FakeRepository implements WaxDeckRepository {
   final Set<String> ownArtworkPids = {};
   final Set<String> unofficialPids = {};
 
+  /// What the metadata read answers for "may this caller edit it".
+  /// True by default: the tests that mount the editor are standing in
+  /// for somebody who may, and the one that checks the refusal says so.
+  /// Null is a server that carries no such field - one older than it,
+  /// or one whose ownership lookup failed.
+  bool? mayCurateItems = true;
+
   /// Entity curation by `entityType/entityPid`.
   final Map<String, Map<String, String>> entityEditsByKey = {};
   final Map<String, List<EntityCuratedField>> entityCurationByKey = {};
@@ -3072,6 +3079,12 @@ class FakeRepository implements WaxDeckRepository {
           EditableField(name: 'artist', writeBack: true),
           EditableField(name: 'album', writeBack: true),
           EditableField(name: 'year', writeBack: true),
+          // Two of the server's snake_case keys, because the editor
+          // draws a field's name and half the real vocabulary is
+          // spelled this way: a form served only single words cannot
+          // tell a display name from a wire key.
+          EditableField(name: 'album_artist', writeBack: true),
+          EditableField(name: 'track_no', writeBack: true),
         ],
         creditRoles: [EditableField(name: 'composer', writeBack: true)],
       ),
@@ -3132,6 +3145,7 @@ class FakeRepository implements WaxDeckRepository {
       artistPid: entities?.artistPid,
       albumPid: entities?.albumPid,
       releaseGroupPid: entities?.releaseGroupPid,
+      mayCurate: mayCurateItems,
     );
   }
 

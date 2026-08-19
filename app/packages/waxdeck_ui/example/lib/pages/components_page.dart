@@ -25,6 +25,11 @@ class _ComponentsPageState extends State<ComponentsPage> {
   String _letter = 'A';
   WaxVisualizerMode _visualizer = WaxVisualizerMode.waveform;
 
+  /// Where the split-pane seam below sits. The component holds no width
+  /// of its own, so somewhere has to; in the app that is a stored
+  /// per-device preference.
+  double _seam = 260;
+
   /// The same position the seek bars above draw, as the listenable the
   /// lyrics and the visualizer follow. They take one because a playhead
   /// moves several times a second and neither rebuilds for it; here the
@@ -492,6 +497,75 @@ class _ComponentsPageState extends State<ComponentsPage> {
                   const SizedBox(width: WaxSpace.s16),
               ],
             ],
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
+        const SectionHeader(overline: 'Shell', title: 'Split panes'),
+        // Live, because a seam is nothing but its behaviour: drag it,
+        // tab to it and press an arrow, double-click it to hand the
+        // width back. What it looks like standing still is one hairline.
+        SizedBox(
+          height: 160,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: WaxRadius.card,
+              border: Border.all(color: colors.hairline),
+            ),
+            child: ClipRRect(
+              borderRadius: WaxRadius.card,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  const listMin = 180.0;
+                  // Floored at the minimum, which the app's own caller
+                  // does for the same reason: narrow the window enough
+                  // and the detail pane's share exceeds the width, so an
+                  // unguarded `clamp(180, 168)` throws and takes the
+                  // whole catalogue page with it.
+                  final listMax =
+                      (constraints.maxWidth - WaxSplitter.hitWidth - 220).clamp(
+                        listMin,
+                        double.infinity,
+                      );
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      SizedBox(
+                        width: _seam.clamp(listMin, listMax),
+                        child: ColoredBox(
+                          color: colors.surface2,
+                          child: Center(
+                            child: Text(
+                              'List',
+                              style: WaxType.label.copyWith(
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      WaxSplitter(
+                        position: _seam.clamp(listMin, listMax),
+                        min: listMin,
+                        max: listMax,
+                        onChanged: (width) => setState(() => _seam = width),
+                        onReset: () => setState(() => _seam = 260),
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            'Detail',
+                            style: WaxType.label.copyWith(
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
         ),
         const SizedBox(height: WaxSpace.s24),

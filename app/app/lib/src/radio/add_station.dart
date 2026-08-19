@@ -321,12 +321,15 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
 
   /// Directory search with its results.
   List<Widget> _directory(AppLocalizations l10n, WaxColors colors) => <Widget>[
-    WaxTextField(
-      label: l10n.radioStationName,
+    // The house search field rather than a labelled one: this asks what
+    // to look for, and captioned "Station name" over a magnifier it
+    // reads as the box that names the station being added - which is
+    // the field further down, under the same string.
+    SearchField(
+      label: l10n.radioSearchDirectory,
+      hint: l10n.radioStationName,
       controller: _search,
-      glyph: WaxIcons.search,
       autofocus: true,
-      textInputAction: TextInputAction.search,
       onSubmitted: (_) => unawaited(_runSearch()),
       semanticsId: SemanticsIds.radioSearchField,
     ),

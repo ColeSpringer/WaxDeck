@@ -267,7 +267,14 @@ void main() {
     await _pump(tester, _host(_container(_repo())));
 
     // The fake vocabulary defines exactly these music fields.
-    for (final field in ['title', 'artist', 'album', 'year']) {
+    for (final field in [
+      'title',
+      'artist',
+      'album',
+      'year',
+      'album_artist',
+      'track_no',
+    ]) {
       expect(_field(field), findsOneWidget);
       expect(
         find.bySemanticsIdentifier(SemanticsIds.fieldLock(field)),
@@ -461,5 +468,58 @@ void main() {
     final message = container.read(shellMessengerProvider);
     expect(message?.text, 'Queued for identification');
     expect(message?.actionLabel, 'Open review');
+  });
+
+  testWidgets('a caller who may not curate gets the refusal, not the form', (
+    tester,
+  ) async {
+    final repo = _repo()..mayCurateItems = false;
+    await _pump(tester, _routed(_container(repo)));
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.metadataForbidden),
+      findsOneWidget,
+    );
+    expect(find.text('This one is not yours to edit'), findsOneWidget);
+    // Its own handle, not the editor's: a refusal wearing the surface
+    // it refuses is how a test passes on the wrong page.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.metadataEditor),
+      findsNothing,
+    );
+    // Not merely a disabled Save: the whole form is withheld, because
+    // this location is shareable and a form nothing can save is worse
+    // than a sentence saying why.
+    expect(_field('title'), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.metadataSave), findsNothing);
+  });
+
+  testWidgets('a server that says nothing gets the form, not the refusal', (
+    tester,
+  ) async {
+    // One too old to carry the field, or one whose ownership lookup
+    // failed. Treating that silence as a no would hand an administrator
+    // a "not yours" page for an item that server would save, and there
+    // is nothing to retry: the read answered 200.
+    final repo = _repo()..mayCurateItems = null;
+    await _pump(tester, _routed(_container(repo)));
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.metadataForbidden),
+      findsNothing,
+    );
+    expect(_field('title'), findsOneWidget);
+  });
+
+  testWidgets('field names are drawn in words rather than in wire keys', (
+    tester,
+  ) async {
+    await _pump(tester, _host(_container(_repo())));
+
+    // The vocabulary arrives as wire keys, which were only ever an
+    // accessible name until the label started being drawn.
+    expect(find.text('Album artist'), findsOneWidget);
+    expect(find.text('album_artist'), findsNothing);
+    expect(find.text('Track number'), findsOneWidget);
   });
 }

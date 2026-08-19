@@ -2,12 +2,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../admin/admin_providers.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -23,10 +25,27 @@ class ReviewSurface extends StatelessWidget {
 
   final String? openEntryId;
 
-  /// The narrowest content pane that holds a list and an entry beside
-  /// it: the list's fixed width, the divider, and enough room left for
-  /// a candidate row to be readable.
-  static const _twoPaneMinWidth = _ReviewScreenState._listWidth + 1 + 340;
+  /// The narrowest the list may be squeezed to and still read as a
+  /// queue, and the widest it grows to on its own.
+  static const listMin = 280.0;
+  static const listMax = 380.0;
+
+  /// What the entry beside it needs, asked of the entry rather than
+  /// guessed: the diff table's own minimum plus the chrome between it
+  /// and the pane's edge. Below this the table's horizontal scroller
+  /// takes over, which is the crowding this threshold exists to keep
+  /// the reviewer out of.
+  static const paneMin = ReviewEntryView.minWidth;
+
+  /// The narrowest content pane that holds both.
+  ///
+  /// Derived from what the *entry* needs rather than from what the list
+  /// wants, which is the change: the old threshold added 340 to a fixed
+  /// 380 list, so the first window wide enough to split gave the
+  /// submission 340 - well inside the table's own minimum, and a
+  /// horizontal scrollbar under the thing being read. Every window that
+  /// gets two panes can now hold the table without one.
+  static const _twoPaneMinWidth = listMin + WaxSplitter.hitWidth + paneMin;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +62,36 @@ class ReviewSurface extends StatelessWidget {
     );
   }
 }
+
+/// Where the reviewer put the seam, in whole pixels; zero is "wherever
+/// the layout puts it", which is what a fresh device reads and what the
+/// double-tap reset writes back.
+///
+/// Per device, stored beside the sidebar's own fold rather than on the
+/// account: a seam is a fact about the window it was dragged in, and the
+/// screen clamps whatever comes back against the room it actually has.
+class ReviewListWidth extends IntSetting {
+  @override
+  String get settingKey => ClientSettingKeys.reviewListWidth;
+
+  @override
+  int get defaultValue => 0;
+
+  @override
+  int get minValue => 0;
+
+  /// A sanity ceiling rather than a layout bound, and deliberately past
+  /// any panel a seam could be dragged across: [IntSetting.set] clamps
+  /// writes as well as reads, so a bound near a real width would freeze
+  /// the seam under a still-moving pointer on a wide enough screen. The
+  /// screen bounds this against the room it actually has, every frame.
+  @override
+  int get maxValue => 32000;
+}
+
+final reviewListWidthProvider = NotifierProvider<ReviewListWidth, int>(
+  ReviewListWidth.new,
+);
 
 /// The metadata review queue: filterable, cursor paged, keyboard-first.
 /// j/k move, a/s/u decide, e opens, Escape leaves. Long-press a row or
@@ -63,10 +112,45 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   /// instead of hunting for offscreen render objects.
   static const _rowExtent = 76.0;
 
-  /// The list's own width once the pane is beside it. Fixed rather than
-  /// shared, because the pane is where the reading happens and a list
-  /// that grew with the window would take the room from it.
-  static const _listWidth = 380.0;
+  /// The list's own width once the pane is beside it.
+  ///
+  /// A third of the room, bounded, rather than a fixed 380: the pane is
+  /// where the reading happens, so the majority goes to the submission
+  /// somebody opened - which at the width this was reported at meant a
+  /// queue of one-line rows holding 380 while the files under review
+  /// had 343.
+  ///
+  /// A seam dragged by hand outranks that and is allowed past [listMax],
+  /// as far as the entry's own floor: the default is a guess about what
+  /// somebody wants, and a drag is not.
+  ///
+  /// [stored] is read in `build` and passed down rather than watched
+  /// here: this runs from a `LayoutBuilder`, which builds during layout
+  /// rather than during the build that owns this ref.
+  double _listWidth(double available, int stored) {
+    final room = available - WaxSplitter.hitWidth;
+    final wanted =
+        _dragging ??
+        (stored > 0
+            ? stored.toDouble()
+            : (room / 3).clamp(ReviewSurface.listMin, ReviewSurface.listMax));
+    return wanted.clamp(ReviewSurface.listMin, _listMax(available));
+  }
+
+  /// Where a drag in flight has the seam, so the panes follow the
+  /// pointer without a preference being written down per frame. Null
+  /// outside a gesture, when the stored width is the answer again.
+  double? _dragging;
+
+  /// The widest the list may be drawn at this size, which is whatever
+  /// leaves the entry its floor. Never below [ReviewSurface.listMin]:
+  /// the surface only draws two panes above the threshold, and clamping
+  /// to a smaller maximum than minimum throws.
+  double _listMax(double available) =>
+      (available - WaxSplitter.hitWidth - ReviewSurface.paneMin).clamp(
+        ReviewSurface.listMin,
+        double.infinity,
+      );
 
   final _scroll = ScrollController();
 
@@ -241,6 +325,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
     final queue = ref.watch(reviewQueueProvider);
+    final seamAt = ref.watch(reviewListWidthProvider);
     final l10n = context.l10n;
     _syncSelection(queue.value?.entries ?? const []);
     // Surface a failed "load more": the queue keeps its rows, so the
@@ -313,13 +398,31 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                         SizedBox(
                           width: widget.openEntryId == null
                               ? constraints.maxWidth
-                              : _listWidth,
+                              : _listWidth(constraints.maxWidth, seamAt),
                           child: _queue(sizeClass),
                         ),
                         if (widget.openEntryId case final open?) ...<Widget>[
-                          VerticalDivider(
-                            width: 1,
-                            color: WaxColors.of(context).hairline,
+                          // The seam only exists where there are two
+                          // panes, which is also why there is none on a
+                          // phone: below the threshold the entry takes
+                          // the screen and there is nothing to divide.
+                          WaxSplitter(
+                            position: _listWidth(constraints.maxWidth, seamAt),
+                            min: ReviewSurface.listMin,
+                            max: _listMax(constraints.maxWidth),
+                            semanticsId: SemanticsIds.reviewSplitter,
+                            onChanged: (width) =>
+                                setState(() => _dragging = width),
+                            onSettled: (width) {
+                              setState(() => _dragging = null);
+                              ref
+                                  .read(reviewListWidthProvider.notifier)
+                                  .set(width.round());
+                            },
+                            onReset: () {
+                              setState(() => _dragging = null);
+                              ref.read(reviewListWidthProvider.notifier).set(0);
+                            },
                           ),
                           Expanded(child: _pane(open)),
                         ],

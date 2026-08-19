@@ -93,7 +93,81 @@ Future<void> _pump(WidgetTester tester, Widget host) async {
   await tester.pumpAndSettle();
 }
 
+/// The pane at one exact width, which is what the review screen's
+/// two-pane threshold hands it.
+Future<void> _pumpAtWidth(
+  WidgetTester tester,
+  FakeRepository repo,
+  double width,
+) async {
+  tester.view.physicalSize = Size(width + 200, 2000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+      // Over a Scaffold, which is what the review screen mounts it in:
+      // the rows carry ink and ink needs a Material above it.
+      child: localizedHost(
+        Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: width,
+              child: const ReviewEntryView(entryId: 'rv-1'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// How far the diff table's own scroller can move. Zero is a table that
+/// fits; anything else is the horizontal scrollbar under the thing
+/// being read.
+double _diffOverflow(WidgetTester tester) => tester
+    .state<ScrollableState>(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (w) =>
+              w is SingleChildScrollView &&
+              w.scrollDirection == Axis.horizontal,
+        ),
+        matching: find.byType(Scrollable),
+      ),
+    )
+    .position
+    .maxScrollExtent;
+
 void main() {
+  group('the pane', () {
+    testWidgets('holds its diff table at the width it declares', (
+      tester,
+    ) async {
+      await _pumpAtWidth(
+        tester,
+        _repoWith(_detail()),
+        ReviewEntryView.minWidth,
+      );
+      expect(_diffOverflow(tester), 0);
+    });
+
+    testWidgets('and one pixel under it does not', (tester) async {
+      // Which is what makes the constant a boundary rather than a
+      // guess: the pane spends its own padding and the table's border
+      // before the table is measured, so a threshold set to the table's
+      // 420 hands it 386 and brings the scrollbar back.
+      await _pumpAtWidth(
+        tester,
+        _repoWith(_detail()),
+        ReviewEntryView.minWidth - 1,
+      );
+      expect(_diffOverflow(tester), greaterThan(0));
+    });
+  });
+
   testWidgets('renders candidates and the track diff', (tester) async {
     final repo = _repoWith(_detail());
     await _pump(tester, _host(repo, 'rv-1'));

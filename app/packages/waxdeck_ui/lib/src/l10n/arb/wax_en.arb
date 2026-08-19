@@ -504,6 +504,16 @@
   "@panelClose": {
     "description": "Accessible name of the close button on a side panel."
   },
+  "percentOf": "{percent}%",
+  "@percentOf": {
+    "description": "A proportion, as a screen reader hears it from a slider or a splitter. Some languages put a space before the sign.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "25"
+      }
+    }
+  },
   "playerCollapse": "Collapse player",
   "@playerCollapse": {
     "description": "Button that closes the full-window player and leaves the bar behind."
@@ -595,6 +605,10 @@
         "example": "45"
       }
     }
+  },
+  "splitterLabel": "Resize panes",
+  "@splitterLabel": {
+    "description": "Accessible name of the draggable seam between two side-by-side panes. It reports how far along its travel it sits, as a percentage."
   },
   "statesErrorTitle": "Something didn't load",
   "@statesErrorTitle": {

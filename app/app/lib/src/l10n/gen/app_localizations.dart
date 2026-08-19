@@ -315,6 +315,12 @@ abstract class AppLocalizations {
   /// **'Backup space (MB)'**
   String get adminBackupKeepMbLabel;
 
+  /// Refusal under a backup retention field whose text is not a whole number, including an empty one. Saving is what surfaces it.
+  ///
+  /// In en, this message translates to:
+  /// **'A whole number, or 0 to keep every backup'**
+  String get adminBackupKeepNeedsNumber;
+
   /// Button that starts a backup.
   ///
   /// In en, this message translates to:
@@ -5169,11 +5175,191 @@ abstract class AppLocalizations {
   /// **'Fetch metadata'**
   String get metadataFetch;
 
+  /// Name of the editable metadata field the server calls `album`.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get metadataFieldAlbum;
+
+  /// Name of the editable metadata field the server calls `album_artist`.
+  ///
+  /// In en, this message translates to:
+  /// **'Album artist'**
+  String get metadataFieldAlbumArtist;
+
+  /// Name of the editable metadata field the server calls `artist`.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get metadataFieldArtist;
+
+  /// Name of the editable metadata field the server calls `asin`.
+  ///
+  /// In en, this message translates to:
+  /// **'ASIN'**
+  String get metadataFieldAsin;
+
+  /// Name of the editable metadata field the server calls `author`.
+  ///
+  /// In en, this message translates to:
+  /// **'Author'**
+  String get metadataFieldAuthor;
+
+  /// Name of the editable metadata field the server calls `author_sort`.
+  ///
+  /// In en, this message translates to:
+  /// **'Author, for sorting'**
+  String get metadataFieldAuthorSort;
+
+  /// Name of the editable metadata field the server calls `comment`.
+  ///
+  /// In en, this message translates to:
+  /// **'Comment'**
+  String get metadataFieldComment;
+
+  /// Name of the editable metadata field the server calls `compilation`.
+  ///
+  /// In en, this message translates to:
+  /// **'Compilation'**
+  String get metadataFieldCompilation;
+
+  /// Name of the editable metadata field the server calls `composer`.
+  ///
+  /// In en, this message translates to:
+  /// **'Composer'**
+  String get metadataFieldComposer;
+
+  /// Name of the editable metadata field the server calls `composer_sort`.
+  ///
+  /// In en, this message translates to:
+  /// **'Composer, for sorting'**
+  String get metadataFieldComposerSort;
+
+  /// Name of the editable metadata field the server calls `description`.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get metadataFieldDescription;
+
+  /// Name of the editable metadata field the server calls `disc_no`.
+  ///
+  /// In en, this message translates to:
+  /// **'Disc number'**
+  String get metadataFieldDiscNo;
+
+  /// Name of the editable metadata field the server calls `edition`.
+  ///
+  /// In en, this message translates to:
+  /// **'Edition'**
+  String get metadataFieldEdition;
+
+  /// Name of the editable metadata field the server calls `episode_no`.
+  ///
+  /// In en, this message translates to:
+  /// **'Episode number'**
+  String get metadataFieldEpisodeNo;
+
+  /// Name of the editable metadata field the server calls `episode_type`.
+  ///
+  /// In en, this message translates to:
+  /// **'Episode type'**
+  String get metadataFieldEpisodeType;
+
+  /// Name of the editable metadata field the server calls `explicit`.
+  ///
+  /// In en, this message translates to:
+  /// **'Explicit'**
+  String get metadataFieldExplicit;
+
+  /// Name of the editable metadata field the server calls `genre`.
+  ///
+  /// In en, this message translates to:
+  /// **'Genre'**
+  String get metadataFieldGenre;
+
+  /// Name of the editable metadata field the server calls `isbn`.
+  ///
+  /// In en, this message translates to:
+  /// **'ISBN'**
+  String get metadataFieldIsbn;
+
+  /// Name of the editable metadata field the server calls `isrc`.
+  ///
+  /// In en, this message translates to:
+  /// **'ISRC'**
+  String get metadataFieldIsrc;
+
+  /// Name of the editable metadata field the server calls `link`.
+  ///
+  /// In en, this message translates to:
+  /// **'Link'**
+  String get metadataFieldLink;
+
   /// Added after the server's own refusal when a save was refused for a locked field. The server names which field; this names the switch on this screen that overrides it, and the quoted word must match that switch's label.
   ///
   /// In en, this message translates to:
   /// **'Check \"Force\" to overwrite locked fields.'**
   String get metadataFieldLockedHint;
+
+  /// Name of the editable metadata field the server calls `mbid`.
+  ///
+  /// In en, this message translates to:
+  /// **'MusicBrainz ID'**
+  String get metadataFieldMbid;
+
+  /// Name of the editable metadata field the server calls `narrator`.
+  ///
+  /// In en, this message translates to:
+  /// **'Narrator'**
+  String get metadataFieldNarrator;
+
+  /// Name of the editable metadata field the server calls `pinned`.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned'**
+  String get metadataFieldPinned;
+
+  /// Name of the editable metadata field the server calls `publisher`.
+  ///
+  /// In en, this message translates to:
+  /// **'Publisher'**
+  String get metadataFieldPublisher;
+
+  /// Name of the editable metadata field the server calls `season`.
+  ///
+  /// In en, this message translates to:
+  /// **'Season'**
+  String get metadataFieldSeason;
+
+  /// Name of the editable metadata field the server calls `series`.
+  ///
+  /// In en, this message translates to:
+  /// **'Series'**
+  String get metadataFieldSeries;
+
+  /// Name of the editable metadata field the server calls `subtitle`.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitle'**
+  String get metadataFieldSubtitle;
+
+  /// Name of the editable metadata field the server calls `title`.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get metadataFieldTitle;
+
+  /// Name of the editable metadata field the server calls `track_no`.
+  ///
+  /// In en, this message translates to:
+  /// **'Track number'**
+  String get metadataFieldTrackNo;
+
+  /// Name of the editable metadata field the server calls `year`.
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get metadataFieldYear;
 
   /// Line above the Fields heading.
   ///
@@ -5186,6 +5372,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fields'**
   String get metadataFieldsTitle;
+
+  /// Body of the refusal page shown when the signed-in account may not edit this item's metadata.
+  ///
+  /// In en, this message translates to:
+  /// **'Editing a track changes it for everyone on this server, so the people who can are administrators and whoever\'s upload brought it in.'**
+  String get metadataForbiddenMessage;
+
+  /// Heading of the refusal page shown when the signed-in account may not edit this item's metadata.
+  ///
+  /// In en, this message translates to:
+  /// **'This one is not yours to edit'**
+  String get metadataForbiddenTitle;
 
   /// Line under the force switch.
   ///

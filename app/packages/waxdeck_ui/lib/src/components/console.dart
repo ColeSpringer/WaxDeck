@@ -640,6 +640,12 @@ class _TypedConfirmDialogState extends State<_TypedConfirmDialog> {
           ),
           const SizedBox(height: WaxSpace.s16),
           WaxTextField(
+            // Drawn, and this is the dialog that most needs it: the
+            // label is the only place the word to type appears. The
+            // body above is the caller's warning and names the thing
+            // being destroyed rather than the word - so without this
+            // the dialog is a title, a sentence, a blank box, and a
+            // destructive button that can never enable.
             label: context.waxL10n.consoleConfirmHint(widget.confirmWord),
             controller: _controller,
             semanticsId: widget.fieldSemanticsId,

@@ -983,6 +983,27 @@ func TestAcquireFromURL(t *testing.T) {
 		t.Fatalf("bystander edit status = %d, want 403", resp.StatusCode)
 	}
 
+	// The read answers all three the same way, so mayCurate is the only
+	// thing on it that tells them apart - and it has to agree with the
+	// three edits just made, or a client draws a form whose Save is
+	// refused.
+	mayCurate := func(who, token string) bool {
+		meta := decode[ItemMetadata](t, get(t, h.ts, "/api/v1/items/"+trackPid+"/metadata", token))
+		if meta.MayCurate == nil {
+			t.Fatalf("%s: metadata read carried no mayCurate", who)
+		}
+		return *meta.MayCurate
+	}
+	if !mayCurate("admin", h.token) {
+		t.Fatal("mayCurate = false for the administrator")
+	}
+	if !mayCurate("acquirer", digger) {
+		t.Fatal("mayCurate = false for the acquirer whose edit landed")
+	}
+	if mayCurate("bystander", bystander) {
+		t.Fatal("mayCurate = true for the bystander the edit refused")
+	}
+
 	// A single video URL takes the non-playlist fallback.
 	resp = post(digger, "/api/v1/acquisitions", map[string]any{
 		"url": "https://tube.example/watch?v=lone", "mediaType": "music",

@@ -40,6 +40,13 @@ abstract final class ClientSettingKeys {
   /// Whether the desktop sidebar is collapsed to an icon rail.
   static const sidebarCollapsed = 'waxdeck.shell.sidebarCollapsed';
 
+  /// How wide the review queue's list is beside the entry being read,
+  /// in whole pixels; zero means the layout's own answer. Per device
+  /// like the rail above it: where a seam sits is a choice about this
+  /// window, and carrying it to a laptop half the width would only be
+  /// re-clamped there.
+  static const reviewListWidth = 'waxdeck.review.listWidth';
+
   /// The recent search queries, newest first, as a JSON string list.
   static const recentSearches = 'waxdeck.search.recent';
 

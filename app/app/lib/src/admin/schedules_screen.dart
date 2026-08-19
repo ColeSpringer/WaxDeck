@@ -202,7 +202,10 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
               ),
             const SizedBox(height: WaxSpace.s12),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              // Bottom-aligned now that the field carries a label above
+              // it: aligned to the top, the button sits beside the word
+              // rather than beside the box it acts on.
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
                 Expanded(
                   child: WaxTextField(

@@ -23,6 +23,7 @@
   "adminBackupKeepAll": "0 las conserva todas",
   "adminBackupKeepCountLabel": "Copias que conservar",
   "adminBackupKeepMbLabel": "Espacio para copias (MB)",
+  "adminBackupKeepNeedsNumber": "Un número entero, o 0 para conservar todas las copias",
   "adminBackupNow": "Hacer una copia ahora",
   "adminBackupRestoreBody": "El servidor sustituye su base de datos por {fileName} en el próximo reinicio. Se pierde todo lo cambiado desde esa copia.",
   "adminBackupRestoreTitle": "¿Restaurar esta copia de seguridad?",

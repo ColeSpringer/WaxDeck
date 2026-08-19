@@ -428,6 +428,10 @@ class _AddRowState extends ConsumerState<_AddRow> {
             label: l10n.playlistAddLabel,
             hint: l10n.playlistAddHint,
             glyph: WaxIcons.add,
+            // Its own name is the header this sits under, and its hint
+            // says what to type: drawn as a caption too, "Add to this
+            // playlist" is the third statement of the same thing.
+            showLabel: false,
             controller: _controller,
             onChanged: _onChanged,
             semanticsId: SemanticsIds.playlistAddField,

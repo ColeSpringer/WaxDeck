@@ -94,6 +94,7 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 		HasArtwork:      d.HasArtwork,
 		HasOwnArtwork:   d.HasOwnArtwork,
 		WriteBackIssues: make([]WriteBackIssue, 0, len(d.WriteBackIssues)),
+		MayCurate:       d.MayCurate,
 	}
 	setOpt(&out.ArtistPid, d.ArtistPID)
 	setOpt(&out.AlbumPid, d.AlbumPID)

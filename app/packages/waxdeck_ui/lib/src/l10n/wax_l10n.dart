@@ -84,3 +84,15 @@ extension WaxDurations on WaxLocalizations {
     );
   }
 }
+
+/// A proportion, as the level controls announce it.
+///
+/// One place because two of them needed it and copied each other: a
+/// slider says how loud, a splitter says how far along its travel, and
+/// both are a fraction spoken as a percentage. The sign's spacing is
+/// the translator's - Spanish puts one before it - which is the half
+/// that made this worth a table entry rather than an interpolation.
+extension WaxProportions on WaxLocalizations {
+  String spellPercent(double fraction) =>
+      percentOf((fraction.clamp(0.0, 1.0) * 100).round());
+}

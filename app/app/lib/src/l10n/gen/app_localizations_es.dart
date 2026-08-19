@@ -135,6 +135,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminBackupKeepMbLabel => 'Espacio para copias (MB)';
 
   @override
+  String get adminBackupKeepNeedsNumber =>
+      'Un número entero, o 0 para conservar todas las copias';
+
+  @override
   String get adminBackupNow => 'Hacer una copia ahora';
 
   @override
@@ -3195,14 +3199,111 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataFetch => 'Obtener metadatos';
 
   @override
+  String get metadataFieldAlbum => 'Álbum';
+
+  @override
+  String get metadataFieldAlbumArtist => 'Artista del álbum';
+
+  @override
+  String get metadataFieldArtist => 'Artista';
+
+  @override
+  String get metadataFieldAsin => 'ASIN';
+
+  @override
+  String get metadataFieldAuthor => 'Autor';
+
+  @override
+  String get metadataFieldAuthorSort => 'Autor, para ordenar';
+
+  @override
+  String get metadataFieldComment => 'Comentario';
+
+  @override
+  String get metadataFieldCompilation => 'Recopilación';
+
+  @override
+  String get metadataFieldComposer => 'Compositor';
+
+  @override
+  String get metadataFieldComposerSort => 'Compositor, para ordenar';
+
+  @override
+  String get metadataFieldDescription => 'Descripción';
+
+  @override
+  String get metadataFieldDiscNo => 'Número de disco';
+
+  @override
+  String get metadataFieldEdition => 'Edición';
+
+  @override
+  String get metadataFieldEpisodeNo => 'Número de episodio';
+
+  @override
+  String get metadataFieldEpisodeType => 'Tipo de episodio';
+
+  @override
+  String get metadataFieldExplicit => 'Explícito';
+
+  @override
+  String get metadataFieldGenre => 'Género';
+
+  @override
+  String get metadataFieldIsbn => 'ISBN';
+
+  @override
+  String get metadataFieldIsrc => 'ISRC';
+
+  @override
+  String get metadataFieldLink => 'Enlace';
+
+  @override
   String get metadataFieldLockedHint =>
       'Marca \"Forzar\" para sobrescribir los campos bloqueados.';
+
+  @override
+  String get metadataFieldMbid => 'ID de MusicBrainz';
+
+  @override
+  String get metadataFieldNarrator => 'Narrador';
+
+  @override
+  String get metadataFieldPinned => 'Fijado';
+
+  @override
+  String get metadataFieldPublisher => 'Editorial';
+
+  @override
+  String get metadataFieldSeason => 'Temporada';
+
+  @override
+  String get metadataFieldSeries => 'Serie';
+
+  @override
+  String get metadataFieldSubtitle => 'Subtítulo';
+
+  @override
+  String get metadataFieldTitle => 'Título';
+
+  @override
+  String get metadataFieldTrackNo => 'Número de pista';
+
+  @override
+  String get metadataFieldYear => 'Año';
 
   @override
   String get metadataFieldsOverline => 'Lo que este elemento dice ser';
 
   @override
   String get metadataFieldsTitle => 'Campos';
+
+  @override
+  String get metadataForbiddenMessage =>
+      'Editar una pista la cambia para todo el mundo en este servidor, así que quienes pueden hacerlo son los administradores y quien la trajo con su subida.';
+
+  @override
+  String get metadataForbiddenTitle => 'Esta no es tuya para editarla';
 
   @override
   String get metadataForceHelp =>

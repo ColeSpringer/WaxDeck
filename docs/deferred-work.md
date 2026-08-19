@@ -522,6 +522,28 @@ here waits on upstream.
   `FilePickerPort` deliberately does not speak; the "Upload a folder"
   tile hides there (`canPickFolders`). Multi-select plus auto
   grouping covers the album case on Android meanwhile.
+- `[in-repo]` **Reading one permission bit costs a whole editor
+  document.** `mayCurate` is only carried by `GET /items/{pid}/metadata`,
+  which assembles provenance, credits, tags, lyrics, write-back issues,
+  book detail and artwork resolution before it answers - and the player
+  asks it per played track to decide whether one overflow row appears
+  (`mayCurateItemProvider`). Administrators short-circuit it already,
+  since `uc.Admin` is half the server's own predicate and the half a
+  client knows, so the cost falls only on a non-admin with upload
+  rights - the population the field exists for - and only while the
+  full-screen player is open. Fix shape when taken: carry the flag on
+  something the queue already holds (`ItemSummary`) or add a small
+  item-permission read, either of which is a spec change; the client
+  provider then loses its fetch and keeps its shape.
+- `[in-repo]` **A track in a listing has no door to the metadata editor.**
+  The player's overflow and its palette command open the editor for
+  whatever is playing, gated on the item's own `mayCurate`; a track row
+  in an album, a playlist, or a search result has no overflow menu at
+  all, so fixing a wrong title still means playing the track first.
+  Rows cannot answer `mayCurate` without a metadata read each, so the
+  shape when taken is an admin-gated row (a listing already knows the
+  session's roles) with the editor's own refusal catching the
+  uploader-curator - not a fetch per row for a menu entry.
 - `[in-repo]` **A single-track unit is scored like a mostly-missing album.**
   The distance model charges every release track no staged file matched
   (the `missing` component, weight 0.9 per track), which is right for an

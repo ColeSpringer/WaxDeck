@@ -2927,6 +2927,7 @@ class ItemMetadata {
     this.artistPid,
     this.releaseGroupPid,
     this.writeBackIssues = const [],
+    this.mayCurate,
   });
 
   final String pid;
@@ -2955,6 +2956,19 @@ class ItemMetadata {
   final String? artistPid;
   final String? releaseGroupPid;
   final List<WriteBackIssue> writeBackIssues;
+
+  /// Whether this account may edit any of it. The read is open to
+  /// everyone who can see the item and the edits are not, so a screen
+  /// that offered Save on the strength of the read alone would offer it
+  /// to callers every save refuses.
+  ///
+  /// Null is "the server did not say" - one too old to carry the field,
+  /// or one whose ownership lookup failed - and it is a third answer
+  /// rather than a no. Withholding a door on it costs nothing, since
+  /// that server refuses the edit anyway; *refusing* on it would put a
+  /// curator in front of a refusal screen for an item their next save
+  /// would be given.
+  final bool? mayCurate;
 }
 
 /// One file a write-back could not update.

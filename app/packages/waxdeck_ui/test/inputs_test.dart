@@ -13,37 +13,20 @@ Widget _host(Widget child, {double height = 400}) => MaterialApp(
 
 void main() {
   group('WaxTextField', () {
-    testWidgets('draws no label by default, whatever it is holding', (
+    testWidgets('draws its label by default, over a field already filled', (
       tester,
     ) async {
-      // The default is what 35 of the 38 call sites render today, so it
-      // is pinned: turning it on for everybody is a look to decide, not
-      // something to arrive by accident through a refactor here.
-      final controller = TextEditingController(text: '12');
-      addTearDown(controller.dispose);
-      await tester.pumpWidget(
-        _host(
-          WaxTextField(label: 'Transcodes at once', controller: controller),
-          height: 80,
-        ),
-      );
-      expect(find.text('Transcodes at once'), findsNothing);
-    });
-
-    testWidgets('showLabel draws the label over a field already filled', (
-      tester,
-    ) async {
-      // The case a hint cannot cover. The hint is still in the tree - it
-      // is faded to nothing rather than removed, which is why looking
-      // for the widget is not the test - so the assertion is on what is
-      // actually on screen.
+      // The case a hint cannot cover, and the reason the label is the
+      // default rather than something 35 of 38 call sites went without.
+      // The hint is still in the tree - it is faded to nothing rather
+      // than removed, which is why looking for the widget is not the
+      // test - so the assertion is on what is actually on screen.
       final controller = TextEditingController(text: '12');
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _host(
           WaxTextField(
             label: 'Transcodes at once',
-            showLabel: true,
             hint: 'never seen',
             controller: controller,
           ),
@@ -67,15 +50,87 @@ void main() {
       );
     });
 
+    testWidgets('withheld, it is still the accessible name', (tester) async {
+      // What every search box in the app is: a field whose surroundings
+      // name it, which still has to answer to a screen reader.
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(
+          const WaxTextField(label: 'Search', showLabel: false),
+          height: 80,
+        ),
+      );
+      expect(find.text('Search'), findsNothing);
+      expect(find.bySemanticsLabel('Search'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('says what an empty value means, until it has to refuse', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const WaxTextField(
+            label: 'Keep backups',
+            helperText: 'Leave blank to keep every one',
+          ),
+          height: 120,
+        ),
+      );
+      expect(find.text('Leave blank to keep every one'), findsOneWidget);
+
+      // One line under a box, not two: the refusal is the more urgent
+      // half and takes the place.
+      await tester.pumpWidget(
+        _host(
+          const WaxTextField(
+            label: 'Keep backups',
+            helperText: 'Leave blank to keep every one',
+            errorText: 'That is not a number',
+          ),
+          height: 120,
+        ),
+      );
+      expect(find.text('Leave blank to keep every one'), findsNothing);
+      expect(find.text('That is not a number'), findsOneWidget);
+    });
+
+    testWidgets('the line under the box is spoken by the box', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(
+          const WaxTextField(
+            label: 'Keep backups',
+            helperText: 'Leave blank to keep every one',
+          ),
+          height: 120,
+        ),
+      );
+
+      // Drawn once and announced once, as part of the field rather than
+      // as a stray node after it: a helper nothing the caret is in ever
+      // says is a helper nobody using a screen reader hears.
+      final node = tester.getSemantics(
+        find.descendant(
+          of: find.byType(WaxTextField),
+          matching: find.byType(EditableText),
+        ),
+      );
+      expect(node.label, 'Keep backups');
+      expect(node.hint, 'Leave blank to keep every one');
+      expect(
+        find.bySemanticsLabel('Leave blank to keep every one'),
+        findsNothing,
+      );
+      handle.dispose();
+    });
+
     testWidgets('the drawn label is not announced a second time', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
-        _host(
-          const WaxTextField(label: 'Server URL', showLabel: true),
-          height: 80,
-        ),
+        _host(const WaxTextField(label: 'Server URL'), height: 80),
       );
       expect(
         find.bySemanticsLabel('Server URL'),
@@ -90,7 +145,6 @@ void main() {
         _host(
           const WaxTextField(
             label: 'Server URL',
-            showLabel: true,
             errorText: 'That is not a URL',
           ),
           height: 120,

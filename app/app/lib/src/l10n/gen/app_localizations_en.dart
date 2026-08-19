@@ -133,6 +133,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminBackupKeepMbLabel => 'Backup space (MB)';
 
   @override
+  String get adminBackupKeepNeedsNumber =>
+      'A whole number, or 0 to keep every backup';
+
+  @override
   String get adminBackupNow => 'Back up now';
 
   @override
@@ -3149,14 +3153,111 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataFetch => 'Fetch metadata';
 
   @override
+  String get metadataFieldAlbum => 'Album';
+
+  @override
+  String get metadataFieldAlbumArtist => 'Album artist';
+
+  @override
+  String get metadataFieldArtist => 'Artist';
+
+  @override
+  String get metadataFieldAsin => 'ASIN';
+
+  @override
+  String get metadataFieldAuthor => 'Author';
+
+  @override
+  String get metadataFieldAuthorSort => 'Author, for sorting';
+
+  @override
+  String get metadataFieldComment => 'Comment';
+
+  @override
+  String get metadataFieldCompilation => 'Compilation';
+
+  @override
+  String get metadataFieldComposer => 'Composer';
+
+  @override
+  String get metadataFieldComposerSort => 'Composer, for sorting';
+
+  @override
+  String get metadataFieldDescription => 'Description';
+
+  @override
+  String get metadataFieldDiscNo => 'Disc number';
+
+  @override
+  String get metadataFieldEdition => 'Edition';
+
+  @override
+  String get metadataFieldEpisodeNo => 'Episode number';
+
+  @override
+  String get metadataFieldEpisodeType => 'Episode type';
+
+  @override
+  String get metadataFieldExplicit => 'Explicit';
+
+  @override
+  String get metadataFieldGenre => 'Genre';
+
+  @override
+  String get metadataFieldIsbn => 'ISBN';
+
+  @override
+  String get metadataFieldIsrc => 'ISRC';
+
+  @override
+  String get metadataFieldLink => 'Link';
+
+  @override
   String get metadataFieldLockedHint =>
       'Check \"Force\" to overwrite locked fields.';
+
+  @override
+  String get metadataFieldMbid => 'MusicBrainz ID';
+
+  @override
+  String get metadataFieldNarrator => 'Narrator';
+
+  @override
+  String get metadataFieldPinned => 'Pinned';
+
+  @override
+  String get metadataFieldPublisher => 'Publisher';
+
+  @override
+  String get metadataFieldSeason => 'Season';
+
+  @override
+  String get metadataFieldSeries => 'Series';
+
+  @override
+  String get metadataFieldSubtitle => 'Subtitle';
+
+  @override
+  String get metadataFieldTitle => 'Title';
+
+  @override
+  String get metadataFieldTrackNo => 'Track number';
+
+  @override
+  String get metadataFieldYear => 'Year';
 
   @override
   String get metadataFieldsOverline => 'What this item claims to be';
 
   @override
   String get metadataFieldsTitle => 'Fields';
+
+  @override
+  String get metadataForbiddenMessage =>
+      'Editing a track changes it for everyone on this server, so the people who can are administrators and whoever\'s upload brought it in.';
+
+  @override
+  String get metadataForbiddenTitle => 'This one is not yours to edit';
 
   @override
   String get metadataForceHelp => 'Overwrite fields that are already locked';

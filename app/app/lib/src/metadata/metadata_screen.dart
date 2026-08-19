@@ -5,11 +5,54 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../music/music_controllers.dart';
+import '../shell/forbidden_page.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'artwork_manager.dart';
 import 'metadata_controller.dart';
+
+/// What one editable field is called in the reader's language.
+///
+/// The vocabulary arrives from the server as wire keys - `album_artist`,
+/// `track_no` - which were only ever an accessible name until the field
+/// began drawing its label. A lookup rather than an enum because the
+/// server owns the list, and the key itself is the fallback: a field a
+/// later server adds draws its own name rather than nothing, and
+/// translating it is one line here.
+String metadataFieldLabel(AppLocalizations l10n, String name) => switch (name) {
+  'title' => l10n.metadataFieldTitle,
+  'artist' => l10n.metadataFieldArtist,
+  'album_artist' => l10n.metadataFieldAlbumArtist,
+  'album' => l10n.metadataFieldAlbum,
+  'composer' => l10n.metadataFieldComposer,
+  'composer_sort' => l10n.metadataFieldComposerSort,
+  'comment' => l10n.metadataFieldComment,
+  'genre' => l10n.metadataFieldGenre,
+  'year' => l10n.metadataFieldYear,
+  'track_no' => l10n.metadataFieldTrackNo,
+  'disc_no' => l10n.metadataFieldDiscNo,
+  'isrc' => l10n.metadataFieldIsrc,
+  'mbid' => l10n.metadataFieldMbid,
+  'compilation' => l10n.metadataFieldCompilation,
+  'author' => l10n.metadataFieldAuthor,
+  'author_sort' => l10n.metadataFieldAuthorSort,
+  'narrator' => l10n.metadataFieldNarrator,
+  'series' => l10n.metadataFieldSeries,
+  'subtitle' => l10n.metadataFieldSubtitle,
+  'asin' => l10n.metadataFieldAsin,
+  'isbn' => l10n.metadataFieldIsbn,
+  'publisher' => l10n.metadataFieldPublisher,
+  'edition' => l10n.metadataFieldEdition,
+  'description' => l10n.metadataFieldDescription,
+  'pinned' => l10n.metadataFieldPinned,
+  'season' => l10n.metadataFieldSeason,
+  'episode_no' => l10n.metadataFieldEpisodeNo,
+  'episode_type' => l10n.metadataFieldEpisodeType,
+  'explicit' => l10n.metadataFieldExplicit,
+  'link' => l10n.metadataFieldLink,
+  _ => name,
+};
 
 /// The per-item metadata editor, deep-linkable at `/metadata/<pid>`.
 /// Always pushed: a review row, a book, and the lyrics view all open it,
@@ -193,6 +236,30 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
       final value = next.value;
       if (value != null) _adoptStored(value);
     });
+    // On the screen, not only on the doors that open it. The album
+    // editor refuses for the same reason - this location is shareable
+    // and the web build puts it in the path - but it refuses before it
+    // loads, because being an administrator is something the session
+    // already knows. Here the answer is a property of the item and
+    // arrives with the read, so the refusal waits for it: the account
+    // whose upload brought the track in may curate it, and nothing on
+    // the client can work that out on its own.
+    //
+    // On an explicit no, never on a silence. A server too old to carry
+    // the field, or one whose ownership lookup failed, says nothing -
+    // and refusing on that would hand an administrator a "not yours"
+    // page for an item that server would save. Unanswered, the editor
+    // opens exactly as it did before this field existed and the save is
+    // what refuses.
+    if (editor.value case final state? when state.metadata.mayCurate == false) {
+      return ForbiddenPage(
+        pageTitle: context.l10n.metadataTitle,
+        heading: context.l10n.metadataForbiddenTitle,
+        message: context.l10n.metadataForbiddenMessage,
+        glyph: WaxIcons.edit,
+        semanticsId: SemanticsIds.metadataForbidden,
+      );
+    }
     return WaxScaffold(
       title: context.l10n.metadataTitle,
       largeTitle: false,
@@ -822,7 +889,7 @@ class _FieldRow extends StatelessWidget {
       children: <Widget>[
         Expanded(
           child: WaxTextField(
-            label: field.name,
+            label: metadataFieldLabel(l10n, field.name),
             controller: controller,
             semanticsId: SemanticsIds.metadataField(field.name),
           ),
