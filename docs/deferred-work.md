@@ -505,7 +505,14 @@ here waits on upstream.
   of patching the SDK. CI runs the browser suites on Linux, which is
   where they ratchet; the Makefile target carries the same note. Worth
   filing upstream (`path.posix.fromUri` is the one-line fix) if it is
-  still there on the next Flutter bump.
+  still there on the next Flutter bump. `--platform chrome` is itself
+  deprecated: 3.44 hides the option and marks it as for testing the
+  framework, removable at any time. It is still the only backend that
+  runs an `@TestOn('browser')` suite, and `-d chrome` is not the
+  replacement - `flutter test -d` applies to `package:integration_test`
+  alone, which rejects web devices outright. If the flag does go, these
+  two suites move to `flutter drive` plus chromedriver, or into the
+  Playwright suite under `e2e/`.
 - `[in-repo]` **The web has no gapless crossing, and a preload window
   is not the way to get one.** just_audio's web platform is a single
   `HTMLAudioElement` whose `src` is re-pointed on every source change,
