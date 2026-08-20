@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../fonts/wax_fonts.dart';
 import '../tokens/colors.dart';
@@ -26,6 +27,30 @@ enum WaxThemeVariant {
 
   Brightness get brightness =>
       this == WaxThemeVariant.light ? Brightness.light : Brightness.dark;
+}
+
+/// What the platform draws its own bars in, for one theme.
+///
+/// Android forces edge-to-edge, so the status-bar band is the app's
+/// canvas with the system's glyphs over it; left unsaid, those glyphs are
+/// whatever the framework last decided, which on a dark app under a light
+/// system is dark-on-dark. Transparent bands rather than tinted ones,
+/// because the content behind them is already the page.
+///
+/// `statusBarBrightness` is iOS's spelling and takes the *background's*
+/// brightness; `statusBarIconBrightness` is Android's and takes the
+/// icons'. They are opposites on purpose.
+SystemUiOverlayStyle waxOverlayStyle(WaxThemeVariant variant) {
+  final light = variant.brightness == Brightness.light;
+  return SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarBrightness: variant.brightness,
+    statusBarIconBrightness: light ? Brightness.dark : Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarIconBrightness: light
+        ? Brightness.dark
+        : Brightness.light,
+  );
 }
 
 /// Builds the app theme from the tokens.
@@ -118,6 +143,7 @@ ThemeData buildWaxTheme({
       centerTitle: false,
       titleTextStyle: WaxType.titleScreen.copyWith(color: colors.textPrimary),
       iconTheme: IconThemeData(color: colors.textPrimary, size: 22),
+      systemOverlayStyle: waxOverlayStyle(variant),
     ),
     cardTheme: CardThemeData(
       color: colors.surface1,

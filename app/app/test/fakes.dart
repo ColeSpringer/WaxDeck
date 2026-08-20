@@ -4576,6 +4576,11 @@ class FakeRepository implements WaxDeckRepository {
   /// Thrown by the stats endpoints when set.
   WaxDeckApiException? statsError;
 
+  /// Held open, every stats aggregate waits on it, so a test can watch
+  /// what a range change draws while the next one is genuinely in
+  /// flight.
+  Completer<void>? statsGate;
+
   /// Canned aggregates served by the stats endpoints.
   ListeningStats listeningStats = const ListeningStats(
     range: '30d',
@@ -4617,6 +4622,7 @@ class FakeRepository implements WaxDeckRepository {
     String? bucket,
   }) async {
     listeningStatsCalls.add((range: range, bucket: bucket));
+    await statsGate?.future;
     final error = statsError;
     if (error != null) throw error;
     return listeningStats;
@@ -4625,6 +4631,7 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<ListeningHeatmap> getListeningHeatmap({int? year}) async {
     heatmapCalls.add(year);
+    await statsGate?.future;
     final error = statsError;
     if (error != null) throw error;
     return heatmap;
@@ -4637,6 +4644,7 @@ class FakeRepository implements WaxDeckRepository {
     int? limit,
   }) async {
     topListCalls.add((kind: kind, range: range, limit: limit));
+    await statsGate?.future;
     final error = statsError;
     if (error != null) throw error;
     return topLists[kind] ?? TopList(kind: kind, range: range ?? '30d');

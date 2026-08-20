@@ -86,9 +86,41 @@ class WaxScaffold extends StatelessWidget {
   /// around its chrome, not around the content pane).
   static double barHeight(BuildContext context, {bool largeTitle = true}) =>
       MediaQuery.paddingOf(context).top +
-      (largeTitle ? _largeTitleHeight : kToolbarHeight);
+      (largeTitle ? largeTitleHeight(context) : kToolbarHeight);
 
-  static const double _largeTitleHeight = 112;
+  /// A window with no room to spend on chrome. A phone on its side is
+  /// 844 wide and 390 tall: wide enough to read as a large size class,
+  /// short enough that a deep band and a scaled title take a fifth of
+  /// what is left.
+  static const double _shortWindow = 600;
+
+  /// How tall the large title's band is, before the window's top inset.
+  ///
+  /// Narrow *or* short, because a phone pays for this twice: the bar is
+  /// `primary`, so it adds the status-bar inset on top of itself, and on
+  /// a 640 dp screen a fixed 112 put a fifth of the window above the
+  /// first row of content. Both, because the size class is a width and
+  /// answers `expanded` for a phone in landscape - the shallowest window
+  /// the app is ever drawn in. A shallow band still sits low and large,
+  /// which is the app's own chrome, but its title holds one size rather
+  /// than scaling as it collapses: there is no longer enough travel for
+  /// a scale to read as anything but a wobble.
+  static double largeTitleHeight(BuildContext context) =>
+      _shallow(context) ? shallowTitleHeight : deepTitleHeight;
+
+  /// The band's two depths, named so a test and a rail can say which one
+  /// they expect rather than repeating a number.
+  static const double shallowTitleHeight = 72;
+  static const double deepTitleHeight = 112;
+
+  /// How much bigger the title draws fully expanded. Material's own
+  /// default is 1.5, which needs a band deep enough to fall through.
+  static double _titleScale(BuildContext context) =>
+      _shallow(context) ? 1 : 1.5;
+
+  static bool _shallow(BuildContext context) =>
+      WaxSizeClass.of(context).isCompact ||
+      MediaQuery.sizeOf(context).height < _shortWindow;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +161,9 @@ class WaxScaffold extends StatelessWidget {
                   slivers: <Widget>[
                     SliverAppBar(
                       pinned: true,
-                      expandedHeight: largeTitle ? _largeTitleHeight : null,
+                      expandedHeight: largeTitle
+                          ? largeTitleHeight(context)
+                          : null,
                       backgroundColor: colors.canvas,
                       surfaceTintColor: Colors.transparent,
                       automaticallyImplyLeading: false,
@@ -154,6 +188,7 @@ class WaxScaffold extends StatelessWidget {
                             ),
                       flexibleSpace: largeTitle
                           ? FlexibleSpaceBar(
+                              expandedTitleScale: _titleScale(context),
                               titlePadding: EdgeInsetsDirectional.only(
                                 start: onBack == null
                                     ? sizeClass.gutter.horizontal / 2

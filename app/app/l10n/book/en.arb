@@ -232,6 +232,10 @@
   "@bookYes": {
     "description": "The value of a yes-or-no row in a book's edition details."
   },
+  "booksAddToLibrary": "Add to library",
+  "@booksAddToLibrary": {
+    "description": "Accessible name of the add control on the audiobook hub, which opens the same sheet home's does with the audiobook type chosen."
+  },
   "booksAuthorChip": "{name} ({count})",
   "@booksAuthorChip": {
     "description": "Chip narrowing the hub to one author, with how many books they have on the shelf.",

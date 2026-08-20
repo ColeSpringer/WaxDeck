@@ -6,7 +6,6 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
-import '../auth/auth_controller.dart';
 import '../downloads/downloads_controller.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
@@ -42,16 +41,15 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canUpload =
-        ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
     // The shelves are server-backed reads, so offline they have nothing
     // to say and the screen says that instead of drawing eight error
     // states.
     final offline = ref.watch(offlineProvider);
+    final canAdd = canAddToLibrary(ref);
     final l10n = context.l10n;
 
     return AudioDropArea(
-      enabled: canUpload && !offline,
+      enabled: canAdd,
       hint: l10n.uploadsDropHint,
       onDropped: (files) => uploadPickedFiles(context, ref, files),
       child: WaxScaffold(
@@ -68,7 +66,7 @@ class HomeScreen extends ConsumerWidget {
           // app's convention. Hidden without the upload right, which
           // every path behind it needs, and offline, where there is no
           // server to hand it to.
-          if (canUpload && !offline)
+          if (canAdd)
             WaxIconButton(
               glyph: WaxIcons.add,
               label: l10n.homeAddAction,
@@ -107,10 +105,10 @@ class _OnlineHome extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The same gate as the app bar's add: this widget only mounts
-    // online, so the offline half is already decided.
-    final canUpload =
-        ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
+    // The same gate as the app bar's add, read through the same helper:
+    // this widget only mounts online, so the offline half it also asks
+    // is already decided.
+    final canUpload = canAddToLibrary(ref);
     final l10n = context.l10n;
     return switch (ref.watch(libraryHasAnythingProvider)) {
       // A server with nothing in it gets the first-run state rather

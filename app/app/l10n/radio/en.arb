@@ -135,6 +135,10 @@
       }
     }
   },
+  "radioPinnedTitle": "Pinned",
+  "@radioPinnedTitle": {
+    "description": "Heading over the one or two pinned stations drawn as rows, below the count at which they draw as the dial instead."
+  },
   "radioPlaying": "Playing",
   "@radioPlaying": {
     "description": "Under a station's name while it is on, where the stream announces no track. Broadcasting has its own idiom in some languages, so this deliberately need not match the player's word for the same English."

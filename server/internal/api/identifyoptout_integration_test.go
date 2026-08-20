@@ -397,15 +397,18 @@ func TestDeclinedImportLinksItsEntities(t *testing.T) {
 		t.Fatalf("entry status = %q, want as-is", e.Status)
 	}
 
-	// Every dimension the file declared, straight off the import. Not
-	// `year`: a scanned file carrying the same DATE tag lands in
-	// [Unknown Year] too, so whatever that is, it is not something the
-	// as-is path does differently.
+	// Every dimension the file declared, straight off the import, `year`
+	// included. It used to be excluded: the fixture's DATE tag reached
+	// the MP3 as nothing at all, because the mpa muxer matches raw keys
+	// and knows only RECORDINGDATE, so [Unknown Year] was the honest
+	// answer for a file with no date frame in it. `fixtures` folds
+	// aliases onto canonical keys now, and the assertion is real.
 	for _, want := range []struct{ dimension, label string }{
 		{"artist", "Paper Radio"},
 		{"album-artist", "Paper Radio"},
 		{"album", "Long Wave"},
 		{"genre", "Ambient"},
+		{"year", "2019"},
 	} {
 		resp := get(t, h.ts, "/api/v1/library/facets?dimension="+want.dimension+"&limit=500", h.token)
 		page := decode[FacetPage](t, resp)

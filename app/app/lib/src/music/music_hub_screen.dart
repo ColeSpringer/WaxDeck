@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../auth/auth_controller.dart';
 import '../home/home_shelves.dart';
 import '../home/item_shelf.dart';
 import '../home/mix_shelf.dart';
@@ -11,7 +11,6 @@ import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import '../sync/sync_providers.dart';
 import '../uploads/add_to_library.dart';
 import 'music_controllers.dart';
 
@@ -93,7 +92,23 @@ class MusicHubScreen extends ConsumerWidget {
 
     return WaxScaffold(
       title: l10n.musicTitle,
-      actions: const <Widget>[SearchAction(), AccountAction()],
+      actions: <Widget>[
+        // The add every other hub has. It was only in the first-run
+        // invitation, which disappears the moment a library has anything
+        // in it - so the one section people add to most had no door
+        // after the first album. Same gate as home's, same sheet, with
+        // this section's type already chosen.
+        if (canAddToLibrary(ref))
+          WaxIconButton(
+            glyph: WaxIcons.add,
+            label: l10n.musicHubAddToLibrary,
+            semanticsId: SemanticsIds.musicAdd,
+            onPressed: () =>
+                showAddToLibrarySheet(context, ref, initial: MediaType.music),
+          ),
+        const SearchAction(),
+        const AccountAction(),
+      ],
       slivers: <Widget>[
         // Compact browses through a tile grid, two to a row. Anything
         // wider gets the slim chip row 6.3 asks for, so the content
@@ -181,12 +196,7 @@ class _AllEmptyInvitation extends ConsumerWidget {
     if (!answered || !empty) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
-    final canUpload =
-        ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
-    final offline = ref.watch(offlineProvider);
-    // The same gate home's add wears: the upload right, and a server to
-    // hand the files to.
-    final offerAdd = canUpload && !offline;
+    final offerAdd = canAddToLibrary(ref);
     final l10n = context.l10n;
     return SliverFillRemaining(
       hasScrollBody: false,

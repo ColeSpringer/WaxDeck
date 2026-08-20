@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"maps"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/colespringer/waxflow"
 	"github.com/colespringer/waxflow/container"
+	"github.com/colespringer/waxlabel/tag"
 )
 
 // Codec names an audio codec a Spec can ask for.
@@ -136,6 +136,11 @@ type route struct {
 	ext     string
 	format  string // WaxFlow TranscodeOptions.Format
 	variant string // WaxFlow TranscodeOptions.Container override
+
+	// Whether this route's muxer matches tag keys against a table of
+	// canonical names (ID3 and MP4 do; a Vorbis comment block takes what
+	// it is given). See canonicalTagKey.
+	canonicalKeys bool
 }
 
 // routes is the supported codec/container matrix. The MP4 routes use
@@ -152,14 +157,14 @@ var routes = map[Codec]map[Container]route{
 		ContainerMatroska: {ext: "mka", format: "flac", variant: "mka"},
 	},
 	CodecMP3: {
-		ContainerMP3: {ext: "mp3", format: "mp3"},
+		ContainerMP3: {ext: "mp3", format: "mp3", canonicalKeys: true},
 	},
 	CodecAAC: {
 		ContainerADTS: {ext: "aac", format: "aac", variant: "adts"},
-		ContainerMP4:  {ext: "m4a", format: "aac", variant: "progressive"},
+		ContainerMP4:  {ext: "m4a", format: "aac", variant: "progressive", canonicalKeys: true},
 	},
 	CodecALAC: {
-		ContainerMP4: {ext: "m4a", format: "alac", variant: "progressive"},
+		ContainerMP4: {ext: "m4a", format: "alac", variant: "progressive", canonicalKeys: true},
 	},
 	CodecOpus: {
 		ContainerOgg: {ext: "opus", format: "opus"},
@@ -514,7 +519,7 @@ func (s Spec) render(r route) ([]byte, error) {
 	opts := waxflow.TranscodeOptions{
 		Format:    r.format,
 		Container: r.variant,
-		Tags:      containerTags(s.Tags),
+		Tags:      containerTags(s.Tags, r),
 		Chapters:  containerChapters(s.Chapters),
 	}
 	if _, err := engine.Transcode(context.Background(), container.BytesSource(wav), "wav", dst, opts); err != nil {
@@ -525,15 +530,57 @@ func (s Spec) render(r route) ([]byte, error) {
 
 // containerTags converts the Spec's tag map to WaxFlow's slice form,
 // sorted by key so tagged output stays deterministic.
-func containerTags(m map[string]string) []container.Tag {
+//
+// Spellings are folded onto their canonical key only for the routes
+// whose muxers match on one. Everywhere else the caller's spelling is
+// what goes in the file, because that is what a real encoder writes and
+// imitating real files is the whole job here.
+func containerTags(m map[string]string, r route) []container.Tag {
 	if len(m) == 0 {
 		return nil
 	}
 	tags := make([]container.Tag, 0, len(m))
-	for _, k := range slices.Sorted(maps.Keys(m)) {
-		tags = append(tags, container.Tag{Key: k, Value: m[k]})
+	for k, v := range m {
+		key := strings.ToUpper(k)
+		if r.canonicalKeys {
+			key = canonicalTagKey(key)
+		}
+		tags = append(tags, container.Tag{Key: key, Value: v})
 	}
-	return tags
+	slices.SortFunc(tags, func(a, b container.Tag) int {
+		if c := strings.Compare(a.Key, b.Key); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Value, b.Value)
+	})
+	// Folding can bring two spellings onto one key - WaxLabel reads both
+	// DATE and YEAR as RECORDINGDATE - and a muxer handed the same field
+	// twice is not being asked a question it can answer. The sort above
+	// makes which one survives deterministic rather than map order.
+	return slices.CompactFunc(tags, func(a, b container.Tag) bool {
+		return a.Key == b.Key
+	})
+}
+
+// canonicalTagKey folds a caller's spelling onto the key the ID3 and MP4
+// tables match on.
+//
+// Those two do raw key matching against tables that know only canonical
+// names: an mpa muxer handed DATE writes no date frame at all, silently.
+// A Vorbis comment block is written verbatim instead, and a reader's
+// alias table picks DATE back up - so the same Spec produced a dated
+// FLAC and an undated MP3, and every test comparing the two read that as
+// a bug somewhere else. Folding everywhere would fix that by putting a
+// RECORDINGDATE= in a FLAC, which no ripper writes.
+//
+// WaxLabel's own table, rather than a second one here: it is what reads
+// these files back, so the two agree by construction.
+func canonicalTagKey(key string) string {
+	upper := strings.ToUpper(key)
+	if canonical, ok := tag.AliasKey(upper); ok {
+		return string(canonical)
+	}
+	return upper
 }
 
 // containerChapters converts the Spec's chapters to WaxFlow's form.

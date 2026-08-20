@@ -136,24 +136,61 @@ void main() {
   testWidgets('the grid lists every station and the dial only the pinned', (
     tester,
   ) async {
-    final container = _container(_repoWithFavorites(<String>['rs-2']));
+    final repo = _repoWithFavorites(<String>['rs-1', 'rs-2', 'rs-3']);
+    repo.radioStationsByPid['rs-4'] = _station('rs-4', name: 'Harbour AM');
+    final container = _container(repo);
     await _pumpHub(tester, container);
 
     // Every station is a row in the grid, which is the primary surface and
     // the one carrying the semantics.
-    expect(find.text('Coastal FM'), findsOneWidget);
+    expect(find.text('Coastal FM'), findsWidgets);
     expect(find.text('Deck Radio'), findsWidgets);
-    expect(find.text('Night Jazz'), findsOneWidget);
+    expect(find.text('Night Jazz'), findsWidgets);
+    expect(find.text('Harbour AM'), findsOneWidget);
 
-    // The dial holds the one pinned station.
+    // The dial holds the pinned three and not the fourth.
     expect(_byId(SemanticsIds.radioDial), findsOneWidget);
-    expect(container.read(radioDialProvider).map((s) => s.pid), ['rs-2']);
+    expect(container.read(radioDialProvider).map((s) => s.pid), [
+      'rs-1',
+      'rs-2',
+      'rs-3',
+    ]);
 
     // The logo band is decoration: the grid below has a row per station, so
     // twelve circular logos in the traversal order buy nothing and cost the
     // way out of them. The one tune control is not excluded, because it is
     // one control rather than twelve.
     expect(_byId(SemanticsIds.radioTune), findsOneWidget);
+  });
+
+  testWidgets('fewer pins than a dial needs draw as rows', (tester) async {
+    final container = _container(_repoWithFavorites(<String>['rs-2', 'rs-3']));
+    await _pumpHub(tester, container);
+
+    // Two pins is not a dial: the ticks would sweep a width nothing
+    // occupies and the needle would point through it.
+    expect(_byId(SemanticsIds.radioDial), findsNothing);
+    expect(_byId(SemanticsIds.radioTune), findsNothing);
+    expect(find.text('Pinned'), findsOneWidget);
+    expect(_byId(SemanticsIds.radioPinned('rs-2')), findsOneWidget);
+    expect(_byId(SemanticsIds.radioPinned('rs-3')), findsOneWidget);
+    // A row is a shortcut over the grid, never a second copy of it: the
+    // unpinned station has no row of its own up here.
+    expect(_byId(SemanticsIds.radioPinned('rs-1')), findsNothing);
+  });
+
+  testWidgets('a pinned row tunes the station it names', (tester) async {
+    final container = _container(_repoWithFavorites(<String>['rs-2']));
+    await _pumpHub(tester, container);
+
+    await tester.tap(_byId(SemanticsIds.radioPinned('rs-2')));
+    await tester.pumpAndSettle();
+
+    expect(container.read(radioPlaybackProvider).station?.pid, 'rs-2');
+
+    // A tuned station polls its title on a timer of its own.
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a station logo is asked for through the proxy, never the '
@@ -199,12 +236,12 @@ void main() {
     await _pumpHub(tester, container);
 
     expect(container.read(radioDialProvider), isEmpty);
-    expect(_byId(SemanticsIds.radioDial), findsNothing);
+    expect(_byId(SemanticsIds.radioPinned('rs-1')), findsNothing);
 
     await tester.tap(_byId(SemanticsIds.radioFavorite('rs-1')));
     await tester.pumpAndSettle();
     expect(container.read(radioDialProvider).map((s) => s.pid), ['rs-1']);
-    expect(_byId(SemanticsIds.radioDial), findsOneWidget);
+    expect(_byId(SemanticsIds.radioPinned('rs-1')), findsOneWidget);
     // Per account, so the pin is on the phone too and signing out takes it
     // with the account rather than leaving it on a shared machine.
     expect(repo.prefs.radioFavorites, ['rs-1']);
@@ -212,6 +249,7 @@ void main() {
     await tester.tap(_byId(SemanticsIds.radioFavorite('rs-1')));
     await tester.pumpAndSettle();
     expect(container.read(radioDialProvider), isEmpty);
+    expect(_byId(SemanticsIds.radioPinned('rs-1')), findsNothing);
     // An empty list is a value, not a "keep": copyWith treats only null
     // that way, so the last unpin carries through.
     expect(repo.prefs.radioFavorites, isEmpty);

@@ -1,10 +1,10 @@
 // Radio: the hub, the dial, and the deck bar a live stream drives.
 
-import { Locator } from '@playwright/test';
+import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickInView, clickThrough } from '../gestures';
+import { clickInView } from '../gestures';
 
 export class Radio extends Surface {
   /// One station's row in the library.
@@ -12,10 +12,17 @@ export class Radio extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.radio(pid)));
   }
 
-  /// The band under the needle. Drawn only once something is pinned: a
-  /// dial with nothing on it is a stripe of chrome.
+  /// The band under the needle. Drawn only once three stations are
+  /// pinned: below that the ticks sweep a width nothing occupies and the
+  /// needle points through it, so the pins draw as rows instead.
   dial(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.radioDial));
+  }
+
+  /// One pinned station's row, which is what a dial too short to be one
+  /// draws in its place.
+  pinnedRow(pid: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.radioPinned(pid)));
   }
 
   /// The dial's own control, which names what it will do.
@@ -30,31 +37,53 @@ export class Radio extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.searchAction));
   }
 
-  /// Pin a station, which is what brings the dial into existence.
+  /// Pin a station, and hold to the star saying so.
   async pin(pid: string): Promise<void> {
-    await clickThrough(
-      this.ctx.page.locator(sem(SemanticsIds.radioFavorite(pid))),
-      this.dial(),
-    );
+    await this.setPinned(pid, true);
   }
 
-  /// Unpin it. Forced, and with nothing to settle on here: what the
-  /// unpin did - the dial going away, the stored list clearing - is the
-  /// spec's assertion.
+  /// Unpin it, and hold to the star saying so.
   async unpin(pid: string): Promise<void> {
-    await this.ctx.page
-      .locator(sem(SemanticsIds.radioFavorite(pid)))
-      .click({ force: true });
+    await this.setPinned(pid, false);
   }
 
-  /// Tune the dial in, which takes the engine.
+  /// Drive one star to a state, reading the state off the star itself.
   ///
-  /// clickInView: the dial has only just appeared and is settling into
-  /// place, so its control is a moving target for a single forced click.
-  /// The deck bar is what proves the tune took.
-  async tuneIn(): Promise<void> {
+  /// Not off the pinned surface, which is rebuilt whole on every change -
+  /// rows below three pins, the band at three - so a gesture settling on
+  /// one can catch it mid-rebuild, read the wrong thing and fire a second
+  /// click that toggles the pin straight back. The star lives on the
+  /// station's tile in the grid, which does not move, and its accessible
+  /// name is the pin's own state.
+  private async setPinned(pid: string, pinned: boolean): Promise<void> {
+    const star = this.ctx.page.locator(sem(SemanticsIds.radioFavorite(pid)));
+    const settled = pinned ? /^Unpin / : /^Pin /;
+    // One computation for the guard and for the assertion. Read by hand
+    // - aria-label with a textContent fallback - they disagree: a flutter
+    // node often carries its name in a child span, so the raw text
+    // arrives padded with newlines and an anchored regex misses it. The
+    // helper then clicks again and unpins what it just pinned.
+    const already = () =>
+      expect(star)
+        .toHaveAccessibleName(settled, { timeout: T.step })
+        .then(() => true, () => false);
+    await expect(async () => {
+      if (!(await already())) {
+        await star.click({ timeout: 2_000, force: true }).catch(() => {});
+      }
+      await expect(star).toHaveAccessibleName(settled, { timeout: T.step });
+    }).toPass({ timeout: T.nav });
+  }
+
+  /// Tune a pinned station in from the surface that holds it, which
+  /// takes the engine.
+  ///
+  /// clickInView: the pinned surface has only just appeared and is
+  /// settling into place, so its control is a moving target for a single
+  /// forced click. The deck bar is what proves the tune took.
+  async tuneIn(target: Locator): Promise<void> {
     const bar = this.deckBar();
-    await clickInView(this.ctx.page, this.tune(), { settled: bar });
+    await clickInView(this.ctx.page, target, { settled: bar });
     await bar.waitFor({ timeout: T.nav });
   }
 

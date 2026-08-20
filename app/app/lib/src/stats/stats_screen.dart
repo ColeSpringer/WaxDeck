@@ -106,8 +106,11 @@ class _ListeningSection extends ConsumerWidget {
     final stats = ref.watch(listeningStatsProvider);
     final bucket = ref.watch(statsBucketProvider);
     final l10n = context.l10n;
-    return switch (stats) {
-      AsyncData(:final value) => Column(
+    return _SectionFace<ListeningStats>(
+      state: stats,
+      skeleton: SkeletonShape.detail,
+      onRetry: () => ref.invalidate(listeningStatsProvider),
+      builder: (context, value) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Wrap(
@@ -167,12 +170,7 @@ class _ListeningSection extends ConsumerWidget {
           ],
         ],
       ),
-      AsyncError(:final error) => _StatsError(
-        error: error,
-        onRetry: () => ref.invalidate(listeningStatsProvider),
-      ),
-      _ => const SkeletonShapes(shape: SkeletonShape.detail),
-    };
+    );
   }
 
   /// First and last bucket dates only; a label on every bar would just
@@ -274,8 +272,11 @@ class _HeatmapSection extends ConsumerWidget {
     final heatmap = ref.watch(listeningHeatmapProvider);
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
-    return switch (heatmap) {
-      AsyncData(:final value) => Column(
+    return _SectionFace<ListeningHeatmap>(
+      state: heatmap,
+      skeleton: SkeletonShape.detail,
+      onRetry: () => ref.invalidate(listeningHeatmapProvider),
+      builder: (context, value) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           SectionHeader(
@@ -296,12 +297,7 @@ class _HeatmapSection extends ConsumerWidget {
           ),
         ],
       ),
-      AsyncError(:final error) => _StatsError(
-        error: error,
-        onRetry: () => ref.invalidate(listeningHeatmapProvider),
-      ),
-      _ => const SkeletonShapes(shape: SkeletonShape.detail),
-    };
+    );
   }
 
   static String _summary(AppLocalizations l10n, ListeningHeatmap heatmap) {
@@ -353,28 +349,27 @@ class _TopListsSection extends ConsumerWidget {
           onSelect: (value) => ref.read(topKindProvider.notifier).select(value),
         ),
         const SizedBox(height: WaxSpace.s8),
-        switch (top) {
-          AsyncData(:final value) when value.entries.isEmpty => EmptyState(
-            title: l10n.statsTopEmptyTitle,
-            message: l10n.statsTopEmptyMessage(kind),
-            glyph: WaxIcons.stats,
-          ),
-          AsyncData(:final value) => Column(
-            children: <Widget>[
-              for (var i = 0; i < value.entries.length; i++)
-                TopEntryRow(
-                  index: i,
-                  entry: value.entries[i],
-                  kind: value.kind,
+        _SectionFace<TopList>(
+          state: top,
+          skeleton: SkeletonShape.list,
+          onRetry: () => ref.invalidate(topListProvider),
+          builder: (context, value) => value.entries.isEmpty
+              ? EmptyState(
+                  title: l10n.statsTopEmptyTitle,
+                  message: l10n.statsTopEmptyMessage(kind),
+                  glyph: WaxIcons.stats,
+                )
+              : Column(
+                  children: <Widget>[
+                    for (var i = 0; i < value.entries.length; i++)
+                      TopEntryRow(
+                        index: i,
+                        entry: value.entries[i],
+                        kind: value.kind,
+                      ),
+                  ],
                 ),
-            ],
-          ),
-          AsyncError(:final error) => _StatsError(
-            error: error,
-            onRetry: () => ref.invalidate(topListProvider),
-          ),
-          _ => const SkeletonShapes(shape: SkeletonShape.list),
-        },
+        ),
       ],
     );
   }
@@ -443,16 +438,117 @@ class _Doors extends StatelessWidget {
   );
 }
 
+/// One section drawn from the last value it held, whatever the load
+/// state, with the next one crossfading in when it lands.
+///
+/// Changing the range rebuilds the provider, and Riverpod hands that
+/// rebuild an `AsyncLoading` still carrying the previous value - a
+/// runtime type no `case AsyncData` matches, so a switch over the state
+/// alone drops every section to a skeleton and reflows the page twice
+/// per change. `search_screen.dart` writes this trap up at its directory
+/// results; `review_screen.dart` answers it the way this does, by
+/// reading `.value` first. A failure still displaces the numbers - the
+/// chip was pressed and something has to say it did not take - but a
+/// load in flight does not.
+///
+/// `hasError` rather than `case AsyncError` for the same reason the
+/// directory results give: Riverpod retries a failed fetch on its own,
+/// and a retry in flight is an `AsyncLoading` still carrying the failure
+/// it is retrying.
+class _SectionFace<T> extends StatelessWidget {
+  const _SectionFace({
+    required this.state,
+    required this.skeleton,
+    required this.onRetry,
+    required this.builder,
+  });
+
+  final AsyncValue<T> state;
+  final SkeletonShape skeleton;
+  final VoidCallback onRetry;
+  final Widget Function(BuildContext context, T value) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = state.value;
+    final Widget face;
+    if (state case AsyncValue<T>(hasError: true, :final error?)) {
+      face = _StatsError(
+        key: const ValueKey<String>('failed'),
+        error: error,
+        onRetry: onRetry,
+        // A retry keeps this face rather than flashing the skeleton, so
+        // the control has to be what says the press took. Riverpod's own
+        // retry lands here too, which is right: the button cannot be
+        // pressed into a fetch that is already running.
+        retrying: state.isLoading,
+      );
+    } else if (value != null) {
+      // Keyed on the value's identity: a fetch that lands is a new
+      // object, which is what tells the switcher to cross rather than
+      // to update the numbers in place.
+      face = KeyedSubtree(
+        key: ObjectKey(value),
+        child: builder(context, value),
+      );
+    } else {
+      face = SkeletonShapes(
+        key: const ValueKey<String>('loading'),
+        shape: skeleton,
+      );
+    }
+    return AnimatedSwitcher(
+      duration: WaxMotion.of(context).standard,
+      switchInCurve: WaxMotion.easeOut,
+      switchOutCurve: WaxMotion.easeOut,
+      layoutBuilder: _newestSizes,
+      child: face,
+    );
+  }
+
+  /// The arriving face sizes the section; the leaving one fades out
+  /// pinned to the top at its own height. The default builder sizes to
+  /// the taller of the two, which would hold a section open for the
+  /// length of the fade every time the numbers shortened.
+  static Widget _newestSizes(Widget? current, List<Widget> previous) => Stack(
+    alignment: AlignmentDirectional.topStart,
+    children: <Widget>[
+      // The leaving face is excluded from semantics for the length of
+      // the fade. `FadeTransition` drops a subtree only at exactly zero
+      // opacity, so without this every identified control in the section
+      // exists twice while it crosses - two "Group by" controls to a
+      // screen reader, and two matches to a spec locating one.
+      for (final child in previous)
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: ExcludeSemantics(child: child),
+        ),
+      ?current,
+    ],
+  );
+}
+
 class _StatsError extends StatelessWidget {
-  const _StatsError({required this.error, required this.onRetry});
+  const _StatsError({
+    super.key,
+    required this.error,
+    required this.onRetry,
+    this.retrying = false,
+  });
 
   final Object error;
   final VoidCallback onRetry;
+
+  /// Whether the fetch this reports is already being tried again.
+  final bool retrying;
 
   @override
   Widget build(BuildContext context) => ErrorState(
     title: context.l10n.statsLoadError,
     message: context.explain(error),
     onRetry: onRetry,
+    retrying: retrying,
   );
 }

@@ -49,16 +49,17 @@ class PrefsController extends AsyncNotifier<Prefs> {
     return mine;
   }
 
-  /// Stores a new theme preference. The endpoint replaces the whole
-  /// document, so the update must start from the loaded value: building
-  /// it from an empty default while the initial fetch is still in
-  /// flight would wipe the stored timezone and locale. An early tap
-  /// waits for the load instead.
-  Future<void> setTheme(ThemePref theme) =>
-      _write((current) => current.copyWith(theme: theme));
-
-  /// Stores the shared-stats opt-out. Same replace semantics as
-  /// [setTheme].
+  /// Stores the shared-stats opt-out.
+  ///
+  /// The endpoint replaces the whole document, so every update here
+  /// starts from the loaded value: building one from an empty default
+  /// while the initial fetch is still in flight would wipe the stored
+  /// timezone and locale. An early tap waits for the load instead.
+  ///
+  /// There is deliberately no writer for `theme`. It is a per-device
+  /// setting now (`ThemeSetting`), and the wire field is deprecated -
+  /// still read once, on a device that has none of its own, so a choice
+  /// made before the move is not silently reset.
   Future<void> setSharedStatsOptOut(bool optOut) =>
       _write((current) => current.copyWith(sharedStatsOptOut: optOut));
 
@@ -69,7 +70,7 @@ class PrefsController extends AsyncNotifier<Prefs> {
       _write((current) => current.copyWith(timezone: timezone));
 
   /// Stores the BCP 47 tag the interface draws in. Same replace
-  /// semantics as [setTheme].
+  /// semantics as [setSharedStatsOptOut].
   Future<void> setLocale(String tag) =>
       _write((current) => current.copyWith(locale: tag));
 
@@ -131,7 +132,8 @@ class PrefsController extends AsyncNotifier<Prefs> {
 
   /// Stores the pinned radio stations, in dial order.
   ///
-  /// Same replace semantics as [setTheme], and the same reason for starting
+  /// Same replace semantics as [setSharedStatsOptOut], and the same
+  /// reason for starting
   /// from the loaded document: a pin made before the first fetch lands
   /// would otherwise write a document holding one list and no timezone.
   ///
@@ -186,17 +188,20 @@ final localeOverrideProvider = Provider<Locale?>((ref) {
   return supportedLocaleFor(tag);
 });
 
-/// Material theme mode derived from the synced preference. The unset
+/// Material theme mode derived from this device's preference. The unset
 /// state follows the platform: someone who never chose a theme has told
 /// the OS what they like, not this app, and dark-on-a-light-desktop was
 /// read as a bug. A stored choice is untouched.
+///
+/// Per device rather than per account since [ThemeSetting]: a theme
+/// describes the screen being looked at, so a `light` chosen on the web
+/// no longer follows the phone. The account's field is still on the wire
+/// and deprecated, read exactly once by that setting's adoption.
 final themeModeProvider = Provider<ThemeMode>((ref) {
-  final prefs = ref.watch(prefsControllerProvider).value;
-  return switch (prefs?.theme) {
+  return switch (ref.watch(themeSettingProvider)) {
     ThemePref.system => ThemeMode.system,
     ThemePref.light => ThemeMode.light,
     ThemePref.dark || ThemePref.oled => ThemeMode.dark,
-    null => ThemeMode.system,
   };
 });
 
@@ -204,10 +209,9 @@ final themeModeProvider = Provider<ThemeMode>((ref) {
 ///
 /// OLED is a parameter of the dark build rather than a third theme, so a
 /// visitor who asked for true black gets it wherever the platform (or
-/// [themeModeProvider]) resolves to dark. Density comes from the other
-/// side of the settings line: it describes the screen in front of the
-/// listener, so it is per-device where the theme is the
-/// account's.
+/// [themeModeProvider]) resolves to dark. Every field here is per-device
+/// now, the theme included: each describes the screen in front of the
+/// listener rather than the account behind it.
 class WaxThemeSpec {
   const WaxThemeSpec({
     required this.mode,
@@ -249,10 +253,9 @@ class WaxThemeSpec {
 }
 
 final waxThemeSpecProvider = Provider<WaxThemeSpec>((ref) {
-  final prefs = ref.watch(prefsControllerProvider).value;
   return WaxThemeSpec(
     mode: ref.watch(themeModeProvider),
-    oled: prefs?.theme == ThemePref.oled,
+    oled: ref.watch(themeSettingProvider) == ThemePref.oled,
     density: ref.watch(densityProvider),
     artworkGlow: ref.watch(artworkGlowProvider),
     captions: ref.watch(cardCaptionsEffectiveProvider),

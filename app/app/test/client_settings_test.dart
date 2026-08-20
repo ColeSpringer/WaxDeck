@@ -5,8 +5,11 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/settings/client_settings/browser_settings_store.dart';
+import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
+import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/shell/adaptive_shell.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -62,6 +65,30 @@ class ThrowingClientSettingsStore implements ClientSettingsStore {
 
   @override
   Future<void> remove(String key) async => throw StateError('no removals');
+}
+
+/// A store that refuses writes to one key. The shape a real one fails
+/// in: a mirror locked by another connection, a quota reached partway
+/// through a launch.
+class PickyClientSettingsStore implements ClientSettingsStore {
+  PickyClientSettingsStore(this.refuse);
+
+  /// The key whose writes throw. Everything else behaves.
+  final String refuse;
+
+  final MemoryClientSettingsStore _kept = MemoryClientSettingsStore();
+
+  @override
+  Future<String?> read(String key) => _kept.read(key);
+
+  @override
+  Future<void> write(String key, String value) async {
+    if (key == refuse) throw StateError('cannot write $key');
+    await _kept.write(key, value);
+  }
+
+  @override
+  Future<void> remove(String key) => _kept.remove(key);
 }
 
 /// A preference whose decode throws, which is the other way a stored
@@ -439,6 +466,157 @@ void main() {
       expect(container.read(explodingSettingProvider), 'default');
       await Future<void>.delayed(Duration.zero);
       expect(container.read(explodingSettingProvider), 'default');
+    });
+  });
+
+  group('adopting the account theme', () {
+    const user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
+
+    ProviderContainer over(
+      ClientSettingsStore store,
+      ThemePref? account, {
+      bool signedIn = true,
+    }) {
+      final repo = FakeRepository()
+        ..sessionState = SessionState(
+          authenticated: signedIn,
+          user: signedIn ? user : null,
+        )
+        ..prefs = Prefs(theme: account);
+      final container = ProviderContainer(
+        overrides: [
+          clientSettingsStoreProvider.overrideWithValue(store),
+          repositoryProvider.overrideWithValue(repo),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    /// A launch: build the notifier, let the document and the store
+    /// answer, and say what the theme came out as.
+    Future<ThemePref> launch(
+      ClientSettingsStore store,
+      ThemePref? account,
+    ) async {
+      final container = over(store, account);
+      // Listened, not read: the notifier has to still be alive when the
+      // document lands, which is the rebuild the adoption rides.
+      container.listen(themeSettingProvider, (_, _) {});
+      await container.read(prefsControllerProvider.future);
+      for (var i = 0; i < 6; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      return container.read(themeSettingProvider);
+    }
+
+    test(
+      'a device with nothing of its own takes what the account had',
+      () async {
+        // The upgrade this exists for: somebody deliberately chose OLED
+        // back when the theme was the account's, and the build that made
+        // it per-device must not silently return them to the system's.
+        final store = MemoryClientSettingsStore();
+
+        expect(await launch(store, ThemePref.oled), ThemePref.oled);
+        expect(await store.read(ClientSettingKeys.theme), 'oled');
+        expect(await store.read(ClientSettingKeys.themeAdopted), isNotNull);
+      },
+    );
+
+    test('a device that already chose keeps its own', () async {
+      final store = MemoryClientSettingsStore();
+      await store.write(ClientSettingKeys.theme, 'dark');
+
+      expect(await launch(store, ThemePref.light), ThemePref.dark);
+      expect(await store.read(ClientSettingKeys.theme), 'dark');
+    });
+
+    test('an account theme set after the first launch is not taken', () async {
+      // The whole point of the move, and the failure a device found:
+      // the first launch had nothing to adopt, so with only an
+      // in-memory guard the question was asked again next launch - and
+      // a `light` set from another client retook a phone that had
+      // never been told to follow the account.
+      final store = MemoryClientSettingsStore();
+
+      expect(await launch(store, null), ThemePref.system);
+      expect(await store.read(ClientSettingKeys.themeAdopted), isNotNull);
+
+      expect(
+        await launch(store, ThemePref.light),
+        ThemePref.system,
+        reason: 'the account stopped deciding at the first launch',
+      );
+      expect(await store.read(ClientSettingKeys.theme), isNull);
+    });
+
+    test('a signed-out launch does not spend the question', () async {
+      // Signed out the document is the empty default, not the account's.
+      // Marking the question answered there would drop the theme of
+      // everybody who installs the app and signs in after - which is
+      // every fresh install of the build that moved the setting.
+      final store = MemoryClientSettingsStore();
+      final signedOut = over(store, null, signedIn: false);
+      signedOut.listen(themeSettingProvider, (_, _) {});
+      await signedOut.read(prefsControllerProvider.future);
+      for (var i = 0; i < 6; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(await store.read(ClientSettingKeys.themeAdopted), isNull);
+
+      expect(await launch(store, ThemePref.oled), ThemePref.oled);
+    });
+
+    test('signing in takes the account theme, not the document it '
+        'replaces', () async {
+      // The failure a device found. Riverpod keeps a provider's previous
+      // value while it reloads, so for the frames just after signing in
+      // the document is the signed-out empty one with `hasValue` true.
+      // Reading the theme there answers null, and the question is spent:
+      // the marker lands, nothing is taken, and the listener's `light`
+      // is gone for good.
+      final store = MemoryClientSettingsStore();
+      final container = over(store, ThemePref.light, signedIn: false);
+      container.listen(themeSettingProvider, (_, _) {});
+      await container.read(prefsControllerProvider.future);
+      for (var i = 0; i < 6; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      await container
+          .read(authControllerProvider.notifier)
+          .login(username: 'admin', password: 'wax');
+      for (var i = 0; i < 8; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(container.read(themeSettingProvider), ThemePref.light);
+      expect(await store.read(ClientSettingKeys.theme), 'light');
+    });
+
+    test('a theme that will not store leaves the question open', () async {
+      // The mark is what makes this unrepeatable, so it must not outlive
+      // a failed write of the theme it records. Marked first, a store
+      // that drops the value at launch would lose a deliberate OLED for
+      // good; this way the next launch asks again.
+      final store = PickyClientSettingsStore(ClientSettingKeys.theme);
+
+      expect(await launch(store, ThemePref.oled), ThemePref.system);
+      expect(await store.read(ClientSettingKeys.themeAdopted), isNull);
+    });
+
+    test('a taken theme is not taken again after being changed back', () async {
+      // Adopt OLED, then set the system back by hand. The account still
+      // says OLED, and the next launch must leave the newer choice
+      // alone.
+      final store = MemoryClientSettingsStore();
+      expect(await launch(store, ThemePref.oled), ThemePref.oled);
+
+      await store.write(ClientSettingKeys.theme, 'system');
+
+      expect(await launch(store, ThemePref.oled), ThemePref.system);
     });
   });
 

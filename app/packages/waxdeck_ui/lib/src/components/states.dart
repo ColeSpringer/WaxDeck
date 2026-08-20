@@ -107,6 +107,7 @@ class ErrorState extends StatelessWidget {
     required this.message,
     this.title,
     this.onRetry,
+    this.retrying = false,
     this.detail,
     this.semanticsId,
     this.retrySemanticsId,
@@ -118,6 +119,12 @@ class ErrorState extends StatelessWidget {
   final String? title;
   final String message;
   final VoidCallback? onRetry;
+
+  /// Whether the retry is already running. The button stays where it is
+  /// and disables, rather than going away: a control that vanishes under
+  /// the finger reads as a mis-tap, and one that looks live for the
+  /// length of a slow fetch reads as dead.
+  final bool retrying;
 
   /// The technical line, for the power-user channel: set in mono, shown
   /// under the human sentence, never instead of it.
@@ -186,7 +193,7 @@ class ErrorState extends StatelessWidget {
                     label: l10n.statesTryAgain,
                     kind: WaxButtonKind.tonal,
                     icon: WaxIcons.refresh,
-                    onPressed: onRetry,
+                    onPressed: retrying ? null : onRetry,
                     semanticsId: retrySemanticsId,
                   ),
                 ],

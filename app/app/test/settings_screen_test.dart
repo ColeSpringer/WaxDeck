@@ -516,7 +516,9 @@ void main() {
       expect(choice.value, ThemePref.system);
     });
 
-    testWidgets('the theme picker stores the preference', (tester) async {
+    testWidgets('the theme picker stores the preference on this device', (
+      tester,
+    ) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
       await tester.pumpWidget(_section(repo, SettingsSection.appearance));
@@ -528,7 +530,53 @@ void main() {
       await tester.tap(find.text('Light').last);
       await tester.pumpAndSettle();
 
-      expect(repo.prefs.theme, ThemePref.light);
+      final container = _container(tester, SettingsSectionScreen);
+      expect(container.read(themeSettingProvider), ThemePref.light);
+      // And not on the account: a light picked on the web used to follow
+      // the phone carried outdoors.
+      expect(repo.prefs.theme, isNull);
+      expect(container.read(themeModeProvider), ThemeMode.light);
+    });
+
+    testWidgets('the row says the choice stays on this device', (tester) async {
+      _tallWindow(tester);
+      await tester.pumpWidget(
+        _section(_signedInRepo(), SettingsSection.appearance),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Set on this device; your other devices keep their own'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a theme chosen before the move is adopted, once', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo()..prefs = const Prefs(theme: ThemePref.oled);
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await tester.pumpAndSettle();
+
+      // Without this, everybody who deliberately chose dark or OLED is
+      // silently flipped to follow-the-system by the upgrade.
+      final container = _container(tester, SettingsSectionScreen);
+      expect(container.read(themeSettingProvider), ThemePref.oled);
+      expect(container.read(waxThemeSpecProvider).oled, isTrue);
+
+      // Once: a device that has since chosen for itself keeps its own
+      // answer whatever the account still holds.
+      await _show(tester, find.bySemanticsIdentifier(SemanticsIds.themeSelect));
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.themeSelect));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Light').last);
+      await tester.pumpAndSettle();
+      expect(container.read(themeSettingProvider), ThemePref.light);
+
+      container.invalidate(prefsControllerProvider);
+      await container.read(prefsControllerProvider.future);
+      await tester.pumpAndSettle();
+      expect(container.read(themeSettingProvider), ThemePref.light);
     });
 
     testWidgets('the language picker stores a tag and clears it again', (

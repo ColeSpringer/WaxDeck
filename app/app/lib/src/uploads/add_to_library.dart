@@ -3,12 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/sync_providers.dart';
 import '../tools/tasks_screen.dart';
 import 'file_picker_port.dart';
 import 'uploads_controller.dart';
@@ -16,6 +18,20 @@ import 'uploads_controller.dart';
 /// The one place new audio enters the library: a URL to acquire or a
 /// file to upload, both landing in the review queue. Shared by the add
 /// button and the uploads screen so there is one flow.
+
+/// Whether this session can be offered a way in at all: the upload right,
+/// which every path behind the sheet needs, and a server to hand the
+/// files to.
+///
+/// One reading for the four surfaces that draw an add - home, the music
+/// and audiobook hubs, and the music hub's own first-run invitation -
+/// because a control that appears on three of them and not the fourth is
+/// how the music hub came to have none.
+bool canAddToLibrary(WidgetRef ref) {
+  final canUpload =
+      ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
+  return canUpload && !ref.watch(offlineProvider);
+}
 
 /// Opens the add sheet, defaulting the media type to [initial] (the
 /// section the caller is in). Podcasts are added by subscribing, not
@@ -35,58 +51,63 @@ Future<void> showAddToLibrarySheet(
     backgroundColor: colors.surface2,
     showDragHandle: true,
     builder: (sheetContext) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          WaxSpace.s16,
-          0,
-          WaxSpace.s16,
-          WaxSpace.s24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            SectionHeader(
-              title: sheetContext.l10n.uploadsAddTitle,
-              overline: sheetContext.l10n.uploadsAddOverline,
-            ),
-            WaxOptionRow(
-              title: sheetContext.l10n.uploadsFromUrl,
-              subtitle: sheetContext.l10n.uploadsFromUrlSubtitle,
-              glyph: WaxIcons.downloads,
-              semanticsId: SemanticsIds.addFromUrl,
-              onTap: () => Navigator.of(sheetContext).pop('url'),
-            ),
-            if (picker != null)
-              WaxOptionRow(
-                title: sheetContext.l10n.uploadsPick,
-                subtitle: sheetContext.l10n.uploadsPickSubtitle,
-                glyph: WaxIcons.add,
-                semanticsId: SemanticsIds.addUploadFile,
-                onTap: () => Navigator.of(sheetContext).pop('file'),
+      // Scrollable, because the sheet is capped at a fraction of the
+      // window and four rows plus a header do not fit a phone held
+      // sideways. It still sizes to its content wherever they do.
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            WaxSpace.s16,
+            0,
+            WaxSpace.s16,
+            WaxSpace.s24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SectionHeader(
+                title: sheetContext.l10n.uploadsAddTitle,
+                overline: sheetContext.l10n.uploadsAddOverline,
               ),
-            if (picker != null && picker.canPickFolders)
               WaxOptionRow(
-                title: sheetContext.l10n.uploadsPickFolder,
-                subtitle: sheetContext.l10n.uploadsPickFolderSubtitle,
-                glyph: WaxIcons.albums,
-                semanticsId: SemanticsIds.addUploadFolder,
-                onTap: () => Navigator.of(sheetContext).pop('folder'),
+                title: sheetContext.l10n.uploadsFromUrl,
+                subtitle: sheetContext.l10n.uploadsFromUrlSubtitle,
+                glyph: WaxIcons.downloads,
+                semanticsId: SemanticsIds.addFromUrl,
+                onTap: () => Navigator.of(sheetContext).pop('url'),
               ),
-            // What was added before, and the quota it is spending. This
-            // sheet is the + control the uploads list stopped being a
-            // navigation destination in favour of, so it is where the
-            // lasting door to that list belongs: the other two ways in -
-            // a notification about an upload, a review entry's origin
-            // line - are news, and news is gone by the next launch.
-            WaxOptionRow(
-              title: sheetContext.l10n.uploadsSessionsTitle,
-              subtitle: sheetContext.l10n.uploadsSessionsSubtitle,
-              glyph: WaxIcons.recent,
-              semanticsId: SemanticsIds.addUploadSessions,
-              onTap: () => Navigator.of(sheetContext).pop('sessions'),
-            ),
-          ],
+              if (picker != null)
+                WaxOptionRow(
+                  title: sheetContext.l10n.uploadsPick,
+                  subtitle: sheetContext.l10n.uploadsPickSubtitle,
+                  glyph: WaxIcons.add,
+                  semanticsId: SemanticsIds.addUploadFile,
+                  onTap: () => Navigator.of(sheetContext).pop('file'),
+                ),
+              if (picker != null && picker.canPickFolders)
+                WaxOptionRow(
+                  title: sheetContext.l10n.uploadsPickFolder,
+                  subtitle: sheetContext.l10n.uploadsPickFolderSubtitle,
+                  glyph: WaxIcons.albums,
+                  semanticsId: SemanticsIds.addUploadFolder,
+                  onTap: () => Navigator.of(sheetContext).pop('folder'),
+                ),
+              // What was added before, and the quota it is spending. This
+              // sheet is the + control the uploads list stopped being a
+              // navigation destination in favour of, so it is where the
+              // lasting door to that list belongs: the other two ways in -
+              // a notification about an upload, a review entry's origin
+              // line - are news, and news is gone by the next launch.
+              WaxOptionRow(
+                title: sheetContext.l10n.uploadsSessionsTitle,
+                subtitle: sheetContext.l10n.uploadsSessionsSubtitle,
+                glyph: WaxIcons.recent,
+                semanticsId: SemanticsIds.addUploadSessions,
+                onTap: () => Navigator.of(sheetContext).pop('sessions'),
+              ),
+            ],
+          ),
         ),
       ),
     ),

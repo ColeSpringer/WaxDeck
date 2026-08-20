@@ -109,6 +109,23 @@ void main() {
                       onPressed: () {},
                     ),
                     const SizedBox(height: 8),
+                    WaxButton(
+                      label: 'See all',
+                      kind: WaxButtonKind.text,
+                      onPressed: () {},
+                    ),
+                    const SizedBox(height: 8),
+                    // Last, and against the same left edge as the
+                    // paragraph under it: the inline kind exists so a
+                    // link reads as part of the prose rather than as a
+                    // pill nudged a fifth of an inch to the side.
+                    WaxButton(
+                      label: 'Show more',
+                      kind: WaxButtonKind.inline,
+                      onPressed: () {},
+                    ),
+                    const Text('Body text this has to line up with.'),
+                    const SizedBox(height: 8),
                     const WaxButton(label: 'Disabled', onPressed: null),
                   ],
                 ),

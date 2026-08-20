@@ -9357,7 +9357,8 @@ export interface components {
              */
             locale?: string;
             /**
-             * @description Preferred app theme.
+             * @deprecated
+             * @description Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients.
              * @enum {string}
              */
             theme?: "system" | "dark" | "light" | "oled";

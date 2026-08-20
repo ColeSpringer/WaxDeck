@@ -26,6 +26,7 @@
   "radioNeedsUrl": "Una emisora necesita la URL de un stream.",
   "radioNoMatches": "Sin coincidencias",
   "radioPin": "Fijar {name} en el dial",
+  "radioPinnedTitle": "Fijadas",
   "radioPlaying": "En antena",
   "radioRemoveStation": "Quitar la emisora",
   "radioSaveChanges": "Guardar los cambios",

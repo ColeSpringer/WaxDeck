@@ -82,6 +82,33 @@ List<String> _order(WidgetTester tester) => <String>[
 ];
 
 void main() {
+  testWidgets('an uploader gets the add every other hub has', (tester) async {
+    final repo = _repo()
+      ..sessionState = const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-01JZX5N8QW3F4V9T2B7KDUPLOAD',
+          username: 'uploader',
+          roles: <String>['member'],
+          uploadEnabled: true,
+        ),
+      );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(_byId(SemanticsIds.booksAdd), findsOneWidget);
+    await _tap(tester, SemanticsIds.booksAdd);
+    expect(_byId(SemanticsIds.addFromUrl), findsOneWidget);
+  });
+
+  testWidgets('a listener without the upload right gets no add', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_repo()));
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.booksAdd), findsNothing);
+  });
+
   testWidgets('the grid holds the audiobooks and nothing else', (tester) async {
     await tester.pumpWidget(_host(_repo()));
     await tester.pumpAndSettle();

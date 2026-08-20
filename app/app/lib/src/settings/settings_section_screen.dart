@@ -756,19 +756,17 @@ class _AppearanceBody extends ConsumerWidget {
           children: <Widget>[
             WaxSettingRow(
               title: l10n.settingsThemeTitle,
-              // The Appearance settings that follow the account rather
-              // than the device, which is why they say so.
-              help: l10n.settingsFollowsAccountHelp,
+              // This device's, not the account's: the screen being
+              // looked at is what a theme is about.
+              help: l10n.settingsThemeHelp,
               control: WaxChoice<ThemePref>(
-                value: prefs?.theme ?? ThemePref.system,
+                value: ref.watch(themeSettingProvider),
                 options: ThemePref.values,
                 labelFor: (theme) => _themeLabel(l10n, theme),
                 label: l10n.settingsThemeTitle,
                 semanticsId: SemanticsIds.themeSelect,
-                onChanged: prefs == null
-                    ? null
-                    : (theme) =>
-                          saveSetting(context, prefsController.setTheme(theme)),
+                onChanged: (theme) =>
+                    ref.read(themeSettingProvider.notifier).set(theme),
               ),
             ),
           ],

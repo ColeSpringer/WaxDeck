@@ -45,6 +45,7 @@
   "bookVoiceBoost": "Realce de voz",
   "bookVoiceBoostHelp": "Hace que la voz destaque en un sitio ruidoso",
   "bookYes": "Sí",
+  "booksAddToLibrary": "Añadir a la biblioteca",
   "booksAuthorChip": "{name} ({count})",
   "booksContinueOverline": "A medias",
   "booksContinueTitle": "Seguir escuchando",

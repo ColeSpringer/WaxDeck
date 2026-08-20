@@ -391,6 +391,7 @@ class _Parser {
     while (runs.isNotEmpty && runs.last.text.trim().isEmpty) {
       runs.removeLast();
     }
+    _collapseBlankRuns();
     if (runs.isNotEmpty) {
       final blockKind = quote > 0 && kind == ShowNotesBlockKind.paragraph
           ? ShowNotesBlockKind.blockquote
@@ -400,6 +401,42 @@ class _Parser {
     runs.clear();
     kind = ShowNotesBlockKind.paragraph;
     marker = null;
+  }
+
+  /// Squashes an interior stretch of blank runs down to one separator.
+  ///
+  /// Feeds lay their notes out with `<br>`, and often with five or six of
+  /// them between paragraphs; each becomes its own literal newline run.
+  /// The edge trim above only reaches a block's two ends, so the interior
+  /// ones survive, and a clamped height then spends itself drawing blank
+  /// lines with the text that was worth reading clipped below them. One
+  /// blank line still separates what the feed meant to separate.
+  ///
+  /// A `<pre>` block is exempt: there the whitespace is the content.
+  void _collapseBlankRuns() {
+    if (kind == ShowNotesBlockKind.pre) return;
+    var i = 0;
+    while (i < runs.length) {
+      if (runs[i].text.trim().isNotEmpty) {
+        i++;
+        continue;
+      }
+      var end = i;
+      var breaks = 0;
+      while (end < runs.length && runs[end].text.trim().isEmpty) {
+        breaks += '\n'.allMatches(runs[end].text).length;
+        end++;
+      }
+      // Unstyled on purpose: a bolded or linked gap is a wider tap
+      // target and an underline running past the word it belongs to.
+      final separator = switch (breaks) {
+        0 => ' ',
+        1 => '\n',
+        _ => '\n\n',
+      };
+      runs.replaceRange(i, end, <ShowNotesRun>[ShowNotesRun(separator)]);
+      i++;
+    }
   }
 
   static String _decodeEntities(String s) {

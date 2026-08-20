@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
 import 'package:waxdeck/src/home/pinned_controller.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
@@ -71,6 +72,9 @@ Future<ProviderContainer> _pump(
   final container = ProviderContainer(
     overrides: [
       repositoryProvider.overrideWithValue(repository),
+      // The session is read by anything gated on a right, and the real
+      // store would go to the keychain.
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
       if (engine) audioEngineProvider.overrideWithValue(FakeEngine()),
       if (prefs != null)
         prefsControllerProvider.overrideWith(() => _StubPrefs(prefs)),
@@ -928,6 +932,36 @@ void main() {
         reason: '$name has no tile',
       );
     }
+  });
+
+  testWidgets('an uploader gets the add every other hub has', (tester) async {
+    final repository = FakeRepository(items: <ItemSummary>[_track('Coastal')])
+      ..sessionState = const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-01JZX5N8QW3F4V9T2B7KDUPLOAD',
+          username: 'uploader',
+          roles: <String>['member'],
+          uploadEnabled: true,
+        ),
+      );
+    await _pump(tester, const MusicHubScreen(), repository);
+
+    // A library with something in it: the first-run invitation that used
+    // to carry the only add is long gone by here.
+    expect(find.bySemanticsIdentifier(SemanticsIds.musicAdd), findsOneWidget);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.musicAdd));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsIdentifier(SemanticsIds.addFromUrl), findsOneWidget);
+  });
+
+  testWidgets('a listener without the upload right gets no add', (
+    tester,
+  ) async {
+    final repository = FakeRepository(items: <ItemSummary>[_track('Coastal')]);
+    await _pump(tester, const MusicHubScreen(), repository);
+    expect(find.bySemanticsIdentifier(SemanticsIds.musicAdd), findsNothing);
   });
 
   testWidgets('compact browses through tiles; wide gets the chip row', (

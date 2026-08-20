@@ -116,6 +116,10 @@ gen.PrefsThemeEnum themePrefToGen(ThemePref theme) =>
     gen.PrefsThemeEnum.valueOf(theme.wireName);
 
 Prefs prefsFromGen(gen.Prefs prefs) {
+  // Deprecated on the wire and still read here on purpose: the theme is
+  // a per-device setting now, and a device with none of its own adopts
+  // the account's once so a choice made before the move is not reset.
+  // ignore: deprecated_member_use
   final theme = prefs.theme;
   final favorites = prefs.radioFavorites;
   final sorts = prefs.browseSorts;

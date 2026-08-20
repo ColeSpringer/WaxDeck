@@ -17,6 +17,7 @@ import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/file_picker_port.dart';
+import 'add_podcast.dart';
 import 'episode_actions.dart';
 import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
@@ -592,95 +593,6 @@ class _LatestEpisodes extends ConsumerWidget {
           const SizedBox(height: WaxSpace.s32),
         ],
       ),
-    );
-  }
-}
-
-/// URL entry plus a source-type toggle; the subscribe call surfaces
-/// server errors (feed-unreachable and friends) as a SnackBar.
-class SubscribeDialog extends ConsumerStatefulWidget {
-  const SubscribeDialog({super.key});
-
-  @override
-  ConsumerState<SubscribeDialog> createState() => _SubscribeDialogState();
-}
-
-class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
-  final _urlController = TextEditingController();
-  var _sourceType = 'rss';
-  var _busy = false;
-
-  @override
-  void dispose() {
-    _urlController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _subscribe() async {
-    final url = _urlController.text.trim();
-    if (url.isEmpty || _busy) return;
-    setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-    final l10n = context.l10n;
-    try {
-      await ref
-          .read(subscriptionsProvider.notifier)
-          .subscribe(url: url, sourceType: _sourceType);
-      navigator.pop();
-    } on WaxDeckApiException catch (e) {
-      // The URL was just typed, so the server's own words about it:
-      // "the feed's own server did not answer" names the address.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return AlertDialog(
-      title: Text(l10n.podcastAddSubscription),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          // No Semantics identifier wrapper: on the web it would mint a
-          // second, disabled text-field node beside the real input.
-          // Tests locate the field by its label, like the login form.
-          TextField(
-            key: const Key('podcast-url-field'),
-            controller: _urlController,
-            decoration: InputDecoration(labelText: l10n.podcastFeedUrlLabel),
-            keyboardType: TextInputType.url,
-            autofocus: true,
-          ),
-          const SizedBox(height: WaxSpace.s12),
-          WaxSegmented(
-            label: l10n.podcastSourceLabel,
-            segments: <WaxSegment>[
-              WaxSegment(name: 'rss', label: l10n.podcastSourceRss),
-              WaxSegment(name: 'youtube', label: l10n.podcastSourceYouTube),
-            ],
-            selected: _sourceType,
-            onSelect: (name) => setState(() => _sourceType = name),
-          ),
-        ],
-      ),
-      actions: <Widget>[
-        WaxButton(
-          label: l10n.commonCancel,
-          kind: WaxButtonKind.text,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        WaxButton(
-          label: l10n.podcastSubscribeAction,
-          semanticsId: SemanticsIds.podcastSubscribeConfirm,
-          onPressed: _busy ? null : _subscribe,
-        ),
-      ],
     );
   }
 }

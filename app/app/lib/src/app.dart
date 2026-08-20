@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -52,11 +53,41 @@ class WaxDeckApp extends ConsumerWidget {
       // can be read from.
       builder: (context, child) => MiniWindowGate(
         child: _ReducedMotion(
-          child: LocaleFontWarmup(child: _BootGate(child: child!)),
+          child: LocaleFontWarmup(
+            child: _SystemBars(child: _BootGate(child: child!)),
+          ),
         ),
       ),
     );
   }
+}
+
+/// Says what the platform should draw its own bars in.
+///
+/// Android forces edge-to-edge, so the status bar sits over the app's own
+/// canvas; with nothing declared, its glyphs are whatever the framework
+/// last set, which under a dark app on a light-themed device is dark on
+/// dark. The app bars carry the same answer through
+/// `AppBarTheme.systemOverlayStyle`; this covers everything that draws no
+/// app bar - the fullscreen player, the visualizer, the boot screen.
+///
+/// Below `Theme`, deliberately: it reads the theme the app actually
+/// resolved rather than the preference, so following the system means
+/// following it here too.
+class _SystemBars extends StatelessWidget {
+  const _SystemBars({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+    value: waxOverlayStyle(
+      Theme.of(context).brightness == Brightness.light
+          ? WaxThemeVariant.light
+          : WaxThemeVariant.dark,
+    ),
+    child: child,
+  );
 }
 
 /// Applies the in-app reduce-motion override.

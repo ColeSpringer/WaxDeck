@@ -6,8 +6,16 @@
     <style name="LaunchTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
         <item name="android:windowSplashScreenBackground">@color/wax_canvas</item>
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/splash_icon</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
     </style>
+    <!-- DayNight carries an action bar, which the NoTitleBar parents below
+         API 31 do not: without these two the activity label draws in a
+         system bar above the Flutter canvas. There is no
+         DayNight.NoActionBar to inherit from, so it is said by hand. -->
     <style name="NormalTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
         <item name="android:windowBackground">@color/wax_canvas</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
     </style>
 </resources>

@@ -1941,6 +1941,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bookYes => 'Sí';
 
   @override
+  String get booksAddToLibrary => 'Añadir a la biblioteca';
+
+  @override
   String booksAuthorChip(String name, int count) {
     return '$name ($count)';
   }
@@ -5233,6 +5236,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistsTitle => 'Listas de reproducción';
 
   @override
+  String get podcastAddByUrl => 'Añadir por URL';
+
+  @override
   String get podcastAddSubscription => 'Añadir una suscripción';
 
   @override
@@ -5557,6 +5563,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Este feed no ha publicado nada que este servidor pueda ver.';
 
   @override
+  String get podcastNoMatches => 'Sin coincidencias';
+
+  @override
   String get podcastNoNewEpisodes => 'No hay episodios nuevos';
 
   @override
@@ -5675,6 +5684,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastRetentionLabel => 'Episodios que conservar';
 
   @override
+  String get podcastSearchDirectory => 'Buscar en el directorio';
+
+  @override
+  String podcastSearchFailedHint(String reason) {
+    return '$reason Suscríbete con la URL de un feed desde \"Añadir por URL\".';
+  }
+
+  @override
   String get podcastSearchShow => 'Buscar en este programa';
 
   @override
@@ -5741,6 +5758,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get podcastShowMoreNotes => 'Ver más';
+
+  @override
+  String get podcastShowName => 'Nombre del programa';
 
   @override
   String get podcastSkipIntro => 'Saltar la intro (segundos)';
@@ -6085,6 +6105,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String radioPin(String name) {
     return 'Fijar $name en el dial';
   }
+
+  @override
+  String get radioPinnedTitle => 'Fijadas';
 
   @override
   String get radioPlaying => 'En antena';
@@ -7858,6 +7881,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsThemeDark => 'Oscuro';
+
+  @override
+  String get settingsThemeHelp =>
+      'Se define en este dispositivo; los demás conservan el suyo';
 
   @override
   String get settingsThemeKeywords => 'oscuro, claro, oled, negro';

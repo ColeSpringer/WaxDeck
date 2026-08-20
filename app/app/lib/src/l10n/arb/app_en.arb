@@ -2621,6 +2621,10 @@
   "@bookYes": {
     "description": "The value of a yes-or-no row in a book's edition details."
   },
+  "booksAddToLibrary": "Add to library",
+  "@booksAddToLibrary": {
+    "description": "Accessible name of the add control on the audiobook hub, which opens the same sheet home's does with the audiobook type chosen."
+  },
   "booksAuthorChip": "{name} ({count})",
   "@booksAuthorChip": {
     "description": "Chip narrowing the hub to one author, with how many books they have on the shelf.",
@@ -4921,7 +4925,7 @@
   },
   "musicHubAddToLibrary": "Add to library",
   "@musicHubAddToLibrary": {
-    "description": "Button on the music hub's first-run invitation, opening the sheet that adds files."
+    "description": "Accessible name of the add control on the music hub, and the button on its first-run invitation. Both open the sheet that adds files."
   },
   "musicHubEmptyMessage": "Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.",
   "@musicHubEmptyMessage": {
@@ -6903,6 +6907,10 @@
   "@playlistsTitle": {
     "description": "The screen holding every playlist, named on its own title and on the music hub tile that opens it."
   },
+  "podcastAddByUrl": "Add by URL",
+  "@podcastAddByUrl": {
+    "description": "Disclosure under the podcast directory search, opening the feed-URL path. A YouTube channel and a private feed have no directory entry, so this stays reachable."
+  },
   "podcastAddSubscription": "Add subscription",
   "@podcastAddSubscription": {
     "description": "Toolbar action opening the dialog that follows a new show, and that dialog's own title."
@@ -7317,6 +7325,10 @@
   "@podcastNoEpisodesMessage": {
     "description": "Message under the no-episodes state."
   },
+  "podcastNoMatches": "No matches",
+  "@podcastNoMatches": {
+    "description": "Shown in the add dialog when the podcast directory answered with nothing."
+  },
   "podcastNoNewEpisodes": "No new episodes",
   "@podcastNoNewEpisodes": {
     "description": "Snackbar after a feed check that found nothing."
@@ -7465,6 +7477,19 @@
   "@podcastRetentionLabel": {
     "description": "Field bounding how many of a show's downloads the server holds."
   },
+  "podcastSearchDirectory": "Search directory",
+  "@podcastSearchDirectory": {
+    "description": "Label of the podcast directory search box in the add dialog, and of the button that runs it."
+  },
+  "podcastSearchFailedHint": "{reason} Subscribe with a feed URL instead, under \"Add by URL\".",
+  "@podcastSearchFailedHint": {
+    "description": "Shown when the podcast directory could not be searched. {reason} is the sentence naming the failure; the rest points at the path that still works.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "podcastSearchShow": "Search this show",
   "@podcastSearchShow": {
     "description": "Field narrowing a show's loaded episodes to the ones whose title matches."
@@ -7560,6 +7585,10 @@
   "podcastShowMoreNotes": "Show more",
   "@podcastShowMoreNotes": {
     "description": "Expands a show's or an episode's notes past the height they are clamped to."
+  },
+  "podcastShowName": "Show name",
+  "@podcastShowName": {
+    "description": "Placeholder in the add dialog's directory search box, saying what to type."
   },
   "podcastSkipIntro": "Skip intro (seconds)",
   "@podcastSkipIntro": {
@@ -8041,6 +8070,10 @@
         "example": "SomaFM Groove Salad"
       }
     }
+  },
+  "radioPinnedTitle": "Pinned",
+  "@radioPinnedTitle": {
+    "description": "Heading over the one or two pinned stations drawn as rows, below the count at which they draw as the dial instead."
   },
   "radioPlaying": "Playing",
   "@radioPlaying": {
@@ -9446,7 +9479,7 @@
   },
   "settingsFollowsAccountHelp": "Follows you to your other devices",
   "@settingsFollowsAccountHelp": {
-    "description": "The line under the two Appearance settings stored on the account rather than on this device: the theme and the language."
+    "description": "The line under the Appearance setting stored on the account rather than on this device: the language."
   },
   "settingsGridLarge": "Large",
   "@settingsGridLarge": {
@@ -10292,6 +10325,10 @@
   "settingsThemeDark": "Dark",
   "@settingsThemeDark": {
     "description": "Theme option: the dark palette."
+  },
+  "settingsThemeHelp": "Set on this device; your other devices keep their own",
+  "@settingsThemeHelp": {
+    "description": "The line under the theme setting, which is per device: a phone carried outdoors and a desktop in a dark room are not one choice."
   },
   "settingsThemeKeywords": "dark, light, oled, black",
   "@settingsThemeKeywords": {

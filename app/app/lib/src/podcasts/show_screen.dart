@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -799,31 +800,208 @@ class CollapsibleNotes extends ConsumerStatefulWidget {
 
 class _CollapsibleNotesState extends ConsumerState<CollapsibleNotes> {
   var _open = false;
+  var _overflows = false;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: _open ? double.infinity : widget.collapsedTo,
-          ),
-          child: ClipRect(
-            child: ShowNotesView(
-              html: widget.html,
-              onOpenLink: ref.read(urlOpenerProvider).open,
-            ),
+        _ClampedBox(
+          budget: widget.collapsedTo,
+          clamped: !_open,
+          onOverflow: (value) {
+            if (!mounted || value == _overflows) return;
+            setState(() => _overflows = value);
+          },
+          child: ShowNotesView(
+            html: widget.html,
+            onOpenLink: ref.read(urlOpenerProvider).open,
           ),
         ),
-        WaxButton(
-          label: _open
-              ? context.l10n.podcastShowLessNotes
-              : context.l10n.podcastShowMoreNotes,
-          kind: WaxButtonKind.text,
-          onPressed: () => setState(() => _open = !_open),
-        ),
+        // Only where there is more to show: a one-line description used
+        // to get a control that unfolded nothing.
+        if (_overflows)
+          WaxButton(
+            label: _open
+                ? context.l10n.podcastShowLessNotes
+                : context.l10n.podcastShowMoreNotes,
+            // Aligned with the notes it opens rather than indented a
+            // pill's padding past them.
+            kind: WaxButtonKind.inline,
+            onPressed: () => setState(() => _open = !_open),
+          ),
       ],
+    );
+  }
+}
+
+/// Clamps its child to a pixel budget and reports whether there was more.
+///
+/// A budget cannot be answered from the widget layer: the notes are
+/// arbitrary blocks, so the only thing that knows they ran past it is the
+/// layout that clipped them. This lays the child out with the height it
+/// asks for, keeps the answer, and takes only as much of it as the budget
+/// allows - which is what lets the control above appear when there is
+/// something behind it and stay away when there is not.
+///
+/// The report is against [budget] whether or not [clamped] is set, so an
+/// opened block still knows it has something to fold back.
+class _ClampedBox extends SingleChildRenderObjectWidget {
+  const _ClampedBox({
+    required this.budget,
+    required this.clamped,
+    required this.onOverflow,
+    required Widget super.child,
+  });
+
+  final double budget;
+  final bool clamped;
+  final ValueChanged<bool> onOverflow;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderClampedBox(budget, clamped, onOverflow);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderClampedBox renderObject,
+  ) {
+    renderObject
+      ..budget = budget
+      ..clamped = clamped
+      ..onOverflow = onOverflow;
+  }
+}
+
+class _RenderClampedBox extends RenderProxyBox {
+  _RenderClampedBox(this._budget, this._clamped, this.onOverflow);
+
+  /// Half a pixel: a block whose height lands on the budget by rounding
+  /// is not something to offer a reader more of, and reporting it would
+  /// flip the control on and off as the window resized.
+  static const double _epsilon = 0.5;
+
+  double _budget;
+  double get budget => _budget;
+  set budget(double value) {
+    if (value == _budget) return;
+    _budget = value;
+    markNeedsLayout();
+  }
+
+  bool _clamped;
+  bool get clamped => _clamped;
+  set clamped(bool value) {
+    if (value == _clamped) return;
+    _clamped = value;
+    markNeedsLayout();
+  }
+
+  ValueChanged<bool> onOverflow;
+
+  bool? _reported;
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    child.layout(
+      BoxConstraints(
+        minWidth: constraints.minWidth,
+        maxWidth: constraints.maxWidth,
+      ),
+      parentUsesSize: true,
+    );
+    final natural = child.size.height;
+    final overflows = natural - _budget > _epsilon;
+    // The same test decides the clip and the control. Told apart - a
+    // bare `>` here against the epsilon below - notes laid out a third
+    // of a pixel over their budget are cut off while the control that
+    // opens them is withheld, which is the failure this box exists to
+    // end.
+    size = constraints.constrain(
+      Size(child.size.width, _clamped && overflows ? _budget : natural),
+    );
+    if (overflows == _reported) return;
+    _reported = overflows;
+    // After the frame rather than during it: the caller answers by
+    // rebuilding, and a setState inside layout is a build reentering
+    // itself.
+    WidgetsBinding.instance.addPostFrameCallback((_) => onOverflow(overflows));
+  }
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      _clamp(super.computeMinIntrinsicHeight(width));
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      _clamp(super.computeMaxIntrinsicHeight(width));
+
+  double _clamp(double height) =>
+      _clamped && height > _budget ? _budget : height;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final child = this.child;
+    if (child == null) return constraints.smallest;
+    final natural = child.getDryLayout(
+      BoxConstraints(
+        minWidth: constraints.minWidth,
+        maxWidth: constraints.maxWidth,
+      ),
+    );
+    return constraints.constrain(Size(natural.width, _clamp(natural.height)));
+  }
+
+  /// Whether anything of the child falls outside what this box took.
+  ///
+  /// Geometry rather than [_clamped]: `performLayout` hands the child
+  /// unbounded height and then constrains itself, so under a height-
+  /// bounding ancestor an unclamped box is still smaller than what it
+  /// holds - and painting that unclipped runs the notes over whatever
+  /// is drawn below them.
+  bool get _clips => child != null && child!.size.height > size.height;
+
+  /// Kept so the engine reuses one retained layer instead of taking a
+  /// new one every paint, the way [RenderClipRect] does.
+  final LayerHandle<ClipRectLayer> _clipLayer = LayerHandle<ClipRectLayer>();
+
+  @override
+  void dispose() {
+    _clipLayer.layer = null;
+    super.dispose();
+  }
+
+  /// What a reader can actually see, so the semantics tree stops where
+  /// the paint does. Without it the clipped-away notes stay in the tree:
+  /// a screen reader reads a whole page of description beside a control
+  /// that says "Show more", and on the web their nodes keep emitting at
+  /// un-clamped offsets over the rows below.
+  @override
+  Rect? describeApproximatePaintClip(RenderObject child) =>
+      _clips ? Offset.zero & size : null;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child == null) return;
+    if (!_clips) {
+      _clipLayer.layer = null;
+      context.paintChild(child, offset);
+      return;
+    }
+    _clipLayer.layer = context.pushClipRect(
+      needsCompositing,
+      offset,
+      Offset.zero & size,
+      (context, offset) => context.paintChild(child, offset),
+      oldLayer: _clipLayer.layer,
     );
   }
 }

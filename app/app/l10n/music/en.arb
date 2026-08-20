@@ -252,7 +252,7 @@
   },
   "musicHubAddToLibrary": "Add to library",
   "@musicHubAddToLibrary": {
-    "description": "Button on the music hub's first-run invitation, opening the sheet that adds files."
+    "description": "Accessible name of the add control on the music hub, and the button on its first-run invitation. Both open the sheet that adds files."
   },
   "musicHubEmptyMessage": "Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.",
   "@musicHubEmptyMessage": {

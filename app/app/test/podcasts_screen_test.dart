@@ -31,6 +31,13 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
+/// Opens the add dialog's expert path: pasting a feed URL is a
+/// disclosure under the name search now, not the first thing asked.
+Future<void> _openUrlPath(WidgetTester tester) async {
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAddByUrl));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('lists the caller subscriptions', (tester) async {
     final repo = FakeRepository()
@@ -165,12 +172,89 @@ void main() {
     expect(find.text('Add a show'), findsOneWidget);
   });
 
+  testWidgets('the add dialog starts from a name and subscribes to a match', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..podcastDirectoryEntries = const <PodcastDirectoryEntry>[
+        PodcastDirectoryEntry(
+          name: 'Pipeweed Economics',
+          feedUrl: 'https://pony.example/feed.xml',
+          author: 'Barliman Butterbur',
+        ),
+      ];
+    await _pump(tester, repo);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAdd));
+    await tester.pumpAndSettle();
+
+    // The name is the primary input, and the URL field is not even
+    // drawn until somebody asks for it.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSearchField),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('podcast-url-field')), findsNothing);
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSearchField),
+      'pipeweed',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastSearchRun));
+    await tester.pumpAndSettle();
+
+    expect(repo.podcastDirectoryQueries, ['pipeweed']);
+    expect(find.text('Pipeweed Economics'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSearchSubscribe(0)),
+    );
+    await tester.pumpAndSettle();
+
+    // A directory match is always an RSS feed, so no kind is sent.
+    expect(repo.subscribeCalls, hasLength(1));
+    expect(repo.subscribeCalls.single.url, 'https://pony.example/feed.xml');
+    expect(repo.subscribeCalls.single.sourceType, isNull);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSearchField),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a directory that will not answer opens the URL path', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..podcastDirectoryError = const WaxDeckApiException(
+        code: 'internal',
+        message: 'the index did not answer',
+        statusCode: 502,
+      );
+    await _pump(tester, repo);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAdd));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSearchField),
+      'pipeweed',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastSearchRun));
+    await tester.pumpAndSettle();
+
+    // Said, and opened: with no directory the feed URL is the only way
+    // through, so it is not left behind a disclosure nobody would think
+    // to press.
+    expect(find.textContaining('Subscribe with a feed URL'), findsOneWidget);
+    expect(find.byKey(const Key('podcast-url-field')), findsOneWidget);
+  });
+
   testWidgets('the subscribe dialog flow adds a tile', (tester) async {
     final repo = FakeRepository();
     await _pump(tester, repo);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAdd));
     await tester.pumpAndSettle();
+    await _openUrlPath(tester);
     await tester.enterText(
       find.byKey(const Key('podcast-url-field')),
       'https://pony.example/feed.xml',
@@ -194,6 +278,7 @@ void main() {
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAdd));
     await tester.pumpAndSettle();
+    await _openUrlPath(tester);
     await tester.enterText(
       find.byKey(const Key('podcast-url-field')),
       'https://tube.example/@pony',
@@ -221,6 +306,7 @@ void main() {
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAdd));
     await tester.pumpAndSettle();
+    await _openUrlPath(tester);
     await tester.enterText(
       find.byKey(const Key('podcast-url-field')),
       'https://dead.example/feed.xml',

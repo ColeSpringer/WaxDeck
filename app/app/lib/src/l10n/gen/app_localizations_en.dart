@@ -1907,6 +1907,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bookYes => 'Yes';
 
   @override
+  String get booksAddToLibrary => 'Add to library';
+
+  @override
   String booksAuthorChip(String name, int count) {
     return '$name ($count)';
   }
@@ -5167,6 +5170,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistsTitle => 'Playlists';
 
   @override
+  String get podcastAddByUrl => 'Add by URL';
+
+  @override
   String get podcastAddSubscription => 'Add subscription';
 
   @override
@@ -5487,6 +5493,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'This feed has published nothing this server can see.';
 
   @override
+  String get podcastNoMatches => 'No matches';
+
+  @override
   String get podcastNoNewEpisodes => 'No new episodes';
 
   @override
@@ -5605,6 +5614,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastRetentionLabel => 'Episodes to keep';
 
   @override
+  String get podcastSearchDirectory => 'Search directory';
+
+  @override
+  String podcastSearchFailedHint(String reason) {
+    return '$reason Subscribe with a feed URL instead, under \"Add by URL\".';
+  }
+
+  @override
   String get podcastSearchShow => 'Search this show';
 
   @override
@@ -5671,6 +5688,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get podcastShowMoreNotes => 'Show more';
+
+  @override
+  String get podcastShowName => 'Show name';
 
   @override
   String get podcastSkipIntro => 'Skip intro (seconds)';
@@ -6012,6 +6032,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String radioPin(String name) {
     return 'Pin $name to the dial';
   }
+
+  @override
+  String get radioPinnedTitle => 'Pinned';
 
   @override
   String get radioPlaying => 'Playing';
@@ -7745,6 +7768,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsThemeDark => 'Dark';
+
+  @override
+  String get settingsThemeHelp =>
+      'Set on this device; your other devices keep their own';
 
   @override
   String get settingsThemeKeywords => 'dark, light, oled, black';

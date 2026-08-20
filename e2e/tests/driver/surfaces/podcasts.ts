@@ -37,15 +37,26 @@ export class Podcasts extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.episodeInfo(pid)));
   }
 
-  /// Subscribe through the real add dialog.
+  /// Subscribe through the real add dialog, by feed URL.
   ///
-  /// The open retries as a unit: a click over canvas can be swallowed
-  /// while Flutter's handlers are still attaching, and a swallowed click
-  /// here means the dialog never appears at all.
+  /// The dialog opens on a directory search now, so the URL path is a
+  /// disclosure under it: open the dialog, open the disclosure, then
+  /// type. Opening the dialog retries as a unit, because a click over
+  /// canvas can be swallowed while Flutter's handlers are still
+  /// attaching.
+  ///
+  /// The disclosure does not, and must not: `clickThrough` re-fires its
+  /// trigger on every attempt the goal is missing, and this trigger is a
+  /// toggle - one slow frame and the retry closes what the last attempt
+  /// opened, and every attempt after that is a coin flip. Same reason
+  /// `chooseFromMenu` exists. One click, then wait for what it reveals.
   async subscribeViaDialog(feedUrl: string): Promise<void> {
     const page = this.ctx.page;
+    const byUrl = page.locator(sem(SemanticsIds.podcastAddByUrl));
     const confirm = page.locator(sem(SemanticsIds.podcastSubscribeConfirm));
-    await clickThrough(this.add(), confirm);
+    await clickThrough(this.add(), byUrl);
+    await byUrl.click({ timeout: T.step });
+    await confirm.waitFor({ timeout: T.nav });
     await typeInto(page, page.getByRole('textbox', { name: 'Feed or channel URL' }), feedUrl);
     await confirm.click();
   }

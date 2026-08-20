@@ -74,6 +74,11 @@ class _ComponentsPageState extends State<ComponentsPage> {
               onPressed: () {},
             ),
             WaxButton(
+              label: 'Show more',
+              kind: WaxButtonKind.inline,
+              onPressed: () {},
+            ),
+            WaxButton(
               label: 'Delete library',
               kind: WaxButtonKind.destructive,
               icon: WaxIcons.delete,

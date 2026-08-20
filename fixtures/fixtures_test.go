@@ -1,6 +1,8 @@
 package fixtures_test
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"io"
@@ -14,6 +16,8 @@ import (
 	"github.com/colespringer/waxflow/codec"
 	"github.com/colespringer/waxflow/container"
 	"github.com/colespringer/waxflow/format"
+	"github.com/colespringer/waxlabel"
+	"github.com/colespringer/waxlabel/tag"
 
 	"github.com/colespringer/waxdeck/fixtures"
 )
@@ -312,5 +316,70 @@ func TestFilenames(t *testing.T) {
 	}
 	if strings.Contains(fixtures.Spec{Codec: "nope"}.Filename(), "flac") {
 		t.Error("unsupported codec leaked a real extension")
+	}
+}
+
+// TestTagAliasesReachEveryContainer pins that a caller's tag spelling
+// lands in the file whatever the container's own key table knows.
+//
+// The muxers match raw keys: the mpa table knows RECORDINGDATE and not
+// DATE, so a DATE-tagged MP3 used to carry no date frame at all while
+// the Vorbis muxer wrote the caller's key verbatim and a reader's alias
+// table picked it back up. Every test comparing the two read that as a
+// bug somewhere else.
+func TestTagAliasesReachEveryContainer(t *testing.T) {
+	for _, c := range []struct {
+		codec     fixtures.Codec
+		container fixtures.Container
+	}{
+		{fixtures.CodecFLAC, ""},
+		{fixtures.CodecMP3, ""},
+		{fixtures.CodecAAC, fixtures.ContainerMP4},
+	} {
+		t.Run(string(c.codec), func(t *testing.T) {
+			dir := t.TempDir()
+			paths, err := fixtures.Generate(dir, fixtures.Spec{
+				Name:      "dated",
+				Codec:     c.codec,
+				Container: c.container,
+				Duration:  time.Second,
+				Tags: map[string]string{
+					"TITLE": "Dated",
+					// The alias, spelled the way a listener's file
+					// spells it and the way these tests always have.
+					"DATE": "2019",
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Read back through WaxLabel, which is what reads these
+			// files everywhere else in the repo.
+			doc, err := waxlabel.ParseFile(context.Background(), paths[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := doc.Get(tag.RecordingDate)
+			if len(got) != 1 || got[0] != "2019" {
+				t.Errorf("%s: RecordingDate = %q, want [2019]", c.codec, got)
+			}
+			if c.codec != fixtures.CodecFLAC {
+				return
+			}
+			// A Vorbis comment block is written verbatim, so folding
+			// here would put the canonical spelling in the file. No
+			// ripper writes RECORDINGDATE= into a FLAC, and a corpus
+			// that does stops standing in for the files it imitates.
+			data, err := os.ReadFile(paths[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bytes.Contains(data, []byte("RECORDINGDATE=")) {
+				t.Error("flac carries the canonical key; real files spell it DATE")
+			}
+			if !bytes.Contains(data, []byte("DATE=2019")) {
+				t.Error("flac lost the caller's own spelling")
+			}
+		})
 	}
 }

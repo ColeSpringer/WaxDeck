@@ -3309,6 +3309,12 @@ abstract class AppLocalizations {
   /// **'Yes'**
   String get bookYes;
 
+  /// Accessible name of the add control on the audiobook hub, which opens the same sheet home's does with the audiobook type chosen.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to library'**
+  String get booksAddToLibrary;
+
   /// Chip narrowing the hub to one author, with how many books they have on the shelf.
   ///
   /// In en, this message translates to:
@@ -5943,7 +5949,7 @@ abstract class AppLocalizations {
   /// **'What it was pressed on - CD, 2xVinyl, Digital Media'**
   String get musicFieldMediaHelp;
 
-  /// Button on the music hub's first-run invitation, opening the sheet that adds files.
+  /// Accessible name of the add control on the music hub, and the button on its first-run invitation. Both open the sheet that adds files.
   ///
   /// In en, this message translates to:
   /// **'Add to library'**
@@ -8240,6 +8246,12 @@ abstract class AppLocalizations {
   /// **'Playlists'**
   String get playlistsTitle;
 
+  /// Disclosure under the podcast directory search, opening the feed-URL path. A YouTube channel and a private feed have no directory entry, so this stays reachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Add by URL'**
+  String get podcastAddByUrl;
+
   /// Toolbar action opening the dialog that follows a new show, and that dialog's own title.
   ///
   /// In en, this message translates to:
@@ -8654,6 +8666,12 @@ abstract class AppLocalizations {
   /// **'This feed has published nothing this server can see.'**
   String get podcastNoEpisodesMessage;
 
+  /// Shown in the add dialog when the podcast directory answered with nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No matches'**
+  String get podcastNoMatches;
+
   /// Snackbar after a feed check that found nothing.
   ///
   /// In en, this message translates to:
@@ -8822,6 +8840,18 @@ abstract class AppLocalizations {
   /// **'Episodes to keep'**
   String get podcastRetentionLabel;
 
+  /// Label of the podcast directory search box in the add dialog, and of the button that runs it.
+  ///
+  /// In en, this message translates to:
+  /// **'Search directory'**
+  String get podcastSearchDirectory;
+
+  /// Shown when the podcast directory could not be searched. {reason} is the sentence naming the failure; the rest points at the path that still works.
+  ///
+  /// In en, this message translates to:
+  /// **'{reason} Subscribe with a feed URL instead, under \"Add by URL\".'**
+  String podcastSearchFailedHint(String reason);
+
   /// Field narrowing a show's loaded episodes to the ones whose title matches.
   ///
   /// In en, this message translates to:
@@ -8929,6 +8959,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show more'**
   String get podcastShowMoreNotes;
+
+  /// Placeholder in the add dialog's directory search box, saying what to type.
+  ///
+  /// In en, this message translates to:
+  /// **'Show name'**
+  String get podcastShowName;
 
   /// Field taking how much of the start of every episode to skip.
   ///
@@ -9481,6 +9517,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pin {name} to the dial'**
   String radioPin(String name);
+
+  /// Heading over the one or two pinned stations drawn as rows, below the count at which they draw as the dial instead.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned'**
+  String get radioPinnedTitle;
 
   /// Under a station's name while it is on, where the stream announces no track. Broadcasting has its own idiom in some languages, so this deliberately need not match the player's word for the same English.
   ///
@@ -11077,7 +11119,7 @@ abstract class AppLocalizations {
   /// **'Playback endpoints'**
   String get settingsEndpointsTitle;
 
-  /// The line under the two Appearance settings stored on the account rather than on this device: the theme and the language.
+  /// The line under the Appearance setting stored on the account rather than on this device: the language.
   ///
   /// In en, this message translates to:
   /// **'Follows you to your other devices'**
@@ -12198,6 +12240,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dark'**
   String get settingsThemeDark;
+
+  /// The line under the theme setting, which is per device: a phone carried outdoors and a desktop in a dark room are not one choice.
+  ///
+  /// In en, this message translates to:
+  /// **'Set on this device; your other devices keep their own'**
+  String get settingsThemeHelp;
 
   /// Comma-separated search keywords for the "Theme" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///

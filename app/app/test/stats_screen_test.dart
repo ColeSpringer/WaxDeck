@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/stats/stats_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -129,6 +131,54 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.listeningStatsCalls.last, (range: '30d', bucket: 'week'));
+  });
+
+  testWidgets('a range change keeps the old numbers until the new ones land', (
+    tester,
+  ) async {
+    final repo = _statsRepo();
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    final gate = Completer<void>();
+    repo.statsGate = gate;
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.statsRange('7d')));
+    await tester.pump();
+
+    // Riverpod hands the rebuild an AsyncLoading still carrying the last
+    // value. Nothing may fall back to a skeleton over it - that is the
+    // double reflow this screen was reported for.
+    expect(repo.listeningStatsCalls.last, (range: '7d', bucket: 'day'));
+    expect(find.byType(SkeletonShapes), findsNothing);
+    expect(find.byKey(const Key('stats-chart')), findsOneWidget);
+    expect(find.text('2h 34m'), findsOneWidget);
+
+    repo.statsGate = null;
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SkeletonShapes), findsNothing);
+    expect(find.byKey(const Key('stats-chart')), findsOneWidget);
+  });
+
+  testWidgets('a failed refresh displaces the numbers it could not renew', (
+    tester,
+  ) async {
+    final repo = _statsRepo();
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+    expect(find.text('2h 34m'), findsOneWidget);
+
+    repo.statsError = WaxDeckApiException(
+      statusCode: 503,
+      code: 'unavailable',
+      message: 'stats are down',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.statsRange('7d')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2h 34m'), findsNothing);
+    expect(find.byType(ErrorState), findsWidgets);
   });
 
   testWidgets('top list tabs switch the kind', (tester) async {

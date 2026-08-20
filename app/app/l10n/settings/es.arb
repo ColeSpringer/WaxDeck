@@ -294,6 +294,7 @@
   "settingsTechnicalDetailsKeywords": "códec, tasa de bits, formato, flac, procedencia",
   "settingsTechnicalDetailsTitle": "Mostrar los detalles técnicos",
   "settingsThemeDark": "Oscuro",
+  "settingsThemeHelp": "Se define en este dispositivo; los demás conservan el suyo",
   "settingsThemeKeywords": "oscuro, claro, oled, negro",
   "settingsThemeLight": "Claro",
   "settingsThemeOled": "Negro OLED",

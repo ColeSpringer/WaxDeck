@@ -1,6 +1,10 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "podcastAddByUrl": "Add by URL",
+  "@podcastAddByUrl": {
+    "description": "Disclosure under the podcast directory search, opening the feed-URL path. A YouTube channel and a private feed have no directory entry, so this stays reachable."
+  },
   "podcastAddSubscription": "Add subscription",
   "@podcastAddSubscription": {
     "description": "Toolbar action opening the dialog that follows a new show, and that dialog's own title."
@@ -415,6 +419,10 @@
   "@podcastNoEpisodesMessage": {
     "description": "Message under the no-episodes state."
   },
+  "podcastNoMatches": "No matches",
+  "@podcastNoMatches": {
+    "description": "Shown in the add dialog when the podcast directory answered with nothing."
+  },
   "podcastNoNewEpisodes": "No new episodes",
   "@podcastNoNewEpisodes": {
     "description": "Snackbar after a feed check that found nothing."
@@ -563,6 +571,19 @@
   "@podcastRetentionLabel": {
     "description": "Field bounding how many of a show's downloads the server holds."
   },
+  "podcastSearchDirectory": "Search directory",
+  "@podcastSearchDirectory": {
+    "description": "Label of the podcast directory search box in the add dialog, and of the button that runs it."
+  },
+  "podcastSearchFailedHint": "{reason} Subscribe with a feed URL instead, under \"Add by URL\".",
+  "@podcastSearchFailedHint": {
+    "description": "Shown when the podcast directory could not be searched. {reason} is the sentence naming the failure; the rest points at the path that still works.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "podcastSearchShow": "Search this show",
   "@podcastSearchShow": {
     "description": "Field narrowing a show's loaded episodes to the ones whose title matches."
@@ -658,6 +679,10 @@
   "podcastShowMoreNotes": "Show more",
   "@podcastShowMoreNotes": {
     "description": "Expands a show's or an episode's notes past the height they are clamped to."
+  },
+  "podcastShowName": "Show name",
+  "@podcastShowName": {
+    "description": "Placeholder in the add dialog's directory search box, saying what to type."
   },
   "podcastSkipIntro": "Skip intro (seconds)",
   "@podcastSkipIntro": {

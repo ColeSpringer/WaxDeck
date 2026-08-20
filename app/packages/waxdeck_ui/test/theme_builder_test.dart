@@ -6,6 +6,34 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 WaxColors _colorsOf(ThemeData theme) => theme.extension<WaxColors>()!;
 
 void main() {
+  group('the system bars', () {
+    test('every theme says what the platform should draw them in', () {
+      // Android forces edge-to-edge, so an app that says nothing gets
+      // whatever the framework last decided - which under a dark app on
+      // a light-themed phone is dark glyphs on a dark band.
+      for (final variant in WaxThemeVariant.values) {
+        final style = buildWaxTheme(
+          variant: variant,
+        ).appBarTheme.systemOverlayStyle;
+        expect(style, isNotNull, reason: '${variant.name} declares nothing');
+        expect(style!.statusBarColor, Colors.transparent);
+        final light = variant == WaxThemeVariant.light;
+        // iOS is told the background's brightness, Android the glyphs':
+        // opposites, and swapping them is the whole bug.
+        expect(
+          style.statusBarBrightness,
+          light ? Brightness.light : Brightness.dark,
+          reason: '${variant.name} misreports its background',
+        );
+        expect(
+          style.statusBarIconBrightness,
+          light ? Brightness.dark : Brightness.light,
+          reason: '${variant.name} draws its glyphs into its own band',
+        );
+      }
+    });
+  });
+
   group('the artwork glow', () {
     test('is on by default, at each dark theme\'s own strength', () {
       // The two dark themes carry different strengths on purpose - OLED

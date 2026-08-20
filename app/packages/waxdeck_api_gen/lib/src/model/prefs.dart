@@ -14,7 +14,7 @@ part 'prefs.g.dart';
 /// Properties:
 /// * [timezone] - IANA timezone name (for example `Europe/Amsterdam`). Drives streaks, heatmaps, and other calendar-bucketed statistics. 
 /// * [locale] - Preferred BCP 47 locale tag (for example `en-US`).
-/// * [theme] - Preferred app theme.
+/// * [theme] - Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
 /// * [sharedStatsOptOut] - Leave the server-wide aggregate stats (the server year in review). Household members are enrolled by default; opting out removes this user's listening from every server-wide figure. Personal stats are unaffected. 
 /// * [radioFavorites] - Radio stations this user has pinned, in the order the dial presents them. The station library itself is shared by every account, so this is the one piece of per-user station state there is: which of the household's stations are *yours*.  Ordered, and the order is the client's to set - new pins go on the end, so a dial does not reshuffle under a thumb. Entries are station PIDs (`rs-...`) and are not resolved on write: a station deleted by another household member leaves its pid here, and a client renders only the pids it can still find, because failing a whole preference write over one departed station would be worse than a dial one slot shorter.  Capped at 64, which is a bound on the document rather than on the feature: clients present about a dozen, and that cap is theirs. A client presenting fewer than the document holds must still write back what it did not draw - the cap belongs to the dial, not to the list.  Stored in the canonical upper-case form the pattern above declares, whatever case a write used, so a pin always names the station the server named. Absent when nothing is pinned: unpinning everything drops the field rather than storing `[]`, and nothing reads a default set of pins out of an absent list, so absent and empty are one answer on the way back. 
 /// * [pinned] - What this user has pinned to home, in the order the shelf presents them. The same shape and the same rules as `radioFavorites`, for the same reason: a pin is about the listener rather than the machine they made it on, so it follows the account.  Ordered, and the order is the client's to set - new pins go on the end. Entries are entity PIDs and are not resolved on write: an album another household member deleted leaves its pid here, and a client draws only the pids it can still resolve, because failing a whole preference write over one departed release would be worse than a shelf one card shorter. Resolve them with `POST /library/entities`, which silently drops what it cannot answer for and names, in its `departed` list, the pids that are gone for everyone - the subset a client may prune from here, so a deleted album does not hold one of the 64 slots forever.  Albums (`al-`), artists (`ar-`), release groups (`rg-`), playlists (`pl-`), podcast shows (`pc-`), and books (`bk-`) may be pinned. Radio stations may not: the dial is already radio's pin surface, and two pin gestures for one station would be two places to unpin it from. Tracks and episodes may not either: a card opens a surface, and a kept set of tracks is a playlist - which pins.  Capped at 64, a bound on the document rather than on the feature. Stored in the canonical upper-case form the pattern declares, whatever case a write used. Absent when nothing is pinned: unpinning everything drops the field rather than storing `[]`. 
@@ -35,7 +35,8 @@ abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   @BuiltValueField(wireName: r'locale')
   String? get locale;
 
-  /// Preferred app theme.
+  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
+  @Deprecated('theme has been deprecated')
   @BuiltValueField(wireName: r'theme')
   PrefsThemeEnum? get theme;
   // enum themeEnum {  system,  dark,  light,  oled,  };
@@ -340,19 +341,19 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
 
 class PrefsThemeEnum extends EnumClass {
 
-  /// Preferred app theme.
+  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'system')
   static const PrefsThemeEnum system = _$prefsThemeEnum_system;
-  /// Preferred app theme.
+  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'dark')
   static const PrefsThemeEnum dark = _$prefsThemeEnum_dark;
-  /// Preferred app theme.
+  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'light')
   static const PrefsThemeEnum light = _$prefsThemeEnum_light;
-  /// Preferred app theme.
+  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'oled')
   static const PrefsThemeEnum oled = _$prefsThemeEnum_oled;
-  /// Preferred app theme.
+  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const PrefsThemeEnum unknownDefaultOpenApi = _$prefsThemeEnum_unknownDefaultOpenApi;
 

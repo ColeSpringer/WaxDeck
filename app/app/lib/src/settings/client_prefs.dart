@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart'
     show FocusHighlightMode, FocusManager, WidgetsBinding;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:waxdeck_api/waxdeck_api.dart' show ThemePref;
 import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
 import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxCaptionMode, WaxDensity;
 
 import '../auth/auth_controller.dart';
 import '../player/smart_rewind.dart';
 import 'client_settings_providers.dart';
+import 'prefs_controller.dart';
 
 /// The per-device preferences, one notifier each.
 ///
@@ -455,6 +459,93 @@ enum WaxGridSize {
   final double scale;
 }
 
+/// Which theme this device draws.
+///
+/// Per device, and this is the line `client_prefs.dart` opens with: a
+/// display theme describes the machine in front of the listener. It was
+/// the account's, so a `light` chosen once on the web followed the phone
+/// carried outdoors, and the settings row said "Follows you to your other
+/// devices" about it.
+///
+/// [ThemePref.system] by default, so a device nobody has told follows the
+/// OS - including a fresh install, which is what the original report was
+/// about.
+class ThemeSetting extends EnumSetting<ThemePref> {
+  @override
+  String get settingKey => ClientSettingKeys.theme;
+
+  @override
+  ThemePref get defaultValue => ThemePref.system;
+
+  @override
+  List<ThemePref> get options => ThemePref.values;
+
+  /// Whether this notifier has already asked. The store holds the
+  /// answer that outlives the launch; this only keeps one build from
+  /// racing the next.
+  var _consideredAccount = false;
+
+  @override
+  ThemePref build() {
+    // Listened, not watched. What follows is a one-shot migration, and a
+    // watch would re-run this notifier - and through it every theme
+    // provider the app is built on - on every unrelated write to the
+    // account document: a radio pin, a browse sort, a crossfade. Each
+    // of those re-runs would also re-fire `hydrate`'s store read, which
+    // does not latch until it finds something.
+    ref.listen(prefsControllerProvider, (_, next) {
+      // Only once a real document is here, which is narrower than
+      // `hasValue`: signed out the controller answers the empty
+      // default, and a reload keeps that previous value while it runs -
+      // so the moment after signing in reads as a document with no
+      // theme in it. Spending the one question there marks the device
+      // adopted and takes nothing, losing the theme of everybody who
+      // signs in.
+      if (!next.hasValue || next.isLoading) return;
+      final signedIn =
+          ref.read(authControllerProvider).value?.authenticated ?? false;
+      if (signedIn) unawaited(_adopt(next.requireValue.theme));
+    }, fireImmediately: true);
+    return hydrate();
+  }
+
+  /// Takes the account's theme once, for a device that has none of its
+  /// own.
+  ///
+  /// Without this, everybody who deliberately chose dark or OLED would be
+  /// silently flipped to follow-the-system by the build that moved the
+  /// setting. Asked exactly once per device, marked as asked either way:
+  /// after that the account's field is the deprecated copy the spec says
+  /// it is, and a `light` set from another client stays there.
+  Future<void> _adopt(ThemePref? account) async {
+    if (_consideredAccount) return;
+    _consideredAccount = true;
+    final store = ref.read(clientSettingsStoreProvider);
+    try {
+      if (await store.read(ClientSettingKeys.themeAdopted) != null) return;
+      // The store rather than [state]: the default and a stored
+      // `system` read alike, and only one of them is a choice somebody
+      // made.
+      final stored = await store.read(settingKey);
+      // The value before the mark, both awaited. The mark is what makes
+      // this unrepeatable, so it must never outlive a failed write of
+      // the thing it records: a store that takes the mark and drops the
+      // theme - a locked mirror at launch, a full quota - loses a
+      // deliberate OLED for good. This way round the worst case is a
+      // second launch that adopts the same value again.
+      if (stored == null && account != null) {
+        await store.write(settingKey, encode(account));
+      }
+      await store.write(ClientSettingKeys.themeAdopted, 'y');
+      if (stored != null || account == null || !ref.mounted) return;
+    } catch (_) {
+      // A store that will not answer is not one to write to either.
+      return;
+    }
+    set(account);
+  }
+}
+
 class Density extends EnumSetting<WaxDensity> {
   @override
   String get settingKey => ClientSettingKeys.density;
@@ -510,6 +601,9 @@ class CardCaptions extends EnumSetting<WaxCaptionMode> {
   List<WaxCaptionMode> get options => WaxCaptionMode.values;
 }
 
+final themeSettingProvider = NotifierProvider<ThemeSetting, ThemePref>(
+  ThemeSetting.new,
+);
 final densityProvider = NotifierProvider<Density, WaxDensity>(Density.new);
 final gridSizeProvider = NotifierProvider<GridSize, WaxGridSize>(GridSize.new);
 final artworkGlowProvider = NotifierProvider<ArtworkGlow, bool>(

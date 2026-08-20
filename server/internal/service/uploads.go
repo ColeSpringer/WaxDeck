@@ -994,11 +994,22 @@ func flatTags(doc *waxlabel.Document) map[string]string {
 	if t.DiscNumber > 0 {
 		out["DISCNUMBER"] = strconv.Itoa(t.DiscNumber)
 	}
-	set("DATE", firstNonEmpty(t.OriginalDate, t.ReleaseDate, t.RecordingDate))
+	set("DATE", matchDate(t))
 	if vals, ok := doc.Get(tag.Key("MUSICBRAINZ_ALBUMID")); ok && len(vals) > 0 {
 		set("MUSICBRAINZ_ALBUMID", vals[0])
 	}
 	return out
+}
+
+// matchDate is the date an uploaded file files and scores under.
+//
+// Recording first, then release, then original - the order both siblings
+// already use (waxbin's firstYear, WaxFlow's stream tag set). Read the
+// other way round, a reissue carrying both scores against the year it
+// was reissued rather than the year it was made, and matches a different
+// release.
+func matchDate(t tag.Tags) string {
+	return firstNonEmpty(t.RecordingDate, t.ReleaseDate, t.OriginalDate)
 }
 
 func parseIntTag(s string) int {

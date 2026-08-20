@@ -17,6 +17,7 @@
     "bookSettingsSpeed": "book-settings-speed",
     "bookSort": "book-sort-{name}",
     "bookStartOver": "book-start-over",
+    "booksAdd": "books-add",
     "booksHub": "books-hub",
     "booksHubOverflow": "books-hub-overflow",
     "chapter": "chapter-{index}"

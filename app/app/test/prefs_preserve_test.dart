@@ -38,7 +38,7 @@ final _clears = <_Clear>[
 
 void main() {
   test(
-    'an early theme change never wipes stored timezone and locale',
+    'an early setting change never wipes stored timezone and locale',
     () async {
       final repo = FakeRepository()
         ..sessionState = const SessionState(authenticated: true, user: _user)
@@ -52,20 +52,26 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      // Tap the theme before the initial prefs fetch has resolved. The
+      // Tap a setting before the initial prefs fetch has resolved. The
       // stored document must survive: the endpoint replaces the whole
       // object, so building the update from an empty default would wipe
-      // the timezone and locale.
+      // the timezone and locale. (The theme used to be this test's
+      // subject; it is a per-device setting now and never written here.)
       final notifier = container.read(prefsControllerProvider.notifier);
-      await notifier.setTheme(ThemePref.oled);
+      await notifier.setSharedStatsOptOut(true);
 
-      expect(repo.prefs.theme, ThemePref.oled);
+      expect(repo.prefs.sharedStatsOptOut, isTrue);
       expect(
         repo.prefs.timezone,
         'America/Denver',
         reason: 'replace semantics must start from the loaded document',
       );
       expect(repo.prefs.locale, 'en-US');
+      expect(
+        repo.prefs.theme,
+        ThemePref.system,
+        reason: 'the deprecated field is carried, not dropped',
+      );
     },
   );
 

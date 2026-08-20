@@ -17,6 +17,7 @@
     "radioMute": "radio-mute",
     "radioNameField": "radio-name-field",
     "radioNowPlaying": "radio-now-playing",
+    "radioPinned": "radio-pinned-{pid}",
     "radioSaved": "radio-saved",
     "radioSavedAcquire": "radio-saved-acquire",
     "radioSavedEntry": "radio-saved-entry-{pid}",

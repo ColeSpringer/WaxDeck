@@ -220,6 +220,17 @@ enum WaxButtonKind {
   /// Everything else.
   text,
 
+  /// A link in a column of text.
+  ///
+  /// [text]'s colour and none of its box: no horizontal padding, so the
+  /// label's leading edge is the prose's leading edge rather than a
+  /// pill's, twenty pixels to the side of it. For anything that has to
+  /// line up with the paragraph it belongs to - a link a note refers
+  /// to, the control that unfolds the rest of one. The vertical touch
+  /// target stays, because a link in a column of text is still
+  /// something a thumb has to hit.
+  inline,
+
   /// Deletes and revokes. Never the default focus target.
   destructive,
 }
@@ -228,6 +239,9 @@ enum WaxButtonKind {
 ///
 /// Labels are sentence case and name their verb ("Save changes", "Add to
 /// queue"), never "Submit" or a bare "OK".
+/// The side padding a pill-shaped button keeps around its label.
+const _pillPadding = EdgeInsets.symmetric(horizontal: WaxSpace.s20);
+
 class WaxButton extends StatelessWidget {
   const WaxButton({
     required this.label,
@@ -264,15 +278,64 @@ class WaxButton extends StatelessWidget {
     final colors = WaxColors.of(context);
     final enabled = onPressed != null;
 
-    final (Color background, Color foreground, Color? border) = switch (kind) {
-      WaxButtonKind.filled => (colors.accent, colors.onAccent, null),
+    // Every per-kind answer in one place. A kind that settled three of
+    // them here and the rest in ternaries further down is how `inline`
+    // came to need a second dispatch of its own, and how the next change
+    // to a ground would quietly skip it.
+    //
+    // `disabled` is the ground a disabled button takes: the filled kinds
+    // fall back to the disabled surface, and a pill radius on a box with
+    // no padding is a lozenge as wide as the word, which is not what a
+    // link's press looks like.
+    final (
+      Color background,
+      Color disabled,
+      Color foreground,
+      Color? border,
+      BorderRadius radius,
+      EdgeInsetsGeometry padding,
+    ) = switch (kind) {
+      WaxButtonKind.filled => (
+        colors.accent,
+        colors.surface2,
+        colors.onAccent,
+        null,
+        WaxRadius.pill,
+        _pillPadding,
+      ),
       WaxButtonKind.tonal => (
+        colors.surface2,
         colors.surface2,
         colors.textPrimary,
         colors.hairline,
+        WaxRadius.pill,
+        _pillPadding,
       ),
-      WaxButtonKind.text => (Colors.transparent, colors.accent, null),
-      WaxButtonKind.destructive => (Colors.transparent, colors.error, null),
+      WaxButtonKind.text => (
+        Colors.transparent,
+        colors.surface2,
+        colors.accent,
+        null,
+        WaxRadius.pill,
+        _pillPadding,
+      ),
+      WaxButtonKind.destructive => (
+        Colors.transparent,
+        colors.surface2,
+        colors.error,
+        null,
+        WaxRadius.pill,
+        _pillPadding,
+      ),
+      // A disabled link keeps prose's ground under it.
+      WaxButtonKind.inline => (
+        Colors.transparent,
+        Colors.transparent,
+        colors.accent,
+        null,
+        WaxRadius.chip,
+        EdgeInsets.zero,
+      ),
     };
 
     final child = Row(
@@ -297,16 +360,16 @@ class WaxButton extends StatelessWidget {
     );
 
     final button = Material(
-      color: enabled ? background : colors.surface2,
-      borderRadius: WaxRadius.pill,
+      color: enabled ? background : disabled,
+      borderRadius: radius,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: WaxRadius.pill,
+        borderRadius: radius,
         child: Container(
           constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
-          padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s20),
+          padding: padding,
           decoration: BoxDecoration(
-            borderRadius: WaxRadius.pill,
+            borderRadius: radius,
             border: border == null ? null : Border.all(color: border),
           ),
           child: Center(widthFactor: expand ? null : 1, child: child),

@@ -118,6 +118,46 @@ void main() {
     expect(unknown.single.runs.single.text, 'still here');
   });
 
+  test('a run of line breaks collapses to one blank line', () {
+    // What feeds actually send: paragraphs laid out with <br> rather than
+    // <p>, five or six deep. Each one is its own literal newline run, and
+    // the edge trim only reaches a block's two ends - so a clamped height
+    // used to spend itself on blank lines with the text clipped under
+    // them.
+    final blocks = parseShowNotes(
+      'Episode notes<br><br><br><br><br>Links below',
+    );
+    expect(blocks, hasLength(1));
+    expect(
+      blocks.single.runs.map((r) => r.text).join(),
+      'Episode notes\n\nLinks below',
+    );
+
+    // A single break still breaks the line.
+    expect(
+      parseShowNotes('One<br>Two').single.runs.map((r) => r.text).join(),
+      'One\nTwo',
+    );
+
+    // Whitespace between the breaks does not save them: the stretch is
+    // read for the newlines it carries, not run by run.
+    expect(
+      parseShowNotes(
+        'One<br>\n  <br>\t<br>Two',
+      ).single.runs.map((r) => r.text).join(),
+      'One\n\nTwo',
+    );
+
+    // Preformatted blocks keep every one: there the whitespace is the
+    // content.
+    expect(
+      parseShowNotes(
+        '<pre>a<br><br><br>b</pre>',
+      ).single.runs.map((r) => r.text).join(),
+      'a\n\n\nb',
+    );
+  });
+
   test('tables flatten to text rows', () {
     final blocks = parseShowNotes(
       '<table><tr><td>a</td><td>b</td></tr><tr><td>c</td></tr></table>',

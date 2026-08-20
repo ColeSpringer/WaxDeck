@@ -161,6 +161,7 @@ abstract final class SemanticsIds {
   static const String bookSettingsSpeed = 'book-settings-speed';
   static String bookSort(Object name) => 'book-sort-$name';
   static const String bookStartOver = 'book-start-over';
+  static const String booksAdd = 'books-add';
   static const String booksHub = 'books-hub';
   static const String booksHubOverflow = 'books-hub-overflow';
   static String chapter(Object index) => 'chapter-$index';
@@ -362,6 +363,7 @@ abstract final class SemanticsIds {
   static const String indexSortCount = 'index-sort-count';
   static String listingRowMore(Object pid) => 'listing-row-more-$pid';
   static const String listingShuffle = 'listing-shuffle';
+  static const String musicAdd = 'music-add';
   static String musicTile(Object name) => 'music-tile-$name';
 
   // organize: Organize: previews, duplicates, and upgrade groups.
@@ -530,10 +532,13 @@ abstract final class SemanticsIds {
   static String notesLink(Object index) => 'notes-link-$index';
   static String podcast(Object pid) => 'podcast-$pid';
   static const String podcastAdd = 'podcast-add';
+  static const String podcastAddByUrl = 'podcast-add-by-url';
   static String podcastFolder(Object name) => 'podcast-folder-$name';
   static const String podcastOpmlExport = 'podcast-opml-export';
   static const String podcastOpmlImport = 'podcast-opml-import';
   static const String podcastOverflow = 'podcast-overflow';
+  static const String podcastSearchField = 'podcast-search-field';
+  static const String podcastSearchRun = 'podcast-search-run';
   static String podcastSearchSubscribe(Object index) =>
       'podcast-search-subscribe-$index';
   static const String podcastSettingsExclude = 'podcast-settings-exclude';
@@ -586,6 +591,7 @@ abstract final class SemanticsIds {
   static const String radioMute = 'radio-mute';
   static const String radioNameField = 'radio-name-field';
   static const String radioNowPlaying = 'radio-now-playing';
+  static String radioPinned(Object pid) => 'radio-pinned-$pid';
   static const String radioSaved = 'radio-saved';
   static const String radioSavedAcquire = 'radio-saved-acquire';
   static String radioSavedEntry(Object pid) => 'radio-saved-entry-$pid';

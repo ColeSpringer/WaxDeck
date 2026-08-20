@@ -18,6 +18,7 @@
     "indexSortCount": "index-sort-count",
     "listingRowMore": "listing-row-more-{pid}",
     "listingShuffle": "listing-shuffle",
+    "musicAdd": "music-add",
     "musicTile": "music-tile-{name}"
   }
 }

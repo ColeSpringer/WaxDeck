@@ -463,7 +463,7 @@
   },
   "settingsFollowsAccountHelp": "Follows you to your other devices",
   "@settingsFollowsAccountHelp": {
-    "description": "The line under the two Appearance settings stored on the account rather than on this device: the theme and the language."
+    "description": "The line under the Appearance setting stored on the account rather than on this device: the language."
   },
   "settingsGridLarge": "Large",
   "@settingsGridLarge": {
@@ -1309,6 +1309,10 @@
   "settingsThemeDark": "Dark",
   "@settingsThemeDark": {
     "description": "Theme option: the dark palette."
+  },
+  "settingsThemeHelp": "Set on this device; your other devices keep their own",
+  "@settingsThemeHelp": {
+    "description": "The line under the theme setting, which is per device: a phone carried outdoors and a desktop in a dark room are not one choice."
   },
   "settingsThemeKeywords": "dark, light, oled, black",
   "@settingsThemeKeywords": {

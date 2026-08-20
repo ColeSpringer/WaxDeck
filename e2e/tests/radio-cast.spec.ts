@@ -20,6 +20,13 @@ const LOGO_HOST = 'http://127.0.0.1:4421';
 const LOGO_STATION = { name: 'E2E Logo FM', stream: `${LOGO_HOST}/wd-fixture-ep-002.mp3` };
 const BARE_STATION = { name: 'E2E Bare FM', stream: `${LOGO_HOST}/wd-fixture-ep-003.mp3` };
 const DIAL_STATION = { name: 'E2E Dial FM', stream: `${LOGO_HOST}/wd-fixture-ep-001.mp3` };
+/// Two more pins, so the band has enough on it to be a dial. Never
+/// tuned, so their streams only have to be distinct - the library
+/// refuses a duplicate and nothing here plays them.
+const BAND_STATIONS = [
+  { name: 'E2E Band One FM', stream: `${LOGO_HOST}/wd-fixture-band-001.mp3` },
+  { name: 'E2E Band Two FM', stream: `${LOGO_HOST}/wd-fixture-band-002.mp3` },
+];
 
 test('a station logo is served from this origin, not from the station host', async ({
   app,
@@ -84,24 +91,36 @@ test('a station logo is served from this origin, not from the station host', asy
   // can actually have no credential at all - TestRadioStationLogoProxy.
 });
 
-test('the hub pins a station to the dial and tunes it in', async ({ app }) => {
+test('the hub pins a station and tunes it in', async ({ app }) => {
   const station = await app.seed.radioStation(DIAL_STATION.name, DIAL_STATION.stream);
+  // Seeded before the hub is entered, all of them: a station added to
+  // the library while the grid is already drawn has no tile there, and
+  // so no star to click.
+  const band: string[] = [];
+  for (const s of BAND_STATIONS) {
+    band.push(await app.seed.radioStation(s.name, s.stream));
+  }
   await app.seed.clearRadioFavorites();
 
   await app.nav.enter('radio');
-  await app.radio.station(station).waitFor({ timeout: T.nav });
+  for (const pid of [station, ...band]) {
+    await app.radio.station(pid).waitFor({ timeout: T.nav });
+  }
 
-  // No dial until something is pinned: a band under a needle with
-  // nothing on it is a stripe of chrome.
+  // Nothing pinned, nothing drawn: a band under a needle with nothing on
+  // it is a stripe of chrome.
   await expect(app.radio.dial()).toHaveCount(0);
+  await expect(app.radio.pinnedRow(station)).toHaveCount(0);
 
   await app.radio.pin(station);
-  // The dial's own control names what it will do.
-  await expect(app.radio.tune()).toBeVisible();
+  // One pin is a row, not a dial: the ticks would sweep a width nothing
+  // occupies and the needle would point through it.
+  await expect(app.radio.pinnedRow(station)).toBeVisible();
+  await expect(app.radio.dial()).toHaveCount(0);
 
-  // Tuning in through the dial takes the engine: the deck bar picks the
-  // station up, with a live pill and stop rather than pause.
-  await app.radio.tuneIn();
+  // Tuning in from the pinned row takes the engine: the deck bar picks
+  // the station up, with a live pill and stop rather than pause.
+  await app.radio.tuneIn(app.radio.pinnedRow(station));
   await expect(app.radio.deckBar()).toHaveAttribute(
     'aria-label',
     new RegExp(`Live, ${DIAL_STATION.name}`),
@@ -132,12 +151,46 @@ test('the hub pins a station to the dial and tunes it in', async ({ app }) => {
     })
     .toEqual([station]);
 
-  // Unpinning takes the dial with it and clears the stored list: the
-  // server drops the field rather than storing `[]`, and no client reads a
-  // default set of pins out of an absent one, so both read as none pinned.
-  // What has to survive is the *clear*, which is what this checks.
-  await app.radio.unpin(station);
+  // Three pins is a dial, and the band arrives with the one control it
+  // publishes. Owned by this test rather than a second one, because the
+  // preference document is the account's and two tests pinning into it
+  // in parallel would each clear the other's.
+  // Settled on the document one at a time, the way the unpins below are.
+  // The star flips on optimistic client state, and a second toggle
+  // computed from a document that does not yet hold the first is the
+  // lost write in `docs/bugs.md`: fired back to back these can land as
+  // two pins, leaving the surface a row short of a dial.
+  for (const pid of [band[0], band[1]]) {
+    await app.radio.pin(pid);
+    await expect
+      .poll(
+        async () => (await app.api.tryGet('/users/me/prefs'))?.radioFavorites ?? [],
+        { message: `the pin of ${pid} should reach the document` },
+      )
+      .toContain(pid);
+  }
+  await expect(app.radio.dial()).toBeVisible();
+  await expect(app.radio.tune()).toBeVisible();
+  // And the rows are gone: the band is the surface now, not a second
+  // copy of one.
+  await expect(app.radio.pinnedRow(station)).toHaveCount(0);
+
+  // Unpinning takes both surfaces with it and clears the stored list:
+  // the server drops the field rather than storing `[]`, and no client
+  // reads a default set of pins out of an absent one, so both read as
+  // none pinned. What has to survive is the *clear*, which is what this
+  // checks.
+  for (const pid of [band[1], band[0], station]) {
+    await app.radio.unpin(pid);
+    await expect
+      .poll(
+        async () => (await app.api.tryGet('/users/me/prefs'))?.radioFavorites ?? [],
+        { message: `the unpin of ${pid} should reach the document` },
+      )
+      .not.toContain(pid);
+  }
   await expect(app.radio.dial()).toHaveCount(0);
+  await expect(app.radio.pinnedRow(station)).toHaveCount(0);
   await expect
     .poll(async () => (await app.api.tryGet('/users/me/prefs'))?.radioFavorites ?? [])
     .toEqual([]);

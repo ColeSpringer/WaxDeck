@@ -289,6 +289,9 @@ void main() {
 
       final wire = prefsToGen(mapped.copyWith(theme: ThemePref.oled));
       expect(wire.timezone, 'Europe/Amsterdam');
+      // Deprecated on the wire, still mapped: the one-time adoption
+      // reads it and third-party clients may still write it.
+      // ignore: deprecated_member_use
       expect(wire.theme, gen.PrefsThemeEnum.oled);
     });
 
@@ -298,6 +301,7 @@ void main() {
       expect(mapped.locale, isNull);
       expect(mapped.theme, isNull);
       final wire = prefsToGen(mapped);
+      // ignore: deprecated_member_use
       expect(wire.theme, isNull);
     });
   });

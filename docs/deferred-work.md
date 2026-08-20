@@ -172,7 +172,7 @@ here waits on upstream.
   the generated sentinel. `prefsFromGen` drops that entry rather than
   let the sentinel's wire value fail every save, and because the PUT
   replaces the whole document, the next write of any preference -
-  theme, autoplay, crossfade - takes that dimension's stored order off
+  locale, autoplay, crossfade - takes that dimension's stored order off
   the server too. No client-side fix reaches it: the original string is
   gone before the mapping layer sees it. The fix is the contract, and
   it is small - make the values free strings, the way `Error.code` and
@@ -443,6 +443,40 @@ here waits on upstream.
   another language; until then it is a table nobody consults.
 
 ## Infrastructure
+
+- `[in-repo]` **`_ClampedBox` is a design-system primitive living
+  private to a podcast screen.** It is a `SingleChildRenderObjectWidget`
+  and a `RenderProxyBox` that lay a child out unbounded, take a pixel
+  budget, clip what does not fit and report whether anything did
+  (`show_screen.dart` around 850-975) - no podcast in it anywhere.
+  CLAUDE.md rule 3 puts components in `waxdeck_ui`, and the package
+  already hosts this exact shape next to `ReadingColumn`
+  (`_SkipLinkBox`/`_RenderSkipLinkBox`, `components/navigation.dart`).
+  Private to a screen it gets no catalogue entry and no golden, so the
+  next surface that wants "clamp this and offer Show more" - an artist
+  bio, an album description, a review note - either copies the render
+  object or falls back to the `ConstrainedBox` + `ClipRect` +
+  unconditional button this replaced, which is the arrangement that
+  offered to unfold a one-line description. Move it with a catalogue
+  entry and both golden passes, and take the tidying in the same change:
+  the intrinsics paths no call site exercises, and two getters nothing
+  reads.
+
+- `[in-repo]` **The Android build turns Kotlin's incremental compiler
+  off on Windows, and should stop having to.** Kotlin 2.3.20 opens a
+  cache file it already holds open while closing it, and every module
+  with Kotlin in it fails to compile: "Could not close incremental
+  caches ... Storage for class-fq-name-to-source.tab is already
+  registered". It reproduces from an empty build directory, so cleaning
+  is no answer, and it is the platform rather than the project - the
+  Linux runners that build the shipped APKs do the same from-scratch
+  compile with incremental on and are green. `android/settings.gradle.kts`
+  sets `kotlin.incremental=false` for Windows hosts only, and yields to
+  an explicit `-Pkotlin.incremental`. Retire it at the next Kotlin bump
+  that fixes the cache double-registration: delete the block, build an
+  APK on Windows, and if it survives the flag is no longer needed. The
+  Kotlin version it is pinned against sits ten lines above it in the
+  same file.
 
 - `[in-repo]` **The e2e renderer hang is diagnosed: a memory race
   inside multi-threaded skwasm.** The old shape - one suite run in

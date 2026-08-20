@@ -3,13 +3,14 @@ import 'database.dart';
 /// Where a preference that belongs to this device - not to the account -
 /// lives between launches.
 ///
-/// The scope is the whole point. Theme, locale, and the shared-stats
-/// opt-out are the account's and ride the server's preference document,
-/// so they follow a listener to a new phone. A collapsed sidebar, a skip
+/// The scope is the whole point. Locale and the shared-stats opt-out are
+/// the account's and ride the server's preference document, so they
+/// follow a listener to a new phone. A collapsed sidebar, a skip
 /// interval sized for these headphones, a wifi-only switch about this
-/// connection: those describe the device in front of the listener and
-/// would be wrong on the next one. Nothing here ever syncs, and a
-/// sign-out leaves it standing (see [ClientSettingKeys]).
+/// connection, the theme this screen draws: those describe the device in
+/// front of the listener and would be wrong on the next one. Nothing
+/// here ever syncs, and a sign-out leaves it standing (see
+/// [ClientSettingKeys]).
 ///
 /// Values are opaque strings. A caller that wants a bool or a list
 /// encodes one, because the store has no way to be right about which is
@@ -129,6 +130,27 @@ abstract final class ClientSettingKeys {
 
   /// Whether codec, bitrate, and provenance chips are drawn.
   static const technicalDetails = 'waxdeck.library.technicalDetails';
+
+  /// Which theme this device draws, by [ThemePref] name; unset follows
+  /// the system.
+  ///
+  /// Per device because a display theme describes the screen in front of
+  /// the listener - the phone carried outdoors and the desktop in a dark
+  /// room are not one choice. It was the account's, which meant a
+  /// `light` picked once on the web followed the phone everywhere and
+  /// the settings row said so.
+  static const theme = 'waxdeck.appearance.theme';
+
+  /// Whether the account's old theme has already been considered for
+  /// [theme]. Written the first time the question is asked, whatever the
+  /// answer was.
+  ///
+  /// A mark of its own rather than the presence of [theme]: a device that
+  /// looked and found nothing to take stores no theme, and with nothing
+  /// else written would look again at the next launch. That is the
+  /// account driving the device, which is what moving the setting was
+  /// for.
+  static const themeAdopted = 'waxdeck.appearance.themeAdopted';
 
   /// How tightly rows pack, and how large artwork tiles are drawn.
   static const density = 'waxdeck.appearance.density';

@@ -7,7 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
-import '../podcasts/podcasts_controller.dart';
+import '../podcasts/add_podcast.dart';
 import '../radio/add_station.dart';
 import '../radio/radio_screen.dart';
 import '../shell/adaptive_shell.dart';
@@ -649,18 +649,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         header,
         SliverList.builder(
           itemCount: value!.length,
-          itemBuilder: (context, index) => WaxOptionRow(
-            title: value[index].name,
-            subtitle: describePodcastDirectoryEntry(context.l10n, value[index]),
-            glyph: WaxIcons.podcasts,
-            semanticsId: SemanticsIds.searchHit('podcastDirectory', index),
-            trailing: WaxButton(
-              label: context.l10n.searchSubscribe,
-              kind: WaxButtonKind.tonal,
-              icon: WaxIcons.add,
-              semanticsId: SemanticsIds.podcastSearchSubscribe(index),
-              onPressed: () => unawaited(_subscribeShow(value[index])),
-            ),
+          itemBuilder: (context, index) => PodcastDirectoryRow(
+            entry: value[index],
+            index: index,
+            rowSemanticsId: SemanticsIds.searchHit('podcastDirectory', index),
+            onSubscribe: () => unawaited(_subscribeShow(value[index])),
           ),
         ),
       ],
@@ -690,31 +683,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     };
   }
 
-  /// Subscribes to a directory match, reporting the outcome where there
-  /// is no modal to put it in.
+  /// Subscribes to a directory match, reporting the refusal where there
+  /// is no modal to put it in. The shared call says so on success.
   Future<void> _subscribeShow(PodcastDirectoryEntry entry) async {
     final messenger = ScaffoldMessenger.of(context);
-    final l10n = context.l10n;
-    String message;
-    try {
-      // A directory match is always an RSS feed, so no source kind is
-      // asked for or sent: the whole reason the endpoint returns
-      // `feedUrl` is that the answer is already known. Through the
-      // controller rather than the repository, so the hub's grid holds
-      // the new show without being told about it separately.
-      await ref
-          .read(subscriptionsProvider.notifier)
-          .subscribe(url: entry.feedUrl);
-      message = l10n.searchSubscribed(entry.name);
-    } on WaxDeckApiException catch (e) {
-      // The feed URL came off the directory rather than out of a field,
-      // so nothing anybody typed is what was refused: the table's own
-      // sentence is the right one.
-      message = explainError(l10n, e);
-    }
-    if (!mounted) return;
+    final refusal = await subscribeToDirectoryEntry(context, ref, entry);
+    if (refusal == null || !mounted) return;
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: Text(refusal)));
   }
 }

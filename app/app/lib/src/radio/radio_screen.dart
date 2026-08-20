@@ -18,6 +18,15 @@ import '../shell/semantics_ids.dart';
 import 'add_station.dart';
 import 'radio_controller.dart';
 
+/// How many pins the band needs before it is a dial.
+///
+/// Under this the ticks sweep a width nothing occupies, the needle points
+/// through empty space and a lone logo floats past it - a ruler with one
+/// mark on it. The star on the fullscreen player makes that first pin easy
+/// to reach by accident, so the degenerate case is the common one; it
+/// draws as rows instead.
+const int _dialMinimum = 3;
+
 /// The dial: what is pinned, and everything there is to tune.
 ///
 /// The favourites strip is a visual shortcut over the grid, which is the
@@ -48,7 +57,7 @@ class RadioScreen extends ConsumerWidget {
         const AccountAction(),
       ],
       slivers: <Widget>[
-        if (dial.isNotEmpty)
+        if (dial.length >= _dialMinimum)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.only(
@@ -57,6 +66,10 @@ class RadioScreen extends ConsumerWidget {
               ),
               child: _Dial(dial: dial, playback: playback),
             ),
+          )
+        else if (dial.isNotEmpty)
+          SliverToBoxAdapter(
+            child: _PinnedRows(dial: dial, playback: playback),
           ),
         if (playback.station != null)
           const SliverToBoxAdapter(child: _StationVolume()),
@@ -90,6 +103,96 @@ class RadioScreen extends ConsumerWidget {
         },
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
+    );
+  }
+}
+
+/// One or two pins, drawn as rows under a heading.
+///
+/// Not a shrunken dial: the same option row the door below it uses, with
+/// the station's logo in the leading slot the component keeps for one.
+/// Every row is a station in the grid below as well, so this is a
+/// shortcut and never the only path - the same claim the band makes,
+/// which is what lets both surfaces be optional.
+class _PinnedRows extends ConsumerWidget {
+  const _PinnedRows({required this.dial, required this.playback});
+
+  final List<RadioStation> dial;
+  final RadioPlayback playback;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gutter = WaxSizeClass.of(context).gutter;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Padding(
+          padding: gutter.copyWith(top: WaxSpace.s8),
+          child: SectionHeader(title: context.l10n.radioPinnedTitle),
+        ),
+        for (final station in dial)
+          Padding(
+            padding: gutter.copyWith(top: WaxSpace.s4, bottom: WaxSpace.s4),
+            child: _PinnedRow(station: station, playback: playback),
+          ),
+        const SizedBox(height: WaxSpace.s8),
+      ],
+    );
+  }
+}
+
+/// A station's second line: what is on, while it is on.
+///
+/// One function, because the pinned row and the grid tile draw the same
+/// line from different shapes - the tile is handed a `starting` already
+/// masked by `playing`, the row is not - and two spellings of one rule
+/// is how a station comes to say "Playing" in the list above "Tuning in"
+/// on its own tile.
+String? stationLine(
+  AppLocalizations l10n, {
+  required bool playing,
+  required bool starting,
+  String? nowPlaying,
+}) {
+  if (!playing) return null;
+  if (starting) return l10n.radioTuningIn;
+  // The ICY line is the reason to look at a station at all; its name is
+  // the fallback until one arrives.
+  return nowPlaying ?? l10n.radioPlaying;
+}
+
+class _PinnedRow extends ConsumerWidget {
+  const _PinnedRow({required this.station, required this.playback});
+
+  final RadioStation station;
+  final RadioPlayback playback;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final playing = station.pid == playback.station?.pid;
+    return WaxOptionRow(
+      leading: ArtworkImage(
+        size: 40,
+        artwork: waxStationLogo(
+          ref.watch(artworkStoreProvider),
+          ref.watch(repositoryProvider),
+          station,
+        ),
+        monogram: station.name,
+        shape: ArtworkShape.circle,
+        domain: WaxDomain.radio,
+      ),
+      title: station.name,
+      subtitle: stationLine(
+        l10n,
+        playing: playing,
+        starting: playback.starting,
+        nowPlaying: playback.nowPlaying,
+      ),
+      active: playing,
+      semanticsId: SemanticsIds.radioPinned(station.pid),
+      onTap: () => unawaited(_tune(context, ref, station, playback)),
     );
   }
 }
@@ -287,11 +390,12 @@ class _StationTile extends ConsumerWidget {
         MediaCard(
           data: MediaTileData(
             title: station.name,
-            // What is on, when this is the station that is on: the ICY
-            // line is the reason to look at a station tile at all.
-            subtitle: starting
-                ? l10n.radioTuningIn
-                : (playing ? (nowPlaying ?? l10n.radioPlaying) : null),
+            subtitle: stationLine(
+              l10n,
+              playing: playing,
+              starting: starting,
+              nowPlaying: nowPlaying,
+            ),
             artwork: artwork,
             domain: WaxDomain.radio,
             shape: ArtworkShape.circle,

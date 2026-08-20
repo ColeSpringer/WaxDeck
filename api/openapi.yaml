@@ -18976,7 +18976,17 @@ components:
         theme:
           type: string
           enum: [system, dark, light, oled]
-          description: Preferred app theme.
+          deprecated: true
+          x-deprecated-reason: >-
+            A display theme describes the screen in front of the listener
+            rather than the account; first-party clients store it per device.
+          description: >
+            Preferred app theme. Deprecated: a display theme describes the
+            screen in front of the listener rather than the account, so the
+            first-party clients store it per device and no longer write
+            this. They read it once, on a device that has none of its own,
+            so that a choice made before the move is not silently reset.
+            Kept on the wire for that read and for third-party clients.
         sharedStatsOptOut:
           type: boolean
           description: >

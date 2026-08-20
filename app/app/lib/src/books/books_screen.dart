@@ -11,6 +11,7 @@ import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../uploads/add_to_library.dart';
 import 'books_controller.dart';
 
 /// The audiobook domain's front door: what is being read, and everything
@@ -71,6 +72,19 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
       semanticsId: SemanticsIds.booksHub,
       controller: _scroll,
       actions: <Widget>[
+        // The hub add the music hub was also missing: same gate, same
+        // sheet, this section's type already chosen.
+        if (canAddToLibrary(ref))
+          WaxIconButton(
+            glyph: WaxIcons.add,
+            label: l10n.booksAddToLibrary,
+            semanticsId: SemanticsIds.booksAdd,
+            onPressed: () => showAddToLibrarySheet(
+              context,
+              ref,
+              initial: MediaType.audiobook,
+            ),
+          ),
         const _HubOverflow(),
         const SearchAction(),
         const AccountAction(),
