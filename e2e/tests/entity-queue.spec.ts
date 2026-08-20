@@ -43,10 +43,14 @@ test('an artist bucket opens the artist, not a filtered list', async ({ app }) =
 });
 
 test('the queue is a place, and it reorders and clears', async ({ app }) => {
-  // Something to queue: an album played from its first row.
+  // Something to queue: an album played from its first row, then
+  // stopped. The fixture tracks are seconds long, so a clock left
+  // running retires the up-next rows one by one and empties the running
+  // order before the surface below has been read at all.
   await app.nav.enter('albums');
   await app.music.openBucket(0);
   await app.music.playEntry(0);
+  await app.player.pause();
 
   await app.queue.openFromPlayer();
 
@@ -77,10 +81,15 @@ test('the queue is a place, and it reorders and clears', async ({ app }) => {
 // covered by widget tests either way.
 test('a listing row can be dragged into the queue panel', async ({ app }) => {
   // Something playing, so the panel has a queue in it and the drop is
-  // an append rather than the start of a session.
+  // an append rather than the start of a session - and then stopped,
+  // because the count below is exact. The fixture tracks are seconds
+  // long, so a running clock retires the up-next rows faster than a
+  // drag can add one, and the snapshot this counts against goes stale
+  // while the gesture is still moving.
   await app.nav.enter('albums');
   await app.music.openBucket(0);
   await app.music.playEntry(0);
+  await app.player.pause();
 
   // Down from the player and across in-app, never by URL: a cold load
   // restarts the web app, which reduces live playback to the deck
