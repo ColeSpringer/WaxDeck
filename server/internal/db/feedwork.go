@@ -76,6 +76,30 @@ func (d *DB) RecordFeedFailure(ctx context.Context, showPID, msg string, ns int6
 	return d.feedStateWrite(ctx, showPID)
 }
 
+// RecordFeedAttempt stamps that a sync was tried, without touching the
+// failure counter or the disable flag.
+//
+// It exists for the sync a third party asked for. A Podping naming a
+// feed is somebody else's news about somebody else's host, so a failure
+// on it is not evidence about this server's own refreshes and must not
+// walk the counter that disables the show - otherwise ten relayed
+// pings during one bad afternoon at the host turn off a subscription
+// nobody here asked to stop. The timestamp still lands, because the
+// floor that keeps this server off a struggling host is measured from
+// it and has to survive a restart.
+func (d *DB) RecordFeedAttempt(ctx context.Context, showPID string, ns int64) error {
+	_, err := d.w.ExecContext(ctx, `
+		INSERT INTO feed_state (show_pid, consecutive_failures, disabled, last_error, last_attempt_ns, last_synced_ns)
+		VALUES (?, 0, 0, '', ?, 0)
+		ON CONFLICT (show_pid) DO UPDATE SET
+			last_attempt_ns = excluded.last_attempt_ns`,
+		showPID, ns)
+	if err != nil {
+		return fmt.Errorf("db: recording feed attempt: %w", err)
+	}
+	return nil
+}
+
 // feedStateWrite reads through the write connection, so a state written
 // a statement ago is visible regardless of read-pool snapshot timing.
 func (d *DB) feedStateWrite(ctx context.Context, showPID string) (FeedState, error) {

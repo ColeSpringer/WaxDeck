@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_mark.dart';
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
 import '../home/pin_action.dart';
@@ -160,6 +161,7 @@ class _Header extends ConsumerWidget {
       shape: ArtworkShape.portrait,
       domain: WaxDomain.audiobooks,
       artwork: ref.watch(artworkStoreProvider).source(book.artUrl),
+      artworkCaption: artSourceLabelWithBorrow(l10n, book.artSource),
       description: _people(l10n, book),
       actions: <Widget>[
         WaxButton(

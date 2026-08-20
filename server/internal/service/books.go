@@ -47,9 +47,12 @@ type BookDetail struct {
 	Abridged        *bool
 	DescriptionHTML string
 	DurationMS      int64
-	Chapters        []ChapterMark
-	Parts           []BookPart
-	Settings        *BookSettings
+	// ArtSource is where the cover this book answers came from, for the
+	// mark under it. Zero when the book has no artwork.
+	ArtSource ArtSourceDTO
+	Chapters  []ChapterMark
+	Parts     []BookPart
+	Settings  *BookSettings
 }
 
 // BookResumePoint is the caller's chapter-aware resume answer.
@@ -81,6 +84,7 @@ func (l *Library) BookDetailFor(ctx context.Context, uc *UserCtx, apiBookPID str
 		DescriptionHTML: sanitizeShowNotes(bd.Description),
 		DurationMS:      bd.TotalDurationMS,
 	}
+	out.ArtSource = l.artSourceForRef(ctx, model.EntityRef{Type: model.ArtTrack, PID: bd.Item.PID})
 	if out.Authors == nil {
 		out.Authors = []string{}
 	}

@@ -14,6 +14,8 @@ class _$Item extends Item {
   @override
   final DateTime? addedAt;
   @override
+  final ArtSource? artSource;
+  @override
   final int? year;
   @override
   final BuiltList<String>? genres;
@@ -51,6 +53,7 @@ class _$Item extends Item {
     this.container,
     this.codec,
     this.addedAt,
+    this.artSource,
     this.year,
     this.genres,
     this.bitrate,
@@ -81,6 +84,7 @@ class _$Item extends Item {
         container == other.container &&
         codec == other.codec &&
         addedAt == other.addedAt &&
+        artSource == other.artSource &&
         year == other.year &&
         genres == other.genres &&
         bitrate == other.bitrate &&
@@ -104,6 +108,7 @@ class _$Item extends Item {
     _$hash = $jc(_$hash, container.hashCode);
     _$hash = $jc(_$hash, codec.hashCode);
     _$hash = $jc(_$hash, addedAt.hashCode);
+    _$hash = $jc(_$hash, artSource.hashCode);
     _$hash = $jc(_$hash, year.hashCode);
     _$hash = $jc(_$hash, genres.hashCode);
     _$hash = $jc(_$hash, bitrate.hashCode);
@@ -129,6 +134,7 @@ class _$Item extends Item {
           ..add('container', container)
           ..add('codec', codec)
           ..add('addedAt', addedAt)
+          ..add('artSource', artSource)
           ..add('year', year)
           ..add('genres', genres)
           ..add('bitrate', bitrate)
@@ -162,6 +168,11 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   DateTime? _addedAt;
   DateTime? get addedAt => _$this._addedAt;
   set addedAt(covariant DateTime? addedAt) => _$this._addedAt = addedAt;
+
+  ArtSourceBuilder? _artSource;
+  ArtSourceBuilder get artSource => _$this._artSource ??= ArtSourceBuilder();
+  set artSource(covariant ArtSourceBuilder? artSource) =>
+      _$this._artSource = artSource;
 
   int? _year;
   int? get year => _$this._year;
@@ -235,6 +246,7 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
       _container = $v.container;
       _codec = $v.codec;
       _addedAt = $v.addedAt;
+      _artSource = $v.artSource?.toBuilder();
       _year = $v.year;
       _genres = $v.genres?.toBuilder();
       _bitrate = $v.bitrate;
@@ -277,6 +289,7 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
             container: container,
             codec: codec,
             addedAt: addedAt,
+            artSource: _artSource?.build(),
             year: year,
             genres: _genres?.build(),
             bitrate: bitrate,
@@ -308,6 +321,9 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
     } catch (_) {
       late String _$failedField;
       try {
+        _$failedField = 'artSource';
+        _artSource?.build();
+
         _$failedField = 'genres';
         _genres?.build();
       } catch (e) {

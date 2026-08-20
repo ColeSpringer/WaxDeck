@@ -47,6 +47,8 @@ export 'package:waxdeck_api_gen/src/model/app_password_list.dart';
 export 'package:waxdeck_api_gen/src/model/art_role.dart';
 export 'package:waxdeck_api_gen/src/model/art_role_info.dart';
 export 'package:waxdeck_api_gen/src/model/art_roles.dart';
+export 'package:waxdeck_api_gen/src/model/art_source.dart';
+export 'package:waxdeck_api_gen/src/model/artwork_lock.dart';
 export 'package:waxdeck_api_gen/src/model/audit_event.dart';
 export 'package:waxdeck_api_gen/src/model/audit_event_page.dart';
 export 'package:waxdeck_api_gen/src/model/backup.dart';

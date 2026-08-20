@@ -511,6 +511,17 @@ paths:
         A URL names a PID and a size, not the bytes behind them, so a
         client that replaces an entity's artwork has to defeat its own
         caches: vary `v` to do it.
+
+
+        The 200 carries the answering image's provenance in
+        `X-Art-Source`, `X-Art-Provider`, `X-Art-Source-Url`, and
+        `X-Art-Level` - the same four values `ArtSource` reports as JSON.
+        They are here because a byte-serving endpoint that says nothing
+        about where its bytes came from is the wrong shape for a
+        third-party consumer. WaxDeck's own clients read the JSON
+        instead: a browser gives a caller no access to the response
+        headers behind an `<img>`, so the header form cannot reach the
+        platform where the mark is most likely to be seen.
       tags: [library]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -556,6 +567,32 @@ paths:
               description: Content-addressed validator for the returned bytes.
               schema:
                 type: string
+            X-Art-Source:
+              description: >
+                Where the answering image came from: `tag`, `sidecar`,
+                `user`, `enrichment`, or `feed`. Omitted when the store
+                holds no attribution for it.
+              schema:
+                type: string
+            X-Art-Provider:
+              description: >
+                The provider that supplied an `enrichment` cover.
+                Omitted for every other source.
+              schema:
+                type: string
+            X-Art-Source-Url:
+              description: >
+                Where a fetched cover's bytes came from. Omitted for a
+                cover that never crossed the network.
+              schema:
+                type: string
+            X-Art-Level:
+              description: >
+                Which rung of the fallback chain answered (`track`,
+                `album`, `artist`, `podcast`, ...), so a caller can tell
+                an item's own cover from an inherited one.
+              schema:
+                type: string
             Cache-Control:
               description: >
                 `private, max-age=86400, stale-while-revalidate=604800`.
@@ -594,6 +631,14 @@ paths:
             validator and freshness the body would have, so a
             revalidation refreshes the cached copy rather than leaving it
             stale enough to revalidate again on the next paint.
+
+
+            It repeats the provenance headers too. The validator
+            addresses the bytes, and a cover can be re-attributed
+            without them changing - a sidecar cover that is now embedded
+            in the tags, a feed that moved its image URL - so a 304 that
+            omitted them would leave a caller citing the old origin for
+            as long as it kept the picture.
           headers:
             ETag:
               description: Content-addressed validator for the cached bytes.
@@ -605,6 +650,22 @@ paths:
                 type: string
             Vary:
               description: The same credentials the 200 varies by.
+              schema:
+                type: string
+            X-Art-Source:
+              description: The same producer the 200 reports.
+              schema:
+                type: string
+            X-Art-Provider:
+              description: The same provider the 200 reports.
+              schema:
+                type: string
+            X-Art-Source-Url:
+              description: The same fetch URL the 200 reports.
+              schema:
+                type: string
+            X-Art-Level:
+              description: The same chain rung the 200 reports.
               schema:
                 type: string
         "400":
@@ -629,6 +690,14 @@ paths:
         cannot: an item that lists a `front` slot here holds its own cover,
         while one that resolves art only through `/items/{pid}/art` inherits
         it from the chain.
+
+
+        Each slot carries where its image came from and whether the front
+        cover is pinned, and `artSource` alongside them describes the
+        cover a front-cover read would actually answer with - which is
+        the inherited one when the entity holds none of its own. That is
+        what a surface drawing the cover marks; the per-slot rows are
+        what an artwork manager edits.
       tags: [library]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -1047,6 +1116,8 @@ components:
           description: >
             Total running time of those tracks, in milliseconds. Absent
             alongside `itemCount`, and for its reason.
+        artSource:
+          $ref: "#/components/schemas/ArtSource"
 
     Item:
       allOf:
@@ -1083,6 +1154,8 @@ components:
               type: string
               format: date-time
               description: When the item entered the library.
+            artSource:
+              $ref: "#/components/schemas/ArtSource"
       description: Full detail for a single library item.
 
     ItemPage:
@@ -1169,27 +1242,68 @@ components:
 
     ArtRoleInfo:
       type: object
-      description: One artwork slot an entity holds at its own level.
+      description: >
+        One artwork slot an entity holds at its own level, with where its
+        image came from and whether it is pinned.
+
+
+        A slot that reports `locked: true` and no `format` is a lock with
+        nothing behind it: the cover was cleared and pinned cleared, which
+        means "do not refill this" rather than "this has no cover yet". It
+        is the one artwork state that was previously invisible, and it is
+        why an entity can list a role at all while holding no image. Only
+        `front` can be locked; the auxiliary slots have no producer to
+        guard against, so they always report false.
       required: [role]
       properties:
         role:
           $ref: "#/components/schemas/ArtRole"
         format:
           type: string
-          description: The stored image format (`jpeg`, `png`, `webp`, `gif`).
+          description: >
+            The stored image format (`jpeg`, `png`, `webp`, `gif`).
+            Absent when the slot holds no image, which happens only on a
+            locked-and-cleared `front`.
         width:
           type: integer
           description: Pixel width, 0 when the image was not decodable.
         height:
           type: integer
           description: Pixel height, 0 when the image was not decodable.
+        source:
+          type: string
+          description: >
+            Where this slot's image came from, in `ArtSource`'s
+            vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`).
+            A string, not a closed enum.
+          example: tag
+        provider:
+          type: string
+          description: The provider that supplied an `enrichment` cover.
+        sourceUrl:
+          type: string
+          description: Where a fetched cover's bytes came from.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this slot was last written.
+        locked:
+          type: boolean
+          description: >
+            Whether the entity's front cover is pinned against enrichment
+            and scan re-derives. False on every non-front role.
 
     ArtRoles:
       type: object
-      description: The artwork slots an entity holds at its own level.
+      description: >
+        The artwork slots an entity holds at its own level, and the
+        provenance of the cover a front-cover read would actually answer
+        with.
       required: [roles]
       properties:
         roles:
           type: array
           items:
             $ref: "#/components/schemas/ArtRoleInfo"
+        artSource:
+          $ref: "#/components/schemas/ArtSource"

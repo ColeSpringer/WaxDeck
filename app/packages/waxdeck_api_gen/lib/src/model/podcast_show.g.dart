@@ -24,6 +24,8 @@ class _$PodcastShow extends PodcastShow {
   @override
   final String? artUrl;
   @override
+  final ArtSource? artSource;
+  @override
   final int? episodeCount;
   @override
   final DateTime? lastPublishedAt;
@@ -50,6 +52,7 @@ class _$PodcastShow extends PodcastShow {
     this.link,
     required this.sourceType,
     this.artUrl,
+    this.artSource,
     this.episodeCount,
     this.lastPublishedAt,
     this.refreshDisabled,
@@ -77,6 +80,7 @@ class _$PodcastShow extends PodcastShow {
         link == other.link &&
         sourceType == other.sourceType &&
         artUrl == other.artUrl &&
+        artSource == other.artSource &&
         episodeCount == other.episodeCount &&
         lastPublishedAt == other.lastPublishedAt &&
         refreshDisabled == other.refreshDisabled &&
@@ -97,6 +101,7 @@ class _$PodcastShow extends PodcastShow {
     _$hash = $jc(_$hash, link.hashCode);
     _$hash = $jc(_$hash, sourceType.hashCode);
     _$hash = $jc(_$hash, artUrl.hashCode);
+    _$hash = $jc(_$hash, artSource.hashCode);
     _$hash = $jc(_$hash, episodeCount.hashCode);
     _$hash = $jc(_$hash, lastPublishedAt.hashCode);
     _$hash = $jc(_$hash, refreshDisabled.hashCode);
@@ -119,6 +124,7 @@ class _$PodcastShow extends PodcastShow {
           ..add('link', link)
           ..add('sourceType', sourceType)
           ..add('artUrl', artUrl)
+          ..add('artSource', artSource)
           ..add('episodeCount', episodeCount)
           ..add('lastPublishedAt', lastPublishedAt)
           ..add('refreshDisabled', refreshDisabled)
@@ -165,6 +171,10 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
   String? _artUrl;
   String? get artUrl => _$this._artUrl;
   set artUrl(String? artUrl) => _$this._artUrl = artUrl;
+
+  ArtSourceBuilder? _artSource;
+  ArtSourceBuilder get artSource => _$this._artSource ??= ArtSourceBuilder();
+  set artSource(ArtSourceBuilder? artSource) => _$this._artSource = artSource;
 
   int? _episodeCount;
   int? get episodeCount => _$this._episodeCount;
@@ -213,6 +223,7 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
       _link = $v.link;
       _sourceType = $v.sourceType;
       _artUrl = $v.artUrl;
+      _artSource = $v.artSource?.toBuilder();
       _episodeCount = $v.episodeCount;
       _lastPublishedAt = $v.lastPublishedAt;
       _refreshDisabled = $v.refreshDisabled;
@@ -264,6 +275,7 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
               'sourceType',
             ),
             artUrl: artUrl,
+            artSource: _artSource?.build(),
             episodeCount: episodeCount,
             lastPublishedAt: lastPublishedAt,
             refreshDisabled: refreshDisabled,
@@ -275,6 +287,9 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
     } catch (_) {
       late String _$failedField;
       try {
+        _$failedField = 'artSource';
+        _artSource?.build();
+
         _$failedField = 'funding';
         _funding?.build();
 

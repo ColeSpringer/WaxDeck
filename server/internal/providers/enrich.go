@@ -4,6 +4,9 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/colespringer/waxbin/art"
+	"github.com/colespringer/waxbin/model"
 )
 
 // Defaults shared by the enrichment providers. The keyed and key-free
@@ -37,6 +40,43 @@ func imageFormat(mediaType string) string {
 	default:
 		return sub
 	}
+}
+
+// coverImage builds the cover a provider hands back to the enrichment
+// pass, content-addressed and measured.
+//
+// The hash is not optional and not cosmetic. The catalog's art store is
+// content-addressed, and its ingest (`attachEntityArtTxChanged`) drops
+// an unhashed image on the floor and reports success, so a provider
+// that returns bytes without one fetches a picture over the network
+// that is then silently discarded - no error, no log, a run that
+// reports itself clean. Every cover a provider returns goes through
+// here so that cannot happen again.
+//
+// Dimensions come from a header probe rather than the transport's
+// media type, because that is what the store records. An ISOBMFF cover
+// (AVIF/HEIC) has no pure-Go decoder and so probes as a failure while
+// still being a perfectly good picture: it keeps the sniffed format and
+// unknown dimensions rather than being thrown away, matching what the
+// catalog's own archive provider does with one. Empty bytes are no
+// cover at all, which is a nil result rather than an image that cannot
+// be stored.
+func coverImage(data []byte, mediaType, sourceURL string) *model.ArtImage {
+	if len(data) == 0 {
+		return nil
+	}
+	img := &model.ArtImage{
+		Data:      data,
+		Hash:      art.Hash(data),
+		Format:    imageFormat(mediaType),
+		SourceURL: sourceURL,
+	}
+	if format, w, h, err := art.Probe(data); err == nil {
+		img.Format, img.Width, img.Height = format, w, h
+	} else if format, ok := art.SniffExotic(data); ok {
+		img.Format = format
+	}
+	return img
 }
 
 // coverNameMatch compares an upstream display name against an already

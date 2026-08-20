@@ -30,6 +30,12 @@ const corsMaxAge = "86400"
 // along; allowing credentials would mean any page on a named origin
 // could act as a signed-in session. The exact-origin match below is only
 // a real boundary while that stays true.
+// exposedHeaders is what cross-origin JS may read off a response: the
+// range headers a media client needs, and the artwork provenance the
+// spec documents on GET /items/{pid}/art.
+const exposedHeaders = "Accept-Ranges, Content-Range, Content-Length, " +
+	"X-Art-Source, X-Art-Provider, X-Art-Source-Url, X-Art-Level"
+
 func withCORS(origins []string, next http.Handler) http.Handler {
 	if len(origins) == 0 {
 		return next
@@ -57,8 +63,17 @@ func withCORS(origins []string, next http.Handler) http.Handler {
 			// Without this, cross-origin JS can read only the handful of
 			// safelisted response headers - so a client fetching audio
 			// could not see what it was given. These are the range
-			// headers a media client reads; everything else stays hidden.
-			w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, Content-Length")
+			// headers a media client reads, plus artwork's provenance;
+			// everything else stays hidden.
+			//
+			// The X-Art-* four are here because a browser is the only
+			// audience they have. WaxDeck's own clients read the same
+			// values off the JSON reads (an `<img>` gives its caller no
+			// access to response headers), so the header form exists
+			// for a third-party consumer of the byte endpoint - and the
+			// third parties this middleware exists for are browser
+			// apps on another origin, which without this read null.
+			w.Header().Set("Access-Control-Expose-Headers", exposedHeaders)
 		}
 
 		// A preflight is answered here rather than routed: it carries no

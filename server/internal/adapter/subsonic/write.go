@@ -579,7 +579,10 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 	times := r.Form["time"]
 	sessions := make([]service.ListenSession, 0, len(ids))
 	for i, id := range ids {
-		det, err := h.svc.Item(r.Context(), uc, id)
+		// The duration alone: a detail read would resolve and discard a
+		// full-size cover per submitted id, and an offline queue
+		// flushes them in bulk.
+		durationMS, err := h.svc.ItemDuration(r.Context(), uc, id)
 		if err != nil {
 			h.failFromService(w, r, err, "no such song")
 			return
@@ -596,14 +599,14 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 			SessionID: scrobbleSessionID(uc.ID, id, started, timed),
 			PID:       id,
 			StartedAt: started.UTC(),
-			MsPlayed:  det.DurationMS,
+			MsPlayed:  durationMS,
 			Client:    r.Form.Get("c"),
 			Source:    "live",
 		}
 		// A submission asserts the client played the item; when the
 		// catalog has no duration the played threshold cannot compute,
 		// so the finished flag carries the assertion instead.
-		if det.DurationMS <= 0 {
+		if durationMS <= 0 {
 			s.Finished = true
 		}
 		sessions = append(sessions, s)

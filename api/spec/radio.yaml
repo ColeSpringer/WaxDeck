@@ -883,7 +883,14 @@ components:
             logo, then the station mark. A station that announces no
             picture of its own leaves this absent for good while the
             external rung is switched off.
+
+
+            `nowPlayingArtSource` alongside it says which of the two
+            rungs answered, so a face can caption the picture rather
+            than presenting a third party's cover as the station's own.
           example: f822426bccd53e012a220bbf972752dc
+        nowPlayingArtSource:
+          $ref: "#/components/schemas/ArtSource"
         nowPlayingSaved:
           type: boolean
           description: >

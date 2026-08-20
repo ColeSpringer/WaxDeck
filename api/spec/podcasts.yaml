@@ -696,6 +696,8 @@ components:
           type: string
           description: Origin-relative URL of the show's artwork endpoint.
           example: /api/v1/items/pc-01JZX5N8QW3F4V9T2B7KD3M9R6/art
+        artSource:
+          $ref: "#/components/schemas/ArtSource"
         episodeCount:
           type: integer
           description: Number of cataloged episodes.

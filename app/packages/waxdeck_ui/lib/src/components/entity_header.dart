@@ -22,6 +22,7 @@ class EntityHeader extends StatelessWidget {
     this.subtitle,
     this.metadata,
     this.artwork,
+    this.artworkCaption,
     this.shape = ArtworkShape.square,
     this.domain = WaxDomain.music,
     this.palette,
@@ -40,6 +41,13 @@ class EntityHeader extends StatelessWidget {
   final String? metadata;
 
   final WaxArtwork? artwork;
+
+  /// A line under the artwork saying where the picture came from. Kept
+  /// with the art rather than in [metadata] because it describes the
+  /// image and not the release, and because the art is the thing it has
+  /// to sit under to be read as its caption.
+  final String? artworkCaption;
+
   final ArtworkShape shape;
   final WaxDomain domain;
   final WaxPalette? palette;
@@ -58,13 +66,36 @@ class EntityHeader extends StatelessWidget {
     final stacked = sizeClass.isCompact;
     final artSize = stacked ? 168.0 : 200.0;
 
-    final art = ArtworkImage(
+    final cover = ArtworkImage(
       size: artSize,
       artwork: artwork,
       monogram: title,
       shape: shape,
       domain: domain,
     );
+    // The caption is bounded by the artwork's own width, so a long
+    // provider name wraps under the picture rather than widening the
+    // column the text block is laid out against.
+    final art = artworkCaption == null
+        ? cover
+        : SizedBox(
+            width: artSize,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                cover,
+                const SizedBox(height: WaxSpace.s8),
+                Text(
+                  artworkCaption!,
+                  textAlign: TextAlign.center,
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          );
 
     final text = Column(
       crossAxisAlignment: stacked

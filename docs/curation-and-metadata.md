@@ -164,6 +164,54 @@ reports per-file detail and surfaces as an out-of-sync diagnostic
 rather than failing the edit. Lyrics write-back writes the `.lrc`
 sidecar so corrections stay portable to every other player.
 
+### Where a cover came from
+
+Covers and lyrics carry the same attribution the scalar fields do:
+whether they were read out of the file's own tags, out of an image or
+`.lrc` sitting beside the audio, out of a podcast feed, fetched from a
+metadata provider (which is named), or set by hand.
+
+Wherever a cover is drawn large enough to carry a caption - the
+artwork manager, the album, artist, book and show headers, and the
+radio face - a line under it says which. It is always on and nothing
+hides it. The grids do not carry it, because a 48-pixel thumbnail has
+no room for a line and no listener reads two hundred of them.
+
+One case is currently wrong, and it is worth knowing which. A cover
+fetched by the editor's per-item "fetch artwork" button is stored as
+though it had been set by hand, so its caption reads that way instead
+of naming the provider that supplied it. The catalog's own
+whole-library enrichment pass is unaffected and names its provider
+correctly; only the per-item button is misattributed, because the
+write path it uses cannot carry provenance yet. The ask is filed in
+`docs/upstream-requests.md`.
+
+A release usually holds no cover of its own and shows one of its
+tracks' instead. Its caption says both things - where that track's
+picture came from, and that the release did not choose it - rather
+than reporting a decision nobody made. On radio the picture is the
+station's own announcement or a provider's answer for the title it
+announced, and the caption names which; the station logo underneath
+is the station's and carries no mark.
+
+### Pinned covers
+
+Setting a cover pins it, which is what keeps it through an enrichment
+run, a rescan, and a podcast feed changing its image URL. Clearing an
+item's cover unpins it and hands the slot back to the album or artist
+chain. Clearing a **release's** cover keeps the pin, because clearing
+one means "this release has no cover" rather than "give me the derived
+one back" - so the slot stays empty and nothing refills it.
+
+That state - pinned with nothing behind it - is visible rather than
+silent: the artwork manager draws it as a pinned empty slot instead of
+an ordinary empty one, and
+`PUT /entities/{entityType}/{entityPid}/artwork/lock` is how an
+administrator lets go of it. Playlists are refused there: a playlist's
+cover authority is its own uploaded-versus-generated marker, and
+clearing an uploaded playlist cover hands the slot back to the mosaic
+built from the members.
+
 ## The genre vocabulary
 
 Genre tags are whatever the files say, which means one genre arrives

@@ -12,6 +12,8 @@ class _$Lyrics extends Lyrics {
   @override
   final String source_;
   @override
+  final String? provider;
+  @override
   final BuiltList<SyncedLine>? synced;
   @override
   final String? unsynced;
@@ -22,6 +24,7 @@ class _$Lyrics extends Lyrics {
   _$Lyrics._({
     required this.pid,
     required this.source_,
+    this.provider,
     this.synced,
     this.unsynced,
   }) : super._();
@@ -38,6 +41,7 @@ class _$Lyrics extends Lyrics {
     return other is Lyrics &&
         pid == other.pid &&
         source_ == other.source_ &&
+        provider == other.provider &&
         synced == other.synced &&
         unsynced == other.unsynced;
   }
@@ -47,6 +51,7 @@ class _$Lyrics extends Lyrics {
     var _$hash = 0;
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, source_.hashCode);
+    _$hash = $jc(_$hash, provider.hashCode);
     _$hash = $jc(_$hash, synced.hashCode);
     _$hash = $jc(_$hash, unsynced.hashCode);
     _$hash = $jf(_$hash);
@@ -58,6 +63,7 @@ class _$Lyrics extends Lyrics {
     return (newBuiltValueToStringHelper(r'Lyrics')
           ..add('pid', pid)
           ..add('source_', source_)
+          ..add('provider', provider)
           ..add('synced', synced)
           ..add('unsynced', unsynced))
         .toString();
@@ -74,6 +80,10 @@ class LyricsBuilder implements Builder<Lyrics, LyricsBuilder> {
   String? _source_;
   String? get source_ => _$this._source_;
   set source_(String? source_) => _$this._source_ = source_;
+
+  String? _provider;
+  String? get provider => _$this._provider;
+  set provider(String? provider) => _$this._provider = provider;
 
   ListBuilder<SyncedLine>? _synced;
   ListBuilder<SyncedLine> get synced =>
@@ -93,6 +103,7 @@ class LyricsBuilder implements Builder<Lyrics, LyricsBuilder> {
     if ($v != null) {
       _pid = $v.pid;
       _source_ = $v.source_;
+      _provider = $v.provider;
       _synced = $v.synced?.toBuilder();
       _unsynced = $v.unsynced;
       _$v = null;
@@ -125,6 +136,7 @@ class LyricsBuilder implements Builder<Lyrics, LyricsBuilder> {
               r'Lyrics',
               'source_',
             ),
+            provider: provider,
             synced: _synced?.build(),
             unsynced: unsynced,
           );

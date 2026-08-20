@@ -473,6 +473,7 @@ func (s *Server) GetBook(ctx context.Context, req GetBookRequestObject) (GetBook
 	}
 	art := "/api/v1/items/" + bd.PID + "/art"
 	out.ArtUrl = &art
+	out.ArtSource = artSourceJSON(bd.ArtSource)
 	setOpt(&out.Subtitle, bd.Subtitle)
 	setOpt(&out.Series, bd.Series)
 	setOpt(&out.SeriesSequence, bd.SeriesSequence)
@@ -795,6 +796,7 @@ func showJSON(show service.PodcastShow) PodcastShow {
 	if persons := feedPersonsJSON(show.Persons); len(persons) > 0 {
 		out.Persons = &persons
 	}
+	out.ArtSource = artSourceJSON(show.ArtSource)
 	return out
 }
 

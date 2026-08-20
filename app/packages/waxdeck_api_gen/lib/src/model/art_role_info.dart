@@ -9,20 +9,25 @@ import 'package:built_value/serializer.dart';
 
 part 'art_role_info.g.dart';
 
-/// One artwork slot an entity holds at its own level.
+/// One artwork slot an entity holds at its own level, with where its image came from and whether it is pinned.  A slot that reports `locked: true` and no `format` is a lock with nothing behind it: the cover was cleared and pinned cleared, which means \"do not refill this\" rather than \"this has no cover yet\". It is the one artwork state that was previously invisible, and it is why an entity can list a role at all while holding no image. Only `front` can be locked; the auxiliary slots have no producer to guard against, so they always report false. 
 ///
 /// Properties:
 /// * [role] 
-/// * [format] - The stored image format (`jpeg`, `png`, `webp`, `gif`).
+/// * [format] - The stored image format (`jpeg`, `png`, `webp`, `gif`). Absent when the slot holds no image, which happens only on a locked-and-cleared `front`. 
 /// * [width] - Pixel width, 0 when the image was not decodable.
 /// * [height] - Pixel height, 0 when the image was not decodable.
+/// * [source_] - Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`). A string, not a closed enum. 
+/// * [provider] - The provider that supplied an `enrichment` cover.
+/// * [sourceUrl] - Where a fetched cover's bytes came from.
+/// * [updatedAt] - When this slot was last written.
+/// * [locked] - Whether the entity's front cover is pinned against enrichment and scan re-derives. False on every non-front role. 
 @BuiltValue()
 abstract class ArtRoleInfo implements Built<ArtRoleInfo, ArtRoleInfoBuilder> {
   @BuiltValueField(wireName: r'role')
   ArtRole get role;
   // enum roleEnum {  front,  back,  disc,  booklet,  background,  };
 
-  /// The stored image format (`jpeg`, `png`, `webp`, `gif`).
+  /// The stored image format (`jpeg`, `png`, `webp`, `gif`). Absent when the slot holds no image, which happens only on a locked-and-cleared `front`. 
   @BuiltValueField(wireName: r'format')
   String? get format;
 
@@ -33,6 +38,26 @@ abstract class ArtRoleInfo implements Built<ArtRoleInfo, ArtRoleInfoBuilder> {
   /// Pixel height, 0 when the image was not decodable.
   @BuiltValueField(wireName: r'height')
   int? get height;
+
+  /// Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`). A string, not a closed enum. 
+  @BuiltValueField(wireName: r'source')
+  String? get source_;
+
+  /// The provider that supplied an `enrichment` cover.
+  @BuiltValueField(wireName: r'provider')
+  String? get provider;
+
+  /// Where a fetched cover's bytes came from.
+  @BuiltValueField(wireName: r'sourceUrl')
+  String? get sourceUrl;
+
+  /// When this slot was last written.
+  @BuiltValueField(wireName: r'updatedAt')
+  DateTime? get updatedAt;
+
+  /// Whether the entity's front cover is pinned against enrichment and scan re-derives. False on every non-front role. 
+  @BuiltValueField(wireName: r'locked')
+  bool? get locked;
 
   ArtRoleInfo._();
 
@@ -81,6 +106,41 @@ class _$ArtRoleInfoSerializer implements PrimitiveSerializer<ArtRoleInfo> {
       yield serializers.serialize(
         object.height,
         specifiedType: const FullType(int),
+      );
+    }
+    if (object.source_ != null) {
+      yield r'source';
+      yield serializers.serialize(
+        object.source_,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.provider != null) {
+      yield r'provider';
+      yield serializers.serialize(
+        object.provider,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.sourceUrl != null) {
+      yield r'sourceUrl';
+      yield serializers.serialize(
+        object.sourceUrl,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.updatedAt != null) {
+      yield r'updatedAt';
+      yield serializers.serialize(
+        object.updatedAt,
+        specifiedType: const FullType(DateTime),
+      );
+    }
+    if (object.locked != null) {
+      yield r'locked';
+      yield serializers.serialize(
+        object.locked,
+        specifiedType: const FullType(bool),
       );
     }
   }
@@ -133,6 +193,41 @@ class _$ArtRoleInfoSerializer implements PrimitiveSerializer<ArtRoleInfo> {
             specifiedType: const FullType(int),
           ) as int;
           result.height = valueDes;
+          break;
+        case r'source':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.source_ = valueDes;
+          break;
+        case r'provider':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.provider = valueDes;
+          break;
+        case r'sourceUrl':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.sourceUrl = valueDes;
+          break;
+        case r'updatedAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(DateTime),
+          ) as DateTime;
+          result.updatedAt = valueDes;
+          break;
+        case r'locked':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.locked = valueDes;
           break;
         default:
           unhandled.add(key);

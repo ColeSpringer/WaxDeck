@@ -25,6 +25,8 @@ import 'package:waxdeck_api_gen/src/model/app_password_list.dart';
 import 'package:waxdeck_api_gen/src/model/art_role.dart';
 import 'package:waxdeck_api_gen/src/model/art_role_info.dart';
 import 'package:waxdeck_api_gen/src/model/art_roles.dart';
+import 'package:waxdeck_api_gen/src/model/art_source.dart';
+import 'package:waxdeck_api_gen/src/model/artwork_lock.dart';
 import 'package:waxdeck_api_gen/src/model/audit_event.dart';
 import 'package:waxdeck_api_gen/src/model/audit_event_page.dart';
 import 'package:waxdeck_api_gen/src/model/backup.dart';
@@ -366,6 +368,8 @@ part 'serializers.g.dart';
   ArtRole,
   ArtRoleInfo,
   ArtRoles,
+  ArtSource,
+  ArtworkLock,
   AuditEvent,
   AuditEventPage,
   Backup,

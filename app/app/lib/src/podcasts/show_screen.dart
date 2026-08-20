@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_mark.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../home/pin_action.dart';
@@ -670,6 +671,10 @@ class _ShowHeader extends ConsumerWidget {
               ),
             if (show.explicit) l10n.podcastExplicit,
           ].join(' · '),
+          // The show detail read already carries it, so the mark costs
+          // nothing here. A feed image reads as the feed's; a cover
+          // somebody replaced by hand says so.
+          artworkCaption: artSourceLabelWithBorrow(l10n, show.artSource),
           artwork: ref.watch(artworkStoreProvider).source(show.artUrl),
           actions: <Widget>[
             if (detail.subscribed)

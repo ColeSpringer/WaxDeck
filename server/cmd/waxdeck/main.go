@@ -6,6 +6,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"database/sql"
@@ -44,6 +45,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/events"
 	"github.com/colespringer/waxdeck/server/internal/metrics"
 	"github.com/colespringer/waxdeck/server/internal/notices"
+	"github.com/colespringer/waxdeck/server/internal/podping"
 	waxproviders "github.com/colespringer/waxdeck/server/internal/providers"
 	"github.com/colespringer/waxdeck/server/internal/restore"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -81,6 +83,10 @@ func run() error {
 		feedRefreshMin  = flag.Int("feed-refresh-minutes", envIntOr("WAXDECK_FEED_REFRESH_MINUTES", 30), "minutes between scheduled feed refreshes")
 		retentionKeep   = flag.Int64("podcast-retention-default", envInt64Or("WAXDECK_PODCAST_RETENTION_DEFAULT", 0), "default keep-newest-N downloaded episodes for subscribers who leave retention unset (0 keeps all)")
 		allowPrivateNet = flag.Bool("allow-private-feed-hosts", envOr("WAXDECK_ALLOW_PRIVATE_FEED_HOSTS", "false") == "true", "allow feeds and enclosures on private addresses (LAN-hosted feeds)")
+
+		podpingOn      = flag.Bool("podping", envOr("WAXDECK_PODPING", "false") == "true", "watch the Hive blockchain for Podping notifications, so a subscribed show whose host publishes them refreshes within seconds of a new episode instead of at the next scheduled refresh. Off by default: it is a standing outbound connection to a third-party public node. Scheduled refresh stays the floor either way")
+		podpingNode    = flag.String("podping-node", envOr("WAXDECK_PODPING_NODE", ""), "Hive API node the Podping watcher reads (empty selects a public node)")
+		podpingWriters = flag.String("podping-writers", envOr("WAXDECK_PODPING_WRITERS", ""), "trusted Podping writer accounts, comma separated. Empty (the default) resolves the published podping.cloud writer set from the chain, which is how it is meant to be read; a list here pins it instead")
 
 		allowPrivateRadio    = flag.Bool("allow-private-radio-hosts", envOr("WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS", "false") == "true", "allow radio stream URLs on private addresses (LAN icecast)")
 		allowPrivateScrobble = flag.Bool("allow-private-scrobble-hosts", envOr("WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS", "false") == "true", "allow ListenBrainz-compatible API bases on private addresses (LAN Maloja)")
@@ -631,6 +637,29 @@ func run() error {
 				}
 			}
 		})
+		// PodPing: a floor-lowering signal, not a second sync path. It
+		// watches somebody else's public chain for "this feed changed" and
+		// drives the same syncShow the scheduler does, so an episode lands
+		// within seconds of publication instead of at the next refresh.
+		// Off by default because it is a standing outbound connection to
+		// a third party, and the refresh above stays the floor either way.
+		if *podpingOn {
+			client := podping.New(podping.Config{NodeURL: *podpingNode})
+			watcher := podping.NewWatcher(client, log, func(ctx context.Context, ping podping.Ping) {
+				svc.NotePodping(ctx, ping.IRI)
+			})
+			pinned := splitNonEmpty(*podpingWriters, ",")
+			if len(pinned) > 0 {
+				watcher.PinWriters(pinned)
+			}
+			// Said once, at start: the operator turned on an outbound
+			// connection to a third party, and the next log line about it
+			// may not come until a subscribed show is published to.
+			log.Info("podping watcher started",
+				"node", cmp.Or(*podpingNode, podping.DefaultNode),
+				"writers", cmp.Or(strings.Join(pinned, ","), "from the chain"))
+			group.Go(ctx, "podping", watcher.Run)
+		}
 		group.Go(ctx, "retention-sweeper", func(ctx context.Context) error {
 			tick := time.NewTicker(time.Minute)
 			defer tick.Stop()

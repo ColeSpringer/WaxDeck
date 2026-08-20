@@ -9,6 +9,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/colespringer/waxdeck/server/internal/providers"
 )
 
 // The second rung of radio artwork: a cover for a song this library does
@@ -40,7 +42,7 @@ import (
 // resolver that answered and found nothing returns ErrNoRadioArt, and
 // anything else is "could not ask".
 type RadioArtResolver interface {
-	FrontCover(ctx context.Context, artist, title string) (data []byte, mime string, err error)
+	FrontCover(ctx context.Context, artist, title string) (providers.TitleCoverResult, error)
 }
 
 // ErrNoRadioArt is the answered-and-empty outcome: upstream was reached
@@ -111,6 +113,11 @@ type radioArtEntry struct {
 	// comes with switching it off: nothing was sent anywhere to get
 	// them.
 	announced bool
+	// source says which rung answered, so a face can caption the cover
+	// rather than presenting a third party's picture as the station's
+	// own. An announced picture is the station's own feed; an external
+	// one names the provider that supplied it.
+	source ArtSourceDTO
 }
 
 func (e radioArtEntry) stale() bool { return time.Since(e.fetched) >= e.fresh }
@@ -189,6 +196,29 @@ func (l *Library) RadioNowPlayingArt(key string) (RadioLogo, error) {
 	return entry.art, nil
 }
 
+// RadioNowPlayingArtSource answers where the cover held under one key
+// came from, so a face can caption it. Zero when nothing is held, which
+// is the same answer RadioNowPlayingArt gives and reads as "draw no
+// mark".
+//
+// It repeats that read's toggle gate for the same reason: an operator
+// who switched the external rung off is not told which third party a
+// still-cached cover came from, because they are no longer being served
+// that cover at all.
+func (l *Library) RadioNowPlayingArtSource(key string) ArtSourceDTO {
+	if key == "" {
+		return ArtSourceDTO{}
+	}
+	entry, ok := l.cachedRadioArt(key)
+	if !ok || len(entry.art.Bytes) == 0 {
+		return ArtSourceDTO{}
+	}
+	if !entry.announced && !l.RadioExternalArtEnabled() {
+		return ArtSourceDTO{}
+	}
+	return entry.source
+}
+
 // announcedArtKey names a picture by the URL it came from and the song
 // it was announced with.
 //
@@ -260,6 +290,10 @@ func (l *Library) EnsureRadioAnnouncedArt(artURL, announced string) (string, boo
 				fetched:   time.Now(),
 				fresh:     radioArtFreshFor,
 				announced: true,
+				// The station published this URL in its own stream, which
+				// is the radio shape of a feed image: nobody was asked for
+				// it and no provider supplied it.
+				source: ArtSourceDTO{Source: artSourceFeed, SourceURL: artURL},
 			})
 			l.wakeRadioListeners()
 		// A body that is not a picture will not be one tomorrow either:
@@ -347,7 +381,7 @@ func (l *Library) EnsureRadioNowPlayingArt(stationName, announced string) string
 		defer l.releaseRadioArtLookup(key)
 		ctx, cancel := context.WithTimeout(ctx, l.radioArtBudget)
 		defer cancel()
-		data, mime, err := l.radioArtResolver.FrontCover(ctx, artist, title)
+		got, err := l.radioArtResolver.FrontCover(ctx, artist, title)
 		// Asked again on the way out: the walk takes up to a minute, and
 		// storing past a switch-off leaves third-party bytes resident for a
 		// week after the forget that ran when the operator said stop.
@@ -355,11 +389,16 @@ func (l *Library) EnsureRadioNowPlayingArt(stationName, announced string) string
 			return nil
 		}
 		switch {
-		case err == nil && len(data) > 0:
+		case err == nil && len(got.Data) > 0:
 			l.storeRadioArt(key, radioArtEntry{
-				art:     radioLogoFromBytes(data, mime),
+				art:     radioLogoFromBytes(got.Data, got.MIME),
 				fetched: time.Now(),
 				fresh:   radioArtFreshFor,
+				source: ArtSourceDTO{
+					Source:    artSourceEnrichment,
+					Provider:  got.Provider,
+					SourceURL: got.SourceURL,
+				},
 			})
 			l.wakeRadioListeners()
 		case errors.Is(err, ErrNoRadioArt):

@@ -14,7 +14,8 @@ part 'lyrics.g.dart';
 ///
 /// Properties:
 /// * [pid] - The item these lyrics belong to.
-/// * [source_] - Where the lyrics came from (`lrc` sidecar, `embedded` tag).
+/// * [source_] - Where the lyrics came from: `tag` (an embedded USLT/SYLT frame), `sidecar` (an `.lrc` beside the audio), `user`, or `enrichment`. The same vocabulary artwork reports; it replaces the older `lrc`/`embedded` pair, which named formats rather than producers. 
+/// * [provider] - The lyrics provider that supplied an `enrichment` copy. Empty for every other source. 
 /// * [synced] - Time-synced lines, ordered by `timeMs`.
 /// * [unsynced] - Plain text block when no synced lines exist.
 @BuiltValue()
@@ -23,9 +24,13 @@ abstract class Lyrics implements Built<Lyrics, LyricsBuilder> {
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// Where the lyrics came from (`lrc` sidecar, `embedded` tag).
+  /// Where the lyrics came from: `tag` (an embedded USLT/SYLT frame), `sidecar` (an `.lrc` beside the audio), `user`, or `enrichment`. The same vocabulary artwork reports; it replaces the older `lrc`/`embedded` pair, which named formats rather than producers. 
   @BuiltValueField(wireName: r'source')
   String get source_;
+
+  /// The lyrics provider that supplied an `enrichment` copy. Empty for every other source. 
+  @BuiltValueField(wireName: r'provider')
+  String? get provider;
 
   /// Time-synced lines, ordered by `timeMs`.
   @BuiltValueField(wireName: r'synced')
@@ -68,6 +73,13 @@ class _$LyricsSerializer implements PrimitiveSerializer<Lyrics> {
       object.source_,
       specifiedType: const FullType(String),
     );
+    if (object.provider != null) {
+      yield r'provider';
+      yield serializers.serialize(
+        object.provider,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.synced != null) {
       yield r'synced';
       yield serializers.serialize(
@@ -118,6 +130,13 @@ class _$LyricsSerializer implements PrimitiveSerializer<Lyrics> {
             specifiedType: const FullType(String),
           ) as String;
           result.source_ = valueDes;
+          break;
+        case r'provider':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.provider = valueDes;
           break;
         case r'synced':
           final valueDes = serializers.deserialize(

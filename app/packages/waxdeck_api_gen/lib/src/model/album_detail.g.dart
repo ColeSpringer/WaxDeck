@@ -33,6 +33,8 @@ class _$AlbumDetail extends AlbumDetail {
   final int? itemCount;
   @override
   final int? totalDurationMs;
+  @override
+  final ArtSource? artSource;
 
   factory _$AlbumDetail([void Function(AlbumDetailBuilder)? updates]) =>
       (AlbumDetailBuilder()..update(updates))._build();
@@ -51,6 +53,7 @@ class _$AlbumDetail extends AlbumDetail {
     this.country,
     this.itemCount,
     this.totalDurationMs,
+    this.artSource,
   }) : super._();
   @override
   AlbumDetail rebuild(void Function(AlbumDetailBuilder) updates) =>
@@ -75,7 +78,8 @@ class _$AlbumDetail extends AlbumDetail {
         media == other.media &&
         country == other.country &&
         itemCount == other.itemCount &&
-        totalDurationMs == other.totalDurationMs;
+        totalDurationMs == other.totalDurationMs &&
+        artSource == other.artSource;
   }
 
   @override
@@ -94,6 +98,7 @@ class _$AlbumDetail extends AlbumDetail {
     _$hash = $jc(_$hash, country.hashCode);
     _$hash = $jc(_$hash, itemCount.hashCode);
     _$hash = $jc(_$hash, totalDurationMs.hashCode);
+    _$hash = $jc(_$hash, artSource.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -113,7 +118,8 @@ class _$AlbumDetail extends AlbumDetail {
           ..add('media', media)
           ..add('country', country)
           ..add('itemCount', itemCount)
-          ..add('totalDurationMs', totalDurationMs))
+          ..add('totalDurationMs', totalDurationMs)
+          ..add('artSource', artSource))
         .toString();
   }
 }
@@ -176,6 +182,10 @@ class AlbumDetailBuilder implements Builder<AlbumDetail, AlbumDetailBuilder> {
   set totalDurationMs(int? totalDurationMs) =>
       _$this._totalDurationMs = totalDurationMs;
 
+  ArtSourceBuilder? _artSource;
+  ArtSourceBuilder get artSource => _$this._artSource ??= ArtSourceBuilder();
+  set artSource(ArtSourceBuilder? artSource) => _$this._artSource = artSource;
+
   AlbumDetailBuilder() {
     AlbumDetail._defaults(this);
   }
@@ -196,6 +206,7 @@ class AlbumDetailBuilder implements Builder<AlbumDetail, AlbumDetailBuilder> {
       _country = $v.country;
       _itemCount = $v.itemCount;
       _totalDurationMs = $v.totalDurationMs;
+      _artSource = $v.artSource?.toBuilder();
       _$v = null;
     }
     return this;
@@ -215,31 +226,48 @@ class AlbumDetailBuilder implements Builder<AlbumDetail, AlbumDetailBuilder> {
   AlbumDetail build() => _build();
 
   _$AlbumDetail _build() {
-    final _$result =
-        _$v ??
-        _$AlbumDetail._(
-          pid: BuiltValueNullFieldError.checkNotNull(
-            pid,
-            r'AlbumDetail',
-            'pid',
-          ),
-          title: BuiltValueNullFieldError.checkNotNull(
-            title,
-            r'AlbumDetail',
-            'title',
-          ),
-          sortKey: sortKey,
-          mbid: mbid,
-          year: year,
-          releaseGroupPid: releaseGroupPid,
-          barcode: barcode,
-          label: label,
-          catalogNumber: catalogNumber,
-          media: media,
-          country: country,
-          itemCount: itemCount,
-          totalDurationMs: totalDurationMs,
+    _$AlbumDetail _$result;
+    try {
+      _$result =
+          _$v ??
+          _$AlbumDetail._(
+            pid: BuiltValueNullFieldError.checkNotNull(
+              pid,
+              r'AlbumDetail',
+              'pid',
+            ),
+            title: BuiltValueNullFieldError.checkNotNull(
+              title,
+              r'AlbumDetail',
+              'title',
+            ),
+            sortKey: sortKey,
+            mbid: mbid,
+            year: year,
+            releaseGroupPid: releaseGroupPid,
+            barcode: barcode,
+            label: label,
+            catalogNumber: catalogNumber,
+            media: media,
+            country: country,
+            itemCount: itemCount,
+            totalDurationMs: totalDurationMs,
+            artSource: _artSource?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'artSource';
+        _artSource?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'AlbumDetail',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

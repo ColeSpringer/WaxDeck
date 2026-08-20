@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_mark.dart';
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
 import '../home/pin_action.dart';
@@ -288,6 +289,14 @@ class _Header extends ConsumerWidget {
       title: facts.title,
       subtitle: facts.artist,
       metadata: facts.caption,
+      // Rides the identity read the header already makes, so the mark
+      // costs no request of its own. Silent while it loads and silent
+      // on failure, like the identity block below: a caption is not
+      // worth a spinner.
+      artworkCaption: artSourceLabelWithBorrow(
+        context.l10n,
+        ref.watch(albumDetailProvider(pid)).value?.artSource,
+      ),
       artwork: ref
           .watch(artworkStoreProvider)
           .source(ref.watch(repositoryProvider).artUrlFor(pid)),

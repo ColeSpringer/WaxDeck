@@ -421,6 +421,29 @@
   "artSlotDiscInline": "el disco",
   "artSlotFront": "Portada",
   "artSlotFrontInline": "la portada",
+  "artSourceBorrowed": "Tomada de una pista",
+  "artSourceBorrowedFrom": "{source} · {borrow}",
+  "@artSourceBorrowedFrom": {
+    "description": "The mark under a release's cover: where the picture came from, plus a note that the release borrowed it from a track. Both halves are sentences, so a locale that orders them the other way round reorders the placeholders.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "borrow": {
+        "type": "String"
+      }
+    }
+  },
+  "artSourceFeed": "Del feed",
+  "artSourceLyricsSidecar": "De un archivo .lrc",
+  "@artSourceLyricsSidecar": {
+    "description": "Provenance of lyrics that came from a companion file beside the audio. The artwork wording (a folder image) is wrong for lyrics, which arrive as an .lrc."
+  },
+  "artSourceProvider": "De {provider}",
+  "artSourceProviderUnnamed": "De un proveedor de metadatos",
+  "artSourceSidecar": "De una imagen de la carpeta",
+  "artSourceTag": "Del archivo",
+  "artSourceUser": "Establecida a mano",
   "artworkClearAction": "Borrar",
   "artworkClearBody": "El hueco queda vacío. No se hereda nada en su lugar.",
   "artworkClearFrontBody": "El elemento pasa a usar la portada de su álbum o de su artista. La imagen se elimina del catálogo.",
@@ -440,6 +463,7 @@
   "artworkStateEmpty": "Vacío",
   "artworkStateImage": "imagen",
   "artworkStateInherited": "Heredada",
+  "artworkStatePinned": "Fijada, sin imagen",
   "artworkStateSize": "{width} x {height}",
   "artworkTitle": "Ilustraciones",
   "artworkTooLarge": "{file} supera los 16 MB que puede ocupar una imagen",
@@ -841,6 +865,7 @@
   "libraryKindArtist": "artista",
   "localeFontSample": "Música, pódcast y audiolibros.",
   "metadataAddTag": "Añadir la etiqueta",
+  "metadataArtworkSource": "Ilustración · {source}",
   "metadataClearLyrics": "Borrar",
   "metadataCreditNames": "Nombres, separados por comas",
   "metadataCreditRole": "Rol del crédito",
@@ -898,6 +923,7 @@
   "metadataLyricsHint": "[00:12.00] Primera línea",
   "metadataLyricsLabel": "LRC",
   "metadataLyricsOverline": "LRC con tiempos, o líneas sin más",
+  "metadataLyricsSource": "Letras · {source}",
   "metadataLyricsTitle": "Letra",
   "metadataNoCreditRoles": "No hay roles de crédito para este tipo",
   "metadataNoSources": "No hay fuentes registradas",
@@ -914,7 +940,31 @@
   "metadataSaveChanges": "{count, plural, =1{Guardar 1 cambio} other{Guardar {count} cambios}}",
   "metadataSaveCredits": "Guardar los créditos",
   "metadataSaveLyrics": "Guardar la letra",
+  "metadataSourceEnrichment": "un proveedor",
+  "@metadataSourceEnrichment": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceFeed": "el feed",
+  "@metadataSourceFeed": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceOrganize": "el organizador",
+  "@metadataSourceOrganize": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceSidecar": "archivos complementarios",
+  "@metadataSourceSidecar": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceTag": "las etiquetas",
+  "@metadataSourceTag": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
   "metadataSourceUnknown": "Origen desconocido",
+  "metadataSourceUser": "ti",
+  "@metadataSourceUser": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
   "metadataSourceWithProvider": "{source} ({provider})",
   "metadataTagKey": "Clave",
   "metadataTagValues": "Valores, separados por comas",

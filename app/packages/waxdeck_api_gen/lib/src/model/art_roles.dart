@@ -5,19 +5,24 @@
 // ignore_for_file: unused_element
 import 'package:waxdeck_api_gen/src/model/art_role_info.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/art_source.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
 part 'art_roles.g.dart';
 
-/// The artwork slots an entity holds at its own level.
+/// The artwork slots an entity holds at its own level, and the provenance of the cover a front-cover read would actually answer with. 
 ///
 /// Properties:
 /// * [roles] 
+/// * [artSource] 
 @BuiltValue()
 abstract class ArtRoles implements Built<ArtRoles, ArtRolesBuilder> {
   @BuiltValueField(wireName: r'roles')
   BuiltList<ArtRoleInfo> get roles;
+
+  @BuiltValueField(wireName: r'artSource')
+  ArtSource? get artSource;
 
   ArtRoles._();
 
@@ -47,6 +52,13 @@ class _$ArtRolesSerializer implements PrimitiveSerializer<ArtRoles> {
       object.roles,
       specifiedType: const FullType(BuiltList, [FullType(ArtRoleInfo)]),
     );
+    if (object.artSource != null) {
+      yield r'artSource';
+      yield serializers.serialize(
+        object.artSource,
+        specifiedType: const FullType(ArtSource),
+      );
+    }
   }
 
   @override
@@ -76,6 +88,13 @@ class _$ArtRolesSerializer implements PrimitiveSerializer<ArtRoles> {
             specifiedType: const FullType(BuiltList, [FullType(ArtRoleInfo)]),
           ) as BuiltList<ArtRoleInfo>;
           result.roles.replace(valueDes);
+          break;
+        case r'artSource':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(ArtSource),
+          ) as ArtSource;
+          result.artSource.replace(valueDes);
           break;
         default:
           unhandled.add(key);

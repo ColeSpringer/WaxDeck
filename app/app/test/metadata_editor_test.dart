@@ -121,6 +121,121 @@ void main() {
     expect(find.text('Empty'), findsNWidgets(4));
   });
 
+  testWidgets('every slot says where its picture came from', (tester) async {
+    // The mark is always on and nothing gates it: a cover a third party
+    // supplied names the third party.
+    final repo = _repo()
+      ..ownArtworkPids.add('tr-1')
+      ..artRoles.addAll(const <ArtRoleInfo>[
+        ArtRoleInfo(
+          role: 'front',
+          format: 'jpeg',
+          width: 600,
+          height: 600,
+          source: 'enrichment',
+          provider: 'coverartarchive',
+        ),
+        ArtRoleInfo(
+          role: 'back',
+          format: 'png',
+          width: 600,
+          height: 600,
+          source: 'tag',
+        ),
+      ]);
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('From Cover Art Archive'), findsOneWidget);
+    expect(find.text('From the file'), findsOneWidget);
+  });
+
+  testWidgets('an inherited front cover names the rung that answered', (
+    tester,
+  ) async {
+    // The item holds nothing, so the caption describes the picture the
+    // chain answered with rather than a slot this item owns.
+    final repo = _repo()
+      ..artworkPids.add('tr-1')
+      ..artSource = const ArtSource(
+        source: 'tag',
+        level: 'album',
+        derived: true,
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('Inherited'), findsOneWidget);
+    expect(find.text('From the file · Borrowed from a track'), findsOneWidget);
+  });
+
+  testWidgets('a pinned empty cover is not an empty one', (tester) async {
+    // A cover cleared and left pinned refuses every later write and
+    // shows nothing. Reading "Empty" there is exactly the confusion the
+    // upstream lock report exists to end.
+    final repo = _repo()
+      ..artRoles.add(const ArtRoleInfo(role: 'front', locked: true));
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('Pinned, no image'), findsOneWidget);
+    expect(find.text('Empty'), findsNWidgets(4));
+  });
+
+  testWidgets('the summary counts fields, and names artifacts apart', (
+    tester,
+  ) async {
+    // Upstream overlays an art row on every item holding a cover, so
+    // counting the provenance list would shift this line on nearly every
+    // item and stop "no recorded sources" meaning anything.
+    final repo = _repo()
+      ..ownArtworkPids.add('tr-1')
+      ..lyricsByPid['tr-1'] = const LyricsState(
+        synced: false,
+        source: 'sidecar',
+      )
+      ..itemProvenance['tr-1'] = const <FieldProvenance>[
+        FieldProvenance(field: 'title', source: 'user', locked: true),
+        FieldProvenance(field: 'art', source: 'tag', locked: false),
+        FieldProvenance(field: 'lyrics', source: 'sidecar', locked: false),
+      ];
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('1 from you'), findsOneWidget);
+    expect(find.text('Artwork · From the file'), findsOneWidget);
+    // A cover's sidecar is a folder image; lyrics arrive as an .lrc, and
+    // one wording cannot honestly describe both files.
+    expect(find.text('Lyrics · From an .lrc file'), findsOneWidget);
+  });
+
+  testWidgets('a lock-only artifact row states no source', (tester) async {
+    // Upstream keeps a row for an art or lyrics field locked with
+    // nothing behind it, and the lock writers invent a source: the
+    // curation paths stamp "user", `waxbin lock <pid> art` stamps
+    // "tag". Neither knows where anything came from, and there is no
+    // artwork here to have come from anywhere.
+    final repo = _repo()
+      ..itemProvenance['tr-1'] = const <FieldProvenance>[
+        FieldProvenance(field: 'art', source: 'tag', locked: true),
+        FieldProvenance(field: 'lyrics', source: 'user', locked: true),
+      ];
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.textContaining('Artwork · '), findsNothing);
+    expect(find.textContaining('Lyrics · '), findsNothing);
+  });
+
+  testWidgets('an item curated by nobody still says so with a cover', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..ownArtworkPids.add('tr-1')
+      ..itemProvenance['tr-1'] = const <FieldProvenance>[
+        FieldProvenance(field: 'art', source: 'tag', locked: false),
+      ];
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('No recorded sources'), findsOneWidget);
+    expect(find.text('Artwork · From the file'), findsOneWidget);
+  });
+
   testWidgets('a front cover the item does not own reads as inherited', (
     tester,
   ) async {

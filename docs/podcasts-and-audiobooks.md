@@ -49,6 +49,48 @@ episode (`DELETE /api/v1/episodes/{pid}/fetch`). The audio moves to
 the library trash, everyone's positions and history survive, and the
 episode can be fetched again at any time.
 
+### PodPing
+
+`WAXDECK_PODPING=true` lowers that thirty-minute floor to seconds for
+the shows whose hosts publish [Podping](https://podping.org)
+notifications. A host asks a podping.cloud writer to name the changed
+feed on the Hive blockchain, and WaxDeck reads the chain and refreshes
+that one show at once. It is a signal, never a replacement: a host that
+does not publish, a writer having an afternoon, and a node WaxDeck
+cannot reach all end the same way, with the scheduled refresh finding
+the episode a few minutes later.
+
+Off by default, because it is a standing outbound connection to a
+third-party public node, and because the schedule already works. What
+it reads is public and anonymous - blocks everyone can read - and it
+sends nothing about this library anywhere; the only thing it can cause
+is a refresh of a feed already subscribed here.
+
+Two limits keep that from being worth much to anyone who tried to abuse
+it. A show is refreshed at most once a minute this way no matter how
+many notifications name it, and the floor is kept in the catalog rather
+than in memory, so restarting WaxDeck does not reset it - which is the
+same floor a subscriber's own manual refresh keeps. And a refresh that
+fails does not count towards the ten consecutive failures that disable
+a feed: those count this server's own scheduled attempts, because a
+stranger relaying a busy host through a bad afternoon should not be
+able to turn off a subscription nobody here asked to stop.
+
+- `WAXDECK_PODPING_NODE` names a Hive API node (empty picks a public
+  one).
+- `WAXDECK_PODPING_WRITERS` pins the trusted writer accounts, comma
+  separated. Empty, WaxDeck resolves the published podping.cloud writer
+  set from the chain, refreshed hourly, which is how it is meant to be
+  read. A notification from any other account is ignored - anyone may
+  write to a public chain, so the writer's identity is the whole of the
+  trust decision.
+
+A feed suspended after repeated failures stays suspended: a stranger's
+notification is not a manual refresh, and honouring it would undo the
+backoff. A show already refreshed in the last thirty seconds is left
+alone, so one publish that puts several notifications on the chain
+still costs the host one request.
+
 Unsubscribing keeps the show, its episodes, and your progress. When
 the last subscriber leaves, the app asks whether the downloaded files
 should go too; keeping them leaves the show ready for the next

@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_mark.dart';
 import '../artwork/artwork_providers.dart';
+import '../metadata/artwork_manager.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../player/entity_star_rating_row.dart';
@@ -163,6 +165,13 @@ class _Header extends ConsumerWidget {
         if (albums.isNotEmpty) l10n.musicArtistReleaseCount(albums.length),
       ].join(' · '),
       shape: ArtworkShape.circle,
+      // An artist has no detail read to ride, so the mark comes off the
+      // art-roles read, which answers for every entity type and carries
+      // the resolved cover's provenance beside the slots.
+      artworkCaption: artSourceLabelWithBorrow(
+        l10n,
+        ref.watch(itemArtRolesProvider(pid)).value?.artSource,
+      ),
       artwork: ref
           .watch(artworkStoreProvider)
           .source(ref.watch(repositoryProvider).artUrlFor(pid)),

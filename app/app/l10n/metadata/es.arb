@@ -3,6 +3,7 @@
   "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
   "@@x-template": "en.arb",
   "metadataAddTag": "Añadir la etiqueta",
+  "metadataArtworkSource": "Ilustración · {source}",
   "metadataClearLyrics": "Borrar",
   "metadataCreditNames": "Nombres, separados por comas",
   "metadataCreditRole": "Rol del crédito",
@@ -60,6 +61,7 @@
   "metadataLyricsHint": "[00:12.00] Primera línea",
   "metadataLyricsLabel": "LRC",
   "metadataLyricsOverline": "LRC con tiempos, o líneas sin más",
+  "metadataLyricsSource": "Letras · {source}",
   "metadataLyricsTitle": "Letra",
   "metadataNoCreditRoles": "No hay roles de crédito para este tipo",
   "metadataNoSources": "No hay fuentes registradas",
@@ -76,7 +78,31 @@
   "metadataSaveChanges": "{count, plural, =1{Guardar 1 cambio} other{Guardar {count} cambios}}",
   "metadataSaveCredits": "Guardar los créditos",
   "metadataSaveLyrics": "Guardar la letra",
+  "metadataSourceEnrichment": "un proveedor",
+  "@metadataSourceEnrichment": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceFeed": "el feed",
+  "@metadataSourceFeed": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceOrganize": "el organizador",
+  "@metadataSourceOrganize": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceSidecar": "archivos complementarios",
+  "@metadataSourceSidecar": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceTag": "las etiquetas",
+  "@metadataSourceTag": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
   "metadataSourceUnknown": "Origen desconocido",
+  "metadataSourceUser": "ti",
+  "@metadataSourceUser": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
   "metadataSourceWithProvider": "{source} ({provider})",
   "metadataTagKey": "Clave",
   "metadataTagValues": "Valores, separados por comas",

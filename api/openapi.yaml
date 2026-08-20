@@ -3203,6 +3203,17 @@ paths:
         A URL names a PID and a size, not the bytes behind them, so a
         client that replaces an entity's artwork has to defeat its own
         caches: vary `v` to do it.
+
+
+        The 200 carries the answering image's provenance in
+        `X-Art-Source`, `X-Art-Provider`, `X-Art-Source-Url`, and
+        `X-Art-Level` - the same four values `ArtSource` reports as JSON.
+        They are here because a byte-serving endpoint that says nothing
+        about where its bytes came from is the wrong shape for a
+        third-party consumer. WaxDeck's own clients read the JSON
+        instead: a browser gives a caller no access to the response
+        headers behind an `<img>`, so the header form cannot reach the
+        platform where the mark is most likely to be seen.
       tags: [library]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -3248,6 +3259,32 @@ paths:
               description: Content-addressed validator for the returned bytes.
               schema:
                 type: string
+            X-Art-Source:
+              description: >
+                Where the answering image came from: `tag`, `sidecar`,
+                `user`, `enrichment`, or `feed`. Omitted when the store
+                holds no attribution for it.
+              schema:
+                type: string
+            X-Art-Provider:
+              description: >
+                The provider that supplied an `enrichment` cover.
+                Omitted for every other source.
+              schema:
+                type: string
+            X-Art-Source-Url:
+              description: >
+                Where a fetched cover's bytes came from. Omitted for a
+                cover that never crossed the network.
+              schema:
+                type: string
+            X-Art-Level:
+              description: >
+                Which rung of the fallback chain answered (`track`,
+                `album`, `artist`, `podcast`, ...), so a caller can tell
+                an item's own cover from an inherited one.
+              schema:
+                type: string
             Cache-Control:
               description: >
                 `private, max-age=86400, stale-while-revalidate=604800`.
@@ -3286,6 +3323,14 @@ paths:
             validator and freshness the body would have, so a
             revalidation refreshes the cached copy rather than leaving it
             stale enough to revalidate again on the next paint.
+
+
+            It repeats the provenance headers too. The validator
+            addresses the bytes, and a cover can be re-attributed
+            without them changing - a sidecar cover that is now embedded
+            in the tags, a feed that moved its image URL - so a 304 that
+            omitted them would leave a caller citing the old origin for
+            as long as it kept the picture.
           headers:
             ETag:
               description: Content-addressed validator for the cached bytes.
@@ -3297,6 +3342,22 @@ paths:
                 type: string
             Vary:
               description: The same credentials the 200 varies by.
+              schema:
+                type: string
+            X-Art-Source:
+              description: The same producer the 200 reports.
+              schema:
+                type: string
+            X-Art-Provider:
+              description: The same provider the 200 reports.
+              schema:
+                type: string
+            X-Art-Source-Url:
+              description: The same fetch URL the 200 reports.
+              schema:
+                type: string
+            X-Art-Level:
+              description: The same chain rung the 200 reports.
               schema:
                 type: string
         "400":
@@ -3321,6 +3382,14 @@ paths:
         cannot: an item that lists a `front` slot here holds its own cover,
         while one that resolves art only through `/items/{pid}/art` inherits
         it from the chain.
+
+
+        Each slot carries where its image came from and whether the front
+        cover is pinned, and `artSource` alongside them describes the
+        cover a front-cover read would actually answer with - which is
+        the inherited one when the entity holds none of its own. That is
+        what a surface drawing the cover marks; the per-slot rows are
+        what an artwork manager edits.
       tags: [library]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -3863,6 +3932,80 @@ paths:
       responses:
         "204":
           description: Cleared.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /entities/{entityType}/{entityPid}/artwork/lock:
+    parameters:
+      - $ref: "#/components/parameters/EntityType"
+      - $ref: "#/components/parameters/EntityPid"
+    get:
+      operationId: getEntityArtworkLock
+      summary: Read an entity's artwork lock
+      description: >
+        Whether an album, artist, release group, or genre's front cover
+        is pinned against enrichment and scan re-derives. This is what
+        explains an entity that shows no cover and refuses every attempt
+        to give it one: the cover was cleared and the pin left standing,
+        which says "do not refill this" rather than "this has no cover
+        yet". Administrators only, like every other catalog-entity
+        curation read.
+      tags: [metadata]
+      responses:
+        "200":
+          description: The entity's artwork lock state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtworkLock"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: setEntityArtworkLock
+      summary: Pin or unpin an entity's artwork
+      description: >
+        Sets or clears the front-cover pin without touching the cover
+        itself, which setting artwork cannot express: that always writes
+        the image slot too, so unpinning through it would mean supplying
+        the picture again. Unpinning here is the way out of a cover that
+        was cleared and left pinned. Administrators only.
+
+
+        `playlist` is refused with `invalid-request`. A playlist's cover
+        authority is its own custom/generated origin marker rather than
+        this pin, and a pin left standing on one would make the mosaic
+        the server builds from the members unwritable - which the read
+        path retries on every read, forever.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArtworkLock"
+      responses:
+        "200":
+          description: The entity's artwork lock state after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtworkLock"
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":
@@ -10318,6 +10461,71 @@ components:
       enum: [front, back, disc, booklet, background]
       default: front
 
+    ArtSource:
+      type: object
+      description: >
+        Where the picture a caller is about to draw came from, so a
+        surface that shows a cover large enough to carry a caption can
+        say so. Reported on the entity detail reads (which already carry
+        the identity the cover belongs to) rather than on list rows: a
+        grid thumbnail has no room for a mark, and putting this on every
+        summary row would cost a lookup per row for a caption nothing
+        draws.
+
+
+        This describes the picture that a front-cover resolve actually
+        answers with, which for an album with no durable cover of its own
+        is a member track's - reported honestly as that track's source,
+        with `derived` marking that the album did not choose it.
+      required: [source]
+      properties:
+        source:
+          type: string
+          description: >
+            The producer: `tag` (the file's own embedded cover),
+            `sidecar` (a cover image beside the audio), `user` (set
+            through the curation surface), `enrichment` (fetched from a
+            metadata provider, named in `provider`), or `feed` (a podcast
+            feed's image, or a radio station's own announcement). A
+            string, not a closed enum: treat an unknown value as
+            unattributed and draw nothing.
+          example: enrichment
+        provider:
+          type: string
+          description: >
+            The provider that supplied an `enrichment` cover, as an id
+            (`deezer`, `coverartarchive`, `fanarttv`). Empty for every
+            other source.
+          example: coverartarchive
+        sourceUrl:
+          type: string
+          description: >
+            Where the bytes were fetched from, for a cover that came off
+            the network (`enrichment`, `feed`). Empty otherwise.
+        level:
+          type: string
+          description: >
+            Which rung of the fallback chain answered: `track`, `book`,
+            `episode`, `album`, `artist`, `release_group`, `genre`,
+            `podcast`, or `playlist`. Absent where there is no chain
+            (radio, which resolves nothing from the catalog). Open set;
+            a client that does not recognise a value should name no rung
+            rather than guess.
+          example: album
+        derived:
+          type: boolean
+          description: >
+            True when the answering level holds no cover of its own and
+            the picture came from a member instead - an album showing one
+            of its tracks' covers, which is the ordinary case for an
+            album nobody has given a durable cover. `source` is that
+            member's, so this is what stops a caption reading as though
+            the album made the choice. Absent means the same as false.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this attachment was last written.
+
     ItemSummary:
       type: object
       description: >
@@ -11572,6 +11780,13 @@ components:
         subtitle:
           type: string
           description: Subtitle, when known.
+        artSource:
+          allOf:
+            - $ref: "#/components/schemas/ArtSource"
+          description: >
+            Where the cover this book answers came from, for the mark
+            under it. Absent when the book has no artwork, or when the
+            answering image carries no attribution.
         authors:
           type: array
           description: Author display names, in credit order.
@@ -13046,6 +13261,8 @@ components:
           description: >
             Total running time of those tracks, in milliseconds. Absent
             alongside `itemCount`, and for its reason.
+        artSource:
+          $ref: "#/components/schemas/ArtSource"
 
     Item:
       allOf:
@@ -13082,6 +13299,8 @@ components:
               type: string
               format: date-time
               description: When the item entered the library.
+            artSource:
+              $ref: "#/components/schemas/ArtSource"
       description: Full detail for a single library item.
 
     ItemPage:
@@ -13168,30 +13387,71 @@ components:
 
     ArtRoleInfo:
       type: object
-      description: One artwork slot an entity holds at its own level.
+      description: >
+        One artwork slot an entity holds at its own level, with where its
+        image came from and whether it is pinned.
+
+
+        A slot that reports `locked: true` and no `format` is a lock with
+        nothing behind it: the cover was cleared and pinned cleared, which
+        means "do not refill this" rather than "this has no cover yet". It
+        is the one artwork state that was previously invisible, and it is
+        why an entity can list a role at all while holding no image. Only
+        `front` can be locked; the auxiliary slots have no producer to
+        guard against, so they always report false.
       required: [role]
       properties:
         role:
           $ref: "#/components/schemas/ArtRole"
         format:
           type: string
-          description: The stored image format (`jpeg`, `png`, `webp`, `gif`).
+          description: >
+            The stored image format (`jpeg`, `png`, `webp`, `gif`).
+            Absent when the slot holds no image, which happens only on a
+            locked-and-cleared `front`.
         width:
           type: integer
           description: Pixel width, 0 when the image was not decodable.
         height:
           type: integer
           description: Pixel height, 0 when the image was not decodable.
+        source:
+          type: string
+          description: >
+            Where this slot's image came from, in `ArtSource`'s
+            vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`).
+            A string, not a closed enum.
+          example: tag
+        provider:
+          type: string
+          description: The provider that supplied an `enrichment` cover.
+        sourceUrl:
+          type: string
+          description: Where a fetched cover's bytes came from.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this slot was last written.
+        locked:
+          type: boolean
+          description: >
+            Whether the entity's front cover is pinned against enrichment
+            and scan re-derives. False on every non-front role.
 
     ArtRoles:
       type: object
-      description: The artwork slots an entity holds at its own level.
+      description: >
+        The artwork slots an entity holds at its own level, and the
+        provenance of the cover a front-cover read would actually answer
+        with.
       required: [roles]
       properties:
         roles:
           type: array
           items:
             $ref: "#/components/schemas/ArtRoleInfo"
+        artSource:
+          $ref: "#/components/schemas/ArtSource"
 
     Lyrics:
       type: object
@@ -13205,8 +13465,18 @@ components:
           description: The item these lyrics belong to.
         source:
           type: string
-          description: Where the lyrics came from (`lrc` sidecar, `embedded` tag).
-          example: lrc
+          description: >
+            Where the lyrics came from: `tag` (an embedded USLT/SYLT
+            frame), `sidecar` (an `.lrc` beside the audio), `user`, or
+            `enrichment`. The same vocabulary artwork reports; it
+            replaces the older `lrc`/`embedded` pair, which named
+            formats rather than producers.
+          example: sidecar
+        provider:
+          type: string
+          description: >
+            The lyrics provider that supplied an `enrichment` copy.
+            Empty for every other source.
         synced:
           type: array
           description: Time-synced lines, ordered by `timeMs`.
@@ -13391,20 +13661,54 @@ components:
 
     FieldProvenance:
       type: object
-      description: Who set one field's current value.
+      description: >
+        Who set one field's current value.
+
+
+        The list carries two kinds of row. A scalar row names a metadata
+        field (`title`, `genre`, ...) and reports the value a curator
+        set. An artifact row names `art` or `lyrics`, with an empty
+        `value` because the value is bytes rather than text. A non-empty
+        provenance list therefore does not mean the item was curated: an
+        untouched track with a cover in its tags reports one `art` row
+        sourced `tag`. Count the scalar rows, not the list, when
+        summarizing what a person changed.
+
+
+        An artifact row does not imply the artifact. Locking `art` or
+        `lyrics` to stop a scan filling it leaves a row with nothing
+        behind it, and the `source` on such a row is invented by
+        whichever writer took the lock rather than describing anything.
+        Read `hasOwnArtwork` and `lyrics` on the enclosing
+        `ItemMetadata` before presenting an artifact row's source as
+        where something came from; on a lock-only row, `locked` is the
+        only field worth reading.
       required: [field, source, locked]
       properties:
         field:
           type: string
-          description: The field, possibly namespaced.
+          description: >
+            The field, possibly namespaced, or `art` / `lyrics` for an
+            artifact row.
         source:
           type: string
           description: >
-            The producer: `tag`, `user`, `enrichment`, or
-            `organize`. A string, not a closed enum.
+            The producer: `tag` (the file's own tags), `sidecar` (a
+            companion file beside the audio - a `cover.jpg`, an `.lrc`),
+            `user` (set through the curation surface), `enrichment`
+            (supplied by a metadata provider, named in `provider`),
+            `organize` (written by an organize tag write-back), or `feed`
+            (a podcast feed). A string, not a closed enum. `sidecar` and
+            `feed` reach only artifact rows; a scalar field is never
+            produced from a cover image or a feed.
         provider:
           type: string
           description: The enrichment provider, for enriched fields.
+        sourceUrl:
+          type: string
+          description: >
+            Where a fetched value's bytes came from, on the rows that
+            have one (an enrichment or feed cover). Empty otherwise.
         locked:
           type: boolean
           description: Whether the field is locked.
@@ -13412,6 +13716,17 @@ components:
           type: string
           format: date-time
           description: When the value last changed.
+
+    ArtworkLock:
+      type: object
+      description: >
+        Whether an entity's front cover is pinned against enrichment and
+        scan re-derives.
+      required: [locked]
+      properties:
+        locked:
+          type: boolean
+          description: True when the cover is pinned.
 
     Credit:
       type: object
@@ -13439,8 +13754,21 @@ components:
         source:
           type: string
           description: >
-            Where the stored copy came from: `lrc` (sidecar),
-            `embedded`, or `user`. A string, not a closed enum.
+            Where the stored copy came from: `tag` (an embedded
+            USLT/SYLT frame), `sidecar` (an `.lrc` beside the audio),
+            `user`, or `enrichment`. A string, not a closed enum.
+
+
+            This is the same vocabulary artwork reports, so one mark
+            serves both. It replaces the older `lrc`/`embedded` pair,
+            which named the two file formats rather than the producer
+            and had nowhere to put a fetched copy; `lrc` is now
+            `sidecar` and `embedded` is now `tag`.
+        provider:
+          type: string
+          description: >
+            The lyrics provider that supplied an `enrichment` copy.
+            Empty for every other source.
         lrc:
           type: string
           description: >
@@ -15959,6 +16287,8 @@ components:
           type: string
           description: Origin-relative URL of the show's artwork endpoint.
           example: /api/v1/items/pc-01JZX5N8QW3F4V9T2B7KD3M9R6/art
+        artSource:
+          $ref: "#/components/schemas/ArtSource"
         episodeCount:
           type: integer
           description: Number of cataloged episodes.
@@ -16655,7 +16985,14 @@ components:
             logo, then the station mark. A station that announces no
             picture of its own leaves this absent for good while the
             external rung is switched off.
+
+
+            `nowPlayingArtSource` alongside it says which of the two
+            rungs answered, so a face can caption the picture rather
+            than presenting a third party's cover as the station's own.
           example: f822426bccd53e012a220bbf972752dc
+        nowPlayingArtSource:
+          $ref: "#/components/schemas/ArtSource"
         nowPlayingSaved:
           type: boolean
           description: >

@@ -575,6 +575,23 @@ func (l *Library) entityInLibraries(info *read.EntityInfo, uc *UserCtx) bool {
 }
 
 // Item returns full detail for one item.
+// ItemDuration answers how long one visible item is, and nothing else.
+//
+// It exists so a caller that wants only this does not pay for a detail
+// read. Item below resolves the cover to caption it, which today means
+// reading the image bytes (see artSourceForRef), and the listen
+// submission path calls it once per id: a client flushing fifty offline
+// plays would otherwise read fifty full-size covers and discard every
+// byte. Same visibility rules and same not-found error as Item, so a
+// caller can swap one for the other without changing what it reports.
+func (l *Library) ItemDuration(ctx context.Context, uc *UserCtx, apiItemPID string) (int64, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return 0, err
+	}
+	return it.DurationMS, nil
+}
+
 func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (ItemDetail, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
@@ -595,6 +612,11 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 		d.Bitrate = f.Bitrate
 		d.AddedAt = time.Unix(0, f.FirstSeen).UTC()
 	}
+	entity := model.ArtTrack
+	if it.Kind == model.KindEpisode {
+		entity = model.ArtEpisode
+	}
+	d.ArtSource = l.artSourceForRef(ctx, model.EntityRef{Type: entity, PID: it.PID})
 	return d, nil
 }
 
@@ -647,6 +669,7 @@ func (l *Library) Album(ctx context.Context, uc *UserCtx, apiAlbumPID string) (A
 	if uc.AllLibraries {
 		out.ItemCount, out.TotalDurationMS = info.ItemCount, info.TotalDurationMS
 	}
+	out.ArtSource = l.artSourceForRef(ctx, model.EntityRef{Type: model.ArtAlbum, PID: info.PID})
 	return out, nil
 }
 
@@ -684,7 +707,111 @@ func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID, role string, siz
 	if mime == "" {
 		mime = "image/jpeg"
 	}
-	return ArtBlob{Bytes: blob.Bytes, MimeType: mime, SourceHash: blob.SourceHash}, nil
+	return ArtBlob{
+		Bytes:      blob.Bytes,
+		MimeType:   mime,
+		SourceHash: blob.SourceHash,
+		Source:     l.artSourceFor(ctx, ref, blob),
+	}, nil
+}
+
+// The two art-source values a producer outside the catalog reports,
+// taken from the catalog's own vocabulary so the two cannot drift.
+// Radio is that producer: a picture the station announced in its own
+// stream is its feed, and one a lookup supplied is enrichment.
+const (
+	artSourceFeed       = string(model.SourceFeed)
+	artSourceEnrichment = string(model.SourceEnrichment)
+)
+
+// artSourceFromBlob reads the provenance the resolve already carried.
+// The bytes came from one level of the fallback chain and that level's
+// attachment is what a caller marks, so a derived album cover honestly
+// reports the member track's answer rather than claiming the album made
+// the choice.
+func artSourceFromBlob(blob *model.ArtBlob) ArtSourceDTO {
+	out := ArtSourceDTO{
+		Source:    string(blob.Source),
+		Provider:  blob.Provider,
+		SourceURL: blob.SourceURL,
+		Level:     string(blob.Level),
+		Derived:   blob.Derived,
+	}
+	if blob.UpdatedAt != 0 {
+		out.UpdatedAt = time.Unix(0, blob.UpdatedAt).UTC()
+	}
+	return out
+}
+
+// artSourceForRef answers where an entity's front cover came from, for
+// the detail reads that draw one. It resolves rather than reading the
+// entity's own slots: an album normally owns no art row and shows a
+// member track's cover, so the own-level read would leave almost every
+// album header unmarked.
+//
+// The zero value is the honest answer for an entity with no cover at
+// all, and for any failure below - a caption is not worth failing a
+// detail read over.
+//
+// This is the one place the resolve is spent on provenance alone: it
+// reads the source bytes to answer four strings, because the metadata-only
+// resolve exists inside WaxBin and is not exported. Recorded in
+// docs/upstream-requests.md; the read collapses to a row lookup once it is.
+func (l *Library) artSourceForRef(ctx context.Context, ref model.EntityRef) ArtSourceDTO {
+	blob, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, 0)
+	if err != nil || blob == nil {
+		return ArtSourceDTO{}
+	}
+	return l.artSourceFor(ctx, ref, blob)
+}
+
+// artSourceFor is the provenance a caller may be shown for one resolved
+// cover: what the blob carried, minus a source URL that is somebody's
+// credential.
+//
+// A feed cover's URL is minted from the feed document and lives on the
+// feed's host, so for a credentialed show it carries the same token the
+// feed URL does - the value showDTO withholds, opml skips, shares
+// refuse, and classifyFeedErr keeps out of error text. Every other
+// source's URL is a public provider address and is reported as fetched.
+//
+// It lives here, between the resolve and every DTO, rather than at the
+// call sites: the leak this closes was four call sites wide, and a
+// fifth would not know the rule either.
+func (l *Library) artSourceFor(ctx context.Context, ref model.EntityRef, blob *model.ArtBlob) ArtSourceDTO {
+	out := artSourceFromBlob(blob)
+	if out.Source != artSourceFeed || out.SourceURL == "" {
+		return out
+	}
+	if !l.feedArtIsPublic(ctx, ref) {
+		out.SourceURL = ""
+	}
+	return out
+}
+
+// feedArtIsPublic reports whether the show a feed-sourced cover came
+// from is one whose addresses may be handed out. It fails closed: a ref
+// whose show cannot be established withholds the URL, because a chain
+// that grew a rung this rule has not been taught must not leak while it
+// waits to be taught.
+func (l *Library) feedArtIsPublic(ctx context.Context, ref model.EntityRef) bool {
+	show := ref.PID
+	switch ref.Type {
+	case model.ArtPodcast:
+	case model.ArtEpisode:
+		it, err := l.lib.Get(ctx, ref.PID)
+		if err != nil || it == nil || it.PodcastPID == "" {
+			return false
+		}
+		show = it.PodcastPID
+	default:
+		return false
+	}
+	pod, err := l.lib.Podcasts().Get(ctx, show)
+	if err != nil || pod == nil {
+		return false
+	}
+	return !l.showIsPrivate(ctx, pod)
 }
 
 // artRef resolves an art read/roles pid to its entity ref. Item PIDs honor
@@ -731,35 +858,62 @@ func (l *Library) artRef(ctx context.Context, uc *UserCtx, apiPID string) (model
 	}
 }
 
-// ArtRoleInfoDTO is one artwork slot an entity holds at its own level.
+// ArtRoleInfoDTO is one artwork slot an entity holds at its own level,
+// with where its image came from and whether it is pinned. An entry with
+// Locked set and no Format is a pin with nothing behind it - a cleared
+// and pinned cover, which is the state that used to be invisible.
 type ArtRoleInfoDTO struct {
-	Role   string
-	Format string
-	Width  int
-	Height int
+	Role      string
+	Format    string
+	Width     int
+	Height    int
+	Source    string
+	Provider  string
+	SourceURL string
+	UpdatedAt time.Time
+	Locked    bool
+}
+
+// ArtRolesDTO is an entity's own artwork slots plus the provenance of
+// the cover a front-cover read would answer with, which is the inherited
+// one when the entity holds none of its own.
+type ArtRolesDTO struct {
+	Roles     []ArtRoleInfoDTO
+	ArtSource ArtSourceDTO
 }
 
 // ItemArtRoles lists the artwork slots an entity holds at its own level
 // (not inherited from the album/artist chain), the own-versus-inherited
 // signal the front-cover read cannot give. Accepts item, album, and artist
 // PIDs like Art.
-func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) ([]ArtRoleInfoDTO, error) {
+func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) (ArtRolesDTO, error) {
 	ref, err := l.artRef(ctx, uc, apiPID)
 	if err != nil {
-		return nil, err
+		return ArtRolesDTO{}, err
 	}
 	infos, err := l.lib.ArtRoles(ctx, ref)
 	if err != nil {
-		return nil, classify(err)
+		return ArtRolesDTO{}, classify(err)
 	}
-	out := make([]ArtRoleInfoDTO, 0, len(infos))
+	out := ArtRolesDTO{
+		Roles:     make([]ArtRoleInfoDTO, 0, len(infos)),
+		ArtSource: l.artSourceForRef(ctx, ref),
+	}
 	for _, i := range infos {
-		out = append(out, ArtRoleInfoDTO{
-			Role:   string(i.Role),
-			Format: i.Format,
-			Width:  i.Width,
-			Height: i.Height,
-		})
+		role := ArtRoleInfoDTO{
+			Role:      string(i.Role),
+			Format:    i.Format,
+			Width:     i.Width,
+			Height:    i.Height,
+			Source:    string(i.Source),
+			Provider:  i.Provider,
+			SourceURL: i.SourceURL,
+			Locked:    i.Locked,
+		}
+		if i.UpdatedAt != 0 {
+			role.UpdatedAt = time.Unix(0, i.UpdatedAt).UTC()
+		}
+		out.Roles = append(out.Roles, role)
 	}
 	return out, nil
 }
@@ -774,7 +928,7 @@ func (l *Library) ItemLyrics(ctx context.Context, uc *UserCtx, apiItemPID string
 	if err != nil {
 		return Lyrics{}, classify(err)
 	}
-	out := Lyrics{PID: apiItemPID, Source: ly.Source, Unsynced: ly.Unsynced}
+	out := Lyrics{PID: apiItemPID, Source: string(ly.Source), Provider: ly.Provider, Unsynced: ly.Unsynced}
 	for _, line := range ly.Synced {
 		out.Synced = append(out.Synced, SyncedLine{TimeMS: line.TimeMS, Text: line.Text})
 	}

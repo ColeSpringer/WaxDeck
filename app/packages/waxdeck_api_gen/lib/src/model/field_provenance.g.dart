@@ -14,6 +14,8 @@ class _$FieldProvenance extends FieldProvenance {
   @override
   final String? provider;
   @override
+  final String? sourceUrl;
+  @override
   final bool locked;
   @override
   final DateTime? updatedAt;
@@ -25,6 +27,7 @@ class _$FieldProvenance extends FieldProvenance {
     required this.field,
     required this.source_,
     this.provider,
+    this.sourceUrl,
     required this.locked,
     this.updatedAt,
   }) : super._();
@@ -42,6 +45,7 @@ class _$FieldProvenance extends FieldProvenance {
         field == other.field &&
         source_ == other.source_ &&
         provider == other.provider &&
+        sourceUrl == other.sourceUrl &&
         locked == other.locked &&
         updatedAt == other.updatedAt;
   }
@@ -52,6 +56,7 @@ class _$FieldProvenance extends FieldProvenance {
     _$hash = $jc(_$hash, field.hashCode);
     _$hash = $jc(_$hash, source_.hashCode);
     _$hash = $jc(_$hash, provider.hashCode);
+    _$hash = $jc(_$hash, sourceUrl.hashCode);
     _$hash = $jc(_$hash, locked.hashCode);
     _$hash = $jc(_$hash, updatedAt.hashCode);
     _$hash = $jf(_$hash);
@@ -64,6 +69,7 @@ class _$FieldProvenance extends FieldProvenance {
           ..add('field', field)
           ..add('source_', source_)
           ..add('provider', provider)
+          ..add('sourceUrl', sourceUrl)
           ..add('locked', locked)
           ..add('updatedAt', updatedAt))
         .toString();
@@ -86,6 +92,10 @@ class FieldProvenanceBuilder
   String? get provider => _$this._provider;
   set provider(String? provider) => _$this._provider = provider;
 
+  String? _sourceUrl;
+  String? get sourceUrl => _$this._sourceUrl;
+  set sourceUrl(String? sourceUrl) => _$this._sourceUrl = sourceUrl;
+
   bool? _locked;
   bool? get locked => _$this._locked;
   set locked(bool? locked) => _$this._locked = locked;
@@ -104,6 +114,7 @@ class FieldProvenanceBuilder
       _field = $v.field;
       _source_ = $v.source_;
       _provider = $v.provider;
+      _sourceUrl = $v.sourceUrl;
       _locked = $v.locked;
       _updatedAt = $v.updatedAt;
       _$v = null;
@@ -139,6 +150,7 @@ class FieldProvenanceBuilder
             'source_',
           ),
           provider: provider,
+          sourceUrl: sourceUrl,
           locked: BuiltValueNullFieldError.checkNotNull(
             locked,
             r'FieldProvenance',

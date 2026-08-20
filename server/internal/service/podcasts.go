@@ -42,6 +42,10 @@ type PodcastShow struct {
 	FundingMessage string
 	Medium         string
 	Persons        []FeedPerson
+	// ArtSource says where the show's cover came from - the feed, or a
+	// hand-set replacement. Detail reads only, beside Persons: a
+	// subscription row draws no caption.
+	ArtSource ArtSourceDTO
 }
 
 // FeedPerson is one <podcast:person> credit at the show or episode level.
@@ -490,6 +494,9 @@ const (
 func (l *Library) afterSubscriptionChange(ctx context.Context, uc *UserCtx, showPID, feedURL, action string, meta subChangeMeta) {
 	l.emitUserEvent(ctx, uc.ID, eventSubscription, showPID)
 	l.bumpGrantEpoch(ctx, uc.ID)
+	// A show followed a moment ago has to be reachable by its first
+	// podping, not by the index's next scheduled rebuild.
+	l.InvalidatePodpingFeeds()
 	if feedURL != "" {
 		if err := l.db.AppendGpodderSubEvent(ctx, wdb.GpodderSubEvent{
 			UserID: uc.ID, FeedURL: feedURL, Action: action,
@@ -881,7 +888,7 @@ func (l *Library) RefreshPodcast(ctx context.Context, uc *UserCtx, apiShowPID st
 	if time.Since(time.Unix(0, st.LastSyncedNS)) < time.Minute {
 		return 0, nil
 	}
-	return l.syncShow(ctx, pod.PID)
+	return l.syncShow(ctx, pod.PID, syncOwn)
 }
 
 // QueueEpisodeFetch queues a server-side enclosure download. The
@@ -1183,6 +1190,7 @@ func (l *Library) showDTO(ctx context.Context, uc *UserCtx, pod *model.Podcast, 
 		if newest, err := l.newestVisibleEpisodeNS(ctx, uc, pod); err == nil {
 			out.LastPublishedNS = newest
 		}
+		out.ArtSource = l.artSourceForRef(ctx, model.EntityRef{Type: model.ArtPodcast, PID: pod.PID})
 	}
 	return out, nil
 }

@@ -104,6 +104,9 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 		if p.Provider != "" {
 			fp.Provider = ptr(p.Provider)
 		}
+		if p.SourceURL != "" {
+			fp.SourceUrl = ptr(p.SourceURL)
+		}
 		if !p.UpdatedAt.IsZero() {
 			fp.UpdatedAt = ptr(p.UpdatedAt)
 		}
@@ -127,6 +130,9 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 	}
 	if d.Lyrics != nil {
 		ls := LyricsState{Synced: d.Lyrics.Synced, Source: d.Lyrics.Source}
+		if d.Lyrics.Provider != "" {
+			ls.Provider = ptr(d.Lyrics.Provider)
+		}
 		if d.Lyrics.LRC != "" {
 			ls.Lrc = ptr(d.Lyrics.LRC)
 		}
@@ -480,6 +486,56 @@ func (s *Server) ClearEntityArtwork(ctx context.Context, req ClearEntityArtworkR
 		return nil, err
 	}
 	return ClearEntityArtwork204Response{}, nil
+}
+
+// GetEntityArtworkLock and SetEntityArtworkLock are administrators-only
+// with no owned-entity exemption: the one entity type whose artwork
+// belongs to a user is the playlist, and the service refuses that type
+// outright, so there is nobody but an administrator to let through.
+
+func (s *Server) GetEntityArtworkLock(ctx context.Context, req GetEntityArtworkLockRequestObject) (GetEntityArtworkLockResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !uc.Admin {
+		return GetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	locked, err := s.svc.EntityArtworkLock(ctx, string(req.EntityType), req.EntityPid)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return GetEntityArtworkLock400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindNotFound:
+			return GetEntityArtworkLock404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
+		}
+		return nil, err
+	}
+	return GetEntityArtworkLock200JSONResponse(ArtworkLock{Locked: locked}), nil
+}
+
+func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkLockRequestObject) (SetEntityArtworkLockResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !uc.Admin {
+		return SetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Body == nil {
+		return SetEntityArtworkLock400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a locked body is required"))}, nil
+	}
+	locked, err := s.svc.SetEntityArtworkLock(ctx, string(req.EntityType), req.EntityPid, req.Body.Locked)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return SetEntityArtworkLock400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindNotFound:
+			return SetEntityArtworkLock404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
+		}
+		return nil, err
+	}
+	return SetEntityArtworkLock200JSONResponse(ArtworkLock{Locked: locked}), nil
 }
 
 // --- custom tags ------------------------------------------------------------------

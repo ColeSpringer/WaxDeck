@@ -81,10 +81,18 @@ type TagEditOutcomeDTO struct {
 }
 
 // FieldProvenanceDTO is one field's provenance row.
+//
+// The list carries two kinds. A scalar row names a metadata field and
+// reports the value a curator set. An artifact row names "art" or
+// "lyrics" and appears whenever the item holds one, with no value
+// because the value is bytes. A non-empty list therefore does not mean
+// the item was curated: an untouched track with a cover in its tags
+// reports one art row sourced "tag".
 type FieldProvenanceDTO struct {
 	Field     string
 	Source    string
 	Provider  string
+	SourceURL string
 	Locked    bool
 	UpdatedAt time.Time
 }
@@ -97,9 +105,10 @@ type CreditDTO struct {
 
 // LyricsStateDTO summarizes stored lyrics for the editor.
 type LyricsStateDTO struct {
-	Synced bool
-	Source string
-	LRC    string
+	Synced   bool
+	Source   string
+	Provider string
+	LRC      string
 }
 
 // CustomTagDTO is one custom tag.
@@ -562,7 +571,7 @@ func (l *Library) SetItemLyrics(ctx context.Context, uc *UserCtx, apiPID, lrc, p
 			synced = append(synced, model.SyncedLine{TimeMS: ln.Time.Milliseconds(), Text: ln.Text})
 		}
 	}
-	ly := &model.Lyrics{Source: "user", Synced: synced, Unsynced: plain}
+	ly := &model.Lyrics{Source: model.SourceUser, Synced: synced, Unsynced: plain}
 	if !ly.HasContent() {
 		return EditOutcomeDTO{}, errInvalid("lyrics must carry timed lines or plain text")
 	}
@@ -800,11 +809,97 @@ func (l *Library) ClearItemArtwork(ctx context.Context, uc *UserCtx, apiPID, rol
 	if err != nil {
 		return err
 	}
-	if err := l.lib.SetItemArt(ctx, it.PID, art, nil, false, true, false); err != nil {
+	// The pin is carried across, for the reason ClearEntityArtwork
+	// carries it: clearing says "there is no cover", not "refill this",
+	// and SetItemArt writes the pin on every front-role write, so
+	// leaving it as the user set it means reading it first. Without
+	// this, the one action the artwork manager offers on a pinned-empty
+	// slot is the one that silently unpins it.
+	lock := false
+	if art == model.ArtRoleFront {
+		ent := model.ArtTrack
+		if it.Kind == model.KindEpisode {
+			ent = model.ArtEpisode
+		}
+		locked, err := l.lib.ArtLocked(ctx, ent, it.PID)
+		if err != nil {
+			return classify(err)
+		}
+		lock = locked
+	}
+	if err := l.lib.SetItemArt(ctx, it.PID, art, nil, lock, true, false); err != nil {
 		return classify(err)
 	}
 	l.noteArtworkChanged(ctx)
 	return nil
+}
+
+// EntityArtworkLock reports whether an entity's front cover is pinned.
+// It is what explains an entity that shows no cover and refuses every
+// attempt to give it one: the cover was cleared and the pin left
+// standing, which is the one artwork state nothing else surfaces.
+func (l *Library) EntityArtworkLock(ctx context.Context, entityType, apiEntityPID string) (bool, error) {
+	ent, pid, err := lockableArtEntity(entityType, apiEntityPID)
+	if err != nil {
+		return false, err
+	}
+	locked, err := l.lib.ArtLocked(ctx, ent, pid)
+	if err != nil {
+		return false, classify(err)
+	}
+	return locked, nil
+}
+
+// SetEntityArtworkLock pins or unpins an entity's front cover without
+// touching the cover itself, which setting artwork cannot express: that
+// always writes the image slot too. Unpinning here is the way out of a
+// cover that was cleared and left pinned.
+func (l *Library) SetEntityArtworkLock(ctx context.Context, entityType, apiEntityPID string, lock bool) (bool, error) {
+	ent, pid, err := lockableArtEntity(entityType, apiEntityPID)
+	if err != nil {
+		return false, err
+	}
+	was, err := l.lib.ArtLocked(ctx, ent, pid)
+	if err != nil {
+		return false, classify(err)
+	}
+	if err := l.lib.SetArtLock(ctx, ent, pid, lock); err != nil {
+		return false, classify(err)
+	}
+	// Only on a change. The artwork epoch is what tells every generated
+	// playlist cover to re-composite, and a pin moves no bytes: bumping
+	// it for a lock that already read this way would rebuild every
+	// mosaic in the library to record nothing.
+	if was != lock {
+		l.noteArtworkChanged(ctx)
+	}
+	return lock, nil
+}
+
+// lockableArtEntity resolves an entity type and pid for the pin surface,
+// refusing playlists.
+//
+// The refusal is structural rather than a matter of the three playlist
+// art call sites agreeing forever. A playlist's cover authority is its
+// own custom/generated origin marker; a pin standing on one makes the
+// mosaic unwritable, and clearPlaylistArtwork deletes the origin marker
+// before clearing the art, so the next read composites, is refused, and
+// returns before recording the fingerprint. Every later read then
+// re-resolves every member, composites again, and is refused again -
+// permanently, on the read path.
+func lockableArtEntity(entityType, apiEntityPID string) (model.ArtEntity, model.PID, error) {
+	ent, ok := artEntityForType(entityType)
+	if !ok {
+		return "", "", errInvalid("unknown entity type " + entityType)
+	}
+	if ent == model.ArtPlaylist {
+		return "", "", errInvalid("a playlist cover has no pin; clearing one hands the slot back to the generated mosaic")
+	}
+	pid, err := editorEntityPID(entityType, apiEntityPID)
+	if err != nil {
+		return "", "", err
+	}
+	return ent, pid, nil
 }
 
 // artEntityForType maps an API entity type to the art entity vocabulary.
@@ -906,7 +1001,11 @@ func (l *Library) SetEntityArtwork(ctx context.Context, uc *UserCtx, entityType,
 			return EditOutcomeDTO{}, err
 		}
 	}
-	out, err := editOutcomeFromWriteBack(l.lib.SetEntityArt(ctx, ent, pid, art, raw, writeBack))
+	// Pin it, and override whatever pin stood before. The caller chose
+	// this image, which is the same rule the item path states, and the
+	// pin is what carries it through an enrichment run that would
+	// otherwise refill the slot from a provider.
+	out, err := editOutcomeFromWriteBack(l.lib.SetEntityArt(ctx, ent, pid, art, raw, true, true, writeBack))
 	if err == nil {
 		// An album or artist cover is what a member track resolves when it
 		// carries none of its own, so this moves playlist covers too.
@@ -938,7 +1037,22 @@ func (l *Library) ClearEntityArtwork(ctx context.Context, uc *UserCtx, entityTyp
 	// No write-back on a clear: a cover already embedded in a file is the
 	// file's, and stripping it is the organizer's business, not this
 	// endpoint's.
-	if err := l.lib.SetEntityArt(ctx, ent, pid, art, nil, false); err != nil {
+	//
+	// The pin is carried across rather than dropped. Clearing a catalog
+	// entity's cover says "there is no cover", not "give me the default
+	// back", so a cleared-and-pinned cover is a real intent - do not
+	// refill this - and it is now a state ArtRoles reports and the lock
+	// endpoint below can undo. SetEntityArt always writes the pin on a
+	// front-role write, so preserving it means reading it first.
+	lock := false
+	if art == model.ArtRoleFront {
+		locked, err := l.lib.ArtLocked(ctx, ent, pid)
+		if err != nil {
+			return classify(err)
+		}
+		lock = locked
+	}
+	if err := l.lib.SetEntityArt(ctx, ent, pid, art, nil, lock, true, false); err != nil {
 		return classify(err)
 	}
 	l.noteArtworkChanged(ctx)
@@ -969,7 +1083,13 @@ func (l *Library) setPlaylistArtwork(ctx context.Context, uc *UserCtx, apiPlayli
 	}
 	// A playlist has no files to write a cover back into: it is a
 	// terminal art level with no ancestry and no members of its own.
-	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, raw, false); err != nil {
+	//
+	// Never pinned, here or in the two paths below. A playlist's cover
+	// authority is WaxDeck's own playlist_cover origin marker, which
+	// claimPlaylistCoverCustom just set; a pin would additionally make
+	// the generated mosaic unwritable, and the generator retries on
+	// every read.
+	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, raw, false, true, false); err != nil {
 		if undoClaim != nil {
 			// Nothing was stored, so the claim has to go back the way it was
 			// or the next read leaves the previous cover in place while
@@ -997,7 +1117,7 @@ func (l *Library) clearPlaylistArtwork(ctx context.Context, uc *UserCtx, apiPlay
 		}
 		pl.HasArt = false
 	}
-	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, nil, false); err != nil {
+	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, nil, false, true, false); err != nil {
 		return classify(err)
 	}
 	if role == model.ArtRoleFront {
@@ -1276,7 +1396,8 @@ func (l *Library) ItemMetadataFor(ctx context.Context, uc *UserCtx, apiPID strin
 	}
 	for _, r := range prov {
 		dto := FieldProvenanceDTO{
-			Field: r.Field, Source: string(r.Source), Provider: r.Provider, Locked: r.Locked,
+			Field: r.Field, Source: string(r.Source), Provider: r.Provider,
+			SourceURL: r.SourceURL, Locked: r.Locked,
 		}
 		if r.UpdatedAt > 0 {
 			dto.UpdatedAt = time.Unix(0, r.UpdatedAt).UTC()
@@ -1439,7 +1560,7 @@ func groupCredits(rows []model.Contributor) []CreditDTO {
 
 // lyricsStateDTO renders stored lyrics in the editor's working format.
 func lyricsStateDTO(ly *model.Lyrics) *LyricsStateDTO {
-	out := &LyricsStateDTO{Source: ly.Source, Synced: len(ly.Synced) > 0}
+	out := &LyricsStateDTO{Source: string(ly.Source), Provider: ly.Provider, Synced: len(ly.Synced) > 0}
 	if len(ly.Synced) > 0 {
 		lines := make([]waxlabel.SyncedLine, 0, len(ly.Synced))
 		for _, ln := range ly.Synced {

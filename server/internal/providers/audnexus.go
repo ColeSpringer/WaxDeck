@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/enrich"
-	"github.com/colespringer/waxbin/model"
 )
 
 // AudnexusConfig configures the Audnexus audiobook provider. Zero values
@@ -139,7 +138,7 @@ func (a *Audnexus) Enrich(ctx context.Context, req enrich.Request) (*enrich.Cand
 		if err != nil {
 			return nil, err
 		}
-		cand.Cover = &model.ArtImage{Data: data, Format: imageFormat(mediaType)}
+		cand.Cover = coverImage(data, mediaType, book.Image)
 	}
 	if len(cand.Fields) == 0 {
 		cand.Fields = nil

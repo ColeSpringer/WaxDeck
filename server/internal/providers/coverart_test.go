@@ -160,12 +160,17 @@ func TestRecordingCoverWalksUntilOneReleaseHasArt(t *testing.T) {
 		CAA:     testCAA(srv, 0),
 		NoCover: errUpstream,
 	}
-	data, mime, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me")
+	got, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mime != "image/png" || len(data) == 0 {
-		t.Fatalf("cover = (%d bytes, %q)", len(data), mime)
+	if got.MIME != "image/png" || len(got.Data) == 0 {
+		t.Fatalf("cover = (%d bytes, %q)", len(got.Data), got.MIME)
+	}
+	// The rung that answered is named, so a listening face can caption
+	// the archive's picture as the archive's rather than the station's.
+	if got.Provider != ProviderCoverArtArchive || !strings.Contains(got.SourceURL, "has-art") {
+		t.Fatalf("attribution = (%q, %q)", got.Provider, got.SourceURL)
 	}
 	// Having a release is not having a picture of it, and the walk stops
 	// the moment one answers rather than asking the whole list.
@@ -196,14 +201,14 @@ func TestRecordingCoverHoldsAReachErrorPastAWorkingRelease(t *testing.T) {
 		CAA:     testCAA(srv, 0),
 		NoCover: errUpstream,
 	}
-	if _, _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); err != nil {
+	if _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); err != nil {
 		t.Fatalf("err = %v, want the cover from the release that answered", err)
 	}
 
 	// Nothing answered: the reach error is the outcome, not the miss, so
 	// the caller remembers it for minutes rather than for a day.
 	rc.MB = &fakeReleaseLookup{ids: []string{"broken-1", "broken-2"}}
-	_, _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me")
+	_, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me")
 	if err == nil || errors.Is(err, errUpstream) {
 		t.Fatalf("err = %v, want a reach error rather than a miss", err)
 	}
@@ -220,26 +225,26 @@ func TestRecordingCoverMissesAreTheCallersSentinel(t *testing.T) {
 	// true tomorrow far more often than not.
 	nothing := &fakeReleaseLookup{}
 	rc := RecordingCover{MB: nothing, CAA: testCAA(srv, 0), NoCover: errUpstream}
-	if _, _, err := rc.FrontCover(context.Background(), "Nobody", "Nothing"); !errors.Is(err, errUpstream) {
+	if _, err := rc.FrontCover(context.Background(), "Nobody", "Nothing"); !errors.Is(err, errUpstream) {
 		t.Fatalf("err = %v, want the caller's sentinel", err)
 	}
 
 	// Every release answered and none had a picture: the same outcome.
 	rc.MB = &fakeReleaseLookup{ids: []string{"bare-1", "bare-2"}}
-	if _, _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); !errors.Is(err, errUpstream) {
+	if _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); !errors.Is(err, errUpstream) {
 		t.Fatalf("err = %v, want the caller's sentinel", err)
 	}
 
 	// A search that could not be made is not an empty search, and never
 	// reaches the archive.
 	rc.MB = &fakeReleaseLookup{err: errors.New("musicbrainz unreachable")}
-	if _, _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); errors.Is(err, errUpstream) {
+	if _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); errors.Is(err, errUpstream) {
 		t.Fatalf("err = %v, want the lookup's own error", err)
 	}
 
 	// Half-wired is not wired: no resolver means no request, not a panic.
 	bare := RecordingCover{NoCover: errUpstream}
-	if _, _, err := bare.FrontCover(context.Background(), "a-ha", "Take On Me"); !errors.Is(err, errUpstream) {
+	if _, err := bare.FrontCover(context.Background(), "a-ha", "Take On Me"); !errors.Is(err, errUpstream) {
 		t.Fatalf("unwired err = %v, want the caller's sentinel", err)
 	}
 	if nothing.call.Load() != 1 {
@@ -407,7 +412,7 @@ func TestRecordingCoverTreatsANonImageAsUpstreamFailing(t *testing.T) {
 		CAA:     caa,
 		NoCover: errUpstream,
 	}
-	_, _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me")
+	_, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me")
 	if err == nil || errors.Is(err, errUpstream) {
 		t.Fatalf("err = %v, want a reach error rather than the miss sentinel", err)
 	}
@@ -467,13 +472,13 @@ func TestRecordingCoverDoesNotRewalkKnownBareReleases(t *testing.T) {
 		CAA:     testCAA(srv, 0),
 		NoCover: errUpstream,
 	}
-	if _, _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); err != nil {
+	if _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); err != nil {
 		t.Fatal(err)
 	}
 	if got := hits.Load(); got != 4 {
 		t.Fatalf("the first walk made %d requests, want 4", got)
 	}
-	if _, _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); err != nil {
+	if _, err := rc.FrontCover(context.Background(), "a-ha", "Take On Me"); err != nil {
 		t.Fatal(err)
 	}
 	// Only the release that actually has the picture is fetched again.
@@ -533,7 +538,7 @@ func TestRecordingCoverStopsWalkingWhenTheBudgetIsSpent(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, err := rc.FrontCover(ctx, "a-ha", "Take On Me"); !errors.Is(err, context.Canceled) {
+	if _, err := rc.FrontCover(ctx, "a-ha", "Take On Me"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want the walk to end on the spent budget", err)
 	}
 	if got := hits.Load(); got != 0 {
@@ -577,7 +582,7 @@ func TestDeezerFrontCoverTakesTheAlbumOfTheMatchingTrack(t *testing.T) {
 		 "album": {"cover_big": "https://%s/cover.jpg"}}
 	]}`)
 
-	data, mime, err := d.FrontCover(context.Background(), "the beatles", "hello goodbye")
+	got, err := d.FrontCover(context.Background(), "the beatles", "hello goodbye")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -585,8 +590,14 @@ func TestDeezerFrontCoverTakesTheAlbumOfTheMatchingTrack(t *testing.T) {
 		t.Fatalf("q = %q, want the advanced track query", q)
 	}
 	// The type is the bytes' rather than the header's, which said jpeg.
-	if mime != "image/png" || len(data) == 0 {
-		t.Fatalf("cover = (%d bytes, %q)", len(data), mime)
+	if got.MIME != "image/png" || len(got.Data) == 0 {
+		t.Fatalf("cover = (%d bytes, %q)", len(got.Data), got.MIME)
+	}
+	// The rung names itself and the address it fetched from, so a radio
+	// face captions the picture rather than passing it off as the
+	// station's own.
+	if got.Provider != "deezer" || !strings.HasSuffix(got.SourceURL, "/cover.jpg") {
+		t.Fatalf("attribution = (%q, %q)", got.Provider, got.SourceURL)
 	}
 	if got := covers.Load(); got != 1 {
 		t.Fatalf("fetched %d covers, want 1", got)
@@ -604,7 +615,7 @@ func TestDeezerFrontCoverRefusesAHitThatIsNotTheSong(t *testing.T) {
 		 "album": {"cover_big": "https://%s/cover.jpg"}}
 	]}`)
 
-	if _, _, err := d.FrontCover(context.Background(), "charlie parker", "ornithology"); !errors.Is(err, ErrNoCover) {
+	if _, err := d.FrontCover(context.Background(), "charlie parker", "ornithology"); !errors.Is(err, ErrNoCover) {
 		t.Fatalf("err = %v, want ErrNoCover", err)
 	}
 	if got := covers.Load(); got != 0 {
@@ -615,16 +626,17 @@ func TestDeezerFrontCoverRefusesAHitThatIsNotTheSong(t *testing.T) {
 // fakeTitleCover is one rung of a chain, with a call counter so a test
 // can see the rung that was never reached.
 type fakeTitleCover struct {
-	data   []byte
-	mime   string
-	err    error
-	calls  atomic.Int64
-	forgot atomic.Int64
+	data     []byte
+	mime     string
+	err      error
+	provider string
+	calls    atomic.Int64
+	forgot   atomic.Int64
 }
 
-func (f *fakeTitleCover) FrontCover(context.Context, string, string) ([]byte, string, error) {
+func (f *fakeTitleCover) FrontCover(context.Context, string, string) (TitleCoverResult, error) {
 	f.calls.Add(1)
-	return f.data, f.mime, f.err
+	return TitleCoverResult{Data: f.data, MIME: f.mime, Provider: f.provider}, f.err
 }
 
 func (f *fakeTitleCover) ForgetMisses() { f.forgot.Add(1) }
@@ -633,11 +645,17 @@ func TestCoverChainOutcomes(t *testing.T) {
 	t.Parallel()
 	png := pngBytes()
 	// The cheap source answering is the whole point of the order.
-	first := &fakeTitleCover{data: png, mime: "image/png"}
+	first := &fakeTitleCover{data: png, mime: "image/png", provider: "first"}
 	second := &fakeTitleCover{data: png, mime: "image/png"}
 	chain := CoverChain{Sources: []TitleCover{first, second}, NoCover: errUpstream}
-	if data, _, err := chain.FrontCover(context.Background(), "a-ha", "Take On Me"); err != nil || len(data) == 0 {
-		t.Fatalf("got (%d bytes, %v), want the first source's cover", len(data), err)
+	got, err := chain.FrontCover(context.Background(), "a-ha", "Take On Me")
+	if err != nil || len(got.Data) == 0 {
+		t.Fatalf("got (%d bytes, %v), want the first source's cover", len(got.Data), err)
+	}
+	// The answering source's own attribution comes back untouched: the
+	// chain reports which rung answered, it does not speak for them.
+	if got.Provider != "first" {
+		t.Fatalf("provider = %q, want the source that answered", got.Provider)
 	}
 	if got := second.calls.Load(); got != 0 {
 		t.Errorf("the second source was asked %d times past an answer, want 0", got)
@@ -646,8 +664,8 @@ func TestCoverChainOutcomes(t *testing.T) {
 	// A miss falls through to the source below it.
 	second = &fakeTitleCover{data: png, mime: "image/png"}
 	chain = CoverChain{Sources: []TitleCover{&fakeTitleCover{err: ErrNoCover}, second}, NoCover: errUpstream}
-	if data, _, err := chain.FrontCover(context.Background(), "a-ha", "Take On Me"); err != nil || len(data) == 0 {
-		t.Fatalf("got (%d bytes, %v), want the second source's cover", len(data), err)
+	if got, err := chain.FrontCover(context.Background(), "a-ha", "Take On Me"); err != nil || len(got.Data) == 0 {
+		t.Fatalf("got (%d bytes, %v), want the second source's cover", len(got.Data), err)
 	}
 
 	// A source that could not be reached is held past a source that
@@ -660,7 +678,7 @@ func TestCoverChainOutcomes(t *testing.T) {
 		},
 		NoCover: errUpstream,
 	}
-	_, _, err := chain.FrontCover(context.Background(), "a-ha", "Take On Me")
+	_, err = chain.FrontCover(context.Background(), "a-ha", "Take On Me")
 	if err == nil || errors.Is(err, errUpstream) {
 		t.Fatalf("err = %v, want the reach error rather than the sentinel", err)
 	}
@@ -671,7 +689,7 @@ func TestCoverChainOutcomes(t *testing.T) {
 		Sources: []TitleCover{&fakeTitleCover{err: ErrNoCover}, &fakeTitleCover{err: errUpstream}},
 		NoCover: errUpstream,
 	}
-	if _, _, err := chain.FrontCover(context.Background(), "a-ha", "Take On Me"); !errors.Is(err, errUpstream) {
+	if _, err := chain.FrontCover(context.Background(), "a-ha", "Take On Me"); !errors.Is(err, errUpstream) {
 		t.Fatalf("err = %v, want the caller's sentinel", err)
 	}
 }
@@ -743,9 +761,9 @@ func TestDeezerFrontCoverWalksPastAnUnusableCover(t *testing.T) {
 	d := NewDeezer(DeezerConfig{
 		BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
 	})
-	data, mime, err := d.FrontCover(context.Background(), "charlie parker", "ornithology")
-	if err != nil || mime != "image/png" || len(data) == 0 {
-		t.Fatalf("got (%d bytes, %q, %v), want the third hit's cover", len(data), mime, err)
+	got, err := d.FrontCover(context.Background(), "charlie parker", "ornithology")
+	if err != nil || got.MIME != "image/png" || len(got.Data) == 0 {
+		t.Fatalf("got (%d bytes, %q, %v), want the third hit's cover", len(got.Data), got.MIME, err)
 	}
 	if got := covers.Load(); got != 3 {
 		t.Fatalf("fetched %d covers, want all three tried", got)
@@ -773,7 +791,7 @@ func TestDeezerFrontCoverReportsAnOversizeCoverAsAMiss(t *testing.T) {
 	d := NewDeezer(DeezerConfig{
 		BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
 	})
-	if _, _, err := d.FrontCover(context.Background(), "charlie parker", "ornithology"); !errors.Is(err, ErrNoCover) {
+	if _, err := d.FrontCover(context.Background(), "charlie parker", "ornithology"); !errors.Is(err, ErrNoCover) {
 		t.Fatalf("err = %v, want ErrNoCover", err)
 	}
 }

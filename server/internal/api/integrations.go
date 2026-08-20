@@ -120,6 +120,7 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 			// picture for this exact broadcast, where an external lookup
 			// guesses a release from a parsed title.
 			out.NowPlayingArtKey = ptr(key)
+			out.NowPlayingArtSource = artSourceJSON(s.svc.RadioNowPlayingArtSource(key))
 		} else if tryExternal {
 			// Only once the two rungs above have missed. Ensure starts
 			// the lookup and answers the key for what is cached now, so
@@ -129,6 +130,7 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 			// is in flight, which is worth one poll's wait.
 			if key := s.svc.EnsureRadioNowPlayingArt(station.Name, title); key != "" {
 				out.NowPlayingArtKey = ptr(key)
+				out.NowPlayingArtSource = artSourceJSON(s.svc.RadioNowPlayingArtSource(key))
 			}
 		}
 	}

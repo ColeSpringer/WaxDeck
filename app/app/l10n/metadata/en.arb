@@ -5,6 +5,16 @@
   "@metadataAddTag": {
     "description": "Button that stores the typed custom tag."
   },
+  "metadataArtworkSource": "Artwork · {source}",
+  "@metadataArtworkSource": {
+    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "From the file"
+      }
+    }
+  },
   "metadataClearLyrics": "Clear",
   "@metadataClearLyrics": {
     "description": "Button that removes the item's stored lyrics."
@@ -277,6 +287,16 @@
   "@metadataLyricsOverline": {
     "description": "Line above the Lyrics heading. LRC is the timed-lyrics file format and stays as it is."
   },
+  "metadataLyricsSource": "Lyrics · {source}",
+  "@metadataLyricsSource": {
+    "description": "The provenance line for the item's lyrics. {source} is where they came from, already worded, in the same vocabulary artwork uses.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Set by hand"
+      }
+    }
+  },
   "metadataLyricsTitle": "Lyrics",
   "@metadataLyricsTitle": {
     "description": "Heading over the item's lyrics."
@@ -353,9 +373,33 @@
   "@metadataSaveLyrics": {
     "description": "Button that writes the lyrics as typed."
   },
+  "metadataSourceEnrichment": "a provider",
+  "@metadataSourceEnrichment": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceFeed": "the feed",
+  "@metadataSourceFeed": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceOrganize": "the organizer",
+  "@metadataSourceOrganize": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceSidecar": "companion files",
+  "@metadataSourceSidecar": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceTag": "tags",
+  "@metadataSourceTag": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
   "metadataSourceUnknown": "Source unknown",
   "@metadataSourceUnknown": {
     "description": "Chip beside a field whose value has no recorded source."
+  },
+  "metadataSourceUser": "you",
+  "@metadataSourceUser": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
   },
   "metadataSourceWithProvider": "{source} ({provider})",
   "@metadataSourceWithProvider": {

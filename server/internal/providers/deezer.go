@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/enrich"
-	"github.com/colespringer/waxbin/model"
 )
 
 // DeezerConfig configures the Deezer cover provider. Zero values take
@@ -113,7 +112,7 @@ func (d *Deezer) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candid
 		}
 		return &enrich.Candidate{
 			Confidence: 0.7,
-			Cover:      &model.ArtImage{Data: data, Format: imageFormat(mediaType)},
+			Cover:      coverImage(data, mediaType, hit.CoverXL),
 		}, nil
 	}
 	return nil, nil
@@ -127,18 +126,18 @@ const maxTitleCoverBytes = 2 << 20
 // FrontCover answers a cover for an announced artist and title, from the
 // album the track belongs to. A track search rather than Enrich's album
 // search, and both names matched: a wrong cover is worse than none.
-func (d *Deezer) FrontCover(ctx context.Context, artist, title string) ([]byte, string, error) {
+func (d *Deezer) FrontCover(ctx context.Context, artist, title string) (TitleCoverResult, error) {
 	if artist == "" || title == "" {
-		return nil, "", ErrNoCover
+		return TitleCoverResult{}, ErrNoCover
 	}
 	q := url.Values{}
 	q.Set("q", `artist:"`+artist+`" track:"`+title+`"`)
 	body, status, err := d.core.get(ctx, d.base+"/search?"+q.Encode(), d.ttl)
 	if err != nil {
-		return nil, "", err
+		return TitleCoverResult{}, err
 	}
 	if status != http.StatusOK {
-		return nil, "", fmt.Errorf("providers: deezer search: status %d", status)
+		return TitleCoverResult{}, fmt.Errorf("providers: deezer search: status %d", status)
 	}
 	var parsed struct {
 		Data []struct {
@@ -152,7 +151,7 @@ func (d *Deezer) FrontCover(ctx context.Context, artist, title string) ([]byte, 
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, "", fmt.Errorf("providers: decode deezer search: %w", err)
+		return TitleCoverResult{}, fmt.Errorf("providers: decode deezer search: %w", err)
 	}
 	// A song is routinely listed several times over - a single, an album,
 	// a deluxe edition - so one unusable cover is not the end of the walk.
@@ -175,12 +174,16 @@ func (d *Deezer) FrontCover(ctx context.Context, artist, title string) ([]byte, 
 		if !ok || len(data) > maxTitleCoverBytes {
 			continue
 		}
-		return data, mime, nil
+		return TitleCoverResult{
+			Data: data, MIME: mime,
+			Provider:  d.Name(),
+			SourceURL: hit.Album.CoverBig,
+		}, nil
 	}
 	if reachErr != nil {
-		return nil, "", reachErr
+		return TitleCoverResult{}, reachErr
 	}
-	return nil, "", ErrNoCover
+	return TitleCoverResult{}, ErrNoCover
 }
 
 // ForgetMisses drops the track searches this rung cached, built as they

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/enrich"
-	"github.com/colespringer/waxbin/model"
 )
 
 // ITunesConfig configures the iTunes cover provider. Zero values take
@@ -111,7 +110,7 @@ func (t *ITunes) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candid
 		}
 		return &enrich.Candidate{
 			Confidence: 0.6,
-			Cover:      &model.ArtImage{Data: data, Format: imageFormat(mediaType)},
+			Cover:      coverImage(data, mediaType, artURL),
 		}, nil
 	}
 	return nil, nil

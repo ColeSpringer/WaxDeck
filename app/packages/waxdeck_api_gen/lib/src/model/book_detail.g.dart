@@ -14,6 +14,8 @@ class _$BookDetail extends BookDetail {
   @override
   final String? subtitle;
   @override
+  final ArtSource? artSource;
+  @override
   final BuiltList<String> authors;
   @override
   final BuiltList<String> narrators;
@@ -51,6 +53,7 @@ class _$BookDetail extends BookDetail {
     required this.pid,
     required this.title,
     this.subtitle,
+    this.artSource,
     required this.authors,
     required this.narrators,
     this.series,
@@ -81,6 +84,7 @@ class _$BookDetail extends BookDetail {
         pid == other.pid &&
         title == other.title &&
         subtitle == other.subtitle &&
+        artSource == other.artSource &&
         authors == other.authors &&
         narrators == other.narrators &&
         series == other.series &&
@@ -104,6 +108,7 @@ class _$BookDetail extends BookDetail {
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, title.hashCode);
     _$hash = $jc(_$hash, subtitle.hashCode);
+    _$hash = $jc(_$hash, artSource.hashCode);
     _$hash = $jc(_$hash, authors.hashCode);
     _$hash = $jc(_$hash, narrators.hashCode);
     _$hash = $jc(_$hash, series.hashCode);
@@ -129,6 +134,7 @@ class _$BookDetail extends BookDetail {
           ..add('pid', pid)
           ..add('title', title)
           ..add('subtitle', subtitle)
+          ..add('artSource', artSource)
           ..add('authors', authors)
           ..add('narrators', narrators)
           ..add('series', series)
@@ -162,6 +168,10 @@ class BookDetailBuilder implements Builder<BookDetail, BookDetailBuilder> {
   String? _subtitle;
   String? get subtitle => _$this._subtitle;
   set subtitle(String? subtitle) => _$this._subtitle = subtitle;
+
+  ArtSourceBuilder? _artSource;
+  ArtSourceBuilder get artSource => _$this._artSource ??= ArtSourceBuilder();
+  set artSource(ArtSourceBuilder? artSource) => _$this._artSource = artSource;
 
   ListBuilder<String>? _authors;
   ListBuilder<String> get authors => _$this._authors ??= ListBuilder<String>();
@@ -240,6 +250,7 @@ class BookDetailBuilder implements Builder<BookDetail, BookDetailBuilder> {
       _pid = $v.pid;
       _title = $v.title;
       _subtitle = $v.subtitle;
+      _artSource = $v.artSource?.toBuilder();
       _authors = $v.authors.toBuilder();
       _narrators = $v.narrators.toBuilder();
       _series = $v.series;
@@ -290,6 +301,7 @@ class BookDetailBuilder implements Builder<BookDetail, BookDetailBuilder> {
               'title',
             ),
             subtitle: subtitle,
+            artSource: _artSource?.build(),
             authors: authors.build(),
             narrators: narrators.build(),
             series: series,
@@ -313,6 +325,8 @@ class BookDetailBuilder implements Builder<BookDetail, BookDetailBuilder> {
     } catch (_) {
       late String _$failedField;
       try {
+        _$failedField = 'artSource';
+        _artSource?.build();
         _$failedField = 'authors';
         authors.build();
         _$failedField = 'narrators';

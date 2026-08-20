@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 
 import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/art_role.dart';
+import 'package:waxdeck_api_gen/src/model/artwork_lock.dart';
 import 'package:waxdeck_api_gen/src/model/bulk_edit.dart';
 import 'package:waxdeck_api_gen/src/model/bulk_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/chapters_edit.dart';
@@ -721,6 +722,94 @@ class MetadataApi {
     );
   }
 
+  /// Read an entity&#39;s artwork lock
+  /// Whether an album, artist, release group, or genre&#39;s front cover is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says \&quot;do not refill this\&quot; rather than \&quot;this has no cover yet\&quot;. Administrators only, like every other catalog-entity curation read. 
+  ///
+  /// Parameters:
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
+  /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ArtworkLock] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ArtworkLock>> getEntityArtworkLock({ 
+    required String entityType,
+    required String entityPid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/entities/{entityType}/{entityPid}/artwork/lock'.replaceAll('{' r'entityType' '}', encodeQueryParameter(_serializers, entityType, const FullType(String)).toString()).replaceAll('{' r'entityPid' '}', encodeQueryParameter(_serializers, entityPid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ArtworkLock? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ArtworkLock),
+      ) as ArtworkLock;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ArtworkLock>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Read entity edit provenance
   /// The entity&#39;s curated fields with source and time.
   ///
@@ -1282,6 +1371,116 @@ class MetadataApi {
     }
 
     return Response<MetadataEditResult>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Pin or unpin an entity&#39;s artwork
+  /// Sets or clears the front-cover pin without touching the cover itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only.  &#x60;playlist&#x60; is refused with &#x60;invalid-request&#x60;. A playlist&#39;s cover authority is its own custom/generated origin marker rather than this pin, and a pin left standing on one would make the mosaic the server builds from the members unwritable - which the read path retries on every read, forever. 
+  ///
+  /// Parameters:
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
+  /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [artworkLock] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ArtworkLock] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ArtworkLock>> setEntityArtworkLock({ 
+    required String entityType,
+    required String entityPid,
+    required ArtworkLock artworkLock,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/entities/{entityType}/{entityPid}/artwork/lock'.replaceAll('{' r'entityType' '}', encodeQueryParameter(_serializers, entityType, const FullType(String)).toString()).replaceAll('{' r'entityPid' '}', encodeQueryParameter(_serializers, entityPid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'PUT',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(ArtworkLock);
+      _bodyData = _serializers.serialize(artworkLock, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ArtworkLock? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ArtworkLock),
+      ) as ArtworkLock;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ArtworkLock>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

@@ -272,6 +272,7 @@ class PlayerScaffold extends StatefulWidget {
     required this.seek,
     this.onCollapse,
     this.actionRow,
+    this.artworkCaption,
     this.heroOverlay,
     this.titleOverline,
     this.subtitleOverride,
@@ -291,6 +292,12 @@ class PlayerScaffold extends StatefulWidget {
 
   /// Lyrics, queue, mix, overflow: the per-medium verbs.
   final Widget? actionRow;
+
+  /// A line under the artwork saying where the picture came from. Under
+  /// the cover rather than in the title block because it describes the
+  /// image and not what is playing: on radio the picture routinely
+  /// belongs to a third party while the title belongs to the station.
+  final String? artworkCaption;
 
   /// Drawn over the artwork at its own extent: radio's platter ring.
   /// Decoration rather than a control, so it is expected to ignore
@@ -678,10 +685,22 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
   /// moves with the other faces instead of sitting still.
   static const double _podcastHeroRatio = 0.48;
 
-  /// The artwork, at whatever extent the layout has for it.
+  /// The vertical room one caption line and its gap take at the
+  /// platform's own text size, so a hero that carries one shrinks by
+  /// that much rather than overflowing the slot it was measured into.
+  /// Scaled by the reader's text setting at the point of use: at twice
+  /// the size the line is twice as tall, and reserving the unscaled
+  /// figure would overflow exactly the layout that needs the room most.
+  static const double _captionAllowance = 24;
+
+  /// The artwork, at whatever extent the layout has for it, with its
+  /// caption under it where there is one.
   Widget _hero(double extent) {
+    final caption = widget.artworkCaption;
+    final allowance = MediaQuery.textScalerOf(context).scale(_captionAllowance);
+    final room = caption == null ? extent : math.max(96.0, extent - allowance);
     final size = math.min(
-      extent,
+      room,
       widget.now.domain == WaxDomain.podcasts
           ? _heroCap * _podcastHeroRatio
           : _heroCap,
@@ -702,16 +721,37 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
         domain: widget.now.domain,
       ),
     );
-    if (widget.heroOverlay == null) return art;
     // Sized to the artwork rather than to the slot: the overlay is a
     // ring around the cover, and a stack that filled the extent would
     // draw it around the gutter on a podcast, whose art is smaller than
     // the room it is given.
-    return SizedBox.square(
-      dimension: size,
-      child: Stack(
-        fit: StackFit.expand,
-        children: <Widget>[art, widget.heroOverlay!],
+    final hero = widget.heroOverlay == null
+        ? art
+        : SizedBox.square(
+            dimension: size,
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[art, widget.heroOverlay!],
+            ),
+          );
+    if (caption == null) return hero;
+    return SizedBox(
+      width: size,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          hero,
+          const SizedBox(height: WaxSpace.s8),
+          Text(
+            caption,
+            textAlign: TextAlign.center,
+            style: WaxType.caption.copyWith(
+              color: WaxColors.of(context).textTertiary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

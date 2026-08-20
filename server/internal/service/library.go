@@ -386,6 +386,9 @@ type Library struct {
 	// radioArtCache holds what it has answered.
 	radioArtResolver RadioArtResolver
 	radioArtCache    radioArt
+	// podping holds the feed-URL index a chain notification resolves
+	// against, and the per-show floor between two podping-driven syncs.
+	podping podpingIndex
 }
 
 // SocketFileName is the IPC socket beside the catalog DB. It is a local

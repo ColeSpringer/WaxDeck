@@ -25,6 +25,8 @@ Serializers _$serializers =
           ..add(ArtRole.serializer)
           ..add(ArtRoleInfo.serializer)
           ..add(ArtRoles.serializer)
+          ..add(ArtSource.serializer)
+          ..add(ArtworkLock.serializer)
           ..add(AuditEvent.serializer)
           ..add(AuditEventPage.serializer)
           ..add(Backup.serializer)

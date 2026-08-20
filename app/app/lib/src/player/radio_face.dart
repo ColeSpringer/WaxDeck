@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_mark.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
@@ -80,6 +81,17 @@ class RadioFace extends ConsumerWidget {
             live: true,
             playing: playing,
           ),
+          // The picture on a radio face routinely belongs to somebody
+          // else: a cover the station named in its stream, or one a
+          // provider answered for a parsed title. It says so, and only
+          // while it is that cover - the station logo underneath is the
+          // station's own and carries no mark.
+          artworkCaption: cover == null
+              ? null
+              : artSourceLabelWithBorrow(
+                  context.l10n,
+                  playback.nowPlayingArtSource,
+                ),
           onCollapse: () => leavePlayer(context),
           trailingHeaderActions: <Widget>[
             _FavoriteButton(station: station),

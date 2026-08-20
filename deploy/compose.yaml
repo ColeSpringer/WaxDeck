@@ -76,6 +76,14 @@ services:
       WAXDECK_PODCAST_ROOT_NAME: podcasts
       WAXDECK_FEED_REFRESH_MINUTES: ${WAXDECK_FEED_REFRESH_MINUTES:-30}
       WAXDECK_PODCAST_RETENTION_DEFAULT: ${WAXDECK_PODCAST_RETENTION_DEFAULT:-0}
+      # PodPing: refresh a show within seconds of its host announcing a
+      # new episode on the Hive blockchain, instead of at the next
+      # scheduled refresh. Off by default (a standing outbound
+      # connection to a third-party public node); polling stays the
+      # floor either way.
+      WAXDECK_PODPING: ${WAXDECK_PODPING:-false}
+      WAXDECK_PODPING_NODE: ${WAXDECK_PODPING_NODE:-}
+      WAXDECK_PODPING_WRITERS: ${WAXDECK_PODPING_WRITERS:-}
       # Set to "true" when your feeds live on the LAN (relaxes the
       # private-address guard on feed and enclosure fetches).
       WAXDECK_ALLOW_PRIVATE_FEED_HOSTS: ${WAXDECK_ALLOW_PRIVATE_FEED_HOSTS:-false}

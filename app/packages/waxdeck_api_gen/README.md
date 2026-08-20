@@ -427,12 +427,14 @@ Class | Method | HTTP request | Description
 [*MetadataApi*](doc/MetadataApi.md) | [**editEntity**](doc/MetadataApi.md#editentity) | **PATCH** /entities/{entityType}/{entityPid} | Edit entity fields
 [*MetadataApi*](doc/MetadataApi.md) | [**editItemMetadata**](doc/MetadataApi.md#edititemmetadata) | **PATCH** /items/{pid}/metadata | Edit scalar fields
 [*MetadataApi*](doc/MetadataApi.md) | [**enrichItem**](doc/MetadataApi.md#enrichitem) | **POST** /items/{pid}/enrich | Enrich one item now
+[*MetadataApi*](doc/MetadataApi.md) | [**getEntityArtworkLock**](doc/MetadataApi.md#getentityartworklock) | **GET** /entities/{entityType}/{entityPid}/artwork/lock | Read an entity&#39;s artwork lock
 [*MetadataApi*](doc/MetadataApi.md) | [**getEntityCuration**](doc/MetadataApi.md#getentitycuration) | **GET** /entities/{entityType}/{entityPid}/curation | Read entity edit provenance
 [*MetadataApi*](doc/MetadataApi.md) | [**getItemMetadata**](doc/MetadataApi.md#getitemmetadata) | **GET** /items/{pid}/metadata | Read an item&#39;s full metadata
 [*MetadataApi*](doc/MetadataApi.md) | [**getMetadataFields**](doc/MetadataApi.md#getmetadatafields) | **GET** /metadata/fields | Discover the editable field vocabulary
 [*MetadataApi*](doc/MetadataApi.md) | [**rematchItem**](doc/MetadataApi.md#rematchitem) | **POST** /items/{pid}/rematch | Requeue an item for matching
 [*MetadataApi*](doc/MetadataApi.md) | [**setBookChapters**](doc/MetadataApi.md#setbookchapters) | **PUT** /books/{pid}/chapters | Replace a book&#39;s chapters
 [*MetadataApi*](doc/MetadataApi.md) | [**setEntityArtwork**](doc/MetadataApi.md#setentityartwork) | **PUT** /entities/{entityType}/{entityPid}/artwork | Set entity artwork
+[*MetadataApi*](doc/MetadataApi.md) | [**setEntityArtworkLock**](doc/MetadataApi.md#setentityartworklock) | **PUT** /entities/{entityType}/{entityPid}/artwork/lock | Pin or unpin an entity&#39;s artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemArtwork**](doc/MetadataApi.md#setitemartwork) | **PUT** /items/{pid}/artwork | Set item artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemCredits**](doc/MetadataApi.md#setitemcredits) | **PUT** /items/{pid}/credits | Replace one credit role
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemLocks**](doc/MetadataApi.md#setitemlocks) | **PUT** /items/{pid}/locks | Lock or unlock fields
@@ -608,6 +610,8 @@ Class | Method | HTTP request | Description
  - [ArtRole](doc/ArtRole.md)
  - [ArtRoleInfo](doc/ArtRoleInfo.md)
  - [ArtRoles](doc/ArtRoles.md)
+ - [ArtSource](doc/ArtSource.md)
+ - [ArtworkLock](doc/ArtworkLock.md)
  - [AuditEvent](doc/AuditEvent.md)
  - [AuditEventPage](doc/AuditEventPage.md)
  - [Backup](doc/Backup.md)

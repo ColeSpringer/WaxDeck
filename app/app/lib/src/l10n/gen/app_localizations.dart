@@ -2619,6 +2619,60 @@ abstract class AppLocalizations {
   /// **'front cover'**
   String get artSlotFrontInline;
 
+  /// Says a release is showing one of its tracks' covers because it holds none of its own. Drawn beside the source mark, which describes that track's picture rather than the release's choice.
+  ///
+  /// In en, this message translates to:
+  /// **'Borrowed from a track'**
+  String get artSourceBorrowed;
+
+  /// The mark under a release's cover: where the picture came from, plus a note that the release borrowed it from a track. Both halves are sentences, so a locale that orders them the other way round reorders the placeholders.
+  ///
+  /// In en, this message translates to:
+  /// **'{source} · {borrow}'**
+  String artSourceBorrowedFrom(String source, String borrow);
+
+  /// Source mark under a cover a podcast feed supplied, or one a radio station announced in its own stream.
+  ///
+  /// In en, this message translates to:
+  /// **'From the feed'**
+  String get artSourceFeed;
+
+  /// Provenance of lyrics that came from a companion file beside the audio. The artwork wording (a folder image) is wrong for lyrics, which arrive as an .lrc.
+  ///
+  /// In en, this message translates to:
+  /// **'From an .lrc file'**
+  String get artSourceLyricsSidecar;
+
+  /// Source mark under a cover a metadata provider supplied. {provider} is the service's own name, which is a proper noun and stays as written.
+  ///
+  /// In en, this message translates to:
+  /// **'From {provider}'**
+  String artSourceProvider(String provider);
+
+  /// Source mark under a fetched cover whose provider the server did not name.
+  ///
+  /// In en, this message translates to:
+  /// **'From a metadata provider'**
+  String get artSourceProviderUnnamed;
+
+  /// Source mark under a cover read from an image file sitting beside the audio, such as a cover.jpg.
+  ///
+  /// In en, this message translates to:
+  /// **'From a folder image'**
+  String get artSourceSidecar;
+
+  /// Source mark under a cover read out of the audio file's own tags.
+  ///
+  /// In en, this message translates to:
+  /// **'From the file'**
+  String get artSourceTag;
+
+  /// Source mark under a cover somebody chose through the curation surface.
+  ///
+  /// In en, this message translates to:
+  /// **'Set by hand'**
+  String get artSourceUser;
+
   /// Confirming button of the clear-artwork dialog. It removes stored content rather than emptying a list, which some languages word differently.
   ///
   /// In en, this message translates to:
@@ -2732,6 +2786,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Inherited'**
   String get artworkStateInherited;
+
+  /// Says an artwork slot is pinned with nothing in it: the cover was cleared and the pin left standing, which means do not refill this rather than no cover yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned, no image'**
+  String get artworkStatePinned;
 
   /// An image's pixel size, in a comma-separated run of facts about it.
   ///
@@ -5139,6 +5199,12 @@ abstract class AppLocalizations {
   /// **'Add tag'**
   String get metadataAddTag;
 
+  /// The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').
+  ///
+  /// In en, this message translates to:
+  /// **'Artwork · {source}'**
+  String metadataArtworkSource(String source);
+
   /// Button that removes the item's stored lyrics.
   ///
   /// In en, this message translates to:
@@ -5481,6 +5547,12 @@ abstract class AppLocalizations {
   /// **'Timed LRC, or plain lines'**
   String get metadataLyricsOverline;
 
+  /// The provenance line for the item's lyrics. {source} is where they came from, already worded, in the same vocabulary artwork uses.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics · {source}'**
+  String metadataLyricsSource(String source);
+
   /// Heading over the item's lyrics.
   ///
   /// In en, this message translates to:
@@ -5577,11 +5649,47 @@ abstract class AppLocalizations {
   /// **'Save lyrics'**
   String get metadataSaveLyrics;
 
+  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'a provider'**
+  String get metadataSourceEnrichment;
+
+  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'the feed'**
+  String get metadataSourceFeed;
+
+  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'the organizer'**
+  String get metadataSourceOrganize;
+
+  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'companion files'**
+  String get metadataSourceSidecar;
+
+  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'tags'**
+  String get metadataSourceTag;
+
   /// Chip beside a field whose value has no recorded source.
   ///
   /// In en, this message translates to:
   /// **'Source unknown'**
   String get metadataSourceUnknown;
+
+  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'you'**
+  String get metadataSourceUser;
 
   /// Chip beside a field, naming where its value came from and which provider answered. Both come from the server and are not translated.
   ///

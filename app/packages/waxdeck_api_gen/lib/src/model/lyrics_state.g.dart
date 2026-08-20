@@ -12,13 +12,19 @@ class _$LyricsState extends LyricsState {
   @override
   final String source_;
   @override
+  final String? provider;
+  @override
   final String? lrc;
 
   factory _$LyricsState([void Function(LyricsStateBuilder)? updates]) =>
       (LyricsStateBuilder()..update(updates))._build();
 
-  _$LyricsState._({required this.synced, required this.source_, this.lrc})
-    : super._();
+  _$LyricsState._({
+    required this.synced,
+    required this.source_,
+    this.provider,
+    this.lrc,
+  }) : super._();
   @override
   LyricsState rebuild(void Function(LyricsStateBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -32,6 +38,7 @@ class _$LyricsState extends LyricsState {
     return other is LyricsState &&
         synced == other.synced &&
         source_ == other.source_ &&
+        provider == other.provider &&
         lrc == other.lrc;
   }
 
@@ -40,6 +47,7 @@ class _$LyricsState extends LyricsState {
     var _$hash = 0;
     _$hash = $jc(_$hash, synced.hashCode);
     _$hash = $jc(_$hash, source_.hashCode);
+    _$hash = $jc(_$hash, provider.hashCode);
     _$hash = $jc(_$hash, lrc.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -50,6 +58,7 @@ class _$LyricsState extends LyricsState {
     return (newBuiltValueToStringHelper(r'LyricsState')
           ..add('synced', synced)
           ..add('source_', source_)
+          ..add('provider', provider)
           ..add('lrc', lrc))
         .toString();
   }
@@ -66,6 +75,10 @@ class LyricsStateBuilder implements Builder<LyricsState, LyricsStateBuilder> {
   String? get source_ => _$this._source_;
   set source_(String? source_) => _$this._source_ = source_;
 
+  String? _provider;
+  String? get provider => _$this._provider;
+  set provider(String? provider) => _$this._provider = provider;
+
   String? _lrc;
   String? get lrc => _$this._lrc;
   set lrc(String? lrc) => _$this._lrc = lrc;
@@ -79,6 +92,7 @@ class LyricsStateBuilder implements Builder<LyricsState, LyricsStateBuilder> {
     if ($v != null) {
       _synced = $v.synced;
       _source_ = $v.source_;
+      _provider = $v.provider;
       _lrc = $v.lrc;
       _$v = null;
     }
@@ -112,6 +126,7 @@ class LyricsStateBuilder implements Builder<LyricsState, LyricsStateBuilder> {
             r'LyricsState',
             'source_',
           ),
+          provider: provider,
           lrc: lrc,
         );
     replace(_$result);

@@ -30,34 +30,16 @@ here waits on upstream.
 
 ## Playback and apps
 
-- `[in-repo]` **Nothing tells a listener where a picture or a field came
-  from.** Scalar fields already carry it end to end - waxbin stores a
-  `model.FieldProvenance` row with a `Provider` id, `/items/{pid}/editor`
-  returns it, and the metadata editor reads it - but that is the only
-  surface, and it is the one place somebody is least likely to be
-  looking. Two gaps under it. **Artwork has no provenance at all**:
-  `model.ArtImage` is data, format, dimensions and a hash, with no
-  provider field, so a cover fetched by enrichment is indistinguishable
-  from one read out of the file's tags - filed as an upstream ask in
-  `docs/upstream-requests.md`. And **radio throws the answer away**:
-  `CoverChain.FrontCover` knows exactly which rung answered - the local
-  catalog, the station's own announcement, Deezer, the Cover Art Archive
-  - and returns only bytes and a mime type, so `radioArtEntry` could not
-  record it even if something wanted to draw it.
-
-  What this is for: a small source mark under the cover on the radio
-  face, and the same mark wherever metadata arrived from somewhere other
-  than the file - a YouTube acquisition, an upload the user then ran
-  `enrichItem` against. It answers "why is this the cover" and "is this
-  the right album" without opening an editor, and it is the honest thing
-  to do about art this server fetched from a third party rather than
-  found in the media. Three decisions before it can be built: whether
-  the mark is a logo (which means vendoring trademarked assets under
-  each service's brand rules) or a worded label; whether radio's rung
-  identity travels as a plain string or as something the contract
-  closes; and whether the mark is always on or lives behind a setting,
-  since a permanent badge on every cover is a busy answer to a question
-  most listeners ask once.
+- `[in-repo]` **The full-screen player's cover carries no source mark.**
+  The mark ships everywhere else a cover is drawn large enough to hold a
+  caption - the artwork manager, the album, artist, book and podcast
+  headers, and the radio face - reading `artSource` off the detail read
+  each of those screens already makes. The item player is the one that cannot:
+  it draws from the queue's `ItemSummary`, so marking it means putting
+  provenance on every listing row, which is a lookup per row for a
+  caption a 48-pixel grid thumbnail has no space to draw. It waits for
+  either a reason to make summary rows carry it or a per-item read the
+  player can afford.
 
 - `[in-repo]` **Every injected enrichment provider is cover-only.**
   Deezer, iTunes and Fanart.tv all advertise `enrich.CapCover` and
@@ -353,11 +335,6 @@ here waits on upstream.
   by construction (they announce like devices); that claim is
   exactly what the checklist verifies.
 
-## Podcasts
-
-- `[in-repo]` **PodPing update notifications.** Polling is the only feed refresh
-  trigger.
-
 ## Compatibility
 
 - `[in-repo]` **NSP import and export.**
@@ -571,6 +548,38 @@ here waits on upstream.
   no-window case and `ui.spec.ts:16` are what say whether a flip took.
 
 ## Curation and metadata
+
+- `[in-repo]` **A podcast show's cover is not a settable entity.**
+  `artRef` resolves a `pc-` pid for reads, so a show's cover is served
+  and its provenance reported, but `artEntityForType` has no podcast
+  case: there is no way to set, clear, or pin one through
+  `/entities/{type}/{pid}/artwork`. The blocker is a permission
+  question rather than plumbing - a show is catalog-wide, so an
+  administrators-only rule matches the other catalog entities, while
+  `ManagePodcasts` matches who already curates shows - and it wants
+  deciding rather than guessing. Two behaviours upstream now guarantees
+  are untestable until it lands, and are noted where they would go in
+  `podcastcover_integration_test.go`: a cleared show cover refilling on
+  the next sync, and a hand-set one never being refetched.
+
+- `[in-repo]` **The artwork pin has no client.**
+  `GET`/`PUT /entities/{type}/{pid}/artwork/lock` ship and are tested,
+  and `docs/curation-and-metadata.md` tells an administrator the
+  endpoint is how they let go of a pinned cover - but nothing in the
+  app calls either verb. The state is visible (the artwork manager
+  draws "Pinned, no image") and an item's pin comes off through the
+  metadata screen's own field locks; an entity's does not, so an album
+  cover pinned empty can be explained in the UI and undone only by an
+  API call. The affordance belongs next to the manager's slot controls.
+
+- `[in-repo]` **`ArtSourceMark` has no caller.**
+  The widget wraps the caption wording and styling, and the three
+  surfaces that draw a caption - `entity_header.dart`,
+  `player_scaffold.dart`, `artwork_manager.dart` - each style their own
+  `Text` instead, already divergently (`maxLines` 2, 1, and unset).
+  Either the surfaces take the widget or the widget goes; keeping both
+  is a fourth copy of the same decision waiting to drift further.
+
 
 - `[in-repo]` **Book and remaining metadata providers.** Hardcover
   (the ASIN to ISBN bridge), Google Books and Open Library fallbacks,

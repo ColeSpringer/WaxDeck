@@ -6,6 +6,7 @@
 import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:waxdeck_api_gen/src/model/chapter_mark.dart';
+import 'package:waxdeck_api_gen/src/model/art_source.dart';
 import 'package:waxdeck_api_gen/src/model/book_part.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -18,6 +19,7 @@ part 'book_detail.g.dart';
 /// * [pid] - Book PID.
 /// * [title] - Book title.
 /// * [subtitle] - Subtitle, when known.
+/// * [artSource] - Where the cover this book answers came from, for the mark under it. Absent when the book has no artwork, or when the answering image carries no attribution. 
 /// * [authors] - Author display names, in credit order.
 /// * [narrators] - Narrator display names, in credit order.
 /// * [series] - Series name, when the book belongs to one.
@@ -46,6 +48,10 @@ abstract class BookDetail implements Built<BookDetail, BookDetailBuilder> {
   /// Subtitle, when known.
   @BuiltValueField(wireName: r'subtitle')
   String? get subtitle;
+
+  /// Where the cover this book answers came from, for the mark under it. Absent when the book has no artwork, or when the answering image carries no attribution. 
+  @BuiltValueField(wireName: r'artSource')
+  ArtSource? get artSource;
 
   /// Author display names, in credit order.
   @BuiltValueField(wireName: r'authors')
@@ -144,6 +150,13 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
       yield serializers.serialize(
         object.subtitle,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.artSource != null) {
+      yield r'artSource';
+      yield serializers.serialize(
+        object.artSource,
+        specifiedType: const FullType(ArtSource),
       );
     }
     yield r'authors';
@@ -284,6 +297,13 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
             specifiedType: const FullType(String),
           ) as String;
           result.subtitle = valueDes;
+          break;
+        case r'artSource':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(ArtSource),
+          ) as ArtSource;
+          result.artSource.replace(valueDes);
           break;
         case r'authors':
           final valueDes = serializers.deserialize(

@@ -6,6 +6,7 @@
 import 'package:waxdeck_api_gen/src/model/podcast_funding.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:waxdeck_api_gen/src/model/feed_person.dart';
+import 'package:waxdeck_api_gen/src/model/art_source.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -22,6 +23,7 @@ part 'podcast_show.g.dart';
 /// * [link] - The show's website, when the feed declares one.
 /// * [sourceType] - Where the show comes from: `rss`, `youtube` (a channel or playlist through the acquisition bridge), or `manual` (a local-folder show). Open set; treat unknown values like `rss`. 
 /// * [artUrl] - Origin-relative URL of the show's artwork endpoint.
+/// * [artSource] 
 /// * [episodeCount] - Number of cataloged episodes.
 /// * [lastPublishedAt] - Publication time of the newest cataloged episode.
 /// * [refreshDisabled] - True when scheduled refresh is suspended after repeated feed failures. A successful manual refresh clears it. 
@@ -62,6 +64,9 @@ abstract class PodcastShow implements Built<PodcastShow, PodcastShowBuilder> {
   /// Origin-relative URL of the show's artwork endpoint.
   @BuiltValueField(wireName: r'artUrl')
   String? get artUrl;
+
+  @BuiltValueField(wireName: r'artSource')
+  ArtSource? get artSource;
 
   /// Number of cataloged episodes.
   @BuiltValueField(wireName: r'episodeCount')
@@ -161,6 +166,13 @@ class _$PodcastShowSerializer implements PrimitiveSerializer<PodcastShow> {
       yield serializers.serialize(
         object.artUrl,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.artSource != null) {
+      yield r'artSource';
+      yield serializers.serialize(
+        object.artSource,
+        specifiedType: const FullType(ArtSource),
       );
     }
     if (object.episodeCount != null) {
@@ -290,6 +302,13 @@ class _$PodcastShowSerializer implements PrimitiveSerializer<PodcastShow> {
             specifiedType: const FullType(String),
           ) as String;
           result.artUrl = valueDes;
+          break;
+        case r'artSource':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(ArtSource),
+          ) as ArtSource;
+          result.artSource.replace(valueDes);
           break;
         case r'episodeCount':
           final valueDes = serializers.deserialize(

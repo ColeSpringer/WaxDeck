@@ -256,6 +256,7 @@ ItemDetail itemDetailFromGen(gen.Item item, {String baseUrl = ''}) {
     sampleRate: item.sampleRate,
     bitrate: item.bitrate,
     addedAt: item.addedAt,
+    artSource: artSourceFromGen(item.artSource),
   );
 }
 
@@ -306,6 +307,7 @@ AlbumDetail albumDetailFromGen(gen.AlbumDetail album) => AlbumDetail(
   country: album.country,
   itemCount: album.itemCount,
   totalDurationMs: album.totalDurationMs,
+  artSource: artSourceFromGen(album.artSource),
 );
 
 PlayInfo playInfoFromGen(gen.PlayInfo info, {String baseUrl = ''}) {
@@ -516,6 +518,7 @@ PodcastShow podcastShowFromGen(gen.PodcastShow show, {String baseUrl = ''}) {
         : PodcastFunding(url: funding.url, message: funding.message),
     medium: show.medium,
     persons: show.persons?.map(feedPersonFromGen).toList() ?? const [],
+    artSource: artSourceFromGen(show.artSource),
   );
 }
 
@@ -753,6 +756,7 @@ BookDetail bookDetailFromGen(gen.BookDetail book, {String baseUrl = ''}) {
     descriptionHtml: book.descriptionHtml,
     durationMs: book.durationMs,
     artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
+    artSource: artSourceFromGen(book.artSource),
     chapters: book.chapters.map(chapterMarkFromGen).toList(),
     parts: book.parts
         .map(
@@ -811,6 +815,7 @@ Lyrics lyricsFromGen(gen.Lyrics lyrics) {
   return Lyrics(
     pid: lyrics.pid,
     source: lyrics.source_,
+    provider: lyrics.provider,
     // Sorted here rather than trusted: the contract says ordered by
     // `timeMs` and the karaoke view walks the list assuming it, so an
     // out-of-order sidecar would light the wrong line rather than
@@ -1449,6 +1454,7 @@ ItemMetadata itemMetadataFromGen(gen.ItemMetadata meta) {
             field: p.field,
             source: p.source_,
             provider: p.provider,
+            sourceUrl: p.sourceUrl,
             locked: p.locked,
             updatedAt: p.updatedAt?.toUtc(),
           ),
@@ -1460,6 +1466,7 @@ ItemMetadata itemMetadataFromGen(gen.ItemMetadata meta) {
         : LyricsState(
             synced: lyrics.synced,
             source: lyrics.source_,
+            provider: lyrics.provider,
             lrc: lyrics.lrc,
           ),
     chapters: meta.chapters?.map(chapterMarkFromGen).toList() ?? const [],
@@ -1606,7 +1613,30 @@ ArtRoleInfo artRoleInfoFromGen(gen.ArtRoleInfo r) => ArtRoleInfo(
   format: r.format,
   width: r.width,
   height: r.height,
+  source: r.source_,
+  provider: r.provider,
+  sourceUrl: r.sourceUrl,
+  updatedAt: r.updatedAt?.toUtc(),
+  locked: r.locked ?? false,
 );
+
+ArtRoles artRolesFromGen(gen.ArtRoles roles) => ArtRoles(
+  roles: roles.roles.map(artRoleInfoFromGen).toList(growable: false),
+  artSource: artSourceFromGen(roles.artSource),
+);
+
+/// Null in, null out: an unattributed picture draws no mark, and the
+/// absence is the signal rather than an object with an empty source.
+ArtSource? artSourceFromGen(gen.ArtSource? a) => a == null
+    ? null
+    : ArtSource(
+        source: a.source_,
+        provider: a.provider,
+        sourceUrl: a.sourceUrl,
+        level: a.level,
+        derived: a.derived ?? false,
+        updatedAt: a.updatedAt?.toUtc(),
+      );
 
 DuplicateEntity duplicateEntityFromGen(gen.DuplicateEntity e) =>
     DuplicateEntity(pid: e.pid, name: e.name, itemCount: e.itemCount);

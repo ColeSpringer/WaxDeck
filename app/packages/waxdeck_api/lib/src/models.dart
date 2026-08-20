@@ -478,6 +478,7 @@ class ItemDetail extends ItemSummary {
     this.sampleRate,
     this.bitrate,
     this.addedAt,
+    this.artSource,
   });
 
   final List<String> genres;
@@ -487,6 +488,10 @@ class ItemDetail extends ItemSummary {
   final int? sampleRate;
   final int? bitrate;
   final DateTime? addedAt;
+
+  /// Where the cover this item resolves came from, so a surface drawing
+  /// it large can say so. Null when nothing is attributed.
+  final ArtSource? artSource;
 }
 
 /// What an [EntityCard] is about, which is what a tap opens.
@@ -561,6 +566,7 @@ class AlbumDetail {
     this.country,
     this.itemCount,
     this.totalDurationMs,
+    this.artSource,
   });
 
   final String pid;
@@ -584,6 +590,11 @@ class AlbumDetail {
 
   final int? itemCount;
   final int? totalDurationMs;
+
+  /// Where the cover this release resolves came from. For an album with
+  /// no durable cover of its own that is a member track's, marked
+  /// [ArtSource.derived].
+  final ArtSource? artSource;
 
   /// Whether the release carries any identity at all. Most do not, and a
   /// header with five blank labels is worse than no block.
@@ -1132,6 +1143,7 @@ class PodcastShow {
     this.funding,
     this.medium,
     this.persons = const [],
+    this.artSource,
   });
 
   final String pid;
@@ -1168,6 +1180,11 @@ class PodcastShow {
 
   /// Show-level person credits. Populated on the detail read only.
   final List<FeedPerson> persons;
+
+  /// Where the show's cover came from - the feed, or a hand-set
+  /// replacement. Detail reads only, beside [persons]: a subscription
+  /// row draws no caption.
+  final ArtSource? artSource;
 }
 
 /// Which new episodes auto-download takes, by keyword against the
@@ -1475,6 +1492,7 @@ class BookDetail {
     this.descriptionHtml,
     required this.durationMs,
     this.artUrl,
+    this.artSource,
     this.chapters = const [],
     this.parts = const [],
     this.settings,
@@ -1499,6 +1517,11 @@ class BookDetail {
   /// Book total across all parts.
   final int durationMs;
   final String? artUrl;
+
+  /// Where the cover this book answers came from, for the mark under
+  /// it. Null when the book has no artwork, or when the answering
+  /// image carries no attribution.
+  final ArtSource? artSource;
   final List<ChapterMark> chapters;
   final List<BookPart> parts;
 
@@ -1612,15 +1635,22 @@ class Lyrics {
   const Lyrics({
     required this.pid,
     required this.source,
+    this.provider,
     this.synced = const [],
     this.unsynced,
   });
 
   final String pid;
 
-  /// Where the words came from (`lrc` sidecar, `embedded` tag). An open
+  /// Where the words came from: `tag` (the file's own tags), `sidecar`
+  /// (an `.lrc` beside the audio), `user`, or `enrichment` (a provider,
+  /// named in [provider]). The same vocabulary artwork reports. An open
   /// vocabulary.
   final String source;
+
+  /// The lyrics provider that supplied an `enrichment` copy. Null for
+  /// every other source.
+  final String? provider;
 
   /// Time-synced lines, ordered by [SyncedLine.timeMs]. Empty when the
   /// source carried no timings.
@@ -1941,6 +1971,7 @@ class RadioPlayInfo {
     this.nowPlaying,
     this.nowPlayingItemPid,
     this.nowPlayingArtKey,
+    this.nowPlayingArtSource,
     this.nowPlayingSaved = false,
     this.nowPlayingSavedPid,
   });
@@ -1966,6 +1997,12 @@ class RadioPlayInfo {
   /// - so it appears on a later poll rather than on the one that started
   /// it - and null forever while the operator has the rung switched off.
   final String? nowPlayingArtKey;
+
+  /// Which rung answered for [nowPlayingArtKey]: the station's own
+  /// stream, or the provider a lookup asked. It is what lets a face
+  /// caption the picture rather than presenting a third party's cover as
+  /// the station's own.
+  final ArtSource? nowPlayingArtSource;
 
   /// Whether the caller has already kept what the station is announcing,
   /// so the heart draws filled. Riding the poll is what keeps it honest
@@ -2829,19 +2866,33 @@ class FieldProvenance {
     required this.field,
     required this.source,
     this.provider,
+    this.sourceUrl,
     required this.locked,
     this.updatedAt,
   });
 
+  /// The field, or `art` / `lyrics` for an artifact row.
   final String field;
 
-  /// `file`, `provider`, or `user`. Open vocabulary.
+  /// `tag`, `sidecar`, `user`, `enrichment`, `organize`, or `feed`.
+  /// Open vocabulary.
   final String source;
 
-  /// The provider name when [source] is `provider`.
+  /// The provider name when [source] is `enrichment`.
   final String? provider;
+
+  /// Where a fetched value's bytes came from, on the rows that have one.
+  final String? sourceUrl;
+
   final bool locked;
   final DateTime? updatedAt;
+
+  /// Whether this row describes an artifact (a cover, a lyrics sheet)
+  /// rather than a scalar field. An artifact row carries no value,
+  /// because the value is bytes, and appears whenever the item holds
+  /// one - so a non-empty provenance list does not mean the item was
+  /// curated.
+  bool get isArtifact => field == 'art' || field == 'lyrics';
 }
 
 /// One credited role with its names, ordered as stored.
@@ -2854,12 +2905,21 @@ class Credit {
 
 /// Whether an item has lyrics and where they came from.
 class LyricsState {
-  const LyricsState({required this.synced, required this.source, this.lrc});
+  const LyricsState({
+    required this.synced,
+    required this.source,
+    this.provider,
+    this.lrc,
+  });
 
   final bool synced;
 
-  /// Open vocabulary.
+  /// `tag`, `sidecar`, `user`, or `enrichment` - the same vocabulary
+  /// artwork reports. Open vocabulary.
   final String source;
+
+  /// The lyrics provider that supplied an `enrichment` copy.
+  final String? provider;
 
   /// The stored LRC text, when synced.
   final String? lrc;
@@ -2892,12 +2952,24 @@ class WriteBackIssue {
 
 /// One artwork slot an item, album, or artist holds at its own level.
 class ArtRoleInfo {
-  const ArtRoleInfo({required this.role, this.format, this.width, this.height});
+  const ArtRoleInfo({
+    required this.role,
+    this.format,
+    this.width,
+    this.height,
+    this.source,
+    this.provider,
+    this.sourceUrl,
+    this.updatedAt,
+    this.locked = false,
+  });
 
   /// The slot: `front`, `back`, `disc`, `booklet`, or `background`.
   final String role;
 
   /// The stored image format (`jpeg`, `png`, `webp`, `gif`), when known.
+  /// Absent when the slot holds no image, which happens only on a
+  /// pinned-and-cleared `front`.
   final String? format;
 
   /// Pixel width, when the image decoded.
@@ -2905,6 +2977,75 @@ class ArtRoleInfo {
 
   /// Pixel height, when the image decoded.
   final int? height;
+
+  /// Where this slot's image came from: `tag`, `sidecar`, `user`,
+  /// `enrichment`, or `feed`. Open vocabulary.
+  final String? source;
+
+  /// The provider that supplied an `enrichment` cover.
+  final String? provider;
+
+  /// Where a fetched cover's bytes came from.
+  final String? sourceUrl;
+
+  final DateTime? updatedAt;
+
+  /// Whether the front cover is pinned against enrichment and scan
+  /// re-derives. False on every other role.
+  final bool locked;
+
+  /// A pin with nothing behind it: the cover was cleared and the pin
+  /// left standing, which says "do not refill this" rather than "no
+  /// cover yet". It is the one artwork state nothing else surfaces.
+  bool get pinnedEmpty => locked && (format ?? '').isEmpty;
+}
+
+/// Where a picture came from, for a surface drawing it large enough to
+/// carry a caption.
+class ArtSource {
+  const ArtSource({
+    required this.source,
+    this.provider,
+    this.sourceUrl,
+    this.level,
+    this.derived = false,
+    this.updatedAt,
+  });
+
+  /// The producer: `tag`, `sidecar`, `user`, `enrichment`, or `feed`.
+  /// Open vocabulary; an unrecognized value draws no mark.
+  final String source;
+
+  /// The provider that supplied an `enrichment` cover (`deezer`,
+  /// `coverartarchive`, `fanarttv`).
+  final String? provider;
+
+  /// Where the bytes were fetched from, for a cover that came off the
+  /// network.
+  final String? sourceUrl;
+
+  /// Which rung of the fallback chain answered (`track`, `album`, ...).
+  final String? level;
+
+  /// Whether the answering level borrowed a member's picture rather
+  /// than holding one of its own - an album showing one of its tracks'
+  /// covers. [source] is that member's.
+  final bool derived;
+
+  final DateTime? updatedAt;
+}
+
+/// An entity's own artwork slots, plus where the cover a front-cover
+/// read would answer with came from.
+class ArtRoles {
+  const ArtRoles({required this.roles, this.artSource});
+
+  final List<ArtRoleInfo> roles;
+
+  /// The resolved cover's provenance, which for an entity holding none
+  /// of its own is the rung it inherits from. Null when nothing is
+  /// attributed, which reads as "draw no mark".
+  final ArtSource? artSource;
 }
 
 /// Everything the metadata editor shows for one item.

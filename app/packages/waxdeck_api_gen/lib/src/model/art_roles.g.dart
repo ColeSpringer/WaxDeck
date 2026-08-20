@@ -9,11 +9,13 @@ part of 'art_roles.dart';
 class _$ArtRoles extends ArtRoles {
   @override
   final BuiltList<ArtRoleInfo> roles;
+  @override
+  final ArtSource? artSource;
 
   factory _$ArtRoles([void Function(ArtRolesBuilder)? updates]) =>
       (ArtRolesBuilder()..update(updates))._build();
 
-  _$ArtRoles._({required this.roles}) : super._();
+  _$ArtRoles._({required this.roles, this.artSource}) : super._();
   @override
   ArtRoles rebuild(void Function(ArtRolesBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -24,22 +26,26 @@ class _$ArtRoles extends ArtRoles {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is ArtRoles && roles == other.roles;
+    return other is ArtRoles &&
+        roles == other.roles &&
+        artSource == other.artSource;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, roles.hashCode);
+    _$hash = $jc(_$hash, artSource.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'ArtRoles',
-    )..add('roles', roles)).toString();
+    return (newBuiltValueToStringHelper(r'ArtRoles')
+          ..add('roles', roles)
+          ..add('artSource', artSource))
+        .toString();
   }
 }
 
@@ -51,6 +57,10 @@ class ArtRolesBuilder implements Builder<ArtRoles, ArtRolesBuilder> {
       _$this._roles ??= ListBuilder<ArtRoleInfo>();
   set roles(ListBuilder<ArtRoleInfo>? roles) => _$this._roles = roles;
 
+  ArtSourceBuilder? _artSource;
+  ArtSourceBuilder get artSource => _$this._artSource ??= ArtSourceBuilder();
+  set artSource(ArtSourceBuilder? artSource) => _$this._artSource = artSource;
+
   ArtRolesBuilder() {
     ArtRoles._defaults(this);
   }
@@ -59,6 +69,7 @@ class ArtRolesBuilder implements Builder<ArtRoles, ArtRolesBuilder> {
     final $v = _$v;
     if ($v != null) {
       _roles = $v.roles.toBuilder();
+      _artSource = $v.artSource?.toBuilder();
       _$v = null;
     }
     return this;
@@ -80,12 +91,16 @@ class ArtRolesBuilder implements Builder<ArtRoles, ArtRolesBuilder> {
   _$ArtRoles _build() {
     _$ArtRoles _$result;
     try {
-      _$result = _$v ?? _$ArtRoles._(roles: roles.build());
+      _$result =
+          _$v ??
+          _$ArtRoles._(roles: roles.build(), artSource: _artSource?.build());
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'roles';
         roles.build();
+        _$failedField = 'artSource';
+        _artSource?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'ArtRoles',

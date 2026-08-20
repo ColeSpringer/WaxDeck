@@ -288,6 +288,13 @@ components:
         subtitle:
           type: string
           description: Subtitle, when known.
+        artSource:
+          allOf:
+            - $ref: "#/components/schemas/ArtSource"
+          description: >
+            Where the cover this book answers came from, for the mark
+            under it. Absent when the book has no artwork, or when the
+            answering image carries no attribution.
         authors:
           type: array
           description: Author display names, in credit order.

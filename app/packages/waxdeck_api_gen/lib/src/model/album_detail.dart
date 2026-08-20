@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/art_source.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -24,6 +25,7 @@ part 'album_detail.g.dart';
 /// * [country] - Release country, as tagged. A scan stores the tag verbatim, so this can hold a value an edit would refuse (\"US & Europe\") as well as a plain ISO code. 
 /// * [itemCount] - Tracks on the release as the catalog holds it. Absent for a caller with restricted library visibility, because the count is not scoped to their grant and a number larger than what they can open would be worse than none. 
 /// * [totalDurationMs] - Total running time of those tracks, in milliseconds. Absent alongside `itemCount`, and for its reason. 
+/// * [artSource] 
 @BuiltValue()
 abstract class AlbumDetail implements Built<AlbumDetail, AlbumDetailBuilder> {
   /// Type-prefixed album PID.
@@ -77,6 +79,9 @@ abstract class AlbumDetail implements Built<AlbumDetail, AlbumDetailBuilder> {
   /// Total running time of those tracks, in milliseconds. Absent alongside `itemCount`, and for its reason. 
   @BuiltValueField(wireName: r'totalDurationMs')
   int? get totalDurationMs;
+
+  @BuiltValueField(wireName: r'artSource')
+  ArtSource? get artSource;
 
   AlbumDetail._();
 
@@ -186,6 +191,13 @@ class _$AlbumDetailSerializer implements PrimitiveSerializer<AlbumDetail> {
       yield serializers.serialize(
         object.totalDurationMs,
         specifiedType: const FullType(int),
+      );
+    }
+    if (object.artSource != null) {
+      yield r'artSource';
+      yield serializers.serialize(
+        object.artSource,
+        specifiedType: const FullType(ArtSource),
       );
     }
   }
@@ -301,6 +313,13 @@ class _$AlbumDetailSerializer implements PrimitiveSerializer<AlbumDetail> {
             specifiedType: const FullType(int),
           ) as int;
           result.totalDurationMs = valueDes;
+          break;
+        case r'artSource':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(ArtSource),
+          ) as ArtSource;
+          result.artSource.replace(valueDes);
           break;
         default:
           unhandled.add(key);

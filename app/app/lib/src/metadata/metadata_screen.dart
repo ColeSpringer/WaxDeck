@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_mark.dart';
 import '../l10n/l10n.dart';
 import '../music/music_controllers.dart';
 import '../shell/forbidden_page.dart';
@@ -737,21 +738,65 @@ class _Header extends StatelessWidget {
   final MetadataEditorState state;
 
   /// "5 from tags, 2 from you, 1 from MusicBrainz", commonest first.
+  ///
+  /// Scalar rows only. The provenance list also carries an `art` and a
+  /// `lyrics` row whenever the item holds one, and counting those in
+  /// would shift this line on every item with a cover - which is nearly
+  /// all of them - and stop "no recorded sources" meaning what it says.
+  /// The artifacts get their own lines below instead, where naming the
+  /// two of them is more use than adding one to a tally.
   static String provenanceSummary(
     AppLocalizations l10n,
     ItemMetadata metadata,
   ) {
-    if (metadata.provenance.isEmpty) return l10n.metadataNoSources;
     final counts = <String, int>{};
     for (final entry in metadata.provenance) {
+      if (entry.isArtifact) continue;
       final source = entry.provider ?? entry.source;
       counts[source] = (counts[source] ?? 0) + 1;
     }
+    if (counts.isEmpty) return l10n.metadataNoSources;
     final ordered = counts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return ordered
-        .map((e) => l10n.metadataFromSource(e.value, e.key))
+        .map(
+          (e) => l10n.metadataFromSource(
+            e.value,
+            provenanceProducerName(l10n, e.key),
+          ),
+        )
         .join(', ');
+  }
+
+  /// Where the item's cover and lyrics came from, one line each, worded
+  /// the way the mark under a cover is.
+  ///
+  /// The row is not enough on its own. An `art` or `lyrics` row also
+  /// appears for a field locked with nothing behind it - the way to
+  /// stop a scan filling one - and the source on that row is whatever
+  /// the writer that took the lock happened to stamp, which is not
+  /// where anything came from. So each line is drawn only when the item
+  /// actually holds the artifact the row is about.
+  static List<String> artifactSources(
+    AppLocalizations l10n,
+    ItemMetadata metadata,
+  ) {
+    final out = <String>[];
+    for (final row in metadata.provenance) {
+      if (!row.isArtifact) continue;
+      final holdsIt = row.field == 'art'
+          ? metadata.hasOwnArtwork
+          : metadata.lyrics != null;
+      if (!holdsIt) continue;
+      final label = provenanceSourceLabel(l10n, row);
+      if (label == null) continue;
+      out.add(
+        row.field == 'art'
+            ? l10n.metadataArtworkSource(label)
+            : l10n.metadataLyricsSource(label),
+      );
+    }
+    return out;
   }
 
   @override
@@ -782,6 +827,11 @@ class _Header extends StatelessWidget {
                 provenanceSummary(l10n, metadata),
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
+              for (final line in artifactSources(l10n, metadata))
+                Text(
+                  line,
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                ),
             ],
           ),
         ),

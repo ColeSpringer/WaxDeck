@@ -122,6 +122,16 @@ var ErrNoCover = errors.New("providers: no front cover for this release")
 // that as ErrNoCover files a release that has a cover as bare.
 var errNotAnImage = errors.New("providers: the archive answered with something that is not an image")
 
+// FrontCoverURL is the address FrontCover fetches a release's front
+// cover from. Exposed so a caller that reports where a picture came
+// from names the same URL the fetch used, rather than rebuilding it.
+func (c *CoverArt) FrontCoverURL(releaseMBID string) string {
+	if releaseMBID == "" {
+		return ""
+	}
+	return c.base + "/release/" + url.PathEscape(releaseMBID) + "/front-500"
+}
+
 // FrontCover downloads a release's front cover, at the archive's 500px
 // rendition rather than the original: an original scan can be a 20 MB
 // TIFF, and the archive's storage is slow enough that the bytes are the
@@ -139,7 +149,7 @@ func (c *CoverArt) FrontCover(ctx context.Context, releaseMBID string) ([]byte, 
 	if c.knownBare(releaseMBID) {
 		return nil, "", ErrNoCover
 	}
-	raw := c.base + "/release/" + url.PathEscape(releaseMBID) + "/front-500"
+	raw := c.FrontCoverURL(releaseMBID)
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, "", err
@@ -255,6 +265,10 @@ var coverArtMimes = map[string]string{
 	"image/gif":  "image/gif",
 }
 
+// ProviderCoverArtArchive is the provider id the archive rung reports,
+// matching the ids the enrichment providers answer to Name().
+const ProviderCoverArtArchive = "coverartarchive"
+
 // RecordingReleaseLookup is the MusicBrainz half of a recording cover
 // lookup. *MusicBrainz implements it.
 type RecordingReleaseLookup interface {
@@ -282,23 +296,23 @@ type RecordingCover struct {
 }
 
 // FrontCover answers a front cover for an announced artist and title.
-func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) ([]byte, string, error) {
+func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) (TitleCoverResult, error) {
 	missing := r.NoCover
 	if missing == nil {
 		missing = ErrNoCover
 	}
 	if r.MB == nil || r.CAA == nil {
-		return nil, "", missing
+		return TitleCoverResult{}, missing
 	}
 	mbids, err := r.MB.ReleaseMBIDsForRecording(ctx, artist, title)
 	if err != nil {
-		return nil, "", err
+		return TitleCoverResult{}, err
 	}
 	if len(mbids) == 0 {
 		// Asked and answered: MusicBrainz knows no recording by this
 		// name, which will still be true tomorrow far more often than
 		// not. That is the long-cached outcome, not the short one.
-		return nil, "", missing
+		return TitleCoverResult{}, missing
 	}
 	// Down the releases in the order the lookup ranked them - album
 	// before single before the rest, compilations demoted. Having a
@@ -315,12 +329,16 @@ func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) ([
 		// caller hears an error rather than a miss, which is what decides
 		// how long the outcome is remembered.
 		if err := ctx.Err(); err != nil {
-			return nil, "", err
+			return TitleCoverResult{}, err
 		}
 		data, mime, err := r.CAA.FrontCover(ctx, mbid)
 		switch {
 		case err == nil:
-			return data, mime, nil
+			return TitleCoverResult{
+				Data: data, MIME: mime,
+				Provider:  ProviderCoverArtArchive,
+				SourceURL: r.CAA.FrontCoverURL(mbid),
+			}, nil
 		case errors.Is(err, ErrNoCover):
 			continue
 		default:
@@ -331,9 +349,9 @@ func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) ([
 		}
 	}
 	if reachErr != nil {
-		return nil, "", reachErr
+		return TitleCoverResult{}, reachErr
 	}
-	return nil, "", missing
+	return TitleCoverResult{}, missing
 }
 
 // ForgetMisses drops the archive's bare-release memory, so the caller's
@@ -344,10 +362,23 @@ func (r RecordingCover) ForgetMisses() {
 	}
 }
 
+// TitleCoverResult is one answer for an announced title: the picture,
+// its type, and where it came from. Provider names the rung that
+// answered so a listening surface can caption a third party's cover as
+// theirs rather than presenting it as the station's own; SourceURL is
+// the address the bytes were fetched from, empty where the rung does
+// not have a single one.
+type TitleCoverResult struct {
+	Data      []byte
+	MIME      string
+	Provider  string
+	SourceURL string
+}
+
 // TitleCover answers a front cover for an announced artist and title.
 // Deezer and RecordingCover both implement it.
 type TitleCover interface {
-	FrontCover(ctx context.Context, artist, title string) ([]byte, string, error)
+	FrontCover(ctx context.Context, artist, title string) (TitleCoverResult, error)
 }
 
 // CoverChain asks its sources in order and takes the first cover, so a
@@ -362,7 +393,7 @@ type CoverChain struct {
 }
 
 // FrontCover walks the sources in order.
-func (c CoverChain) FrontCover(ctx context.Context, artist, title string) ([]byte, string, error) {
+func (c CoverChain) FrontCover(ctx context.Context, artist, title string) (TitleCoverResult, error) {
 	missing := c.NoCover
 	if missing == nil {
 		missing = ErrNoCover
@@ -370,12 +401,12 @@ func (c CoverChain) FrontCover(ctx context.Context, artist, title string) ([]byt
 	var reachErr error
 	for _, src := range c.Sources {
 		if err := ctx.Err(); err != nil {
-			return nil, "", err
+			return TitleCoverResult{}, err
 		}
-		data, mime, err := src.FrontCover(ctx, artist, title)
+		got, err := src.FrontCover(ctx, artist, title)
 		switch {
-		case err == nil && len(data) > 0:
-			return data, mime, nil
+		case err == nil && len(got.Data) > 0:
+			return got, nil
 		case err == nil, errors.Is(err, ErrNoCover), errors.Is(err, missing):
 			continue
 		default:
@@ -383,9 +414,9 @@ func (c CoverChain) FrontCover(ctx context.Context, artist, title string) ([]byt
 		}
 	}
 	if reachErr != nil {
-		return nil, "", reachErr
+		return TitleCoverResult{}, reachErr
 	}
-	return nil, "", missing
+	return TitleCoverResult{}, missing
 }
 
 // ForgetMisses passes an operator's purge down to whichever sources keep

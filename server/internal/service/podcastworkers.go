@@ -66,7 +66,7 @@ func (l *Library) RefreshDueFeeds(ctx context.Context, interval time.Duration) {
 		if now.Sub(time.Unix(0, st.LastAttemptNS)) < interval {
 			continue
 		}
-		if _, err := l.syncShow(ctx, model.PID(show)); err != nil {
+		if _, err := l.syncShow(ctx, model.PID(show), syncOwn); err != nil {
 			// syncShow recorded the failure; the log line is the operator
 			// surface until notifications land.
 			l.log.Warn("scheduled feed sync failed", "show", show, "err", err)
@@ -74,10 +74,26 @@ func (l *Library) RefreshDueFeeds(ctx context.Context, interval time.Duration) {
 	}
 }
 
+// syncOrigin says who asked for a sync, which decides what a failure is
+// allowed to conclude about the feed.
+type syncOrigin int
+
+const (
+	// syncOwn is this server's own cadence: the scheduled refresh and a
+	// subscriber's manual one. A run of failures there is real evidence
+	// the feed is broken, so it walks the disable counter.
+	syncOwn syncOrigin = iota
+	// syncPinged is a third party naming the feed on a public chain.
+	// The attempt is recorded so the floor that keeps this server off a
+	// struggling host survives a restart, but the failure counts for
+	// nothing: strangers do not get to disable a subscription.
+	syncPinged
+)
+
 // syncShow syncs one show now, records the outcome in feed_state, and
 // fans out what a change implies: auto-download for the newest
 // arrivals and a retention re-evaluation.
-func (l *Library) syncShow(ctx context.Context, showPID model.PID) (int, error) {
+func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOrigin) (int, error) {
 	pod, err := l.lib.Podcasts().Get(ctx, showPID)
 	if err != nil {
 		return 0, classify(err)
@@ -85,6 +101,13 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID) (int, error) 
 	res, err := l.lib.Podcasts().Sync(ctx, showPID)
 	now := time.Now().UnixNano()
 	if err != nil {
+		if origin == syncPinged {
+			// The attempt lands, the verdict does not. See syncPinged.
+			if dbErr := l.db.RecordFeedAttempt(ctx, string(showPID), now); dbErr != nil {
+				l.log.Warn("recording feed attempt", "show", string(showPID), "err", dbErr)
+			}
+			return 0, l.classifyFeedErr(ctx, err, pod.FeedURL, l.showIsPrivate(ctx, pod))
+		}
 		st, dbErr := l.db.RecordFeedFailure(ctx, string(showPID), err.Error(), now, feedDisableAfter)
 		if dbErr != nil {
 			l.log.Warn("recording feed failure", "show", string(showPID), "err", dbErr)

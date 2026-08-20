@@ -162,6 +162,43 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a source caption sits under the hero and still fits', (
+      tester,
+    ) async {
+      // The caption is drawn inside the slot the hero was measured
+      // into, so the artwork has to give up its height rather than the
+      // column overflowing by a line. A short window is where that
+      // shows: there is no slack to absorb it.
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 620,
+          child: PlayerScaffold(
+            now: _music,
+            artworkCaption: 'From the Cover Art Archive',
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 620),
+      );
+      expect(tester.takeException(), isNull);
+
+      final caption = tester.getRect(find.text('From the Cover Art Archive'));
+      final art = tester.getRect(find.byType(ArtworkImage).first);
+      expect(
+        caption.top,
+        greaterThanOrEqualTo(art.bottom),
+        reason: 'the caption belongs under the picture it describes',
+      );
+      expect(
+        caption.width,
+        lessThanOrEqualTo(art.width + 1),
+        reason: 'bounded by the artwork, so a long provider name wraps',
+      );
+    });
+
     testWidgets('the title block centres every line on its own width', (
       tester,
     ) async {

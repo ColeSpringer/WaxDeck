@@ -1032,7 +1032,7 @@ abstract interface class WaxDeckRepository {
   /// `GET /items/{pid}/art-roles`: the artwork slots an item, album, or
   /// artist holds at its own level (not inherited from the chain), each
   /// with its stored format and pixel dimensions.
-  Future<List<ArtRoleInfo>> getItemArtRoles(String pid);
+  Future<ArtRoles> getItemArtRoles(String pid);
 
   /// `PUT /items/{pid}/artwork`: replaces an item's artwork in one slot
   /// ([role], default `front`) with the uploaded image [bytes].
@@ -1068,6 +1068,21 @@ abstract interface class WaxDeckRepository {
     String entityType,
     String entityPid, {
     String role = 'front',
+  });
+
+  /// `GET /entities/{entityType}/{entityPid}/artwork/lock`: whether a
+  /// catalog entity's front cover is pinned against enrichment and scan
+  /// re-derives. Refuses `playlist`.
+  Future<bool> getEntityArtworkLock(String entityType, String entityPid);
+
+  /// `PUT /entities/{entityType}/{entityPid}/artwork/lock`: pins or
+  /// unpins a catalog entity's front cover without touching the cover.
+  /// Unpinning is the way out of a cover cleared and left pinned, which
+  /// setting artwork cannot express. Refuses `playlist`.
+  Future<bool> setEntityArtworkLock(
+    String entityType,
+    String entityPid, {
+    required bool locked,
   });
 
   /// `PUT /items/{pid}/tags/{key}`: replaces one custom tag's values.
@@ -2793,6 +2808,7 @@ class WaxDeckClient implements WaxDeckRepository {
       nowPlaying: info.nowPlaying,
       nowPlayingItemPid: info.nowPlayingItemPid,
       nowPlayingArtKey: info.nowPlayingArtKey,
+      nowPlayingArtSource: artSourceFromGen(info.nowPlayingArtSource),
       nowPlayingSaved: info.nowPlayingSaved ?? false,
       nowPlayingSavedPid: info.nowPlayingSavedPid,
     );
@@ -3483,11 +3499,9 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<List<ArtRoleInfo>> getItemArtRoles(String pid) => _guard(() async {
+  Future<ArtRoles> getItemArtRoles(String pid) => _guard(() async {
     final response = await _gen.getLibraryApi().getItemArtRoles(pid: pid);
-    return _require(
-      response.data,
-    ).roles.map(artRoleInfoFromGen).toList(growable: false);
+    return artRolesFromGen(_require(response.data));
   });
 
   @override
@@ -3546,6 +3560,30 @@ class WaxDeckClient implements WaxDeckRepository {
       entityPid: entityPid,
       role: gen.ArtRole.valueOf(role),
     );
+  });
+
+  @override
+  Future<bool> getEntityArtworkLock(String entityType, String entityPid) =>
+      _guard(() async {
+        final response = await _gen.getMetadataApi().getEntityArtworkLock(
+          entityType: entityType,
+          entityPid: entityPid,
+        );
+        return _require(response.data).locked;
+      });
+
+  @override
+  Future<bool> setEntityArtworkLock(
+    String entityType,
+    String entityPid, {
+    required bool locked,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setEntityArtworkLock(
+      entityType: entityType,
+      entityPid: entityPid,
+      artworkLock: gen.ArtworkLock((b) => b.locked = locked),
+    );
+    return _require(response.data).locked;
   });
 
   @override

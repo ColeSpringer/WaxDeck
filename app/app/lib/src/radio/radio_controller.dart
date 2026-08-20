@@ -12,6 +12,22 @@ import '../providers.dart';
 import '../settings/prefs_controller.dart';
 
 /// The shared internet radio station library.
+/// Whether two art attributions would draw the same caption.
+///
+/// Field-wise because the API models are plain data holders with no
+/// value equality - comparing the objects would be an identity check
+/// that never matches across two polls, which would defeat the guard
+/// this feeds rather than tighten it. Only the fields the caption reads
+/// count: a timestamp that moved without the wording changing is not a
+/// reason to rebuild the dial.
+bool _sameArtSource(ArtSource? a, ArtSource? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null) return false;
+  return a.source == b.source &&
+      a.provider == b.provider &&
+      a.derived == b.derived;
+}
+
 class RadioStationsController extends AsyncNotifier<List<RadioStation>> {
   @override
   Future<List<RadioStation>> build() =>
@@ -221,6 +237,7 @@ class RadioPlayback {
     this.nowPlaying,
     this.nowPlayingItemPid,
     this.nowPlayingArtKey,
+    this.nowPlayingArtSource,
     this.nowPlayingSaved = false,
     this.nowPlayingSavedPid,
   });
@@ -249,6 +266,12 @@ class RadioPlayback {
   /// makes the image URL built from it change too.
   final String? nowPlayingArtKey;
 
+  /// Which rung answered for [nowPlayingArtKey]: the station's own
+  /// stream, or the provider a lookup asked. It is what the face
+  /// captions the picture with, so a third party's cover is not
+  /// presented as the station's own.
+  final ArtSource? nowPlayingArtSource;
+
   /// Whether this listener has kept [nowPlaying], which is what the
   /// heart draws. The server answers it on every poll, so a save made on
   /// the phone fills the desktop's heart within fifteen seconds and a
@@ -269,6 +292,7 @@ class RadioPlayback {
     nowPlaying: nowPlaying,
     nowPlayingItemPid: nowPlayingItemPid,
     nowPlayingArtKey: nowPlayingArtKey,
+    nowPlayingArtSource: nowPlayingArtSource,
     nowPlayingSaved: saved,
     nowPlayingSavedPid: pid,
   );
@@ -391,6 +415,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         nowPlaying: info.nowPlaying,
         nowPlayingItemPid: info.nowPlayingItemPid,
         nowPlayingArtKey: info.nowPlayingArtKey,
+        nowPlayingArtSource: info.nowPlayingArtSource,
         nowPlayingSaved: info.nowPlayingSaved,
         nowPlayingSavedPid: info.nowPlayingSavedPid,
       );
@@ -516,6 +541,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         nowPlaying: held.nowPlaying,
         nowPlayingItemPid: held.nowPlayingItemPid,
         nowPlayingArtKey: held.nowPlayingArtKey,
+        nowPlayingArtSource: held.nowPlayingArtSource,
         nowPlayingSaved: held.nowPlayingSaved,
         nowPlayingSavedPid: held.nowPlayingSavedPid,
       );
@@ -590,6 +616,13 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
       if (info.nowPlaying == state.nowPlaying &&
           info.nowPlayingItemPid == state.nowPlayingItemPid &&
           info.nowPlayingArtKey == state.nowPlayingArtKey &&
+          // The art key can stand while its attribution arrives: the
+          // cover is resolved on a detached worker, so the first poll
+          // after a title change often carries the key with no source
+          // yet and the next one fills it in. Leaving this out of the
+          // comparison drops exactly that fill, and the caption under
+          // the cover never appears.
+          _sameArtSource(info.nowPlayingArtSource, state.nowPlayingArtSource) &&
           info.nowPlayingSaved == state.nowPlayingSaved &&
           info.nowPlayingSavedPid == state.nowPlayingSavedPid) {
         return;
@@ -615,6 +648,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         nowPlaying: info.nowPlaying,
         nowPlayingItemPid: info.nowPlayingItemPid,
         nowPlayingArtKey: info.nowPlayingArtKey,
+        nowPlayingArtSource: info.nowPlayingArtSource,
         nowPlayingSaved: holdHeart
             ? state.nowPlayingSaved
             : info.nowPlayingSaved,

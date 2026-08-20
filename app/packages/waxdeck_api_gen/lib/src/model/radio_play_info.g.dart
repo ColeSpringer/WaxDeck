@@ -16,6 +16,8 @@ class _$RadioPlayInfo extends RadioPlayInfo {
   @override
   final String? nowPlayingArtKey;
   @override
+  final ArtSource? nowPlayingArtSource;
+  @override
   final bool? nowPlayingSaved;
   @override
   final String? nowPlayingSavedPid;
@@ -28,6 +30,7 @@ class _$RadioPlayInfo extends RadioPlayInfo {
     this.nowPlaying,
     this.nowPlayingItemPid,
     this.nowPlayingArtKey,
+    this.nowPlayingArtSource,
     this.nowPlayingSaved,
     this.nowPlayingSavedPid,
   }) : super._();
@@ -46,6 +49,7 @@ class _$RadioPlayInfo extends RadioPlayInfo {
         nowPlaying == other.nowPlaying &&
         nowPlayingItemPid == other.nowPlayingItemPid &&
         nowPlayingArtKey == other.nowPlayingArtKey &&
+        nowPlayingArtSource == other.nowPlayingArtSource &&
         nowPlayingSaved == other.nowPlayingSaved &&
         nowPlayingSavedPid == other.nowPlayingSavedPid;
   }
@@ -57,6 +61,7 @@ class _$RadioPlayInfo extends RadioPlayInfo {
     _$hash = $jc(_$hash, nowPlaying.hashCode);
     _$hash = $jc(_$hash, nowPlayingItemPid.hashCode);
     _$hash = $jc(_$hash, nowPlayingArtKey.hashCode);
+    _$hash = $jc(_$hash, nowPlayingArtSource.hashCode);
     _$hash = $jc(_$hash, nowPlayingSaved.hashCode);
     _$hash = $jc(_$hash, nowPlayingSavedPid.hashCode);
     _$hash = $jf(_$hash);
@@ -70,6 +75,7 @@ class _$RadioPlayInfo extends RadioPlayInfo {
           ..add('nowPlaying', nowPlaying)
           ..add('nowPlayingItemPid', nowPlayingItemPid)
           ..add('nowPlayingArtKey', nowPlayingArtKey)
+          ..add('nowPlayingArtSource', nowPlayingArtSource)
           ..add('nowPlayingSaved', nowPlayingSaved)
           ..add('nowPlayingSavedPid', nowPlayingSavedPid))
         .toString();
@@ -98,6 +104,12 @@ class RadioPlayInfoBuilder
   set nowPlayingArtKey(String? nowPlayingArtKey) =>
       _$this._nowPlayingArtKey = nowPlayingArtKey;
 
+  ArtSourceBuilder? _nowPlayingArtSource;
+  ArtSourceBuilder get nowPlayingArtSource =>
+      _$this._nowPlayingArtSource ??= ArtSourceBuilder();
+  set nowPlayingArtSource(ArtSourceBuilder? nowPlayingArtSource) =>
+      _$this._nowPlayingArtSource = nowPlayingArtSource;
+
   bool? _nowPlayingSaved;
   bool? get nowPlayingSaved => _$this._nowPlayingSaved;
   set nowPlayingSaved(bool? nowPlayingSaved) =>
@@ -119,6 +131,7 @@ class RadioPlayInfoBuilder
       _nowPlaying = $v.nowPlaying;
       _nowPlayingItemPid = $v.nowPlayingItemPid;
       _nowPlayingArtKey = $v.nowPlayingArtKey;
+      _nowPlayingArtSource = $v.nowPlayingArtSource?.toBuilder();
       _nowPlayingSaved = $v.nowPlayingSaved;
       _nowPlayingSavedPid = $v.nowPlayingSavedPid;
       _$v = null;
@@ -140,20 +153,37 @@ class RadioPlayInfoBuilder
   RadioPlayInfo build() => _build();
 
   _$RadioPlayInfo _build() {
-    final _$result =
-        _$v ??
-        _$RadioPlayInfo._(
-          url: BuiltValueNullFieldError.checkNotNull(
-            url,
-            r'RadioPlayInfo',
-            'url',
-          ),
-          nowPlaying: nowPlaying,
-          nowPlayingItemPid: nowPlayingItemPid,
-          nowPlayingArtKey: nowPlayingArtKey,
-          nowPlayingSaved: nowPlayingSaved,
-          nowPlayingSavedPid: nowPlayingSavedPid,
+    _$RadioPlayInfo _$result;
+    try {
+      _$result =
+          _$v ??
+          _$RadioPlayInfo._(
+            url: BuiltValueNullFieldError.checkNotNull(
+              url,
+              r'RadioPlayInfo',
+              'url',
+            ),
+            nowPlaying: nowPlaying,
+            nowPlayingItemPid: nowPlayingItemPid,
+            nowPlayingArtKey: nowPlayingArtKey,
+            nowPlayingArtSource: _nowPlayingArtSource?.build(),
+            nowPlayingSaved: nowPlayingSaved,
+            nowPlayingSavedPid: nowPlayingSavedPid,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'nowPlayingArtSource';
+        _nowPlayingArtSource?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'RadioPlayInfo',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_mark.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
@@ -57,9 +58,10 @@ enum ArtSlot {
   };
 }
 
-/// The slots an entity holds at its own level.
+/// The slots an entity holds at its own level, and where the cover it
+/// resolves came from.
 final itemArtRolesProvider = FutureProvider.autoDispose
-    .family<List<ArtRoleInfo>, String>(
+    .family<ArtRoles, String>(
       (ref, pid) => ref.watch(repositoryProvider).getItemArtRoles(pid),
     );
 
@@ -204,7 +206,8 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
   Widget build(BuildContext context) {
     final roles = ref.watch(itemArtRolesProvider(widget.pid));
     final own = <String, ArtRoleInfo>{
-      for (final role in roles.value ?? const <ArtRoleInfo>[]) role.role: role,
+      for (final role in roles.value?.roles ?? const <ArtRoleInfo>[])
+        role.role: role,
     };
     final picker = ref.watch(filePickerProvider);
     final l10n = context.l10n;
@@ -227,12 +230,20 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
                 info: own[slot.role],
                 // A front cover with nothing of its own still draws:
                 // what appears is the album's or the artist's, and the
-                // caption is what says so.
+                // caption is what says so. A pin with nothing behind it
+                // is nothing of its own: the catalog synthesizes a row
+                // for it, but the read endpoint still answers the
+                // album's cover, so treating that row as an image would
+                // blank a tile whose picture the header is showing.
                 inherited:
                     slot == ArtSlot.front &&
-                    own[ArtSlot.front.role] == null &&
+                    (own[ArtSlot.front.role]?.pinnedEmpty ?? true) &&
                     widget.hasArtwork,
                 title: widget.title,
+                // The resolved cover's provenance belongs to the front
+                // tile alone: it is the only slot that inherits, and the
+                // only one an inherited picture can appear in.
+                resolved: slot == ArtSlot.front ? roles.value?.artSource : null,
                 artUrl: _urlFor(slot),
                 busy: _busyRole == slot.role,
                 canPick: picker != null,
@@ -253,6 +264,7 @@ class _SlotTile extends ConsumerWidget {
     required this.info,
     required this.inherited,
     required this.title,
+    required this.resolved,
     required this.artUrl,
     required this.busy,
     required this.canPick,
@@ -271,6 +283,13 @@ class _SlotTile extends ConsumerWidget {
 
   final bool inherited;
   final String title;
+
+  /// Where the picture this tile actually draws came from, for the
+  /// front slot: the entity's own attribution where it holds one, the
+  /// rung it inherits from where it does not. Null on every other slot,
+  /// which never inherits and carries its own row instead.
+  final ArtSource? resolved;
+
   final String artUrl;
   final bool busy;
   final bool canPick;
@@ -280,6 +299,10 @@ class _SlotTile extends ConsumerWidget {
 
   String _stateOf(AppLocalizations l10n) {
     final held = info;
+    // A pin with nothing behind it is not an empty slot: it refuses
+    // every later write and shows nothing, and saying "Empty" here is
+    // exactly the confusion the upstream lock report exists to end.
+    if (held != null && held.pinnedEmpty) return l10n.artworkStatePinned;
     if (held != null) {
       final size = (held.width ?? 0) > 0 && (held.height ?? 0) > 0
           ? l10n.artworkStateSize(held.width!, held.height!)
@@ -289,16 +312,35 @@ class _SlotTile extends ConsumerWidget {
     return inherited ? l10n.artworkStateInherited : l10n.artworkStateEmpty;
   }
 
+  /// Where this tile's picture came from. A slot the entity holds
+  /// carries its own attribution; the front slot showing an inherited
+  /// cover reports the rung that answered instead.
+  String? _sourceOf(AppLocalizations l10n) {
+    final held = info;
+    if (held != null && !held.pinnedEmpty) {
+      return artRoleSourceLabel(l10n, held);
+    }
+    // The borrow note rides along here and nowhere else on this grid: a
+    // slot the item owns cannot be borrowed, and the inherited case is
+    // the one where the picture may be twice removed from this item.
+    return inherited ? artSourceLabelWithBorrow(l10n, resolved) : null;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final state = _stateOf(l10n);
+    final source = _sourceOf(l10n);
     final store = ref.watch(artworkStoreProvider);
+    // Whether this slot holds a picture of its own, which is the one
+    // question the three controls below each used to answer for
+    // themselves. A pin with nothing behind it holds nothing.
+    final holdsImage = info != null && !info!.pinnedEmpty;
     // The tile draws whatever the endpoint answers for this slot, which
     // for `front` may be the album's. Every other slot 404s when it is
     // empty, and a 404 is the monogram.
-    final artwork = info != null || inherited ? store.source(artUrl) : null;
+    final artwork = holdsImage || inherited ? store.source(artUrl) : null;
     return Semantics(
       identifier: SemanticsIds.artSlot(slot.role),
       container: true,
@@ -321,7 +363,7 @@ class _SlotTile extends ConsumerWidget {
                     monogram: title,
                     semanticLabel: l10n.artworkSlotSpoken(
                       slot.labelOf(l10n),
-                      state,
+                      source == null ? state : '$state, $source',
                     ),
                   ),
                   if (busy)
@@ -354,14 +396,21 @@ class _SlotTile extends ConsumerWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (source != null)
+                Text(
+                  source,
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               const SizedBox(height: WaxSpace.s4),
               Row(
                 children: <Widget>[
                   WaxIconButton(
                     glyph: WaxIcons.edit,
-                    label: info == null
-                        ? l10n.artworkSetSlot(slot.inlineOf(l10n))
-                        : l10n.artworkReplaceSlot(slot.inlineOf(l10n)),
+                    label: holdsImage
+                        ? l10n.artworkReplaceSlot(slot.inlineOf(l10n))
+                        : l10n.artworkSetSlot(slot.inlineOf(l10n)),
                     size: 16,
                     semanticsId: SemanticsIds.artSlotSet(slot.role),
                     onPressed: busy || !canPick ? null : onPick,
@@ -373,8 +422,11 @@ class _SlotTile extends ConsumerWidget {
                     semanticsId: SemanticsIds.artSlotClear(slot.role),
                     // Nothing of its own is nothing to clear: an
                     // inherited cover belongs to the album, and this
-                    // screen is not where an album is edited.
-                    onPressed: busy || info == null ? null : onClear,
+                    // screen is not where an album is edited. A pinned
+                    // empty slot holds nothing either - clearing it
+                    // again would do nothing at all, and the pin comes
+                    // off through the field's own lock, not here.
+                    onPressed: busy || !holdsImage ? null : onClear,
                   ),
                 ],
               ),

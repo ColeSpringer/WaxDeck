@@ -1510,6 +1510,37 @@ class AppLocalizationsEs extends AppLocalizations {
   String get artSlotFrontInline => 'la portada';
 
   @override
+  String get artSourceBorrowed => 'Tomada de una pista';
+
+  @override
+  String artSourceBorrowedFrom(String source, String borrow) {
+    return '$source · $borrow';
+  }
+
+  @override
+  String get artSourceFeed => 'Del feed';
+
+  @override
+  String get artSourceLyricsSidecar => 'De un archivo .lrc';
+
+  @override
+  String artSourceProvider(String provider) {
+    return 'De $provider';
+  }
+
+  @override
+  String get artSourceProviderUnnamed => 'De un proveedor de metadatos';
+
+  @override
+  String get artSourceSidecar => 'De una imagen de la carpeta';
+
+  @override
+  String get artSourceTag => 'Del archivo';
+
+  @override
+  String get artSourceUser => 'Establecida a mano';
+
+  @override
   String get artworkClearAction => 'Borrar';
 
   @override
@@ -1586,6 +1617,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get artworkStateInherited => 'Heredada';
+
+  @override
+  String get artworkStatePinned => 'Fijada, sin imagen';
 
   @override
   String artworkStateSize(int width, int height) {
@@ -3178,6 +3212,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataAddTag => 'Añadir la etiqueta';
 
   @override
+  String metadataArtworkSource(String source) {
+    return 'Ilustración · $source';
+  }
+
+  @override
   String get metadataClearLyrics => 'Borrar';
 
   @override
@@ -3378,6 +3417,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataLyricsOverline => 'LRC con tiempos, o líneas sin más';
 
   @override
+  String metadataLyricsSource(String source) {
+    return 'Letras · $source';
+  }
+
+  @override
   String get metadataLyricsTitle => 'Letra';
 
   @override
@@ -3436,7 +3480,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataSaveLyrics => 'Guardar la letra';
 
   @override
+  String get metadataSourceEnrichment => 'un proveedor';
+
+  @override
+  String get metadataSourceFeed => 'el feed';
+
+  @override
+  String get metadataSourceOrganize => 'el organizador';
+
+  @override
+  String get metadataSourceSidecar => 'archivos complementarios';
+
+  @override
+  String get metadataSourceTag => 'las etiquetas';
+
+  @override
   String get metadataSourceUnknown => 'Origen desconocido';
+
+  @override
+  String get metadataSourceUser => 'ti';
 
   @override
   String metadataSourceWithProvider(String source, String provider) {

@@ -77,23 +77,35 @@ func TestArtworkRolesAndLevelScope(t *testing.T) {
 	wantStatus(t, get(t, h.ts, "/api/v1/items/"+pid+"/art?role=front", h.token), 200, "read front")
 	wantStatus(t, get(t, h.ts, "/api/v1/items/"+pid+"/art?role=bogus", h.token), 400, "bad role")
 
-	// Clearing the front drops own-art; the back slot survives.
+	// Clearing the front drops own-art; the back slot survives. The
+	// front row itself stays, pinned and empty: the PUT above locked
+	// the slot (the `lock` parameter defaults true) and a clear leaves
+	// the pin as the caller set it, so what is left is the "no cover,
+	// and do not refill it" state rather than a slot enrichment may
+	// fill on its next pass.
 	wantStatus(t, h.deleteReq(t, "/api/v1/items/"+pid+"/artwork"), 204, "clear front")
 	if h.itemMeta(t, pid).HasOwnArtwork {
 		t.Fatal("after clearing the front cover, hasOwnArtwork stayed true")
 	}
 	after := decode[ArtRoles](t, get(t, h.ts, "/api/v1/items/"+pid+"/art-roles", h.token))
-	var frontStill, backStill bool
-	for _, r := range after.Roles {
+	var front *ArtRoleInfo
+	var backStill bool
+	for i, r := range after.Roles {
 		switch string(r.Role) {
 		case "front":
-			frontStill = true
+			front = &after.Roles[i]
 		case "back":
 			backStill = true
 		}
 	}
-	if frontStill {
-		t.Fatalf("front slot survived a clear: %+v", after.Roles)
+	if front == nil {
+		t.Fatalf("front slot lost its pin on a clear: %+v", after.Roles)
+	}
+	if deref(front.Format) != "" {
+		t.Errorf("front slot kept an image through a clear: %+v", front)
+	}
+	if front.Locked == nil || !*front.Locked {
+		t.Errorf("front slot came back unpinned, so the next enrichment refills it: %+v", front)
 	}
 	if !backStill {
 		t.Fatalf("back slot lost when clearing front: %+v", after.Roles)

@@ -392,6 +392,11 @@ void main() {
                   title: 'A Bright Shore',
                   subtitle: 'Read by Ines Marchetti',
                   metadata: '11 hr 3 min · 24 chapters',
+                  // Where the cover came from, under the cover. The
+                  // caption is bounded by the artwork's width, so a long
+                  // provider name wraps under the picture rather than
+                  // widening the column beside it.
+                  artworkCaption: 'From the Cover Art Archive',
                   shape: ArtworkShape.portrait,
                   domain: WaxDomain.audiobooks,
                   actions: <Widget>[

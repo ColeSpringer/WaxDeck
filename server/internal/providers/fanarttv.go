@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/enrich"
-	"github.com/colespringer/waxbin/model"
 )
 
 // FanartTVConfig configures the fanart.tv cover provider. Zero values
@@ -117,6 +116,6 @@ func (f *FanartTV) Enrich(ctx context.Context, req enrich.Request) (*enrich.Cand
 	}
 	return &enrich.Candidate{
 		Confidence: 0.8,
-		Cover:      &model.ArtImage{Data: data, Format: imageFormat(mediaType)},
+		Cover:      coverImage(data, mediaType, album.AlbumCover[0].URL),
 	}, nil
 }

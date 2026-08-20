@@ -6,6 +6,7 @@
 import 'package:built_collection/built_collection.dart';
 import 'package:waxdeck_api_gen/src/model/item_summary.dart';
 import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/art_source.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -32,6 +33,7 @@ part 'item.g.dart';
 /// * [sampleRate] - Source sample rate in Hz.
 /// * [bitrate] - Source bitrate in bits per second, when known.
 /// * [addedAt] - When the item entered the library.
+/// * [artSource] 
 @BuiltValue()
 abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   /// Source file container.
@@ -45,6 +47,9 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   /// When the item entered the library.
   @BuiltValueField(wireName: r'addedAt')
   DateTime? get addedAt;
+
+  @BuiltValueField(wireName: r'artSource')
+  ArtSource? get artSource;
 
   /// Release / publication year.
   @BuiltValueField(wireName: r'year')
@@ -97,6 +102,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
       yield serializers.serialize(
         object.addedAt,
         specifiedType: const FullType(DateTime),
+      );
+    }
+    if (object.artSource != null) {
+      yield r'artSource';
+      yield serializers.serialize(
+        object.artSource,
+        specifiedType: const FullType(ArtSource),
       );
     }
     if (object.trackNumber != null) {
@@ -239,6 +251,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
             specifiedType: const FullType(DateTime),
           ) as DateTime;
           result.addedAt = valueDes;
+          break;
+        case r'artSource':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(ArtSource),
+          ) as ArtSource;
+          result.artSource.replace(valueDes);
           break;
         case r'trackNumber':
           final valueDes = serializers.deserialize(

@@ -512,6 +512,7 @@ func albumJSON(d service.AlbumDetail) AlbumDetail {
 	if d.TotalDurationMS != 0 {
 		out.TotalDurationMs = ptr(d.TotalDurationMS)
 	}
+	out.ArtSource = artSourceJSON(d.ArtSource)
 	return out
 }
 
@@ -543,7 +544,33 @@ func (s *Server) GetItem(ctx context.Context, req GetItemRequestObject) (GetItem
 const (
 	artCacheControl = "private, max-age=86400, stale-while-revalidate=604800"
 	artVary         = "Cookie, Authorization"
+	// maxArtHeaderURL bounds the fetch URL echoed as a response header.
+	// Generous for a real cover address, well under where an
+	// intermediary's own header limits begin.
+	maxArtHeaderURL = 2048
 )
+
+// artHeaderValues renders one resolved cover's provenance as the four
+// response headers, for the 200 and the 304 alike.
+func artHeaderValues(src service.ArtSourceDTO) (source, provider, sourceURL, level *string) {
+	source = ptr(src.Source)
+	if src.Provider != "" {
+		provider = ptr(src.Provider)
+	}
+	// The one header value that came off somebody else's network.
+	// net/http neutralizes the newlines, so this is the length: a
+	// multi-kilobyte header is where proxies start dropping the
+	// response, and losing the cover to caption it would be a poor
+	// trade. Omitted rather than truncated, because half a URL is not a
+	// shorter URL.
+	if url := src.SourceURL; url != "" && len(url) <= maxArtHeaderURL {
+		sourceURL = ptr(url)
+	}
+	if src.Level != "" {
+		level = ptr(src.Level)
+	}
+	return source, provider, sourceURL, level
+}
 
 func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (GetItemArtResponseObject, error) {
 	size := 0
@@ -574,12 +601,20 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	if req.Params.IfNoneMatch != nil && httpcache.ETagMatches(*req.Params.IfNoneMatch, etag) {
 		// A 304 repeats the validator and the freshness the body would
 		// have carried; without them the cached copy stays as stale as
-		// it was and revalidates again on the next paint.
-		return GetItemArt304Response{Headers: GetItemArt304ResponseHeaders{
+		// it was and revalidates again on the next paint. It repeats the
+		// provenance too: the validator addresses the bytes, and a cover
+		// can be re-attributed without them changing, so a bare 304
+		// would pin a caller to the old origin for as long as it held
+		// the picture.
+		h := GetItemArt304ResponseHeaders{
 			ETag:         &etag,
 			CacheControl: &cacheControl,
 			Vary:         &vary,
-		}}, nil
+		}
+		if src := blob.Source; src.Attributed() {
+			h.XArtSource, h.XArtProvider, h.XArtSourceUrl, h.XArtLevel = artHeaderValues(src)
+		}
+		return GetItemArt304Response{Headers: h}, nil
 	}
 	body := bytes.NewReader(blob.Bytes)
 	length := int64(len(blob.Bytes))
@@ -587,6 +622,13 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 		ETag:         &etag,
 		CacheControl: &cacheControl,
 		Vary:         &vary,
+	}
+	// The provenance of the bytes being served, for a consumer that has
+	// only this response to read. WaxDeck's own clients take the same
+	// four values off the JSON reads: a browser hands an `<img>` caller
+	// no access to response headers, so this form cannot reach the web.
+	if src := blob.Source; src.Attributed() {
+		headers.XArtSource, headers.XArtProvider, headers.XArtSourceUrl, headers.XArtLevel = artHeaderValues(src)
 	}
 	switch blob.MimeType {
 	case "image/png":
@@ -612,15 +654,62 @@ func (s *Server) GetItemArtRoles(ctx context.Context, req GetItemArtRolesRequest
 		}
 		return nil, err
 	}
-	out := ArtRoles{Roles: make([]ArtRoleInfo, 0, len(infos))}
-	for _, i := range infos {
-		info := ArtRoleInfo{Role: ArtRole(i.Role), Width: ptr(i.Width), Height: ptr(i.Height)}
+	out := ArtRoles{
+		Roles:     make([]ArtRoleInfo, 0, len(infos.Roles)),
+		ArtSource: artSourceJSON(infos.ArtSource),
+	}
+	for _, i := range infos.Roles {
+		info := ArtRoleInfo{
+			Role:   ArtRole(i.Role),
+			Width:  ptr(i.Width),
+			Height: ptr(i.Height),
+			Locked: ptr(i.Locked),
+		}
 		if i.Format != "" {
 			info.Format = ptr(i.Format)
+		}
+		if i.Source != "" {
+			info.Source = ptr(i.Source)
+		}
+		if i.Provider != "" {
+			info.Provider = ptr(i.Provider)
+		}
+		if i.SourceURL != "" {
+			info.SourceUrl = ptr(i.SourceURL)
+		}
+		if !i.UpdatedAt.IsZero() {
+			info.UpdatedAt = ptr(i.UpdatedAt)
 		}
 		out.Roles = append(out.Roles, info)
 	}
 	return GetItemArtRoles200JSONResponse(out), nil
+}
+
+// artSourceJSON renders a picture's provenance, or nothing when the
+// store holds none. Absent is the signal a surface reads as "draw no
+// mark"; an object with an empty source would ask every caller to make
+// the same emptiness check twice.
+func artSourceJSON(a service.ArtSourceDTO) *ArtSource {
+	if !a.Attributed() {
+		return nil
+	}
+	out := &ArtSource{Source: a.Source}
+	if a.Provider != "" {
+		out.Provider = ptr(a.Provider)
+	}
+	if a.SourceURL != "" {
+		out.SourceUrl = ptr(a.SourceURL)
+	}
+	if a.Level != "" {
+		out.Level = ptr(a.Level)
+	}
+	if a.Derived {
+		out.Derived = ptr(true)
+	}
+	if !a.UpdatedAt.IsZero() {
+		out.UpdatedAt = ptr(a.UpdatedAt)
+	}
+	return out
 }
 
 func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObject) (GetItemLyricsResponseObject, error) {
@@ -636,6 +725,9 @@ func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObje
 		return nil, err
 	}
 	out := Lyrics{Pid: ly.PID, Source: ly.Source}
+	if ly.Provider != "" {
+		out.Provider = ptr(ly.Provider)
+	}
 	if len(ly.Synced) > 0 {
 		lines := make([]SyncedLine, 0, len(ly.Synced))
 		for _, l := range ly.Synced {
@@ -1021,6 +1113,7 @@ func itemJSON(d service.ItemDetail) Item {
 	if !d.AddedAt.IsZero() {
 		it.AddedAt = &d.AddedAt
 	}
+	it.ArtSource = artSourceJSON(d.ArtSource)
 	return it
 }
 

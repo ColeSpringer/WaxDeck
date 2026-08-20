@@ -8,27 +8,32 @@ import 'package:built_value/serializer.dart';
 
 part 'field_provenance.g.dart';
 
-/// Who set one field's current value.
+/// Who set one field's current value.  The list carries two kinds of row. A scalar row names a metadata field (`title`, `genre`, ...) and reports the value a curator set. An artifact row names `art` or `lyrics`, with an empty `value` because the value is bytes rather than text. A non-empty provenance list therefore does not mean the item was curated: an untouched track with a cover in its tags reports one `art` row sourced `tag`. Count the scalar rows, not the list, when summarizing what a person changed.  An artifact row does not imply the artifact. Locking `art` or `lyrics` to stop a scan filling it leaves a row with nothing behind it, and the `source` on such a row is invented by whichever writer took the lock rather than describing anything. Read `hasOwnArtwork` and `lyrics` on the enclosing `ItemMetadata` before presenting an artifact row's source as where something came from; on a lock-only row, `locked` is the only field worth reading. 
 ///
 /// Properties:
-/// * [field] - The field, possibly namespaced.
-/// * [source_] - The producer: `tag`, `user`, `enrichment`, or `organize`. A string, not a closed enum. 
+/// * [field] - The field, possibly namespaced, or `art` / `lyrics` for an artifact row. 
+/// * [source_] - The producer: `tag` (the file's own tags), `sidecar` (a companion file beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the curation surface), `enrichment` (supplied by a metadata provider, named in `provider`), `organize` (written by an organize tag write-back), or `feed` (a podcast feed). A string, not a closed enum. `sidecar` and `feed` reach only artifact rows; a scalar field is never produced from a cover image or a feed. 
 /// * [provider] - The enrichment provider, for enriched fields.
+/// * [sourceUrl] - Where a fetched value's bytes came from, on the rows that have one (an enrichment or feed cover). Empty otherwise. 
 /// * [locked] - Whether the field is locked.
 /// * [updatedAt] - When the value last changed.
 @BuiltValue()
 abstract class FieldProvenance implements Built<FieldProvenance, FieldProvenanceBuilder> {
-  /// The field, possibly namespaced.
+  /// The field, possibly namespaced, or `art` / `lyrics` for an artifact row. 
   @BuiltValueField(wireName: r'field')
   String get field;
 
-  /// The producer: `tag`, `user`, `enrichment`, or `organize`. A string, not a closed enum. 
+  /// The producer: `tag` (the file's own tags), `sidecar` (a companion file beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the curation surface), `enrichment` (supplied by a metadata provider, named in `provider`), `organize` (written by an organize tag write-back), or `feed` (a podcast feed). A string, not a closed enum. `sidecar` and `feed` reach only artifact rows; a scalar field is never produced from a cover image or a feed. 
   @BuiltValueField(wireName: r'source')
   String get source_;
 
   /// The enrichment provider, for enriched fields.
   @BuiltValueField(wireName: r'provider')
   String? get provider;
+
+  /// Where a fetched value's bytes came from, on the rows that have one (an enrichment or feed cover). Empty otherwise. 
+  @BuiltValueField(wireName: r'sourceUrl')
+  String? get sourceUrl;
 
   /// Whether the field is locked.
   @BuiltValueField(wireName: r'locked')
@@ -75,6 +80,13 @@ class _$FieldProvenanceSerializer implements PrimitiveSerializer<FieldProvenance
       yield r'provider';
       yield serializers.serialize(
         object.provider,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.sourceUrl != null) {
+      yield r'sourceUrl';
+      yield serializers.serialize(
+        object.sourceUrl,
         specifiedType: const FullType(String),
       );
     }
@@ -133,6 +145,13 @@ class _$FieldProvenanceSerializer implements PrimitiveSerializer<FieldProvenance
             specifiedType: const FullType(String),
           ) as String;
           result.provider = valueDes;
+          break;
+        case r'sourceUrl':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.sourceUrl = valueDes;
           break;
         case r'locked':
           final valueDes = serializers.deserialize(

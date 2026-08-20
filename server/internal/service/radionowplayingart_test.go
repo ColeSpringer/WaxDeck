@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/providers"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
 
@@ -18,24 +19,28 @@ import (
 // pair, counting calls so the tests can assert what did and did not go
 // out over the wire.
 type fakeRadioArt struct {
-	calls atomic.Int64
-	data  []byte
-	mime  string
-	err   error
+	calls    atomic.Int64
+	data     []byte
+	mime     string
+	provider string
+	srcURL   string
+	err      error
 
 	mu    sync.Mutex
 	asked [][2]string
 }
 
-func (f *fakeRadioArt) FrontCover(ctx context.Context, artist, title string) ([]byte, string, error) {
+func (f *fakeRadioArt) FrontCover(ctx context.Context, artist, title string) (providers.TitleCoverResult, error) {
 	f.calls.Add(1)
 	f.mu.Lock()
 	f.asked = append(f.asked, [2]string{artist, title})
 	f.mu.Unlock()
 	if f.err != nil {
-		return nil, "", f.err
+		return providers.TitleCoverResult{}, f.err
 	}
-	return f.data, f.mime, nil
+	return providers.TitleCoverResult{
+		Data: f.data, MIME: f.mime, Provider: f.provider, SourceURL: f.srcURL,
+	}, nil
 }
 
 func (f *fakeRadioArt) queries() [][2]string {
@@ -169,11 +174,11 @@ type blockingRadioArt struct {
 	cancelled chan struct{}
 }
 
-func (b *blockingRadioArt) FrontCover(ctx context.Context, artist, title string) ([]byte, string, error) {
+func (b *blockingRadioArt) FrontCover(ctx context.Context, artist, title string) (providers.TitleCoverResult, error) {
 	close(b.started)
 	<-ctx.Done()
 	close(b.cancelled)
-	return nil, "", ctx.Err()
+	return providers.TitleCoverResult{}, ctx.Err()
 }
 
 // TestRadioArtLookupEndsWithTheProcess is the shutdown property.
@@ -274,12 +279,12 @@ type gatedRadioArt struct {
 	mime string
 }
 
-func (g *gatedRadioArt) FrontCover(ctx context.Context, _, _ string) ([]byte, string, error) {
+func (g *gatedRadioArt) FrontCover(ctx context.Context, _, _ string) (providers.TitleCoverResult, error) {
 	select {
 	case <-g.gate:
-		return g.data, g.mime, nil
+		return providers.TitleCoverResult{Data: g.data, MIME: g.mime}, nil
 	case <-ctx.Done():
-		return nil, "", ctx.Err()
+		return providers.TitleCoverResult{}, ctx.Err()
 	}
 }
 
@@ -404,10 +409,10 @@ func TestRadioArtIsNotServedWhileOff(t *testing.T) {
 // holds until its context ends and answers with that.
 type deadlineRadioArt struct{ calls atomic.Int64 }
 
-func (d *deadlineRadioArt) FrontCover(ctx context.Context, _, _ string) ([]byte, string, error) {
+func (d *deadlineRadioArt) FrontCover(ctx context.Context, _, _ string) (providers.TitleCoverResult, error) {
 	d.calls.Add(1)
 	<-ctx.Done()
-	return nil, "", ctx.Err()
+	return providers.TitleCoverResult{}, ctx.Err()
 }
 
 // waitForRadioArtLookupToSettle blocks until the detached worker has

@@ -47,6 +47,7 @@ type ItemDetail struct {
 	SampleRate int
 	Bitrate    int
 	AddedAt    time.Time
+	ArtSource  ArtSourceDTO
 }
 
 // AlbumDetail is one album entity's identity and counts. Everything
@@ -67,6 +68,7 @@ type AlbumDetail struct {
 	Country         string
 	ItemCount       int
 	TotalDurationMS int64
+	ArtSource       ArtSourceDTO
 }
 
 // Page is one keyset page of items.
@@ -106,12 +108,38 @@ type Job struct {
 
 // ArtBlob is resolved artwork. SourceHash identifies the source image
 // the bytes derive from; combined with the requested size it makes a
-// stable cache validator.
+// stable cache validator. Source carries where the answering level's
+// picture came from, which the art endpoint reports as headers.
 type ArtBlob struct {
 	Bytes      []byte
 	MimeType   string
 	SourceHash string
+	Source     ArtSourceDTO
 }
+
+// ArtSourceDTO says where a picture came from: the producer, the
+// provider that supplied a fetched one, the URL it was fetched from,
+// and which rung of the fallback chain answered.
+//
+// Zero Source means unattributed, which is what every surface that
+// cannot answer the question reports rather than guessing.
+type ArtSourceDTO struct {
+	Source    string
+	Provider  string
+	SourceURL string
+	Level     string
+	// Derived marks a level answering with a member's picture rather
+	// than one of its own - an album showing a track's cover, which is
+	// the ordinary case for an album nobody gave a durable one. Source
+	// is that member's, so this is what keeps a caption from reading as
+	// though the album made the choice.
+	Derived   bool
+	UpdatedAt time.Time
+}
+
+// Attributed reports whether this names a producer. An unattributed
+// source draws no mark.
+func (a ArtSourceDTO) Attributed() bool { return a.Source != "" }
 
 // SyncedLine is one time-synced lyric line.
 type SyncedLine struct {
@@ -123,6 +151,7 @@ type SyncedLine struct {
 type Lyrics struct {
 	PID      string
 	Source   string
+	Provider string
 	Synced   []SyncedLine
 	Unsynced string
 }

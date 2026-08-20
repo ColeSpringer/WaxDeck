@@ -480,6 +480,80 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /entities/{entityType}/{entityPid}/artwork/lock:
+    parameters:
+      - $ref: "#/components/parameters/EntityType"
+      - $ref: "#/components/parameters/EntityPid"
+    get:
+      operationId: getEntityArtworkLock
+      summary: Read an entity's artwork lock
+      description: >
+        Whether an album, artist, release group, or genre's front cover
+        is pinned against enrichment and scan re-derives. This is what
+        explains an entity that shows no cover and refuses every attempt
+        to give it one: the cover was cleared and the pin left standing,
+        which says "do not refill this" rather than "this has no cover
+        yet". Administrators only, like every other catalog-entity
+        curation read.
+      tags: [metadata]
+      responses:
+        "200":
+          description: The entity's artwork lock state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtworkLock"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: setEntityArtworkLock
+      summary: Pin or unpin an entity's artwork
+      description: >
+        Sets or clears the front-cover pin without touching the cover
+        itself, which setting artwork cannot express: that always writes
+        the image slot too, so unpinning through it would mean supplying
+        the picture again. Unpinning here is the way out of a cover that
+        was cleared and left pinned. Administrators only.
+
+
+        `playlist` is refused with `invalid-request`. A playlist's cover
+        authority is its own custom/generated origin marker rather than
+        this pin, and a pin left standing on one would make the mosaic
+        the server builds from the members unwritable - which the read
+        path retries on every read, forever.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArtworkLock"
+      responses:
+        "200":
+          description: The entity's artwork lock state after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtworkLock"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /items/{pid}/tags/{key}:
     parameters:
       - $ref: "#/components/parameters/Pid"
@@ -815,8 +889,18 @@ components:
           description: The item these lyrics belong to.
         source:
           type: string
-          description: Where the lyrics came from (`lrc` sidecar, `embedded` tag).
-          example: lrc
+          description: >
+            Where the lyrics came from: `tag` (an embedded USLT/SYLT
+            frame), `sidecar` (an `.lrc` beside the audio), `user`, or
+            `enrichment`. The same vocabulary artwork reports; it
+            replaces the older `lrc`/`embedded` pair, which named
+            formats rather than producers.
+          example: sidecar
+        provider:
+          type: string
+          description: >
+            The lyrics provider that supplied an `enrichment` copy.
+            Empty for every other source.
         synced:
           type: array
           description: Time-synced lines, ordered by `timeMs`.
@@ -1001,20 +1085,54 @@ components:
 
     FieldProvenance:
       type: object
-      description: Who set one field's current value.
+      description: >
+        Who set one field's current value.
+
+
+        The list carries two kinds of row. A scalar row names a metadata
+        field (`title`, `genre`, ...) and reports the value a curator
+        set. An artifact row names `art` or `lyrics`, with an empty
+        `value` because the value is bytes rather than text. A non-empty
+        provenance list therefore does not mean the item was curated: an
+        untouched track with a cover in its tags reports one `art` row
+        sourced `tag`. Count the scalar rows, not the list, when
+        summarizing what a person changed.
+
+
+        An artifact row does not imply the artifact. Locking `art` or
+        `lyrics` to stop a scan filling it leaves a row with nothing
+        behind it, and the `source` on such a row is invented by
+        whichever writer took the lock rather than describing anything.
+        Read `hasOwnArtwork` and `lyrics` on the enclosing
+        `ItemMetadata` before presenting an artifact row's source as
+        where something came from; on a lock-only row, `locked` is the
+        only field worth reading.
       required: [field, source, locked]
       properties:
         field:
           type: string
-          description: The field, possibly namespaced.
+          description: >
+            The field, possibly namespaced, or `art` / `lyrics` for an
+            artifact row.
         source:
           type: string
           description: >
-            The producer: `tag`, `user`, `enrichment`, or
-            `organize`. A string, not a closed enum.
+            The producer: `tag` (the file's own tags), `sidecar` (a
+            companion file beside the audio - a `cover.jpg`, an `.lrc`),
+            `user` (set through the curation surface), `enrichment`
+            (supplied by a metadata provider, named in `provider`),
+            `organize` (written by an organize tag write-back), or `feed`
+            (a podcast feed). A string, not a closed enum. `sidecar` and
+            `feed` reach only artifact rows; a scalar field is never
+            produced from a cover image or a feed.
         provider:
           type: string
           description: The enrichment provider, for enriched fields.
+        sourceUrl:
+          type: string
+          description: >
+            Where a fetched value's bytes came from, on the rows that
+            have one (an enrichment or feed cover). Empty otherwise.
         locked:
           type: boolean
           description: Whether the field is locked.
@@ -1022,6 +1140,17 @@ components:
           type: string
           format: date-time
           description: When the value last changed.
+
+    ArtworkLock:
+      type: object
+      description: >
+        Whether an entity's front cover is pinned against enrichment and
+        scan re-derives.
+      required: [locked]
+      properties:
+        locked:
+          type: boolean
+          description: True when the cover is pinned.
 
     Credit:
       type: object
@@ -1049,8 +1178,21 @@ components:
         source:
           type: string
           description: >
-            Where the stored copy came from: `lrc` (sidecar),
-            `embedded`, or `user`. A string, not a closed enum.
+            Where the stored copy came from: `tag` (an embedded
+            USLT/SYLT frame), `sidecar` (an `.lrc` beside the audio),
+            `user`, or `enrichment`. A string, not a closed enum.
+
+
+            This is the same vocabulary artwork reports, so one mark
+            serves both. It replaces the older `lrc`/`embedded` pair,
+            which named the two file formats rather than the producer
+            and had nowhere to put a fetched copy; `lrc` is now
+            `sidecar` and `embedded` is now `tag`.
+        provider:
+          type: string
+          description: >
+            The lyrics provider that supplied an `enrichment` copy.
+            Empty for every other source.
         lrc:
           type: string
           description: >

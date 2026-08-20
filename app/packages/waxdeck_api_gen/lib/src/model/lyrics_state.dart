@@ -12,7 +12,8 @@ part 'lyrics_state.g.dart';
 ///
 /// Properties:
 /// * [synced] - Whether timed lines are stored.
-/// * [source_] - Where the stored copy came from: `lrc` (sidecar), `embedded`, or `user`. A string, not a closed enum. 
+/// * [source_] - Where the stored copy came from: `tag` (an embedded USLT/SYLT frame), `sidecar` (an `.lrc` beside the audio), `user`, or `enrichment`. A string, not a closed enum.  This is the same vocabulary artwork reports, so one mark serves both. It replaces the older `lrc`/`embedded` pair, which named the two file formats rather than the producer and had nowhere to put a fetched copy; `lrc` is now `sidecar` and `embedded` is now `tag`. 
+/// * [provider] - The lyrics provider that supplied an `enrichment` copy. Empty for every other source. 
 /// * [lrc] - The lyrics serialized as LRC text (timed lines when synced, bare lines otherwise), the editor's working format. 
 @BuiltValue()
 abstract class LyricsState implements Built<LyricsState, LyricsStateBuilder> {
@@ -20,9 +21,13 @@ abstract class LyricsState implements Built<LyricsState, LyricsStateBuilder> {
   @BuiltValueField(wireName: r'synced')
   bool get synced;
 
-  /// Where the stored copy came from: `lrc` (sidecar), `embedded`, or `user`. A string, not a closed enum. 
+  /// Where the stored copy came from: `tag` (an embedded USLT/SYLT frame), `sidecar` (an `.lrc` beside the audio), `user`, or `enrichment`. A string, not a closed enum.  This is the same vocabulary artwork reports, so one mark serves both. It replaces the older `lrc`/`embedded` pair, which named the two file formats rather than the producer and had nowhere to put a fetched copy; `lrc` is now `sidecar` and `embedded` is now `tag`. 
   @BuiltValueField(wireName: r'source')
   String get source_;
+
+  /// The lyrics provider that supplied an `enrichment` copy. Empty for every other source. 
+  @BuiltValueField(wireName: r'provider')
+  String? get provider;
 
   /// The lyrics serialized as LRC text (timed lines when synced, bare lines otherwise), the editor's working format. 
   @BuiltValueField(wireName: r'lrc')
@@ -61,6 +66,13 @@ class _$LyricsStateSerializer implements PrimitiveSerializer<LyricsState> {
       object.source_,
       specifiedType: const FullType(String),
     );
+    if (object.provider != null) {
+      yield r'provider';
+      yield serializers.serialize(
+        object.provider,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.lrc != null) {
       yield r'lrc';
       yield serializers.serialize(
@@ -104,6 +116,13 @@ class _$LyricsStateSerializer implements PrimitiveSerializer<LyricsState> {
             specifiedType: const FullType(String),
           ) as String;
           result.source_ = valueDes;
+          break;
+        case r'provider':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.provider = valueDes;
           break;
         case r'lrc':
           final valueDes = serializers.deserialize(

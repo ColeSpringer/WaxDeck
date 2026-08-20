@@ -3133,6 +3133,7 @@ class FakeRepository implements WaxDeckRepository {
       fields: Map.of(itemFieldsByPid[pid] ?? const {}),
       lockedFields: (lockedFieldsByPid[pid] ?? const <String>{}).toList()
         ..sort(),
+      provenance: itemProvenance[pid] ?? const [],
       credits: creditsByPid[pid] ?? const [],
       lyrics: lyricsByPid[pid],
       customTags: [
@@ -3254,13 +3255,24 @@ class FakeRepository implements WaxDeckRepository {
 
   final List<ArtRoleInfo> artRoles = [];
 
+  /// Where the cover the entity resolves came from, which the roles
+  /// read reports beside the slots it holds.
+  ArtSource? artSource;
+
+  /// The editor's provenance rows per item: the scalar fields somebody
+  /// set, plus an art or lyrics row wherever the item holds one.
+  final Map<String, List<FieldProvenance>> itemProvenance = {};
+
+  /// Entity front-cover pins, by "entityType/entityPid".
+  final Map<String, bool> entityArtworkLocks = {};
+
   /// Every slot write, so a test can see which role got which bytes.
   final List<({String pid, String role, int bytes})> setItemArtworkCalls = [];
   final List<({String pid, String role})> clearItemArtworkCalls = [];
 
   @override
-  Future<List<ArtRoleInfo>> getItemArtRoles(String pid) async =>
-      List.unmodifiable(artRoles);
+  Future<ArtRoles> getItemArtRoles(String pid) async =>
+      ArtRoles(roles: List.unmodifiable(artRoles), artSource: artSource);
 
   @override
   Future<MetadataEditResult> setItemArtwork(
@@ -3314,6 +3326,24 @@ class FakeRepository implements WaxDeckRepository {
     final error = metadataError;
     if (error != null) throw error;
     clearEntityArtworkCalls.add((entityType: entityType, entityPid: entityPid));
+  }
+
+  @override
+  Future<bool> getEntityArtworkLock(
+    String entityType,
+    String entityPid,
+  ) async => entityArtworkLocks['$entityType/$entityPid'] ?? false;
+
+  @override
+  Future<bool> setEntityArtworkLock(
+    String entityType,
+    String entityPid, {
+    required bool locked,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    entityArtworkLocks['$entityType/$entityPid'] = locked;
+    return locked;
   }
 
   @override

@@ -1986,6 +1986,56 @@
   "@artSlotFrontInline": {
     "description": "The front cover named inside a sentence. English lower-cases it; a language needing an article or a different case writes that here, because the sentences around it cannot know the gender of the words in this list."
   },
+  "artSourceBorrowed": "Borrowed from a track",
+  "@artSourceBorrowed": {
+    "description": "Says a release is showing one of its tracks' covers because it holds none of its own. Drawn beside the source mark, which describes that track's picture rather than the release's choice."
+  },
+  "artSourceBorrowedFrom": "{source} · {borrow}",
+  "@artSourceBorrowedFrom": {
+    "description": "The mark under a release's cover: where the picture came from, plus a note that the release borrowed it from a track. Both halves are sentences, so a locale that orders them the other way round reorders the placeholders.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "borrow": {
+        "type": "String"
+      }
+    }
+  },
+  "artSourceFeed": "From the feed",
+  "@artSourceFeed": {
+    "description": "Source mark under a cover a podcast feed supplied, or one a radio station announced in its own stream."
+  },
+  "artSourceLyricsSidecar": "From an .lrc file",
+  "@artSourceLyricsSidecar": {
+    "description": "Provenance of lyrics that came from a companion file beside the audio. The artwork wording (a folder image) is wrong for lyrics, which arrive as an .lrc."
+  },
+  "artSourceProvider": "From {provider}",
+  "@artSourceProvider": {
+    "description": "Source mark under a cover a metadata provider supplied. {provider} is the service's own name, which is a proper noun and stays as written.",
+    "placeholders": {
+      "provider": {
+        "type": "String",
+        "example": "Cover Art Archive"
+      }
+    }
+  },
+  "artSourceProviderUnnamed": "From a metadata provider",
+  "@artSourceProviderUnnamed": {
+    "description": "Source mark under a fetched cover whose provider the server did not name."
+  },
+  "artSourceSidecar": "From a folder image",
+  "@artSourceSidecar": {
+    "description": "Source mark under a cover read from an image file sitting beside the audio, such as a cover.jpg."
+  },
+  "artSourceTag": "From the file",
+  "@artSourceTag": {
+    "description": "Source mark under a cover read out of the audio file's own tags."
+  },
+  "artSourceUser": "Set by hand",
+  "@artSourceUser": {
+    "description": "Source mark under a cover somebody chose through the curation surface."
+  },
   "artworkClearAction": "Clear",
   "@artworkClearAction": {
     "description": "Confirming button of the clear-artwork dialog. It removes stored content rather than emptying a list, which some languages word differently."
@@ -2123,6 +2173,10 @@
   "artworkStateInherited": "Inherited",
   "@artworkStateInherited": {
     "description": "Says a slot draws the album's or artist's image rather than one of its own. Agrees with the word for an image in this language."
+  },
+  "artworkStatePinned": "Pinned, no image",
+  "@artworkStatePinned": {
+    "description": "Says an artwork slot is pinned with nothing in it: the cover was cleared and the pin left standing, which means do not refill this rather than no cover yet."
   },
   "artworkStateSize": "{width} x {height}",
   "@artworkStateSize": {
@@ -4240,6 +4294,16 @@
   "@metadataAddTag": {
     "description": "Button that stores the typed custom tag."
   },
+  "metadataArtworkSource": "Artwork · {source}",
+  "@metadataArtworkSource": {
+    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "From the file"
+      }
+    }
+  },
   "metadataClearLyrics": "Clear",
   "@metadataClearLyrics": {
     "description": "Button that removes the item's stored lyrics."
@@ -4512,6 +4576,16 @@
   "@metadataLyricsOverline": {
     "description": "Line above the Lyrics heading. LRC is the timed-lyrics file format and stays as it is."
   },
+  "metadataLyricsSource": "Lyrics · {source}",
+  "@metadataLyricsSource": {
+    "description": "The provenance line for the item's lyrics. {source} is where they came from, already worded, in the same vocabulary artwork uses.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Set by hand"
+      }
+    }
+  },
   "metadataLyricsTitle": "Lyrics",
   "@metadataLyricsTitle": {
     "description": "Heading over the item's lyrics."
@@ -4588,9 +4662,33 @@
   "@metadataSaveLyrics": {
     "description": "Button that writes the lyrics as typed."
   },
+  "metadataSourceEnrichment": "a provider",
+  "@metadataSourceEnrichment": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceFeed": "the feed",
+  "@metadataSourceFeed": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceOrganize": "the organizer",
+  "@metadataSourceOrganize": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceSidecar": "companion files",
+  "@metadataSourceSidecar": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
+  "metadataSourceTag": "tags",
+  "@metadataSourceTag": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+  },
   "metadataSourceUnknown": "Source unknown",
   "@metadataSourceUnknown": {
     "description": "Chip beside a field whose value has no recorded source."
+  },
+  "metadataSourceUser": "you",
+  "@metadataSourceUser": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
   },
   "metadataSourceWithProvider": "{source} ({provider})",
   "@metadataSourceWithProvider": {
