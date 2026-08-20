@@ -153,6 +153,14 @@ class ItemShelf extends ConsumerWidget {
               if (at < 0) return;
               openHomeItem(context, ref, items[at], progress[items[at].pid]);
             },
+            // The cover is the thing that plays here, so it says so
+            // under a pointer. Nothing appears for a finger: the
+            // affordance is a hover, and a touch device reports none.
+            onPlayItem: (tile) {
+              final at = tiles.indexOf(tile);
+              if (at < 0) return;
+              playHomeItem(ref, items[at], progress[items[at].pid]);
+            },
           ),
         ),
       ),
@@ -234,6 +242,35 @@ class _DelayedShelfSkeletonState extends State<DelayedShelfSkeleton> {
       ),
     );
   }
+}
+
+/// Plays one shelf item where it stands, going nowhere.
+///
+/// The verb behind a card's hover play affordance, as against
+/// [openHomeItem], which is what tapping the card does. The two differ
+/// on purpose: a tap on a book or an episode opens the screen where the
+/// chapters and the show notes are, because that is where somebody
+/// decides whether to play it - but a press on a play button has already
+/// decided, whatever the medium.
+///
+/// One item, and it says so, for the reason [openHomeItem] gives: a
+/// shelf is a dozen unrelated covers rather than a running order. A book
+/// names itself as the source instead, because its parts roll inside the
+/// session and there is nothing else in the queue for them to be.
+void playHomeItem(WidgetRef ref, ItemSummary item, PlayProgress progress) {
+  ref
+      .read(nowPlayingProvider.notifier)
+      .play(
+        <ItemSummary>[item],
+        source: QueueSource(
+          kind: item.mediaType == MediaType.audiobook
+              ? QueueSourceKind.book
+              : QueueSourceKind.single,
+          label: item.title,
+          pid: item.pid,
+        ),
+        positionMs: progress.positionMs,
+      );
 }
 
 /// Opens or resumes whatever a home card is about.

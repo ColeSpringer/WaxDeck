@@ -386,6 +386,70 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    testWidgets('draws the matched song cover, not only the logo', (
+      tester,
+    ) async {
+      // The face full screen has drawn the song's cover for a while; the
+      // bar it collapses into drew the station logo, so what was playing
+      // was visible only after expanding.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final station = RadioStation(
+        pid: 'ra-2',
+        name: 'Coastal FM',
+        streamUrl: 'https://radio.example/stream',
+        createdAt: DateTime.utc(2026, 7, 1),
+      );
+      repo
+        ..radioStationsByPid[station.pid] = station
+        ..radioNowPlaying[station.pid] = 'Salt Harbour - The Bree Trio'
+        ..radioNowPlayingItemPid[station.pid] = 'tr-A';
+      final engine = FakeEngine();
+      final artwork = FakeArtworkStore();
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: engine,
+        container: playbackContainer(
+          repo: repo,
+          engine: engine,
+          extra: [artworkStoreProvider.overrideWithValue(artwork)],
+        ),
+      );
+      await harness.container
+          .read(radioPlaybackProvider.notifier)
+          .play(station);
+      await tester.pumpAndSettle();
+
+      expect(
+        artwork.requested,
+        contains(repo.artUrlFor('tr-A')),
+        reason: 'the bar must ask for the song the station is playing',
+      );
+      // And it is drawn as a sleeve, not as a logo: a cover cropped to a
+      // circle loses its corners, which is most of an album cover.
+      expect(
+        tester.widget<ArtworkImage>(find.byType(ArtworkImage).first).shape,
+        ArtworkShape.square,
+      );
+
+      // With nothing matched the logo is still what it draws.
+      repo.radioNowPlayingItemPid.remove(station.pid);
+      await harness.container.read(radioPlaybackProvider.notifier).stop();
+      await harness.container
+          .read(radioPlaybackProvider.notifier)
+          .play(station);
+      await tester.pumpAndSettle();
+      expect(artwork.requested, contains(repo.radioLogoUrlFor('ra-2')));
+      expect(
+        tester.widget<ArtworkImage>(find.byType(ArtworkImage).first).shape,
+        ArtworkShape.circle,
+      );
+
+      await harness.container.read(radioPlaybackProvider.notifier).stop();
+      await tester.pumpAndSettle();
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('follows live radio onto the station', (tester) async {
       final repo = FakeRepository(items: [testItem('tr-A')]);
       final station = RadioStation(

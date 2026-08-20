@@ -1,3 +1,5 @@
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -174,6 +176,108 @@ void main() {
         ),
       );
       expect(find.text('SH'), findsOneWidget);
+    });
+  });
+
+  group('artwork play affordance', () {
+    Future<TestPointer> hoverOver(WidgetTester tester, Finder finder) async {
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(pointer.hover(tester.getCenter(finder)));
+      await tester.pumpAndSettle();
+      return pointer;
+    }
+
+    testWidgets('appears under a pointer and plays', (tester) async {
+      var played = 0;
+      await tester.pumpWidget(
+        _host(
+          ArtworkImage(
+            size: 120,
+            monogram: 'Salt Harbour',
+            onPlay: () => played++,
+            playLabel: 'Play Salt Harbour',
+          ),
+        ),
+      );
+
+      // Scoped to the artwork: a Scaffold has IgnorePointers of its own,
+      // and this is a statement about the overlay rather than about
+      // Material.
+      final overlay = find.descendant(
+        of: find.byType(ArtworkImage),
+        matching: find.byType(IgnorePointer),
+      );
+      // Nothing is offered until a pointer is over the artwork: the
+      // affordance is a hover, so a touch device never sees it and the
+      // artwork's own gesture is never taken from it.
+      expect(tester.widget<IgnorePointer>(overlay).ignoring, isTrue);
+
+      await hoverOver(tester, find.byType(ArtworkImage));
+      expect(tester.widget<IgnorePointer>(overlay).ignoring, isFalse);
+      expect(
+        tester
+            .widget<AnimatedOpacity>(
+              find.descendant(
+                of: find.byType(ArtworkImage),
+                matching: find.byType(AnimatedOpacity),
+              ),
+            )
+            .opacity,
+        1,
+      );
+
+      await tester.tap(find.bySemanticsLabel('Play Salt Harbour'));
+      await tester.pumpAndSettle();
+      expect(played, 1);
+    });
+
+    testWidgets('is not a tab stop while it is invisible', (tester) async {
+      // IgnorePointer and a zero opacity stop it being seen or clicked
+      // and neither stops it being tabbed to. A grid of these is a run
+      // of invisible stops where Enter starts playback with nothing on
+      // screen to say why.
+      var played = 0;
+      await tester.pumpWidget(
+        _host(
+          Column(
+            children: <Widget>[
+              ArtworkImage(
+                size: 120,
+                monogram: 'Salt Harbour',
+                onPlay: () => played++,
+                playLabel: 'Play Salt Harbour',
+              ),
+              TextButton(onPressed: () {}, child: const Text('after')),
+            ],
+          ),
+        ),
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(
+        played,
+        0,
+        reason: 'tabbing must not reach a control nothing is drawing',
+      );
+    });
+
+    testWidgets('is absent entirely without an onPlay', (tester) async {
+      // Opt-in per call site: a cover in an editor is a picture, and a
+      // play button over it would be a lie.
+      await tester.pumpWidget(
+        _host(const ArtworkImage(size: 120, monogram: 'Salt Harbour')),
+      );
+      await hoverOver(tester, find.byType(ArtworkImage));
+      expect(
+        find.descendant(
+          of: find.byType(ArtworkImage),
+          matching: find.byType(IgnorePointer),
+        ),
+        findsNothing,
+      );
     });
   });
 }

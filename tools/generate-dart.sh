@@ -61,6 +61,11 @@ analyzer:
     unused_element: ignore
     unused_field: ignore
     deprecated_member_use: ignore
+    # An operation carrying a free-form JSON body or response types as
+    # BuiltMap<String, JsonObject>, and the generator then writes the
+    # json_object import twice in that API file. Harmless, and not
+    # something a template we do not own can be told not to do.
+    duplicate_import: ignore
 EOF
 
 # --- 4. built_value codegen (.g.dart) ------------------------------------------

@@ -308,6 +308,17 @@ func TestSubsonicVisibility(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 
+	// Warm the full-visibility index first. The grouped index is cached
+	// per catalog tail and per grant set, so a key that did not carry
+	// the grants would hand the administrator's whole catalog to the
+	// restricted caller below - which is the failure this ordering
+	// exists to catch.
+	adminSecret := newSubsonicSecret(t, h)
+	warm := subsonicGet(t, h, "getArtists", adminSecret, "")
+	if warm.Artists == nil || len(warm.Artists.Index) == 0 {
+		t.Fatal("the administrator sees no artists; the visibility check below would prove nothing")
+	}
+
 	// A user with no library grants sees an empty catalog, not an error.
 	resp := h.postJSON(t, "/api/v1/users", map[string]any{
 		"username": "subsonic-restricted", "password": "restricted-pass",
@@ -343,6 +354,29 @@ func TestSubsonicVisibility(t *testing.T) {
 	}
 	if env.Artists != nil && len(env.Artists.Index) != 0 {
 		t.Fatalf("restricted user sees artists: %+v", env.Artists)
+	}
+
+	// A second page for the same caller reads the cached index rather
+	// than sweeping again, and still answers empty.
+	getResp, err = http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(getResp.Body)
+	getResp.Body.Close()
+	wrapper = nil
+	if err := json.Unmarshal(body, &wrapper); err != nil {
+		t.Fatalf("restricted getArtists (second call): %v (%s)", err, body)
+	}
+	if again := wrapper["subsonic-response"]; again.Artists != nil && len(again.Artists.Index) != 0 {
+		t.Fatalf("restricted user sees artists on a repeat call: %+v", again.Artists)
+	}
+
+	// And the administrator's own view is untouched by the restricted
+	// caller's entry sharing the same tail.
+	after := subsonicGet(t, h, "getArtists", adminSecret, "")
+	if after.Artists == nil || len(after.Artists.Index) != len(warm.Artists.Index) {
+		t.Fatalf("administrator index changed after a restricted caller browsed: %+v", after.Artists)
 	}
 }
 

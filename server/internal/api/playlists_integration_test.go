@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"io"
 	"net/url"
 	"strings"
@@ -787,4 +788,189 @@ func TestSmartPlaylistStateRuleSeesArchivedItems(t *testing.T) {
 	if det.Rule == nil || det.Rule.Root.Field == nil || *det.Rule.Root.Field != "mediaType" {
 		t.Fatalf("stored rule came back rewritten: %+v", det.Rule)
 	}
+}
+
+func TestPlaylistNspRoundTrip(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	// A document written the way the other server writes one: a rating
+	// on Navidrome's 0-5 scale, and a notContains that has no rule
+	// operator of its own.
+	resp := h.postJSON(t, "/api/v1/playlists/nsp", map[string]any{
+		"name":   "From NSP",
+		"public": true,
+		"all": []any{
+			map[string]any{"contains": map[string]any{"genre": "Rock"}},
+			map[string]any{"gt": map[string]any{"rating": 3}},
+			map[string]any{"notContains": map[string]any{"title": "Live"}},
+			map[string]any{"inTheLast": map[string]any{"lastPlayed": 30}},
+		},
+		"sort":  "dateAdded",
+		"order": "desc",
+		"limit": 25,
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("import status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	if pl.Kind != "smart" || pl.Name != "From NSP" || pl.Visibility != "shared" {
+		t.Fatalf("imported playlist = %+v", pl)
+	}
+
+	// Back out again, and the rating scale comes back down with it.
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("export status = %d", resp.StatusCode)
+	}
+	doc := decode[map[string]any](t, resp)
+	raw, _ := json.Marshal(doc)
+	// Field names come back lower-cased, which is the converter's
+	// spelling and is read back by either side; the assertion is on the
+	// values, and on the re-import below.
+	for _, want := range []string{
+		`"rating":3`, `"notContains"`, `"sort":"dateadded"`,
+		`"order":"desc"`, `"limit":25`, `"name":"From NSP"`, `"public":true`,
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("export lacks %s: %s", want, raw)
+		}
+	}
+
+	// And the document it wrote imports again unchanged, which is what
+	// "round trip" has to mean for a format another server reads.
+	resp = h.postJSON(t, "/api/v1/playlists/nsp?name=Round+Two", doc)
+	if resp.StatusCode != 201 {
+		t.Fatalf("re-import status = %d", resp.StatusCode)
+	}
+
+	// A static playlist has no rule to export.
+	resp = h.postJSON(t, "/api/v1/playlists", map[string]any{"name": "Static", "kind": "static"})
+	static := decode[Playlist](t, resp)
+	resp = get(t, h.ts, "/api/v1/playlists/"+static.Pid+"/nsp", h.token)
+	wantStatus(t, resp, 501, "NSP export of a static playlist")
+	resp.Body.Close()
+}
+
+func TestPlaylistNspExportRefusesWhatItCannotSay(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	// mediaType has no NSP form at all, so the export refuses and says
+	// so rather than handing back a document that means something else.
+	// All-or-nothing: the genre condition beside it does not survive on
+	// its own, because half a rule is a different playlist.
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Music only", "kind": "smart",
+		"rule": map[string]any{"root": map[string]any{"type": "all", "nodes": []any{
+			map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+			map[string]any{"type": "condition", "field": "genre", "op": "is", "value": "Rock"},
+		}}},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp", h.token)
+	if resp.StatusCode != 501 {
+		t.Fatalf("export status = %d, want 501", resp.StatusCode)
+	}
+	refusal := decode[Error](t, resp)
+	if !strings.Contains(refusal.Message, "kind") && !strings.Contains(refusal.Message, "mediaType") {
+		t.Fatalf("refusal does not name the offender: %q", refusal.Message)
+	}
+}
+
+func TestPlaylistNspImportRefusesWhatItCannotSay(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	cases := []struct {
+		name string
+		doc  map[string]any
+		want string
+	}{
+		{
+			"unknown field",
+			map[string]any{"name": "x", "all": []any{
+				map[string]any{"gt": map[string]any{"bitrate": 320}},
+			}},
+			"bitrate",
+		},
+		{
+			// An unrecognised top-level key is refused rather than
+			// dropped: a typo for `all` would otherwise import as a
+			// rule over the whole library.
+			"unknown top-level key",
+			map[string]any{"name": "x", "alll": []any{}},
+			"alll",
+		},
+		{
+			"no root group",
+			map[string]any{"name": "x", "limit": 10},
+			"root group",
+		},
+		{
+			"limitPercent",
+			map[string]any{"name": "x", "all": []any{}, "limitPercent": 10},
+			"limitPercent",
+		},
+		{
+			// A naive local date against a stored instant has no
+			// faithful reading, so the absolute date operators refuse.
+			"absolute date",
+			map[string]any{"name": "x", "all": []any{
+				map[string]any{"before": map[string]any{"dateAdded": "2024-03-01"}},
+			}},
+			"dateAdded",
+		},
+		{
+			// Refused by the field it names rather than by the
+			// operator: another server's playlist identifier is not a
+			// field this catalog has.
+			"playlist membership",
+			map[string]any{"name": "x", "all": []any{
+				map[string]any{"inPlaylist": map[string]any{"id": "abc"}},
+			}},
+			"unsupported field",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			resp := h.postJSON(t, "/api/v1/playlists/nsp", tc.doc)
+			if resp.StatusCode != 400 {
+				t.Fatalf("import status = %d, want 400", resp.StatusCode)
+			}
+			if refusal := decode[Error](t, resp); !strings.Contains(refusal.Message, tc.want) {
+				t.Fatalf("refusal %q does not name %q", refusal.Message, tc.want)
+			}
+		})
+	}
+}
+
+func TestPlaylistNspImportNamesAndBounds(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	// A nameless document is importable only with a name supplied.
+	resp := h.postJSON(t, "/api/v1/playlists/nsp", map[string]any{"all": []any{}})
+	wantStatus(t, resp, 400, "a nameless NSP document")
+	resp.Body.Close()
+	resp = h.postJSON(t, "/api/v1/playlists/nsp?name=Named", map[string]any{"all": []any{}})
+	if resp.StatusCode != 201 {
+		t.Fatalf("named import status = %d", resp.StatusCode)
+	}
+	if pl := decode[Playlist](t, resp); pl.Name != "Named" {
+		t.Fatalf("name = %q, want the parameter to win", pl.Name)
+	}
+
+	// And the document is bounded before it is parsed: a free-form
+	// object carries no maxLength for the contract to declare.
+	huge := strings.Repeat("x", 1<<20)
+	resp = h.postJSON(t, "/api/v1/playlists/nsp?name=Huge", map[string]any{
+		"all": []any{map[string]any{"is": map[string]any{"title": huge}}},
+	})
+	wantStatus(t, resp, 400, "an oversized NSP document")
+	resp.Body.Close()
 }

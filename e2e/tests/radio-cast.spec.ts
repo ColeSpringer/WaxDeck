@@ -155,20 +155,23 @@ test('the hub pins a station and tunes it in', async ({ app }) => {
   // publishes. Owned by this test rather than a second one, because the
   // preference document is the account's and two tests pinning into it
   // in parallel would each clear the other's.
-  // Settled on the document one at a time, the way the unpins below are.
-  // The star flips on optimistic client state, and a second toggle
-  // computed from a document that does not yet hold the first is the
-  // lost write in `docs/bugs.md`: fired back to back these can land as
-  // two pins, leaving the surface a row short of a dial.
+  //
+  // Fired back to back with nothing between them, which is the whole
+  // point: the star flips on optimistic client state, and a toggle
+  // computed from a document that does not yet hold the one before it
+  // used to lose every write but the first. Only the document is
+  // asserted, and only once - a poll between the taps is the pacing
+  // that hid the bug. Exactly these three, in pin order: a superset
+  // would pass a duplicate or a leaked pid, which is the other half of
+  // what a burst gets wrong.
   for (const pid of [band[0], band[1]]) {
     await app.radio.pin(pid);
-    await expect
-      .poll(
-        async () => (await app.api.tryGet('/users/me/prefs'))?.radioFavorites ?? [],
-        { message: `the pin of ${pid} should reach the document` },
-      )
-      .toContain(pid);
   }
+  await expect
+    .poll(async () => (await app.api.tryGet('/users/me/prefs'))?.radioFavorites ?? [], {
+      message: 'every pin in the run should reach the document',
+    })
+    .toEqual([station, band[0], band[1]]);
   await expect(app.radio.dial()).toBeVisible();
   await expect(app.radio.tune()).toBeVisible();
   // And the rows are gone: the band is the surface now, not a second
@@ -179,15 +182,10 @@ test('the hub pins a station and tunes it in', async ({ app }) => {
   // the server drops the field rather than storing `[]`, and no client
   // reads a default set of pins out of an absent one, so both read as
   // none pinned. What has to survive is the *clear*, which is what this
-  // checks.
+  // checks - three unpins in a run, and then the document, for the same
+  // reason the pins above are unpaced.
   for (const pid of [band[1], band[0], station]) {
     await app.radio.unpin(pid);
-    await expect
-      .poll(
-        async () => (await app.api.tryGet('/users/me/prefs'))?.radioFavorites ?? [],
-        { message: `the unpin of ${pid} should reach the document` },
-      )
-      .not.toContain(pid);
   }
   await expect(app.radio.dial()).toHaveCount(0);
   await expect(app.radio.pinnedRow(station)).toHaveCount(0);

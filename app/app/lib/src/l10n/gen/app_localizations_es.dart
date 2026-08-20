@@ -1575,6 +1575,19 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get artworkLockHelp =>
+      'Mantiene esta portada a través de los análisis y los enriquecimientos. Fijada con el hueco vacío significa \"déjalo sin portada\" en lugar de \"no se encontró ninguna\", que es el estado que si no rechaza cualquier portada sin explicar por qué.';
+
+  @override
+  String get artworkLockPinned => 'Portada fijada';
+
+  @override
+  String get artworkLockTitle => 'Fijar esta portada';
+
+  @override
+  String get artworkLockUnpinned => 'Portada desfijada';
+
+  @override
   String artworkOneImageOnly(String slot, String file) {
     return '$slot admite una sola imagen; se usa $file';
   }
@@ -3577,6 +3590,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get musicAlbumEditorFromTags => 'De las etiquetas';
 
   @override
+  String get musicAlbumEditorNamesOverline =>
+      'Cómo se ordena y con qué coincide';
+
+  @override
+  String get musicAlbumEditorNamesTitle => 'Nombre e identificador';
+
+  @override
   String musicAlbumEditorSaveChanges(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -3597,8 +3617,32 @@ class AppLocalizationsEs extends AppLocalizations {
   String get musicAlbumEditorSectionTitle => 'Identidad de la edición';
 
   @override
+  String musicAlbumEditorTracksMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'y $count más',
+      one: 'y 1 más',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicAlbumEditorTracksOverline => 'A qué llega una reescritura';
+
+  @override
+  String get musicAlbumEditorTracksTitle => 'En esta edición';
+
+  @override
   String get musicAlbumEditorWriteBackHelp =>
       'Reescribe también las etiquetas correspondientes en todas las pistas de esta edición. El soporte no tiene forma de etiqueta y se queda aquí.';
+
+  @override
+  String get musicAlbumEditorWriteOverline =>
+      'Dónde caen los valores y qué anulan';
+
+  @override
+  String get musicAlbumEditorWriteTitle => 'Cómo se escribe este cambio';
 
   @override
   String get musicAlbumEmptyMessage =>
@@ -3767,11 +3811,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String get musicFieldLabelHelp => 'El sello que la publicó';
 
   @override
+  String get musicFieldMbid => 'ID de edición de MusicBrainz';
+
+  @override
+  String get musicFieldMbidHelp =>
+      'El identificador con el que esta edición coincidió en MusicBrainz. El enriquecimiento lo rellena; ponerlo aquí fija una coincidencia a mano.';
+
+  @override
   String get musicFieldMedia => 'Soporte';
 
   @override
   String get musicFieldMediaHelp =>
       'En qué se editó: CD, 2xVinyl, Digital Media';
+
+  @override
+  String get musicFieldSort => 'Nombre de ordenación';
+
+  @override
+  String get musicFieldSortHelp =>
+      'Cómo se ordena esta edición en una lista alfabética. Vacío la ordena por su título.';
 
   @override
   String get musicHubAddToLibrary => 'Añadir a la biblioteca';

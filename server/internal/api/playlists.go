@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -273,6 +274,44 @@ func (s *Server) ImportPlaylistM3u(ctx context.Context, req ImportPlaylistM3uReq
 		out.UnmatchedPaths = ptr(res.UnmatchedPaths)
 	}
 	return ImportPlaylistM3u201JSONResponse(out), nil
+}
+
+func (s *Server) ImportPlaylistNsp(ctx context.Context, req ImportPlaylistNspRequestObject) (ImportPlaylistNspResponseObject, error) {
+	if req.Body == nil {
+		return ImportPlaylistNsp400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// The body arrives decoded, so it goes back to bytes for the
+	// converter, which parses the grammar's one-key clauses out of raw
+	// JSON rather than walking an any tree.
+	doc, err := json.Marshal(*req.Body)
+	if err != nil {
+		return ImportPlaylistNsp400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "the NSP document could not be read"))}, nil
+	}
+	name := ""
+	if req.Params.Name != nil {
+		name = *req.Params.Name
+	}
+	pl, err := s.svc.ImportPlaylistNSP(ctx, uc, doc, name)
+	if err != nil {
+		return nil, err
+	}
+	return ImportPlaylistNsp201JSONResponse(playlistJSON(pl)), nil
+}
+
+func (s *Server) ExportPlaylistNsp(ctx context.Context, req ExportPlaylistNspRequestObject) (ExportPlaylistNspResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := s.svc.ExportPlaylistNSP(ctx, uc, req.Pid)
+	if err != nil {
+		return nil, err
+	}
+	return ExportPlaylistNsp200JSONResponse(doc), nil
 }
 
 // --- wire conversion --------------------------------------------------------------

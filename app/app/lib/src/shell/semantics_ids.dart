@@ -312,7 +312,10 @@ abstract final class SemanticsIds {
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
   static const String albumEditDetails = 'album-edit-details';
   static const String albumEditor = 'album-editor';
+  static const String albumEditorNames = 'album-editor-names';
+  static const String albumEditorTracks = 'album-editor-tracks';
   static const String albumIdentity = 'album-identity';
+  static const String artLock = 'art-lock';
   static String artSlot(Object role) => 'art-slot-$role';
   static String artSlotClear(Object role) => 'art-slot-clear-$role';
   static String artSlotDrop(Object role) => 'art-slot-drop-$role';

@@ -1,4 +1,5 @@
 import 'package:alchemist/alchemist.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -17,6 +18,44 @@ Widget _themed(WaxThemeVariant variant, Widget child, {WaxDensity? density}) {
     ),
   );
 }
+
+/// Rests a mouse pointer on every widget matching [finder], so a
+/// hover-only affordance can be baselined at all. Alchemist ships press,
+/// long-press, and scroll and no hover; one pointer per match, because a
+/// single pointer can only be in one place and a group mounts every
+/// variant at once.
+Interaction _hoverAll(Finder finder) => (WidgetTester tester) async {
+  final pointers = <TestPointer>[];
+  var id = 1;
+  for (final element in finder.evaluate().toList()) {
+    // A device of its own per scenario, not just a pointer id. The
+    // tracker keys hover on the device, so pointers sharing the default
+    // device 0 are one mouse being moved from card to card - every
+    // scenario but the last would be baselined in its resting state,
+    // which is a golden capturing the opposite of what it is named for.
+    final pointer = TestPointer(id, PointerDeviceKind.mouse, id);
+    id++;
+    pointers.add(pointer);
+    await tester.sendEventToBinding(
+      pointer.hover(tester.getCenter(find.byWidget(element.widget))),
+    );
+  }
+  await tester.pumpAndSettle();
+  // Every scenario, not just the first: a golden of a hover affordance
+  // that captured its resting state would never catch a regression, and
+  // the failure mode is silent.
+  for (final element
+      in find
+          .descendant(of: finder, matching: find.byType(AnimatedOpacity))
+          .evaluate()) {
+    expect((element.widget as AnimatedOpacity).opacity, 1);
+  }
+  return () async {
+    for (final pointer in pointers) {
+      await tester.sendEventToBinding(pointer.hover(Offset.zero));
+    }
+  };
+};
 
 /// Animated components (the row bars, the skeletons) never
 /// settle by design, so goldens pump a fixed number of frames instead of
@@ -324,6 +363,38 @@ void main() {
                         width: 120,
                       ),
                     ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'playable artwork offers to play under a pointer',
+      fileName: 'card_hover_play',
+      whilePerforming: _hoverAll(find.byType(ArtworkImage)),
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in <WaxThemeVariant>[
+            WaxThemeVariant.dark,
+            WaxThemeVariant.light,
+          ])
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 140,
+                  child: MediaCard(
+                    data: const MediaTileData(
+                      title: 'Salt Harbour',
+                      subtitle: 'Nightjar',
+                    ),
+                    width: 120,
+                    onPlay: () {},
                   ),
                 ),
               ),

@@ -17,36 +17,199 @@ class PrefsController extends AsyncNotifier<Prefs> {
   /// value and the second has never heard of the first. Here rather than
   /// per caller because the unit at risk is the document: a pin racing a
   /// theme change loses the theme as quietly as one pin loses another.
+  ///
+  /// Cleared when the newest write settles, and only by that write: one
+  /// queued behind it owns the flag from the moment it queues. Never
+  /// clearing it would stop [build] ever issuing a GET again, so a
+  /// change made on another device would never land.
   Future<void>? _writing;
+
+  /// The newest document this client knows, and the account it belongs
+  /// to: the in-flight change while a write is running, the server's
+  /// answer once it lands.
+  ///
+  /// This provider sits in the user fan-out, so the server's own event
+  /// for a write invalidates it, and every rebuild reads back through
+  /// `.value` - which is what the radio dial and the pinned shelf
+  /// recompute their lists from. Without a held document that rebuild
+  /// answers from the last *settled* one, which has never heard of the
+  /// writes still in flight, and the optimistic list is replaced by a
+  /// stale one under the thumb that made it. Three pins in a row then
+  /// settle on the document the first one wrote.
+  ///
+  /// Held rather than awaited on purpose: `_write` resolves the loaded
+  /// value with `await future`, and a [build] that awaited the write
+  /// would deadlock against one started before the first fetch landed -
+  /// which is precisely the early-tap case [setRadioFavorites] exists
+  /// to handle.
+  Prefs? _stored;
+  String? _storedFor;
+
+  /// The last document the server itself handed back, from a read or a
+  /// write. It is what a refused write reverts to: the optimistic copy
+  /// claims a change the server would not take, and reverting to the
+  /// document as it stood one write ago would re-assert an earlier
+  /// change that was refused too. Queued writes re-apply their own on
+  /// top when their turn comes, so the revert costs nothing that is
+  /// still wanted.
+  Prefs? _confirmed;
+
+  /// Bumped every time a write publishes a document, so a read can tell
+  /// whether one landed while it was in flight.
+  int _writes = 0;
 
   @override
   Future<Prefs> build() async {
     final session = await ref.watch(authControllerProvider.future);
-    if (!session.authenticated) return const Prefs();
-    return ref.watch(repositoryProvider).getPrefs();
+    if (!session.authenticated) {
+      _forget(null);
+      return const Prefs();
+    }
+    // A different account is not a stale document, it is somebody
+    // else's: drop it rather than answering this session with it.
+    final owner = session.user?.id ?? '';
+    if (owner != _storedFor) _forget(owner);
+
+    // Watched before the early return below, not after it: a build that
+    // answers from the held document still depends on the repository,
+    // and skipping the watch would drop it from this build's dependency
+    // set.
+    final repository = ref.watch(repositoryProvider);
+    final held = _stored;
+    if (_writing != null && held != null) return held;
+    final before = _writes;
+    final fetched = await repository.getPrefs();
+    // A write that landed while this read was in flight is newer than
+    // what the read was served, whatever order the two answers arrived
+    // in. Without this the first write of a session has no held
+    // document to answer with, so the read goes out, and a poll racing
+    // a PUT is exactly how the document loses an update.
+    final landed = _stored;
+    if (_writes != before && landed != null) return landed;
+    _stored = fetched;
+    _confirmed = fetched;
+    return fetched;
+  }
+
+  /// Drops every document held for the previous session.
+  void _forget(String? owner) {
+    _stored = null;
+    _confirmed = null;
+    _storedFor = owner;
   }
 
   /// Replaces the document, one write at a time. [change] runs against the
   /// loaded value after any queued write has landed.
   Future<void> _write(Prefs Function(Prefs current) change) {
+    // Published here, synchronously with the call, and not only from
+    // the body below. The body is deferred, and an invalidation can
+    // arrive before it has started - the server's echo of the previous
+    // write is one, and so is a second tap, because reading a dirty
+    // provider rebuilds it. Every such rebuild recomputes the dial and
+    // the pinned shelf from `.value`, so a document that does not yet
+    // hold this change replaces the optimistic list with a stale one,
+    // and the next toggle is computed from that. Three taps in a row
+    // then settle on the first one.
+    //
+    // Skipped while nothing is loaded: there is no document to change
+    // yet, and the body's `await future` is what waits for one.
+    final loaded = state.value;
+    if (loaded != null) _publish(change(loaded));
+
+    // The account this write belongs to. Null before the first load has
+    // settled, which is the early-tap case: such a write has no account
+    // yet and adopts whichever one the load lands on, rather than
+    // reading "not the same" and dropping itself.
+    var owner = _storedFor;
     final queued = _writing;
-    final mine = Future<void>(() async {
-      if (queued != null) {
+    var failed = false;
+    late final Future<void> mine;
+    mine = Future<void>(() async {
+      try {
+        if (queued != null) {
+          try {
+            await queued;
+          } on Object {
+            // A failure ahead in the queue is that caller's to report; this
+            // one still starts from whatever the server ended up holding.
+          }
+        }
+        // Applied again, to the document this write's turn actually
+        // starts from: the optimistic copy above was for whoever
+        // rebuilt in the meantime, and a queued write's base is what
+        // the one ahead of it stored.
+        final current = state.value ?? await future;
+        owner ??= _storedFor;
+        // A queued write can wait out a sign-out: without this fence it
+        // resumes against the next account's document, applies a change
+        // nobody there made, and PUTs it into their prefs.
+        if (_storedFor != owner) return;
+        final next = change(current);
+        // Published only while this is still the newest write. One
+        // queued behind it has already published something later, and
+        // republishing this one would rewind every list recomputed from
+        // the document - three taps in a run would each be undone and
+        // redone, and a fourth landing in that window would compute
+        // from the rewound list, which is the lost write this whole
+        // path exists to close.
+        _publishIfNewest(mine, next);
         try {
-          await queued;
+          final stored = await ref.read(repositoryProvider).putPrefs(next);
+          _confirmed = stored;
+          if (_storedFor != owner) return;
+          _publishIfNewest(mine, stored);
         } on Object {
-          // A failure ahead in the queue is that caller's to report; this
-          // one still starts from whatever the server ended up holding.
+          // The write did not land, so the document must stop claiming
+          // it did - both the copy held for readers and the state every
+          // list is recomputed from.
+          failed = true;
+          final confirmed = _confirmed;
+          if (_storedFor == owner && confirmed != null) {
+            _publishIfNewest(mine, confirmed);
+          }
+          rethrow;
+        }
+      } finally {
+        if (identical(_writing, mine)) {
+          _writing = null;
+          // A failed write leaves this client unsure what the document
+          // holds, and any invalidation that arrived while it ran was
+          // answered from the held copy without a read. Ask once now
+          // that nothing is in flight, so a change made elsewhere is
+          // not lost with the failure.
+          if (failed) {
+            _stored = null;
+            ref.invalidateSelf();
+          }
         }
       }
-      final current = state.value ?? await future;
-      final stored = await ref
-          .read(repositoryProvider)
-          .putPrefs(change(current));
-      state = AsyncData(stored);
     });
     _writing = mine;
     return mine;
+  }
+
+  /// [_publish], but only while [mine] is still the newest write. An
+  /// older write's answer is not news: the newer one has already
+  /// published something built on top of it.
+  void _publishIfNewest(Future<void> mine, Prefs document) {
+    if (!identical(_writing, mine)) {
+      // Nothing at all, not even to the held copy: [build] answers from
+      // that while a write is in flight, so recording an older document
+      // there would rewind every reader through the rebuild instead of
+      // through the state. What the write behind this one builds on is
+      // `state.value`, and what a refusal reverts to is `_confirmed`;
+      // neither needs this one.
+      return;
+    }
+    _publish(document);
+  }
+
+  /// Makes [document] what this client knows, for readers and for the
+  /// next write alike.
+  void _publish(Prefs document) {
+    _stored = document;
+    _writes++;
+    state = AsyncData(document);
   }
 
   /// Stores the shared-stats opt-out.

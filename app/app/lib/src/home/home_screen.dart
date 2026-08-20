@@ -16,6 +16,7 @@ import '../podcasts/podcast_shelves.dart';
 import '../search/search_chrome.dart';
 import '../sync/sync_providers.dart';
 import '../shell/account_chrome.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/add_to_library.dart';
@@ -110,10 +111,20 @@ class _OnlineHome extends ConsumerWidget {
     // is already decided.
     final canUpload = canAddToLibrary(ref);
     final l10n = context.l10n;
-    return switch (ref.watch(libraryHasAnythingProvider)) {
+    // This provider rides the catalog fan-out, so every catalog event
+    // rebuilds it into an AsyncLoading carrying the previous answer -
+    // which a switch on the runtime type matches nowhere, and the whole
+    // screen blanks to a skeleton and back. Whether the library holds
+    // anything does not change on a scan tick.
+    return AsyncSliverFace<bool>(
+      state: ref.watch(libraryHasAnythingProvider),
+      skeleton: SkeletonShape.shelf,
+      errorTitle: l10n.homeLibraryLoadError,
+      onRetry: () => ref.invalidate(libraryHasAnythingProvider),
       // A server with nothing in it gets the first-run state rather
       // than eight empty shelves.
-      AsyncData(value: false) => SliverFillRemaining(
+      isEmpty: (hasAnything) => !hasAnything,
+      empty: (context) => SliverFillRemaining(
         hasScrollBody: false,
         child: EmptyState(
           title: l10n.homeEmptyTitle,
@@ -125,19 +136,8 @@ class _OnlineHome extends ConsumerWidget {
               : null,
         ),
       ),
-      AsyncData() => const _Shelves(),
-      AsyncError(:final error) => SliverFillRemaining(
-        hasScrollBody: false,
-        child: ErrorState(
-          title: l10n.homeLibraryLoadError,
-          message: context.explain(error),
-          onRetry: () => ref.invalidate(libraryHasAnythingProvider),
-        ),
-      ),
-      _ => const SliverToBoxAdapter(
-        child: SkeletonShapes(shape: SkeletonShape.shelf),
-      ),
-    };
+      builder: (context, _) => const _Shelves(),
+    );
   }
 }
 
@@ -257,6 +257,13 @@ class _DownloadedShelf extends ConsumerWidget {
               // with no network, and resuming at zero there is the
               // failure it exists to avoid.
               openHomeItem(context, ref, item, _resume(entry.progress));
+            },
+            onPlayItem: (tile) {
+              final at = tiles.indexOf(tile);
+              if (at < 0) return;
+              final item = shown[at].item;
+              if (item == null) return;
+              playHomeItem(ref, item, _resume(shown[at].progress));
             },
           ),
         ),

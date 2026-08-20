@@ -249,13 +249,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // loaded. They belong under any chip that shows library results.
     final stations = _localStations();
 
+    // Matched on the settled state, and that is the difference between
+    // this screen and a hub. A hub's provider reloads the same
+    // question, so an AsyncLoading carrying the previous answer is
+    // still an answer to what is on screen and AsyncSliverFace draws
+    // it. These three providers watch the query itself
+    // (search_controller.dart), so the value they carry across a
+    // rebuild belongs to the *previous* query - drawing it would put
+    // the results for "bbc" under the word "npr", and the empty state
+    // below would name the new query while reporting the old one's
+    // silence.
     return switch (results) {
-      AsyncData(:final value) when value != null => _groups(
-        value,
-        scope,
-        stations,
-        directory,
-      ),
       // Typed rather than the `:final error` shorthand: `hasError` is
       // `error != null`, so binding it as an Object is exact and the
       // sentence below needs no null check.
@@ -270,6 +274,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
         ...directory,
       ],
+      AsyncData(:final value) when value != null => _groups(
+        value,
+        scope,
+        stations,
+        directory,
+      ),
       _ => <Widget>[
         ...stations,
         // Not SliverFillRemaining while there is a directory half to
@@ -318,6 +328,48 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final local = _localStations();
     final entries = ref.watch(radioDirectoryResultsProvider);
     return switch (entries) {
+      // The stations already here are not the directory's to lose. With
+      // some listed, the failure is a line under them; with none, it is
+      // the whole answer and gets the whole screen. A SliverFillRemaining
+      // under a filled list would be pushed past the fold, which is the
+      // same as not reporting it.
+      //
+      // Matched on hasError rather than on AsyncError, because a retry in
+      // flight is an AsyncLoading still carrying the failure it is
+      // retrying. Matching the settled state alone would replace the
+      // reported problem with a skeleton for as long as the directory
+      // keeps failing, which is exactly when it must not. The value arms
+      // below match the settled state instead: this provider watches the
+      // query, so what it carries across a rebuild is the previous
+      // query's answer, and a skeleton is the honest face for a search
+      // that has not come back yet.
+      AsyncValue(hasError: true) when local.isNotEmpty => <Widget>[
+        ...local,
+        SliverPadding(
+          padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s16),
+          sliver: SliverToBoxAdapter(
+            child: WaxBanner(
+              message: l10n.searchDirectoryDegraded,
+              tone: WaxBannerTone.caution,
+              actionLabel: l10n.commonRetry,
+              onAction: () => ref.invalidate(radioDirectoryResultsProvider),
+            ),
+          ),
+        ),
+      ],
+      AsyncValue(hasError: true, error: final Object error) => <Widget>[
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: ErrorState(
+            title: l10n.searchDirectoryErrorTitle,
+            message: context.explain(error),
+            // The way out the directory-unavailable mapping implies:
+            // adding a station by URL works with no directory at all.
+            detail: l10n.searchDirectoryErrorDetail,
+            onRetry: () => ref.invalidate(radioDirectoryResultsProvider),
+          ),
+        ),
+      ],
       AsyncData(:final value) when value == null || value.isEmpty => <Widget>[
         ...local,
         if (local.isEmpty)
@@ -356,44 +408,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               semanticsId: SemanticsIds.radioSearchAdd(index),
               onPressed: () => unawaited(_addStation(value[index])),
             ),
-          ),
-        ),
-      ],
-      // The stations already here are not the directory's to lose. With
-      // some listed, the failure is a line under them; with none, it is
-      // the whole answer and gets the whole screen. A SliverFillRemaining
-      // under a filled list would be pushed past the fold, which is the
-      // same as not reporting it.
-      //
-      // Matched on hasError rather than on AsyncError, because a retry in
-      // flight is an AsyncLoading still carrying the failure it is
-      // retrying. Matching the settled state alone would replace the
-      // reported problem with a skeleton for as long as the directory
-      // keeps failing, which is exactly when it must not.
-      AsyncValue(hasError: true) when local.isNotEmpty => <Widget>[
-        ...local,
-        SliverPadding(
-          padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s16),
-          sliver: SliverToBoxAdapter(
-            child: WaxBanner(
-              message: l10n.searchDirectoryDegraded,
-              tone: WaxBannerTone.caution,
-              actionLabel: l10n.commonRetry,
-              onAction: () => ref.invalidate(radioDirectoryResultsProvider),
-            ),
-          ),
-        ),
-      ],
-      AsyncValue(hasError: true, error: final Object error) => <Widget>[
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: ErrorState(
-            title: l10n.searchDirectoryErrorTitle,
-            message: context.explain(error),
-            // The way out the directory-unavailable mapping implies:
-            // adding a station by URL works with no directory at all.
-            detail: l10n.searchDirectoryErrorDetail,
-            onRetry: () => ref.invalidate(radioDirectoryResultsProvider),
           ),
         ),
       ],
@@ -643,6 +657,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       ),
     );
     return switch (entries) {
+      // hasError rather than AsyncError: a retry in flight is an
+      // AsyncLoading still carrying the failure it is retrying, and a
+      // skeleton in place of the reported problem is the wrong answer
+      // for as long as the directory keeps failing. The value arms stay
+      // on the settled state, because this provider watches the query
+      // and what it carries across a rebuild answers the previous one.
+      AsyncValue(hasError: true) => <Widget>[
+        SliverPadding(
+          padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s16),
+          sliver: SliverToBoxAdapter(
+            child: WaxBanner(
+              message: context.l10n.searchPodcastDirectoryDegraded,
+              tone: WaxBannerTone.caution,
+              actionLabel: context.l10n.commonRetry,
+              onAction: () => ref.invalidate(podcastDirectoryResultsProvider),
+            ),
+          ),
+        ),
+      ],
       AsyncData(:final value) when value == null || value.isEmpty =>
         const <Widget>[],
       AsyncData(:final value) => <Widget>[
@@ -654,23 +687,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             index: index,
             rowSemanticsId: SemanticsIds.searchHit('podcastDirectory', index),
             onSubscribe: () => unawaited(_subscribeShow(value[index])),
-          ),
-        ),
-      ],
-      // hasError rather than AsyncError: a retry in flight is an
-      // AsyncLoading still carrying the failure it is retrying, and a
-      // skeleton in place of the reported problem is the wrong answer
-      // for as long as the directory keeps failing.
-      AsyncValue(hasError: true) => <Widget>[
-        SliverPadding(
-          padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s16),
-          sliver: SliverToBoxAdapter(
-            child: WaxBanner(
-              message: context.l10n.searchPodcastDirectoryDegraded,
-              tone: WaxBannerTone.caution,
-              actionLabel: context.l10n.commonRetry,
-              onAction: () => ref.invalidate(podcastDirectoryResultsProvider),
-            ),
           ),
         ),
       ],

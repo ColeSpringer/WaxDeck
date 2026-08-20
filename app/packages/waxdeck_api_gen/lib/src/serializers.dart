@@ -698,6 +698,14 @@ part 'serializers.g.dart';
   YearInReview,
 ])
 Serializers serializers = (_$serializers.toBuilder()
+      ..addBuilderFactory(
+        const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+        () => MapBuilder<String, JsonObject>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltMap, [FullType(String), FullType(JsonObject)]),
+        () => MapBuilder<String, JsonObject>(),
+      )
       ..add(AppPassword.serializer)
       ..add(EpisodeSummary.serializer)
       ..add(Invite.serializer)

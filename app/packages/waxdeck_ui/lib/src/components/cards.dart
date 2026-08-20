@@ -194,6 +194,8 @@ class _MediaCardState extends State<MediaCard> {
           domain: data.domain,
           progress: data.progress,
           dimmed: data.unavailableOffline,
+          onPlay: widget.onPlay,
+          playLabel: l10n.cardsPlayItem(data.title),
         ),
         if (widget.playing)
           Positioned(
@@ -253,30 +255,6 @@ class _MediaCardState extends State<MediaCard> {
                 color: colors.accent,
                 shape: BoxShape.circle,
                 border: Border.all(color: colors.scrim, width: 2),
-              ),
-            ),
-          ),
-        if (widget.onPlay != null)
-          Positioned.fill(
-            child: IgnorePointer(
-              ignoring: !_hovered,
-              child: AnimatedOpacity(
-                // Built either way and faded: an overlay that only exists
-                // while hovered is created at full opacity and pops.
-                opacity: _hovered ? 1 : 0,
-                duration: motion.quick,
-                child: ColoredBox(
-                  color: colors.scrim.withValues(alpha: 0.35),
-                  child: Center(
-                    child: WaxIconButton(
-                      glyph: WaxIcons.play,
-                      label: l10n.cardsPlayItem(data.title),
-                      size: 28,
-                      color: colors.textPrimary,
-                      onPressed: widget.onPlay,
-                    ),
-                  ),
-                ),
               ),
             ),
           ),

@@ -147,6 +147,22 @@
       }
     }
   },
+  "artworkLockHelp": "Keeps this cover through scans and enrichment runs. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.",
+  "@artworkLockHelp": {
+    "description": "Help under the cover pin switch. The second sentence is the whole reason the pin is visible: a cleared-and-pinned cover refuses every later write."
+  },
+  "artworkLockPinned": "Cover pinned",
+  "@artworkLockPinned": {
+    "description": "Confirmation after pinning a cover."
+  },
+  "artworkLockTitle": "Pin this cover",
+  "@artworkLockTitle": {
+    "description": "Switch over an album or artist cover: keep the picture through scans and enrichment runs."
+  },
+  "artworkLockUnpinned": "Cover unpinned",
+  "@artworkLockUnpinned": {
+    "description": "Confirmation after unpinning a cover."
+  },
   "artworkOneImageOnly": "{slot} takes one image; using {file}",
   "@artworkOneImageOnly": {
     "description": "Message after several images were dropped on one slot. {slot} is the slot's name and {file} the one that was taken.",

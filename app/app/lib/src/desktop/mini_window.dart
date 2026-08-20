@@ -215,18 +215,26 @@ class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
       builder: (context, snapshot) {
         final playing = snapshot.data ?? engine.playing;
         final live = station.station != null;
+        // Same mapping as the deck bar and the face: a station playing a
+        // matched song shows the song here too.
+        final art = live
+            ? waxRadioArtwork(
+                ref.watch(artworkStoreProvider),
+                ref.watch(repositoryProvider),
+                station.station!,
+                ref.watch(radioNowPlayingArtProvider),
+              )
+            : null;
         return MiniPlayer(
-          now: live
+          // Keyed on the artwork rather than on `live`: they answer the
+          // same question, and this one narrows the type.
+          now: art != null
               ? NowPlayingData(
                   title: station.station!.name,
                   subtitle: station.nowPlaying,
-                  artwork: waxStationLogo(
-                    ref.watch(artworkStoreProvider),
-                    ref.watch(repositoryProvider),
-                    station.station!,
-                  ),
+                  artwork: art.artwork,
                   domain: WaxDomain.radio,
-                  shape: ArtworkShape.circle,
+                  shape: art.shape,
                   position: Duration.zero,
                   duration: Duration.zero,
                   live: true,

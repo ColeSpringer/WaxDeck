@@ -41,6 +41,46 @@ here waits on upstream.
   either a reason to make summary rows carry it or a per-item read the
   player can afford.
 
+- `[in-repo]` **Preference writes have no offline outbox.** Play-state
+  and entity-state writes queue through `OptimisticStateController`,
+  which holds an intent while the network is gone and replays it;
+  `PrefsController` publishes optimistically and serializes writes but
+  has no such branch, so a pin, a crossfade, or a browse sort made
+  offline is reverted when its PUT fails rather than sent when the
+  connection returns. The two are close enough in shape that folding
+  the document controller onto the same protocol looks obvious - the
+  reason it has not been done is that the outbox is per-pid and keyed
+  to one entity's state, while this is one whole-document singleton
+  whose "intent" is a function over the document rather than a value.
+
+- `[in-repo]` **Ten screens still switch on an `AsyncValue`'s runtime
+  type.** `AsyncSliverFace` (`shell/`) is the shape that fixes it -
+  failure, then whatever value is held, then the skeleton - and the
+  three hubs, the home screen, and the review queue take it. The rest
+  still read `AsyncData(...) => rows, AsyncError(...) => error, _ =>
+  skeleton`, which a refresh matches nowhere: `playlists_screen`,
+  `downloads_screen`, `books_screen`, `show_screen`, `playlist_screen`,
+  `album_screen`, `artist_screen`, `uploads_screen`, and
+  `tasks_screen`. Several watch fan-out providers, so a catalog or user
+  event blanks them to a skeleton and back. Not swept in one change
+  because each one has its own empty and error faces to carry across,
+  and a mechanical conversion is how an empty state gets lost; the
+  search screen is deliberately *not* on this list, because its
+  providers watch the query and a value carried across a rebuild
+  answers the previous one.
+
+- `[in-repo]` **The hover play affordance is on the item shelves only.**
+  `ArtworkImage` takes an `onPlay` and draws a scrim and a glyph under a
+  pointer for whoever passes one, and the home shelves do: their cards
+  are catalog items, so "play this" is one queue write with a source of
+  `single` (or `book`). Every other grid is entity tiles - an album, a
+  show, a station, a playlist - where the verb is a different one over a
+  different read: playing an album means fetching its running order
+  first, and a podcast tile has no single thing to play at all. Those
+  call sites opt in when each verb is decided; the affordance costs
+  nothing on touch either way, because a `MouseRegion` reports no hover
+  to a finger.
+
 - `[in-repo]` **Every injected enrichment provider is cover-only.**
   Deezer, iTunes and Fanart.tv all advertise `enrich.CapCover` and
   nothing else, and all three refuse anything but `TargetReleaseGroup`,
@@ -334,22 +374,6 @@ here waits on upstream.
   need hardware this environment lacks. Speaker groups are handled
   by construction (they announce like devices); that claim is
   exactly what the checklist verifies.
-
-## Compatibility
-
-- `[in-repo]` **NSP import and export.**
-- `[in-repo]` **The Subsonic index is rebuilt per request for
-  library-restricted accounts.** The grouped index every browse and
-  `search3` ride is cached tail-keyed for full-visibility callers and
-  rebuilt from a whole-catalog `TrackFacts` sweep for anyone holding
-  library grants - and a real client pages hard: Feishin discovers its
-  track count by walking `search3` at rising offsets, so a restricted
-  account on a 50k-track library pays a full sweep per page of a walk
-  that takes dozens of pages. The fix shape is a second cache keyed on
-  the catalog tail plus the caller's grant set, invalidated exactly as
-  the shared one is; not taken yet because the sweep is honest, just
-  repeated, and the compatibility surface's heavy users today are
-  single-account instances.
 
 ## Localization
 

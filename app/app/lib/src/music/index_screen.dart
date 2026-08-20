@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../search/search_chrome.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'music_controllers.dart';
@@ -216,21 +217,15 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
                 // a column would narrow every row on a phone to buy a
                 // strip that is only useful while a finger is on it.
                 padding: EdgeInsets.only(right: railed ? WaxSpace.s24 : 0),
-                sliver: switch (state) {
-                  AsyncData(:final value) => _list(value),
-                  AsyncError(:final error) => SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: ErrorState(
-                      title: context.l10n.musicIndexLoadError(dimension.name),
-                      message: context.explain(error),
-                      onRetry: () => ref.invalidate(musicIndexProvider(key)),
-                    ),
-                  ),
-                  _ => const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: SkeletonShapes(shape: SkeletonShape.list),
-                  ),
-                },
+                sliver: AsyncSliverFace<MusicIndexState>(
+                  state: state,
+                  // The whole body of this screen, so the wait is the
+                  // page rather than six rows above empty space.
+                  skeletonFills: true,
+                  errorTitle: context.l10n.musicIndexLoadError(dimension.name),
+                  onRetry: () => ref.invalidate(musicIndexProvider(key)),
+                  builder: (context, value) => _list(value),
+                ),
               ),
             ],
           ),

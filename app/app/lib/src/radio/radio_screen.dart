@@ -11,6 +11,7 @@ import '../media_view.dart';
 import '../player/output_volume.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
@@ -74,8 +75,13 @@ class RadioScreen extends ConsumerWidget {
         if (playback.station != null)
           const SliverToBoxAdapter(child: _StationVolume()),
         const SliverToBoxAdapter(child: _SavedSongsDoor()),
-        switch (stations) {
-          AsyncData(:final value) when value.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<List<RadioStation>>(
+          state: stations,
+          skeleton: SkeletonShape.grid,
+          errorTitle: l10n.radioLoadError,
+          onRetry: () => ref.invalidate(radioStationsProvider),
+          isEmpty: (value) => value.isEmpty,
+          empty: (context) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.radioEmptyTitle,
@@ -85,22 +91,9 @@ class RadioScreen extends ConsumerWidget {
               onAction: () => unawaited(showAddStationDialog(context)),
             ),
           ),
-          AsyncData(:final value) => _StationGrid(
-            stations: value,
-            playback: playback,
-          ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.radioLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(radioStationsProvider),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.grid),
-          ),
-        },
+          builder: (context, value) =>
+              _StationGrid(stations: value, playback: playback),
+        ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
     );

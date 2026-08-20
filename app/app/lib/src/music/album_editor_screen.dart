@@ -2,14 +2,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_mark.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
+import '../metadata/artwork_manager.dart';
 import '../providers.dart';
 import '../shell/forbidden_page.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'album_detail.dart';
+import 'entity_facts.dart';
+import 'music_controllers.dart';
 
 /// The album-entity editor, reached from an album's overflow and served
 /// at `/metadata/<al-...>`.
@@ -19,6 +23,11 @@ import 'album_detail.dart';
 /// different endpoints with independent failure, so one Save button over
 /// both would report success for a pair of calls of which one failed;
 /// and the pid already says which is meant.
+///
+/// It shows the release before it offers to change it: the cover, the
+/// title, and what is on it. An editor whose only content is seven text
+/// fields makes the person using it hold the album in their head, and
+/// the fields here are exactly the ones nobody remembers the value of.
 class AlbumEditorScreen extends ConsumerStatefulWidget {
   const AlbumEditorScreen({super.key, required this.pid});
 
@@ -42,6 +51,20 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
   var _force = false;
   var _busy = false;
 
+  /// Every editable field, as the two things the form's bookkeeping
+  /// needs: the name the endpoint takes it under, and what the album
+  /// currently holds there. The labels live on the enums, which is
+  /// where the rows that draw them read them from.
+  Iterable<({String wire, String Function(AlbumDetail) stored})>
+  get _fields sync* {
+    for (final field in AlbumNameField.values) {
+      yield (wire: field.wire, stored: (a) => albumNameValue(a, field));
+    }
+    for (final field in AlbumIdentityField.values) {
+      yield (wire: field.wire, stored: (a) => albumIdentityValue(a, field));
+    }
+  }
+
   @override
   void dispose() {
     for (final controller in _controllers.values) {
@@ -64,14 +87,12 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
   /// item editor does it and is load-bearing rather than stylistic:
   /// writing a controller notifies, and the notify calls `setState`.
   /// Flutter permits that only while the element being dirtied is the one
-  /// currently building - true today because the body is a method on this
-  /// State, and false the moment it becomes a widget of its own, which is
-  /// the obvious next refactor for a form this size.
+  /// currently building, which a `listen` callback is not building at all.
   void _adoptStored(AlbumDetail album) {
-    for (final field in AlbumIdentityField.values) {
+    for (final field in _fields) {
       final controller = _controllers[field.wire];
       if (controller == null) continue;
-      final stored = albumIdentityValue(album, field);
+      final stored = field.stored(album);
       if (controller.text == stored) {
         _seeded[field.wire] = stored;
         continue;
@@ -85,13 +106,13 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
 
   /// Only the fields that differ from what is stored. The endpoint takes
   /// a sparse map and locks what it is sent, so sending every field would
-  /// lock five of them on a one-word change.
+  /// lock seven of them on a one-word change.
   Map<String, String> _changed(AlbumDetail album) {
     final changed = <String, String>{};
-    for (final field in AlbumIdentityField.values) {
+    for (final field in _fields) {
       final controller = _controllers[field.wire];
       if (controller == null) continue;
-      final stored = albumIdentityValue(album, field);
+      final stored = field.stored(album);
       if (controller.text != stored) changed[field.wire] = controller.text;
     }
     return changed;
@@ -133,15 +154,25 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
       onBack: () => context.leave(fallback: WaxRoute.music),
       slivers: <Widget>[
         switch (async) {
-          AsyncData(:final value) => SliverToBoxAdapter(child: _body(value)),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.musicAlbumLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(albumDetailProvider(widget.pid)),
-            ),
+          // Value first here, which is the opposite of the order the
+          // hubs use behind AsyncSliverFace, and deliberately: a hub
+          // showing rows that failed to reload may be showing something
+          // wrong, so it says so - but this form holds typing nobody
+          // else has a copy of, and replacing it with an error card
+          // over a refetch that failed would throw that away. The
+          // failure still reaches the person through the save.
+          AsyncValue(value: final album?) => SliverToBoxAdapter(
+            child: _body(album),
           ),
+          AsyncValue(hasError: true, error: final Object error) =>
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: ErrorState(
+                title: l10n.musicAlbumLoadError,
+                message: context.explain(error),
+                onRetry: () => ref.invalidate(albumDetailProvider(widget.pid)),
+              ),
+            ),
           _ => const SliverFillRemaining(
             hasScrollBody: false,
             child: SkeletonShapes(shape: SkeletonShape.list),
@@ -165,23 +196,77 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              SectionHeader(
+              _AlbumSummary(pid: widget.pid, album: album),
+              const SizedBox(height: WaxSpace.s24),
+              // The cover, through the same grid the item editor uses -
+              // set, clear, the provenance mark, and the pin that
+              // explains a release refusing every cover it is offered.
+              // Write-back rides the switch below, so embedding a cover
+              // into the member files is the same decision as embedding
+              // a barcode.
+              ArtworkManager(
+                pid: widget.pid,
+                title: album.title,
+                // Read off the identity the screen already has: a
+                // release resolves a cover whenever anything answered
+                // for it, its own or a member track's, and that is
+                // exactly what makes the front tile draw a picture
+                // rather than a monogram.
+                hasArtwork: album.artSource != null,
+                entityType: 'album',
+                writeBack: _writeBack,
+                // The summary above draws this album's resolved cover
+                // and its source mark from the detail read, which the
+                // grid knows nothing about: without this, clearing a
+                // cover leaves the mark describing a picture that is
+                // gone until the screen is left and re-entered.
+                onChanged: () =>
+                    ref.invalidate(albumDetailProvider(widget.pid)),
+              ),
+              const SizedBox(height: WaxSpace.s24),
+              _FieldSection(
+                title: l10n.musicAlbumEditorNamesTitle,
+                overline: l10n.musicAlbumEditorNamesOverline,
+                semanticsId: SemanticsIds.albumEditorNames,
+                children: <Widget>[
+                  for (final field in AlbumNameField.values)
+                    _FieldRow(
+                      label: field.labelOf(l10n),
+                      help: field.helpOf(l10n),
+                      wire: field.wire,
+                      controller: _controllerFor(
+                        field.wire,
+                        albumNameValue(album, field),
+                      ),
+                      curated: curation[field.wire],
+                      dirty: changed.containsKey(field.wire),
+                    ),
+                ],
+              ),
+              const SizedBox(height: WaxSpace.s24),
+              _FieldSection(
                 title: l10n.musicAlbumEditorSectionTitle,
                 overline: l10n.musicAlbumEditorSectionOverline,
+                children: <Widget>[
+                  for (final field in AlbumIdentityField.values)
+                    _FieldRow(
+                      label: field.labelOf(l10n),
+                      help: field.helpOf(l10n),
+                      wire: field.wire,
+                      controller: _controllerFor(
+                        field.wire,
+                        albumIdentityValue(album, field),
+                      ),
+                      curated: curation[field.wire],
+                      dirty: changed.containsKey(field.wire),
+                    ),
+                ],
               ),
-              for (final field in AlbumIdentityField.values) ...<Widget>[
-                _FieldRow(
-                  field: field,
-                  controller: _controllerFor(
-                    field.wire,
-                    albumIdentityValue(album, field),
-                  ),
-                  curated: curation[field.wire],
-                  dirty: changed.containsKey(field.wire),
-                ),
-                const SizedBox(height: WaxSpace.s12),
-              ],
-              const SizedBox(height: WaxSpace.s16),
+              const SizedBox(height: WaxSpace.s24),
+              SectionHeader(
+                title: l10n.musicAlbumEditorWriteTitle,
+                overline: l10n.musicAlbumEditorWriteOverline,
+              ),
               // The item editor's own switches, down to the semantics
               // identifiers, so they read its keys. Only the write-back
               // help differs.
@@ -280,15 +365,154 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
   }
 }
 
+/// What is being edited: the title, what the catalog knows about the
+/// release, and the tracks a write-back would reach.
+///
+/// The tracks are the point rather than decoration. "Also rewrite the
+/// matching tags in every track on this release" is a sentence about
+/// files nobody can see from here, and the count is what makes it a
+/// decision instead of a leap.
+class _AlbumSummary extends ConsumerWidget {
+  const _AlbumSummary({required this.pid, required this.album});
+
+  static const _maxTracks = 6;
+
+  final String pid;
+  final AlbumDetail album;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    final wax = context.waxL10n;
+    final tracks = albumOrder(
+      ref
+              .watch(
+                musicItemsProvider((
+                  dimension: MusicDimension.albums,
+                  segment: pid,
+                )),
+              )
+              .value
+              ?.items ??
+          const <ItemSummary>[],
+    );
+    final duration = album.totalDurationMs;
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      identifier: SemanticsIds.albumEditorTracks,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            album.title,
+            style: WaxType.titleEntity.copyWith(color: colors.textPrimary),
+          ),
+          const SizedBox(height: WaxSpace.s4),
+          Text(
+            // Joined here rather than in one ICU string, the way the
+            // album header's own caption is: a release with no year and
+            // no stored running time should read as a track count, not
+            // as two empty separators.
+            <String>[
+              if (album.year != null) '${album.year}',
+              l10n.musicTrackCount(album.itemCount ?? tracks.length),
+              if (duration != null && duration > 0)
+                formatRunningTime(wax, Duration(milliseconds: duration)),
+            ].join(' · '),
+            style: WaxType.caption.copyWith(color: colors.textSecondary),
+          ),
+          // The mark under the cover the release actually resolves. The
+          // grid below reports each slot's own; this is the one the
+          // album shows, borrow note included.
+          if (artSourceLabelWithBorrow(l10n, album.artSource)
+              case final source?) ...<Widget>[
+            const SizedBox(height: WaxSpace.s4),
+            Text(
+              source,
+              style: WaxType.caption.copyWith(color: colors.textTertiary),
+            ),
+          ],
+          if (tracks.isNotEmpty) ...<Widget>[
+            const SizedBox(height: WaxSpace.s16),
+            SectionHeader(
+              title: l10n.musicAlbumEditorTracksTitle,
+              overline: l10n.musicAlbumEditorTracksOverline,
+            ),
+            for (final track in tracks.take(_maxTracks))
+              Text(
+                track.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WaxType.caption.copyWith(color: colors.textSecondary),
+              ),
+            if (tracks.length > _maxTracks)
+              Text(
+                l10n.musicAlbumEditorTracksMore(tracks.length - _maxTracks),
+                style: WaxType.caption.copyWith(color: colors.textTertiary),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A titled run of fields. One wrapper, so the two groups sit at the
+/// same rhythm as the artwork grid and the switches around them.
+class _FieldSection extends StatelessWidget {
+  const _FieldSection({
+    required this.title,
+    required this.overline,
+    required this.children,
+    this.semanticsId,
+  });
+
+  final String title;
+  final String overline;
+  final List<Widget> children;
+  final String? semanticsId;
+
+  @override
+  Widget build(BuildContext context) {
+    final section = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        SectionHeader(title: title, overline: overline),
+        for (final child in children) ...<Widget>[
+          child,
+          const SizedBox(height: WaxSpace.s12),
+        ],
+      ],
+    );
+    if (semanticsId == null) return section;
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      identifier: semanticsId,
+      child: section,
+    );
+  }
+}
+
 class _FieldRow extends StatelessWidget {
   const _FieldRow({
-    required this.field,
+    required this.label,
+    required this.help,
+    required this.wire,
     required this.controller,
     required this.curated,
     required this.dirty,
   });
 
-  final AlbumIdentityField field;
+  final String label;
+  final String help;
+
+  /// The endpoint's own name for the field, which is also the handle
+  /// its input carries and the key its curation row is filed under.
+  final String wire;
+
   final TextEditingController controller;
 
   /// The curation row, when a user has already set this field. Its lock
@@ -307,10 +531,10 @@ class _FieldRow extends StatelessWidget {
       children: <Widget>[
         Expanded(
           child: WaxTextField(
-            label: field.labelOf(l10n),
-            hint: field.helpOf(l10n),
+            label: label,
+            hint: help,
             controller: controller,
-            semanticsId: SemanticsIds.metadataField(field.wire),
+            semanticsId: SemanticsIds.metadataField(wire),
           ),
         ),
         const SizedBox(width: WaxSpace.s8),
@@ -333,9 +557,7 @@ class _FieldRow extends StatelessWidget {
                     size: 16,
                     color: colors.accent,
                     active: true,
-                    semanticLabel: l10n.musicAlbumEditorFieldLocked(
-                      field.labelOf(l10n),
-                    ),
+                    semanticLabel: l10n.musicAlbumEditorFieldLocked(label),
                   ),
                 ),
             ],

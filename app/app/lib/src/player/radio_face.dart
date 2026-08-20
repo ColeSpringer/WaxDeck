@@ -52,30 +52,25 @@ class RadioFace extends ConsumerWidget {
             ((snapshot.data ?? engine.playing) || playback.starting) &&
             !blocked;
         // The song's cover when the server matched one, the logo
-        // otherwise. Only here: a bar whose picture changed every few
-        // minutes would read as the station changing.
-        final cover = waxArtwork(
+        // otherwise, and the shape that suits whichever answered. The
+        // deck bar and the mini window draw the same thing through the
+        // same mapping: a cover worth showing full screen is worth
+        // showing on the bar the face collapses into.
+        final art = waxRadioArtwork(
           ref.watch(artworkStoreProvider),
+          ref.watch(repositoryProvider),
+          station,
           ref.watch(radioNowPlayingArtProvider),
         );
-        // Which rung answered decides the shape. A circle suits a
-        // station logo and the wordmark; a sleeve cropped to one loses
-        // its corners, which is most of an album cover.
-        final onTheRecord = cover != null;
+        final onTheRecord = art.onTheRecord;
         return PlayerScaffold(
           ids: radioPlayerIds,
           now: NowPlayingData(
             title: station.name,
             subtitle: playback.nowPlaying,
-            artwork:
-                cover ??
-                waxStationLogo(
-                  ref.watch(artworkStoreProvider),
-                  ref.watch(repositoryProvider),
-                  station,
-                ),
+            artwork: art.artwork,
             domain: WaxDomain.radio,
-            shape: onTheRecord ? ArtworkShape.square : ArtworkShape.circle,
+            shape: art.shape,
             position: Duration.zero,
             duration: Duration.zero,
             live: true,
@@ -86,7 +81,7 @@ class RadioFace extends ConsumerWidget {
           // provider answered for a parsed title. It says so, and only
           // while it is that cover - the station logo underneath is the
           // station's own and carries no mark.
-          artworkCaption: cover == null
+          artworkCaption: !onTheRecord
               ? null
               : artSourceLabelWithBorrow(
                   context.l10n,

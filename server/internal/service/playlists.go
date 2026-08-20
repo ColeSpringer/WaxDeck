@@ -1103,17 +1103,49 @@ func (l *Library) CreatePlaylist(ctx context.Context, uc *UserCtx, req PlaylistC
 		if err != nil {
 			return Playlist{}, err
 		}
-		// A dry-run evaluation surfaces engine-level rejections (a bad
-		// tag key, an unsortable sort) at write time, per the contract.
-		if _, err := l.lib.Count(ctx, q, owner); err != nil {
-			return Playlist{}, classify(err)
-		}
-		pid, err = l.lib.Playlists().CreateSmart(ctx, name, owner, vis, q)
-		if err != nil {
-			return Playlist{}, classify(err)
-		}
+		return l.createSmartFromQuery(ctx, uc, name, vis, q)
 	default:
 		return Playlist{}, errInvalid("kind must be static or smart")
+	}
+	pl, err := l.lib.Playlists().Get(ctx, pid)
+	if err != nil {
+		return Playlist{}, classify(err)
+	}
+	// Cover the playlist now rather than on its first open, so a list
+	// created from a selection is not a blank tile on the grid it lands
+	// back on.
+	l.refreshPlaylistCover(ctx, pl)
+	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pid))
+	return l.playlistDTO(ctx, uc, pl, true, nil), nil
+}
+
+// createSmartFromQuery stores one smart playlist from an engine query
+// already in hand, and is the single smart-create path: the wire rule
+// converts to a query and lands here, and so does an NSP document,
+// which WaxBin's importer hands over as a query directly.
+//
+// Taking a query rather than a wire rule is what lets the NSP import
+// skip a round trip through the wire vocabulary. That round trip is not
+// merely wasted: the engine accepts field aliases the wire table does
+// not list (`albumartist` beside `album_artist`), so a query WaxBin
+// built correctly can fail a conversion back to a rule the editor would
+// render.
+func (l *Library) createSmartFromQuery(
+	ctx context.Context,
+	uc *UserCtx,
+	name string,
+	vis model.PlaylistVisibility,
+	q query.Query,
+) (Playlist, error) {
+	owner := model.PID(uc.CatalogPID)
+	// A dry-run evaluation surfaces engine-level rejections (a bad tag
+	// key, an unsortable sort) at write time, per the contract.
+	if _, err := l.lib.Count(ctx, q, owner); err != nil {
+		return Playlist{}, classify(err)
+	}
+	pid, err := l.lib.Playlists().CreateSmart(ctx, name, owner, vis, q)
+	if err != nil {
+		return Playlist{}, classify(err)
 	}
 	pl, err := l.lib.Playlists().Get(ctx, pid)
 	if err != nil {

@@ -13,6 +13,7 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
+import '../shell/async_sliver_face.dart';
 import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -51,8 +52,13 @@ class PodcastsScreen extends ConsumerWidget {
       ],
       slivers: <Widget>[
         const SliverToBoxAdapter(child: _UpNextShelf()),
-        switch (subscriptions) {
-          AsyncData(:final value) when value.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<List<Subscription>>(
+          state: subscriptions,
+          skeleton: SkeletonShape.grid,
+          errorTitle: l10n.podcastsLoadError,
+          onRetry: () => ref.invalidate(subscriptionsProvider),
+          isEmpty: (value) => value.isEmpty,
+          empty: (context) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.podcastsEmptyTitle,
@@ -65,21 +71,9 @@ class PodcastsScreen extends ConsumerWidget {
               ),
             ),
           ),
-          AsyncData(:final value) => _Subscriptions(
-            subscriptions: sortSubscriptions(value, sort),
-          ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.podcastsLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(subscriptionsProvider),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.grid),
-          ),
-        },
+          builder: (context, value) =>
+              _Subscriptions(subscriptions: sortSubscriptions(value, sort)),
+        ),
         const SliverToBoxAdapter(child: _LatestEpisodes()),
       ],
     );

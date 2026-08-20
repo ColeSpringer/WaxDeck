@@ -58,13 +58,18 @@ type Handler struct {
 	version string
 	log     *slog.Logger
 
-	// The full-visibility grouped index, cached against the catalog
-	// feed position (polling clients browse far more often than the
-	// catalog changes). Read-only once built, so it is shared across
-	// requests.
+	// The grouped index, cached against the catalog feed position
+	// (polling clients browse far more often than the catalog
+	// changes). Read-only once built, so an entry is shared across
+	// requests. idxShared is the full-visibility view; idxScoped holds
+	// one entry per distinct library grant set, which is what keeps a
+	// restricted account's client walk from paying a whole-catalog
+	// sweep per page. Both generations are stamped with the same
+	// idxTail and so drop together.
 	idxMu     sync.Mutex
 	idxTail   int64
 	idxShared *index
+	idxScoped map[string]*index
 
 	// Playlist totals for the list response, which has no members to add
 	// up.
@@ -772,41 +777,119 @@ func (idx *index) albumForTrack(tr track) *album {
 	return idx.albumByTrack[tr.PID]
 }
 
-// index returns the grouped view over the service's track sweep. The
-// full-visibility view is cached against the catalog feed position,
-// mirroring the sweep's own cache; restricted callers group per request
-// over their filtered sweep, keeping visibility exact.
+// idxScopedCap bounds the per-grant-set cache. An entry holds the whole
+// sweep it grouped, and only the full-visibility sweep is cached in the
+// service beneath, so each scoped entry is an unshared copy of most of
+// the catalog. That makes this a memory cap rather than a hit rate:
+// four is chosen against the resident cost, not against how many
+// accounts are browsing, and every restricted account sharing one grant
+// set shares one entry.
+const idxScopedCap = 4
+
+// indexScope identifies the visibility an index was built for: empty
+// for a full-visibility caller, otherwise the caller's sorted library
+// grants joined behind a prefix, so an account granted nothing does not
+// read as an administrator. Library pids are ULIDs, so the comma
+// cannot appear inside one and the join is unambiguous.
+//
+// The grant set is the complete key because it is the sweep's only
+// per-caller input: sweepTrackFacts filters on itemVisible, which
+// consults uc.Libraries and nothing else. A second input added there -
+// content rules, a per-account filter - has to be added here in the
+// same change, or one account reads another's index.
+func indexScope(uc *service.UserCtx) string {
+	if uc.AllLibraries {
+		return ""
+	}
+	libs := make([]string, 0, len(uc.Libraries))
+	for lib, granted := range uc.Libraries {
+		if granted {
+			libs = append(libs, lib)
+		}
+	}
+	sort.Strings(libs)
+	return "r:" + strings.Join(libs, ",")
+}
+
+// index returns the grouped view over the service's track sweep,
+// cached against the catalog feed position for every caller. A
+// restricted caller's entry is keyed on their grants as well, which
+// keeps visibility exact - the sweep it caches is already filtered -
+// while letting a client that pages hard read one build instead of one
+// per page.
 func (h *Handler) index(ctx context.Context, uc *service.UserCtx) (*index, error) {
-	build := func() (*index, error) {
-		rows, err := h.svc.TrackFacts(ctx, uc)
-		if err != nil {
-			return nil, err
-		}
-		names, err := h.entityNames(ctx, rows)
-		if err != nil {
-			return nil, err
-		}
-		return buildIndex(rows, names), nil
-	}
-	if !uc.AllLibraries {
-		return build()
-	}
 	tail := h.svc.CatalogTailSeq()
-	h.idxMu.Lock()
-	if h.idxShared != nil && h.idxTail == tail {
-		idx := h.idxShared
-		h.idxMu.Unlock()
+	scope := indexScope(uc)
+	if idx := h.cachedIndex(tail, scope); idx != nil {
 		return idx, nil
 	}
-	h.idxMu.Unlock()
-	idx, err := build()
+	rows, err := h.svc.TrackFacts(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
-	h.idxMu.Lock()
-	h.idxTail, h.idxShared = tail, idx
-	h.idxMu.Unlock()
+	names, err := h.entityNames(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	idx := buildIndex(rows, names)
+	// The catalog position is re-read rather than trusted: a sweep takes
+	// time, and during a scan the tail moves throughout it. A build that
+	// finished against a position the catalog has already left can never
+	// be served - readers match on the current tail - and caching it
+	// would stamp the whole cache with a stale generation and throw away
+	// every entry built since.
+	if h.svc.CatalogTailSeq() == tail {
+		h.cacheIndex(tail, scope, idx)
+	}
 	return idx, nil
+}
+
+// cachedIndex reads the entry for this tail and scope, or nil.
+func (h *Handler) cachedIndex(tail int64, scope string) *index {
+	h.idxMu.Lock()
+	defer h.idxMu.Unlock()
+	if h.idxTail != tail {
+		return nil
+	}
+	if scope == "" {
+		return h.idxShared
+	}
+	return h.idxScoped[scope]
+}
+
+// cacheIndex stores one built index under the catalog generation it was
+// built for. Callers store only a build that is still current (see
+// index); a tail that differs from the cached one is therefore a newer
+// generation, and the shared view and every scoped one are stale
+// together, so they drop together.
+func (h *Handler) cacheIndex(tail int64, scope string, idx *index) {
+	h.idxMu.Lock()
+	defer h.idxMu.Unlock()
+	if h.idxTail != tail {
+		h.idxTail, h.idxShared, h.idxScoped = tail, nil, nil
+	}
+	if scope == "" {
+		h.idxShared = idx
+		return
+	}
+	if h.idxScoped == nil {
+		h.idxScoped = make(map[string]*index, idxScopedCap)
+	}
+	// Evict one rather than clearing the map: unlike the playlist totals
+	// beside it, an entry here costs a whole-catalog sweep to rebuild,
+	// so throwing away three good ones to make room for a fourth is the
+	// expensive answer. Re-caching a scope already held replaces it and
+	// needs no room made, which is why the cap is checked against the
+	// entry rather than against the map alone.
+	if _, held := h.idxScoped[scope]; !held {
+		for len(h.idxScoped) >= idxScopedCap {
+			for k := range h.idxScoped {
+				delete(h.idxScoped, k)
+				break
+			}
+		}
+	}
+	h.idxScoped[scope] = idx
 }
 
 // entityNames resolves the catalog's display name for every artist and

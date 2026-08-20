@@ -2721,6 +2721,30 @@ abstract class AppLocalizations {
   /// **'Drop an image into {slot}'**
   String artworkDropHint(String slot);
 
+  /// Help under the cover pin switch. The second sentence is the whole reason the pin is visible: a cleared-and-pinned cover refuses every later write.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeps this cover through scans and enrichment runs. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.'**
+  String get artworkLockHelp;
+
+  /// Confirmation after pinning a cover.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover pinned'**
+  String get artworkLockPinned;
+
+  /// Switch over an album or artist cover: keep the picture through scans and enrichment runs.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin this cover'**
+  String get artworkLockTitle;
+
+  /// Confirmation after unpinning a cover.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover unpinned'**
+  String get artworkLockUnpinned;
+
   /// Message after several images were dropped on one slot. {slot} is the slot's name and {file} the one that was taken.
   ///
   /// In en, this message translates to:
@@ -5811,6 +5835,18 @@ abstract class AppLocalizations {
   /// **'From tags'**
   String get musicAlbumEditorFromTags;
 
+  /// Overline over the sort name and MusicBrainz ID fields.
+  ///
+  /// In en, this message translates to:
+  /// **'How this release files and matches'**
+  String get musicAlbumEditorNamesOverline;
+
+  /// Section over the sort name and MusicBrainz ID fields.
+  ///
+  /// In en, this message translates to:
+  /// **'Name and identifier'**
+  String get musicAlbumEditorNamesTitle;
+
   /// Save button on the album editor, counting the fields that differ from what is stored.
   ///
   /// In en, this message translates to:
@@ -5835,11 +5871,41 @@ abstract class AppLocalizations {
   /// **'Release identity'**
   String get musicAlbumEditorSectionTitle;
 
+  /// Line under a truncated track list.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{and 1 more} other{and {count} more}}'**
+  String musicAlbumEditorTracksMore(int count);
+
+  /// Overline over the track list, naming why it is shown: write-back rewrites tags in every one of them.
+  ///
+  /// In en, this message translates to:
+  /// **'What a write-back reaches'**
+  String get musicAlbumEditorTracksOverline;
+
+  /// Section over the track list an album edit reaches.
+  ///
+  /// In en, this message translates to:
+  /// **'On this release'**
+  String get musicAlbumEditorTracksTitle;
+
   /// Help under the write-tags switch on the album editor.
   ///
   /// In en, this message translates to:
   /// **'Also rewrite the matching tags in every track on this release. Media has no tag form and stays here.'**
   String get musicAlbumEditorWriteBackHelp;
+
+  /// Overline over the write-back, lock, and force switches.
+  ///
+  /// In en, this message translates to:
+  /// **'Where the values land, and what they overrule'**
+  String get musicAlbumEditorWriteOverline;
+
+  /// Section over the write-back, lock, and force switches.
+  ///
+  /// In en, this message translates to:
+  /// **'How this edit is written'**
+  String get musicAlbumEditorWriteTitle;
 
   /// Message under the empty state of an album, saying why it is empty.
   ///
@@ -6045,6 +6111,18 @@ abstract class AppLocalizations {
   /// **'The issuing label'**
   String get musicFieldLabelHelp;
 
+  /// The album's identifier at MusicBrainz.
+  ///
+  /// In en, this message translates to:
+  /// **'MusicBrainz release ID'**
+  String get musicFieldMbid;
+
+  /// Help under the MusicBrainz release ID field.
+  ///
+  /// In en, this message translates to:
+  /// **'The identifier this release matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.'**
+  String get musicFieldMbidHelp;
+
   /// What a release was pressed on, on the release editor and on the album screen.
   ///
   /// In en, this message translates to:
@@ -6056,6 +6134,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'What it was pressed on - CD, 2xVinyl, Digital Media'**
   String get musicFieldMediaHelp;
+
+  /// The album's filing name, as against its title.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort name'**
+  String get musicFieldSort;
+
+  /// Help under the sort name field.
+  ///
+  /// In en, this message translates to:
+  /// **'How this release files in an A-to-Z list. Empty files it under its title.'**
+  String get musicFieldSortHelp;
 
   /// Accessible name of the add control on the music hub, and the button on its first-run invitation. Both open the sheet that adds files.
   ///

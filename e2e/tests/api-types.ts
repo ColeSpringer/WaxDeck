@@ -2707,6 +2707,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/playlists/nsp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import a Navidrome smart playlist (NSP)
+         * @description Creates a **smart** playlist from an NSP document, which is the request body itself. The document's `name` names the playlist (the `name` parameter overrides it, and is what lets a nameless document be imported) and `public` sets its visibility; `comment` is read and discarded, since a WaxDeck playlist has no comment.
+         *
+         *     Fields map onto the rule vocabulary (`GET /playlists/rule-fields`): `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `playCount` by name, plus `dateAdded` to `addedAt`, `lastPlayed` to `lastPlayedAt`, `filepath` to `path`, `loved` to `starred`, `duration` to `durationMs`, and `rating`. Two of those carry different units on each side and are **rescaled**: NSP counts duration in seconds where WaxDeck counts milliseconds, and rates 0 to 5 where WaxDeck rates 0 to 100, so an unscaled `rating gt 3` would mean "rated above 3 out of 100", which is every rated track.
+         *
+         *     `notContains` imports as a `not` node wrapping `contains`; every other operator has a WaxDeck spelling of the same name.
+         *
+         *     Fields map onto the catalog's own rule vocabulary: `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `tracknumber`, `discnumber`, `playcount`, `starred`, and `rating`, plus `dateAdded` and `lastPlayed` under the relative operators. `rating` is **rescaled**: Navidrome rates 0 to 5 where the catalog rates 0 to 100, so an unscaled `rating gt 3` would mean "rated above 3 out of 100", which is every rated track.
+         *
+         *     Mapping is **all-or-nothing**. A field, an operator, or a top-level key with no faithful counterpart rejects the whole document, naming the offender, rather than importing a rule that means something else - a document that imported as a quietly different playlist is worse than one that did not import. That covers fields the catalog has no answer for (`bitrate`, `size`, `bpm`, the `mbz_*` identifiers, and the rest), `limitPercent` and any other unrecognised top-level key, `inPlaylist`/`notInPlaylist`, and the absolute date operators (`before`, `after`, `is`) on `dateAdded` and `lastPlayed`, whose naive local dates have no faithful reading against the catalog's stored instants. `sort: random` maps to the random limit mode and needs a positive `limit`.
+         */
+        post: operations["importPlaylistNsp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/playlists/{pid}": {
         parameters: {
             query?: never;
@@ -2795,6 +2823,30 @@ export interface paths {
          * @description The playlist as an M3U8 document, for interop with path-based players. Entries are the cataloged display paths (absolute server-side paths); exposing them is deliberate, since playlists reach only this server's own users and path-based interop is the point of the format. A smart playlist exports its current evaluation. The import side matches by exact path or unique relative-path suffix, so documents exported from a differently-rooted server still resolve.
          */
         get: operations["exportPlaylistM3u"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/playlists/{pid}/nsp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export a smart playlist as NSP
+         * @description The playlist's rule as a Navidrome smart playlist document. A static playlist has no rule and answers `feature-unavailable`.
+         *
+         *     Export is **all-or-nothing**, like the import: a rule holding anything NSP cannot say is refused with the offender named, rather than written as a document that means something else. WaxDeck's rule vocabulary is the larger one, so this is the common answer for a rule built in the editor. `notContains` is the only negation NSP can carry, so every other `not` refuses; `gte`, `lte`, `isPresent`, and `isMissing` have no NSP form; the `minutes` and `megabytes` limit modes and a pinned random seed have none; a rating that is not a whole number of stars has none; and neither do the fields NSP does not carry (`mediaType`, `state`, `source`, `container`, `codec`, `podcast`, `season`, `publishedAt`, `updatedAt`, `starredAt`, `played`, `finished`, the album identity fields, `tag.KEY`, and `playlist`).
+         *
+         *     The response carries the playlist's own `name`, and `public` when it is shared - neither is part of the rule.
+         */
+        get: operations["exportPlaylistNsp"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7741,6 +7793,10 @@ export interface components {
             items: components["schemas"]["ItemSummary"][];
             /** @description Total items the condition tree matches for the caller, ignoring the rule's `limit`, so editors can render "matches N items, keeping the first L". */
             total: number;
+        };
+        /** @description A Navidrome smart playlist (NSP) document, carried verbatim: `name`, `comment`, `public`, one of the mutually exclusive `all` / `any` condition groups, `sort`, `order`, and `limit`. Free-form on purpose - the grammar is another server's, and pinning its shape here would make every change over there a breaking change over here. What WaxDeck does and does not read is described on the two operations that carry it. */
+        NspDocument: {
+            [key: string]: unknown;
         };
         /** @description An M3U8 document to import as a static playlist. */
         M3uImport: {
@@ -14215,6 +14271,37 @@ export interface operations {
             503: components["responses"]["CatalogMaintenance"];
         };
     };
+    importPlaylistNsp: {
+        parameters: {
+            query?: {
+                /** @description Name for the created playlist, overriding the document's own. Required when the document carries no `name`. */
+                name?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The NSP document, at most 1 MiB. A free-form object carries no `maxLength`, so the bound is enforced on the way in and answers `invalid-request`. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NspDocument"];
+            };
+        };
+        responses: {
+            /** @description The created smart playlist. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Playlist"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
     getPlaylist: {
         parameters: {
             query?: never;
@@ -14442,6 +14529,33 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    exportPlaylistNsp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The NSP document. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NspDocument"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            501: components["responses"]["FeatureUnavailable"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };

@@ -6,7 +6,9 @@ import '../icons/wax_icon.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
+import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
+import 'controls.dart';
 import 'view_data.dart';
 
 /// Artwork with its placeholder, its shape, and its resume ring.
@@ -33,6 +35,8 @@ class ArtworkImage extends StatelessWidget {
     this.progress,
     this.dimmed = false,
     this.semanticLabel,
+    this.onPlay,
+    this.playLabel,
     super.key,
   });
 
@@ -60,6 +64,20 @@ class ArtworkImage extends StatelessWidget {
   final bool dimmed;
 
   final String? semanticLabel;
+
+  /// What to play when the artwork is the thing that plays. Opt-in per
+  /// call site, and deliberately so: a cover in an editor, a settings
+  /// row, or an artwork manager is a picture rather than a control, and
+  /// a play button over it would be a lie.
+  ///
+  /// Drawn only while a pointer is over the artwork, which is what makes
+  /// it free on touch: a `MouseRegion` reports no hover to a finger, so
+  /// no affordance appears and nothing takes a tap the card wanted.
+  final VoidCallback? onPlay;
+
+  /// The spoken name for that control. Required alongside [onPlay]: the
+  /// component knows the picture, not what it is a picture of.
+  final String? playLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -166,11 +184,114 @@ class ArtworkImage extends StatelessWidget {
             );
     }
 
-    if (semanticLabel != null) {
-      return Semantics(image: true, label: semanticLabel, child: art);
-    }
-    // Artwork beside a title says nothing a screen reader needs twice.
-    return ExcludeSemantics(child: art);
+    final Widget picture = semanticLabel != null
+        ? Semantics(image: true, label: semanticLabel, child: art)
+        // Artwork beside a title says nothing a screen reader needs twice.
+        : ExcludeSemantics(child: art);
+    if (onPlay == null) return picture;
+    // Outside the picture's own semantics, not inside: the affordance is
+    // a control and keeps its name, where the image it sits on has none
+    // to give. A caller that hides its whole subtree - a card announcing
+    // itself as one node - still hides this, which is its call to make.
+    return _HoverPlay(
+      onPlay: onPlay!,
+      label: playLabel ?? '',
+      radius: radius,
+      child: picture,
+    );
+  }
+}
+
+/// The play affordance [ArtworkImage.onPlay] draws: a scrim and a glyph
+/// that fade in under a pointer.
+///
+/// Built either way and faded rather than created on hover, which pops.
+/// Ignoring pointers while faded out is what keeps the artwork's own
+/// gesture - the card's tap, the row's - reaching it untouched.
+class _HoverPlay extends StatefulWidget {
+  const _HoverPlay({
+    required this.onPlay,
+    required this.label,
+    required this.radius,
+    required this.child,
+  });
+
+  final VoidCallback onPlay;
+  final String label;
+  final double radius;
+  final Widget child;
+
+  @override
+  State<_HoverPlay> createState() => _HoverPlayState();
+}
+
+class _HoverPlayState extends State<_HoverPlay> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final motion = WaxMotion.of(context);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Stack(
+        children: <Widget>[
+          widget.child,
+          Positioned.fill(
+            // Out of the focus tree while it is invisible, not just out
+            // of the hit test. IgnorePointer and a zero opacity stop it
+            // being seen or clicked, and neither stops it being tabbed
+            // to - so a grid of cards became a run of invisible stops
+            // where Enter starts playback with nothing on screen to say
+            // why. The card itself is the keyboard path, and it already
+            // activates.
+            child: ExcludeFocus(
+              excluding: !_hovered,
+              child: IgnorePointer(
+                ignoring: !_hovered,
+                child: AnimatedOpacity(
+                  opacity: _hovered ? 1 : 0,
+                  duration: motion.quick,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(widget.radius),
+                    child: ColoredBox(
+                      // Not overly intrusive: enough to say the cover is a
+                      // control, and little enough that the artwork is
+                      // still the thing being looked at.
+                      color: colors.scrim.withValues(alpha: 0.35),
+                      child: Center(
+                        // On an opaque chip, on a tested surface pair, for
+                        // the reason the card's badge is: the scrim is
+                        // translucent, so a glyph in the text colour
+                        // composites to ink on ink over a dark cover in
+                        // light mode and disappears.
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: colors.surface1,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(WaxSpace.s8),
+                            child: WaxIconButton(
+                              glyph: WaxIcons.play,
+                              label: widget.label,
+                              size: 24,
+                              color: colors.textPrimary,
+                              onPressed: widget.onPlay,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

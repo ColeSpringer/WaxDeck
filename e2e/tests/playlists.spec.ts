@@ -236,3 +236,84 @@ test('a Subsonic client manages playlists, stars, scrobbles, and radio', async (
   }
 });
 
+test('a Navidrome smart playlist round-trips through NSP', async ({ app }) => {
+  await app.seed.clearPlaylistsNamed('From Navidrome');
+  await app.seed.clearPlaylistsNamed('Music only');
+
+  // A document written the way the other server writes one: a rating on
+  // its 0-5 scale, and a notContains that has no rule operator of its
+  // own.
+  const imported = await app.api.post('/playlists/nsp', {
+    data: {
+      name: 'From Navidrome',
+      all: [
+        { contains: { genre: 'Rock' } },
+        { gt: { rating: 3 } },
+        { notContains: { title: 'Live' } },
+      ],
+      sort: 'dateAdded',
+      order: 'desc',
+      limit: 25,
+    },
+  });
+  expect(imported.kind).toBe('smart');
+
+  // Out again, and the rating scale comes back down with it.
+  const exported = JSON.stringify(
+    await app.api.get('/playlists/{pid}/nsp', { path: { pid: imported.pid } }),
+  );
+  expect(exported).toContain('"rating":3');
+  expect(exported).toContain('"notContains"');
+  expect(exported).toContain('"limit":25');
+
+  // And what it wrote imports again, which is what "round trip" has to
+  // mean for a format another server reads.
+  const again = await app.api.post('/playlists/nsp', {
+    query: { name: 'Round Two' },
+    data: JSON.parse(exported),
+  });
+  expect(again.kind).toBe('smart');
+
+  // What cannot be said exactly refuses the whole document, in both
+  // directions. A field the catalog has no answer for, on the way in:
+  const refused = await app.api.raw.post('/playlists/nsp', {
+    data: { name: 'Bitrate', all: [{ gt: { bitrate: 320 } }] },
+  });
+  expect(refused.status()).toBe(400);
+  expect(await refused.text()).toContain('bitrate');
+
+  // A typo for `all` is refused rather than read as "everything": an
+  // unrecognised top-level key would otherwise import as a rule over
+  // the whole library.
+  const typo = await app.api.raw.post('/playlists/nsp', {
+    data: { name: 'Typo', alll: [{ contains: { genre: 'Rock' } }] },
+  });
+  expect(typo.status()).toBe(400);
+  expect(await typo.text()).toContain('alll');
+
+  // And a rule NSP cannot carry, on the way out. All-or-nothing: the
+  // genre condition beside it does not survive on its own.
+  const lossy = await app.api.post('/playlists', {
+    data: {
+      name: 'Music only',
+      kind: 'smart',
+      rule: {
+        root: {
+          type: 'all',
+          nodes: [
+            { type: 'condition', field: 'mediaType', op: 'is', value: 'music' },
+            { type: 'condition', field: 'genre', op: 'is', value: 'Rock' },
+          ],
+        },
+      },
+    },
+  });
+  const refusedExport = await app.api.raw.get('/playlists/{pid}/nsp', {
+    path: { pid: lossy.pid },
+  });
+  expect(refusedExport.status()).toBe(501);
+
+  await app.seed.clearPlaylistsNamed('From Navidrome');
+  await app.seed.clearPlaylistsNamed('Round Two');
+  await app.seed.clearPlaylistsNamed('Music only');
+});

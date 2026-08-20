@@ -3,7 +3,10 @@
   "ids": {
     "albumEditDetails": "album-edit-details",
     "albumEditor": "album-editor",
+    "albumEditorNames": "album-editor-names",
+    "albumEditorTracks": "album-editor-tracks",
     "albumIdentity": "album-identity",
+    "artLock": "art-lock",
     "artSlot": "art-slot-{role}",
     "artSlotClear": "art-slot-clear-{role}",
     "artSlotDrop": "art-slot-drop-{role}",

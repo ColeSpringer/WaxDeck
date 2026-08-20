@@ -11,6 +11,19 @@ note.
 
 ## WaxBin
 
+- **`ExportNSP` cannot say what it would drop.** The converter is
+  all-or-nothing in both directions, which is right for the default:
+  half a rule is a different playlist. But it leaves no way to offer
+  "export what maps and record the rest", because a caller cannot ask
+  what stopped the export without re-implementing the field and
+  operator tables to find out - which is the duplication the shared
+  converter exists to prevent. A report alongside the refusal (the
+  fields, operators, and modes with no `.nsp` form in this query) would
+  let a caller present the loss and let the person decide, with one
+  table still owning the answer. Workaround stated: WaxDeck refuses the
+  export and passes WaxBin's sentence through, which names the first
+  offender but not the whole list.
+
 - **The facade drops provenance the caller already knows.** Four write
   paths stamp `user` unconditionally even though the store layer under
   them is built to carry the real answer. `SetItemArt` and

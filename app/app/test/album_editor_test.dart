@@ -228,6 +228,82 @@ void main() {
     );
   });
 
+  testWidgets('the album says what it is before it offers to change it', (
+    tester,
+  ) async {
+    // The complaint the rebuild answers: five text fields and a Save,
+    // with no cover, no title, and no sign of what an edit reaches.
+    final repo = _repo(
+      album: const AlbumDetail(
+        pid: _album,
+        title: 'Long Exposure',
+        year: 1975,
+        itemCount: 2,
+        totalDurationMs: 2460000,
+      ),
+    );
+    repo.facetItems['album ${_album.substring(3)}'] = <ItemSummary>[
+      testItem('tr-A', title: 'Salt Harbour'),
+      testItem('tr-B', title: 'Nightjar'),
+    ];
+    await _pump(tester, repo);
+
+    expect(find.text('Long Exposure'), findsWidgets);
+    expect(find.textContaining('1975'), findsOneWidget);
+    expect(_byId(SemanticsIds.albumEditorTracks), findsOneWidget);
+    expect(find.text('Salt Harbour'), findsOneWidget);
+    expect(find.text('Nightjar'), findsOneWidget);
+    // The cover grid, in entity mode: the front slot is what an album
+    // holds, and the pin is what explains one refusing every cover.
+    expect(_byId(SemanticsIds.artSlot('front')), findsOneWidget);
+    expect(_byId(SemanticsIds.artLock), findsOneWidget);
+  });
+
+  testWidgets('the sort name and MusicBrainz id are editable', (tester) async {
+    // Two fields the endpoint has always taken and the screen never
+    // offered, so the only way to set them was another client.
+    final repo = _repo(
+      album: const AlbumDetail(
+        pid: _album,
+        title: 'Long Exposure',
+        sortKey: 'Long Exposure',
+      ),
+    );
+    await _pump(tester, repo);
+
+    expect(_byId(SemanticsIds.albumEditorNames), findsOneWidget);
+    expect(_byId(SemanticsIds.metadataField('sort')), findsOneWidget);
+    expect(_byId(SemanticsIds.metadataField('mbid')), findsOneWidget);
+
+    await tester.enterText(
+      _byId(SemanticsIds.metadataField('mbid')),
+      '1f3a9d2e-0000-4000-8000-abcdefabcdef',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.metadataSave));
+    await tester.pumpAndSettle();
+
+    expect(repo.entityEdits, hasLength(1));
+    expect(repo.entityEdits.single.edits, <String, String>{
+      'mbid': '1f3a9d2e-0000-4000-8000-abcdefabcdef',
+    });
+  });
+
+  testWidgets('the cover pin is written through the entity endpoint', (
+    tester,
+  ) async {
+    // The one way out of a cover cleared and left pinned: setting
+    // artwork cannot say "stop refusing", and clearing it again does
+    // nothing at all.
+    final repo = _repo();
+    await _pump(tester, repo);
+
+    await tester.tap(_byId(SemanticsIds.artLock));
+    await tester.pumpAndSettle();
+
+    expect(repo.entityArtworkLocks['album/$_album'], isTrue);
+  });
+
   testWidgets('a member gets the refusal rather than an editable form', (
     tester,
   ) async {

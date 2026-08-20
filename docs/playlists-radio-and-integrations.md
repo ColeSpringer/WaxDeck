@@ -49,6 +49,40 @@ place), and every playlist detail menu offers Export M3U with a copy
 button. M3U8 carries no cover: the format has no directive for one, so
 an exported playlist is text and its cover stays on the server.
 
+### Navidrome smart playlists (NSP)
+
+A rule, unlike a member list, round-trips as a rule.
+`POST /playlists/nsp` takes a Navidrome `.nsp` document as the request
+body and creates a smart playlist from it; `GET /playlists/{pid}/nsp`
+writes one back out. The conversion is the catalog's own, so the two
+servers agree about what a field means rather than drifting apart as
+either gains one.
+
+`rating` is rescaled rather than copied: Navidrome rates 0 to 5 where
+the catalog rates 0 to 100. An unscaled `rating gt 3` would mean
+"rated above 3 out of 100", which is every rated track - a playlist
+that looks imported and is not the one you had. On the way out, a
+rating that is not a whole number of stars is refused rather than
+written as a fraction Navidrome cannot mean.
+
+That is the rule for both directions: **anything that cannot be said
+exactly refuses the whole document, naming what stopped it.** Half a
+rule is a different playlist, so nothing is quietly dropped and there
+is no partial export. On import that covers fields the catalog has no
+answer for (`bitrate`, `size`, `bpm`, the `mbz_*` identifiers, and the
+rest), `limitPercent` and any other unrecognised top-level key -
+including a typo for `all`, which would otherwise import as a rule
+over your whole library - `inPlaylist`, and the absolute date
+operators, whose naive local dates have no faithful reading against
+stored instants. On export it covers what the catalog can say and NSP
+cannot, which is more: every negation but `notContains`, `gte` and
+`lte`, `isPresent` and `isMissing`, custom `tag.KEY` fields, the
+budget limit modes, and the fields NSP does not carry at all.
+
+Exporting a rule that only *partly* maps is not offered. Saying which
+parts were dropped is the converter's to report, and the ask is filed
+in `docs/upstream-requests.md`.
+
 ### Covers
 
 Every playlist gets a cover without being given one. The server tiles

@@ -61,3 +61,30 @@ WaxArtwork? waxStationLogo(
   WaxDeckRepository repository,
   RadioStation station,
 ) => store.source(repository.radioLogoUrlFor(station.pid));
+
+/// What a radio surface draws: the song's cover where the server matched
+/// one, the station's logo otherwise, with the shape that suits whichever
+/// answered. A circle suits a logo and a wordmark; a sleeve cropped to
+/// one loses its corners, which is most of an album cover.
+///
+/// Every radio surface uses it - the player face, the deck bar, and the
+/// mini window - so the cover appears wherever the station does rather
+/// than only full screen. Shared for the reason [waxStationLogo] is: one
+/// copy of this left behind is a bar that keeps drawing a logo while the
+/// face beside it draws the record.
+({WaxArtwork? artwork, ArtworkShape shape, bool onTheRecord}) waxRadioArtwork(
+  ArtworkStore store,
+  WaxDeckRepository repository,
+  RadioStation station,
+  String? nowPlayingArtUrl,
+) {
+  final cover = waxArtwork(store, nowPlayingArtUrl);
+  if (cover != null) {
+    return (artwork: cover, shape: ArtworkShape.square, onTheRecord: true);
+  }
+  return (
+    artwork: waxStationLogo(store, repository, station),
+    shape: ArtworkShape.circle,
+    onTheRecord: false,
+  );
+}

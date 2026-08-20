@@ -311,22 +311,24 @@ class _RadioDeckBar extends ConsumerWidget {
         WaxSizeClass.of(context).hasSidebar &&
         ref.watch(localVolumeAvailableProvider);
     final volume = localVolume ? ref.watch(outputVolumeProvider) : null;
+    // The song's cover where the server matched one, the station's logo
+    // otherwise - the same mapping the full-screen face uses, so what is
+    // playing is visible on the bar rather than only after expanding it.
+    final art = waxRadioArtwork(
+      ref.watch(artworkStoreProvider),
+      ref.watch(repositoryProvider),
+      station,
+      ref.watch(radioNowPlayingArtProvider),
+    );
     return _EngineTransport(
       builder: (context, playing) => DeckBar(
         ids: _ids,
         now: NowPlayingData(
           title: station.name,
           subtitle: playback.nowPlaying,
-          // Through the proxy, like the hub's tiles: the station host's own
-          // URL is the direct fetch the logo endpoint exists to replace,
-          // and on web most of them would not draw at all.
-          artwork: waxStationLogo(
-            ref.watch(artworkStoreProvider),
-            ref.watch(repositoryProvider),
-            station,
-          ),
+          artwork: art.artwork,
           domain: WaxDomain.radio,
-          shape: ArtworkShape.circle,
+          shape: art.shape,
           position: Duration.zero,
           duration: Duration.zero,
           live: true,

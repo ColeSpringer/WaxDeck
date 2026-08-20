@@ -1544,6 +1544,19 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get artworkLockHelp =>
+      'Keeps this cover through scans and enrichment runs. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.';
+
+  @override
+  String get artworkLockPinned => 'Cover pinned';
+
+  @override
+  String get artworkLockTitle => 'Pin this cover';
+
+  @override
+  String get artworkLockUnpinned => 'Cover unpinned';
+
+  @override
   String artworkOneImageOnly(String slot, String file) {
     return '$slot takes one image; using $file';
   }
@@ -3529,6 +3542,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicAlbumEditorFromTags => 'From tags';
 
   @override
+  String get musicAlbumEditorNamesOverline =>
+      'How this release files and matches';
+
+  @override
+  String get musicAlbumEditorNamesTitle => 'Name and identifier';
+
+  @override
   String musicAlbumEditorSaveChanges(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -3549,8 +3569,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicAlbumEditorSectionTitle => 'Release identity';
 
   @override
+  String musicAlbumEditorTracksMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'and $count more',
+      one: 'and 1 more',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicAlbumEditorTracksOverline => 'What a write-back reaches';
+
+  @override
+  String get musicAlbumEditorTracksTitle => 'On this release';
+
+  @override
   String get musicAlbumEditorWriteBackHelp =>
       'Also rewrite the matching tags in every track on this release. Media has no tag form and stays here.';
+
+  @override
+  String get musicAlbumEditorWriteOverline =>
+      'Where the values land, and what they overrule';
+
+  @override
+  String get musicAlbumEditorWriteTitle => 'How this edit is written';
 
   @override
   String get musicAlbumEmptyMessage =>
@@ -3719,11 +3763,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicFieldLabelHelp => 'The issuing label';
 
   @override
+  String get musicFieldMbid => 'MusicBrainz release ID';
+
+  @override
+  String get musicFieldMbidHelp =>
+      'The identifier this release matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.';
+
+  @override
   String get musicFieldMedia => 'Media';
 
   @override
   String get musicFieldMediaHelp =>
       'What it was pressed on - CD, 2xVinyl, Digital Media';
+
+  @override
+  String get musicFieldSort => 'Sort name';
+
+  @override
+  String get musicFieldSortHelp =>
+      'How this release files in an A-to-Z list. Empty files it under its title.';
 
   @override
   String get musicHubAddToLibrary => 'Add to library';

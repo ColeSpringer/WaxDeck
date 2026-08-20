@@ -36,6 +36,14 @@
   "@musicAlbumEditorFromTags": {
     "description": "Chip beside an album-editor field whose value came from the files' own tags rather than from somebody typing it."
   },
+  "musicAlbumEditorNamesOverline": "How this release files and matches",
+  "@musicAlbumEditorNamesOverline": {
+    "description": "Overline over the sort name and MusicBrainz ID fields."
+  },
+  "musicAlbumEditorNamesTitle": "Name and identifier",
+  "@musicAlbumEditorNamesTitle": {
+    "description": "Section over the sort name and MusicBrainz ID fields."
+  },
   "musicAlbumEditorSaveChanges": "{count, plural, =1{Save 1 change} other{Save {count} changes}}",
   "@musicAlbumEditorSaveChanges": {
     "description": "Save button on the album editor, counting the fields that differ from what is stored.",
@@ -57,9 +65,34 @@
   "@musicAlbumEditorSectionTitle": {
     "description": "Heading over the album editor's five fields."
   },
+  "musicAlbumEditorTracksMore": "{count, plural, =1{and 1 more} other{and {count} more}}",
+  "@musicAlbumEditorTracksMore": {
+    "description": "Line under a truncated track list.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicAlbumEditorTracksOverline": "What a write-back reaches",
+  "@musicAlbumEditorTracksOverline": {
+    "description": "Overline over the track list, naming why it is shown: write-back rewrites tags in every one of them."
+  },
+  "musicAlbumEditorTracksTitle": "On this release",
+  "@musicAlbumEditorTracksTitle": {
+    "description": "Section over the track list an album edit reaches."
+  },
   "musicAlbumEditorWriteBackHelp": "Also rewrite the matching tags in every track on this release. Media has no tag form and stays here.",
   "@musicAlbumEditorWriteBackHelp": {
     "description": "Help under the write-tags switch on the album editor."
+  },
+  "musicAlbumEditorWriteOverline": "Where the values land, and what they overrule",
+  "@musicAlbumEditorWriteOverline": {
+    "description": "Overline over the write-back, lock, and force switches."
+  },
+  "musicAlbumEditorWriteTitle": "How this edit is written",
+  "@musicAlbumEditorWriteTitle": {
+    "description": "Section over the write-back, lock, and force switches."
   },
   "musicAlbumEmptyMessage": "The tracks that were here have moved or been removed.",
   "@musicAlbumEmptyMessage": {
@@ -242,6 +275,14 @@
   "@musicFieldLabelHelp": {
     "description": "Hint under the label field in the release editor."
   },
+  "musicFieldMbid": "MusicBrainz release ID",
+  "@musicFieldMbid": {
+    "description": "The album's identifier at MusicBrainz."
+  },
+  "musicFieldMbidHelp": "The identifier this release matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.",
+  "@musicFieldMbidHelp": {
+    "description": "Help under the MusicBrainz release ID field."
+  },
   "musicFieldMedia": "Media",
   "@musicFieldMedia": {
     "description": "What a release was pressed on, on the release editor and on the album screen."
@@ -249,6 +290,14 @@
   "musicFieldMediaHelp": "What it was pressed on - CD, 2xVinyl, Digital Media",
   "@musicFieldMediaHelp": {
     "description": "Hint under the media field in the release editor. The three examples are the values MusicBrainz uses and stay as they are."
+  },
+  "musicFieldSort": "Sort name",
+  "@musicFieldSort": {
+    "description": "The album's filing name, as against its title."
+  },
+  "musicFieldSortHelp": "How this release files in an A-to-Z list. Empty files it under its title.",
+  "@musicFieldSortHelp": {
+    "description": "Help under the sort name field."
   },
   "musicHubAddToLibrary": "Add to library",
   "@musicHubAddToLibrary": {

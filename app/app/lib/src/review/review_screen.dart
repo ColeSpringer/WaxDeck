@@ -460,7 +460,12 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     final rows = queue.value;
     if (rows != null) return _list(rows, sizeClass);
     return switch (queue) {
-      AsyncError(:final error) => Padding(
+      // hasError rather than AsyncError: Riverpod retries a failed fetch
+      // on its own, and a retry in flight is an AsyncLoading still
+      // carrying the failure it is retrying. Matching the settled state
+      // alone drops the error card to a skeleton for as long as the
+      // fetch keeps failing, which is exactly when it must not.
+      AsyncValue(hasError: true, error: final Object error) => Padding(
         padding: sizeClass.gutter,
         child: ErrorState(
           title: context.l10n.reviewLoadError,

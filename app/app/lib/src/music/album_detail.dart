@@ -79,6 +79,41 @@ enum AlbumIdentityField {
   };
 }
 
+/// The album's own name and handle, as against its edition.
+///
+/// Its own enumeration rather than two more [AlbumIdentityField] rows,
+/// because the two lists answer to different surfaces: the album header
+/// draws the edition columns and would be wrong to draw a sort key or a
+/// MusicBrainz id, which are a filing decision and a match rather than
+/// facts about the pressing. Both endpoints take them, and the editor
+/// is where they belong.
+enum AlbumNameField {
+  sort('sort'),
+  mbid('mbid');
+
+  const AlbumNameField(this.wire);
+
+  /// The field name the entity-edit endpoint takes.
+  final String wire;
+
+  String labelOf(AppLocalizations l10n) => switch (this) {
+    AlbumNameField.sort => l10n.musicFieldSort,
+    AlbumNameField.mbid => l10n.musicFieldMbid,
+  };
+
+  String helpOf(AppLocalizations l10n) => switch (this) {
+    AlbumNameField.sort => l10n.musicFieldSortHelp,
+    AlbumNameField.mbid => l10n.musicFieldMbidHelp,
+  };
+}
+
+/// This album's stored value for one name field.
+String albumNameValue(AlbumDetail album, AlbumNameField field) =>
+    switch (field) {
+      AlbumNameField.sort => album.sortKey ?? '',
+      AlbumNameField.mbid => album.mbid ?? '',
+    };
+
 /// This album's stored value for one identity field.
 ///
 /// Displayed verbatim, never re-validated here: a scan stores the tag as

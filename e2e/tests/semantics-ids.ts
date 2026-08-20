@@ -307,7 +307,10 @@ export const SemanticsIds = {
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
   albumEditDetails: 'album-edit-details',
   albumEditor: 'album-editor',
+  albumEditorNames: 'album-editor-names',
+  albumEditorTracks: 'album-editor-tracks',
   albumIdentity: 'album-identity',
+  artLock: 'art-lock',
   artSlot: (role: string | number) => `art-slot-${role}`,
   artSlotClear: (role: string | number) => `art-slot-clear-${role}`,
   artSlotDrop: (role: string | number) => `art-slot-drop-${role}`,

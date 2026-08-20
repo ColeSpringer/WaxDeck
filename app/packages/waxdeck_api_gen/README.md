@@ -490,11 +490,13 @@ Class | Method | HTTP request | Description
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**createPlaylist**](doc/PlaylistsApi.md#createplaylist) | **POST** /playlists | Create a playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**deletePlaylist**](doc/PlaylistsApi.md#deleteplaylist) | **DELETE** /playlists/{pid} | Delete a playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**exportPlaylistM3u**](doc/PlaylistsApi.md#exportplaylistm3u) | **GET** /playlists/{pid}/m3u | Export a playlist as M3U8
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**exportPlaylistNsp**](doc/PlaylistsApi.md#exportplaylistnsp) | **GET** /playlists/{pid}/nsp | Export a smart playlist as NSP
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**exportPlaylistPortable**](doc/PlaylistsApi.md#exportplaylistportable) | **GET** /playlists/{pid}/portable | Export a playlist as portable refs
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**getPlaylist**](doc/PlaylistsApi.md#getplaylist) | **GET** /playlists/{pid} | Get one playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**getRuleFields**](doc/PlaylistsApi.md#getrulefields) | **GET** /playlists/rule-fields | Discover smart rule fields
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**importPlaylist**](doc/PlaylistsApi.md#importplaylist) | **POST** /playlists/import | Import a streaming-service playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**importPlaylistM3u**](doc/PlaylistsApi.md#importplaylistm3u) | **POST** /playlists/m3u | Import an M3U8 playlist
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**importPlaylistNsp**](doc/PlaylistsApi.md#importplaylistnsp) | **POST** /playlists/nsp | Import a Navidrome smart playlist (NSP)
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**listPlaylistItems**](doc/PlaylistsApi.md#listplaylistitems) | **GET** /playlists/{pid}/items | List a playlist&#39;s items
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**listPlaylists**](doc/PlaylistsApi.md#listplaylists) | **GET** /playlists | List playlists visible to the caller
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**previewSmartRule**](doc/PlaylistsApi.md#previewsmartrule) | **POST** /playlists/preview | Preview a smart rule

@@ -205,12 +205,31 @@ one back" - so the slot stays empty and nothing refills it.
 
 That state - pinned with nothing behind it - is visible rather than
 silent: the artwork manager draws it as a pinned empty slot instead of
-an ordinary empty one, and
-`PUT /entities/{entityType}/{entityPid}/artwork/lock` is how an
+an ordinary empty one, and the album editor carries a **Pin this
+cover** switch over
+`PUT /entities/{entityType}/{entityPid}/artwork/lock`, which is how an
 administrator lets go of it. Playlists are refused there: a playlist's
 cover authority is its own uploaded-versus-generated marker, and
 clearing an uploaded playlist cover hands the slot back to the mosaic
 built from the members.
+
+### Editing a release
+
+An album's own fields are edited on their own screen, reached from the
+album's overflow (administrators only, because barcodes and labels are
+shared by everyone who can see the release). It opens on the album
+itself - the cover, the title, the year, the running time, and the
+tracks a write-back would reach - because "also rewrite the matching
+tags in every track on this release" is a sentence about files nobody
+can see from the form.
+
+The cover sits in the same artwork grid the item editor uses: set,
+clear, the source mark, and the pin above. Below it are the release's
+own name and handle (**Sort name** and the **MusicBrainz release ID**)
+and its edition columns (barcode, label, catalog number, media,
+country), each showing where its current value came from and whether
+it is locked. Only the fields that changed are sent, so a one-word
+correction does not lock the other six.
 
 ## The genre vocabulary
 
