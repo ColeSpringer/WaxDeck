@@ -2,7 +2,15 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
-- [8-18-2026] when you change a track and then go back it keeps playing from the spot that you were at. It should restart? We shouldn't be remembering positions of old tracks? at most we remember the position of the last track that was playing so users can continue if they needed to stop.
+- [8-21-2026] "From the file" in reference to the cover art of a music track should be changed. Not obvious what it's even talking about from the user perspective.
+
+- [8-21-2026] Fullscreen "Playing from a mix" off center.
+
+- [8-21-2026] Playing a music track from the homescreen should automatically start a mix or similar. Currently only play that singular track and stops. If fact, we should favor continuous listening in most cases. Maybe having the ability to turn off kind of like youtube music / apple music do with a simple toggle (that the client remembers).
+
+- [8-21-2026] I don't think radio listening time is counted in listening stats. 
+
+- [8-18-2026] when you change a track and then go back it keeps playing from the spot that you were at. It should restart? We shouldn't be remembering positions of old tracks? at most we remember the position of the last track that was playing so users can continue if they needed to stop. This actually occurs both ways forward and backward.
 
 - [8-18-2026] [web] music track changes repaint the entire screen when in fullscreen.
 
