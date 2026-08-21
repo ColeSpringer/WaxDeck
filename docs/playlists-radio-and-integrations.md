@@ -36,11 +36,11 @@ Sort keys and a member limit turn rules into charts: "my 25 most
 played this collection" is one condition, one sort, one limit. The
 editor previews the match count live while you build.
 
-Two honest limitations, both recorded in docs/upstream-requests.md:
-date conditions compare absolute dates (a rule meaning "recently"
-must be re-saved to move its cutoff), and saving a rule change
-reissues the playlist's internal id, which clients follow
-automatically.
+Date conditions read either way. `before`, `after` and `inTheRange`
+compare a fixed date; `inTheLast` and `notInTheLast` take a window in
+days and anchor it at read time, so "added in the last 30 days" moves
+its own cutoff and never needs re-saving. Editing a rule updates the
+playlist in place, so its pid and every link to it survive the edit.
 
 Playlists round-trip M3U8 for interop with path-based players. Import
 lives on the playlists screen (paste a file's contents; the server

@@ -578,12 +578,11 @@ func (l *Library) entityInLibraries(info *read.EntityInfo, uc *UserCtx) bool {
 // ItemDuration answers how long one visible item is, and nothing else.
 //
 // It exists so a caller that wants only this does not pay for a detail
-// read. Item below resolves the cover to caption it, which today means
-// reading the image bytes (see artSourceForRef), and the listen
-// submission path calls it once per id: a client flushing fifty offline
-// plays would otherwise read fifty full-size covers and discard every
-// byte. Same visibility rules and same not-found error as Item, so a
-// caller can swap one for the other without changing what it reports.
+// read, and the listen submission path calls it once per id: a client
+// flushing fifty offline plays would otherwise run fifty detail reads to
+// use one number from each. Same visibility rules and same not-found error
+// as Item, so a caller can swap one for the other without changing what it
+// reports.
 func (l *Library) ItemDuration(ctx context.Context, uc *UserCtx, apiItemPID string) (int64, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
@@ -711,7 +710,7 @@ func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID, role string, siz
 		Bytes:      blob.Bytes,
 		MimeType:   mime,
 		SourceHash: blob.SourceHash,
-		Source:     l.artSourceFor(ctx, ref, blob),
+		Source:     l.artSourceFor(ctx, ref, artSourceFromBlob(blob)),
 	}, nil
 }
 
@@ -724,21 +723,33 @@ const (
 	artSourceEnrichment = string(model.SourceEnrichment)
 )
 
-// artSourceFromBlob reads the provenance the resolve already carried.
-// The bytes came from one level of the fallback chain and that level's
-// attachment is what a caller marks, so a derived album cover honestly
-// reports the member track's answer rather than claiming the album made
-// the choice.
+// artSourceMark reads the provenance an art resolve carried. The picture
+// came from one level of the fallback chain and that level's attachment is
+// what a caller marks, so a derived album cover honestly reports the member
+// track's answer rather than claiming the album made the choice.
+//
+// The two reads that answer this question - the byte resolve and the
+// metadata-only one - carry the same values under different types, so each
+// gets a one-line constructor over this shared body rather than a call site
+// spelling the field list out.
 func artSourceFromBlob(blob *model.ArtBlob) ArtSourceDTO {
+	return artSourceMark(blob.Attribution, blob.Level, blob.Derived, blob.UpdatedAt)
+}
+
+func artSourceFromProvenance(prov *model.ArtProvenance) ArtSourceDTO {
+	return artSourceMark(prov.Attribution, prov.Level, prov.Derived, prov.UpdatedAt)
+}
+
+func artSourceMark(attr model.Attribution, level model.ArtEntity, derived bool, updatedAt int64) ArtSourceDTO {
 	out := ArtSourceDTO{
-		Source:    string(blob.Source),
-		Provider:  blob.Provider,
-		SourceURL: blob.SourceURL,
-		Level:     string(blob.Level),
-		Derived:   blob.Derived,
+		Source:    string(attr.Source),
+		Provider:  attr.Provider,
+		SourceURL: attr.SourceURL,
+		Level:     string(level),
+		Derived:   derived,
 	}
-	if blob.UpdatedAt != 0 {
-		out.UpdatedAt = time.Unix(0, blob.UpdatedAt).UTC()
+	if updatedAt != 0 {
+		out.UpdatedAt = time.Unix(0, updatedAt).UTC()
 	}
 	return out
 }
@@ -753,16 +764,15 @@ func artSourceFromBlob(blob *model.ArtBlob) ArtSourceDTO {
 // all, and for any failure below - a caption is not worth failing a
 // detail read over.
 //
-// This is the one place the resolve is spent on provenance alone: it
-// reads the source bytes to answer four strings, because the metadata-only
-// resolve exists inside WaxBin and is not exported. Recorded in
-// docs/upstream-requests.md; the read collapses to a row lookup once it is.
+// It walks the same chain a front-cover read walks and answers off the row
+// alone, so a detail screen that draws a caption does not pay for the
+// picture it is not going to show.
 func (l *Library) artSourceForRef(ctx context.Context, ref model.EntityRef) ArtSourceDTO {
-	blob, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, 0)
-	if err != nil || blob == nil {
+	prov, err := l.lib.ArtProvenance(ctx, ref, model.ArtRoleFront)
+	if err != nil || prov == nil {
 		return ArtSourceDTO{}
 	}
-	return l.artSourceFor(ctx, ref, blob)
+	return l.artSourceFor(ctx, ref, artSourceFromProvenance(prov))
 }
 
 // artSourceFor is the provenance a caller may be shown for one resolved
@@ -778,8 +788,7 @@ func (l *Library) artSourceForRef(ctx context.Context, ref model.EntityRef) ArtS
 // It lives here, between the resolve and every DTO, rather than at the
 // call sites: the leak this closes was four call sites wide, and a
 // fifth would not know the rule either.
-func (l *Library) artSourceFor(ctx context.Context, ref model.EntityRef, blob *model.ArtBlob) ArtSourceDTO {
-	out := artSourceFromBlob(blob)
+func (l *Library) artSourceFor(ctx context.Context, ref model.EntityRef, out ArtSourceDTO) ArtSourceDTO {
 	if out.Source != artSourceFeed || out.SourceURL == "" {
 		return out
 	}

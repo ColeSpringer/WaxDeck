@@ -170,7 +170,7 @@ func TestEditorScalarFieldsOverlay(t *testing.T) {
 		Year: 2001, TrackNo: 3, Compilation: true,
 	}
 	prov := []model.FieldProvenance{
-		{Field: "isrc", Value: "USRC17607839", Source: model.SourceUser},
+		{Field: "isrc", Value: "USRC17607839", Attribution: model.Attribution{Source: model.SourceUser}},
 		{Field: "narrator", Value: "wrong kind"},  // off-vocabulary for a track
 		{Field: "title", Value: "", Locked: true}, // lock-only row must not blank the view value
 	}

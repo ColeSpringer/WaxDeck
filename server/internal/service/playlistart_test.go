@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"testing"
 
+	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -60,7 +61,9 @@ func giveCovers(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, pi
 		if err != nil {
 			t.Fatalf("resolving %s: %v", apiPID, err)
 		}
-		if err := svc.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, raw, false, true, false); err != nil {
+		if err := svc.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, raw, waxbin.ArtEditOptions{
+			Lock: model.LockOff, Force: true,
+		}); err != nil {
 			t.Fatalf("setting art on %s: %v", apiPID, err)
 		}
 	}

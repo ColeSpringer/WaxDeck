@@ -277,13 +277,18 @@ here waits on upstream.
   the track, the artist, the album, and the timestamps that drive the
   progress bar; the image beside them is the `waxdeck` art
   asset uploaded against the Discord application (the emblem, since
-  the official mark landed), the same for every track. The two richer sources
-  named when this was first recorded are both out of reach today, and
-  for different reasons. **Cover Art Archive** needs a MusicBrainz
-  release id on the item read surface, which is an upstream ask (see
-  `docs/upstream-requests.md`): `model.ItemView` carries no MBID, which
-  is the same wall the `missing-mbid` health check ran into
-  (`server/internal/service/health.go`). **The tokenized `/media/art`**
+  the official mark landed), the same for every track. Of the two richer
+  sources named when this was first recorded, one has since come within
+  reach. **Cover Art Archive** was blocked on a MusicBrainz release id
+  the catalog would not project; that upstream ask landed, `model.ItemView`
+  now carries `MBID`, `AlbumMBID` and `ReleaseGroupMBID`, and the
+  `missing-mbid` health rule already reads the first of them
+  (`server/internal/service/health.go`). What is left is WaxDeck's own
+  contract: `mbid` is on the album schema, and the binder holds playback
+  state, so it would take an album mbid on the surface the player reads -
+  or an album detail read per track - before a `coverartarchive.org` URL
+  could be built. That is a spec change and a binder change, not a wall.
+  **The tokenized `/media/art`**
   a cast receiver uses would work on an instance the internet can reach,
   but the token is minted per play-info and the presence binder does not
   hold one: `PlaybackSession` fetches its `PlayInfo`, uses the stream
@@ -777,6 +782,24 @@ here waits on upstream.
 
 ## Discovery and stats
 
+- `[in-repo]` **The album pid is a seed and a share target the clients
+  never send.** Both surfaces take one server-side and neither app offers
+  the action. `POST /mixes/instant` accepts an album `seedPid` and
+  `albumMix` anchors the centroid on the album's own tracks
+  (`service/discovery.go`); `POST /shares` accepts an `al-` pid and an
+  album share serves its tracks in disc-then-track order
+  (`service/shares.go`, `api/spec/shares.yaml`). On the client,
+  `showInstantMixSheet` is wired only from the player's overflow with the
+  playing track, home's mix cards seed from artists and genres
+  (`home/home_shelves.dart`), and `showShareLinkDialog` is called from the
+  book, playlist, episode, player and deck-bar menus but from no album
+  screen. Both are one overflow action each over dialogs that already
+  exist, which is why they were never a slice of their own. Recorded
+  because the docs now say "contract-only" in two places
+  (`docs/discovery-and-stats.md`, `docs/sharing.md`) and that sentence
+  should have somewhere to be deleted from. They came in through the
+  entity-pid query fields, which retired the display-string matching that
+  used to make an album pid unresolvable.
 - `[in-repo]` **The web build has no downloads of its own to announce.**
   The bell now reports what this device finished transferring
   (`NotificationKind.download`), which the web build can never produce:
@@ -943,137 +966,3 @@ here waits on upstream.
   per-station bit, and the only per-user station state that exists is the
   favourites list; whoever adds a second one should decide whether they
   share a shape.
-
-## Decided, not deferred
-
-The macOS desktop and iOS targets are dropped, not deferred. Desktop
-is Linux and Windows, mobile is Android, and a Mac or an iPhone
-reaches WaxDeck through the web app the server already serves - or any
-Subsonic client. What rode on the platform went with it: the DMG
-packaging and its volume icon, the Homebrew cask, and the sandboxed
-keychain question, which was answered before the drop and is worth
-keeping: an unsigned sandboxed build cannot use the data-protection
-keychain at all (`SecItemAdd` answers `errSecMissingEntitlement`, the
-store swallows it by design, and every launch asks for a password
-again), and the workaround that did work pinned the credential to the
-exact binary, so a rebuild raised an authorization dialog. Fixing it
-meant a developer certificate, which was never going to be bought.
-One engine consequence, and it is a simplification: both shipped
-desktops now route through media_kit/mpv, so the desktop conformance
-suite holds one engine to the port contract instead of two.
-
-Every browse validates the caller's pid, and that is a behaviour
-change WaxDeck accepted rather than work it postponed. waxbin's
-`browseFilter` short-circuits only when a query has neither an entity
-nor a where clause, and a built query never is, so
-`/music/tracks`, `/music/albums`, `/music/artists` and every
-alphabetical browse now resolve `UserPID`. The cost was overstated when
-this was first written down as a deferral: `userStateJoin` returns
-early with no join clause when the query needs no user state, so it is
-one indexed `userIDByPID` lookup per browse, not a join. What actually
-changed is that `Browse(alphabetical, {UserPID: "bogus"})` errors where
-the field used to be ignored, which waxbin warns about and WaxDeck
-takes on purpose - validation beats a silent fallback to
-default-scoped results. There is nothing to build and no upstream ask
-behind it; do not file one.
-
-The owned font set grows one face at a time, and that is the mechanism
-rather than a stopgap. It now covers Latin, Greek, Cyrillic, Arabic,
-Hebrew, Thai and CJK eagerly-or-on-demand as before, plus fifteen more
-scripts (Devanagari, Bengali, Gurmukhi, Gujarati, Tamil, Telugu,
-Kannada, Malayalam, Sinhala, Khmer, Lao, Myanmar, Georgian, Armenian,
-Ethiopic) and a colour emoji face, all deferred: about 34 MB of assets
-that cost a startup nothing, because a library reaches for one only when
-a title is written in that script. The engine's own CDN fallback stays
-pointed at an unrouted same-origin path, so an instance still behaves
-identically with and without internet. What is deliberately absent -
-Oriya, Tibetan, and the rest - waits for the same evidence the fifteen
-had: a real library that would otherwise render boxes. Adding one is a
-row in `tools/fetch-fonts.sh`, a `WaxScript` value, and a detection
-range, which is the whole of it.
-
-The live fan-out's worst edge is closed, and the two that remain are
-accepted rather than owed. The fan-out defers around in-flight first
-builds through a `ProviderObserver` ledger, and the edge that mattered
-was a first build that never landed at all: with no transport deadline
-anywhere, a hung request kept its topic's retry timer re-arming every
-window for the life of the session. Every transport now has one - the
-API client 10s to connect and 30s between response chunks, artwork
-10s/15s, the sync socket 10s to finish its upgrade and a 30s ping after
-that - so a request that hangs ends as a `timeout`, and an error is a
-landing the ledger prunes exactly as a value is. Two edges are left,
-both bounded and neither worth machinery. A watched instance invalidated
-mid-first-build from outside the fan-out rebuilds into a bare loading
-the notification gate suppresses, so that one instance rides plain
-pacing until a differing state lands, which is the pre-deferral
-behaviour and not a new failure. And a nested `ProviderScope` overriding
-a fan-out target would sit outside `allProviders`' enumeration (children
-are excluded), unreachable by sweep and retry alike, as it already was
-by the plain invalidations before the pacer; no such scope exists, and
-whoever introduces one takes the fan-out's enumeration with it.
-
-Cross-origin access is opt-in and stays that way. A browser client
-served from somewhere else - a self-hosted Feishin, which CI now drives
-against the stack - cannot call a server that does not name its origin,
-so `WAXDECK_CORS_ORIGINS` names them: exact origins only, no wildcard
-and no pattern, never with credentials (the compatibility surfaces carry
-their own app-password auth, so nothing needs the cookie), applied to
-the whole mux with the preflight answered before the router. Empty by
-default, which is every deployment that just uses the bundled web app,
-and an unconfigured server behaves exactly as it did. There is nothing
-left to build here; a deployment that wants a browser client sets the
-variable.
-
-Signup spends its rate-limit budget on success as well as failure, and
-that is the anti-abuse decision rather than a missing `Success` call.
-`signup.go` says so where it happens: "account creation is the expensive
-outcome. A NAT'd household admitting a handful of members stays under
-the threshold; a script farming accounts does not." What made it read as
-a bug was the shared key - behind a reverse proxy every signup counted
-against the proxy's address, so the cap was server-wide - and
-`WAXDECK_TRUSTED_PROXIES` is the whole of that fix. With
-correct client addresses the budget is per caller, which is what it was
-always meant to be. Do not add a `Success` call on the success path; it
-would undo the decision, not complete it.
-
-The snapshot path's tombstone guard is deliberate belt, not dead code:
-`sync.go`'s snapshot builds its page from `visibleItems()`, so
-`archived(it)` inside `itemSyncEntry` cannot be true there and the
-`entry.Op == syncOpDelete` half never fires. The comment beside it says
-so ("The query above already drops them; this is the belt for the pids
-the delta path tombstones"), and the same goes for the nil argument and
-`tombstoneReason`'s nil branch. Removing them would make the delta path's
-correctness depend on the snapshot query never changing.
-
-Declining identification imports with no stop, and the review queue is
-not the record that makes that safe - the entry is. The open question
-this list used to carry, whether a submission that says "leave my tags
-alone" should still confirm once in review, is settled against
-confirming: somebody who turned identification off has already said
-what to do with the files, and asking again once per album is asking
-twice. What lands is a review entry written `as-is` rather than
-`pending`, so the import keeps the same record, the same undo, and the
-same uploads-screen link a decided-by-hand one has. The stop survives
-where it earns its keep: an import that refuses - a name collision, a
-destination nothing may be written to - leaves the entry pending with
-`identifyDeclined` on it, which is the only way one is ever seen.
-
-Recorded so they are not re-read as gaps: gpodder episode delete
-actions stay echo-only (a per-device client delete must not reclaim a
-shared server file). Music has no first-class explicit boolean by
-decision: no canonical source exists (MusicBrainz carries no explicit
-flag), so files' own ITUNESADVISORY tags ride the custom-tag surface
-(queryable, facetable, hand-settable, lockable) and enforcement is
-the deny-list mechanism, not a per-track flag. Audiobooks have no
-explicit convention anywhere; custom tags cover anyone who wants one.
-Scope-level non-goals and accepted risks live in the roadmap's
-post-v1 section.
-
-What stays English is chosen, not overlooked. The Subsonic and
-gpodder adapters answer third-party clients in protocol strings and
-localize nothing. The API `Error.message` stays developer English
-everywhere - the localization boundary is the `code`, per the
-Localization entries - and so does the diagnostic prose on the admin
-surfaces: a failed task's `error`, a job's progress note, a
-migration's cautions. Translating diagnostics trades grep-ability
-for polish on the one surface whose reader wants the grep.

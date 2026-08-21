@@ -974,3 +974,72 @@ func TestPlaylistNspImportNamesAndBounds(t *testing.T) {
 	wantStatus(t, resp, 400, "an oversized NSP document")
 	resp.Body.Close()
 }
+
+// A rule may carry up to maxRuleSorts sort terms and .nsp carries one, so
+// a two-sort playlist is the one shape a person can build today that used
+// to export and no longer does: the converter dropped terms 2+ in silence
+// and answered 200, and now refuses and names the term it would have lost.
+// Refusing is the right half of that trade - a silently reordered playlist
+// on the far server is worse than either answer - but it is a live change
+// for anyone holding such a playlist, so it is pinned here rather than
+// left to be discovered.
+func TestPlaylistNspExportRefusesAMultiTermSort(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Most played, then title", "kind": "smart",
+		"rule": map[string]any{
+			"root": map[string]any{"type": "all", "nodes": []any{
+				map[string]any{"type": "condition", "field": "genre", "op": "is", "value": "Rock"},
+			}},
+			"sorts": []any{
+				map[string]any{"field": "playCount", "desc": true},
+				map[string]any{"field": "title"},
+			},
+		},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp", h.token)
+	if resp.StatusCode != 501 {
+		t.Fatalf("export status = %d, want 501 for a two-term sort", resp.StatusCode)
+	}
+	refusal := decode[Error](t, resp)
+	// The dropped term, not the surviving one: naming "playCount" would
+	// point at the half that maps fine.
+	if !strings.Contains(refusal.Message, "title") {
+		t.Fatalf("refusal does not name the dropped sort term: %q", refusal.Message)
+	}
+}
+
+// A composed refusal is a list of things to fix, so it dedupes and stops.
+// Ten conditions on one unsupported field are one problem, not ten, and a
+// maxNSPBytes document full of them would otherwise be joined into a
+// multi-megabyte error body and log line.
+func TestPlaylistNspImportRefusalDedupesAndBounds(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	nodes := make([]any, 0, 40)
+	for i := 0; i < 40; i++ {
+		nodes = append(nodes, map[string]any{"gt": map[string]any{"bitrate": 128 + i}})
+	}
+	resp := h.postJSON(t, "/api/v1/playlists/nsp", map[string]any{"name": "x", "all": nodes})
+	if resp.StatusCode != 400 {
+		resp.Body.Close()
+		t.Fatalf("import status = %d, want 400", resp.StatusCode)
+	}
+	msg := decode[Error](t, resp).Message
+	if !strings.Contains(msg, "bitrate") {
+		t.Fatalf("refusal does not name the offender: %q", msg)
+	}
+	// Forty identical gaps collapse to the one sentence, so nothing is
+	// repeated and there is no overflow tail to add.
+	if n := strings.Count(msg, "bitrate"); n != 1 {
+		t.Errorf("refusal names bitrate %d times, want 1: %q", n, msg)
+	}
+}

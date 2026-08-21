@@ -1014,7 +1014,7 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 		for _, pid := range order {
 			batch = append(batch, model.ItemFieldEdit{ItemPID: pid, Fields: editByPID[pid]})
 		}
-		if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{Lock: true, Force: true}); err != nil {
+		if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{Lock: model.LockOn, Force: true}); err != nil {
 			return warnings, classify(err)
 		}
 	}
@@ -1066,7 +1066,7 @@ func (l *Library) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decid
 	// (no WriteBack, like the apply), so the batch does no on-disk tag sync
 	// and reports no per-item write-back failures; revert surfaces only a
 	// hard error, not the warnings the apply collects.
-	if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{Lock: false, Force: true}); err != nil {
+	if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{Lock: model.LockOff, Force: true}); err != nil {
 		return classify(err)
 	}
 	for pid, fields := range snap.Items {

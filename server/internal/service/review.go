@@ -21,7 +21,7 @@ import (
 // always forced (the mark must land over an earlier lock), locked when
 // setting so scans and enrichment respect it.
 func waxbinTagOpts(lock bool) waxbin.TagEditOptions {
-	return waxbin.TagEditOptions{Lock: lock, Force: true}
+	return waxbin.TagEditOptions{Lock: model.LockOf(lock), Force: true}
 }
 
 // ReviewEntryDTO is the API-facing entry summary.

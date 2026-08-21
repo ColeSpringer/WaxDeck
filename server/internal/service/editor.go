@@ -438,7 +438,7 @@ func (l *Library) EditItemMetadata(ctx context.Context, uc *UserCtx, apiPID stri
 		}
 	}
 	err = l.lib.EditFields(ctx, it.PID, fields, waxbin.EditOptions{
-		WriteBack: p.WriteBack, Lock: p.Lock, Force: p.Force,
+		WriteBack: p.WriteBack, Lock: model.LockOf(p.Lock), Force: p.Force,
 	})
 	return editOutcomeFromWriteBack(err)
 }
@@ -480,7 +480,7 @@ func (l *Library) BulkEditMetadata(ctx context.Context, uc *UserCtx, apiPIDs []s
 	}
 	res, err := l.lib.EditManyFields(ctx, pids, fields, waxbin.EditOptions{
 		WriteBack: writeBack, Force: force, SkipLocked: skipLocked,
-		Lock: true,
+		Lock: model.LockOn,
 	})
 	if err != nil {
 		return BulkEditOutcomeDTO{}, classify(err)
@@ -529,7 +529,7 @@ func (l *Library) SetItemCredits(ctx context.Context, uc *UserCtx, apiPID, role 
 		}
 	}
 	_, err = l.lib.SetCredits(ctx, it.PID, r, names, waxbin.CreditEditOptions{
-		WriteBack: writeBack, Lock: p.Lock, Force: p.Force,
+		WriteBack: writeBack, Lock: model.LockOf(p.Lock), Force: p.Force,
 	})
 	out, err := editOutcomeFromWriteBack(err)
 	if err != nil {
@@ -580,7 +580,7 @@ func (l *Library) SetItemLyrics(ctx context.Context, uc *UserCtx, apiPID, lrc, p
 			return EditOutcomeDTO{}, err
 		}
 	}
-	if err := l.lib.SetLyrics(ctx, it.PID, ly, p.Lock, p.Force); err != nil {
+	if err := l.lib.SetLyrics(ctx, it.PID, ly, model.LockOf(p.Lock), p.Force); err != nil {
 		return EditOutcomeDTO{}, classify(err)
 	}
 	out := EditOutcomeDTO{Warnings: warnings}
@@ -678,7 +678,7 @@ func (l *Library) ClearItemLyrics(ctx context.Context, uc *UserCtx, apiPID strin
 	if err != nil {
 		return err
 	}
-	if err := l.lib.SetLyrics(ctx, it.PID, nil, false, true); err != nil {
+	if err := l.lib.SetLyrics(ctx, it.PID, nil, model.LockOff, true); err != nil {
 		return classify(err)
 	}
 	return nil
@@ -710,7 +710,7 @@ func (l *Library) SetBookChapters(ctx context.Context, uc *UserCtx, apiPID strin
 			Position: i, Title: ch.Title, StartMS: ch.StartMS, EndMS: ch.EndMS,
 		})
 	}
-	if err := l.lib.SetChapters(ctx, it.PID, stored, lock, force); err != nil {
+	if err := l.lib.SetChapters(ctx, it.PID, stored, model.LockOf(lock), force); err != nil {
 		return EditOutcomeDTO{}, classify(err)
 	}
 	return EditOutcomeDTO{}, nil
@@ -786,7 +786,9 @@ func (l *Library) SetItemArtwork(ctx context.Context, uc *UserCtx, apiPID, role 
 			return EditOutcomeDTO{}, err
 		}
 	}
-	out, err := editOutcomeFromWriteBack(l.lib.SetItemArt(ctx, it.PID, art, raw, lock, true, writeBack))
+	out, err := editOutcomeFromWriteBack(l.lib.SetItemArt(ctx, it.PID, art, raw, waxbin.ArtEditOptions{
+		WriteBack: writeBack, Lock: model.LockOf(lock), Force: true,
+	}))
 	if err == nil {
 		// The catalog write committed (a write-back failure rides the
 		// outcome, not the error). A generated playlist cover may have been
@@ -809,25 +811,13 @@ func (l *Library) ClearItemArtwork(ctx context.Context, uc *UserCtx, apiPID, rol
 	if err != nil {
 		return err
 	}
-	// The pin is carried across, for the reason ClearEntityArtwork
-	// carries it: clearing says "there is no cover", not "refill this",
-	// and SetItemArt writes the pin on every front-role write, so
-	// leaving it as the user set it means reading it first. Without
-	// this, the one action the artwork manager offers on a pinned-empty
-	// slot is the one that silently unpins it.
-	lock := false
-	if art == model.ArtRoleFront {
-		ent := model.ArtTrack
-		if it.Kind == model.KindEpisode {
-			ent = model.ArtEpisode
-		}
-		locked, err := l.lib.ArtLocked(ctx, ent, it.PID)
-		if err != nil {
-			return classify(err)
-		}
-		lock = locked
-	}
-	if err := l.lib.SetItemArt(ctx, it.PID, art, nil, lock, true, false); err != nil {
+	// The pin is left exactly as it stands, for the reason ClearEntityArtwork
+	// leaves it: clearing says "there is no cover", not "refill this". Force
+	// is what lets the clear through a pinned slot, which is the one action
+	// the artwork manager offers there.
+	if err := l.lib.SetItemArt(ctx, it.PID, art, nil, waxbin.ArtEditOptions{
+		Lock: model.LockUnchanged, Force: true,
+	}); err != nil {
 		return classify(err)
 	}
 	l.noteArtworkChanged(ctx)
@@ -1005,7 +995,9 @@ func (l *Library) SetEntityArtwork(ctx context.Context, uc *UserCtx, entityType,
 	// this image, which is the same rule the item path states, and the
 	// pin is what carries it through an enrichment run that would
 	// otherwise refill the slot from a provider.
-	out, err := editOutcomeFromWriteBack(l.lib.SetEntityArt(ctx, ent, pid, art, raw, true, true, writeBack))
+	out, err := editOutcomeFromWriteBack(l.lib.SetEntityArt(ctx, ent, pid, art, raw, waxbin.ArtEditOptions{
+		WriteBack: writeBack, Lock: model.LockOn, Force: true,
+	}))
 	if err == nil {
 		// An album or artist cover is what a member track resolves when it
 		// carries none of its own, so this moves playlist covers too.
@@ -1038,21 +1030,15 @@ func (l *Library) ClearEntityArtwork(ctx context.Context, uc *UserCtx, entityTyp
 	// file's, and stripping it is the organizer's business, not this
 	// endpoint's.
 	//
-	// The pin is carried across rather than dropped. Clearing a catalog
-	// entity's cover says "there is no cover", not "give me the default
-	// back", so a cleared-and-pinned cover is a real intent - do not
-	// refill this - and it is now a state ArtRoles reports and the lock
-	// endpoint below can undo. SetEntityArt always writes the pin on a
-	// front-role write, so preserving it means reading it first.
-	lock := false
-	if art == model.ArtRoleFront {
-		locked, err := l.lib.ArtLocked(ctx, ent, pid)
-		if err != nil {
-			return classify(err)
-		}
-		lock = locked
-	}
-	if err := l.lib.SetEntityArt(ctx, ent, pid, art, nil, lock, true, false); err != nil {
+	// The pin is left exactly as it stands rather than dropped. Clearing a
+	// catalog entity's cover says "there is no cover", not "give me the
+	// default back", so a cleared-and-pinned cover is a real intent - do not
+	// refill this - and it is a state ArtRoles reports and the lock endpoint
+	// below can undo. Force skips the lock check and nothing else, so the
+	// clear goes through a pinned slot without rewriting the pin.
+	if err := l.lib.SetEntityArt(ctx, ent, pid, art, nil, waxbin.ArtEditOptions{
+		Lock: model.LockUnchanged, Force: true,
+	}); err != nil {
 		return classify(err)
 	}
 	l.noteArtworkChanged(ctx)
@@ -1089,7 +1075,9 @@ func (l *Library) setPlaylistArtwork(ctx context.Context, uc *UserCtx, apiPlayli
 	// claimPlaylistCoverCustom just set; a pin would additionally make
 	// the generated mosaic unwritable, and the generator retries on
 	// every read.
-	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, raw, false, true, false); err != nil {
+	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, raw, waxbin.ArtEditOptions{
+		Lock: model.LockOff, Force: true,
+	}); err != nil {
 		if undoClaim != nil {
 			// Nothing was stored, so the claim has to go back the way it was
 			// or the next read leaves the previous cover in place while
@@ -1117,7 +1105,9 @@ func (l *Library) clearPlaylistArtwork(ctx context.Context, uc *UserCtx, apiPlay
 		}
 		pl.HasArt = false
 	}
-	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, nil, false, true, false); err != nil {
+	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, nil, waxbin.ArtEditOptions{
+		Lock: model.LockOff, Force: true,
+	}); err != nil {
 		return classify(err)
 	}
 	if role == model.ArtRoleFront {
@@ -1140,7 +1130,7 @@ func (l *Library) SetItemTag(ctx context.Context, uc *UserCtx, apiPID, key strin
 		return TagEditOutcomeDTO{}, errInvalid("at most 100 values per tag")
 	}
 	canon, stored, err := l.lib.SetItemTag(ctx, it.PID, key, values, waxbin.TagEditOptions{
-		Lock: lock, Force: force,
+		Lock: model.LockOf(lock), Force: force,
 	})
 	if err != nil {
 		return TagEditOutcomeDTO{}, classify(err)
@@ -1155,7 +1145,7 @@ func (l *Library) ClearItemTag(ctx context.Context, uc *UserCtx, apiPID, key str
 		return err
 	}
 	if _, _, err := l.lib.SetItemTag(ctx, it.PID, key, nil, waxbin.TagEditOptions{
-		Lock: false, Force: true,
+		Lock: model.LockOff, Force: true,
 	}); err != nil {
 		return classify(err)
 	}
@@ -1257,7 +1247,7 @@ func (l *Library) EditEntity(ctx context.Context, entityType, apiEntityPID strin
 		}
 	}
 	err = l.lib.EditEntity(ctx, et, pid, edits, waxbin.EntityEditOptions{
-		WriteBack: p.WriteBack, Lock: p.Lock, Force: p.Force,
+		WriteBack: p.WriteBack, Lock: model.LockOf(p.Lock), Force: p.Force,
 	})
 	return editOutcomeFromWriteBack(err)
 }
@@ -1449,9 +1439,9 @@ func (l *Library) ItemMetadataFor(ctx context.Context, uc *UserCtx, apiPID strin
 	if it.Kind == model.KindEpisode {
 		ref.Type = model.ArtEpisode
 	}
-	if blob, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, 64); err == nil && blob != nil {
+	if prov, err := l.lib.ArtProvenance(ctx, ref, model.ArtRoleFront); err == nil && prov != nil {
 		out.HasArtwork = true
-		out.HasOwnArtwork = blob.Level == ref.Type && !blob.Derived
+		out.HasOwnArtwork = prov.Level == ref.Type && !prov.Derived
 	}
 	return out, nil
 }

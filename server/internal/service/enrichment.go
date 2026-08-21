@@ -7,6 +7,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 
 	"github.com/colespringer/waxbin"
@@ -334,7 +335,7 @@ func (l *Library) artifactPresent(ctx context.Context, it *model.ItemView, want 
 		if it.Kind == model.KindEpisode {
 			ref.Type = model.ArtEpisode
 		}
-		_, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, 0)
+		_, err := l.lib.ArtProvenance(ctx, ref, model.ArtRoleFront)
 		return err == nil
 	case enrichWantLyrics:
 		ly, err := l.lib.Lyrics(ctx, it.PID)
@@ -430,6 +431,25 @@ func (l *Library) EnrichItemNow(ctx context.Context, pid model.PID, wants []stri
 	return applied, skipped, nil
 }
 
+// namedEnrichProviders drops an injected provider that reports no name,
+// mirroring the guard the catalog's own enrichment service applies to the
+// same slice. A provider's name is the provenance mark stamped on
+// everything it supplies, and the store refuses an enrichment value that
+// names none - so a nameless provider would not degrade to an unmarked
+// write, it would fail every enrich-now write it answered, once per
+// request, with nothing but a log line to say why.
+func namedEnrichProviders(providers []enrich.Provider, log *slog.Logger) []enrich.Provider {
+	out := make([]enrich.Provider, 0, len(providers))
+	for _, p := range providers {
+		if p.Name() == "" {
+			log.Warn("enrichment: dropping an injected provider with no name; its values could carry no provenance")
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
 // enrichProvidersWith returns the registered providers advertising the
 // wanted capability.
 func (l *Library) enrichProvidersWith(want enrich.Capability) []enrich.Provider {
@@ -446,6 +466,15 @@ func (l *Library) enrichProvidersWith(want enrich.Capability) []enrich.Provider 
 // judged through the art resolution chain, so an item already covered
 // by its album's art is left alone.
 func (l *Library) enrichCover(ctx context.Context, it *model.ItemView, locked map[string]bool) (appliedEntry, skippedEntry string) {
+	// The catalog holds item-level art for tracks and books only, so an
+	// episode write is refused whatever the bytes are. Without this the
+	// want fetches a cover from every provider first and reports "no
+	// provider hit", which reads as a lookup that missed rather than one
+	// that could never have landed - and re-fetches on the next request.
+	// An episode's picture is the feed's, resolved from its show.
+	if it.Kind == model.KindEpisode {
+		return "", "cover: an episode's cover comes from its feed"
+	}
 	if locked["art"] {
 		return "", "cover: locked"
 	}
@@ -453,7 +482,7 @@ func (l *Library) enrichCover(ctx context.Context, it *model.ItemView, locked ma
 	if it.Kind == model.KindEpisode {
 		ref.Type = model.ArtEpisode
 	}
-	if _, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, 0); err == nil {
+	if _, err := l.lib.ArtProvenance(ctx, ref, model.ArtRoleFront); err == nil {
 		return "", "cover: already present"
 	}
 	providers := l.enrichProvidersWith(enrich.CapCover)
@@ -474,7 +503,14 @@ func (l *Library) enrichCover(ctx context.Context, it *model.ItemView, locked ma
 		if cand == nil || cand.Cover == nil || len(cand.Cover.Data) == 0 {
 			continue
 		}
-		if err := l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, cand.Cover.Data, false, false, false); err != nil {
+		// The cover is stamped with the provider that supplied it, so a
+		// fetched picture is not reported as one a person chose. The lock is
+		// left alone: enrichment forms no pin intent, and an unlocked slot is
+		// already the only one it reaches.
+		if err := l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, cand.Cover.Data, waxbin.ArtEditOptions{
+			Source: model.SourceEnrichment, Provider: p.Name(), SourceURL: cand.Cover.SourceURL,
+			Lock: model.LockUnchanged,
+		}); err != nil {
 			l.log.Warn("enrich: applying cover", "provider", p.Name(), "item", it.PID, "err", err)
 			continue
 		}
@@ -525,7 +561,9 @@ func (l *Library) enrichGenres(ctx context.Context, it *model.ItemView, locked m
 		}
 		if err := l.lib.EditFields(ctx, it.PID,
 			map[string]string{"genre": genre.Join(genres)},
-			waxbin.EditOptions{}); err != nil {
+			waxbin.EditOptions{
+				Source: model.SourceEnrichment, Provider: p.Name(), Lock: model.LockUnchanged,
+			}); err != nil {
 			l.log.Warn("enrich: applying genres", "provider", p.Name(), "item", it.PID, "err", err)
 			continue
 		}
@@ -568,7 +606,9 @@ func (l *Library) enrichLyrics(ctx context.Context, it *model.ItemView, locked m
 		if cand == nil || !cand.Lyrics.HasContent() {
 			continue
 		}
-		if err := l.lib.SetLyrics(ctx, it.PID, cand.Lyrics, false, false); err != nil {
+		// The candidate carries its own provenance, which SetLyrics now reads
+		// off the struct rather than overwriting.
+		if err := l.lib.SetLyrics(ctx, it.PID, cand.Lyrics, model.LockUnchanged, false); err != nil {
 			l.log.Warn("enrich: applying lyrics", "provider", p.Name(), "item", it.PID, "err", err)
 			continue
 		}
@@ -624,7 +664,9 @@ func (l *Library) enrichBook(ctx context.Context, it *model.ItemView, locked map
 			}
 			return "", "book: nothing new to fill"
 		}
-		if err := l.lib.EditFields(ctx, it.PID, edits, waxbin.EditOptions{}); err != nil {
+		if err := l.lib.EditFields(ctx, it.PID, edits, waxbin.EditOptions{
+			Source: model.SourceEnrichment, Provider: p.Name(), Lock: model.LockUnchanged,
+		}); err != nil {
 			l.log.Warn("enrich: applying book fields", "provider", p.Name(), "item", it.PID, "err", err)
 			continue
 		}

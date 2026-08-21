@@ -445,7 +445,7 @@ func (l *Library) normalizeGenres(ctx context.Context, norm *genre.Normalizer, v
 		// re-applies it -- the same round trip an enriched genre makes, and
 		// the intended consequence of the database being the working copy.
 		batch, err := l.lib.EditManyFields(ctx, pids, map[string]string{"genre": v},
-			waxbin.EditOptions{SkipLocked: true})
+			waxbin.EditOptions{SkipLocked: true, Lock: model.LockUnchanged})
 		if err != nil {
 			return res, classify(err)
 		}

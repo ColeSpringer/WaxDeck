@@ -213,6 +213,12 @@ func (fs *feedServer) feedURL() string { return fs.ts.URL + "/feed.xml" }
 // newPodcastHarness is the shared harness plus the podcast surface: a
 // download dir outside the library roots and loopback feeds allowed.
 func newPodcastHarness(t *testing.T) *harness {
+	return newPodcastHarnessWith(t, nil)
+}
+
+// newPodcastHarnessWith lets a podcast test adjust the rest of the service
+// configuration, the way newHarnessWith does for the plain one.
+func newPodcastHarnessWith(t *testing.T, mutate func(*service.Config)) *harness {
 	podcastDir := t.TempDir()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.PodcastDir = podcastDir
@@ -221,6 +227,9 @@ func newPodcastHarness(t *testing.T) *harness {
 		// Tests drive checkpoints and sweeps back to back; the in-use
 		// deferral would read every touched episode as live playback.
 		cfg.RetentionInUseWindow = -1
+		if mutate != nil {
+			mutate(cfg)
+		}
 	})
 	h.podcastDir = podcastDir
 	return h

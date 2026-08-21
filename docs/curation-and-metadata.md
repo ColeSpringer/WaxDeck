@@ -177,15 +177,6 @@ radio face - a line under it says which. It is always on and nothing
 hides it. The grids do not carry it, because a 48-pixel thumbnail has
 no room for a line and no listener reads two hundred of them.
 
-One case is currently wrong, and it is worth knowing which. A cover
-fetched by the editor's per-item "fetch artwork" button is stored as
-though it had been set by hand, so its caption reads that way instead
-of naming the provider that supplied it. The catalog's own
-whole-library enrichment pass is unaffected and names its provider
-correctly; only the per-item button is misattributed, because the
-write path it uses cannot carry provenance yet. The ask is filed in
-`docs/upstream-requests.md`.
-
 A release usually holds no cover of its own and shows one of its
 tracks' instead. Its caption says both things - where that track's
 picture came from, and that the release did not choose it - rather
@@ -197,11 +188,17 @@ is the station's and carries no mark.
 ### Pinned covers
 
 Setting a cover pins it, which is what keeps it through an enrichment
-run, a rescan, and a podcast feed changing its image URL. Clearing an
-item's cover unpins it and hands the slot back to the album or artist
-chain. Clearing a **release's** cover keeps the pin, because clearing
-one means "this release has no cover" rather than "give me the derived
-one back" - so the slot stays empty and nothing refills it.
+run, a rescan, and a podcast feed changing its image URL. A pin governs
+writes and nothing else: what you see is always the first level of the
+chain that holds a picture, so a track with no cover of its own shows
+its album's and an album with none shows a member track's, pinned or
+not.
+
+Clearing removes the picture at that level and leaves the pin exactly as
+it stands, on an item as on a release. The read then falls back down the
+chain as usual - what the pin buys is that nothing automatic puts a new
+cover in the slot you just emptied, which is the difference between
+"this has no cover of its own" and "refill this from wherever you can".
 
 That state - pinned with nothing behind it - is visible rather than
 silent: the artwork manager draws it as a pinned empty slot instead of

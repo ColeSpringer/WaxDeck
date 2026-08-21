@@ -125,8 +125,8 @@ func TestItemPinnedWithNothingBehindIt(t *testing.T) {
 	}
 	pid := page.Items[0].Pid
 
-	// Clear (which leaves the item unpinned), then pin the empty slot
-	// through the locks surface.
+	// Clear (which leaves the pin as it stands, and nothing has pinned
+	// this one), then pin the empty slot through the locks surface.
 	wantStatus(t, h.deleteReq(t, "/api/v1/items/"+pid+"/artwork"), 204, "clear front")
 	wantStatus(t, putJSON(t, h.ts, "/api/v1/items/"+pid+"/locks", h.token,
 		map[string]any{"fields": []string{"art"}, "locked": true}), 200, "pin art")

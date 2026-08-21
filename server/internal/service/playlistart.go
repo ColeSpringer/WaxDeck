@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 
@@ -128,7 +129,9 @@ func (l *Library) syncPlaylistCover(ctx context.Context, pl *model.Playlist, ite
 	}
 	// Empty bytes clear the slot: a playlist whose members all lost their
 	// art should lose the mosaic built from it, not keep a stale one.
-	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, model.ArtRoleFront, raw, false, true, false); err != nil {
+	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, model.ArtRoleFront, raw, waxbin.ArtEditOptions{
+		Lock: model.LockOff, Force: true,
+	}); err != nil {
 		l.log.Warn("storing playlist cover", "playlist", pl.PID, "err", err)
 		return
 	}

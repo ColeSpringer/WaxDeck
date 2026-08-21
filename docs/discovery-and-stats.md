@@ -22,8 +22,11 @@ adventurousness knob gets real teeth, and sonic paths exist.
 ## Instant mixes
 
 `POST /api/v1/mixes/instant` builds a mix from a seed: a track pid, an
-artist pid, or a genre name. In the apps it is the "Instant mix"
-action on tracks, artists, and genres.
+artist pid, an album pid, or a genre name. An album seed anchors on its
+own tracks, addressed by entity identity rather than a display-string
+match. In the apps it is the "Instant mix" action on the playing track,
+and the artist and genre cards on home; the album seed is contract-only
+so far, with no action offering it.
 
 The `adventurousness` knob (0 to 1) controls how far the mix wanders.
 At 0 a sonic mix hugs the seed's closest neighbors; at 1 it samples
@@ -33,11 +36,6 @@ the genre bound instead, mixing in more of the wider catalog.
 Mixes are computed fresh per request and never persisted. For endless
 radio, request another mix and pass what already played in
 `excludePids`.
-
-To mix from an album, seed with one of its tracks. The catalog's item
-query addresses entities by display string, so an album pid alone does
-not resolve to its members server-side yet; the ask is recorded in
-docs/upstream-requests.md.
 
 ## Similar tracks
 

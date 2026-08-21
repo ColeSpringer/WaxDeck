@@ -26,10 +26,11 @@ import (
 // The conversion is all-or-nothing in both directions: a field or an
 // operator with no faithful counterpart rejects the document rather
 // than importing a rule that means something else, and rejects the
-// export rather than writing one. There is no lossy escape hatch,
-// because "export what maps and say what did not" needs the converter
-// to report what it dropped, which is upstream's to add (filed in
-// docs/upstream-requests.md).
+// export rather than writing one. WaxDeck offers no lossy escape hatch
+// yet, though the converter now reports what it would drop; adopting
+// that is tracked in docs/upstream-requests.md. What the report already
+// buys is the refusal itself: an import names every gap rather than the
+// first one the parse tripped over.
 
 // maxNSPBytes bounds the document the import will read. The M3U8 import
 // beside it caps its payload in the contract; a free-form JSON object
@@ -37,6 +38,11 @@ import (
 // before the parse, since the rule-node bound cannot apply to a
 // document nobody has parsed yet.
 const maxNSPBytes = 1 << 20
+
+// maxNSPRefusalReasons bounds how many distinct gap sentences a refusal
+// names. Past a handful the list stops being something a person acts on,
+// and the count that follows says there is more without carrying it.
+const maxNSPRefusalReasons = 12
 
 // nspMeta is the part of an NSP document that describes the playlist
 // rather than the rule: the two keys WaxDeck's playlist record is made
@@ -107,16 +113,56 @@ func (l *Library) ImportPlaylistNSP(ctx context.Context, uc *UserCtx, doc []byte
 	if err != nil {
 		// WaxBin's refusals name the offending field, operator, or key,
 		// which is the whole value of an all-or-nothing import. The
-		// sentence is kept and answered as invalid-request rather than
-		// as the unsupported code it carries: what the caller sent is
+		// sentences are kept and answered as invalid-request rather than
+		// as the unsupported code they carry: what the caller sent is
 		// what has to change.
-		return Playlist{}, errInvalid(err.Error())
+		return Playlist{}, errInvalid(nspImportRefusal(rule, err))
 	}
 	vis := model.VisibilityPrivate
 	if meta.Public {
 		vis = model.VisibilityShared
 	}
 	return l.createSmartFromQuery(ctx, uc, name, vis, q)
+}
+
+// nspImportRefusal composes the sentence an all-or-nothing import refuses
+// with. The strict parse stops at the first gap, so a document with a typo
+// for `all` is refused for the missing root group the typo caused and never
+// names the typo; the check walks the whole document, so the refusal names
+// every offender the caller has to fix instead of one round trip each.
+//
+// The strict sentence stands when the two disagree: an unparseable document
+// is the check's only failure, and a check that found nothing has nothing
+// to say about a refusal that happened anyway.
+func nspImportRefusal(rule []byte, strict error) string {
+	rep, err := playlist.CheckNSPImport(rule)
+	if err != nil || len(rep.Gaps) == 0 {
+		return strict.Error()
+	}
+	// Deduped and capped. A document may hold thousands of conditions
+	// against one unsupported field, each producing the same sentence, and
+	// the whole point of the list is the set of things to fix: repeating
+	// one verbatim adds nothing, and an unbounded join turns a maxNSPBytes
+	// document into a multi-megabyte error body and log line.
+	seen := make(map[string]bool, len(rep.Gaps))
+	reasons := make([]string, 0, maxNSPRefusalReasons)
+	extra := 0
+	for _, g := range rep.Gaps {
+		if seen[g.Reason] {
+			continue
+		}
+		seen[g.Reason] = true
+		if len(reasons) == maxNSPRefusalReasons {
+			extra++
+			continue
+		}
+		reasons = append(reasons, g.Reason)
+	}
+	msg := strings.Join(reasons, "; ")
+	if extra > 0 {
+		msg += fmt.Sprintf("; and %d more", extra)
+	}
+	return msg
 }
 
 // ExportPlaylistNSP renders a smart playlist's rule as an NSP document.

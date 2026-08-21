@@ -335,12 +335,13 @@ func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exemp
 	}
 
 	// Art: the item resolver serves tracks and books alike, walking the
-	// fallback chain to album and artist art. Size 0 returns the source
-	// blob, whose dimensions also answer small-art.
-	blob, err := l.lib.ResolveArt(ctx, model.EntityRef{Type: model.ArtTrack, PID: it.PID}, model.ArtRoleFront, 0)
+	// fallback chain to album and artist art. Both rules read the stored
+	// source's dimensions, which the metadata-only resolve answers without
+	// loading a cover per item across a whole-library sweep.
+	prov, err := l.lib.ArtProvenance(ctx, model.EntityRef{Type: model.ArtTrack, PID: it.PID}, model.ArtRoleFront)
 	switch {
 	case err == nil:
-		if blob.Width > 0 && blob.Height > 0 && (blob.Width < smallArtMinSide || blob.Height < smallArtMinSide) {
+		if prov.Width > 0 && prov.Height > 0 && (prov.Width < smallArtMinSide || prov.Height < smallArtMinSide) {
 			rules = append(rules, ruleSmallArt)
 		}
 	case KindOf(classify(err)) == KindNotFound:
@@ -398,7 +399,7 @@ func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exemp
 // in one paginated pass over the query engine's has_lyrics field, so the
 // sweep grades missing-lyrics from a set lookup instead of a Lyrics point
 // read per item. (has_lyrics is item-own, matching the point read it
-// replaces; the art rules stay on ResolveArt, which walks the fallback
+// replaces; the art rules stay on the resolve, which walks the fallback
 // chain that the own-only has_art field cannot express.)
 func (l *Library) lyricsPresence(ctx context.Context) (map[model.PID]bool, error) {
 	present := make(map[model.PID]bool)
@@ -794,13 +795,22 @@ func (l *Library) runHealthFix(ctx context.Context, row wdb.FixQueueRow) error {
 		// value with WriteBack and Force: the catalog edit is a no-op,
 		// but it forces a tag rewrite of the backing file, and a
 		// successful write-back clears the unsynced diagnostic
-		// upstream. Lock stays off so the fix leaves no curation marks.
+		// upstream. The lock is left as it stands: Force is here to get
+		// the no-op edit past a locked title, not to release one, and a
+		// fix that quietly unpinned a curated title would be worse than
+		// the diagnostic it clears.
+		//
+		// It is not mark-free, though: an edit naming no source records a
+		// user one, so each fixed item gains a field_provenance row saying
+		// a person set its title. That is what enrichment and organize read
+		// to decide authority, so a sweep over a library full of unsynced
+		// diagnostics leaves that many titles reading as hand-curated.
 		it, err := l.lib.Get(ctx, pid)
 		if err != nil {
 			return classify(err)
 		}
 		if err := l.lib.EditFields(ctx, pid, map[string]string{"title": it.Title},
-			waxbin.EditOptions{WriteBack: true, Force: true}); err != nil {
+			waxbin.EditOptions{WriteBack: true, Force: true, Lock: model.LockUnchanged}); err != nil {
 			return classify(err)
 		}
 		return nil

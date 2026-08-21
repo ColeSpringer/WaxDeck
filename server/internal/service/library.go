@@ -572,7 +572,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			l.fpcalcPath = p
 		}
 	}
-	l.enrichProviders = cfg.EnrichmentProviders
+	l.enrichProviders = namedEnrichProviders(cfg.EnrichmentProviders, l.log)
 	l.enrichmentConfigured = cfg.EnrichmentContact != ""
 	l.sourceProviders = cfg.SourceProviders
 	if err := l.initSync(ctx); err != nil {

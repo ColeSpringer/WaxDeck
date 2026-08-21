@@ -1,14 +1,16 @@
 # Public share links
 
-A share link makes one track, playlist, book, or episode reachable by
-anyone holding the URL: no account, no app. Paste it in a chat and the
-recipient gets a page with artwork and a play button that works on any
-phone.
+A share link makes one track, album, playlist, book, or episode
+reachable by anyone holding the URL: no account, no app. Paste it in a
+chat and the recipient gets a page with artwork and a play button that
+works in any browser.
 
 ## How links work
 
-`POST /api/v1/shares` creates a link for a track, book, or episode
-you can see, or a playlist you own. Playlists require ownership: the
+`POST /api/v1/shares` creates a link for a track, album, book, or
+episode you can see, or a playlist you own. An album share opens the
+album's tracks in order; it is contract-only so far, with no share
+action on the album screen offering it. Playlists require ownership: the
 public page serves the owner's member view for the link's whole life,
 so another user's shared playlist is theirs to publish, not yours.
 The URL is a signed capability: possession is the authorization,
@@ -51,6 +53,3 @@ A public link must never become a free resource faucet, so:
   and the server key, so a leaked database exposes no working links,
   and your listing can always show full URLs.
 
-Albums share through a playlist of their tracks for now; an album pid
-alone does not resolve to members server-side (recorded in
-docs/upstream-requests.md).
