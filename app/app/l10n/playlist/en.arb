@@ -59,6 +59,10 @@
   "@playlistCopiedM3u": {
     "description": "Snackbar after the M3U reached the clipboard."
   },
+  "playlistCopiedNsp": "Playlist copied as NSP",
+  "@playlistCopiedNsp": {
+    "description": "Snackbar after the NSP document reached the clipboard."
+  },
   "playlistCopiedPortable": "Portable playlist copied",
   "@playlistCopiedPortable": {
     "description": "Snackbar after the portable export reached the clipboard."
@@ -128,6 +132,28 @@
   "playlistExportM3u": "Export M3U",
   "@playlistExportM3u": {
     "description": "Row in a playlist's overflow menu offering it as an M3U file, and the title of the dialog that shows it."
+  },
+  "playlistExportNsp": "Export as NSP",
+  "@playlistExportNsp": {
+    "description": "Row in a smart playlist's overflow menu offering its rule as a Navidrome smart-playlist document, and the title of the dialog that shows it."
+  },
+  "playlistExportNspLossCount": "{count, plural, =1{One part of this rule has no NSP form.} other{{count} parts of this rule have no NSP form.}}",
+  "@playlistExportNspLossCount": {
+    "description": "Frame above the list of parts of a rule that NSP cannot carry. Says only that they have no NSP form: some of them are dropped by the export and some are losses the format makes either way, and the row under each one says which.",
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "playlistExportNspLossTitle": "Some of this rule cannot be exported",
+  "@playlistExportNspLossTitle": {
+    "description": "Title of the dialog listing what an NSP export would drop."
+  },
+  "playlistExportNspProceed": "Export without them",
+  "@playlistExportNspProceed": {
+    "description": "Button accepting the loss and exporting the partial NSP document."
   },
   "playlistExportPortable": "Export portable",
   "@playlistExportPortable": {

@@ -14,6 +14,7 @@ import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/m3u_import.dart';
 import 'package:waxdeck_api_gen/src/model/m3u_import_result.dart';
+import 'package:waxdeck_api_gen/src/model/nsp_report.dart';
 import 'package:waxdeck_api_gen/src/model/playlist.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_create.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_import_request.dart';
@@ -363,10 +364,11 @@ class PlaylistsApi {
   }
 
   /// Export a smart playlist as NSP
-  /// The playlist&#39;s rule as a Navidrome smart playlist document. A static playlist has no rule and answers &#x60;feature-unavailable&#x60;.  Export is **all-or-nothing**, like the import: a rule holding anything NSP cannot say is refused with the offender named, rather than written as a document that means something else. WaxDeck&#39;s rule vocabulary is the larger one, so this is the common answer for a rule built in the editor. &#x60;notContains&#x60; is the only negation NSP can carry, so every other &#x60;not&#x60; refuses; &#x60;gte&#x60;, &#x60;lte&#x60;, &#x60;isPresent&#x60;, and &#x60;isMissing&#x60; have no NSP form; the &#x60;minutes&#x60; and &#x60;megabytes&#x60; limit modes and a pinned random seed have none; a rating that is not a whole number of stars has none; and neither do the fields NSP does not carry (&#x60;mediaType&#x60;, &#x60;state&#x60;, &#x60;source&#x60;, &#x60;container&#x60;, &#x60;codec&#x60;, &#x60;podcast&#x60;, &#x60;season&#x60;, &#x60;publishedAt&#x60;, &#x60;updatedAt&#x60;, &#x60;starredAt&#x60;, &#x60;played&#x60;, &#x60;finished&#x60;, the album identity fields, &#x60;tag.KEY&#x60;, and &#x60;playlist&#x60;).  The response carries the playlist&#39;s own &#x60;name&#x60;, and &#x60;public&#x60; when it is shared - neither is part of the rule. 
+  /// The playlist&#39;s rule as a Navidrome smart playlist document. A static playlist has no rule and answers &#x60;feature-unavailable&#x60;.  Export is **all-or-nothing** by default, like the import: a rule holding anything NSP cannot say is refused with **every** offender named, rather than written as a document that means something else. WaxDeck&#39;s rule vocabulary is the larger one, so this is the common answer for a rule built in the editor. &#x60;notContains&#x60; is the only negation NSP can carry, so every other &#x60;not&#x60; refuses; &#x60;gte&#x60;, &#x60;lte&#x60;, &#x60;isPresent&#x60;, and &#x60;isMissing&#x60; have no NSP form; the &#x60;minutes&#x60; and &#x60;megabytes&#x60; limit modes and a pinned random seed have none; a rating that is not a whole number of stars has none; NSP sorts on one term, so a rule ordered by a second refuses rather than dropping it; and neither do the fields NSP does not carry (&#x60;mediaType&#x60;, &#x60;state&#x60;, &#x60;source&#x60;, &#x60;container&#x60;, &#x60;codec&#x60;, &#x60;podcast&#x60;, &#x60;season&#x60;, &#x60;publishedAt&#x60;, &#x60;updatedAt&#x60;, &#x60;starredAt&#x60;, &#x60;played&#x60;, &#x60;finished&#x60;, &#x60;albumBarcode&#x60;, &#x60;albumLabel&#x60;, &#x60;albumCatalogNumber&#x60;, &#x60;albumMedia&#x60;, &#x60;albumCountry&#x60;, &#x60;tag.KEY&#x60;, and &#x60;playlist&#x60;). &#x60;albumArtist&#x60; is **not** among them: NSP carries it, and it round-trips.  &#x60;partial&#x3D;true&#x60; accepts the loss instead: the parts NSP cannot say are dropped and the rest is written. Still refused when nothing survives, since a document with every condition dropped matches the whole library on the far side. Ask &#x60;GET /playlists/{pid}/nsp/report&#x60; first to see what would go.  The response carries the playlist&#39;s own &#x60;name&#x60;, and &#x60;public&#x60; when it is shared - neither is part of the rule. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [partial] - Export what maps and drop the rest, rather than refusing the whole rule. 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -378,6 +380,7 @@ class PlaylistsApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<BuiltMap<String, JsonObject>>> exportPlaylistNsp({ 
     required String pid,
+    bool? partial = false,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -409,9 +412,14 @@ class PlaylistsApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (partial != null) r'partial': encodeQueryParameter(_serializers, partial, const FullType(bool)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -917,11 +925,12 @@ class PlaylistsApi {
   }
 
   /// Import a Navidrome smart playlist (NSP)
-  /// Creates a **smart** playlist from an NSP document, which is the request body itself. The document&#39;s &#x60;name&#x60; names the playlist (the &#x60;name&#x60; parameter overrides it, and is what lets a nameless document be imported) and &#x60;public&#x60; sets its visibility; &#x60;comment&#x60; is read and discarded, since a WaxDeck playlist has no comment.  Fields map onto the rule vocabulary (&#x60;GET /playlists/rule-fields&#x60;): &#x60;title&#x60;, &#x60;album&#x60;, &#x60;artist&#x60;, &#x60;albumartist&#x60;, &#x60;genre&#x60;, &#x60;year&#x60;, &#x60;playCount&#x60; by name, plus &#x60;dateAdded&#x60; to &#x60;addedAt&#x60;, &#x60;lastPlayed&#x60; to &#x60;lastPlayedAt&#x60;, &#x60;filepath&#x60; to &#x60;path&#x60;, &#x60;loved&#x60; to &#x60;starred&#x60;, &#x60;duration&#x60; to &#x60;durationMs&#x60;, and &#x60;rating&#x60;. Two of those carry different units on each side and are **rescaled**: NSP counts duration in seconds where WaxDeck counts milliseconds, and rates 0 to 5 where WaxDeck rates 0 to 100, so an unscaled &#x60;rating gt 3&#x60; would mean \&quot;rated above 3 out of 100\&quot;, which is every rated track.  &#x60;notContains&#x60; imports as a &#x60;not&#x60; node wrapping &#x60;contains&#x60;; every other operator has a WaxDeck spelling of the same name.  Fields map onto the catalog&#39;s own rule vocabulary: &#x60;title&#x60;, &#x60;album&#x60;, &#x60;artist&#x60;, &#x60;albumartist&#x60;, &#x60;genre&#x60;, &#x60;year&#x60;, &#x60;tracknumber&#x60;, &#x60;discnumber&#x60;, &#x60;playcount&#x60;, &#x60;starred&#x60;, and &#x60;rating&#x60;, plus &#x60;dateAdded&#x60; and &#x60;lastPlayed&#x60; under the relative operators. &#x60;rating&#x60; is **rescaled**: Navidrome rates 0 to 5 where the catalog rates 0 to 100, so an unscaled &#x60;rating gt 3&#x60; would mean \&quot;rated above 3 out of 100\&quot;, which is every rated track.  Mapping is **all-or-nothing**. A field, an operator, or a top-level key with no faithful counterpart rejects the whole document, naming the offender, rather than importing a rule that means something else - a document that imported as a quietly different playlist is worse than one that did not import. That covers fields the catalog has no answer for (&#x60;bitrate&#x60;, &#x60;size&#x60;, &#x60;bpm&#x60;, the &#x60;mbz_*&#x60; identifiers, and the rest), &#x60;limitPercent&#x60; and any other unrecognised top-level key, &#x60;inPlaylist&#x60;/&#x60;notInPlaylist&#x60;, and the absolute date operators (&#x60;before&#x60;, &#x60;after&#x60;, &#x60;is&#x60;) on &#x60;dateAdded&#x60; and &#x60;lastPlayed&#x60;, whose naive local dates have no faithful reading against the catalog&#39;s stored instants. &#x60;sort: random&#x60; maps to the random limit mode and needs a positive &#x60;limit&#x60;. 
+  /// Creates a **smart** playlist from an NSP document, which is the request body itself. The document&#39;s &#x60;name&#x60; names the playlist (the &#x60;name&#x60; parameter overrides it, and is what lets a nameless document be imported) and &#x60;public&#x60; sets its visibility; &#x60;comment&#x60; is read and discarded, since a WaxDeck playlist has no comment.  Fields map onto the rule vocabulary (&#x60;GET /playlists/rule-fields&#x60;): &#x60;title&#x60;, &#x60;album&#x60;, &#x60;artist&#x60;, &#x60;albumartist&#x60;, &#x60;genre&#x60;, &#x60;year&#x60;, &#x60;playCount&#x60; by name, plus &#x60;dateAdded&#x60; to &#x60;addedAt&#x60;, &#x60;lastPlayed&#x60; to &#x60;lastPlayedAt&#x60;, &#x60;filepath&#x60; to &#x60;path&#x60;, &#x60;loved&#x60; to &#x60;starred&#x60;, &#x60;duration&#x60; to &#x60;durationMs&#x60;, and &#x60;rating&#x60;. Two of those carry different units on each side and are **rescaled**: NSP counts duration in seconds where WaxDeck counts milliseconds, and rates 0 to 5 where WaxDeck rates 0 to 100, so an unscaled &#x60;rating gt 3&#x60; would mean \&quot;rated above 3 out of 100\&quot;, which is every rated track.  &#x60;notContains&#x60; imports as a &#x60;not&#x60; node wrapping &#x60;contains&#x60;; every other operator has a WaxDeck spelling of the same name.  Mapping is **all-or-nothing** by default. A field, an operator, or a top-level key with no faithful counterpart rejects the whole document, naming **every** offender, rather than importing a rule that means something else - a document that imported as a quietly different playlist is worse than one that did not import. That covers fields the catalog has no answer for (&#x60;bitrate&#x60;, &#x60;size&#x60;, &#x60;bpm&#x60;, the &#x60;mbz_*&#x60; identifiers, and the rest), &#x60;limitPercent&#x60; and any other unrecognised top-level key, &#x60;inPlaylist&#x60;/&#x60;notInPlaylist&#x60;, and the absolute date operators (&#x60;before&#x60;, &#x60;after&#x60;, &#x60;is&#x60;) on &#x60;dateAdded&#x60; and &#x60;lastPlayed&#x60;, whose naive local dates have no faithful reading against the catalog&#39;s stored instants. &#x60;sort: random&#x60; maps to the random limit mode and needs a positive &#x60;limit&#x60;.  &#x60;partial&#x3D;true&#x60; accepts the loss instead: the unmappable parts are dropped and what is left becomes the rule. Still refused when nothing survives, since a rule with every condition dropped matches the whole library, and when the document is malformed rather than merely unmappable. Ask &#x60;POST /playlists/nsp/report&#x60; first to see what would go. 
   ///
   /// Parameters:
   /// * [requestBody] - The NSP document, at most 1 MiB. A free-form object carries no `maxLength`, so the bound is enforced on the way in and answers `invalid-request`. 
   /// * [name] - Name for the created playlist, overriding the document's own. Required when the document carries no `name`. 
+  /// * [partial] - Import what maps and drop the rest, rather than refusing the whole document. 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -934,6 +943,7 @@ class PlaylistsApi {
   Future<Response<Playlist>> importPlaylistNsp({ 
     required BuiltMap<String, JsonObject> requestBody,
     String? name,
+    bool? partial = false,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -968,6 +978,7 @@ class PlaylistsApi {
 
     final _queryParameters = <String, dynamic>{
       if (name != null) r'name': encodeQueryParameter(_serializers, name, const FullType(String)),
+      if (partial != null) r'partial': encodeQueryParameter(_serializers, partial, const FullType(bool)),
     };
 
     dynamic _bodyData;
@@ -1475,6 +1486,198 @@ class PlaylistsApi {
     );
 
     return _response;
+  }
+
+  /// Report what an NSP export would lose
+  /// What exporting this playlist&#39;s rule as NSP would drop, without exporting it.  Answers a report rather than refusing: the point is to see the loss before choosing between the strict export and &#x60;partial&#x3D;true&#x60;. A static playlist has no rule and so answers &#x60;feature-unavailable&#x60;, which is the one thing this can refuse for.  Deliberately its own operation rather than something a successful &#x60;partial&#x3D;true&#x60; carries back. The export&#39;s 200 body is the document another server reads, so a report key beside &#x60;all&#x60;, &#x60;sort&#x60; and &#x60;limit&#x60; would either be rejected over there or silently change what the document means. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [NspReport] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<NspReport>> reportPlaylistNspExport({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/playlists/{pid}/nsp/report'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    NspReport? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(NspReport),
+      ) as NspReport;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<NspReport>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Report what an NSP import would lose
+  /// What importing this document would drop, without importing it. Nothing is created and nothing is changed.  Answers a report rather than refusing: the point is to see the loss before choosing between the strict import and &#x60;partial&#x3D;true&#x60;. Its only failure is a document that is not readable JSON at all, which is not a gap in the mapping but a broken file. 
+  ///
+  /// Parameters:
+  /// * [requestBody] - The NSP document, at most 1 MiB.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [NspReport] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<NspReport>> reportPlaylistNspImport({ 
+    required BuiltMap<String, JsonObject> requestBody,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/playlists/nsp/report';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(BuiltMap, [FullType(String), FullType(JsonObject)]);
+      _bodyData = _serializers.serialize(requestBody, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    NspReport? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(NspReport),
+      ) as NspReport;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<NspReport>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// Update a playlist

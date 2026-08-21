@@ -742,15 +742,9 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
         children: <Widget>[
           hero,
           const SizedBox(height: WaxSpace.s8),
-          Text(
-            caption,
-            textAlign: TextAlign.center,
-            style: WaxType.caption.copyWith(
-              color: WaxColors.of(context).textTertiary,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          // One line, which is what `_captionAllowance` above reserved
+          // room for.
+          ArtworkCaption(caption, align: TextAlign.center),
         ],
       ),
     );

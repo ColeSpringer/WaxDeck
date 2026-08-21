@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1041,5 +1042,399 @@ func TestPlaylistNspImportRefusalDedupesAndBounds(t *testing.T) {
 	// repeated and there is no overflow tail to add.
 	if n := strings.Count(msg, "bitrate"); n != 1 {
 		t.Errorf("refusal names bitrate %d times, want 1: %q", n, msg)
+	}
+}
+
+// The report is what makes the partial paths an informed choice rather
+// than a shrug: it names every gap without refusing, and the export that
+// follows drops exactly what it named.
+func TestPlaylistNspExportReportThenPartial(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	// Three gaps of three kinds - a field NSP has no name for, a second
+	// sort term it cannot carry, and a limit mode with no NSP spelling -
+	// beside one condition that maps cleanly and has to survive.
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Mostly exportable", "kind": "smart",
+		"rule": map[string]any{
+			"root": map[string]any{"type": "all", "nodes": []any{
+				map[string]any{"type": "condition", "field": "genre", "op": "is", "value": "Rock"},
+				map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+			}},
+			"sorts": []any{
+				map[string]any{"field": "playCount", "desc": true},
+				map[string]any{"field": "title"},
+			},
+			"limitMode": "minutes",
+			"limit":     60,
+		},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp/report", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d, want 200 - a report never refuses on expressiveness", resp.StatusCode)
+	}
+	rep := decode[NspReport](t, resp)
+	if rep.Direction != "export" {
+		t.Errorf("report direction = %q, want export", rep.Direction)
+	}
+	if rep.Gaps == nil || len(*rep.Gaps) < 2 {
+		t.Fatalf("report names %v gaps, want the field and the sort term", rep.Gaps)
+	}
+	var kinds, fields, paths []string
+	for _, g := range *rep.Gaps {
+		kinds = append(kinds, string(g.Kind))
+		paths = append(paths, g.Path)
+		if g.Field != nil {
+			fields = append(fields, *g.Field)
+		}
+		if g.Path == "" || g.Reason == "" {
+			t.Errorf("gap %+v carries no pointer or no sentence", g)
+		}
+	}
+	for _, want := range []string{"sort", "limit", "field"} {
+		if !slices.Contains(kinds, want) {
+			t.Errorf("report kinds = %v, want a %s gap among them", kinds, want)
+		}
+	}
+	// The pointer dereferences against the rule a client holds, whose
+	// condition tree is `root`. The converter's own word for it is
+	// `where`, which is a member `SmartRule` does not have.
+	if !slices.Contains(paths, "/root/nodes/1") {
+		t.Errorf("report paths = %v, want a pointer into the rule's own shape", paths)
+	}
+	for _, p := range paths {
+		if strings.HasPrefix(p, "/where") {
+			t.Errorf("report path %q points into the converter's shape, not the rule's", p)
+		}
+	}
+	// WaxDeck's own vocabulary, not the query engine's: the rule holds a
+	// `mediaType` condition, and reporting a gap on `kind` would name a
+	// field the person who built the rule has never seen.
+	if !slices.Contains(fields, "mediaType") {
+		t.Errorf("report fields = %v, want mediaType rather than the engine spelling", fields)
+	}
+	if !slices.Contains(fields, "title") {
+		t.Errorf("report fields = %v, want the dropped sort term named", fields)
+	}
+
+	// Strict still refuses, and names more than one of them.
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp", h.token)
+	if resp.StatusCode != 501 {
+		t.Fatalf("strict export status = %d, want 501", resp.StatusCode)
+	}
+	msg := decode[Error](t, resp).Message
+	if !strings.Contains(msg, ";") {
+		t.Errorf("strict refusal names one gap, not every one: %q", msg)
+	}
+
+	// The partial writes what is left, keeping the condition that maps
+	// and dropping the two that do not.
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp?partial=true", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("partial export status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := json.Marshal(decode[map[string]any](t, resp))
+	if !strings.Contains(string(raw), "Rock") {
+		t.Errorf("partial export dropped the condition that maps: %s", raw)
+	}
+	if strings.Contains(string(raw), "mediaType") {
+		t.Errorf("partial export carried a condition NSP cannot say: %s", raw)
+	}
+}
+
+// The import half of the same choice. The report answers 200 for a
+// document the strict import refuses, and the partial import builds the
+// rule that is left.
+func TestPlaylistNspImportReportThenPartial(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	doc := map[string]any{
+		"name": "Half of it", "all": []any{
+			map[string]any{"contains": map[string]any{"genre": "Rock"}},
+			map[string]any{"gt": map[string]any{"bitrate": 320}},
+		},
+	}
+
+	resp := h.postJSON(t, "/api/v1/playlists/nsp/report", doc)
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d, want 200", resp.StatusCode)
+	}
+	rep := decode[NspReport](t, resp)
+	if rep.Direction != "import" {
+		t.Errorf("report direction = %q, want import", rep.Direction)
+	}
+	if rep.Gaps == nil || len(*rep.Gaps) != 1 {
+		t.Fatalf("report names %v gaps, want the one unmappable field", rep.Gaps)
+	}
+	gap := (*rep.Gaps)[0]
+	if gap.Field == nil || *gap.Field != "bitrate" {
+		t.Errorf("gap does not name bitrate: %+v", gap)
+	}
+	if gap.Path == "" {
+		t.Errorf("gap carries no JSON pointer: %+v", gap)
+	}
+
+	// Strict refuses.
+	resp = h.postJSON(t, "/api/v1/playlists/nsp", doc)
+	wantStatus(t, resp, 400, "a strict import of a document with a gap")
+	resp.Body.Close()
+
+	// Partial takes it, and the playlist it creates is the surviving half.
+	resp = h.postJSON(t, "/api/v1/playlists/nsp?partial=true", doc)
+	if resp.StatusCode != 201 {
+		t.Fatalf("partial import status = %d, want 201", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	if pl.Kind != "smart" {
+		t.Fatalf("partial import made a %s playlist", pl.Kind)
+	}
+	rule, _ := json.Marshal(pl.Rule)
+	if !strings.Contains(string(rule), "genre") {
+		t.Errorf("partial import dropped the condition that maps: %s", rule)
+	}
+	if strings.Contains(string(rule), "bitrate") {
+		t.Errorf("partial import kept a condition it has no field for: %s", rule)
+	}
+}
+
+// Both partial paths still refuse when nothing survives: a rule with
+// every condition dropped is not a smaller version of what was asked
+// for, it is the whole library.
+func TestPlaylistNspPartialRefusesAnEmptyResult(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/playlists/nsp?partial=true", map[string]any{
+		"name": "Nothing survives", "all": []any{
+			map[string]any{"gt": map[string]any{"bitrate": 320}},
+		},
+	})
+	wantStatus(t, resp, 400, "a partial import with nothing left")
+	resp.Body.Close()
+
+	resp = h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Music only, partial", "kind": "smart",
+		"rule": map[string]any{"root": map[string]any{"type": "all", "nodes": []any{
+			map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+		}}},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp?partial=true", h.token)
+	wantStatus(t, resp, 501, "a partial export with nothing left")
+	resp.Body.Close()
+}
+
+// A static playlist has no rule, which is the one thing the export
+// report can refuse for.
+func TestPlaylistNspExportReportRefusesAStaticPlaylist(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{"name": "Static report", "kind": "static"})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp/report", h.token)
+	wantStatus(t, resp, 501, "an NSP export report for a static playlist")
+	resp.Body.Close()
+}
+
+// A lossless rule reports nothing, which is what lets a client skip the
+// dialog and hand back the document.
+func TestPlaylistNspExportReportIsEmptyWhenNothingIsLost(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Fully exportable", "kind": "smart",
+		"rule": map[string]any{"root": map[string]any{"type": "all", "nodes": []any{
+			map[string]any{"type": "condition", "field": "genre", "op": "is", "value": "Rock"},
+		}}},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp/report", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d", resp.StatusCode)
+	}
+	rep := decode[NspReport](t, resp)
+	if rep.Gaps != nil || rep.Notes != nil {
+		t.Fatalf("a lossless rule reports %+v", rep)
+	}
+}
+
+// albumArtist is a field .nsp genuinely carries, and it has to survive
+// both directions. WaxDeck stores the engine spelling `album_artist`
+// while WaxBin's .nsp table is keyed on `albumartist`; the query engine
+// accepts both as one field, so nothing about evaluation says which is
+// canonical, and only the round trip does.
+func TestPlaylistNspCarriesAlbumArtistBothWays(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "By album artist", "kind": "smart",
+		"rule": map[string]any{
+			"root": map[string]any{"type": "all", "nodes": []any{
+				map[string]any{"type": "condition", "field": "albumArtist", "op": "is", "value": "Nightjar"},
+			}},
+			"sorts": []any{map[string]any{"field": "albumArtist"}},
+		},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+
+	// Nothing is lost, so the report is empty and the strict export runs.
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp/report", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d", resp.StatusCode)
+	}
+	if rep := decode[NspReport](t, resp); rep.Gaps != nil {
+		t.Fatalf("albumArtist reported as unexportable: %+v", *rep.Gaps)
+	}
+
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("export status = %d, want 200", resp.StatusCode)
+	}
+	doc := decode[map[string]any](t, resp)
+	raw, _ := json.Marshal(doc)
+	if !strings.Contains(string(raw), "albumartist") {
+		t.Fatalf("export dropped the album artist: %s", raw)
+	}
+
+	// And back in, as a field the rule editor can name. A rule carrying
+	// the engine spelling instead is one the editor draws as
+	// "Albumartist" and a later PATCH refuses.
+	resp = h.postJSON(t, "/api/v1/playlists/nsp?name=Round+Trip", doc)
+	if resp.StatusCode != 201 {
+		t.Fatalf("re-import status = %d", resp.StatusCode)
+	}
+	back := decode[Playlist](t, resp)
+	rule, _ := json.Marshal(back.Rule)
+	if !strings.Contains(string(rule), `"albumArtist"`) {
+		t.Fatalf("import named the field in the engine's spelling: %s", rule)
+	}
+}
+
+// A report is a list of things to fix, so it dedupes and stops for the
+// same reason the refusal beside it does: a maxNSPBytes document holding
+// tens of thousands of clauses against one unsupported field is one
+// problem, and a client draws a row per entry.
+func TestPlaylistNspImportReportDedupesAndBounds(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	nodes := make([]any, 0, 200)
+	for i := 0; i < 200; i++ {
+		nodes = append(nodes, map[string]any{"gt": map[string]any{"bitrate": 128 + i}})
+	}
+	resp := h.postJSON(t, "/api/v1/playlists/nsp/report", map[string]any{"name": "x", "all": nodes})
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d", resp.StatusCode)
+	}
+	rep := decode[NspReport](t, resp)
+	// One sentence per distinct problem, plus whatever the converter says
+	// about the group they all sat in - never one per clause.
+	if rep.Gaps == nil || len(*rep.Gaps) > 3 {
+		t.Fatalf("200 clauses against one field reported as %v gaps", rep.Gaps)
+	}
+	if n := countGapsNaming(*rep.Gaps, "bitrate"); n != 1 {
+		t.Errorf("bitrate reported %d times, want once", n)
+	}
+
+	// Distinct problems are still distinct, up to the cap.
+	nodes = nodes[:0]
+	for _, field := range []string{"bitrate", "size", "bpm", "channels"} {
+		nodes = append(nodes, map[string]any{"gt": map[string]any{field: 1}})
+	}
+	resp = h.postJSON(t, "/api/v1/playlists/nsp/report", map[string]any{"name": "x", "all": nodes})
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d", resp.StatusCode)
+	}
+	rep = decode[NspReport](t, resp)
+	for _, field := range []string{"bitrate", "size", "bpm", "channels"} {
+		if countGapsNaming(*rep.Gaps, field) != 1 {
+			t.Errorf("%s is not reported once in %v", field, *rep.Gaps)
+		}
+	}
+}
+
+// countGapsNaming counts the gaps whose sentence names one field, which
+// is what a dedupe is about: the same problem twice is one row.
+func countGapsNaming(gaps []NspGap, field string) int {
+	n := 0
+	for _, g := range gaps {
+		if strings.Contains(g.Reason, field) {
+			n++
+		}
+	}
+	return n
+}
+
+// A refusal answers WaxBin's sentence, never its error type's rendering
+// of it: `waxerr.Error()` prefixes the operation, which is a package
+// path and an internal name.
+func TestPlaylistNspRefusalsCarryNoInternalNames(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	// The partial import's own refusal, which is the one path that does
+	// not go through the composed message.
+	resp := h.postJSON(t, "/api/v1/playlists/nsp?partial=true", map[string]any{
+		"name": "Nothing left", "all": []any{
+			map[string]any{"gt": map[string]any{"bitrate": 320}},
+		},
+	})
+	if resp.StatusCode != 400 {
+		resp.Body.Close()
+		t.Fatalf("partial import status = %d, want 400", resp.StatusCode)
+	}
+	msg := decode[Error](t, resp).Message
+	if strings.Contains(msg, "playlist.nsp:") {
+		t.Errorf("refusal names the converter's package path: %q", msg)
+	}
+	if !strings.Contains(msg, "nothing in this document") {
+		t.Errorf("refusal lost WaxBin's own sentence: %q", msg)
+	}
+
+	// And the partial export's.
+	resp = h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Nothing left either", "kind": "smart",
+		"rule": map[string]any{"root": map[string]any{"type": "all", "nodes": []any{
+			map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+		}}},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp?partial=true", h.token)
+	if resp.StatusCode != 501 {
+		resp.Body.Close()
+		t.Fatalf("partial export status = %d, want 501", resp.StatusCode)
+	}
+	msg = decode[Error](t, resp).Message
+	if strings.Contains(msg, "playlist.nsp:") {
+		t.Errorf("refusal names the converter's package path: %q", msg)
+	}
+	if !strings.Contains(msg, "nothing in this rule") {
+		t.Errorf("refusal lost WaxBin's own sentence: %q", msg)
 	}
 }

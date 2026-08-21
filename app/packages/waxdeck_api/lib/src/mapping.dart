@@ -2430,6 +2430,48 @@ PortablePlaylist portablePlaylistFromGen(gen.PortablePlaylist playlist) {
   );
 }
 
+/// Bridges a generated enum's Dart name back to its wire form.
+///
+/// The generator escapes a value that would be a Dart keyword by
+/// appending an underscore, which is how `export`, `import` and
+/// `operator` - three of the eleven values these two enums carry -
+/// arrive as `export_`, `import_` and `operator_`. `.name` on its own
+/// therefore answers something the contract never defines, and silently:
+/// nothing throws, the branch just never matches.
+///
+/// Safe as a general strip rather than a table because the escape is
+/// only ever a suffix and no value in either enum ends in an underscore.
+/// `nsp_report_test.dart` pins every value against the generated enum,
+/// so a change in the generator's escaping reds there.
+String _nspWireName(String name) =>
+    name.endsWith('_') ? name.substring(0, name.length - 1) : name;
+
+NspReport nspReportFromGen(gen.NspReport report) {
+  return NspReport(
+    direction: _nspWireName(report.direction.name),
+    gaps: _nspGapsFromGen(report.gaps),
+    notes: _nspGapsFromGen(report.notes),
+  );
+}
+
+List<NspGap> _nspGapsFromGen(BuiltList<gen.NspGap>? gaps) {
+  if (gaps == null) return const <NspGap>[];
+  return gaps
+      .map(
+        (g) => NspGap(
+          // The wire name rather than a switch: the kinds are open, and
+          // a screen renders the gap's own sentence whatever this says.
+          kind: _nspWireName(g.kind.name),
+          path: g.path,
+          reason: g.reason,
+          field: g.field,
+          op: g.op,
+          value: g.value?.value,
+        ),
+      )
+      .toList(growable: false);
+}
+
 SimilarityStatus similarityStatusFromGen(gen.SimilarityStatus status) {
   return SimilarityStatus(
     enabled: status.enabled,

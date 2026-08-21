@@ -4742,6 +4742,65 @@ class PortablePlaylist {
   final List<PortableRef> refs;
 }
 
+/// One part of a rule or an NSP document with no faithful counterpart
+/// on the other side.
+///
+/// [reason] is the converter's own sentence about what the person built,
+/// so a screen renders it rather than mapping it to a phrase of its own.
+/// [field] and [op] are written in the vocabulary of the side being
+/// read, which is what the report's direction says.
+class NspGap {
+  const NspGap({
+    required this.kind,
+    required this.path,
+    required this.reason,
+    this.field,
+    this.op,
+    this.value,
+  });
+
+  /// `field`, `operator`, `value`, `shape`, `sort`, `limit`, `entity`,
+  /// or `malformed`. Open by construction: a kind this build has no
+  /// wording for still carries a [reason], which is what a screen shows.
+  final String kind;
+
+  /// An RFC 6901 JSON Pointer to the offending part.
+  final String path;
+
+  final String reason;
+  final String? field;
+  final String? op;
+
+  /// The offending value on a `value` gap, whatever JSON type it was.
+  final Object? value;
+}
+
+/// What one NSP conversion could not carry.
+///
+/// [gaps] refuse the strict conversion and are what a partial one drops;
+/// [notes] refuse nothing. A lossless conversion reports neither, which
+/// is what lets a caller skip asking the person anything.
+class NspReport {
+  const NspReport({
+    required this.direction,
+    this.gaps = const [],
+    this.notes = const [],
+  });
+
+  /// `export` or `import`.
+  final String direction;
+
+  final List<NspGap> gaps;
+  final List<NspGap> notes;
+
+  /// Everything worth showing, in one list: the losses that refuse and
+  /// the losses that do not. A person deciding whether to accept the
+  /// loss is not helped by the distinction, only by the list.
+  List<NspGap> get all => <NspGap>[...gaps, ...notes];
+
+  bool get isLossless => gaps.isEmpty && notes.isEmpty;
+}
+
 /// Coverage of the sonic-similarity surface.
 class SimilarityStatus {
   const SimilarityStatus({

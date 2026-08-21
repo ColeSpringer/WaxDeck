@@ -4572,6 +4572,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistCopiedM3u => 'Playlist copied as M3U';
 
   @override
+  String get playlistCopiedNsp => 'Playlist copied as NSP';
+
+  @override
   String get playlistCopiedPortable => 'Portable playlist copied';
 
   @override
@@ -4622,6 +4625,32 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistExportM3u => 'Export M3U';
+
+  @override
+  String get playlistExportNsp => 'Export as NSP';
+
+  @override
+  String playlistExportNspLossCount(num count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString parts of this rule have no NSP form.',
+      one: 'One part of this rule has no NSP form.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistExportNspLossTitle =>
+      'Some of this rule cannot be exported';
+
+  @override
+  String get playlistExportNspProceed => 'Export without them';
 
   @override
   String get playlistExportPortable => 'Export portable';

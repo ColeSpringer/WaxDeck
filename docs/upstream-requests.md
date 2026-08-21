@@ -11,22 +11,27 @@ note.
 
 ## WaxBin
 
-- **`ExportNSP` cannot say what it would drop.** The converter is
-  all-or-nothing in both directions, which is right for the default:
-  half a rule is a different playlist. But it leaves no way to offer
-  "export what maps and record the rest", because a caller cannot ask
-  what stopped the export without re-implementing the field and
-  operator tables to find out - which is the duplication the shared
-  converter exists to prevent. A report alongside the refusal (the
-  fields, operators, and modes with no `.nsp` form in this query) would
-  let a caller present the loss and let the person decide, with one
-  table still owning the answer.
+- **The `.nsp` field map's inverse does not cover the engine's own
+  aliases.** `nspFieldToWB` is keyed on Navidrome's `albumartist`, and
+  `wbFieldToNSP` is built by inverting it - so it has an `albumartist`
+  key and no `album_artist` one. But the query engine accepts both as
+  the same column (`store/sqlite/fields.go` lists them side by side with
+  one expression), so which spelling a caller stores is arbitrary as far
+  as evaluation is concerned, and a rule holding `album_artist` exports
+  as a gap on a field `.nsp` carries perfectly well. `ExportNSPPartial`
+  then drops that condition, and because a sibling condition survived,
+  the empty-result guard does not fire: the document written selects a
+  strictly wider set than the rule did. Building the inverse map over
+  the engine's alias set - or having the exporter resolve a field
+  through the same alias table the engine uses before looking it up -
+  closes it.
 
-  Answered upstream by `CheckNSPExport`/`CheckNSPImport` and the
-  `ExportNSPPartial`/`ImportNSPPartial` pair; the entry stands until
-  WaxDeck adopts them. Workaround today: an import refusal composes
-  every gap the check reports, and the export still refuses with
-  WaxBin's own first-offender sentence and offers nothing partial.
+  Workaround today: `nspEngineAliases` in `server/internal/service/nsp.go`
+  rewrites `album_artist` to `albumartist` in the query handed to the
+  converter, and registers the reverse as a read alias so an imported
+  rule reads back in WaxDeck's own vocabulary. One field, and it is a
+  spelling rather than a mapping - but it is a WaxDeck-side table about
+  `.nsp` conversion, which is the thing that file exists not to have.
 
 - **No art setter takes an already-stamped `*model.ArtImage`.** The
   provenance ask asked for two things, and one landed: `ArtEditOptions`

@@ -172,10 +172,12 @@ whether they were read out of the file's own tags, out of an image or
 metadata provider (which is named), or set by hand.
 
 Wherever a cover is drawn large enough to carry a caption - the
-artwork manager, the album, artist, book and show headers, and the
-radio face - a line under it says which. It is always on and nothing
-hides it. The grids do not carry it, because a 48-pixel thumbnail has
-no room for a line and no listener reads two hundred of them.
+artwork manager, the album, artist, book and show headers, the radio
+face, and the full-screen player - a line under it says which. It is
+always on and nothing hides it. The grids do not carry it, because a
+48-pixel thumbnail has no room for a line and no listener reads two
+hundred of them; the player pays a read of its own for the one track on
+screen rather than putting provenance on every listing row.
 
 A release usually holds no cover of its own and shows one of its
 tracks' instead. Its caption says both things - where that track's

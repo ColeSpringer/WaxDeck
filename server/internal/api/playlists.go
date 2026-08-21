@@ -295,11 +295,29 @@ func (s *Server) ImportPlaylistNsp(ctx context.Context, req ImportPlaylistNspReq
 	if req.Params.Name != nil {
 		name = *req.Params.Name
 	}
-	pl, err := s.svc.ImportPlaylistNSP(ctx, uc, doc, name)
+	pl, err := s.svc.ImportPlaylistNSP(ctx, uc, doc, name, derefBool(req.Params.Partial))
 	if err != nil {
 		return nil, err
 	}
 	return ImportPlaylistNsp201JSONResponse(playlistJSON(pl)), nil
+}
+
+func (s *Server) ReportPlaylistNspImport(ctx context.Context, req ReportPlaylistNspImportRequestObject) (ReportPlaylistNspImportResponseObject, error) {
+	if req.Body == nil {
+		return ReportPlaylistNspImport400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	if _, _, err := s.requireUserCtx(ctx); err != nil {
+		return nil, err
+	}
+	doc, err := json.Marshal(*req.Body)
+	if err != nil {
+		return ReportPlaylistNspImport400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "the NSP document could not be read"))}, nil
+	}
+	rep, err := s.svc.ReportPlaylistNSPImport(doc)
+	if err != nil {
+		return nil, err
+	}
+	return ReportPlaylistNspImport200JSONResponse(nspReportJSON(rep)), nil
 }
 
 func (s *Server) ExportPlaylistNsp(ctx context.Context, req ExportPlaylistNspRequestObject) (ExportPlaylistNspResponseObject, error) {
@@ -307,11 +325,63 @@ func (s *Server) ExportPlaylistNsp(ctx context.Context, req ExportPlaylistNspReq
 	if err != nil {
 		return nil, err
 	}
-	doc, err := s.svc.ExportPlaylistNSP(ctx, uc, req.Pid)
+	doc, err := s.svc.ExportPlaylistNSP(ctx, uc, req.Pid, derefBool(req.Params.Partial))
 	if err != nil {
 		return nil, err
 	}
 	return ExportPlaylistNsp200JSONResponse(doc), nil
+}
+
+func (s *Server) ReportPlaylistNspExport(ctx context.Context, req ReportPlaylistNspExportRequestObject) (ReportPlaylistNspExportResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rep, err := s.svc.ReportPlaylistNSPExport(ctx, uc, req.Pid)
+	if err != nil {
+		return nil, err
+	}
+	return ReportPlaylistNspExport200JSONResponse(nspReportJSON(rep)), nil
+}
+
+// nspReportJSON re-types the service's report onto the operation's
+// schema, which mirrors it field for field.
+func nspReportJSON(rep service.NSPReport) NspReport {
+	out := NspReport{Direction: NspReportDirection(rep.Direction)}
+	if gaps := nspGapsJSON(rep.Gaps); gaps != nil {
+		out.Gaps = &gaps
+	}
+	if notes := nspGapsJSON(rep.Notes); notes != nil {
+		out.Notes = &notes
+	}
+	return out
+}
+
+func nspGapsJSON(gaps []service.NSPGap) []NspGap {
+	if len(gaps) == 0 {
+		return nil
+	}
+	out := make([]NspGap, 0, len(gaps))
+	for _, g := range gaps {
+		row := NspGap{
+			Kind:   NspGapKind(g.Kind),
+			Path:   g.Path,
+			Reason: g.Reason,
+		}
+		if g.Field != "" {
+			row.Field = ptr(g.Field)
+		}
+		if g.Op != "" {
+			row.Op = ptr(g.Op)
+		}
+		// The generated field is a bare `interface{}`, not a pointer:
+		// taking an address here would hand every in-process reader a
+		// `*interface{}` that only survives because encoding/json
+		// follows it.
+		row.Value = g.Value
+		out = append(out, row)
+	}
+	return out
 }
 
 // --- wire conversion --------------------------------------------------------------

@@ -196,6 +196,8 @@ export 'package:waxdeck_api_gen/src/model/notification_target_create.dart';
 export 'package:waxdeck_api_gen/src/model/notification_target_kind.dart';
 export 'package:waxdeck_api_gen/src/model/notification_target_list.dart';
 export 'package:waxdeck_api_gen/src/model/notification_target_update.dart';
+export 'package:waxdeck_api_gen/src/model/nsp_gap.dart';
+export 'package:waxdeck_api_gen/src/model/nsp_report.dart';
 export 'package:waxdeck_api_gen/src/model/oidc_exchange_request.dart';
 export 'package:waxdeck_api_gen/src/model/oidc_provider.dart';
 export 'package:waxdeck_api_gen/src/model/oidc_providers.dart';

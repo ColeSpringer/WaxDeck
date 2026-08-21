@@ -86,12 +86,10 @@ class EntityHeader extends StatelessWidget {
               children: <Widget>[
                 cover,
                 const SizedBox(height: WaxSpace.s8),
-                Text(
+                ArtworkCaption(
                   artworkCaption!,
-                  textAlign: TextAlign.center,
-                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                  align: TextAlign.center,
                   maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

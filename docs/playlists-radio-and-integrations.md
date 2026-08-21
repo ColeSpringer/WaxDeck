@@ -65,23 +65,39 @@ that looks imported and is not the one you had. On the way out, a
 rating that is not a whole number of stars is refused rather than
 written as a fraction Navidrome cannot mean.
 
-That is the rule for both directions: **anything that cannot be said
-exactly refuses the whole document, naming what stopped it.** Half a
-rule is a different playlist, so nothing is quietly dropped and there
-is no partial export. On import that covers fields the catalog has no
-answer for (`bitrate`, `size`, `bpm`, the `mbz_*` identifiers, and the
-rest), `limitPercent` and any other unrecognised top-level key -
-including a typo for `all`, which would otherwise import as a rule
-over your whole library - `inPlaylist`, and the absolute date
-operators, whose naive local dates have no faithful reading against
-stored instants. On export it covers what the catalog can say and NSP
-cannot, which is more: every negation but `notContains`, `gte` and
-`lte`, `isPresent` and `isMissing`, custom `tag.KEY` fields, the
-budget limit modes, and the fields NSP does not carry at all.
+That is the rule for both directions by default: **anything that cannot
+be said exactly refuses the whole document, naming every part that
+stopped it.** Half a rule is a different playlist, so nothing is
+quietly dropped. On import that covers fields the catalog has no answer
+for (`bitrate`, `size`, `bpm`, the `mbz_*` identifiers, and the rest),
+`limitPercent` and any other unrecognised top-level key - including a
+typo for `all`, which would otherwise import as a rule over your whole
+library - `inPlaylist`, and the absolute date operators, whose naive
+local dates have no faithful reading against stored instants. On export
+it covers what the catalog can say and NSP cannot, which is more: every
+negation but `notContains`, `gte` and `lte`, `isPresent` and
+`isMissing`, custom `tag.KEY` fields, the budget limit modes, and the
+fields NSP does not carry at all.
 
-Exporting a rule that only *partly* maps is not offered. Saying which
-parts were dropped is the converter's to report, and the ask is filed
-in `docs/upstream-requests.md`.
+**A rule sorted on more than one term is one of them.** NSP orders on a
+single `sort`, so a playlist ordered by play count and then by title
+refuses rather than exporting with the second term silently gone - and
+a rule may carry up to four, so this is a rule somebody has. Reordering
+a playlist without saying so was worse than either answer.
+
+You can accept the loss instead. **Export as NSP** asks first: a rule
+that maps exactly hands back the document, and one that does not lists
+every part that would go, in the converter's own words, before offering
+to export without them. Import works the same way -
+`POST /playlists/nsp/report` says what a document would lose, and
+`?partial=true` on either operation takes it. Both still refuse when
+nothing survives, since a rule with every condition dropped selects the
+whole library rather than a smaller version of what was asked for.
+
+The report is its own request rather than something a successful export
+carries back: the export's body is the document *another server reads*,
+and a report key beside `all` and `sort` would either be rejected over
+there or change what the document means.
 
 ### Covers
 

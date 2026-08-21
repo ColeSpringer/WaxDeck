@@ -81,10 +81,23 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
 /// else - a timeout, a 500, a code carrying no detail - reads from the
 /// table. The same split the timezone dialog already makes, hoisted to
 /// where the other forms can reach it.
+/// `feature-unavailable` joins them under one condition: that it names
+/// no `feature`. That code is an umbrella, and its params are what say
+/// which refusal it is - so a parameterised one still reads from the
+/// table, where the sentence is translated and specific. One with no
+/// params has nothing there but the umbrella's own "this server is not
+/// running the feature that request needs", which is exactly wrong for
+/// the refusals that are about the request: an .nsp export saying no
+/// part of this rule can be written is a sentence about what the person
+/// built, and the server is running the feature fine.
 String explainRefusal(AppLocalizations l10n, Object error) {
-  if (error is WaxDeckApiException &&
-      const {'invalid-request', 'conflict'}.contains(error.code) &&
-      error.message.trim().isNotEmpty) {
+  if (error is! WaxDeckApiException || error.message.trim().isEmpty) {
+    return explainError(l10n, error);
+  }
+  if (const {'invalid-request', 'conflict'}.contains(error.code)) {
+    return error.message;
+  }
+  if (error.code == 'feature-unavailable' && error.params?['feature'] == null) {
     return error.message;
   }
   return explainError(l10n, error);

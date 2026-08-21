@@ -405,6 +405,47 @@ class _ComponentsPageState extends State<ComponentsPage> {
         ),
         const SizedBox(height: WaxSpace.s24),
 
+        const SectionHeader(overline: 'Content', title: 'Artwork captions'),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // What is in the slot, which is a fact about the picture
+            // that is there - one step up the ramp from the rest.
+            SizedBox(
+              width: 120,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  ArtworkImage(size: 120, artwork: art.of('Salt Harbour')),
+                  const SizedBox(height: WaxSpace.s8),
+                  const ArtworkCaption('jpeg, 1400 x 1400', emphasis: true),
+                  const ArtworkCaption('From the Cover Art Archive'),
+                ],
+              ),
+            ),
+            const SizedBox(width: WaxSpace.s16),
+            // The two-line case a header takes, where a long provider
+            // name wraps under the picture instead of widening it.
+            SizedBox(
+              width: 120,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const ArtworkImage(size: 120, monogram: 'Nightjar Ensemble'),
+                  const SizedBox(height: WaxSpace.s8),
+                  const ArtworkCaption(
+                    'From the Cover Art Archive, borrowed from a track',
+                    align: TextAlign.center,
+                    maxLines: 2,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
         const SectionHeader(overline: 'States', title: 'Empty, error, loading'),
         SizedBox(
           height: 220,

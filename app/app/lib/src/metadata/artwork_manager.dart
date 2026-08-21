@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../artwork/art_source_mark.dart';
+import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
@@ -57,13 +57,6 @@ enum ArtSlot {
     background => l10n.artSlotBackgroundInline,
   };
 }
-
-/// The slots an entity holds at its own level, and where the cover it
-/// resolves came from.
-final itemArtRolesProvider = FutureProvider.autoDispose
-    .family<ArtRoles, String>(
-      (ref, pid) => ref.watch(repositoryProvider).getItemArtRoles(pid),
-    );
 
 /// Every artwork role, what is in it, and the verbs that fill or empty
 /// it. Own-versus-inherited is what the grid exists to answer: a front
@@ -515,23 +508,8 @@ class _SlotTile extends ConsumerWidget {
                 slot.labelOf(l10n),
                 style: WaxType.label.copyWith(color: colors.textPrimary),
               ),
-              Text(
-                state,
-                style: WaxType.caption.copyWith(
-                  color: info != null
-                      ? colors.textSecondary
-                      : colors.textTertiary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (source != null)
-                Text(
-                  source,
-                  style: WaxType.caption.copyWith(color: colors.textTertiary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              ArtworkCaption(state, emphasis: info != null),
+              if (source != null) ArtworkCaption(source),
               const SizedBox(height: WaxSpace.s4),
               Row(
                 children: <Widget>[

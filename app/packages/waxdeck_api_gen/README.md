@@ -502,6 +502,8 @@ Class | Method | HTTP request | Description
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**previewSmartRule**](doc/PlaylistsApi.md#previewsmartrule) | **POST** /playlists/preview | Preview a smart rule
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**removePlaylistItemAt**](doc/PlaylistsApi.md#removeplaylistitemat) | **DELETE** /playlists/{pid}/items/{position} | Remove one member by position
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**replacePlaylistItems**](doc/PlaylistsApi.md#replaceplaylistitems) | **PUT** /playlists/{pid}/items | Replace a static playlist&#39;s members
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**reportPlaylistNspExport**](doc/PlaylistsApi.md#reportplaylistnspexport) | **GET** /playlists/{pid}/nsp/report | Report what an NSP export would lose
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**reportPlaylistNspImport**](doc/PlaylistsApi.md#reportplaylistnspimport) | **POST** /playlists/nsp/report | Report what an NSP import would lose
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**updatePlaylist**](doc/PlaylistsApi.md#updateplaylist) | **PATCH** /playlists/{pid} | Update a playlist
 [*PodcastsApi*](doc/PodcastsApi.md) | [**captureEpisodeTranscript**](doc/PodcastsApi.md#captureepisodetranscript) | **POST** /episodes/{pid}/transcript | Capture an episode&#39;s transcript for search
 [*PodcastsApi*](doc/PodcastsApi.md) | [**exportOpml**](doc/PodcastsApi.md#exportopml) | **GET** /podcasts/opml | Export the caller&#39;s subscriptions as OPML
@@ -761,6 +763,8 @@ Class | Method | HTTP request | Description
  - [NotificationTargetKind](doc/NotificationTargetKind.md)
  - [NotificationTargetList](doc/NotificationTargetList.md)
  - [NotificationTargetUpdate](doc/NotificationTargetUpdate.md)
+ - [NspGap](doc/NspGap.md)
+ - [NspReport](doc/NspReport.md)
  - [OidcExchangeRequest](doc/OidcExchangeRequest.md)
  - [OidcProvider](doc/OidcProvider.md)
  - [OidcProviders](doc/OidcProviders.md)

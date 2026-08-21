@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../providers.dart';
@@ -8,6 +9,18 @@ import '../sync/sync_providers.dart';
 import 'artwork_store.dart';
 import 'artwork_store_io.dart'
     if (dart.library.js_interop) 'artwork_store_stub.dart';
+
+/// The artwork slots an item holds at its own level, and where the
+/// cover it resolves came from.
+///
+/// Shared rather than private to the artwork manager: the full-screen
+/// player draws the same mark under the same cover, and the read behind
+/// it is a row lookup on the server rather than an image decode, so two
+/// surfaces watching one family is one request and not two.
+final itemArtRolesProvider = FutureProvider.autoDispose
+    .family<ArtRoles, String>(
+      (ref, pid) => ref.watch(repositoryProvider).getItemArtRoles(pid),
+    );
 
 /// Where offline artwork is recorded. Native only: the web build has no
 /// mirror and no offline mode to pin for.

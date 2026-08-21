@@ -183,6 +183,10 @@ Serializers _$serializers =
           ..add(NotificationTargetKind.serializer)
           ..add(NotificationTargetList.serializer)
           ..add(NotificationTargetUpdate.serializer)
+          ..add(NspGap.serializer)
+          ..add(NspGapKindEnum.serializer)
+          ..add(NspReport.serializer)
+          ..add(NspReportDirectionEnum.serializer)
           ..add(OidcExchangeRequest.serializer)
           ..add(OidcProvider.serializer)
           ..add(OidcProviders.serializer)
@@ -626,6 +630,14 @@ Serializers _$serializers =
               const FullType(NotificationTarget),
             ]),
             () => ListBuilder<NotificationTarget>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(NspGap)]),
+            () => ListBuilder<NspGap>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(NspGap)]),
+            () => ListBuilder<NspGap>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(OidcProvider)]),

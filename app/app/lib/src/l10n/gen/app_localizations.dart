@@ -7215,6 +7215,12 @@ abstract class AppLocalizations {
   /// **'Playlist copied as M3U'**
   String get playlistCopiedM3u;
 
+  /// Snackbar after the NSP document reached the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist copied as NSP'**
+  String get playlistCopiedNsp;
+
   /// Snackbar after the portable export reached the clipboard.
   ///
   /// In en, this message translates to:
@@ -7310,6 +7316,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export M3U'**
   String get playlistExportM3u;
+
+  /// Row in a smart playlist's overflow menu offering its rule as a Navidrome smart-playlist document, and the title of the dialog that shows it.
+  ///
+  /// In en, this message translates to:
+  /// **'Export as NSP'**
+  String get playlistExportNsp;
+
+  /// Frame above the list of parts of a rule that NSP cannot carry. Says only that they have no NSP form: some of them are dropped by the export and some are losses the format makes either way, and the row under each one says which.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{One part of this rule has no NSP form.} other{{count} parts of this rule have no NSP form.}}'**
+  String playlistExportNspLossCount(num count);
+
+  /// Title of the dialog listing what an NSP export would drop.
+  ///
+  /// In en, this message translates to:
+  /// **'Some of this rule cannot be exported'**
+  String get playlistExportNspLossTitle;
+
+  /// Button accepting the loss and exporting the partial NSP document.
+  ///
+  /// In en, this message translates to:
+  /// **'Export without them'**
+  String get playlistExportNspProceed;
 
   /// Row in a playlist's overflow menu copying the playlist in the form another WaxDeck server can import.
   ///

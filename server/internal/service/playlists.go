@@ -268,6 +268,16 @@ func init() {
 		ruleFieldsByAPI[s.api] = s
 		ruleFieldsByEngine[s.engine] = s
 	}
+	// Read aliases, on top of the spellings WaxDeck writes. A rule that
+	// arrived through the .nsp converter carries the engine's other name
+	// for the same field (nspEngineAliases in nsp.go), and reading it
+	// back as anything but WaxDeck's own name gives the rule editor a
+	// field it cannot draw and a later PATCH one it will refuse.
+	for engine, alias := range nspEngineAliases {
+		if spec, ok := ruleFieldsByEngine[engine]; ok {
+			ruleFieldsByEngine[alias] = spec
+		}
+	}
 }
 
 // mediaTypeRuleValues maps rule values for the mediaType field onto the

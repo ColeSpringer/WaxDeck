@@ -441,6 +441,52 @@ class _Placeholder extends StatelessWidget {
   }
 }
 
+/// The line under a picture: what is in the slot, or where the picture
+/// came from.
+///
+/// Takes a worded string rather than anything it could word itself. The
+/// vocabulary a cover's provenance is drawn from is the app's - source
+/// tokens, provider ids, the borrowed note - and this package has no
+/// translation table to turn one into a sentence. What it owns is how
+/// that sentence sits under artwork: the type ramp, the tertiary tone,
+/// the ellipsis, so four surfaces cannot drift into four answers.
+///
+/// [maxLines] is the caller's, not a policy: a header caption under a
+/// 200-pixel cover has room for two, and a player hero reserves exactly
+/// one line of vertical allowance before it sizes itself.
+class ArtworkCaption extends StatelessWidget {
+  const ArtworkCaption(
+    this.text, {
+    this.align = TextAlign.start,
+    this.maxLines = 1,
+    this.emphasis = false,
+    super.key,
+  });
+
+  final String text;
+  final TextAlign align;
+  final int maxLines;
+
+  /// Whether this line describes the picture that is there rather than
+  /// the absence of one or the place it came from. One step up the text
+  /// ramp, which is the difference between "1400 x 1400" and "Empty".
+  final bool emphasis;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Text(
+      text,
+      textAlign: align,
+      style: WaxType.caption.copyWith(
+        color: emphasis ? colors.textSecondary : colors.textTertiary,
+      ),
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
 /// A thin progress arc around artwork: how far into a book, an episode, a
 /// half-heard album you are.
 class ProgressRing extends StatelessWidget {

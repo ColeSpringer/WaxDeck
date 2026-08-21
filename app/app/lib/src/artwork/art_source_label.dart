@@ -1,5 +1,4 @@
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 
@@ -118,35 +117,4 @@ String? provenanceSourceLabel(AppLocalizations l10n, FieldProvenance row) {
     l10n,
     ArtSource(source: row.source, provider: row.provider),
   );
-}
-
-/// The caption under a cover: where the picture came from.
-///
-/// Drawn wherever a cover is presented large enough to carry a line,
-/// and nowhere else - a grid thumbnail has no room for one, which is
-/// why nothing here reads a list row. Nothing gates it: a picture
-/// fetched from a third party says so, always.
-class ArtSourceMark extends StatelessWidget {
-  const ArtSourceMark({
-    super.key,
-    required this.source,
-    this.align = TextAlign.start,
-  });
-
-  final ArtSource? source;
-  final TextAlign align;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = artSourceLabelWithBorrow(context.l10n, source);
-    if (label == null) return const SizedBox.shrink();
-    final colors = WaxColors.of(context);
-    return Text(
-      label,
-      textAlign: align,
-      style: WaxType.caption.copyWith(color: colors.textTertiary),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
 }

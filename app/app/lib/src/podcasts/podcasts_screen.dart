@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -158,37 +157,16 @@ class _HubOverflow extends ConsumerWidget {
       return;
     }
     if (!context.mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.podcastOpmlExport),
-        content: SizedBox(
-          width: 480,
-          child: SingleChildScrollView(
-            child: SelectableText(
-              opml,
-              key: const Key('opml-export-content'),
-              style: WaxType.monoData,
-            ),
-          ),
-        ),
-        actions: <Widget>[
-          WaxButton(
-            label: l10n.commonClose,
-            kind: WaxButtonKind.text,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          WaxButton(
-            label: l10n.podcastOpmlCopy,
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: opml));
-              messenger
-                ..hideCurrentSnackBar()
-                ..showSnackBar(SnackBar(content: Text(l10n.podcastOpmlCopied)));
-            },
-          ),
-        ],
-      ),
+    await showDocumentDialog(
+      context,
+      title: l10n.podcastOpmlExport,
+      document: opml,
+      documentKey: const Key('opml-export-content'),
+      closeLabel: l10n.commonClose,
+      copyLabel: l10n.podcastOpmlCopy,
+      onCopied: () => messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(l10n.podcastOpmlCopied))),
     );
   }
 

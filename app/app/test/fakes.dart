@@ -4869,6 +4869,46 @@ class FakeRepository implements WaxDeckRepository {
     return portableExport;
   }
 
+  /// What [reportPlaylistNspExport] answers, and the NSP document
+  /// [exportPlaylistNsp] hands back.
+  NspReport nspReport = const NspReport(direction: 'export');
+  Map<String, Object?> nspExport = const <String, Object?>{
+    'name': 'Smart playlist',
+    'all': <Object?>[],
+  };
+
+  /// Every NSP report and export, and for the export whether it asked
+  /// for the lossy one. The dialog's whole job is to make that last
+  /// field true only after somebody has seen the loss, and to ask about
+  /// the same playlist both times.
+  final List<String> nspReports = [];
+  final List<({String pid, bool partial})> nspExports = [];
+
+  /// Raised by the report and by the export respectively. Two hooks and
+  /// not one: the reachable refusal is the export's, after a report that
+  /// answered, and a single hook cannot express that.
+  WaxDeckApiException? nspReportError;
+  WaxDeckApiException? nspExportError;
+
+  @override
+  Future<NspReport> reportPlaylistNspExport(String pid) async {
+    nspReports.add(pid);
+    final error = nspReportError;
+    if (error != null) throw error;
+    return nspReport;
+  }
+
+  @override
+  Future<Map<String, Object?>> exportPlaylistNsp(
+    String pid, {
+    bool partial = false,
+  }) async {
+    nspExports.add((pid: pid, partial: partial));
+    final error = nspExportError;
+    if (error != null) throw error;
+    return nspExport;
+  }
+
   /// Similarity coverage served by [getSimilarityStatus].
   SimilarityStatus similarityStatus = const SimilarityStatus(
     enabled: false,

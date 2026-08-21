@@ -174,6 +174,8 @@ import 'package:waxdeck_api_gen/src/model/notification_target_create.dart';
 import 'package:waxdeck_api_gen/src/model/notification_target_kind.dart';
 import 'package:waxdeck_api_gen/src/model/notification_target_list.dart';
 import 'package:waxdeck_api_gen/src/model/notification_target_update.dart';
+import 'package:waxdeck_api_gen/src/model/nsp_gap.dart';
+import 'package:waxdeck_api_gen/src/model/nsp_report.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_exchange_request.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_provider.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_providers.dart';
@@ -517,6 +519,8 @@ part 'serializers.g.dart';
   NotificationTargetKind,
   NotificationTargetList,
   NotificationTargetUpdate,
+  NspGap,
+  NspReport,
   OidcExchangeRequest,
   OidcProvider,
   OidcProviders,

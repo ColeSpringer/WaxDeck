@@ -563,6 +563,21 @@ abstract interface class WaxDeckRepository {
   /// for re-importing on another WaxDeck server.
   Future<PortablePlaylist> exportPlaylistPortable(String pid);
 
+  /// `GET /playlists/{pid}/nsp/report`: what exporting this smart
+  /// playlist's rule as a Navidrome document would drop, without
+  /// exporting it. Refuses only for a playlist with no rule.
+  Future<NspReport> reportPlaylistNspExport(String pid);
+
+  /// `GET /playlists/{pid}/nsp`: the smart playlist's rule as a
+  /// Navidrome document. Refuses when the rule holds anything NSP
+  /// cannot say, naming every offender; [partial] drops those parts
+  /// and writes the rest, which is a choice to make after reading
+  /// [reportPlaylistNspExport].
+  Future<Map<String, Object?>> exportPlaylistNsp(
+    String pid, {
+    bool partial = false,
+  });
+
   /// `GET /shares`: the caller's share links, newest first. [all] lists
   /// every account's links instead, which the server allows only to an
   /// administrator and which is the only listing that names owners.
@@ -2621,6 +2636,35 @@ class WaxDeckClient implements WaxDeckRepository {
         );
         return portablePlaylistFromGen(_require(response.data));
       });
+
+  @override
+  Future<NspReport> reportPlaylistNspExport(String pid) => _guard(() async {
+    final response = await _gen.getPlaylistsApi().reportPlaylistNspExport(
+      pid: pid,
+    );
+    return nspReportFromGen(_require(response.data));
+  });
+
+  @override
+  Future<Map<String, Object?>> exportPlaylistNsp(
+    String pid, {
+    bool partial = false,
+  }) => _guard(() async {
+    final response = await _gen.getPlaylistsApi().exportPlaylistNsp(
+      pid: pid,
+      // Only when it is asked for: the parameter defaults false on the
+      // wire, and sending it always would put a query string on every
+      // strict export for nothing.
+      partial: partial ? true : null,
+    );
+    // The document is another server's grammar, carried verbatim. It
+    // stays a map: nothing here reads it, and a model of it would be a
+    // second place to keep in step with a format WaxDeck does not own.
+    return <String, Object?>{
+      for (final entry in _require(response.data).entries)
+        entry.key: entry.value.value,
+    };
+  });
 
   @override
   Future<SharePage> listShares({

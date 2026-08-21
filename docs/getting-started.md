@@ -263,3 +263,8 @@ already-playing streams keep flowing, authentication and settings stay
 live, and catalog reads answer with a typed `catalog-maintenance`
 error until the hand-off ends. The socket is a local admin plane,
 created 0600 for the server's own user.
+
+Build the CLI from the `waxbin` pseudo-version pinned in
+`server/go.mod`. The socket protocol is versioned and a mismatch is a
+total refusal rather than a degrade, so a CLI built from a different
+commit does not connect at all.

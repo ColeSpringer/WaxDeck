@@ -11,6 +11,7 @@ import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart' show ArtworkCaption;
 
 import 'fakes.dart';
 import 'player_host.dart';
@@ -256,6 +257,43 @@ void main() {
       await pumpPlayerInto(tester, harness);
 
       expect(find.text('Playing from Salt Harbour'), findsOneWidget);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a fetched cover names its provider under the hero', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')])
+        ..artSource = const ArtSource(
+          source: 'enrichment',
+          provider: 'coverartarchive',
+        );
+      final harness = PlayerHarness(
+        playbackContainer(repo: repo, engine: FakeEngine()),
+      );
+      harness.play([_track(_first, 'Salt Harbour')]);
+      await pumpPlayerInto(tester, harness);
+      // The read is a future, so the mark arrives a frame after the face.
+      await tester.pumpAndSettle();
+
+      expect(find.text('From Cover Art Archive'), findsOneWidget);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a cover the tags carried draws no borrowed note', (
+      tester,
+    ) async {
+      // The other half of the mark: an unattributed cover says nothing
+      // at all rather than falling back to a sentence about a person.
+      final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
+      final harness = PlayerHarness(
+        playbackContainer(repo: repo, engine: FakeEngine()),
+      );
+      harness.play([_track(_first, 'Salt Harbour')]);
+      await pumpPlayerInto(tester, harness);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ArtworkCaption), findsNothing);
       await harness.endPlayback(tester);
     });
   });

@@ -2724,11 +2724,33 @@ export interface paths {
          *
          *     `notContains` imports as a `not` node wrapping `contains`; every other operator has a WaxDeck spelling of the same name.
          *
-         *     Fields map onto the catalog's own rule vocabulary: `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `tracknumber`, `discnumber`, `playcount`, `starred`, and `rating`, plus `dateAdded` and `lastPlayed` under the relative operators. `rating` is **rescaled**: Navidrome rates 0 to 5 where the catalog rates 0 to 100, so an unscaled `rating gt 3` would mean "rated above 3 out of 100", which is every rated track.
+         *     Mapping is **all-or-nothing** by default. A field, an operator, or a top-level key with no faithful counterpart rejects the whole document, naming **every** offender, rather than importing a rule that means something else - a document that imported as a quietly different playlist is worse than one that did not import. That covers fields the catalog has no answer for (`bitrate`, `size`, `bpm`, the `mbz_*` identifiers, and the rest), `limitPercent` and any other unrecognised top-level key, `inPlaylist`/`notInPlaylist`, and the absolute date operators (`before`, `after`, `is`) on `dateAdded` and `lastPlayed`, whose naive local dates have no faithful reading against the catalog's stored instants. `sort: random` maps to the random limit mode and needs a positive `limit`.
          *
-         *     Mapping is **all-or-nothing**. A field, an operator, or a top-level key with no faithful counterpart rejects the whole document, naming the offender, rather than importing a rule that means something else - a document that imported as a quietly different playlist is worse than one that did not import. That covers fields the catalog has no answer for (`bitrate`, `size`, `bpm`, the `mbz_*` identifiers, and the rest), `limitPercent` and any other unrecognised top-level key, `inPlaylist`/`notInPlaylist`, and the absolute date operators (`before`, `after`, `is`) on `dateAdded` and `lastPlayed`, whose naive local dates have no faithful reading against the catalog's stored instants. `sort: random` maps to the random limit mode and needs a positive `limit`.
+         *     `partial=true` accepts the loss instead: the unmappable parts are dropped and what is left becomes the rule. Still refused when nothing survives, since a rule with every condition dropped matches the whole library, and when the document is malformed rather than merely unmappable. Ask `POST /playlists/nsp/report` first to see what would go.
          */
         post: operations["importPlaylistNsp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/playlists/nsp/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report what an NSP import would lose
+         * @description What importing this document would drop, without importing it. Nothing is created and nothing is changed.
+         *
+         *     Answers a report rather than refusing: the point is to see the loss before choosing between the strict import and `partial=true`. Its only failure is a document that is not readable JSON at all, which is not a gap in the mapping but a broken file.
+         */
+        post: operations["reportPlaylistNspImport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2842,11 +2864,37 @@ export interface paths {
          * Export a smart playlist as NSP
          * @description The playlist's rule as a Navidrome smart playlist document. A static playlist has no rule and answers `feature-unavailable`.
          *
-         *     Export is **all-or-nothing**, like the import: a rule holding anything NSP cannot say is refused with the offender named, rather than written as a document that means something else. WaxDeck's rule vocabulary is the larger one, so this is the common answer for a rule built in the editor. `notContains` is the only negation NSP can carry, so every other `not` refuses; `gte`, `lte`, `isPresent`, and `isMissing` have no NSP form; the `minutes` and `megabytes` limit modes and a pinned random seed have none; a rating that is not a whole number of stars has none; and neither do the fields NSP does not carry (`mediaType`, `state`, `source`, `container`, `codec`, `podcast`, `season`, `publishedAt`, `updatedAt`, `starredAt`, `played`, `finished`, the album identity fields, `tag.KEY`, and `playlist`).
+         *     Export is **all-or-nothing** by default, like the import: a rule holding anything NSP cannot say is refused with **every** offender named, rather than written as a document that means something else. WaxDeck's rule vocabulary is the larger one, so this is the common answer for a rule built in the editor. `notContains` is the only negation NSP can carry, so every other `not` refuses; `gte`, `lte`, `isPresent`, and `isMissing` have no NSP form; the `minutes` and `megabytes` limit modes and a pinned random seed have none; a rating that is not a whole number of stars has none; NSP sorts on one term, so a rule ordered by a second refuses rather than dropping it; and neither do the fields NSP does not carry (`mediaType`, `state`, `source`, `container`, `codec`, `podcast`, `season`, `publishedAt`, `updatedAt`, `starredAt`, `played`, `finished`, `albumBarcode`, `albumLabel`, `albumCatalogNumber`, `albumMedia`, `albumCountry`, `tag.KEY`, and `playlist`). `albumArtist` is **not** among them: NSP carries it, and it round-trips.
+         *
+         *     `partial=true` accepts the loss instead: the parts NSP cannot say are dropped and the rest is written. Still refused when nothing survives, since a document with every condition dropped matches the whole library on the far side. Ask `GET /playlists/{pid}/nsp/report` first to see what would go.
          *
          *     The response carries the playlist's own `name`, and `public` when it is shared - neither is part of the rule.
          */
         get: operations["exportPlaylistNsp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/playlists/{pid}/nsp/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report what an NSP export would lose
+         * @description What exporting this playlist's rule as NSP would drop, without exporting it.
+         *
+         *     Answers a report rather than refusing: the point is to see the loss before choosing between the strict export and `partial=true`. A static playlist has no rule and so answers `feature-unavailable`, which is the one thing this can refuse for.
+         *
+         *     Deliberately its own operation rather than something a successful `partial=true` carries back. The export's 200 body is the document another server reads, so a report key beside `all`, `sort` and `limit` would either be rejected over there or silently change what the document means.
+         */
+        get: operations["reportPlaylistNspExport"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7797,6 +7845,44 @@ export interface components {
         /** @description A Navidrome smart playlist (NSP) document, carried verbatim: `name`, `comment`, `public`, one of the mutually exclusive `all` / `any` condition groups, `sort`, `order`, and `limit`. Free-form on purpose - the grammar is another server's, and pinning its shape here would make every change over there a breaking change over here. What WaxDeck does and does not read is described on the two operations that carry it. */
         NspDocument: {
             [key: string]: unknown;
+        };
+        /**
+         * @description One part of a rule or an NSP document with no faithful counterpart on the other side.
+         *
+         *     `field` and `op` are written in the vocabulary of the side being *read*, which is what the report's `direction` says: WaxDeck's names on an export, Navidrome's on an import. A gap names what the walk examined before it stopped - a leaf is checked field first, then operator, then value - so a `field` gap carries no `op` because the operator was never reached, while an `operator` gap carries the field it was used on.
+         */
+        NspGap: {
+            /**
+             * @description Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable.
+             * @enum {string}
+             */
+            kind: "field" | "operator" | "value" | "shape" | "sort" | "limit" | "entity" | "malformed";
+            /** @description The field this gap is about, where one is named. */
+            field?: string;
+            /** @description The operator this gap is about, where one is named. */
+            op?: string;
+            /** @description The offending value on a `value` gap, so a client can render it without picking `reason` apart. Any JSON type, since it is whatever the rule or the document held. */
+            value?: unknown;
+            /** @description An RFC 6901 JSON Pointer to the offending part, so an editor can point at it rather than describe it. On an export it dereferences against the playlist's `SmartRule` (`/root/...`, `/sorts/0`, `/limitMode`); on an import, against the document that was sent. The empty pointer is RFC 6901's whole document, which is what an import answers for a fault that has no one place - a document with no `all`/`any` root group, or with two. */
+            path: string;
+            /** @description The sentence the strict conversion would refuse with for this gap. Written by the converter about what the caller built, so a client renders it as-is rather than mapping it to a phrase of its own. */
+            reason: string;
+        };
+        /** @description What one NSP mapping could not carry. `gaps` block the strict conversion and are what a `partial=true` conversion drops; `notes` are losses that block nothing, so a client mentions them without refusing. Both are empty when the mapping is lossless. */
+        NspReport: {
+            /**
+             * @description Which way the mapping ran, and so whose vocabulary the gaps' `field` and `op` are written in.
+             * @enum {string}
+             */
+            direction: "export" | "import";
+            /**
+             * @description Losses that refuse the strict conversion.
+             *
+             *     Deduplicated by `reason` and capped: a rule or a document repeating one problem is one problem, and the row a client draws per entry says nothing new the second time. `path` names the first place the problem was found. The strict refusal's message is composed from this same list, so a refusal and a report never disagree about what is wrong.
+             */
+            gaps?: components["schemas"]["NspGap"][];
+            /** @description Losses that refuse nothing. Deduplicated and capped the same way. */
+            notes?: components["schemas"]["NspGap"][];
         };
         /** @description An M3U8 document to import as a static playlist. */
         M3uImport: {
@@ -14276,6 +14362,8 @@ export interface operations {
             query?: {
                 /** @description Name for the created playlist, overriding the document's own. Required when the document carries no `name`. */
                 name?: string;
+                /** @description Import what maps and drop the rest, rather than refusing the whole document. */
+                partial?: boolean;
             };
             header?: never;
             path?: never;
@@ -14295,6 +14383,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Playlist"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    reportPlaylistNspImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The NSP document, at most 1 MiB. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NspDocument"];
+            };
+        };
+        responses: {
+            /** @description Everything the import could not carry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NspReport"];
                 };
             };
             400: components["responses"]["InvalidRequest"];
@@ -14534,7 +14650,10 @@ export interface operations {
     };
     exportPlaylistNsp: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Export what maps and drop the rest, rather than refusing the whole rule. */
+                partial?: boolean;
+            };
             header?: never;
             path: {
                 /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -14551,6 +14670,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NspDocument"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            501: components["responses"]["FeatureUnavailable"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    reportPlaylistNspExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Everything the export could not carry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NspReport"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

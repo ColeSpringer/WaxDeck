@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_label.dart';
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../connect/device_picker.dart';
@@ -461,6 +462,15 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     // what makes this affordable here and not on a list of rows.
     final mayCurate =
         ref.watch(mayCurateItemProvider(_item.pid)).value ?? false;
+    // Where the cover under the hero came from, for the mark under it.
+    // Affordable here for the same reason as the read above: one item,
+    // the one on screen, and Phase 4's `ArtProvenance` made the server
+    // side of it a row lookup rather than an image decode. It is
+    // deliberately not on `ItemSummary`, so no list row pays for it.
+    final artSource = ref
+        .watch(itemArtRolesProvider(_item.pid))
+        .value
+        ?.artSource;
     final playback = ref.read(nowPlayingProvider.notifier);
     final queue = ref.read(queueControllerProvider.notifier);
 
@@ -484,6 +494,11 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             carMode: carMode,
             mayCurate: mayCurate,
           ),
+          // A cover fetched from a third party says so here too, at the
+          // one size in the app where the picture is the whole screen.
+          // Nothing gates it: the mark is the same sentence the album
+          // header and the artwork manager draw, from the same wording.
+          artworkCaption: artSourceLabelWithBorrow(context.l10n, artSource),
           // The show an episode is from, above its title and tappable
           // (5.3). Books and tracks name their maker under the title
           // instead, which is what the subtitle already is.

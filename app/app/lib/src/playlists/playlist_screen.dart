@@ -35,6 +35,7 @@ enum _PlaylistAction {
   setCover,
   resetCover,
   exportM3u,
+  exportNsp,
   exportPortable,
   delete,
 }
@@ -815,6 +816,16 @@ class _Overflow extends ConsumerWidget {
           glyph: WaxIcons.downloads,
           semanticsId: SemanticsIds.playlistExportM3u,
         ),
+        // Smart only - there is no rule to write for a manual list -
+        // but not owner only, because neither export beside it is and
+        // the server gates none of the three.
+        if (playlist.isSmart)
+          WaxMenuItem<_PlaylistAction>(
+            value: _PlaylistAction.exportNsp,
+            label: l10n.playlistExportNsp,
+            glyph: WaxIcons.downloads,
+            semanticsId: SemanticsIds.playlistExportNsp,
+          ),
         WaxMenuItem<_PlaylistAction>(
           value: _PlaylistAction.exportPortable,
           label: l10n.playlistExportPortable,
@@ -855,6 +866,8 @@ class _Overflow extends ConsumerWidget {
         await _resetCover(context, ref);
       case _PlaylistAction.exportM3u:
         await _exportM3u(context, ref);
+      case _PlaylistAction.exportNsp:
+        await _exportNsp(context, ref);
       case _PlaylistAction.exportPortable:
         await _exportPortable(context, ref);
       case _PlaylistAction.delete:
@@ -911,45 +924,182 @@ class _Overflow extends ConsumerWidget {
       return;
     }
     if (!context.mounted) return;
-    await showDialog<void>(
+    await _showDocument(
+      context,
+      messenger: messenger,
+      title: l10n.playlistExportM3u,
+      document: content,
+      copied: l10n.playlistCopiedM3u,
+    );
+  }
+
+  /// Offers a smart playlist's rule as a Navidrome document, asking
+  /// first when the conversion would lose something.
+  ///
+  /// Two calls rather than one, because the loss has to be answerable
+  /// before it happens: the report says what would go, and only a
+  /// person who has seen that list asks for the export that drops it.
+  /// A lossless rule never sees a dialog at all.
+  Future<void> _exportNsp(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    final repository = ref.read(repositoryProvider);
+    final pid = view.playlist.pid;
+    final NspReport report;
+    try {
+      report = await repository.reportPlaylistNspExport(pid);
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      return;
+    }
+    var partial = false;
+    if (!report.isLossless) {
+      if (!context.mounted) return;
+      // Gaps and notes together: the difference between a loss that
+      // refuses and one that does not is the converter's business, and
+      // somebody deciding whether to accept the loss wants the list.
+      final proceed = await _confirmNspLoss(context, report.all);
+      if (proceed != true) return;
+      // Only the gaps need it. A report of notes alone describes a loss
+      // the strict export makes anyway, and asking for the lossy path
+      // to get the same document would say the wrong thing.
+      partial = report.gaps.isNotEmpty;
+    }
+    final Map<String, Object?> document;
+    try {
+      document = await repository.exportPlaylistNsp(pid, partial: partial);
+    } on WaxDeckApiException catch (e) {
+      // `explainRefusal`, not `explainError`: this endpoint's 501 is a
+      // sentence about the rule, and the reachable one after the dialog
+      // above is "nothing in this rule has an .nsp form" - which the
+      // umbrella's general wording would flatten into a claim about the
+      // server that is not true.
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      return;
+    }
+    if (!context.mounted) return;
+    await _showDocument(
+      context,
+      messenger: messenger,
+      title: l10n.playlistExportNsp,
+      // Indented, because this one is read before it is pasted: the
+      // dialog above said what the document loses, and a single line
+      // would make checking what it kept impossible.
+      document: const JsonEncoder.withIndent('  ').convert(document),
+      copied: l10n.playlistCopiedNsp,
+    );
+  }
+
+  /// Lists what the export would drop, and offers to do it anyway.
+  ///
+  /// Each row is the converter's own sentence about the rule this
+  /// person built - which field, which operator, which sort term - so
+  /// it is rendered rather than mapped to a phrase of ours.
+  ///
+  /// Over it, where the gap names a field, that field's own name from
+  /// the rule editor's vocabulary. The converter writes its sentences
+  /// against the query engine's spelling, so a rule holding "Media type
+  /// is Music" is refused for `kind`; the heading is what connects the
+  /// sentence back to the row the person actually built.
+  Future<bool?> _confirmNspLoss(BuildContext context, List<NspGap> gaps) {
+    final l10n = context.l10n;
+    return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.playlistExportM3u),
-        content: SizedBox(
-          width: 480,
-          child: SingleChildScrollView(
-            child: SelectableText(
-              content,
-              style: WaxType.monoData.copyWith(
-                color: WaxColors.of(context).textPrimary,
+      builder: (context) {
+        // The dialog's own context: it is a route of its own, so the
+        // theme it draws under is the one below it rather than the
+        // screen's.
+        final colors = WaxColors.of(context);
+        return AlertDialog(
+          title: Text(l10n.playlistExportNspLossTitle),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Semantics(
+                identifier: SemanticsIds.playlistExportNspLoss,
+                container: true,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.playlistExportNspLossCount(gaps.length),
+                      style: WaxType.body.copyWith(color: colors.textSecondary),
+                    ),
+                    const SizedBox(height: WaxSpace.s12),
+                    for (final (index, gap) in gaps.indexed)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: WaxSpace.s12),
+                        child: Semantics(
+                          identifier: SemanticsIds.playlistExportNspLossRow(
+                            index,
+                          ),
+                          container: true,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              if (gap.field != null && gap.field!.isNotEmpty)
+                                Text(
+                                  ruleFieldLabel(l10n, gap.field!),
+                                  style: WaxType.label.copyWith(
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                              Text(
+                                gap.reason,
+                                style: WaxType.body.copyWith(
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        actions: <Widget>[
-          WaxButton(
-            label: l10n.commonClose,
-            kind: WaxButtonKind.text,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          WaxButton(
-            label: l10n.playlistExportCopy,
-            semanticsId: SemanticsIds.playlistExportCopy,
-            onPressed: () async {
-              final navigator = Navigator.of(context);
-              await Clipboard.setData(ClipboardData(text: content));
-              // Closes first: a snackbar renders on the scaffold behind
-              // the modal, where nobody would see the confirmation.
-              if (navigator.mounted) navigator.pop();
-              messenger
-                ..hideCurrentSnackBar()
-                ..showSnackBar(SnackBar(content: Text(l10n.playlistCopiedM3u)));
-            },
-          ),
-        ],
-      ),
+          actions: <Widget>[
+            WaxButton(
+              label: l10n.commonCancel,
+              kind: WaxButtonKind.text,
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            WaxButton(
+              label: l10n.playlistExportNspProceed,
+              semanticsId: SemanticsIds.playlistExportNspProceed,
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        );
+      },
     );
   }
+
+  /// Both text exports land in the design system's one document dialog.
+  Future<void> _showDocument(
+    BuildContext context, {
+    required ScaffoldMessengerState messenger,
+    required String title,
+    required String document,
+    required String copied,
+  }) => showDocumentDialog(
+    context,
+    title: title,
+    document: document,
+    closeLabel: context.l10n.commonClose,
+    copyLabel: context.l10n.playlistExportCopy,
+    copySemanticsId: SemanticsIds.playlistExportCopy,
+    onCopied: () => messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(copied))),
+  );
 
   /// Copies the portable refs, for importing on another server.
   Future<void> _exportPortable(BuildContext context, WidgetRef ref) async {

@@ -543,6 +543,49 @@ void main() {
     );
 
     goldenTest(
+      'a caption under a cover reads at two weights and wraps at two lines',
+      fileName: 'artwork_caption',
+      builder: () => GoldenTestGroup(
+        columns: 3,
+        children: <Widget>[
+          for (final variant in WaxThemeVariant.values)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 160,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      // The slot's own state, which describes a picture
+                      // that is there, above where it came from.
+                      const ArtworkCaption('jpeg, 1400 x 1400', emphasis: true),
+                      const ArtworkCaption('From the Cover Art Archive'),
+                      const SizedBox(height: 12),
+                      // The header's two lines, and the one line every
+                      // other surface takes - the same sentence, so the
+                      // difference in the capture is the wrap and the
+                      // ellipsis rather than the words.
+                      const ArtworkCaption(
+                        'From the Cover Art Archive, borrowed from a track',
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 12),
+                      const ArtworkCaption(
+                        'From the Cover Art Archive, borrowed from a track',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
       'the shell wears one piece of chrome per size class',
       fileName: 'shell_chrome',
       // The sidebar wordmark chips the emblem asset; without the

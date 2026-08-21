@@ -926,6 +926,259 @@ void main() {
     expect(find.text('Playlist copied as M3U'), findsOneWidget);
   });
 
+  testWidgets('a lossless NSP export goes straight to the document', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track])
+      ..nspExport = const <String, Object?>{
+        'name': 'Rock',
+        'all': <Object?>[
+          <String, Object?>{
+            'is': <String, Object?>{'genre': 'Rock'},
+          },
+        ],
+      };
+    final created = await repo.createPlaylist(
+      name: 'Rock',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+        ]),
+      ),
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => null,
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNsp),
+    );
+    await tester.pumpAndSettle();
+
+    // Nothing to ask about, so nothing is asked: the loss dialog never
+    // appears and the export is the strict one.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspLoss),
+      findsNothing,
+    );
+    expect(repo.nspReports, [created.pid]);
+    expect(repo.nspExports, [(pid: created.pid, partial: false)]);
+    expect(find.textContaining('"genre"'), findsWidgets);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportCopy),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Playlist copied as NSP'), findsOneWidget);
+  });
+
+  testWidgets('a lossy NSP export lists the loss and can be backed out of', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track])
+      ..nspReport = const NspReport(
+        direction: 'export',
+        gaps: [
+          NspGap(
+            kind: 'field',
+            path: '/all/1',
+            reason: 'nsp: no .nsp field for mediaType',
+            field: 'mediaType',
+          ),
+        ],
+        notes: [
+          NspGap(
+            kind: 'sort',
+            path: '/sort',
+            reason: 'nsp: .nsp sorts on one term, so title is dropped',
+            field: 'title',
+          ),
+        ],
+      );
+    final created = await repo.createPlaylist(
+      name: 'Music only',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'mediaType', op: 'is', value: 'music'),
+        ]),
+      ),
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    Future<void> openMenu() async {
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistOverflow),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistExportNsp),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await openMenu();
+
+    // Both a gap and a note, each in the converter's own words rather
+    // than a phrase of ours - under the name the rule editor gives the
+    // field, which is what ties the sentence to a row somebody built.
+    expect(find.text('nsp: no .nsp field for mediaType'), findsOneWidget);
+    expect(
+      find.text('nsp: .nsp sorts on one term, so title is dropped'),
+      findsOneWidget,
+    );
+    expect(find.text('Media type'), findsOneWidget);
+    expect(find.text('Title'), findsOneWidget);
+    // One row per gap rather than one paragraph of all of them.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspLossRow(1)),
+      findsOneWidget,
+    );
+    // Counts what has no NSP form, not what the export drops: one of
+    // the two is a note, which is a loss the format makes either way and
+    // that a partial export does not drop.
+    expect(find.text('2 parts of this rule have no NSP form.'), findsOneWidget);
+
+    // Cancel exports nothing at all.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(repo.nspExports, isEmpty);
+
+    // Proceeding asks for the lossy one, which is the only way that
+    // parameter is ever true.
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => null,
+    );
+    await openMenu();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspProceed),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.nspExports, [(pid: created.pid, partial: true)]);
+  });
+
+  testWidgets('a refused NSP export keeps the server\'s sentence', (
+    tester,
+  ) async {
+    // The reachable refusal: the report answers, the person accepts the
+    // loss, and then nothing survives - so the export 501s with a
+    // sentence about the rule. `feature-unavailable` translated says
+    // "this server is not running the feature that request needs", which
+    // is both unhelpful and untrue.
+    final repo = FakeRepository(items: const [_track])
+      ..nspReport = const NspReport(
+        direction: 'export',
+        gaps: [
+          NspGap(
+            kind: 'field',
+            path: '/root/nodes/0',
+            reason: 'nsp: unsupported field: kind',
+            field: 'mediaType',
+          ),
+        ],
+      )
+      ..nspExportError = const WaxDeckApiException(
+        code: 'feature-unavailable',
+        message:
+            'nsp: nothing in this rule has an .nsp form, so a partial '
+            'export would match the whole library',
+      );
+    final created = await repo.createPlaylist(
+      name: 'Music only',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'mediaType', op: 'is', value: 'music'),
+        ]),
+      ),
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNsp),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspProceed),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.nspExports, [(pid: created.pid, partial: true)]);
+    expect(find.textContaining('nothing in this rule'), findsOneWidget);
+  });
+
+  testWidgets('a report this playlist cannot answer never exports', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track])
+      ..nspReportError = const WaxDeckApiException(
+        code: 'catalog-maintenance',
+        message: 'the catalog is temporarily under maintenance',
+      );
+    final created = await repo.createPlaylist(
+      name: 'Unreachable',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+        ]),
+      ),
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNsp),
+    );
+    await tester.pumpAndSettle();
+
+    // A code the table has a sentence for reads from the table, and
+    // nothing is exported behind the failed question.
+    expect(repo.nspExports, isEmpty);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspLoss),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a manual playlist is not offered an NSP export', (tester) async {
+    // There is no rule to write, and the server answers 501 for one:
+    // offering the row would be an affordance that only ever refuses.
+    final repo = FakeRepository(items: const [_track]);
+    final created = await repo.createPlaylist(
+      name: 'Road Trip',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNsp),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportM3u),
+      findsOneWidget,
+      reason: 'the other two exports are unchanged',
+    );
+  });
+
   testWidgets('a playlist without a cover falls back to the monogram', (
     tester,
   ) async {

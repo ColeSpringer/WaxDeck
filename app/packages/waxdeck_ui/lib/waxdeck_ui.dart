@@ -21,6 +21,7 @@ export 'src/components/command_palette.dart';
 export 'src/components/console.dart';
 export 'src/components/controls.dart';
 export 'src/components/deck_bar.dart';
+export 'src/components/document_dialog.dart';
 export 'src/components/entity_header.dart';
 export 'src/components/fast_scroll.dart';
 export 'src/components/indicators.dart';

@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { subsonic } from './driver/subsonic';
+import { clickThrough } from './driver/gestures';
 
 // The playlists slice over the real stack: the rule editor building a
 // smart playlist in the browser, live re-evaluation when user state
@@ -316,4 +317,89 @@ test('a Navidrome smart playlist round-trips through NSP', async ({ app }) => {
   await app.seed.clearPlaylistsNamed('From Navidrome');
   await app.seed.clearPlaylistsNamed('Round Two');
   await app.seed.clearPlaylistsNamed('Music only');
+});
+
+test('an NSP export reports every gap, and offers the partial', async ({ app }) => {
+  await app.seed.clearPlaylistsNamed('Two Sorts');
+
+  // Two things NSP cannot carry, of two different kinds: a field it has
+  // no name for, and a second sort term. The second one is the reason
+  // this test exists - a rule ordered by two terms exported fine until
+  // the converter started reporting the terms it was silently dropping,
+  // and `maxRuleSorts` is 4, so somebody has one.
+  const lossy = await app.api.post('/playlists', {
+    data: {
+      name: 'Two Sorts',
+      kind: 'smart',
+      rule: {
+        root: {
+          type: 'all',
+          nodes: [
+            { type: 'condition', field: 'genre', op: 'is', value: 'Rock' },
+            { type: 'condition', field: 'mediaType', op: 'is', value: 'music' },
+          ],
+        },
+        sorts: [{ field: 'playCount', desc: true }, { field: 'title' }],
+      },
+    },
+  });
+
+  // The report never refuses on expressiveness - that is what makes it
+  // askable before the export - and it names every gap, not the first.
+  const report = await app.api.get('/playlists/{pid}/nsp/report', {
+    path: { pid: lossy.pid },
+  });
+  expect(report.direction).toBe('export');
+  const gaps = report.gaps ?? [];
+  expect(gaps.length).toBeGreaterThan(1);
+  expect(gaps.map((g) => g.kind)).toContain('sort');
+  for (const gap of gaps) {
+    expect(gap.path).toBeTruthy();
+    expect(gap.reason).toBeTruthy();
+  }
+
+  // Strict still refuses, and the refusal names the dropped sort term
+  // rather than stopping at the first offender it met.
+  const strict = await app.api.raw.get('/playlists/{pid}/nsp', {
+    path: { pid: lossy.pid },
+  });
+  expect(strict.status()).toBe(501);
+  expect(await strict.text()).toContain('title');
+
+  // The partial writes what is left: the genre condition survives, the
+  // field NSP has no name for does not.
+  const partial = JSON.stringify(
+    await app.api.get('/playlists/{pid}/nsp', {
+      path: { pid: lossy.pid },
+      query: { partial: true },
+    }),
+  );
+  expect(partial).toContain('Rock');
+  expect(partial).not.toContain('mediaType');
+
+  // And through the UI, which is where the choice actually gets made:
+  // the loss is listed in the converter's own words, and only somebody
+  // who has read it reaches the document.
+  await app.nav.enter('playlists');
+  await app.playlists.openShowing(lossy.pid, app.playlists.ruleSummary());
+  await app.playlists.fromOverflow(
+    app.playlists.exportNsp(),
+    app.playlists.exportNspLoss(),
+  );
+  // The converter's sentence names the query engine's spelling (`kind`
+  // for a mediaType condition), so the row leads with the field's own
+  // name from the rule editor - which is what ties the refusal to a row
+  // somebody actually built.
+  await expect(app.playlists.exportNspLossRow(0)).toContainText('Media type');
+  await expect(app.playlists.exportNspLossRow(1)).toContainText('Title');
+  await expect(app.playlists.exportNspLoss()).toContainText('single sort term');
+
+  // Proceeding lands on the same document dialog the other exports use.
+  // What it holds is asserted through the API above and in the widget
+  // test: a SelectableText reports as an empty disabled textbox to the
+  // browser's accessibility tree, so no text assertion can reach it.
+  await clickThrough(app.playlists.exportNspProceed(), app.playlists.exportCopy());
+  await expect(app.playlists.text('Export as NSP')).toBeVisible();
+
+  await app.seed.clearPlaylistsNamed('Two Sorts');
 });

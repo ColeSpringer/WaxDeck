@@ -5,9 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../artwork/art_source_mark.dart';
+import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
-import '../metadata/artwork_manager.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../player/entity_star_rating_row.dart';

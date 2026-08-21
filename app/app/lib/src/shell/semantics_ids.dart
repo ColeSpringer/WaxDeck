@@ -480,6 +480,11 @@ abstract final class SemanticsIds {
       'playlist-entry-remove-$index';
   static const String playlistExportCopy = 'playlist-export-copy';
   static const String playlistExportM3u = 'playlist-export-m3u';
+  static const String playlistExportNsp = 'playlist-export-nsp';
+  static const String playlistExportNspLoss = 'playlist-export-nsp-loss';
+  static String playlistExportNspLossRow(Object index) =>
+      'playlist-export-nsp-loss-$index';
+  static const String playlistExportNspProceed = 'playlist-export-nsp-proceed';
   static const String playlistExportPortable = 'playlist-export-portable';
   static const String playlistImport = 'playlist-import';
   static const String playlistImportName = 'playlist-import-name';

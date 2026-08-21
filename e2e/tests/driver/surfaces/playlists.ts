@@ -4,7 +4,7 @@ import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickThrough, dragOnto, typeInto } from '../gestures';
+import { chooseFromMenu, clickThrough, dragOnto, typeInto } from '../gestures';
 
 export class Playlists extends Surface {
   add(): Locator {
@@ -107,4 +107,46 @@ export class Playlists extends Surface {
     return this.ctx.page.getByRole('banner', { name });
   }
 
+  /// The playlist screen's one overflow, and the export verbs behind it.
+  overflow(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistOverflow));
+  }
+
+  exportNsp(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistExportNsp));
+  }
+
+  /// The dialog listing what an NSP export would drop.
+  exportNspLoss(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistExportNspLoss));
+  }
+
+  /// One gap's row inside that dialog, by position.
+  exportNspLossRow(index: number): Locator {
+    return this.ctx.page.locator(
+      sem(SemanticsIds.playlistExportNspLossRow(index)),
+    );
+  }
+
+  exportNspProceed(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistExportNspProceed));
+  }
+
+  /// The copy button on whichever export document is on screen.
+  exportCopy(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistExportCopy));
+  }
+
+  /// Open the overflow and take one of its verbs, settling on whatever
+  /// that verb puts on screen.
+  ///
+  /// `chooseFromMenu` and not a second `clickThrough`: that one re-clicks
+  /// its trigger whenever the destination is missing, and on a retry the
+  /// click lands on the modal barrier and closes the menu the last
+  /// attempt opened. It also waits for the menu's rect to come to rest,
+  /// which is what stops a menu repositioning near a screen edge from
+  /// taking the row underneath the one aimed at.
+  async fromOverflow(verb: Locator, showing: Locator): Promise<void> {
+    await chooseFromMenu(this.overflow(), verb, showing);
+  }
 }

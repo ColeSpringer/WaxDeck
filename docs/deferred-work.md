@@ -30,16 +30,59 @@ here waits on upstream.
 
 ## Playback and apps
 
-- `[in-repo]` **The full-screen player's cover carries no source mark.**
-  The mark ships everywhere else a cover is drawn large enough to hold a
-  caption - the artwork manager, the album, artist, book and podcast
-  headers, and the radio face - reading `artSource` off the detail read
-  each of those screens already makes. The item player is the one that cannot:
-  it draws from the queue's `ItemSummary`, so marking it means putting
-  provenance on every listing row, which is a lookup per row for a
-  caption a 48-pixel grid thumbnail has no space to draw. It waits for
-  either a reason to make summary rows carry it or a per-item read the
-  player can afford.
+- `[in-repo]` **The full-screen player's cover resizes when its mark
+  arrives.** `PlayerScaffold` sizes the hero against the room a caption
+  needs (`_captionAllowance`, scaled by the reader's text setting), and
+  the player feeds that caption from an async read of
+  `/items/{pid}/art-roles`. So the first frame draws the art at full
+  extent and the frame after the response draws it ~24px smaller - 48 at
+  twice the text size - which binds on a compact window, where the
+  extent is under the hero cap, and can land mid-Hero flight from the
+  deck bar. The other five caption surfaces read `artSource` off a
+  detail their screen already awaits, so none of them has this. Closing
+  it means either the scaffold knowing a caption is pending (a slot that
+  reserves its line before it has one) or the player getting provenance
+  from a read it already blocks on.
+
+- `[in-repo]` **An NSP export's loss list is not pinned to the rule it
+  was computed from.** The report is asked at one moment and
+  `partial=true` is applied to whatever the rule is when the person taps
+  through the dialog. `exportableRule` resolves through `resolvePlaylist`
+  rather than `resolveOwnedPlaylist`, so a shared smart playlist's owner
+  can save a rule change while a second viewer holds the dialog open:
+  the viewer accepts a list naming A and B and the export drops C and D.
+  A rule hash on the report, echoed as `If-Match` on the export, would
+  close it - and would let the export reuse the walk the report already
+  did rather than paying for a second catalog read on the lossless path.
+
+- `[in-repo]` **The NSP loss dialog shows what goes, not what stays.**
+  `GET /playlists/{pid}/nsp/report` answers the gaps, and the dialog
+  before a partial export lists them in the converter's own sentences.
+  For somebody deciding whether to accept the loss, the more answerable
+  question is the other one: what does the exported playlist actually
+  select? `playlist.ExportNSPPartial` already returns that as
+  `NSPExport.Rule`, in WaxDeck's own rule vocabulary, so the mechanism
+  is a nullable `rule` on the report (running `ExportNSPPartial`
+  alongside `CheckNSPExport`) plus a rule-tree rendering in the dialog
+  through the `rule_vocabulary.dart` the rule editor already uses. That
+  is a second, larger UI than "can I accept this loss?", which is why
+  the loss list shipped first.
+
+  The same rendering would close a smaller thing on the way: the
+  converter writes its refusal sentences against the query engine's
+  spelling, so a `mediaType` condition is refused for `kind`. The gap's
+  `field` is translated back to WaxDeck's vocabulary and the dialog
+  leads each row with that name, but the sentence under it still says
+  `kind` - as does the strict refusal's 501 message, which has no row
+  to lead with at all.
+
+  One more thing waits on the same rendering: the dialog's forward
+  button reads "Export without them", which is right for a gap and
+  wrong for a note - a note is a loss the format makes either way and
+  that a partial export does not drop. Unreachable today, because
+  `ruleToQuery` always builds `query.EntityItems` and WaxBin's single
+  export note fires on `EntityTracks`, so no WaxDeck rule can produce a
+  notes-only report.
 
 - `[in-repo]` **Preference writes have no offline outbox.** Play-state
   and entity-state writes queue through `OptimisticStateController`,
@@ -590,24 +633,6 @@ here waits on upstream.
   are untestable until it lands, and are noted where they would go in
   `podcastcover_integration_test.go`: a cleared show cover refilling on
   the next sync, and a hand-set one never being refetched.
-
-- `[in-repo]` **The artwork pin has no client.**
-  `GET`/`PUT /entities/{type}/{pid}/artwork/lock` ship and are tested,
-  and `docs/curation-and-metadata.md` tells an administrator the
-  endpoint is how they let go of a pinned cover - but nothing in the
-  app calls either verb. The state is visible (the artwork manager
-  draws "Pinned, no image") and an item's pin comes off through the
-  metadata screen's own field locks; an entity's does not, so an album
-  cover pinned empty can be explained in the UI and undone only by an
-  API call. The affordance belongs next to the manager's slot controls.
-
-- `[in-repo]` **`ArtSourceMark` has no caller.**
-  The widget wraps the caption wording and styling, and the three
-  surfaces that draw a caption - `entity_header.dart`,
-  `player_scaffold.dart`, `artwork_manager.dart` - each style their own
-  `Text` instead, already divergently (`maxLines` 2, 1, and unset).
-  Either the surfaces take the widget or the widget goes; keeping both
-  is a fourth copy of the same decision waiting to drift further.
 
 
 - `[in-repo]` **Book and remaining metadata providers.** Hardcover
