@@ -160,6 +160,12 @@ abstract final class WaxIcons {
     IconData(0xE3F8, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
+  /// Phosphor `infinity`.
+  static const keepPlaying = WaxGlyph(
+    IconData(0xE634, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE634, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   /// Phosphor `gauge`.
   static const speed = WaxGlyph(
     IconData(0xE628, fontFamily: _regularFamily, fontPackage: _fontPackage),
@@ -551,6 +557,7 @@ abstract final class WaxIcons {
     'shuffle': shuffle,
     'repeatAll': repeatAll,
     'repeatOne': repeatOne,
+    'keepPlaying': keepPlaying,
     'speed': speed,
     'sleepTimer': sleepTimer,
     'volume': volume,

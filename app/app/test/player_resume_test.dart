@@ -23,9 +23,13 @@ Future<void> _listen(WidgetTester tester, FakeEngine engine, int secs) async {
 void main() {
   const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
 
-  testWidgets('resumes from the saved play-state position', (tester) async {
-    final repo = FakeRepository(items: [testItem(pid)])
-      ..playPositions[pid] = 60000;
+  testWidgets('spoken word resumes from the saved play-state position', (
+    tester,
+  ) async {
+    // A book and a podcast are what a checkpoint is for: an hour in is
+    // where you were, not a place you happened to pass.
+    final book = testItem(pid, mediaType: MediaType.audiobook);
+    final repo = FakeRepository(items: [book])..playPositions[pid] = 60000;
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
@@ -34,7 +38,7 @@ void main() {
       tester,
       repo: repo,
       engine: engine,
-      item: testItem(pid),
+      item: book,
     );
 
     expect(engine.loadedUrl, '/media/stream?pid=$pid&mt=test-token');
@@ -53,6 +57,32 @@ void main() {
           .label,
       'Pause',
     );
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('music starts at the head with a checkpoint standing', (
+    tester,
+  ) async {
+    // The rule the other way round: skipping away from a track and back
+    // is a fresh play, and so is tapping a track in a listing you had
+    // heard half of. The checkpoint is still written - it is what a
+    // restored queue and a hand-back from radio come back to - it is
+    // just not what an ordinary start reads.
+    final repo = FakeRepository(items: [testItem(pid)])
+      ..playPositions[pid] = 60000;
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+    );
+
+    expect(engine.position, Duration.zero);
+    expect(engine.playing, isTrue);
     await harness.endPlayback(tester);
   });
 
@@ -148,8 +178,7 @@ void main() {
 
   testWidgets('checkpoints and reports the listen session when the queue '
       'lets go', (tester) async {
-    final repo = FakeRepository(items: [testItem(pid)])
-      ..playPositions[pid] = 60000;
+    final repo = FakeRepository(items: [testItem(pid)]);
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
@@ -166,7 +195,7 @@ void main() {
 
     expect(repo.putPlayStateCalls, isNotEmpty);
     expect(repo.putPlayStateCalls.last.pid, pid);
-    expect(repo.putPlayStateCalls.last.positionMs, 63000);
+    expect(repo.putPlayStateCalls.last.positionMs, 3000);
 
     expect(repo.reportedSessions, hasLength(1));
     final session = repo.reportedSessions.single;
@@ -279,6 +308,37 @@ void main() {
     expect(engine.playing, isTrue);
     expect(engine.position, const Duration(seconds: 30));
     expect(find.byKey(const Key('player-error')), findsNothing);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('retrying a music start comes back to the head', (tester) async {
+    // A music start is at the head unless somebody asked otherwise, and
+    // the retry asks for what the start asked for. Recording the request
+    // rather than what the start settled on left the retry with nothing
+    // to ask for, which reads as "go and look at the checkpoint" - the
+    // very checkpoint the fresh start declined to honour.
+    final repo = FakeRepository(items: [testItem(pid)])
+      ..playPositions[pid] = 45000
+      ..playInfoError = const WaxDeckApiException(
+        code: 'transport',
+        message: 'network unreachable',
+      );
+    final engine = FakeEngine();
+
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+    );
+    expect(find.byKey(const Key('player-error')), findsOneWidget);
+
+    repo.playInfoError = null;
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerRetry));
+    await tester.pumpAndSettle();
+
+    expect(engine.loadedUrl, contains(pid));
+    expect(engine.position, Duration.zero);
     await harness.endPlayback(tester);
   });
 

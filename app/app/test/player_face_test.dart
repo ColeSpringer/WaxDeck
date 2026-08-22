@@ -121,7 +121,12 @@ void main() {
       ]);
       await pumpPlayerInto(tester, harness);
 
-      expect(find.text('Gullwing'), findsOneWidget);
+      // The peek draws the title and the artist as one paragraph, so
+      // the title is a span rather than a Text of its own.
+      expect(
+        find.textContaining('Gullwing', findRichText: true),
+        findsOneWidget,
+      );
       expect(
         tester
             .getSemantics(find.bySemanticsIdentifier(SemanticsIds.playerUpNext))
@@ -293,7 +298,13 @@ void main() {
       await pumpPlayerInto(tester, harness);
       await tester.pumpAndSettle();
 
-      expect(find.byType(ArtworkCaption), findsNothing);
+      // The line itself stays - it is held for the session so that a
+      // mark arriving later does not resize the cover under it - so what
+      // is asserted is that it says nothing rather than that it is gone.
+      final caption = tester.widget<ArtworkCaption>(
+        find.byType(ArtworkCaption),
+      );
+      expect(caption.text, isNot(matches(RegExp(r'\p{L}', unicode: true))));
       await harness.endPlayback(tester);
     });
   });

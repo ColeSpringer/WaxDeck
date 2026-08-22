@@ -114,7 +114,7 @@ Future<Uint8List> decodeArtworkPixels(Uint8List bytes) async {
 /// the palette is tweened and the fallback hue is a legitimate end of
 /// that tween, which is what a track with no cover following one with a
 /// cover looks like.
-class ArtworkAccent extends ConsumerWidget {
+class ArtworkAccent extends ConsumerStatefulWidget {
   const ArtworkAccent({
     required this.artUrl,
     required this.domain,
@@ -130,20 +130,57 @@ class ArtworkAccent extends ConsumerWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final url = artUrl;
-    final extracted = url == null || url.isEmpty
-        ? null
-        : ref.watch(artworkPaletteProvider(url)).value;
+  ConsumerState<ArtworkAccent> createState() => _ArtworkAccentState();
+}
+
+class _ArtworkAccentState extends ConsumerState<ArtworkAccent> {
+  /// The last colour this surface actually knew, held so a cover that
+  /// has to be fetched crossfades from the one before it rather than
+  /// through the domain hue and back. Null is a real answer here too: a
+  /// sleeve with no usable colour resolves to the fallback, and the next
+  /// cold one should start there.
+  WaxPalette? _held;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = widget.artUrl;
+    WaxPalette? extracted;
+    if (url != null && url.isNotEmpty) {
+      final read = ref.watch(artworkPaletteProvider(url));
+      if (read.hasValue) {
+        extracted = read.value;
+        _held = extracted;
+      } else if (read.isLoading) {
+        // The provider is an async family, so it yields a frame of
+        // loading even for a cover this session has already read - and
+        // that frame is a flash to the domain hue and back, on every
+        // track change. The cache answers it synchronously; `peek`
+        // rather than `recall` because reordering an LRU from a build is
+        // a mutation in the wrong phase.
+        final cache = ref.read(paletteCacheProvider);
+        extracted = cache.holds(url) ? cache.peek(url) : _held;
+        // Held from here too: what the cache answered is what this
+        // surface knows, and the next cold cover should come from it
+        // rather than from whatever was before this one.
+        _held = extracted;
+      } else {
+        // A read that failed says nothing about the colour, so the last
+        // one this surface knew stands. Clearing it here would crossfade
+        // to the domain hue for a cover that may decode next time.
+        extracted = _held;
+      }
+    } else {
+      _held = null;
+    }
     final palette =
-        extracted ?? WaxPalette.forDomain(WaxColors.of(context), domain);
+        extracted ?? WaxPalette.forDomain(WaxColors.of(context), widget.domain);
     return TweenAnimationBuilder<WaxPalette>(
       tween: WaxPaletteTween(end: palette),
       duration: WaxMotion.of(context).artworkCrossfade,
       curve: WaxMotion.emphasized,
       builder: (context, tweened, child) =>
-          WaxAccent(palette: tweened, domain: domain, child: child!),
-      child: child,
+          WaxAccent(palette: tweened, domain: widget.domain, child: child!),
+      child: widget.child,
     );
   }
 }
@@ -182,6 +219,13 @@ class ArtworkPaletteCache {
     _entries[artUrl] = palette;
     return palette;
   }
+
+  /// The remembered palette for [artUrl] without moving it in the order.
+  ///
+  /// For readers that run inside a build, where [recall]'s re-insertion
+  /// would be a mutation in the wrong phase. Ask [holds] first, for the
+  /// same reason [recall] says to.
+  WaxPalette? peek(String artUrl) => _entries[artUrl];
 
   void remember(String artUrl, WaxPalette? palette) {
     _entries.remove(artUrl);

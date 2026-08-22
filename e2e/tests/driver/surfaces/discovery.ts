@@ -44,4 +44,23 @@ export class Discovery extends Surface {
       await clickToward(run, { gone: run });
     }).toPass({ timeout: T.nav });
   }
+
+  /// The "Open" on the message a mix landing behind a standing queue
+  /// raises. The mix changes nothing on screen, so this is the only
+  /// affordance it leaves.
+  queueFromMessage(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.queueOpen));
+  }
+
+  /// List the tracks like whatever the player is holding.
+  ///
+  /// The list is pushed rather than played, so the settle target is the
+  /// list's first row - which needs the seed to actually have
+  /// neighbours, so callers prove that over the API first.
+  async runSimilarTracks(): Promise<void> {
+    const page = this.ctx.page;
+    const similar = page.locator(sem(SemanticsIds.similarTracks));
+    await clickThrough(this.discover(), similar);
+    await clickThrough(similar, this.item('similar', 0));
+  }
 }

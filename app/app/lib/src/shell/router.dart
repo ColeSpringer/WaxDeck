@@ -61,6 +61,7 @@ import '../podcasts/episode_screen.dart';
 import '../podcasts/podcasts_screen.dart';
 import '../podcasts/show_screen.dart';
 import '../prototype/editing_prototype_screen.dart';
+import '../queue/queue_continuation.dart';
 import '../queue/queue_persistence.dart';
 import '../queue/queue_refiller.dart';
 import '../queue/queue_screen.dart';
@@ -782,6 +783,10 @@ class _SignedInScope extends ConsumerWidget {
     ref.watch(syncBinderProvider);
     ref.watch(queuePersistenceProvider);
     ref.watch(queueRefillProvider);
+    // The notifier rather than its state: this scope is the whole signed
+    // -in tree, and rebuilding it every time a continuation appends
+    // would be a rebuild of the app per mix.
+    ref.watch(queueContinuationProvider.notifier);
     // What the lock screen, the head unit, MPRIS, and the Windows
     // transport controls all say. Here rather than
     // beside the deck bar: those surfaces are what somebody looks at

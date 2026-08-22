@@ -314,6 +314,25 @@ final preloadOnWifiOnlyProvider = NotifierProvider<PreloadOnWifiOnly, bool>(
   PreloadOnWifiOnly.new,
 );
 
+/// Whether a music queue that has run out keeps going with similar
+/// music, rather than ending where it was built to end.
+///
+/// On by default: a queue that stops dead is the thing the setting
+/// exists to prevent, and every other player a listener has used
+/// continues. Off is the deliberate choice, and the queue surface
+/// carries the same switch so it can be made where it is felt.
+class KeepPlayingSimilar extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.keepPlayingSimilar;
+
+  @override
+  bool get defaultValue => true;
+}
+
+final keepPlayingSimilarProvider = NotifierProvider<KeepPlayingSimilar, bool>(
+  KeepPlayingSimilar.new,
+);
+
 /// Whether downloads wait for an unmetered connection.
 ///
 /// On by default, unlike the preload switch, and for the reason that

@@ -292,6 +292,12 @@ List<SettingEntry> settingsEntries(AppLocalizations l10n) => <SettingEntry>[
     keywords: _words(l10n.settingsAutoplayKeywords),
   ),
   SettingEntry(
+    id: 'keep-playing-similar',
+    title: l10n.settingsKeepPlayingTitle,
+    section: SettingsSection.playback,
+    keywords: _words(l10n.settingsKeepPlayingKeywords),
+  ),
+  SettingEntry(
     id: 'car-button',
     title: l10n.settingsCarButtonTitle,
     section: SettingsSection.playback,

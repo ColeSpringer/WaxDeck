@@ -2028,9 +2028,9 @@
   "@artSourceSidecar": {
     "description": "Source mark under a cover read from an image file sitting beside the audio, such as a cover.jpg."
   },
-  "artSourceTag": "From the file",
+  "artSourceTag": "From the file's tags",
   "@artSourceTag": {
-    "description": "Source mark under a cover read out of the audio file's own tags."
+    "description": "Source mark under a cover read out of the audio file's own tags. The provenance rows draw it for an embedded lyric as well, which arrives the same way."
   },
   "artSourceUser": "Set by hand",
   "@artSourceUser": {
@@ -4312,7 +4312,7 @@
   },
   "metadataArtworkSource": "Artwork · {source}",
   "@metadataArtworkSource": {
-    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').",
+    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file's tags', 'Set by hand', 'From Deezer').",
     "placeholders": {
       "source": {
         "type": "String",
@@ -7978,6 +7978,10 @@
   "@queueClearSelectionAction": {
     "description": "Button that unselects the selected queue rows. It clears the selection, not the queue, so it must not read as a delete."
   },
+  "queueContinuing": "CONTINUING WITH SIMILAR MUSIC",
+  "@queueContinuing": {
+    "description": "Divider above the first track the app added on its own once the queue had run out. Upper case in English because the queue's other section labels are; a language that does not shout section labels should not."
+  },
   "queueDragToReorder": "Drag to reorder",
   "@queueDragToReorder": {
     "description": "Accessible name of the handle that reorders queued tracks by dragging."
@@ -8008,6 +8012,14 @@
   "@queueHideHistory": {
     "description": "Accessible name of the control that folds away the already-played rows."
   },
+  "queueKeepPlayingOff": "Keep playing off",
+  "@queueKeepPlayingOff": {
+    "description": "Accessible name of the queue's continue control while it is off, so the queue stops where it ends. Worded as a state to match \"Shuffle off\" and \"Repeat off\" beside it, which a screen reader sweeps up in the same breath."
+  },
+  "queueKeepPlayingOn": "Keep playing on",
+  "@queueKeepPlayingOn": {
+    "description": "Accessible name of the queue's continue control while it is on, so a music queue that runs out carries on with similar tracks. Worded as a state to match \"Shuffle on\" beside it."
+  },
   "queueMoveDown": "Move down",
   "@queueMoveDown": {
     "description": "Screen-reader action that moves one queued track later."
@@ -8027,6 +8039,10 @@
   "queueNothingUpNext": "NOTHING UP NEXT",
   "@queueNothingUpNext": {
     "description": "Heading where the up-next list would be when the queue holds nothing after the current track. Upper case as a typographic style; write it the way small headings are written in this language."
+  },
+  "queueOpenAction": "Open",
+  "@queueOpenAction": {
+    "description": "Button on the message that says tracks were added, which opens the queue so they can be seen. A short verb, beside a sentence that already names the queue."
   },
   "queuePlayingFrom": "Playing from {source}",
   "@queuePlayingFrom": {
@@ -9781,6 +9797,18 @@
   "settingsIdentifyUploadsTitle": "Identify uploads",
   "@settingsIdentifyUploadsTitle": {
     "description": "Name of the \"Identify uploads\" setting, drawn on its own row and in settings search."
+  },
+  "settingsKeepPlayingHelp": "When a music queue runs out, keep going with tracks like the last one. The queue's own toggle sets the same thing.",
+  "@settingsKeepPlayingHelp": {
+    "description": "Help line under the keep-playing setting. Says what happens and where else the same switch is."
+  },
+  "settingsKeepPlayingKeywords": "continuous, endless, radio, mix, similar, autoplay, queue",
+  "@settingsKeepPlayingKeywords": {
+    "description": "Comma-separated search keywords for the \"Keep playing similar music\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsKeepPlayingTitle": "Keep playing similar music",
+  "@settingsKeepPlayingTitle": {
+    "description": "Setting that decides whether a music queue that has run out continues with a mix built from what it ended on, rather than stopping."
   },
   "settingsLanguageKeywords": "language, idioma, locale, translation, spanish, english",
   "@settingsLanguageKeywords": {

@@ -577,6 +577,18 @@
   "@settingsIdentifyUploadsTitle": {
     "description": "Name of the \"Identify uploads\" setting, drawn on its own row and in settings search."
   },
+  "settingsKeepPlayingHelp": "When a music queue runs out, keep going with tracks like the last one. The queue's own toggle sets the same thing.",
+  "@settingsKeepPlayingHelp": {
+    "description": "Help line under the keep-playing setting. Says what happens and where else the same switch is."
+  },
+  "settingsKeepPlayingKeywords": "continuous, endless, radio, mix, similar, autoplay, queue",
+  "@settingsKeepPlayingKeywords": {
+    "description": "Comma-separated search keywords for the \"Keep playing similar music\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsKeepPlayingTitle": "Keep playing similar music",
+  "@settingsKeepPlayingTitle": {
+    "description": "Setting that decides whether a music queue that has run out continues with a mix built from what it ended on, rather than stopping."
+  },
   "settingsLanguageKeywords": "language, idioma, locale, translation, spanish, english",
   "@settingsLanguageKeywords": {
     "description": "Comma-separated search keywords for the language setting. Deliberately bilingual: somebody looking for their own language types its name, and the interface they are typing into is the one they cannot read. Keep the other languages' words and add this one's."

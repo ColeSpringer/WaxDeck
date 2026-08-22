@@ -1504,7 +1504,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get artSourceSidecar => 'From a folder image';
 
   @override
-  String get artSourceTag => 'From the file';
+  String get artSourceTag => 'From the file\'s tags';
 
   @override
   String get artSourceUser => 'Set by hand';
@@ -5989,6 +5989,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get queueClearSelectionAction => 'Clear';
 
   @override
+  String get queueContinuing => 'CONTINUING WITH SIMILAR MUSIC';
+
+  @override
   String get queueDragToReorder => 'Drag to reorder';
 
   @override
@@ -6010,6 +6013,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get queueHideHistory => 'Hide what has played';
 
   @override
+  String get queueKeepPlayingOff => 'Keep playing off';
+
+  @override
+  String get queueKeepPlayingOn => 'Keep playing on';
+
+  @override
   String get queueMoveDown => 'Move down';
 
   @override
@@ -6023,6 +6032,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queueNothingUpNext => 'NOTHING UP NEXT';
+
+  @override
+  String get queueOpenAction => 'Open';
 
   @override
   String queuePlayingFrom(String source) {
@@ -7324,6 +7336,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsIdentifyUploadsTitle => 'Identify uploads';
+
+  @override
+  String get settingsKeepPlayingHelp =>
+      'When a music queue runs out, keep going with tracks like the last one. The queue\'s own toggle sets the same thing.';
+
+  @override
+  String get settingsKeepPlayingKeywords =>
+      'continuous, endless, radio, mix, similar, autoplay, queue';
+
+  @override
+  String get settingsKeepPlayingTitle => 'Keep playing similar music';
 
   @override
   String get settingsLanguageKeywords =>

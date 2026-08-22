@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { J } from './driver';
+import { J, T } from './driver';
 
 // The discovery slice over the real stack: an instant mix started from
 // a playing track in the browser, the sonic surfaces (similar tracks
@@ -30,22 +30,22 @@ test('an instant mix starts from any playing track', async ({ app }) => {
   await app.music.play(pid);
   await app.discovery.runInstantMix();
 
-  // Confirming pushes the mix list and a player for its first track on
-  // top. The seed is never in its own mix, so the seed title vanishing
-  // proves the new player is up before popping back onto the list.
-  await expect(app.discovery.text('Bravo Song', { exact: true })).toHaveCount(0);
+  // A mix started from a playing track lands behind it. Nothing is
+  // replaced and nothing is pushed - the track that was playing is
+  // still playing - so the message the sheet leaves is the only way to
+  // what changed.
+  const open = app.discovery.queueFromMessage();
+  await expect(open).toBeVisible({ timeout: T.nav });
+  await open.click();
 
-  // The player's own control, by handle: it is a collapse chevron named
-  // "Collapse player" since the rebuild onto the scaffold, so a match on
-  // "Back" finds the mix list's button underneath and pops that instead.
-  await app.player.collapse(app.discovery.item('mix', 0));
-  await expect(app.discovery.text('Instant mix', { exact: true })).toBeVisible();
-
-  // The basis chip reports whichever engine answered; coverage may or
-  // may not have landed by the time this spec runs.
-  await expect(app.discovery.basis('mix')).toHaveText(
-    /^Answered by the (metadata|sonic) engine$/,
-  );
+  // The queue, over the player: the seed still holds the current row,
+  // and the rows after it are the mix. Playing one track queues exactly
+  // it, so anything up next at all came from the mix.
+  await expect(app.queue.screen()).toBeVisible({ timeout: T.nav });
+  expect(
+    await app.queue.upNextCount(),
+    'the mix is queued behind what is playing',
+  ).toBeGreaterThan(0);
 });
 
 test('sonic coverage answers similar tracks and a sonic path', async ({ app }) => {
@@ -59,6 +59,17 @@ test('sonic coverage answers similar tracks and a sonic path', async ({ app }) =
   expect(similar.basis).toBe('sonic');
   expect(similar.items.length).toBeGreaterThan(0);
   expect(similar.items.map((it) => it.pid)).not.toContain(charlie);
+
+  // The same answer through the browser, on a seed the call above has
+  // just proved has neighbours: the list screen and the basis chip it
+  // draws are shared with the instant mix, which reaches them from the
+  // home shelf rather than from the player.
+  await app.nav.enter('tracks');
+  await app.music.play(charlie);
+  await app.discovery.runSimilarTracks();
+  await expect(app.discovery.basis('similar')).toHaveText(
+    /^Answered by the (metadata|sonic) engine$/,
+  );
 
   const path = await app.api.get('/mixes/path', {
     query: { from: charlie, to: delta },

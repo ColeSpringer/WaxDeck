@@ -1,8 +1,14 @@
+import 'localized_host.dart';
+
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_palette.dart';
+import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
+
+import 'fakes.dart';
 
 const _red = WaxPalette(
   glow: Color(0xFFB4321E),
@@ -49,6 +55,20 @@ void main() {
       expect(cache.holds('/art/128'), isTrue);
     });
 
+    test('a peek reads a palette without making it the newest', () {
+      // What a build reads through: reordering an LRU from a build is a
+      // mutation in the wrong phase, and eviction order would then
+      // follow whatever happened to rebuild.
+      final cache = ArtworkPaletteCache();
+      for (var i = 0; i < 128; i++) {
+        cache.remember('/art/$i', _red);
+      }
+      expect(cache.peek('/art/0'), _red);
+      cache.remember('/art/128', _blue);
+      expect(cache.holds('/art/0'), isFalse);
+      expect(cache.holds('/art/1'), isTrue);
+    });
+
     test('forgets one cover, and forgets them all', () {
       final cache = ArtworkPaletteCache()
         ..remember('/art/a', _red)
@@ -63,6 +83,95 @@ void main() {
 
       cache.clear();
       expect(cache.length, 0);
+    });
+  });
+
+  group('the accent in scope', () {
+    // The palette provider is an async family, so it hands back a frame
+    // of AsyncLoading even for a cover this session has already read -
+    // and that frame drew the domain hue, which is a flash to grey and
+    // back at every track change.
+    Future<WaxPalette> accentAfterOneFrame(
+      WidgetTester tester, {
+      required String? artUrl,
+      required ArtworkPaletteCache cache,
+    }) async {
+      late WaxPalette seen;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            paletteCacheProvider.overrideWithValue(cache),
+            artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
+          ],
+          child: localizedHost(
+            ArtworkAccent(
+              artUrl: artUrl,
+              domain: WaxDomain.music,
+              child: Builder(
+                builder: (context) {
+                  seen = WaxAccent.of(context);
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      return seen;
+    }
+
+    testWidgets('a cover already read draws its colour on the first frame', (
+      tester,
+    ) async {
+      final cache = ArtworkPaletteCache()..remember('/art/a', _red);
+      expect(
+        await accentAfterOneFrame(tester, artUrl: '/art/a', cache: cache),
+        _red,
+      );
+    });
+
+    testWidgets('an item with no cover is a fallback, not a wait', (
+      tester,
+    ) async {
+      final palette = await accentAfterOneFrame(
+        tester,
+        artUrl: null,
+        cache: ArtworkPaletteCache(),
+      );
+      expect(palette.isFallback, isTrue);
+    });
+
+    testWidgets('a cold cover holds the colour it is replacing', (
+      tester,
+    ) async {
+      // Nothing in the cache for the second URL, so the read is a real
+      // one - and until it lands the surface keeps the palette it had
+      // rather than dropping to the domain hue and coming back.
+      final cache = ArtworkPaletteCache()..remember('/art/a', _red);
+      late WaxPalette seen;
+      Widget host(String artUrl) => ProviderScope(
+        overrides: [
+          paletteCacheProvider.overrideWithValue(cache),
+          artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
+        ],
+        child: localizedHost(
+          ArtworkAccent(
+            artUrl: artUrl,
+            domain: WaxDomain.music,
+            child: Builder(
+              builder: (context) {
+                seen = WaxAccent.of(context);
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(host('/art/a'));
+      expect(seen, _red);
+      await tester.pumpWidget(host('/art/cold'));
+      expect(seen, _red);
     });
   });
 

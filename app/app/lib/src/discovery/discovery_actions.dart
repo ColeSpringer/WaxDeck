@@ -8,9 +8,12 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
+import '../queue/queue_controller.dart';
 import '../queue/queue_state.dart';
+import '../queue/queue_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 
 /// How large an instant mix is asked to be.
 const instantMixSize = 50;
@@ -63,8 +66,20 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
     final navigator = Navigator.of(context);
     final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final shell = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final playback = ref.read(nowPlayingProvider.notifier);
+    // What the mix must not repeat, as it stands when the mix is asked
+    // for. The branch below reads the queue again: a track started while
+    // the mix built is a standing queue too, and wiping it because it
+    // was empty a moment ago is the destruction this whole branch exists
+    // to avoid.
+    final queued = ref.read(queueControllerProvider).pids;
+    // Read here for the same reason as the four above: the message's
+    // action fires after this sheet has popped. Over the shell, because
+    // the sheet's own route is over the player, which is over the shell:
+    // a panel opened from here would open behind both.
+    final showQueue = queueOpener(context, ref, overShell: true);
     try {
       final mix = await ref
           .read(repositoryProvider)
@@ -72,6 +87,9 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
             seedPid: widget.seed.pid,
             adventurousness: _adventurousness,
             size: instantMixSize,
+            // A mix landing behind a standing queue must not repeat what
+            // is already in it. Harmless when there is no queue.
+            excludePids: queued,
           );
       // Dismissed while the mix was building: that is a cancel, and
       // popping again from here would take the screen underneath with
@@ -84,11 +102,36 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
           ..showSnackBar(SnackBar(content: Text(l10n.discoveryMixEmpty)));
         return;
       }
-      // Mirror how playlists start playback: the mix list stands in
-      // for the playlist screen, and the player opens on the first
-      // track so the mix starts immediately. Popping the player lands
-      // on the list to keep going. Route futures resolve on pop, so
-      // neither push is awaited.
+      // Read again rather than reusing the snapshot above: `mounted` is
+      // checked a few lines up, so the container is still there.
+      if (ref.read(queueControllerProvider).isNotEmpty) {
+        // Something is already queued, so the mix goes behind it and the
+        // song playing keeps playing. No route push either: nothing on
+        // screen was asked to change, and the message is the way to what
+        // did. Through the shell rather than a bare SnackBarAction,
+        // which carries no semantics identifier for the button.
+        playback.enqueue(mix.items);
+        shell.show(
+          mix.items.length == 1
+              ? l10n.queueAddedOne(mix.items.first.title)
+              : l10n.queueAddedMany(mix.items.length),
+          actionLabel: l10n.queueOpenAction,
+          onAction: showQueue,
+          actionSemanticsId: SemanticsIds.queueOpen,
+        );
+        return;
+      }
+      // An empty queue: mirror how playlists start playback. The mix
+      // list stands in for the playlist screen, and the player opens on
+      // the first track so the mix starts immediately. Popping the
+      // player lands on the list to keep going. Route futures resolve on
+      // pop, so neither push is awaited.
+      //
+      // No production caller reaches this today - the sheet is raised
+      // from the player's own menu, and a player showing a track has a
+      // queue holding it. Kept because it is the right answer for the
+      // state it names, and because enqueueing behind nothing would
+      // leave the tracks queued and silent.
       unawaited(
         router.push<void>(
           WaxRoute.tracks,

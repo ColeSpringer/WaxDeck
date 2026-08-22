@@ -273,6 +273,7 @@ class PlayerScaffold extends StatefulWidget {
     this.onCollapse,
     this.actionRow,
     this.artworkCaption,
+    this.artworkCaptionReserved = false,
     this.heroOverlay,
     this.titleOverline,
     this.subtitleOverride,
@@ -298,6 +299,18 @@ class PlayerScaffold extends StatefulWidget {
   /// image and not what is playing: on radio the picture routinely
   /// belongs to a third party while the title belongs to the station.
   final String? artworkCaption;
+
+  /// That this face keeps the caption line whether or not it has one.
+  ///
+  /// The hero is sized against the room a caption needs, so a face whose
+  /// mark comes and goes draws the cover at one extent and then another
+  /// - mid-Hero flight from the deck bar, on a window narrow enough for
+  /// the extent to bind. Both faces that draw a mark are like that: the
+  /// player's arrives from a read after the first frame and is absent
+  /// for a library nothing has enriched, and radio's turns over with
+  /// every song. Set, the slot is held and left blank when there is
+  /// nothing to put in it, so the cover has one size for the session.
+  final bool artworkCaptionReserved;
 
   /// Drawn over the artwork at its own extent: radio's platter ring.
   /// Decoration rather than a control, so it is expected to ignore
@@ -329,6 +342,13 @@ class PlayerScaffold extends StatefulWidget {
   /// Up-next peek, chapters, notes, transcript.
   final Widget? bottomRegion;
 
+  /// The controls at the right of the header bar.
+  ///
+  /// One touch target tall each: the bar states its own height so the
+  /// provenance between the islands can be centred against the whole of
+  /// it. That height is a floor rather than a cap - the toolbar's slots
+  /// are not clipped, so anything taller than a [WaxIconButton] here
+  /// paints outside the bar and over the artwork.
   final List<Widget>? trailingHeaderActions;
 
   /// The e2e handles for the scaffold's own controls.
@@ -540,46 +560,83 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
     horizontal: WaxSpace.s8,
   );
 
-  Widget _header(BuildContext context, WaxColors colors) => Row(
-    children: <Widget>[
-      // The controls are islands, the stretch between them is not. The
-      // centre stays dismissing on purpose: on a phone the content box
-      // is the full width, and this stretch is the only region a tap
-      // can land in.
-      _ContentIsland(
-        child: Padding(
-          padding: _headerControlGutter,
-          child: WaxIconButton(
-            glyph: WaxIcons.collapse,
-            label: context.waxL10n.playerCollapse,
-            onPressed: widget.onCollapse,
-            semanticsId: widget.ids.collapse,
-          ),
-        ),
-      ),
-      Expanded(
-        child: Center(
-          child: widget.now.provenance == null
-              ? const SizedBox.shrink()
-              : Text(
-                  widget.now.provenance!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: WaxType.caption.copyWith(color: colors.textSecondary),
-                ),
-        ),
-      ),
-      if (widget.trailingHeaderActions != null)
-        _ContentIsland(
+  /// The header's height, stated rather than measured.
+  ///
+  /// A toolbar that centres its middle against the whole bar has to lay
+  /// that middle out itself, so it takes the height it is given instead
+  /// of the height of its tallest child - which is what the row this
+  /// replaced did. One touch target is that height: every control that
+  /// goes in this bar is a [WaxIconButton], which is exactly that
+  /// square, and [trailingHeaderActions] says so.
+  ///
+  /// Except that the provenance between them is type, and a bar of a
+  /// fixed height would lay a large accessibility size out into 44
+  /// logical pixels and paint the overflow over the artwork - the
+  /// toolbar constrains its middle and nothing clips it. So the floor is
+  /// the touch target and the bar grows with the reader's setting past
+  /// it, by the same allowance one caption line takes under the cover.
+  double _headerHeight(BuildContext context) => math.max(
+    WaxSpace.touchTarget,
+    MediaQuery.textScalerOf(context).scale(_captionAllowance),
+  );
+
+  Widget _header(BuildContext context, WaxColors colors) => SizedBox(
+    height: _headerHeight(context),
+    // NavigationToolbar rather than a Row: an Expanded middle centres
+    // itself in what the two islands leave over, which is the middle of
+    // the bar only if they are the same width - and they never are, one
+    // collapse button against three controls. This lays the provenance
+    // out at its own width, centres it against the whole header, and
+    // shifts it only when it would collide with a side.
+    //
+    // The controls are islands, the space between and around them is
+    // not. That space stays dismissing on purpose: on a phone the
+    // content box is the full width, and it is the only region a tap can
+    // land in. Nothing covers it now that the middle is intrinsic, so
+    // the taps reach the surface's own opaque detector, which is what
+    // dismisses them.
+    child: NavigationToolbar(
+      middleSpacing: WaxSpace.s8,
+      // Centred in the slot rather than handed straight over: the
+      // toolbar gives its leading a tight height, and an island
+      // stretched down a bar that grew for the type would be room to
+      // miss the button into that no longer dismisses. `widthFactor`
+      // because the slot's width is the whole bar and its measured width
+      // is what the middle is centred against.
+      leading: Center(
+        widthFactor: 1,
+        child: _ContentIsland(
           child: Padding(
             padding: _headerControlGutter,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: widget.trailingHeaderActions!,
+            child: WaxIconButton(
+              glyph: WaxIcons.collapse,
+              label: context.waxL10n.playerCollapse,
+              onPressed: widget.onCollapse,
+              semanticsId: widget.ids.collapse,
             ),
           ),
         ),
-    ],
+      ),
+      middle: widget.now.provenance == null
+          ? null
+          : Text(
+              widget.now.provenance!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: WaxType.caption.copyWith(color: colors.textSecondary),
+            ),
+      trailing: widget.trailingHeaderActions == null
+          ? null
+          : _ContentIsland(
+              child: Padding(
+                padding: _headerControlGutter,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: widget.trailingHeaderActions!,
+                ),
+              ),
+            ),
+    ),
   );
 
   Widget _portrait(BuildContext context, WaxColors colors) {
@@ -697,8 +754,12 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
   /// caption under it where there is one.
   Widget _hero(double extent) {
     final caption = widget.artworkCaption;
+    // Reserved for a caption this face may yet draw as well as for one
+    // it is drawing: the alternative is a cover at full extent that
+    // shrinks by the allowance the moment a mark arrives.
+    final reserved = caption != null || widget.artworkCaptionReserved;
     final allowance = MediaQuery.textScalerOf(context).scale(_captionAllowance);
-    final room = caption == null ? extent : math.max(96.0, extent - allowance);
+    final room = reserved ? math.max(96.0, extent - allowance) : extent;
     final size = math.min(
       room,
       widget.now.domain == WaxDomain.podcasts
@@ -734,7 +795,7 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
               children: <Widget>[art, widget.heroOverlay!],
             ),
           );
-    if (caption == null) return hero;
+    if (!reserved) return hero;
     return SizedBox(
       width: size,
       child: Column(
@@ -743,8 +804,22 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           hero,
           const SizedBox(height: WaxSpace.s8),
           // One line, which is what `_captionAllowance` above reserved
-          // room for.
-          ArtworkCaption(caption, align: TextAlign.center),
+          // room for - and the same line, blank, where the extent was
+          // taken for a caption this face has not got. Reserving the
+          // extent without standing in the box for it would centre a
+          // shorter column and move the cover up instead of resizing it,
+          // which is the same jump wearing a different hat.
+          //
+          // The same widget either way, so the column is the same height
+          // to the pixel: a zero-width space lays out one line of the
+          // caption's own type and draws nothing. Excluded from
+          // semantics, because a blank line is not a label.
+          if (caption == null)
+            const ExcludeSemantics(
+              child: ArtworkCaption('​', align: TextAlign.center),
+            )
+          else
+            ArtworkCaption(caption, align: TextAlign.center),
         ],
       ),
     );

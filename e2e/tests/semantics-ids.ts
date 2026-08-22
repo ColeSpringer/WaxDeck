@@ -225,6 +225,8 @@ export const SemanticsIds = {
   queueEntryRemove: (queueId: string | number) => `queue-entry-remove-${queueId}`,
   queueHistory: 'queue-history',
   queueHistoryEntry: (id: string | number) => `queue-history-${id}`,
+  queueKeepPlaying: 'queue-keep-playing',
+  queueOpen: 'queue-open',
   queueEntrySelect: (queueId: string | number) => `queue-entry-select-${queueId}`,
   queueRepeat: 'queue-repeat',
   queueRestoreSession: (id: string | number) => `queue-restore-session-${id}`,

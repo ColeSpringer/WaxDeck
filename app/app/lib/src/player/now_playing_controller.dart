@@ -129,6 +129,13 @@ class NowPlayingController extends Notifier<NowPlaying> {
   int? _pendingPositionMs;
   bool _pendingPaused = false;
 
+  /// Armed by [restore] across the one synchronous call that can consume
+  /// it, so the start the queue's own notification lands on knows it is
+  /// putting a listen back rather than beginning one. Every other caller
+  /// says so with [_start]'s parameter; this one cannot, because the
+  /// start it means happens inside `queue.restore`.
+  bool _pendingUseSaved = false;
+
   /// Where the entry being played was asked to start, so a retry asks
   /// for the same thing rather than falling back to the checkpoint.
   int? _entryPositionMs;
@@ -162,7 +169,11 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // guarded on the token rather than on the session, which is not
       // set until a start is well underway.
       Future<void>.microtask(() {
-        if (ref.mounted && _startToken == 0) _inFlight = _start(standing);
+        if (ref.mounted && _startToken == 0) {
+          // A queue that was already standing when playback was built is
+          // one that was put back, so it comes back where it stood.
+          _inFlight = _start(standing, useSavedPosition: true);
+        }
       });
     }
     ref.onDispose(() {
@@ -416,7 +427,11 @@ class NowPlayingController extends Notifier<NowPlaying> {
     // way out, and that checkpoint is the truthful place to come back
     // to; the original request is where it began, which is behind.
     _pendingPositionMs = state.error != null ? _entryPositionMs : null;
-    _inFlight = _start(entry);
+    // Both states this answers are resumes: a start that failed asks
+    // again for where it was going, and an item that let go of the
+    // engine to radio comes back to the checkpoint it wrote on its way
+    // out. Neither is a fresh play.
+    _inFlight = _start(entry, useSavedPosition: true);
   }
 
   /// Puts a queue found at launch back in play, paused at its
@@ -427,15 +442,25 @@ class NowPlayingController extends Notifier<NowPlaying> {
   void restore(QueueState queue, {bool offerUndo = false}) {
     _pendingPositionMs = null;
     _pendingPaused = true;
+    // The one music case that legitimately comes back mid-track: this is
+    // the listen the app was closed in the middle of. Armed only across
+    // the call below, which notifies as it assigns and so may start from
+    // inside it; disarmed the moment it returns, so no unrelated start
+    // can pick it up.
+    _pendingUseSaved = true;
     final began = _startToken;
-    ref
-        .read(queueControllerProvider.notifier)
-        .restore(
-          queue,
-          displacedPositionMs: offerUndo
-              ? _session?.displayPosition.inMilliseconds ?? 0
-              : null,
-        );
+    try {
+      ref
+          .read(queueControllerProvider.notifier)
+          .restore(
+            queue,
+            displacedPositionMs: offerUndo
+                ? _session?.displayPosition.inMilliseconds ?? 0
+                : null,
+          );
+    } finally {
+      _pendingUseSaved = false;
+    }
     // The queue notified its listeners as it was assigned, so when the
     // restored current entry's id differs from the playing one's, the
     // entry change above already started it. When it does not - restored
@@ -449,7 +474,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     if (_startToken != began) return;
     final entry = ref.read(queueControllerProvider).currentEntry;
     if (entry == null) return;
-    _inFlight = _start(entry);
+    _inFlight = _start(entry, useSavedPosition: true);
   }
 
   /// Takes back the replacement a tap made: the queue that was
@@ -509,11 +534,30 @@ class NowPlayingController extends Notifier<NowPlaying> {
     unawaited(_syncPreload());
   }
 
-  Future<void> _start(QueueEntry entry) async {
+  /// Starts [entry].
+  ///
+  /// [useSavedPosition] is where the "music never resumes mid-track"
+  /// policy lives, and it lives here rather than in [PlaybackSession]:
+  /// the session's job is to honour the position it is handed, and six
+  /// other callers rely on it reading the checkpoint when it is handed
+  /// none. A parameter rather than a pending flag, deliberately -
+  /// `build` defers its first start to a microtask, and a flag set
+  /// before that microtask would be consumed by whatever started in
+  /// between and resume the wrong item mid-track.
+  ///
+  /// Spoken word is untouched whatever the flag says: a book and a
+  /// podcast come back to their checkpoints, which is what a checkpoint
+  /// is for. Only music starts at the head.
+  ///
+  /// Precedence: `_pendingPositionMs` still wins over both.
+  /// `undoReplace`, `playPids(positionMs:)` and resume-after-error all
+  /// set it and all mean it.
+  Future<void> _start(QueueEntry entry, {bool useSavedPosition = false}) async {
     final token = ++_startToken;
     _starting = token;
     _sessionEntryId = entry.queueId;
-    final positionMs = _pendingPositionMs;
+    var positionMs = _pendingPositionMs;
+    final useSaved = useSavedPosition || _pendingUseSaved;
     final paused = _pendingPaused;
     _entryPositionMs = positionMs;
     _pendingPositionMs = null;
@@ -537,6 +581,29 @@ class NowPlayingController extends Notifier<NowPlaying> {
       _preload = null;
       final item = await _resolve(entry.pid);
       if (_superseded(token)) return;
+      // Music starts at the head. Skipping away from a track and back is
+      // a fresh play rather than a resume, and so is tapping a track in
+      // a listing you had heard half of; the exceptions all say so
+      // through [useSavedPosition]. Told to the session as an explicit
+      // zero rather than by leaving it null, which is what asks the
+      // session to go and read the checkpoint. Spoken word passes null
+      // and keeps resuming.
+      if (positionMs == null &&
+          !useSaved &&
+          item.mediaType == MediaType.music) {
+        positionMs = 0;
+      }
+      // Recorded as the head rather than as "unspecified", because this
+      // is what `resume` asks for again after a start that failed. Left
+      // null it would ask the session to read the checkpoint - the very
+      // checkpoint the line above just declined to honour, so a music
+      // start that failed would retry into the middle of the track.
+      // Recorded as the head rather than as "unspecified", because this
+      // is what `resume` asks for again after a start that failed. Left
+      // null it would ask the session to read the checkpoint - the very
+      // checkpoint the line above just declined to honour, so a music
+      // start that failed would retry into the middle of the track.
+      _entryPositionMs = positionMs;
       final session = _build(item, initialPositionMs: positionMs);
       // The engine's owner changes as start() begins, so the outgoing
       // session flushes its final checkpoint and listen report without
@@ -921,14 +988,13 @@ class NowPlayingController extends Notifier<NowPlaying> {
       _refusedNext = next.queueId;
       return;
     }
-    // The port prepares an item at the head of its window, so an item
-    // that would resume anywhere else has to load on advance.
-    final saved = await ref.read(repositoryProvider).getPlayState(next.pid);
-    if (!ref.mounted) return;
-    if (saved.positionMs > 0) {
-      _refusedNext = next.queueId;
-      return;
-    }
+    // No play-state read here any more. It refused an item with a saved
+    // position, because the port prepares an item at the head of its
+    // window - but both guards above have already returned for anything
+    // that is not music, and music now always starts at the head. That
+    // made the read a round trip per arm whose answer could not matter,
+    // and it cost the gapless crossing into every track the listener had
+    // once heard part of.
     final info = await ref.read(repositoryProvider).getPlayInfo(next.pid);
     if (!ref.mounted) return;
     // Only passthrough streams: a preloaded transcode opens a second

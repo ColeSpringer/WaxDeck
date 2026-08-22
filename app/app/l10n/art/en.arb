@@ -83,9 +83,9 @@
   "@artSourceSidecar": {
     "description": "Source mark under a cover read from an image file sitting beside the audio, such as a cover.jpg."
   },
-  "artSourceTag": "From the file",
+  "artSourceTag": "From the file's tags",
   "@artSourceTag": {
-    "description": "Source mark under a cover read out of the audio file's own tags."
+    "description": "Source mark under a cover read out of the audio file's own tags. The provenance rows draw it for an embedded lyric as well, which arrives the same way."
   },
   "artSourceUser": "Set by hand",
   "@artSourceUser": {

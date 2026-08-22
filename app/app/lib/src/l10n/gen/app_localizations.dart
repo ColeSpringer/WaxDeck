@@ -2661,10 +2661,10 @@ abstract class AppLocalizations {
   /// **'From a folder image'**
   String get artSourceSidecar;
 
-  /// Source mark under a cover read out of the audio file's own tags.
+  /// Source mark under a cover read out of the audio file's own tags. The provenance rows draw it for an embedded lyric as well, which arrives the same way.
   ///
   /// In en, this message translates to:
-  /// **'From the file'**
+  /// **'From the file\'s tags'**
   String get artSourceTag;
 
   /// Source mark under a cover somebody chose through the curation surface.
@@ -5223,7 +5223,7 @@ abstract class AppLocalizations {
   /// **'Add tag'**
   String get metadataAddTag;
 
-  /// The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').
+  /// The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file's tags', 'Set by hand', 'From Deezer').
   ///
   /// In en, this message translates to:
   /// **'Artwork · {source}'**
@@ -9434,6 +9434,12 @@ abstract class AppLocalizations {
   /// **'Clear'**
   String get queueClearSelectionAction;
 
+  /// Divider above the first track the app added on its own once the queue had run out. Upper case in English because the queue's other section labels are; a language that does not shout section labels should not.
+  ///
+  /// In en, this message translates to:
+  /// **'CONTINUING WITH SIMILAR MUSIC'**
+  String get queueContinuing;
+
   /// Accessible name of the handle that reorders queued tracks by dragging.
   ///
   /// In en, this message translates to:
@@ -9470,6 +9476,18 @@ abstract class AppLocalizations {
   /// **'Hide what has played'**
   String get queueHideHistory;
 
+  /// Accessible name of the queue's continue control while it is off, so the queue stops where it ends. Worded as a state to match "Shuffle off" and "Repeat off" beside it, which a screen reader sweeps up in the same breath.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep playing off'**
+  String get queueKeepPlayingOff;
+
+  /// Accessible name of the queue's continue control while it is on, so a music queue that runs out carries on with similar tracks. Worded as a state to match "Shuffle on" beside it.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep playing on'**
+  String get queueKeepPlayingOn;
+
   /// Screen-reader action that moves one queued track later.
   ///
   /// In en, this message translates to:
@@ -9499,6 +9517,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'NOTHING UP NEXT'**
   String get queueNothingUpNext;
+
+  /// Button on the message that says tracks were added, which opens the queue so they can be seen. A short verb, beside a sentence that already names the queue.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get queueOpenAction;
 
   /// Where a queue came from, over the queue itself. {source} is the album, show, or playlist's own name.
   ///
@@ -11520,6 +11544,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Identify uploads'**
   String get settingsIdentifyUploadsTitle;
+
+  /// Help line under the keep-playing setting. Says what happens and where else the same switch is.
+  ///
+  /// In en, this message translates to:
+  /// **'When a music queue runs out, keep going with tracks like the last one. The queue\'s own toggle sets the same thing.'**
+  String get settingsKeepPlayingHelp;
+
+  /// Comma-separated search keywords for the "Keep playing similar music" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'continuous, endless, radio, mix, similar, autoplay, queue'**
+  String get settingsKeepPlayingKeywords;
+
+  /// Setting that decides whether a music queue that has run out continues with a mix built from what it ended on, rather than stopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep playing similar music'**
+  String get settingsKeepPlayingTitle;
 
   /// Comma-separated search keywords for the language setting. Deliberately bilingual: somebody looking for their own language types its name, and the interface they are typing into is the one they cannot read. Keep the other languages' words and add this one's.
   ///

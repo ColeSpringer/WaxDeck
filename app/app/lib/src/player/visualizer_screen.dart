@@ -77,8 +77,11 @@ class _Frame extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
+                  // Back, not collapse: this pops a pushed route rather
+                  // than lowering a sheet, which is what the label has
+                  // said all along.
                   child: WaxIconButton(
-                    glyph: WaxIcons.collapse,
+                    glyph: WaxIcons.back,
                     label: context.l10n.playerLeaveVisualizer,
                     onPressed: () => leavePlayer(context),
                     semanticsId: SemanticsIds.visualizerClose,

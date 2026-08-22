@@ -4,7 +4,6 @@ import '../color/contrast.dart';
 import '../color/palette.dart';
 import '../theme/wax_accent.dart';
 import '../tokens/colors.dart';
-import '../tokens/motion.dart';
 
 /// The artwork-derived backdrop behind players and entity headers.
 ///
@@ -43,7 +42,6 @@ class WaxBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final motion = WaxMotion.of(context);
     final resolved = palette ?? WaxAccent.of(context);
 
     final scrimAlpha = WaxContrast.scrimAlphaFor(
@@ -55,10 +53,14 @@ class WaxBackdrop extends StatelessWidget {
       scrim: colors.scrim.withValues(alpha: 1),
     );
 
-    return AnimatedContainer(
-      // Track changes crossfade their colour; they never snap.
-      duration: motion.artworkCrossfade,
-      curve: WaxMotion.emphasized,
+    // A DecoratedBox and not an AnimatedContainer: the colour arriving
+    // here has already been tweened over exactly this duration by
+    // whoever put the palette in scope, and an implicit animation
+    // re-targets on every rebuild - so a second one over the same
+    // duration chases a moving target and never lands, which is the long
+    // mushy fade a track change draws in light mode. Dark never showed
+    // it, its container colour being the constant canvas.
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.isDark
             ? colors.canvas
@@ -111,7 +113,11 @@ class WaxBackdrop extends StatelessWidget {
                 child: const _Grain(),
               ),
             ),
-          child,
+          // The colour tween runs a repaint of this stack per frame for
+          // the length of a track change. Behind a boundary the artwork,
+          // the title block and the transport are not redrawn with it -
+          // only the washes above, which is all that is changing.
+          RepaintBoundary(child: child),
         ],
       ),
     );

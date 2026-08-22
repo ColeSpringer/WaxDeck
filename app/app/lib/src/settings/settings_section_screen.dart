@@ -213,6 +213,21 @@ class _PlaybackBody extends ConsumerWidget {
         _Group(
           title: l10n.settingsGroupPlayer,
           children: <Widget>[
+            // Here rather than under "Starting on its own": that group
+            // is the gestureless-start gate for a Connect handover, and
+            // two adjacent switches - one "let another device start me",
+            // one "keep going when the queue ends" - would read as two
+            // words for the same thing. This one is about continuing.
+            WaxSettingRow(
+              title: l10n.settingsKeepPlayingTitle,
+              help: l10n.settingsKeepPlayingHelp,
+              control: WaxSwitch(
+                value: ref.watch(keepPlayingSimilarProvider),
+                label: l10n.settingsKeepPlayingTitle,
+                semanticsId: SemanticsIds.setting('keep-playing-similar'),
+                onChanged: ref.read(keepPlayingSimilarProvider.notifier).set,
+              ),
+            ),
             WaxSettingRow(
               title: l10n.settingsCarButtonTitle,
               help: l10n.settingsCarButtonHelp,

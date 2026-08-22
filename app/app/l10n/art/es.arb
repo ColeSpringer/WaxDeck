@@ -33,7 +33,7 @@
   "artSourceProvider": "De {provider}",
   "artSourceProviderUnnamed": "De un proveedor de metadatos",
   "artSourceSidecar": "De una imagen de la carpeta",
-  "artSourceTag": "Del archivo",
+  "artSourceTag": "De las etiquetas del archivo",
   "artSourceUser": "Establecida a mano",
   "artworkClearAction": "Borrar",
   "artworkClearBody": "El hueco queda vacío. No se hereda nada en su lugar.",

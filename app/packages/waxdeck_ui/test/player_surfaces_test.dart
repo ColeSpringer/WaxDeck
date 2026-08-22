@@ -199,6 +199,181 @@ void main() {
       );
     });
 
+    testWidgets('a reserved caption line holds the cover still', (
+      tester,
+    ) async {
+      // The mark arrives from a read drawn after the first frame and is
+      // absent for a library nothing has enriched, and on radio it turns
+      // over with the songs. Without the slot held the cover is drawn at
+      // one extent and then another - mid-Hero flight from the deck bar,
+      // on a window narrow enough for the extent to bind.
+      Future<Rect> heroBox({String? caption, required bool reserved}) async {
+        await _pumpAt(
+          tester,
+          SizedBox(
+            width: 420,
+            height: 620,
+            child: PlayerScaffold(
+              now: _music,
+              artworkCaption: caption,
+              artworkCaptionReserved: reserved,
+              transport: TransportCluster(playing: true, onPlayPause: () {}),
+              seek: SeekCluster(now: _music, onSeek: (_) {}),
+            ),
+          ),
+          size: const Size(420, 620),
+        );
+        return tester.getRect(find.byType(ArtworkImage).first);
+      }
+
+      // The whole rect, not its width: reserving the extent without
+      // standing in the box for it leaves the cover the same size and
+      // moves it up the screen, which is the same jump.
+      final waiting = await heroBox(reserved: true);
+      final arrived = await heroBox(
+        caption: 'From the Cover Art Archive',
+        reserved: true,
+      );
+      expect(waiting, arrived);
+
+      // And a face that reserves nothing still gets the whole extent.
+      final never = await heroBox(reserved: false);
+      expect(never.width, greaterThan(arrived.width));
+    });
+
+    testWidgets('the provenance centres against the header, not the gap', (
+      tester,
+    ) async {
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 900,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () {},
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+            // Three controls against one: the asymmetry is the whole
+            // point, and it is what a centre taken from the leftover
+            // space gets wrong.
+            trailingHeaderActions: <Widget>[
+              WaxIconButton(
+                glyph: WaxIcons.cast,
+                label: 'Play on another device',
+                onPressed: () {},
+              ),
+              WaxIconButton(
+                glyph: WaxIcons.downloads,
+                label: 'Download',
+                onPressed: () {},
+              ),
+              WaxIconButton(
+                glyph: WaxIcons.more,
+                label: 'More',
+                onPressed: () {},
+              ),
+            ],
+          ),
+        ),
+        size: const Size(900, 880),
+      );
+
+      final provenance = tester.getRect(find.text('Playing from Salt Harbour'));
+      final surface = tester.getRect(find.byType(PlayerScaffold));
+      expect(provenance.center.dx, moreOrLessEquals(surface.center.dx));
+    });
+
+    testWidgets('the header grows with the type rather than spilling', (
+      tester,
+    ) async {
+      // The toolbar lays its middle out inside the height the bar
+      // states and nothing clips it, so a bar pinned to one touch target
+      // paints a large accessibility size over the artwork below.
+      Future<Rect> headerAt(double scale) async {
+        await _pumpAt(
+          tester,
+          MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+            child: SizedBox(
+              width: 900,
+              height: 880,
+              child: PlayerScaffold(
+                now: _music,
+                onCollapse: () {},
+                transport: TransportCluster(playing: true, onPlayPause: () {}),
+                seek: SeekCluster(now: _music, onSeek: (_) {}),
+              ),
+            ),
+          ),
+          size: const Size(900, 880),
+        );
+        return tester.getRect(find.text('Playing from Salt Harbour'));
+      }
+
+      // The bar the provenance sits in, found through the button beside
+      // it: the toolbar gives both slots the bar's own height.
+      Rect bar() => tester.getRect(
+        find
+            .ancestor(
+              of: find.byType(NavigationToolbar),
+              matching: find.byType(SizedBox),
+            )
+            .first,
+      );
+
+      final plain = await headerAt(1);
+      final plainBar = bar();
+      expect(plainBar.height, WaxSpace.touchTarget);
+      expect(plain.height, lessThanOrEqualTo(plainBar.height));
+
+      final large = await headerAt(3);
+      final largeBar = bar();
+      expect(largeBar.height, greaterThan(plainBar.height));
+      expect(
+        large.height,
+        lessThanOrEqualTo(largeBar.height),
+        reason: 'the provenance stays inside the bar it is laid out in',
+      );
+    });
+
+    testWidgets('a click beside the provenance collapses the player', (
+      tester,
+    ) async {
+      // The middle is only as wide as its own text now, so the run
+      // between it and the trailing island is bare surface - which is
+      // what dismisses.
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 900,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+            trailingHeaderActions: <Widget>[
+              WaxIconButton(
+                glyph: WaxIcons.more,
+                label: 'More',
+                onPressed: () {},
+              ),
+            ],
+          ),
+        ),
+        size: const Size(900, 880),
+      );
+
+      final provenance = tester.getRect(find.text('Playing from Salt Harbour'));
+      await tester.tapAt(
+        Offset(provenance.right + WaxSpace.s24, provenance.center.dy),
+      );
+      await tester.pump();
+      expect(collapsed, 1);
+    });
+
     testWidgets('the title block centres every line on its own width', (
       tester,
     ) async {

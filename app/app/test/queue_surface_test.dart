@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_panel.dart';
@@ -133,6 +134,40 @@ void main() {
       // the current one pinned at the top.
       expect(find.text('PREVIOUSLY (1)'), findsOneWidget);
       expect(_rowTitles(tester), hasLength(2));
+    });
+
+    testWidgets('the seam is drawn once, ahead of the listener', (
+      tester,
+    ) async {
+      final repository = FakeRepository(items: <ItemSummary>[testItem('tr-1')])
+        ..instantMixResult = InstantMix(
+          basis: MixBasis.sonic,
+          items: <ItemSummary>[testItem('tr-2'), testItem('tr-3')],
+        );
+      final container = await _pump(tester, repository: repository);
+      // Through playback rather than the queue directly: the seam is
+      // drawn over what the continuation appended, and the continuation
+      // only fires for a seed something has resolved.
+      container.read(nowPlayingProvider.notifier).play(<ItemSummary>[
+        testItem('tr-1'),
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      expect(find.text('CONTINUING WITH SIMILAR MUSIC'), findsOneWidget);
+
+      // Once the listener is inside the mix the seam is behind them, and
+      // every row left is on its far side: a divider at the top of the
+      // list would be a second section heading under "Up next" claiming
+      // a boundary that has passed.
+      container.read(queueControllerProvider.notifier).jumpTo(1);
+      await tester.pumpAndSettle();
+
+      expect(find.text('CONTINUING WITH SIMILAR MUSIC'), findsNothing);
+
+      // Playing for real leaves a session with a checkpoint ticker on
+      // it, and the binding refuses to end a test holding a timer.
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('the played head opens and closes', (tester) async {

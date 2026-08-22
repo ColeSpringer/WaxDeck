@@ -87,6 +87,11 @@ class RadioFace extends ConsumerWidget {
                   context.l10n,
                   playback.nowPlayingArtSource,
                 ),
+          // The mark above turns over with the songs, so the line under
+          // the platter is kept whether or not this one carries it: a
+          // slot that came and went would resize the platter at every
+          // title change the station makes.
+          artworkCaptionReserved: true,
           onCollapse: () => leavePlayer(context),
           trailingHeaderActions: <Widget>[
             _FavoriteButton(station: station),

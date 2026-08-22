@@ -152,8 +152,21 @@ test: test-server test-fixtures test-app
 test-app-chrome:
 	cd app/app && flutter test --platform chrome test/*_web_test.dart
 
+# The cap is a deadlock detector, not a budget. Go's default is 10
+# minutes per package, so a worker that never returns costs ten minutes
+# and answers with an eight-thousand-line goroutine dump - which is how
+# a supervised teardown that deadlocked `Group.Wait` was found. The two
+# heavy packages measure 15s and 14s here and everything else is under
+# three, so two minutes is eight times the slowest and still turns a
+# hang into a fast answer. Raise it when a package legitimately grows
+# past it; do not raise it to make a hang pass.
+#
+# CI is deliberately not this number: it runs the same suite under
+# `-race` on a shared runner, where `internal/api` has historically been
+# minutes rather than seconds, and `.github/workflows/ci.yaml` sets 20m
+# for that with its own note.
 test-server:
-	cd server && go test ./...
+	cd server && go test -timeout 120s ./...
 
 test-fixtures:
 	cd fixtures && go test ./...

@@ -119,6 +119,10 @@ abstract final class ClientSettingKeys {
   /// Whether gapless preloading waits for an unmetered connection.
   static const preloadOnWifiOnly = 'waxdeck.playback.preloadOnWifiOnly';
 
+  /// Whether a music queue that has run out keeps going with a mix
+  /// seeded on what it ended on. Per device, like the rest of playback.
+  static const keepPlayingSimilar = 'waxdeck.playback.keepPlayingSimilar';
+
   /// Whether downloads wait for an unmetered connection.
   static const downloadsOnWifiOnly = 'waxdeck.downloads.wifiOnly';
 

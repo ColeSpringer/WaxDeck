@@ -1535,7 +1535,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get artSourceSidecar => 'De una imagen de la carpeta';
 
   @override
-  String get artSourceTag => 'Del archivo';
+  String get artSourceTag => 'De las etiquetas del archivo';
 
   @override
   String get artSourceUser => 'Establecida a mano';
@@ -6061,6 +6061,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get queueClearSelectionAction => 'Deseleccionar';
 
   @override
+  String get queueContinuing => 'CONTINUAMOS CON MÚSICA SIMILAR';
+
+  @override
   String get queueDragToReorder => 'Arrastra para reordenar';
 
   @override
@@ -6082,6 +6085,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get queueHideHistory => 'Ocultar lo ya reproducido';
 
   @override
+  String get queueKeepPlayingOff => 'Continuación desactivada';
+
+  @override
+  String get queueKeepPlayingOn => 'Continuación activada';
+
+  @override
   String get queueMoveDown => 'Bajar';
 
   @override
@@ -6095,6 +6104,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get queueNothingUpNext => 'NADA A CONTINUACIÓN';
+
+  @override
+  String get queueOpenAction => 'Abrir';
 
   @override
   String queuePlayingFrom(String source) {
@@ -7421,6 +7433,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsIdentifyUploadsTitle => 'Identificar las subidas';
+
+  @override
+  String get settingsKeepPlayingHelp =>
+      'Cuando una cola de música se acaba, sigue con pistas parecidas a la última. El interruptor de la propia cola hace lo mismo.';
+
+  @override
+  String get settingsKeepPlayingKeywords =>
+      'continua, sin fin, radio, mezcla, parecida, similar, reproducción automática, cola';
+
+  @override
+  String get settingsKeepPlayingTitle => 'Seguir con música similar';
 
   @override
   String get settingsLanguageKeywords =>

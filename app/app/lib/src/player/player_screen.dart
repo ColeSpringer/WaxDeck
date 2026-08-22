@@ -185,21 +185,23 @@ class PlayerScreen extends ConsumerWidget {
     // a station has taken the engine, so whatever the queue still names
     // is not what is coming out of the speakers.
     final radio = ref.watch(radioPlaybackProvider);
-    if (radio.station != null) {
-      return ArtworkAccent(
-        artUrl: null,
-        domain: WaxDomain.radio,
-        child: RadioFace(playback: radio),
-      );
-    }
+    final onAir = radio.station != null;
+    final nowPlaying = onAir ? null : ref.watch(nowPlayingProvider);
+    final item = nowPlaying?.item;
+    final domain = onAir
+        ? WaxDomain.radio
+        : waxDomainOf(item?.mediaType ?? MediaType.music);
 
-    final nowPlaying = ref.watch(nowPlayingProvider);
+    final Widget face;
     // The queue is what decides whether anything is playing. An item
     // still resolving, or one whose start failed before it could be
     // named, is not nothing: saying so would hide the failure and the
     // button that retries it.
-    if (nowPlaying.entry == null) {
-      return _PlayerShell(
+    if (nowPlaying == null) {
+      face = RadioFace(playback: radio);
+    } else if (nowPlaying.entry == null) {
+      face = _PlayerShell(
+        domain: domain,
         child: EmptyState(
           key: const Key('player-idle'),
           glyph: WaxIcons.headphones,
@@ -208,45 +210,52 @@ class PlayerScreen extends ConsumerWidget {
           semanticsId: SemanticsIds.playerSurface,
         ),
       );
+    } else {
+      face = switch (nowPlaying) {
+        NowPlaying(:final Object error) => _PlayerShell(
+          domain: domain,
+          child: ErrorState(
+            key: const Key('player-error'),
+            title: context.l10n.playerStopped,
+            // `NowPlaying.error` holds whatever the start threw, and the
+            // engine's exceptions are not the contract's: the table has
+            // nothing to say about a codec, so those keep the sentence
+            // that at least says what failed.
+            message: error is WaxDeckApiException
+                ? context.explain(error)
+                : context.l10n.playerStartFailed,
+            // The queue still holds the entry, and nothing else will try
+            // it again: without this the failure is where playback stops
+            // until something rebuilds the queue.
+            onRetry: ref.read(nowPlayingProvider.notifier).resume,
+            semanticsId: SemanticsIds.playerSurface,
+            retrySemanticsId: SemanticsIds.playerRetry,
+          ),
+        ),
+        // Both, always: the state publishes a session and the item it is
+        // for together.
+        NowPlaying(:final PlaybackSession session, :final ItemSummary item) =>
+          PlayerFace(session: session, item: item),
+        _ => _PlayerShell(
+          domain: domain,
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+      };
     }
 
-    final item = nowPlaying.item;
-    return switch (nowPlaying) {
-      NowPlaying(:final Object error) => _PlayerShell(
-        artUrl: item?.artUrl,
-        domain: waxDomainOf(item?.mediaType ?? MediaType.music),
-        child: ErrorState(
-          key: const Key('player-error'),
-          title: context.l10n.playerStopped,
-          // `NowPlaying.error` holds whatever the start threw, and the
-          // engine's exceptions are not the contract's: the table has
-          // nothing to say about a codec, so those keep the sentence
-          // that at least says what failed.
-          message: error is WaxDeckApiException
-              ? context.explain(error)
-              : context.l10n.playerStartFailed,
-          // The queue still holds the entry, and nothing else will try
-          // it again: without this the failure is where playback stops
-          // until something rebuilds the queue.
-          onRetry: ref.read(nowPlayingProvider.notifier).resume,
-          semanticsId: SemanticsIds.playerSurface,
-          retrySemanticsId: SemanticsIds.playerRetry,
-        ),
-      ),
-      // Both, always: the state publishes a session and the item it is
-      // for together.
-      NowPlaying(:final PlaybackSession session, :final ItemSummary item) =>
-        ArtworkAccent(
-          artUrl: item.artUrl,
-          domain: waxDomainOf(item.mediaType),
-          child: PlayerFace(session: session, item: item),
-        ),
-      _ => _PlayerShell(
-        artUrl: item?.artUrl,
-        domain: waxDomainOf(item?.mediaType ?? MediaType.music),
-        child: const Center(child: CircularProgressIndicator()),
-      ),
-    };
+    // One accent over every state this screen has, rather than one
+    // inside each. A track change publishes a session-less state for the
+    // frames the resolve takes, and that is a different branch above:
+    // an accent per branch is a fresh element each time, which drops the
+    // palette it was holding and crossfades through the domain hue and
+    // back - the flash the holding is there to stop.
+    return ArtworkAccent(
+      // Radio draws its own picture and asks for no accent from it: the
+      // cover it shows is borrowed and turns over with the songs.
+      artUrl: onAir ? null : item?.artUrl,
+      domain: domain,
+      child: face,
+    );
   }
 }
 
@@ -256,58 +265,52 @@ class PlayerScreen extends ConsumerWidget {
 /// have to be leaveable and still have to look like the player rather
 /// than like a blank route.
 class _PlayerShell extends ConsumerWidget {
-  const _PlayerShell({
-    required this.child,
-    this.artUrl,
-    this.domain = WaxDomain.music,
-  });
+  const _PlayerShell({required this.child, this.domain = WaxDomain.music});
 
   final Widget child;
-  final String? artUrl;
   final WaxDomain domain;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ArtworkAccent(
-      artUrl: artUrl,
+    // No accent of its own: the screen puts one over all of its states
+    // at once, so that a state passing through here on the way to a
+    // playing one does not take the held palette with it.
+    return WaxBackdrop(
       domain: domain,
-      child: WaxBackdrop(
-        domain: domain,
-        // The scaffold's dismissal, on the surfaces that have no
-        // scaffold. Unlike the player proper this has no content card to
-        // hold a tap back from: these states are a glyph, two lines, and
-        // at most one button, and the button is the deeper hit target so
-        // it still gets its own taps. Everything else here is backdrop,
-        // and a tap on backdrop leaves.
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            // Same reason as the scaffold's: a published tap action here
-            // would be an unnamed control the size of the window, and
-            // the collapse button beside it already says what it does.
-            excludeFromSemantics: true,
-            onTap: () => leavePlayer(context),
-            child: SafeArea(
-              child: Column(
-                children: <Widget>[
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: WaxSpace.s8,
-                      ),
-                      child: WaxIconButton(
-                        glyph: WaxIcons.collapse,
-                        label: context.l10n.playerCollapse,
-                        onPressed: () => leavePlayer(context),
-                        semanticsId: SemanticsIds.playerBack,
-                      ),
+      // The scaffold's dismissal, on the surfaces that have no
+      // scaffold. Unlike the player proper this has no content card to
+      // hold a tap back from: these states are a glyph, two lines, and
+      // at most one button, and the button is the deeper hit target so
+      // it still gets its own taps. Everything else here is backdrop,
+      // and a tap on backdrop leaves.
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // Same reason as the scaffold's: a published tap action here
+          // would be an unnamed control the size of the window, and
+          // the collapse button beside it already says what it does.
+          excludeFromSemantics: true,
+          onTap: () => leavePlayer(context),
+          child: SafeArea(
+            child: Column(
+              children: <Widget>[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: WaxSpace.s8,
+                    ),
+                    child: WaxIconButton(
+                      glyph: WaxIcons.collapse,
+                      label: context.l10n.playerCollapse,
+                      onPressed: () => leavePlayer(context),
+                      semanticsId: SemanticsIds.playerBack,
                     ),
                   ),
-                  Expanded(child: child),
-                ],
-              ),
+                ),
+                Expanded(child: child),
+              ],
             ),
           ),
         ),
@@ -499,6 +502,13 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           // Nothing gates it: the mark is the same sentence the album
           // header and the artwork manager draw, from the same wording.
           artworkCaption: artSourceLabelWithBorrow(context.l10n, artSource),
+          // Held for the session rather than only while the read above is
+          // in flight. That read lands after the first frame, and it
+          // answers null for a library nothing has enriched and for
+          // every track whose picture came from its own file - so a slot
+          // reserved by the request alone is a cover drawn small and
+          // then grown, which is the resize this is here to stop.
+          artworkCaptionReserved: true,
           // The show an episode is from, above its title and tappable
           // (5.3). Books and tracks name their maker under the title
           // instead, which is what the subtitle already is.
@@ -963,28 +973,35 @@ class _UpNextPeek extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: WaxSpace.s4),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        item?.title ?? context.l10n.commonLoadingTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                // Title and artist as one paragraph rather than a row of
+                // two. A row strands the artist at the far edge if the
+                // title is Expanded, and splits the width down the middle
+                // if both are Flexible - a flex child is capped at its
+                // share and hands nothing back, so a short artist leaves
+                // a hole the title was truncated to make. One line lays
+                // out left to right and runs out at the end, which is
+                // where an ellipsis belongs. The remaining count is on
+                // the line above and keeps the right edge to itself.
+                Text.rich(
+                  TextSpan(
+                    children: <InlineSpan>[
+                      TextSpan(
+                        text: item?.title ?? context.l10n.commonLoadingTitle,
                         style: WaxType.body.copyWith(color: colors.textPrimary),
                       ),
-                    ),
-                    if (item?.artist != null) ...<Widget>[
-                      const SizedBox(width: WaxSpace.s8),
-                      Text(
-                        item!.artist!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: WaxType.caption.copyWith(
-                          color: colors.textSecondary,
+                      if (item?.artist != null) ...<InlineSpan>[
+                        const WidgetSpan(child: SizedBox(width: WaxSpace.s8)),
+                        TextSpan(
+                          text: item!.artist!,
+                          style: WaxType.caption.copyWith(
+                            color: colors.textSecondary,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

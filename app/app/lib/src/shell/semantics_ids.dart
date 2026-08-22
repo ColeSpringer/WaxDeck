@@ -227,6 +227,8 @@ abstract final class SemanticsIds {
       'queue-entry-remove-$queueId';
   static const String queueHistory = 'queue-history';
   static String queueHistoryEntry(Object id) => 'queue-history-$id';
+  static const String queueKeepPlaying = 'queue-keep-playing';
+  static const String queueOpen = 'queue-open';
   static String queueEntrySelect(Object queueId) =>
       'queue-entry-select-$queueId';
   static const String queueRepeat = 'queue-repeat';

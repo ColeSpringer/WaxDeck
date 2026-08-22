@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter/services.dart'
     show HardwareKeyboard, LogicalKeyboardKey;
@@ -13,6 +15,8 @@ import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/side_panel.dart';
+import '../settings/client_prefs.dart';
+import 'queue_continuation.dart';
 import 'queue_controller.dart';
 import 'queue_drag.dart';
 import 'queue_item.dart';
@@ -56,6 +60,33 @@ void openQueue(BuildContext context, WidgetRef ref, {bool overShell = false}) {
     return;
   }
   context.push(WaxRoute.queue);
+}
+
+/// [openQueue] as a callback that outlives the widget that made it.
+///
+/// A message's action fires long after the sheet that raised it has
+/// popped, and by then neither that context nor that ref can be used -
+/// so both are read here, while the caller is still standing, and the
+/// same condition is answered from what they said.
+///
+/// [overShell] means what it means above, and for the same reason: a
+/// sheet raised from the player is a sheet over a pushed route, so the
+/// panel it would otherwise open opens behind it.
+VoidCallback queueOpener(
+  BuildContext context,
+  WidgetRef ref, {
+  bool overShell = false,
+}) {
+  final router = GoRouter.of(context);
+  final panels = ref.read(sidePanelProvider.notifier);
+  final panel = !overShell && WaxSizeClass.of(context).hasSidebar;
+  return () {
+    if (panel) {
+      panels.toggle(WaxPanel.queue);
+      return;
+    }
+    unawaited(router.push<void>(WaxRoute.queue));
+  };
 }
 
 /// The next repeat mode in the cycle the transport walks.
@@ -248,6 +279,10 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
   final queue = ref.watch(queueControllerProvider);
   final notifier = ref.read(queueControllerProvider.notifier);
   final showHistory = ref.watch(queueHistoryOpenProvider);
+  final keepPlaying = ref.watch(keepPlayingSimilarProvider);
+  // The entries the continuation appended, which is what the seam below
+  // is drawn from.
+  final continued = ref.watch(queueContinuationProvider);
 
   if (queue.isEmpty) {
     return <Widget>[
@@ -286,12 +321,116 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
   // it. The ordered list stays for the range and the drop, which need
   // positions rather than membership.
   final upNextSet = upNextIds.toSet();
+  // The first entry the continuation appended that is still up next.
+  // Recomputed every build rather than remembered, so dragging a row
+  // across the seam moves the divider with it instead of stranding it.
+  //
+  // Nothing once the current entry is itself one of them: the seam is
+  // behind the listener by then, every remaining row is on the far side
+  // of it, and a divider at the top of the list would be a second
+  // section heading under "Up next" claiming a boundary that has passed.
+  final continuesAt =
+      continued.isEmpty || continued.contains(queue.currentEntry?.queueId ?? '')
+      ? -1
+      : upNextIds.indexWhere(continued.contains);
   final selected = <String>{
     for (final id in ref.watch(queueSelectionProvider))
       if (upNextSet.contains(id)) id,
   };
   final selecting = selected.isNotEmpty;
   final selection = ref.read(queueSelectionProvider.notifier);
+
+  // One up-next row, for the list and for the drag proxy alike. `seam`
+  // draws the divider that says the queue ran out here and the rest was
+  // chosen for it; it rides inside the dismissable rather than above the
+  // row, so a swipe takes the heading away with the row it introduces
+  // instead of leaving it standing over the next one. The proxy asks for
+  // it off: lifting a row must not lift a section heading with it.
+  Widget upNextRow(int index, {required bool seam}) {
+    final entry = upNext[index];
+    final at = queue.currentIndex + 1 + index;
+    return MetaData(
+      // What a drop from a listing hit-tests against, so a row
+      // dragged onto the panel lands where it was released rather
+      // than always at the end. Opaque so the gaps between rows
+      // answer too: a drop between two of them is a drop, and a
+      // pointer that fell in a one-pixel seam is not a mistake.
+      metaData: QueueRowTarget(entry.queueId),
+      behavior: HitTestBehavior.opaque,
+      child: _Dismissable(
+        entry: entry,
+        // A swipe is a shortcut for removing one row, and while a
+        // set is picked the row-shaped verbs belong to the bar.
+        onRemove: selecting ? null : () => notifier.removeAt(at),
+        // The column is here whether or not there is a seam, so a seam
+        // that has moved on does not take the row under it down and
+        // build it again.
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            if (seam) const _ContinuingLabel() else const SizedBox.shrink(),
+            // A drag is a gesture, and a gesture is not a path for
+            // everyone. `SliverReorderableList` carries none of the
+            // move actions `ReorderableListView` adds for itself, so
+            // the row declares them: a screen reader and a switch can
+            // move an entry without dragging anything.
+            Semantics(
+              customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
+                if (index > 0)
+                  CustomSemanticsAction(label: l10n.queueMoveUp): () =>
+                      notifier.reorder(at, at - 1),
+                if (index < upNext.length - 1)
+                  CustomSemanticsAction(label: l10n.queueMoveDown): () =>
+                      notifier.reorder(at, at + 1),
+              },
+              child: QueueRow(
+                entry: entry,
+                // While a set is picked a tap picks rather than jumps:
+                // the surface is in a mode, and a tap that started
+                // playback halfway through choosing would be the worst
+                // possible answer.
+                onTap: selecting
+                    ? () => _pick(selection, entry.queueId, upNextIds)
+                    : () => _pick(
+                        selection,
+                        entry.queueId,
+                        upNextIds,
+                        orJump: () => notifier.jumpTo(at),
+                      ),
+                onRemove: selecting ? null : () => notifier.removeAt(at),
+                // Only while a set is picked: the checkbox takes the
+                // artwork's slot, so wiring it always would put a column
+                // of empty boxes down a queue nobody is selecting in.
+                // The long press below is the way in.
+                onSelect: selecting
+                    ? (_) => selection.toggle(entry.queueId)
+                    : null,
+                selected: selected.contains(entry.queueId),
+                selectSemanticsId: SemanticsIds.queueEntrySelect(entry.queueId),
+                onLongPress: () => selection.toggle(entry.queueId),
+                handle: ReorderableDragStartListener(
+                  index: index,
+                  child: Semantics(
+                    identifier: SemanticsIds.queueEntryDrag(entry.queueId),
+                    label: l10n.queueDragToReorder,
+                    child: Padding(
+                      padding: const EdgeInsets.all(WaxSpace.s8),
+                      child: WaxIcon(
+                        WaxIcons.sort,
+                        size: 16,
+                        color: colors.textTertiary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   return <Widget>[
     SliverToBoxAdapter(
@@ -349,6 +488,28 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
                       notifier.setRepeat(nextQueueRepeat(queue.repeat)),
                   semanticsId: SemanticsIds.queueRepeat,
                 ),
+                // Beside repeat rather than instead of it: repeat plays
+                // this queue again, this plays something else next. The
+                // preference is per device and the same switch is in
+                // Settings > Playback; here is where it is felt.
+                WaxIconButton(
+                  glyph: WaxIcons.keepPlaying,
+                  // Its state, not the verb that changes it. `active` is
+                  // a tint rather than a published toggled flag, so this
+                  // is the only thing that says which way the switch is
+                  // - and it is swept up beside "Shuffle off" and
+                  // "Repeat off", where a verb would read as the state
+                  // and mean the opposite of it.
+                  label: keepPlaying
+                      ? l10n.queueKeepPlayingOn
+                      : l10n.queueKeepPlayingOff,
+                  size: 18,
+                  active: keepPlaying,
+                  onPressed: ref
+                      .read(keepPlayingSimilarProvider.notifier)
+                      .toggle,
+                  semanticsId: SemanticsIds.queueKeepPlaying,
+                ),
               ],
             ),
           ],
@@ -399,7 +560,7 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
     SliverLayoutBuilder(
       builder: (context, sliverConstraints) => SliverReorderableList(
         itemCount: upNext.length,
-        proxyDecorator: (child, index, animation) {
+        proxyDecorator: (_, index, _) {
           // The lifted row says how many rows are coming with it, because
           // the others stay where they are until the drop and a block
           // that moved silently would read as a bug.
@@ -407,6 +568,10 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
               index < upNextIds.length && selected.contains(upNextIds[index])
               ? selected.length
               : 1;
+          // Built here rather than decorating what was handed over: the
+          // handed row may be the one under the seam heading, and what
+          // is being carried is the row.
+          final lifted = upNextRow(index, seam: false);
           return Material(
             color: colors.surface2,
             child: SizedBox(
@@ -415,14 +580,14 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
                   ? Stack(
                       alignment: AlignmentDirectional.centerEnd,
                       children: <Widget>[
-                        child,
+                        lifted,
                         Padding(
                           padding: const EdgeInsets.only(right: WaxSpace.s32),
                           child: _DragCount(count: carrying),
                         ),
                       ],
                     )
-                  : child,
+                  : lifted,
             ),
           );
         },
@@ -451,87 +616,13 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
             queue.currentIndex + 1 + to,
           );
         },
-        itemBuilder: (context, index) {
-          final entry = upNext[index];
-          final at = queue.currentIndex + 1 + index;
-          return MetaData(
-            // The reorderable list wants the key on the row it is
-            // handed, so it rides out here with the marker rather than
-            // on the dismissable inside.
-            key: ValueKey<String>(entry.queueId),
-            // What a drop from a listing hit-tests against, so a row
-            // dragged onto the panel lands where it was released rather
-            // than always at the end. Opaque so the gaps between rows
-            // answer too: a drop between two of them is a drop, and a
-            // pointer that fell in a one-pixel seam is not a mistake.
-            metaData: QueueRowTarget(entry.queueId),
-            behavior: HitTestBehavior.opaque,
-            child: _Dismissable(
-              entry: entry,
-              // A swipe is a shortcut for removing one row, and while a
-              // set is picked the row-shaped verbs belong to the bar.
-              onRemove: selecting ? null : () => notifier.removeAt(at),
-              // A drag is a gesture, and a gesture is not a path for
-              // everyone. `SliverReorderableList` carries none of the
-              // move actions `ReorderableListView` adds for itself, so
-              // the row declares them: a screen reader and a switch can
-              // move an entry without dragging anything.
-              child: Semantics(
-                customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
-                  if (index > 0)
-                    CustomSemanticsAction(label: l10n.queueMoveUp): () =>
-                        notifier.reorder(at, at - 1),
-                  if (index < upNext.length - 1)
-                    CustomSemanticsAction(label: l10n.queueMoveDown): () =>
-                        notifier.reorder(at, at + 1),
-                },
-                child: QueueRow(
-                  entry: entry,
-                  // While a set is picked a tap picks rather than jumps:
-                  // the surface is in a mode, and a tap that started
-                  // playback halfway through choosing would be the worst
-                  // possible answer.
-                  onTap: selecting
-                      ? () => _pick(selection, entry.queueId, upNextIds)
-                      : () => _pick(
-                          selection,
-                          entry.queueId,
-                          upNextIds,
-                          orJump: () => notifier.jumpTo(at),
-                        ),
-                  onRemove: selecting ? null : () => notifier.removeAt(at),
-                  // Only while a set is picked: the checkbox takes the
-                  // artwork's slot, so wiring it always would put a column
-                  // of empty boxes down a queue nobody is selecting in.
-                  // The long press below is the way in.
-                  onSelect: selecting
-                      ? (_) => selection.toggle(entry.queueId)
-                      : null,
-                  selected: selected.contains(entry.queueId),
-                  selectSemanticsId: SemanticsIds.queueEntrySelect(
-                    entry.queueId,
-                  ),
-                  onLongPress: () => selection.toggle(entry.queueId),
-                  handle: ReorderableDragStartListener(
-                    index: index,
-                    child: Semantics(
-                      identifier: SemanticsIds.queueEntryDrag(entry.queueId),
-                      label: l10n.queueDragToReorder,
-                      child: Padding(
-                        padding: const EdgeInsets.all(WaxSpace.s8),
-                        child: WaxIcon(
-                          WaxIcons.sort,
-                          size: 16,
-                          color: colors.textTertiary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
+        itemBuilder: (context, index) => KeyedSubtree(
+          // The reorderable list wants the key on the widget it is
+          // handed, and it has to stay the same one whether or not the
+          // divider is drawn above the row.
+          key: ValueKey<String>(upNext[index].queueId),
+          child: upNextRow(index, seam: index == continuesAt),
+        ),
       ),
     ),
     if (played.isNotEmpty) ...<Widget>[
@@ -710,6 +801,40 @@ class _SelectionBar extends StatelessWidget {
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.queueSelectionClear,
             onPressed: onClear,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The seam above the first track the queue did not come with.
+///
+/// A box rather than a sliver, unlike [_label] below it: this one is
+/// drawn inside a row of the reorderable list, which is the only place
+/// mid-list it can go.
+class _ContinuingLabel extends StatelessWidget {
+  const _ContinuingLabel();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        WaxSpace.s16,
+        WaxSpace.s16,
+        WaxSpace.s16,
+        WaxSpace.s4,
+      ),
+      child: Row(
+        children: <Widget>[
+          WaxIcon(WaxIcons.keepPlaying, size: 14, color: colors.textTertiary),
+          const SizedBox(width: WaxSpace.s8),
+          Expanded(
+            child: Text(
+              context.l10n.queueContinuing,
+              style: WaxType.overline.copyWith(color: colors.textTertiary),
+            ),
           ),
         ],
       ),

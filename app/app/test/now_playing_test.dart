@@ -483,14 +483,19 @@ void main() {
       expect(h.repo.playInfoCalls.where((c) => c.pid == _b), hasLength(asked));
     });
 
-    test('an item that would resume mid-way is not prepared', () async {
+    test('a saved position no longer blocks the arm', () async {
+      // It used to: the port prepares an item at the head of its window,
+      // so anything that would have resumed elsewhere had to load on
+      // advance. Music always starts at the head now, so the guard was
+      // refusing the gapless crossing into every track the listener had
+      // once heard part of.
       final h = _harness();
       h.repo.playPositions[_b] = 45000;
       h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
       await pumpEventQueue();
       await _skipTo(h.engine, 190000);
 
-      expect(h.engine.preloadedUrl, isNull);
+      expect(h.engine.preloadedUrl, contains(_b));
     });
 
     test('a queue edited while an arm is in flight drops it', () async {

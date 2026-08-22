@@ -386,6 +386,16 @@ type Library struct {
 	// radioArtCache holds what it has answered.
 	radioArtResolver RadioArtResolver
 	radioArtCache    radioArt
+	// radioScrobbles hands a finished radio segment from the goroutine
+	// relaying that listener's audio to the writer Open starts, which is
+	// the only one of the three service calls in the relay loop that
+	// touches SQLite.
+	radioScrobbles chan radioSegmentPlay
+	// radioScrobbleWritten, when set, is called after each queued
+	// segment has been written, so a test can wait for the writer
+	// instead of sleeping; nothing in the server sets it. Atomic because
+	// the writer is already running by the time a test can install one.
+	radioScrobbleWritten atomic.Pointer[func()]
 	// podping holds the feed-URL index a chain notification resolves
 	// against, and the per-show floor between two podping-driven syncs.
 	podping podpingIndex
@@ -498,6 +508,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		catalogWake:              make(chan struct{}, 1),
 		userWake:                 make(chan string, 64),
 		matchWake:                make(chan struct{}, 1),
+		radioScrobbles:           make(chan radioSegmentPlay, radioScrobbleQueue),
 		sealer:                   cfg.Sealer,
 		podcastDir:               cfg.PodcastDir,
 		podcastRootName:          cfg.PodcastRootName,
@@ -601,6 +612,12 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// The change-feed consumer: subscribes, primes, follows, and feeds
 	// the event hub's invalidation fan-out.
 	group.Go(ctx, "catalog-feed", l.runCatalogFeed)
+
+	// The radio scrobble writer. Started here rather than on the first
+	// segment a listener produces: spawning it from a request goroutine
+	// would add to the group's wait counter while shutdown may already
+	// be waiting on it, which is a panic rather than a late worker.
+	group.Go(ctx, "radio-scrobble", l.writeRadioScrobbles)
 
 	// A waxbin upgrade can change the sort-key fold, and no scan rewrites
 	// an existing key, so every boot sweeps the stale ones; rewritten rows

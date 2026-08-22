@@ -33,6 +33,10 @@
   "@queueClearSelectionAction": {
     "description": "Button that unselects the selected queue rows. It clears the selection, not the queue, so it must not read as a delete."
   },
+  "queueContinuing": "CONTINUING WITH SIMILAR MUSIC",
+  "@queueContinuing": {
+    "description": "Divider above the first track the app added on its own once the queue had run out. Upper case in English because the queue's other section labels are; a language that does not shout section labels should not."
+  },
   "queueDragToReorder": "Drag to reorder",
   "@queueDragToReorder": {
     "description": "Accessible name of the handle that reorders queued tracks by dragging."
@@ -63,6 +67,14 @@
   "@queueHideHistory": {
     "description": "Accessible name of the control that folds away the already-played rows."
   },
+  "queueKeepPlayingOff": "Keep playing off",
+  "@queueKeepPlayingOff": {
+    "description": "Accessible name of the queue's continue control while it is off, so the queue stops where it ends. Worded as a state to match \"Shuffle off\" and \"Repeat off\" beside it, which a screen reader sweeps up in the same breath."
+  },
+  "queueKeepPlayingOn": "Keep playing on",
+  "@queueKeepPlayingOn": {
+    "description": "Accessible name of the queue's continue control while it is on, so a music queue that runs out carries on with similar tracks. Worded as a state to match \"Shuffle on\" beside it."
+  },
   "queueMoveDown": "Move down",
   "@queueMoveDown": {
     "description": "Screen-reader action that moves one queued track later."
@@ -82,6 +94,10 @@
   "queueNothingUpNext": "NOTHING UP NEXT",
   "@queueNothingUpNext": {
     "description": "Heading where the up-next list would be when the queue holds nothing after the current track. Upper case as a typographic style; write it the way small headings are written in this language."
+  },
+  "queueOpenAction": "Open",
+  "@queueOpenAction": {
+    "description": "Button on the message that says tracks were added, which opens the queue so they can be seen. A short verb, beside a sentence that already names the queue."
   },
   "queuePlayingFrom": "Playing from {source}",
   "@queuePlayingFrom": {

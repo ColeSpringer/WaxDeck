@@ -89,6 +89,15 @@ export class Queue extends Surface {
     await this.ctx.page.keyboard.press('Escape');
   }
 
+  /// How many rows stand after the current entry.
+  ///
+  /// Counted off the drag handles, which only the up-next rows carry:
+  /// the played rows above and the current one have none, so this is
+  /// the queue's own answer to "what is still coming".
+  async upNextCount(): Promise<number> {
+    return this.dragHandles().count();
+  }
+
   /// The queue id of the first row after the current entry.
   ///
   /// Read off its drag handle rather than guessed: queue ids are minted

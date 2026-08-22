@@ -30,19 +30,6 @@ here waits on upstream.
 
 ## Playback and apps
 
-- `[in-repo]` **The full-screen player's cover resizes when its mark
-  arrives.** `PlayerScaffold` sizes the hero against the room a caption
-  needs (`_captionAllowance`, scaled by the reader's text setting), and
-  the player feeds that caption from an async read of
-  `/items/{pid}/art-roles`. So the first frame draws the art at full
-  extent and the frame after the response draws it ~24px smaller - 48 at
-  twice the text size - which binds on a compact window, where the
-  extent is under the hero cap, and can land mid-Hero flight from the
-  deck bar. The other five caption surfaces read `artSource` off a
-  detail their screen already awaits, so none of them has this. Closing
-  it means either the scaffold knowing a caption is pending (a slot that
-  reserves its line before it has one) or the player getting provenance
-  from a read it already blocks on.
 
 - `[in-repo]` **An NSP export's loss list is not pinned to the rule it
   was computed from.** The report is asked at one moment and
@@ -991,3 +978,20 @@ here waits on upstream.
   per-station bit, and the only per-user station state that exists is the
   favourites list; whoever adds a second one should decide whether they
   share a shape.
+- `[in-repo]` **A worker started from a request goroutine can panic the
+  process at shutdown.** `supervise.Group.Go`/`GoOnce` add to a
+  `sync.WaitGroup` that `Wait` may already be blocked on, which is the
+  documented misuse and panics from a zero counter - "Add called
+  concurrently with Wait", taking down the one process the package exists
+  to keep up. Two live callers spawn from a request: both radio artwork
+  lookups (`radionowplayingart.go`), which outlive the poll that asked
+  for them. The obvious guard - decline a spawn once `Wait` has begun -
+  deadlocks instead: teardown is itself supervised
+  (`connect.Service.endSession` hands `session-teardown-<id>` to the
+  group, and that worker is what cancels the session pump `Wait` is
+  waiting on), so declining it hangs shutdown rather than ending it.
+  Measured: `TestConnectCastSession` goes from 1.7s to the package
+  timeout. The real fix is a group that can be waited on while still
+  accepting work - a counter and a condition variable rather than a
+  `WaitGroup` - with `Wait` returning when the count reaches zero
+  whatever arrived meanwhile.

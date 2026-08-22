@@ -146,7 +146,7 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.text('From Cover Art Archive'), findsOneWidget);
-    expect(find.text('From the file'), findsOneWidget);
+    expect(find.text('From the file\'s tags'), findsOneWidget);
   });
 
   testWidgets('an inherited front cover names the rung that answered', (
@@ -164,7 +164,10 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.text('Inherited'), findsOneWidget);
-    expect(find.text('From the file · Borrowed from a track'), findsOneWidget);
+    expect(
+      find.text('From the file\'s tags · Borrowed from a track'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a pinned empty cover is not an empty one', (tester) async {
@@ -199,7 +202,7 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.text('1 from you'), findsOneWidget);
-    expect(find.text('Artwork · From the file'), findsOneWidget);
+    expect(find.text('Artwork · From the file\'s tags'), findsOneWidget);
     // A cover's sidecar is a folder image; lyrics arrive as an .lrc, and
     // one wording cannot honestly describe both files.
     expect(find.text('Lyrics · From an .lrc file'), findsOneWidget);
@@ -233,7 +236,7 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.text('No recorded sources'), findsOneWidget);
-    expect(find.text('Artwork · From the file'), findsOneWidget);
+    expect(find.text('Artwork · From the file\'s tags'), findsOneWidget);
   });
 
   testWidgets('a front cover the item does not own reads as inherited', (

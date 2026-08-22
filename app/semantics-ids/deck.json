@@ -33,6 +33,8 @@
     "queueEntryRemove": "queue-entry-remove-{queueId}",
     "queueHistory": "queue-history",
     "queueHistoryEntry": "queue-history-{id}",
+    "queueKeepPlaying": "queue-keep-playing",
+    "queueOpen": "queue-open",
     "queueEntrySelect": "queue-entry-select-{queueId}",
     "queueRepeat": "queue-repeat",
     "queueRestoreSession": "queue-restore-session-{id}",
