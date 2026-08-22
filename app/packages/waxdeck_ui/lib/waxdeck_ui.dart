@@ -33,6 +33,7 @@ export 'src/components/panel.dart';
 export 'src/components/player_scaffold.dart';
 export 'src/components/reading_column.dart';
 export 'src/components/scaffold.dart';
+export 'src/components/secondary_tap.dart';
 export 'src/components/semantics_slots.dart';
 export 'src/components/settings.dart';
 export 'src/components/splitter.dart';

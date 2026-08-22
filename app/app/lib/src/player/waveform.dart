@@ -12,9 +12,12 @@ import '../providers.dart';
 /// never spins at it - `unavailable` is final, and `pending` only
 /// changes when a pass runs, which is not something to poll for.
 ///
-/// Auto-disposing per pid: the player holds one at a time, and coming
-/// back to a track re-asks against the response's own ETag rather than
-/// keeping a kilobyte of envelope per track played this session.
+/// Auto-disposing per pid: the player holds one at a time, rather than
+/// keeping a kilobyte of envelope per track played this session. Note
+/// that re-asking is a full re-read and not a revalidation - the
+/// generated client sends no `If-None-Match` (only the artwork store
+/// does) and dio carries no cache - so a surface that mounts and
+/// unmounts repeatedly pays for each one. See `docs/deferred-work.md`.
 ///
 /// Who asks is the caller's decision, not this provider's. The music
 /// face does. Podcast episodes are never analyzed, and a book's bar
@@ -25,15 +28,56 @@ final waveformProvider = FutureProvider.autoDispose
     .family<List<double>?, String>((ref, pid) async {
       try {
         return normalisedPeaks(
-          await ref.watch(repositoryProvider).getWaveform(pid),
+          await ref.watch(trackWaveformProvider(pid).future),
         );
       } on WaxDeckApiException {
         // A waveform is decoration. An item that has gone away, a catalog in
         // maintenance, or a credential that has just rotated all mean the
-        // same thing here: draw the plain bar.
+        // same thing here: draw the plain bar. The refusal is still on
+        // [trackWaveformProvider] for anything that has to tell "we could
+        // not ask" from "there is nothing".
         return null;
       }
     });
+
+/// The whole answer for one track, envelope and state together.
+///
+/// [waveformProvider] is derived from this rather than the other way
+/// round, so both still cost one request per track, and the reason for
+/// the split is what the peaks throw away. A null envelope conflates
+/// three different things - `pending`, `unavailable`, and a request that
+/// never landed - and anything deciding whether to *offer* a
+/// peak-driven surface has to tell them apart. Greying a control out
+/// because a connection dropped would take away something that would
+/// have worked.
+///
+/// The error is left to surface as an error rather than being swallowed
+/// into a null, for the same reason: `AsyncValue.hasError` is how a
+/// caller sees "we could not ask" as distinct from "there is nothing".
+///
+/// And so it has to opt out of Riverpod 3's automatic retry, which
+/// re-asks anything that fails with an `Exception` ten times across
+/// about thirteen seconds. Two reasons, and the second is the one that
+/// bites: a waveform is decoration and a refusal is not worth re-asking,
+/// and a provider *between* retries reports `AsyncLoading` carrying the
+/// previous error rather than `AsyncError` - so `.future` never settles,
+/// and anything awaiting it, [waveformProvider] included, waits out the
+/// whole backoff.
+final trackWaveformProvider = FutureProvider.autoDispose
+    .family<Waveform, String>(
+      (ref, pid) async => ref.watch(repositoryProvider).getWaveform(pid),
+      retry: (_, _) => null,
+    );
+
+/// Whether a peak-driven surface has anything to draw for [waveform].
+///
+/// A read still in flight, or one that failed, answers true: the caller
+/// is deciding what to offer, and taking an option away on a dropped
+/// connection is worse than offering one that turns out empty.
+bool waveformMayHavePeaks(AsyncValue<Waveform> waveform) =>
+    waveform.hasError ||
+    !waveform.hasValue ||
+    normalisedPeaks(waveform.requireValue) != null;
 
 /// The peaks a book's seek bar paints across its whole timeline, or
 /// null when there are none.

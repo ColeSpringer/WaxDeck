@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kSecondaryButton;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Override lives here rather than in the root library.
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -576,6 +578,30 @@ void main() {
     expect(container.read(radioFavoritesProvider), ['rs-2']);
   });
 
+  testWidgets('a right-click on the tile raises the same menu', (tester) async {
+    // The menu was reachable only through a 16-pixel button in the
+    // tile's corner. The tile is the surface somebody will try the
+    // gesture on, and it now raises the menu the button raises - which
+    // is also what gives touch a long press on it.
+    final repo = _repoWithFavorites(<String>['rs-1', 'rs-2']);
+    final container = _container(repo);
+    await _pumpHub(tester, container);
+
+    final tile = _byId(SemanticsIds.radio('rs-1'));
+    final gesture = await tester.startGesture(
+      tester.getCenter(tile),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryButton,
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Remove station').last);
+    await tester.pumpAndSettle();
+
+    expect(repo.radioStationsByPid.containsKey('rs-1'), isFalse);
+  });
+
   testWidgets('an empty library says how to fill it', (tester) async {
     final container = _container(FakeRepository(items: <ItemSummary>[]));
     await _pumpHub(tester, container);
@@ -758,6 +784,72 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('A station needs a name.'), findsOneWidget);
+    expect(repo.radioStationsByPid['rs-2']?.name, 'Deck Radio');
+  });
+
+  testWidgets('an edit carries both fields the visitor typed', (tester) async {
+    // The regression guard for the report that the dialog dropped a
+    // save: a new name and a new stream URL entered together, the
+    // dialog closed, and the server left holding the old values. The
+    // path reads sound - `_save` reads the controllers, awaits the PUT,
+    // and pops only on success - so this pins that reading rather than
+    // trusting it.
+    final repo = _repo();
+    await _pumpHub(tester, _container(repo));
+
+    await tester.tap(_byId(SemanticsIds.radioMenu('rs-2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit station').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(_byId(SemanticsIds.radioNameField), 'Night Signal');
+    await tester.enterText(
+      _byId(SemanticsIds.radioUrlField),
+      'https://stream.example/night-signal',
+    );
+    await tester.tap(_byId(SemanticsIds.radioAddConfirm));
+    await tester.pumpAndSettle();
+
+    final saved = repo.radioStationsByPid['rs-2'];
+    expect(saved?.name, 'Night Signal');
+    expect(saved?.streamUrl, 'https://stream.example/night-signal');
+    // Closed only because the PUT landed: a dialog that popped on a
+    // refusal is the shape the report described.
+    expect(_byId(SemanticsIds.radioUrlField), findsNothing);
+  });
+
+  testWidgets('a refused edit keeps the dialog and the typing', (tester) async {
+    // The other half of the same report. A save that the server refused
+    // has to leave the dialog standing with what was typed still in it,
+    // or a listener sees a closed dialog and assumes it landed.
+    final repo = _repo()
+      // The code the server actually raises for this: `service/radio.go`
+      // answers a duplicate stream URL with `KindConflict`, and
+      // `conflict` is one of the two codes `explainRefusal` keeps the
+      // server's own sentence for. An invented code would fall through
+      // to the general explainer and exercise a path production never
+      // takes.
+      ..radioEditError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'Another station already uses that stream.',
+        statusCode: 409,
+      );
+    await _pumpHub(tester, _container(repo));
+
+    await tester.tap(_byId(SemanticsIds.radioMenu('rs-2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit station').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(_byId(SemanticsIds.radioNameField), 'Night Signal');
+    await tester.tap(_byId(SemanticsIds.radioAddConfirm));
+    await tester.pumpAndSettle();
+
+    expect(_byId(SemanticsIds.radioUrlField), findsOneWidget);
+    expect(
+      find.text('Another station already uses that stream.'),
+      findsOneWidget,
+    );
     expect(repo.radioStationsByPid['rs-2']?.name, 'Deck Radio');
   });
 

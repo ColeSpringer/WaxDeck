@@ -341,11 +341,9 @@ void main() {
       repo.hold = null;
       await minting;
 
-      expect(
-        seen.map((e) => e.kind),
-        <String>['upload'],
-        reason: 'the walk the hint asked for ran once the mint was done',
-      );
+      expect(seen.map((e) => e.kind), <String>[
+        'upload',
+      ], reason: 'the walk the hint asked for ran once the mint was done');
       expect(repo.sinceCalls, <String?>[null, 'c0']);
     });
 

@@ -176,6 +176,12 @@ nothing, and the unfinished track at disconnect stays off the record.
 Titles that do not honestly parse as "Artist - Title" (station
 slogans, URLs, ads) are dropped rather than guessed at.
 
+Scrobbling and your own listening stats are separate questions with
+separate answers. Scrobbling needs a parseable song title and can be
+turned off; the listening record only needs the connection, so radio
+time counts toward your totals, your heatmap, and a **Top stations**
+list whatever a station's metadata says - or whether it sends any.
+
 Listens that cross the played threshold queue in a durable outbox and
 deliver in the background with retries, so scrobbles survive restarts
 and outages; offline listens replayed later scrobble with their

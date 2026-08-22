@@ -3,7 +3,7 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/stats_media_type.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -18,8 +18,8 @@ part 'media_type_listening.g.dart';
 @BuiltValue()
 abstract class MediaTypeListening implements Built<MediaTypeListening, MediaTypeListeningBuilder> {
   @BuiltValueField(wireName: r'mediaType')
-  MediaType get mediaType;
-  // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
+  StatsMediaType get mediaType;
+  // enum mediaTypeEnum {  music,  podcast,  audiobook,  radio,  };
 
   /// Milliseconds listened.
   @BuiltValueField(wireName: r'ms')
@@ -55,7 +55,7 @@ class _$MediaTypeListeningSerializer implements PrimitiveSerializer<MediaTypeLis
     yield r'mediaType';
     yield serializers.serialize(
       object.mediaType,
-      specifiedType: const FullType(MediaType),
+      specifiedType: const FullType(StatsMediaType),
     );
     yield r'ms';
     yield serializers.serialize(
@@ -93,8 +93,8 @@ class _$MediaTypeListeningSerializer implements PrimitiveSerializer<MediaTypeLis
         case r'mediaType':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(MediaType),
-          ) as MediaType;
+            specifiedType: const FullType(StatsMediaType),
+          ) as StatsMediaType;
           result.mediaType = valueDes;
           break;
         case r'ms':

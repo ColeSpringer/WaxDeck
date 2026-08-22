@@ -314,6 +314,7 @@ Serializers _$serializers =
           ..add(Soundbite.serializer)
           ..add(StarUpdate.serializer)
           ..add(StarredEntities.serializer)
+          ..add(StatsMediaType.serializer)
           ..add(SubscribeRequest.serializer)
           ..add(Subscription.serializer)
           ..add(SubscriptionPage.serializer)

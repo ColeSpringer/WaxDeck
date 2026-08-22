@@ -9,6 +9,7 @@ import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
+import 'package:waxdeck/src/player/waveform.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
@@ -564,6 +565,39 @@ void main() {
       findsNothing,
     );
     expect(shell.location, WaxRoute.home);
+  });
+
+  testWidgets('the visualizer is offered only where there is a shape', (
+    tester,
+  ) async {
+    // The palette is the third door onto the visualizer, and it used to
+    // be gated on anything playing at all - so it could carry a listener
+    // to an empty state during a podcast, or during a track no analyze
+    // pass has measured. Same gate as the player's own row now.
+    final shell = await _pumpShell(tester);
+    await _play(tester, shell);
+
+    await _openPalette(tester);
+    await _type(tester, 'visual');
+    expect(_row('cmd-visualizer'), findsNothing);
+    await _press(tester, LogicalKeyboardKey.escape);
+
+    // Measured, so it comes back. `refresh` because the face already
+    // read the pending answer for this track.
+    shell.repo.waveforms[_trackPid] = Waveform(
+      state: 'ready',
+      peaks: <int>[for (var i = 0; i < 1000; i++) (i % 200) + 20],
+      resolution: 1000,
+    );
+    shell.container.invalidate(trackWaveformProvider(_trackPid));
+    await tester.pumpAndSettle();
+
+    await _openPalette(tester);
+    await _type(tester, 'visual');
+    expect(_row('cmd-visualizer'), findsOneWidget);
+    await _press(tester, LogicalKeyboardKey.escape);
+
+    await _stop(tester, shell);
   });
 
   test('every standing command is unique, and every key is spelled', () {

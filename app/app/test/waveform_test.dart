@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/waveform.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -113,6 +114,99 @@ void main() {
       final sub = container.listen(waveformProvider(_pid), (_, _) {});
       addTearDown(sub.close);
       expect(await container.read(waveformProvider(_pid).future), isNull);
+    });
+
+    test('the whole answer keeps the refusal the peaks throw away', () async {
+      // The seek bar's null is three different things at once. Anything
+      // deciding whether to *offer* a peak-driven surface reads the
+      // state, so a refusal stays a refusal here.
+      final repo = FakeRepository(items: [testItem(_pid)])
+        ..waveformError = const WaxDeckApiException(
+          code: 'catalog-maintenance',
+          message: 'the catalog is being rebuilt',
+          statusCode: 503,
+        );
+      final container = playbackContainer(repo: repo, engine: FakeEngine());
+      final sub = container.listen(
+        trackWaveformProvider(_pid),
+        (_, _) {},
+        onError: (_, _) {},
+      );
+      addTearDown(sub.close);
+
+      await expectLater(
+        container.read(trackWaveformProvider(_pid).future),
+        throwsA(isA<WaxDeckApiException>()),
+      );
+      // Settled, not retrying: Riverpod's default would re-ask ten times
+      // and report `AsyncLoading` in between, which never settles.
+      expect(container.read(trackWaveformProvider(_pid)).hasError, isTrue);
+      expect(repo.waveformCalls, <String>[_pid]);
+    });
+
+    test('one request answers both the bar and the offer', () async {
+      final repo = FakeRepository(items: [testItem(_pid)])
+        ..waveforms[_pid] = const Waveform(
+          state: 'ready',
+          peaks: [0, 128, 255],
+          resolution: 3,
+        );
+      final container = playbackContainer(repo: repo, engine: FakeEngine());
+      final sub = container.listen(waveformProvider(_pid), (_, _) {});
+      addTearDown(sub.close);
+      final peaks = await container.read(waveformProvider(_pid).future);
+      final whole = await container.read(trackWaveformProvider(_pid).future);
+
+      expect(peaks, isNotNull);
+      expect(whole.state, 'ready');
+      expect(repo.waveformCalls, <String>[_pid]);
+    });
+  });
+
+  group('whether a peak-driven surface has anything to draw', () {
+    test('a measured track does', () {
+      expect(
+        waveformMayHavePeaks(
+          const AsyncData(
+            Waveform(state: 'ready', peaks: [0, 128, 255], resolution: 3),
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('an unmeasured one does not, whichever way it says so', () {
+      expect(
+        waveformMayHavePeaks(const AsyncData(Waveform(state: 'pending'))),
+        isFalse,
+      );
+      expect(
+        waveformMayHavePeaks(const AsyncData(Waveform(state: 'unavailable'))),
+        isFalse,
+      );
+      // Ready with a flat envelope is the digital-black case: there is a
+      // measurement, and it draws nothing.
+      expect(
+        waveformMayHavePeaks(
+          const AsyncData(Waveform(state: 'ready', peaks: [0, 0, 0])),
+        ),
+        isFalse,
+      );
+    });
+
+    test('an unfinished or failed read counts as yes', () {
+      // The point of the split: taking a control away because a
+      // connection dropped removes something that would have worked.
+      expect(waveformMayHavePeaks(const AsyncLoading()), isTrue);
+      expect(
+        waveformMayHavePeaks(
+          AsyncError(
+            const WaxDeckApiException(code: 'x', message: 'y', statusCode: 503),
+            StackTrace.empty,
+          ),
+        ),
+        isTrue,
+      );
     });
   });
 

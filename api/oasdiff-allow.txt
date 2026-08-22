@@ -2,9 +2,28 @@
 # Temporary by construction: this file rides the change that makes the
 # break and is deleted once the base ref contains it.
 #
-# `sizeBytes` gains the ceiling the server now enforces. Nothing that
-# worked stops working: 16 GiB clears the largest single file anybody
-# uploads, and an unbounded declaration was never accepted in practice
-# either - it overflowed the quota arithmetic it was checked against.
-# Formally a narrowed request schema, which is why it is here.
-POST /uploads the 'sizeBytes' request property's max was set to '17179869184.00'
+# Radio joins the listening record, so the response enums that name what
+# a session was gain a value: `mediaType` gains `radio`, the log's
+# `source` gains `radio` for the rows the stream proxy timed itself, and
+# the top lists' `kind` gains `stations`. oasdiff calls an added response
+# enum value a break because a client that switched exhaustively over
+# the old set now has a case it has never seen.
+#
+# Accepted, and the reason is what the values are. Nothing that worked
+# stops working: every existing value keeps its meaning, and the new
+# ones only appear where the old ones could not have - a `radio` row
+# exists only once the stream proxy has written one, and `kind` only
+# answers `stations` to a request that asked for it. WaxDeck's own
+# clients read these through generated enums with
+# `enumUnknownDefaultCase=true`, so an older build folds an unfamiliar
+# value into its unknown case rather than failing to parse.
+#
+# The request-side widening (the `kind` query parameter) is genuinely
+# additive and is not listed here, and the report side's own `source`
+# stays `[live, import]`: `radio` is something the server measures, never
+# something a client may claim.
+GET /stats/listening added the new 'radio' enum value to the 'byMediaType/items/mediaType' response property for the response status '200'
+GET /stats/sessions added the new 'radio' enum value to the 'sessions/items/mediaType' response property for the response status '200'
+GET /stats/sessions added the new 'radio' enum value to the 'sessions/items/source' response property for the response status '200'
+GET /stats/top added the new 'stations' enum value to the 'kind' response property for the response status '200'
+GET /stats/year-in-review added the new 'radio' enum value to the 'byMediaType/items/mediaType' response property for the response status '200'

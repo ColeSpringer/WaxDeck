@@ -17,7 +17,7 @@ permissions:
 
 env:
   GO_VERSION: "1.26.x"
-  FLUTTER_VERSION: "3.44.9"
+  FLUTTER_VERSION: "3.47.1"
 
 jobs:
   # The bare version ("0.2.0" for tag v0.2.0), computed once. GitHub

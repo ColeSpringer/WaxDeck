@@ -9,6 +9,7 @@ import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -458,6 +459,79 @@ void main() {
     await pumpEventQueue();
     expect(_ofType(h.sent, 'session-report').length, before);
   });
+
+  test('a routed stop during live radio lets the station go', () async {
+    // The verbs used to go straight at the engine, which silences the
+    // stream but leaves the station tuned - so the face and the deck
+    // bar went on naming a station nothing was playing.
+    final h = _build();
+    final station = RadioStation(
+      pid: 'rs-1',
+      name: 'Nightjar FM',
+      streamUrl: 'https://stream.example/rs-1',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    h.repo.radioStationsByPid['rs-1'] = station;
+    await h.container.read(radioPlaybackProvider.notifier).play(station);
+    await pumpEventQueue();
+    expect(h.container.read(radioPlaybackProvider).station, isNotNull);
+
+    await _cmd(h, 'stop', id: 'e2');
+    await pumpEventQueue();
+
+    expect(h.container.read(radioPlaybackProvider).station, isNull);
+    expect(h.engine.playing, isFalse);
+  });
+
+  test('a routed pause during live radio lets the station go too', () async {
+    // A live stream has no pause worth the name: pausing it leaves the
+    // buffer to go stale, and resuming plays whatever was in it.
+    final h = _build();
+    final station = RadioStation(
+      pid: 'rs-1',
+      name: 'Nightjar FM',
+      streamUrl: 'https://stream.example/rs-1',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    h.repo.radioStationsByPid['rs-1'] = station;
+    await h.container.read(radioPlaybackProvider.notifier).play(station);
+    await pumpEventQueue();
+
+    await _cmd(h, 'pause', id: 'e2');
+    await pumpEventQueue();
+
+    expect(h.container.read(radioPlaybackProvider).station, isNull);
+  });
+
+  test(
+    'the play after that pause is refused rather than answered ok',
+    () async {
+      // The other half of letting the station go: there is now no station,
+      // no session, and no queue, so the play has nothing to start. It
+      // used to fall through every rung and answer `ok` - a head unit
+      // whose pause then play left it in silence and told it that worked.
+      final h = _build();
+      final station = RadioStation(
+        pid: 'rs-1',
+        name: 'Nightjar FM',
+        streamUrl: 'https://stream.example/rs-1',
+        createdAt: DateTime.utc(2026, 7, 1),
+      );
+      h.repo.radioStationsByPid['rs-1'] = station;
+      await h.container.read(radioPlaybackProvider.notifier).play(station);
+      await pumpEventQueue();
+      await _cmd(h, 'pause', id: 'e2');
+      await pumpEventQueue();
+
+      await _cmd(h, 'play', id: 'e3');
+      await pumpEventQueue();
+
+      final result = _ofType(h.sent, 'cmd-result').last;
+      expect(result['id'], 'e3');
+      expect(result['ok'], isFalse);
+      expect(result['code'], 'invalid-request');
+    },
+  );
 
   test('the queue that follows a stop is reported as a new one', () async {
     final h = _build();

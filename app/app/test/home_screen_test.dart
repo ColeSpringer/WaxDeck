@@ -216,17 +216,13 @@ void main() {
     await _pumpHome(tester, repo);
 
     final asked = repo.browseCalls.map((call) => call.list).toList();
-    expect(
-      asked.toSet(),
-      <DiscoveryList>{
-        DiscoveryList.recentlyPlayed,
-        DiscoveryList.recentlyAdded,
-        DiscoveryList.neverPlayed,
-        DiscoveryList.rediscover,
-        DiscoveryList.mostPlayed,
-      },
-      reason: 'home draws the five item shelves over these five lists',
-    );
+    expect(asked.toSet(), <DiscoveryList>{
+      DiscoveryList.recentlyPlayed,
+      DiscoveryList.recentlyAdded,
+      DiscoveryList.neverPlayed,
+      DiscoveryList.rediscover,
+      DiscoveryList.mostPlayed,
+    }, reason: 'home draws the five item shelves over these five lists');
     // Home is cross-domain: none of its shelves is scoped to a medium.
     expect(repo.browseCalls.every((call) => call.mediaType == null), isTrue);
   });

@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { T } from './driver';
+import { App, T } from './driver';
 
 // The radio slice and the Connect surfaces over the real stack: a station
 // added over the API is drawn from the server's own logo proxy, tuned in
@@ -27,6 +27,51 @@ const BAND_STATIONS = [
   { name: 'E2E Band One FM', stream: `${LOGO_HOST}/wd-fixture-band-001.mp3` },
   { name: 'E2E Band Two FM', stream: `${LOGO_HOST}/wd-fixture-band-002.mp3` },
 ];
+/// The station the edit scenario owns, and what it is edited to. Its own
+/// name and stream for the reason the rest have theirs: the library is
+/// server-global and refuses a duplicate URL.
+const EDIT_STATION = { name: 'E2E Edit FM', stream: `${LOGO_HOST}/wd-fixture-edit-001.mp3` };
+const EDITED_STATION = {
+  name: 'E2E Edited FM',
+  stream: `${LOGO_HOST}/wd-fixture-edit-002.mp3`,
+};
+
+/// The edit scenario's station, put back to the identity it seeds by.
+///
+/// Called before the act as well as after it, which is the convention
+/// `clearRadioSaved` and `clearPlaylistsNamed` already follow and the
+/// reason they give: a run that dies before its cleanup must cost the
+/// next one nothing. Here it costs rather a lot. The station library is
+/// server-global, `seed.radioStation` matches by name, and this test
+/// renames a row - so a failed expect, a timeout, or a Ctrl+C between
+/// the edit and the restore leaves `E2E Edit FM` gone and
+/// `E2E Edited FM` holding the stream URL the edit moves to. The next
+/// run then finds no station by the seed name, creates a second row on
+/// the now-free URL, and collides on the edit - permanently, leaking a
+/// row per attempt into a five-hundred-capped library shared by every
+/// worker.
+///
+/// Matching on either name is what makes it self-healing: the row is
+/// found whichever side of the rename it was left on.
+async function resetEditStation(app: App): Promise<string> {
+  const held = await app.api.get('/radio/stations');
+  const existing = (held.stations ?? []).find(
+    (s) => s.name === EDIT_STATION.name || s.name === EDITED_STATION.name,
+  );
+  if (existing === undefined) {
+    return app.seed.radioStation(EDIT_STATION.name, EDIT_STATION.stream);
+  }
+  if (
+    existing.name !== EDIT_STATION.name ||
+    existing.streamUrl !== EDIT_STATION.stream
+  ) {
+    await app.api.put('/radio/stations/{pid}', {
+      path: { pid: existing.pid },
+      data: { name: EDIT_STATION.name, streamUrl: EDIT_STATION.stream },
+    });
+  }
+  return existing.pid;
+}
 
 test('a station logo is served from this origin, not from the station host', async ({
   app,
@@ -89,6 +134,38 @@ test('a station logo is served from this origin, not from the station host', asy
 
   // The tokenless 401 is not asserted here: it is covered where a client
   // can actually have no credential at all - TestRadioStationLogoProxy.
+});
+
+test('an edit typed into the dialog reaches the server', async ({ app }) => {
+  // The reproduction attempt for the report that "Save changes" closed
+  // the dialog and left the server holding the old values. It was seen
+  // once under Playwright-driven text entry, which is the one thing a
+  // widget test cannot be: the entry path that produced it runs through
+  // a real browser, a real editing session, and the semantics tree.
+  //
+  // So this drives exactly that, and the assertion is the server's own
+  // copy rather than anything on screen - the dialog closing is the
+  // claim under suspicion, not the evidence.
+  const station = await resetEditStation(app);
+
+  await app.nav.enter('radio');
+  await app.radio.station(station).waitFor({ timeout: T.nav });
+
+  try {
+    await app.radio.editStation(station, {
+      name: EDITED_STATION.name,
+      streamUrl: EDITED_STATION.stream,
+    });
+
+    const held = await app.api.get('/radio/stations');
+    const saved = (held.stations ?? []).find((s) => s.pid === station);
+    expect(saved?.name).toBe(EDITED_STATION.name);
+    expect(saved?.streamUrl).toBe(EDITED_STATION.stream);
+  } finally {
+    // In a finally, so a failing expect above restores too - the assert
+    // is the likeliest thing here to leave the row renamed.
+    await resetEditStation(app);
+  }
 });
 
 test('the hub pins a station and tunes it in', async ({ app }) => {

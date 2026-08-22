@@ -6,9 +6,14 @@
 # git, so no codegen toolchain is needed here: only Flutter (web build) and Go.
 
 ## --- stage 1: Flutter web build ----------------------------------------------
-# Pin note: 3.44.0 is the newest 3.44.x tag published at ghcr.io/cirruslabs/flutter
-# as of 2026-08 (3.44.9 exists as a Flutter stable release but has no image tag
-# yet). Bump when cirruslabs catches up so this matches CI's 3.44.9.
+# Pin note: 3.44.0 is the newest tag published at ghcr.io/cirruslabs/flutter
+# as of 2026-08-22 - nothing in 3.45, 3.46 or 3.47 has an image yet, so this
+# now trails CI's 3.47.1 by three minor releases rather than one patch.
+# Bump when cirruslabs catches up. Worth watching rather than ignoring: the
+# gap is wide enough that the image's analyzer, formatter and golden
+# rendering are not the ones the gates ran against, and only the web bundle
+# is built here - a divergence would surface as a rendering difference in a
+# container image nothing else covers.
 #
 # --platform=$BUILDPLATFORM: the web bundle is architecture-independent, so
 # multi-arch builds (release workflow) run this stage once on the build host

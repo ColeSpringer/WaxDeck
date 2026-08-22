@@ -8821,12 +8821,13 @@ paths:
   /stats/top:
     get:
       operationId: getTopList
-      summary: Top artists, albums, genres, or shows
+      summary: Top artists, albums, genres, shows, or stations
       description: >
         The caller's most-listened entries of one kind over a range,
-        ranked by listening time. `shows` covers podcasts; spoken-word
-        listening dominates by raw time, so music kinds only count
-        music sessions and `shows` only counts podcast sessions.
+        ranked by listening time. `shows` covers podcasts and
+        `stations` covers radio; spoken-word listening dominates by raw
+        time, so music kinds only count music sessions, `shows` only
+        counts podcast sessions, and `stations` only counts radio.
       tags: [stats]
       parameters:
         - name: kind
@@ -8835,7 +8836,7 @@ paths:
           description: Which top list.
           schema:
             type: string
-            enum: [artists, albums, genres, shows]
+            enum: [artists, albums, genres, shows, stations]
         - name: range
           in: query
           description: How far back to aggregate, ending now.
@@ -18453,13 +18454,27 @@ components:
           type: integer
           description: Listen sessions in the bucket.
 
+    StatsMediaType:
+      type: string
+      description: >
+        What a recorded listen was. The three first-class item kinds
+        plus `radio`, which is measured in the stream proxy rather than
+        reported by a client and belongs to no item.
+
+        Deliberately not the shared `MediaType`: that enum is the item
+        kinds browse, items, and uploads answer with, and none of them
+        will ever answer `radio`. Named to stay clear of
+        `MediaTypeListening`, the per-media total object one word-order
+        away.
+      enum: [music, podcast, audiobook, radio]
+
     MediaTypeListening:
       type: object
       description: Listening total for one media type.
       required: [mediaType, ms, sessions]
       properties:
         mediaType:
-          $ref: "#/components/schemas/MediaType"
+          $ref: "#/components/schemas/StatsMediaType"
         ms:
           type: integer
           format: int64
@@ -18523,7 +18538,7 @@ components:
         kind:
           type: string
           description: Which top list this is.
-          enum: [artists, albums, genres, shows]
+          enum: [artists, albums, genres, shows, stations]
         range:
           type: string
           description: The range that was aggregated.
@@ -18547,7 +18562,9 @@ components:
           type: string
           description: >
             The entry's pid when the entry is a catalog entity (absent
-            for genres, and for names that no longer resolve).
+            for genres, and for names that no longer resolve). A
+            `stations` entry carries the station's `rs-` pid, which is
+            not a catalog entity but is addressable all the same.
           example: ar-01JZX5N8QW3F4V9T2B7KD3M9R6
         artUrl:
           type: string
@@ -18593,7 +18610,7 @@ components:
           type: string
           description: The item's display artist, author, or show.
         mediaType:
-          $ref: "#/components/schemas/MediaType"
+          $ref: "#/components/schemas/StatsMediaType"
         startedAt:
           type: string
           format: date-time
@@ -18617,8 +18634,13 @@ components:
           example: waxdeck-web
         source:
           type: string
-          description: "`live` playback or a backdated `import`."
-          enum: [live, import]
+          description: >
+            Who measured the session. `live` is a WaxDeck client
+            reporting its own playback and `import` a backdated session
+            from another service's history; `radio` is the server's own
+            stream proxy, which times a tune-in because no client is
+            holding the stream to report it.
+          enum: [live, import, radio]
 
     YearInReview:
       type: object

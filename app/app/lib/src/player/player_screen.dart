@@ -458,6 +458,12 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     // build of that leaf and not of this widget, and a `watch` from
     // there would be registering a dependency out of phase.
     final canDelete = canDeleteItems(ref);
+    // Same reason, and the seek cluster below already reads this track's
+    // envelope, so the header costs no extra request by asking too: both
+    // derive from the one provider.
+    final hasShape =
+        _music &&
+        waveformMayHavePeaks(ref.watch(trackWaveformProvider(_item.pid)));
     // Same reason, and it decides two things at once: whether the action
     // row carries car mode, and whether the overflow still offers it.
     final carMode = ref.watch(carModeButtonProvider);
@@ -496,6 +502,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             canDelete: canDelete,
             carMode: carMode,
             mayCurate: mayCurate,
+            hasShape: hasShape,
           ),
           // A cover fetched from a third party says so here too, at the
           // one size in the app where the picture is the whole screen.
@@ -578,6 +585,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     required bool canDelete,
     required bool carMode,
     required bool mayCurate,
+    required bool hasShape,
   }) {
     // Captured while the surface is still standing: a delete finishes
     // when the server answers, and what it leaves behind is a player
@@ -659,6 +667,12 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
               // wear it twice.
               glyph: WaxIcons.albums,
               label: l10n.playerVisualizer,
+              // Both modes are peak-driven, so a track the analyze pass
+              // has not measured has nothing to draw in either. Shown
+              // and disabled rather than hidden: the row disappearing
+              // says nothing, and the reason is the whole answer.
+              enabled: hasShape,
+              help: hasShape ? null : l10n.playerVisualizerAnalysisNeeded,
               semanticsId: SemanticsIds.playerVisualizer,
             ),
           // Gone from the menu once the row above carries it: the verb

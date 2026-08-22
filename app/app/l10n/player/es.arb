@@ -101,6 +101,7 @@
   "playerUpNextItem": "A continuación, {title}",
   "playerUpNextLabel": "A continuación",
   "playerVisualizer": "Visualizador",
+  "playerVisualizerAnalysisNeeded": "Esta pista aún no se ha analizado.",
   "playerVisualizerIdleMessage": "Empieza una pista y su forma aparecerá aquí.",
   "playerVisualizerMode": "Modo del visualizador",
   "playerVoiceBoost": "Realce de voz",

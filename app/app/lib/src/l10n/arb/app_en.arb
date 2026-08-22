@@ -5963,6 +5963,10 @@
   "@playerVisualizer": {
     "description": "Menu item that opens the screen drawing the track's shape."
   },
+  "playerVisualizerAnalysisNeeded": "This track has not been analyzed yet.",
+  "@playerVisualizerAnalysisNeeded": {
+    "description": "Why the visualizer row is disabled: nothing has measured the track's shape, so there is nothing to draw."
+  },
   "playerVisualizerIdleMessage": "Start a track and its shape shows up here.",
   "@playerVisualizerIdleMessage": {
     "description": "Under the idle heading on the visualizer."
@@ -11279,6 +11283,10 @@
   "@statsKindShows": {
     "description": "Chip choosing which ranked list to show."
   },
+  "statsKindStations": "Stations",
+  "@statsKindStations": {
+    "description": "Chip choosing which ranked list to show; radio stations."
+  },
   "statsListened": "listened",
   "@statsListened": {
     "description": "Caption under the total listening time. Lower case: it sits under a figure and reads as one phrase with it."
@@ -11385,7 +11393,7 @@
   "@statsTitle": {
     "description": "Title of the screen showing what this listener has played."
   },
-  "statsTopEmptyMessage": "{kind, select, artists{A longer range, or an artist you have actually played.} albums{A longer range, or an album you have actually played.} genres{A longer range, or a genre you have actually played.} shows{A longer range, or a show you have actually played.} other{A longer range, or something you have actually played.}}",
+  "statsTopEmptyMessage": "{kind, select, artists{A longer range, or an artist you have actually played.} albums{A longer range, or an album you have actually played.} genres{A longer range, or a genre you have actually played.} shows{A longer range, or a show you have actually played.} stations{A longer range, or a station you have actually tuned in.} other{A longer range, or something you have actually played.}}",
   "@statsTopEmptyMessage": {
     "description": "Empty state of a ranked list, naming what it lists. Whole sentences per kind rather than a noun in a frame, because the article follows the noun's gender.",
     "placeholders": {

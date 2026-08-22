@@ -10,6 +10,8 @@ const ListenLogEntrySource_Enum _$listenLogEntrySourceEnum_live =
     const ListenLogEntrySource_Enum._('live');
 const ListenLogEntrySource_Enum _$listenLogEntrySourceEnum_import_ =
     const ListenLogEntrySource_Enum._('import_');
+const ListenLogEntrySource_Enum _$listenLogEntrySourceEnum_radio =
+    const ListenLogEntrySource_Enum._('radio');
 const ListenLogEntrySource_Enum
 _$listenLogEntrySourceEnum_unknownDefaultOpenApi =
     const ListenLogEntrySource_Enum._('unknownDefaultOpenApi');
@@ -20,6 +22,8 @@ ListenLogEntrySource_Enum _$listenLogEntrySourceEnumValueOf(String name) {
       return _$listenLogEntrySourceEnum_live;
     case 'import_':
       return _$listenLogEntrySourceEnum_import_;
+    case 'radio':
+      return _$listenLogEntrySourceEnum_radio;
     case 'unknownDefaultOpenApi':
       return _$listenLogEntrySourceEnum_unknownDefaultOpenApi;
     default:
@@ -31,6 +35,7 @@ final BuiltSet<ListenLogEntrySource_Enum> _$listenLogEntrySourceEnumValues =
     BuiltSet<ListenLogEntrySource_Enum>(const <ListenLogEntrySource_Enum>[
       _$listenLogEntrySourceEnum_live,
       _$listenLogEntrySourceEnum_import_,
+      _$listenLogEntrySourceEnum_radio,
       _$listenLogEntrySourceEnum_unknownDefaultOpenApi,
     ]);
 
@@ -42,11 +47,13 @@ class _$ListenLogEntrySource_EnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'live': 'live',
     'import_': 'import',
+    'radio': 'radio',
     'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'live': 'live',
     'import': 'import_',
+    'radio': 'radio',
     'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 
@@ -80,7 +87,7 @@ class _$ListenLogEntry extends ListenLogEntry {
   @override
   final String? artist;
   @override
-  final MediaType mediaType;
+  final StatsMediaType mediaType;
   @override
   final DateTime startedAt;
   @override
@@ -182,9 +189,9 @@ class ListenLogEntryBuilder
   String? get artist => _$this._artist;
   set artist(String? artist) => _$this._artist = artist;
 
-  MediaType? _mediaType;
-  MediaType? get mediaType => _$this._mediaType;
-  set mediaType(MediaType? mediaType) => _$this._mediaType = mediaType;
+  StatsMediaType? _mediaType;
+  StatsMediaType? get mediaType => _$this._mediaType;
+  set mediaType(StatsMediaType? mediaType) => _$this._mediaType = mediaType;
 
   DateTime? _startedAt;
   DateTime? get startedAt => _$this._startedAt;

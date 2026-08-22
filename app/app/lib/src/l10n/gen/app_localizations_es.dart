@@ -4571,6 +4571,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerVisualizer => 'Visualizador';
 
   @override
+  String get playerVisualizerAnalysisNeeded =>
+      'Esta pista aún no se ha analizado.';
+
+  @override
   String get playerVisualizerIdleMessage =>
       'Empieza una pista y su forma aparecerá aquí.';
 
@@ -8617,6 +8621,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get statsKindShows => 'Programas';
 
   @override
+  String get statsKindStations => 'Emisoras';
+
+  @override
   String get statsListened => 'escuchado';
 
   @override
@@ -8717,6 +8724,8 @@ class AppLocalizationsEs extends AppLocalizations {
           'Un periodo más largo, o un género que hayas escuchado de verdad.',
       'shows':
           'Un periodo más largo, o un programa que hayas escuchado de verdad.',
+      'stations':
+          'Un periodo más largo, o una emisora que hayas sintonizado de verdad.',
       'other': 'Un periodo más largo, o algo que hayas escuchado de verdad.',
     });
     return '$_temp0';

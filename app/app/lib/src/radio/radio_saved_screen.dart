@@ -168,18 +168,18 @@ class _SavedList extends ConsumerWidget {
             // whole point of the list. `go`, not `push`: a search is a
             // location a stranger can open.
             onTap: () => context.go(WaxRoute.searchFor(query)),
+            // The row's own overflow, drawn by the row rather than beside
+            // it, so the same sheet answers the button, a right-click,
+            // and a long press instead of only the button.
+            onMore: () => showRadioSavedMenu(context, ref, song),
+            moreSemanticsId: SemanticsIds.radioSavedMore(song.pid),
+            moreLabel: l10n.radioSavedWays(title),
             actions: <Widget>[
               WaxIconButton(
                 glyph: WaxIcons.search,
                 label: l10n.radioSavedFind(title),
                 semanticsId: SemanticsIds.radioSavedFind(song.pid),
                 onPressed: () => context.go(WaxRoute.searchFor(query)),
-              ),
-              WaxIconButton(
-                glyph: WaxIcons.more,
-                label: l10n.radioSavedWays(title),
-                semanticsId: SemanticsIds.radioSavedMore(song.pid),
-                onPressed: () => showRadioSavedMenu(context, ref, song),
               ),
               WaxIconButton(
                 glyph: WaxIcons.close,

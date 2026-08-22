@@ -12,7 +12,7 @@ part 'top_entry.g.dart';
 ///
 /// Properties:
 /// * [name] - Display name (artist, album, genre, or show).
-/// * [pid] - The entry's pid when the entry is a catalog entity (absent for genres, and for names that no longer resolve). 
+/// * [pid] - The entry's pid when the entry is a catalog entity (absent for genres, and for names that no longer resolve). A `stations` entry carries the station's `rs-` pid, which is not a catalog entity but is addressable all the same. 
 /// * [artUrl] - Origin-relative artwork URL, when the entry has one. 
 /// * [plays] - Listen sessions attributed to the entry in the range.
 /// * [ms] - Milliseconds listened in the range.
@@ -22,7 +22,7 @@ abstract class TopEntry implements Built<TopEntry, TopEntryBuilder> {
   @BuiltValueField(wireName: r'name')
   String get name;
 
-  /// The entry's pid when the entry is a catalog entity (absent for genres, and for names that no longer resolve). 
+  /// The entry's pid when the entry is a catalog entity (absent for genres, and for names that no longer resolve). A `stations` entry carries the station's `rs-` pid, which is not a catalog entity but is addressable all the same. 
   @BuiltValueField(wireName: r'pid')
   String? get pid;
 

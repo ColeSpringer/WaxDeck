@@ -47,7 +47,7 @@ func watchRadioScrobbles(t *testing.T, svc *Library) func() {
 	t.Helper()
 	written := make(chan struct{}, 16)
 	hook := func() { written <- struct{}{} }
-	svc.radioScrobbleWritten.Store(&hook)
+	svc.radioWriteDone.Store(&hook)
 	return func() {
 		t.Helper()
 		select {
@@ -145,7 +145,7 @@ func TestScrobbleRadioPlayNeverBlocks(t *testing.T) {
 		once.Do(func() { close(stuck) })
 		<-release
 	}
-	svc.radioScrobbleWritten.Store(&hook)
+	svc.radioWriteDone.Store(&hook)
 	defer close(release)
 
 	started := time.Now().Add(-2 * time.Minute)
@@ -161,7 +161,7 @@ func TestScrobbleRadioPlayNeverBlocks(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < radioScrobbleQueue*2; i++ {
+		for i := 0; i < radioWriteQueue*2; i++ {
 			svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Boards of Canada - Roygbiv", started)
 		}
 	}()
@@ -200,7 +200,7 @@ func TestRadioScrobbleWriterDrainsAtShutdown(t *testing.T) {
 			<-release
 		}
 	}
-	svc.radioScrobbleWritten.Store(&hook)
+	svc.radioWriteDone.Store(&hook)
 	defer close(release)
 
 	started := time.Now().Add(-2 * time.Minute)
@@ -217,7 +217,7 @@ func TestRadioScrobbleWriterDrainsAtShutdown(t *testing.T) {
 	// queue still holds segments.
 	dead, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := svc.writeRadioScrobbles(dead); err != nil {
+	if err := svc.writeRadioBookkeeping(dead); err != nil {
 		t.Fatalf("writer: %v", err)
 	}
 

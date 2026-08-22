@@ -537,6 +537,10 @@
   "@playerVisualizer": {
     "description": "Menu item that opens the screen drawing the track's shape."
   },
+  "playerVisualizerAnalysisNeeded": "This track has not been analyzed yet.",
+  "@playerVisualizerAnalysisNeeded": {
+    "description": "Why the visualizer row is disabled: nothing has measured the track's shape, so there is nothing to draw."
+  },
   "playerVisualizerIdleMessage": "Start a track and its shape shows up here.",
   "@playerVisualizerIdleMessage": {
     "description": "Under the idle heading on the visualizer."

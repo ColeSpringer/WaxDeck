@@ -376,8 +376,11 @@ final publicRoutes = <RouteBase>[
 /// link into one working.
 List<RouteBase> shellRoutes() => <RouteBase>[
   StatefulShellRoute.indexedStack(
-    builder: (context, state, navigationShell) =>
-        AdaptiveShell(shell: navigationShell, location: state.uri.path),
+    builder: (context, state, navigationShell) => AdaptiveShell(
+      shell: navigationShell,
+      location: state.uri.path,
+      uri: state.uri.toString(),
+    ),
     branches: <StatefulShellBranch>[
       StatefulShellBranch(
         routes: <RouteBase>[

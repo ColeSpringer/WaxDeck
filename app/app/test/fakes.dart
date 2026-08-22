@@ -144,6 +144,10 @@ class FakeRepository implements WaxDeckRepository {
   /// Thrown by [getWaveform] when set.
   WaxDeckApiException? waveformError;
 
+  /// Thrown by [updateRadioStation] when set, for the refusal half of
+  /// the edit dialog.
+  WaxDeckApiException? radioEditError;
+
   /// Lyrics by pid. An unseeded pid answers null, which is what a
   /// server says about a track nobody has words for.
   final Map<String, Lyrics> lyrics = {};
@@ -1904,6 +1908,8 @@ class FakeRepository implements WaxDeckRepository {
     String? homepageUrl,
     String? logoUrl,
   }) async {
+    final error = radioEditError;
+    if (error != null) throw error;
     final st = RadioStation(
       pid: pid,
       name: name,

@@ -319,6 +319,7 @@ class _TopListsSection extends ConsumerWidget {
     'albums' => l10n.statsKindAlbums,
     'genres' => l10n.statsKindGenres,
     'shows' => l10n.statsKindShows,
+    'stations' => l10n.statsKindStations,
     _ => kind,
   };
 
@@ -388,13 +389,21 @@ class TopEntryRow extends ConsumerWidget {
   final TopEntry entry;
   final String kind;
 
-  static WaxDomain _domain(String kind) =>
-      kind == 'shows' ? WaxDomain.podcasts : WaxDomain.music;
+  static WaxDomain _domain(String kind) => switch (kind) {
+    'shows' => WaxDomain.podcasts,
+    'stations' => WaxDomain.radio,
+    _ => WaxDomain.music,
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => MediaListRow(
     data: MediaTileData(
-      title: entry.name,
+      // An entry outlives the thing it counted: a track deleted since,
+      // a station taken out of the library. The time it holds is real
+      // and stays in the ranking, so it needs a name to stand under -
+      // the same one the listen log gives a row in the same state,
+      // rather than a blank line where a title goes.
+      title: entry.name.isEmpty ? context.l10n.statsLogRemovedItem : entry.name,
       subtitle: context.l10n.statsPlays(entry.plays),
       artwork: waxArtwork(ref.watch(artworkStoreProvider), entry.artUrl),
       domain: _domain(kind),

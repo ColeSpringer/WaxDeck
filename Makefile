@@ -114,6 +114,13 @@ brand:
 # type, which rasterises host-specifically, so the container is what keeps
 # any OS able to run this. Flutter version comes from ci.yaml so baselines
 # are rendered by the toolchain that checks them.
+#
+# After a Flutter bump, drop the pub-cache volume first:
+# `docker volume rm waxdeck-pub-cache`. Docker seeds a named volume from
+# the image only while the volume is empty, so one left over from the
+# previous image keeps that image's ownership - and the run fails on a
+# bare "Permission denied" from pub rather than anything naming the
+# cause.
 FLUTTER_VERSION := $(shell sed -n 's/^[[:space:]]*FLUTTER_VERSION:[[:space:]]*"\([0-9][0-9.]*\)".*/\1/p' .github/workflows/ci.yaml | head -1)
 goldens-linux:
 	@test -n "$(FLUTTER_VERSION)" || { echo "make goldens-linux: no FLUTTER_VERSION found in .github/workflows/ci.yaml" >&2; exit 1; }

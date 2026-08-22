@@ -19,6 +19,19 @@ WaxDomain waxDomainOf(MediaType type) => switch (type) {
   MediaType.audiobook => WaxDomain.audiobooks,
 };
 
+/// The same mapping for a recorded listen, which can be a station.
+///
+/// A sibling rather than a widening of [waxDomainOf]: that one is an
+/// exhaustive switch over the three item kinds, Dart has no
+/// overloading, and radio is not an item kind. Two small functions beat
+/// one that has to be told which enum it was handed.
+WaxDomain waxDomainOfStats(StatsMediaType type) => switch (type) {
+  StatsMediaType.music => WaxDomain.music,
+  StatsMediaType.podcast => WaxDomain.podcasts,
+  StatsMediaType.audiobook => WaxDomain.audiobooks,
+  StatsMediaType.radio => WaxDomain.radio,
+};
+
 /// Shape is a domain signal that reads at 40 px and survives greyscale.
 /// Book covers vary between square (audio sources) and portrait (book
 /// sources), so they are fitted on a matte rather than cropped to match
@@ -26,6 +39,15 @@ WaxDomain waxDomainOf(MediaType type) => switch (type) {
 ArtworkShape waxShapeOf(MediaType type) => switch (type) {
   MediaType.music || MediaType.podcast => ArtworkShape.square,
   MediaType.audiobook => ArtworkShape.portrait,
+};
+
+/// The listening record's shapes. A station logo is square, like the
+/// rest of radio's artwork.
+ArtworkShape waxShapeOfStats(StatsMediaType type) => switch (type) {
+  StatsMediaType.music ||
+  StatsMediaType.podcast ||
+  StatsMediaType.radio => ArtworkShape.square,
+  StatsMediaType.audiobook => ArtworkShape.portrait,
 };
 
 /// The artwork behind a URL the API already resolved, or null where

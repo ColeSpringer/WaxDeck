@@ -88,6 +88,26 @@ enum MediaType {
   final String wireName;
 }
 
+/// What a recorded listen was.
+///
+/// A sibling of [MediaType] rather than a widening of it, because the
+/// two answer different questions. [MediaType] is the three first-class
+/// *item* kinds - what browse, items, and uploads deal in, none of
+/// which will ever answer `radio`. This is what the listening record
+/// can hold, and radio is measured server-side in the stream proxy and
+/// belongs to no item at all.
+enum StatsMediaType {
+  music('music'),
+  podcast('podcast'),
+  audiobook('audiobook'),
+  radio('radio');
+
+  const StatsMediaType(this.wireName);
+
+  /// Value as it appears on the wire.
+  final String wireName;
+}
+
 /// Discovery lists servable by the browse endpoint. Play-derived lists
 /// reflect the calling user's own listening state.
 enum DiscoveryList {
@@ -4273,7 +4293,7 @@ class MediaTypeListening {
     required this.sessions,
   });
 
-  final MediaType mediaType;
+  final StatsMediaType mediaType;
   final int ms;
   final int sessions;
 }
@@ -4424,7 +4444,7 @@ class ListenLogEntry {
   /// The item's display artist, author, or show.
   final String? artist;
 
-  final MediaType mediaType;
+  final StatsMediaType mediaType;
   final DateTime startedAt;
 
   /// Milliseconds actually heard.

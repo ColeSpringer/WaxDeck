@@ -71,7 +71,12 @@ optional `length`).
 
 Every client reports listen sessions with idempotency ids, so plays
 are deduplicated across devices and offline replays never
-double-count. The stats surface aggregates those sessions:
+double-count. Radio is the exception, and the reason is that nothing
+on a listener's end knows it is playing something the stats can name:
+the server's own stream proxy measures a tune-in while it relays it,
+checkpointing as it goes so a long listen survives a restart. One row
+per connection, so reconnecting counts as a second session while the
+time stays right. The stats surface aggregates all of it:
 
 - `GET /api/v1/stats/listening` - listening time over a range (7d to
   all time), bucketed by day, week, or month for charts, split by
@@ -80,10 +85,10 @@ double-count. The stats surface aggregates those sessions:
 - `GET /api/v1/stats/heatmap` - a calendar year of per-day listening
   plus streaks. The current streak counts runs ending today or
   yesterday, and streaks cross year boundaries honestly.
-- `GET /api/v1/stats/top` - top artists, albums, genres, or shows by
-  listening time over a range. Music kinds count only music sessions
-  and shows count only podcast sessions, so spoken-word hours never
-  drown a music chart.
+- `GET /api/v1/stats/top` - top artists, albums, genres, shows, or
+  stations by listening time over a range. Music kinds count only music
+  sessions, shows only podcast sessions, and stations only radio, so
+  spoken-word hours never drown a music chart.
 - `GET /api/v1/stats/sessions` - the raw session log, newest first,
   with the reporting client, so "what played on which device when" is
   answerable. Filter by client label.

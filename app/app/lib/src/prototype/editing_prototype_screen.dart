@@ -108,74 +108,79 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
               }
               final i = index - 1;
               final r = rows[i];
-              return GestureDetector(
-                onSecondaryTapDown: (d) => _contextMenu(d.globalPosition, i),
-                child: Semantics(
-                  identifier: SemanticsIds.protoRow(i),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: theme.dividerColor),
-                      ),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: WaxSpace.s12,
-                      vertical: WaxSpace.s4,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: Semantics(
-                            identifier: SemanticsIds.protoCellCurrent(i),
-                            child: Text(r.currentTitle),
-                          ),
+              // This row answers a secondary tap with a menu of its own,
+              // so it owes the browser's the same suppression every card
+              // and list row gives it.
+              return WaxSecondaryTapRegion(
+                child: GestureDetector(
+                  onSecondaryTapDown: (d) => _contextMenu(d.globalPosition, i),
+                  child: Semantics(
+                    identifier: SemanticsIds.protoRow(i),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: theme.dividerColor),
                         ),
-                        Expanded(
-                          flex: 3,
-                          child: Semantics(
-                            identifier: SemanticsIds.protoEdit(i),
-                            child: TextField(
-                              controller: proposed[i],
-                              decoration: const InputDecoration(
-                                isDense: true,
-                                border: OutlineInputBorder(),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: WaxSpace.s12,
+                        vertical: WaxSpace.s4,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Semantics(
+                              identifier: SemanticsIds.protoCellCurrent(i),
+                              child: Text(r.currentTitle),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Semantics(
+                              identifier: SemanticsIds.protoEdit(i),
+                              child: TextField(
+                                controller: proposed[i],
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  border: OutlineInputBorder(),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: WaxSpace.s8),
-                        Expanded(
-                          flex: 2,
-                          child: Semantics(
-                            identifier: SemanticsIds.protoCellArtist(i),
-                            child: Text(r.artist),
-                          ),
-                        ),
-                        SizedBox(
-                          width: 48,
-                          child: Text(
-                            '${r.confidence}%',
-                            textAlign: TextAlign.end,
-                          ),
-                        ),
-                        Semantics(
-                          identifier: SemanticsIds.protoKebab(i),
-                          label: context.l10n.prototypeRowActions,
-                          button: true,
-                          excludeSemantics: true,
-                          onTap: () => _kebabMenu(i),
-                          child: IconButton(
-                            key: Key(SemanticsIds.protoKebab(i)),
-                            visualDensity: VisualDensity.compact,
-                            icon: const WaxIcon(
-                              WaxIcons.moreVertical,
-                              size: 18,
+                          const SizedBox(width: WaxSpace.s8),
+                          Expanded(
+                            flex: 2,
+                            child: Semantics(
+                              identifier: SemanticsIds.protoCellArtist(i),
+                              child: Text(r.artist),
                             ),
-                            onPressed: () => _kebabMenu(i),
                           ),
-                        ),
-                      ],
+                          SizedBox(
+                            width: 48,
+                            child: Text(
+                              '${r.confidence}%',
+                              textAlign: TextAlign.end,
+                            ),
+                          ),
+                          Semantics(
+                            identifier: SemanticsIds.protoKebab(i),
+                            label: context.l10n.prototypeRowActions,
+                            button: true,
+                            excludeSemantics: true,
+                            onTap: () => _kebabMenu(i),
+                            child: IconButton(
+                              key: Key(SemanticsIds.protoKebab(i)),
+                              visualDensity: VisualDensity.compact,
+                              icon: const WaxIcon(
+                                WaxIcons.moreVertical,
+                                size: 18,
+                              ),
+                              onPressed: () => _kebabMenu(i),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

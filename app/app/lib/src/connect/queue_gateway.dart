@@ -79,7 +79,14 @@ abstract class QueueGateway {
   /// the engine. A play arriving after the item ended is a replay, and
   /// only the session resets the per-play bookkeeping and rewinds a
   /// book to its first part.
-  Future<void> play();
+  ///
+  /// False when there was nothing to start, the way [next] and
+  /// [previous] answer for a queue with nowhere to go - so a routed
+  /// command can refuse instead of reporting a success nobody heard.
+  /// The reachable case is a play that follows a pause during live
+  /// radio: pause lets the station go, which leaves no station, no
+  /// session, and an empty queue behind it.
+  Future<bool> play();
 
   /// Silences what is playing, for a caller that means it deliberately
   /// (the sleep timer). An item pauses so it resumes where it stood; a
@@ -206,26 +213,30 @@ class LocalQueueGateway implements QueueGateway {
   /// engine, which starts a station and restarts a finished item but has
   /// nothing to start when a restored queue was never begun.
   @override
-  Future<void> play() async {
+  Future<bool> play() async {
     // A station is playing, or paused with its stream still loaded.
     // Radio keeps no session of ours, and the engine is what holds it.
     if (_ref.read(radioPlaybackProvider).station != null) {
       await _ref.read(audioEngineProvider).play();
-      return;
+      return true;
     }
     final session = _playback.liveSession;
     if (session != null) {
       await session.play();
-      return;
+      return true;
     }
+    // Answered before asking, because `resume` cannot answer for
+    // itself: it bails silently on an empty queue, and a caller told
+    // nothing went wrong reports that the play worked.
+    if (_ref.read(queueControllerProvider).isEmpty) return false;
     // No station and no session, but a queue still standing: a start
     // that failed, waiting to be asked again. (A queue restored at
     // launch does not land here - the queue listener starts it as soon
     // as it is put back.) Asking again is what the deck's own play does
     // in this state, and the only reading of a play from a car or a
-    // headset that is not a button doing nothing. `resume` bails by
-    // itself when there is no entry, so an empty queue stays empty.
+    // headset that is not a button doing nothing.
     _playback.resume();
+    return true;
   }
 
   @override

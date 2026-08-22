@@ -558,7 +558,7 @@ Class | Method | HTTP request | Description
 [*StatsApi*](doc/StatsApi.md) | [**getListeningHeatmap**](doc/StatsApi.md#getlisteningheatmap) | **GET** /stats/heatmap | Calendar heatmap and streaks
 [*StatsApi*](doc/StatsApi.md) | [**getListeningStats**](doc/StatsApi.md#getlisteningstats) | **GET** /stats/listening | Listening time statistics
 [*StatsApi*](doc/StatsApi.md) | [**getServerYearInReview**](doc/StatsApi.md#getserveryearinreview) | **GET** /stats/server-year-in-review | Server-wide year in review
-[*StatsApi*](doc/StatsApi.md) | [**getTopList**](doc/StatsApi.md#gettoplist) | **GET** /stats/top | Top artists, albums, genres, or shows
+[*StatsApi*](doc/StatsApi.md) | [**getTopList**](doc/StatsApi.md#gettoplist) | **GET** /stats/top | Top artists, albums, genres, shows, or stations
 [*StatsApi*](doc/StatsApi.md) | [**getYearInReview**](doc/StatsApi.md#getyearinreview) | **GET** /stats/year-in-review | Year in review
 [*StatsApi*](doc/StatsApi.md) | [**listListenLog**](doc/StatsApi.md#listlistenlog) | **GET** /stats/sessions | Listen session log
 [*SyncApi*](doc/SyncApi.md) | [**syncCatalog**](doc/SyncApi.md#synccatalog) | **GET** /sync/catalog | Mirror the catalog (snapshot or changed-since delta)
@@ -886,6 +886,7 @@ Class | Method | HTTP request | Description
  - [Soundbite](doc/Soundbite.md)
  - [StarUpdate](doc/StarUpdate.md)
  - [StarredEntities](doc/StarredEntities.md)
+ - [StatsMediaType](doc/StatsMediaType.md)
  - [SubscribeRequest](doc/SubscribeRequest.md)
  - [Subscription](doc/Subscription.md)
  - [SubscriptionPage](doc/SubscriptionPage.md)

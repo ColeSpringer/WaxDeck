@@ -128,7 +128,10 @@ class CachedArtworkStore extends ArtworkStore {
     try {
       final stale = await _cache.getFileFromCache(url);
       if (stale != null && stale.file.existsSync()) {
-        return stale.file.readAsBytes();
+        // Awaited inside the try on purpose: a read that fails after the
+        // existsSync - a file swept between the two - is exactly what
+        // the catch below is here to fall back from.
+        return await stale.file.readAsBytes();
       }
     } catch (_) {
       // The cache itself is unavailable (no storage to open, a corrupt

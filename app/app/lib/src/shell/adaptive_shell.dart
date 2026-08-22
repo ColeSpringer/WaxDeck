@@ -528,13 +528,29 @@ void goToNavTarget(BuildContext context, WaxNavTarget? target) {
 /// still own their own app bars, because the bar is contextual per screen.
 /// The deck bar and the side panel take their slots in the frame.
 class AdaptiveShell extends ConsumerStatefulWidget {
-  const AdaptiveShell({required this.shell, required this.location, super.key});
+  const AdaptiveShell({
+    required this.shell,
+    required this.location,
+    this.uri,
+    super.key,
+  });
 
   final StatefulNavigationShell shell;
 
   /// The matched location, from the router rather than from a listener, so
   /// the highlight can never disagree with what is on screen.
+  ///
+  /// The path alone. Every comparison here asks "is this a different
+  /// screen", and a query that changes under a screen that does not - a
+  /// search refining itself a keystroke at a time - is not one.
   final String location;
+
+  /// The same location with its query, which is what a step back has to
+  /// return to: `/search` and `/search?q=jazz` are the same screen and
+  /// not the same place, and going to the first from the second empties
+  /// the results. Null falls back to [location], for a caller that has
+  /// no query to keep.
+  final String? uri;
 
   @override
   ConsumerState<AdaptiveShell> createState() => _AdaptiveShellState();
@@ -544,6 +560,25 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   /// The action of the last message raised, so a repeat of the same
   /// offer replaces its predecessor rather than queueing behind it.
   String? _lastRaised;
+
+  /// Where the visitor was before the location they are on now.
+  ///
+  /// A branch index and not a stack of locations: each branch keeps a
+  /// live navigator, so `goBranch` restores the whole drill-in somebody
+  /// left, while a recorded location cannot - a pushed page is
+  /// deliberately absent from the URL the router reports, so it never
+  /// gets recorded, and `go`ing to a branch root rebuilds the branch
+  /// instead of returning to it. The location rides along for the one
+  /// case the index cannot answer: a hop inside the same branch.
+  _ShellSpot? _previous;
+
+  /// Set while a move the visitor made *outward* is in flight: a step
+  /// back, or a tap on the navigation chrome. Both mean "leave where I
+  /// am", so the spot being left is not one back should return to. The
+  /// record is dropped rather than inverted, which is what keeps back a
+  /// ladder out of the app instead of an oscillation between two spots,
+  /// and what keeps a tab tap from being undone by the next press.
+  bool _outward = false;
 
   /// The sidebar header's search field, owned here and nowhere else.
   ///
@@ -575,6 +610,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   @override
   void didUpdateWidget(AdaptiveShell old) {
     super.didUpdateWidget(old);
+    _recordDeparture(old);
     // Arriving at search puts the caret in the field, which is what the
     // screen's own autofocus used to do before the header took the field
     // over. On the transition only: this rebuilds on every navigation,
@@ -584,6 +620,60 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
     if (!widget.location.startsWith(WaxRoute.search)) return;
     if (!_headerFieldShowing) return;
     unawaited(_focusHeaderField());
+  }
+
+  /// Notes the spot the visitor just left, so anything that wants a way
+  /// back has one.
+  ///
+  /// `old.shell` is the shell as it was before this navigation, so its
+  /// `currentIndex` is the branch they were in rather than the one they
+  /// have arrived in.
+  void _recordDeparture(AdaptiveShell old) {
+    // The guard first, and the flag consumed only behind it. This runs on
+    // every rebuild the parent causes, most of which are not navigations
+    // at all - a theme change, a provider above the shell - and a flag
+    // spent on one of those would leave the tab tap that set it to be
+    // recorded as a departure and undone by the next back press.
+    if (old.location == widget.location) return;
+    final outward = _outward;
+    _outward = false;
+    if (outward) return;
+    _previous = _ShellSpot(old.shell.currentIndex, old.uri ?? old.location);
+  }
+
+  /// Marks the move about to be made as one *out* of where the visitor
+  /// is, so it drops the way back rather than becoming it.
+  ///
+  /// The flag is cleared again at the end of the frame, because a move
+  /// can land nowhere: tapping the tab already showing, at its root,
+  /// navigates to where the router already is, so nothing rebuilds and
+  /// nothing consumes it. Left set, it would be spent on whatever the
+  /// visitor did next - typing in the header field, following a link -
+  /// and back would skip the spot that move actually left.
+  void _markOutward() {
+    _previous = null;
+    _outward = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _outward = false);
+  }
+
+  /// Steps back to the spot the visitor came from, if one was recorded.
+  ///
+  /// Returns false when nothing was, which leaves the fallback to the
+  /// caller: a screen reached by a link has no history to step through.
+  bool goBack() {
+    final previous = _previous;
+    if (previous == null) return false;
+    _markOutward();
+    if (previous.branch == widget.shell.currentIndex) {
+      // A hop inside one branch, so `goBranch` would land back on what is
+      // already showing; the location is all that separates the two.
+      context.go(previous.location);
+    } else {
+      // Restores the branch's own navigator, drill-in and all - Radio, a
+      // station, search, back, and the station is still there.
+      widget.shell.goBranch(previous.branch);
+    }
+    return true;
   }
 
   /// Puts the caret in the header field once the arriving route has
@@ -731,6 +821,10 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   }
 
   void _select(WaxNavTarget target) {
+    // Choosing a destination is an outward move, whatever it lands on, so
+    // it drops the way back rather than becoming it: back after tapping a
+    // tab steps out of the app, it does not undo the tap.
+    _markOutward();
     final branch = waxShellBranches.indexOf(target);
     if (branch < 0) {
       // Everything else shares one branch, so a plain `go` puts it there
@@ -809,7 +903,11 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
     );
 
     // Android convention: back leaves a drilled-in screen first, then
+    // returns to the spot a screen carried the visitor away from - search
+    // opened over Radio steps back onto the station, not onto home - then
     // steps from a domain tab to home once, and only then leaves the app.
+    // Every rung consumes its record, so this is a ladder outward and
+    // never an oscillation between two spots.
     //
     // Through the router's back-button dispatcher rather than a
     // `PopScope`. A PopScope here registers with the shell page's route,
@@ -822,11 +920,58 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
     // press happens rather than during a build that may not run again.
     return BackButtonListener(
       onBackButtonPressed: () async {
-        if (router.canPop() || widget.shell.currentIndex == 0) return false;
+        if (router.canPop()) return false;
+        if (goBack()) return true;
+        if (widget.shell.currentIndex == 0) return false;
+        // Outward like every other rung, and this is the one that makes
+        // the ladder finite: unmarked, the step to home records home as
+        // somewhere reached *from* the domain tab, and the next press
+        // spends that record going back to it - so back alternated
+        // between two tabs and never reached the platform.
+        _markOutward();
         widget.shell.goBranch(0);
         return true;
       },
-      child: frame,
+      child: ShellBackScope(onBack: goBack, child: frame),
     );
   }
+}
+
+/// A spot in the shell: the branch a visitor was in, and the location it
+/// was reporting at the time, query and all.
+///
+/// Only the same-branch step back reads the location - the cross-branch
+/// one restores a whole navigator and needs nothing from here - and that
+/// step is a plain `go`, so a query dropped on the way in is a query the
+/// arriving screen never sees.
+class _ShellSpot {
+  const _ShellSpot(this.branch, this.location);
+
+  final int branch;
+  final String location;
+}
+
+/// Hands screens the shell's way back.
+///
+/// Screens live inside the branch navigators, below the shell, and a back
+/// affordance on one of them wants the branch the visitor came from -
+/// which only the shell knows. Nothing here is watched, so the scope
+/// notifies nobody; it is a lookup, not a value.
+class ShellBackScope extends InheritedWidget {
+  const ShellBackScope({required this.onBack, required super.child, super.key});
+
+  /// Steps back, reporting whether there was anywhere to step back to.
+  final bool Function() onBack;
+
+  /// Steps back to where the visitor came from, or goes to [fallback]
+  /// when there is no shell above (a screen under test) or nothing
+  /// recorded (this location was opened from a link).
+  static void goBack(BuildContext context, {required String fallback}) {
+    final scope = context.getInheritedWidgetOfExactType<ShellBackScope>();
+    if (scope != null && scope.onBack()) return;
+    context.go(fallback);
+  }
+
+  @override
+  bool updateShouldNotify(ShellBackScope old) => false;
 }

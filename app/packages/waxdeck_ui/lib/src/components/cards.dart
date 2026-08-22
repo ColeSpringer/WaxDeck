@@ -14,6 +14,7 @@ import '../tokens/typography.dart';
 import 'artwork.dart';
 import 'controls.dart';
 import 'indicators.dart';
+import 'secondary_tap.dart';
 import 'snap_physics.dart';
 import 'view_data.dart';
 
@@ -295,75 +296,81 @@ class _MediaCardState extends State<MediaCard> {
           focused: _focused,
           borderRadius: WaxRadius.card,
           surface: colors.canvas,
-          child: GestureDetector(
-            onTap: widget.onTap,
-            onSecondaryTap: widget.onMore,
-            onLongPress: widget.onMore,
-            child: SizedBox(
-              width: width,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  art,
-                  const SizedBox(height: WaxSpace.s8),
-                  Text(
-                    data.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: WaxType.titleItem.copyWith(
-                      color: data.unavailableOffline
-                          ? colors.textSecondary
-                          : colors.textPrimary,
+          // Only where there is a menu to raise: a card with no `onMore`
+          // has nothing of its own to show, so the browser keeps its own
+          // menu over it.
+          child: WaxSecondaryTapRegion(
+            enabled: widget.onMore != null,
+            child: GestureDetector(
+              onTap: widget.onTap,
+              onSecondaryTap: widget.onMore,
+              onLongPress: widget.onMore,
+              child: SizedBox(
+                width: width,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    art,
+                    const SizedBox(height: WaxSpace.s8),
+                    Text(
+                      data.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: WaxType.titleItem.copyWith(
+                        color: data.unavailableOffline
+                            ? colors.textSecondary
+                            : colors.textPrimary,
+                      ),
                     ),
-                  ),
-                  // Faded rather than removed. The captions still lay
-                  // out at every opacity, so [heightFor]'s reservation
-                  // holds and a shelf does not resize under the pointer;
-                  // and the label above is built from the data, so what
-                  // a screen reader hears never changes either.
-                  //
-                  // The fade is built only where it can run. An
-                  // AnimatedOpacity carries a controller and a ticker
-                  // apiece, and a full grid is a hundred cards: in the
-                  // mode that never hides a caption they would all be
-                  // allocated to animate a constant.
-                  _Captions(
-                    fading: captionsFade,
-                    visible: captionsVisible,
-                    duration: motion.quick,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        if (data.subtitle != null)
-                          Text(
-                            data.subtitle!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: WaxType.caption.copyWith(
-                              color: colors.textSecondary,
+                    // Faded rather than removed. The captions still lay
+                    // out at every opacity, so [heightFor]'s reservation
+                    // holds and a shelf does not resize under the pointer;
+                    // and the label above is built from the data, so what
+                    // a screen reader hears never changes either.
+                    //
+                    // The fade is built only where it can run. An
+                    // AnimatedOpacity carries a controller and a ticker
+                    // apiece, and a full grid is a hundred cards: in the
+                    // mode that never hides a caption they would all be
+                    // allocated to animate a constant.
+                    _Captions(
+                      fading: captionsFade,
+                      visible: captionsVisible,
+                      duration: motion.quick,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          if (data.subtitle != null)
+                            Text(
+                              data.subtitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: WaxType.caption.copyWith(
+                                color: colors.textSecondary,
+                              ),
                             ),
-                          ),
-                        if (data.trailingText != null)
-                          Text(
-                            data.trailingText!,
-                            // Clamped like every other line in the card,
-                            // and for a load-bearing reason: [heightFor]
-                            // reserves one caption line for this, so a
-                            // readout that wrapped would overflow the
-                            // cell by exactly one line - which is what a
-                            // book's "1 hr 20 min left" did.
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: WaxType.caption.copyWith(
-                              color: colors.textTertiary,
+                          if (data.trailingText != null)
+                            Text(
+                              data.trailingText!,
+                              // Clamped like every other line in the card,
+                              // and for a load-bearing reason: [heightFor]
+                              // reserves one caption line for this, so a
+                              // readout that wrapped would overflow the
+                              // cell by exactly one line - which is what a
+                              // book's "1 hr 20 min left" did.
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: WaxType.caption.copyWith(
+                                color: colors.textTertiary,
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -408,6 +415,7 @@ class MediaListRow extends StatelessWidget {
     this.onTap,
     this.onMore,
     this.moreSemanticsId,
+    this.moreLabel,
     this.onLongPress,
     this.onSelect,
     this.selectSemanticsId,
@@ -431,6 +439,11 @@ class MediaListRow extends StatelessWidget {
   /// test drives. The button is a control of its own beside the row's,
   /// so it does not inherit the row's identifier.
   final String? moreSemanticsId;
+
+  /// The overflow button's accessible name, for a row whose menu is
+  /// worth naming as something more specific than "More". Null takes
+  /// the design system's own wording.
+  final String? moreLabel;
 
   /// A long press with no menu behind it. Starting a multi-select is
   /// the one so far. Kept apart from [onMore] because that one draws a
@@ -653,7 +666,7 @@ class MediaListRow extends StatelessWidget {
         if (onMore != null)
           WaxIconButton(
             glyph: WaxIcons.more,
-            label: l10n.cardsMoreForItem(data.title),
+            label: moreLabel ?? l10n.cardsMoreForItem(data.title),
             size: 18,
             semanticsId: moreSemanticsId,
             onPressed: onMore,
@@ -663,45 +676,50 @@ class MediaListRow extends StatelessWidget {
 
     return Material(
       color: selected ? colors.surface2 : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        onSecondaryTap: onMore,
-        onLongPress: onMore ?? onLongPress,
-        child: Container(
-          constraints: BoxConstraints(minHeight: layout.rowHeight),
-          padding: const EdgeInsets.symmetric(
-            horizontal: WaxSpace.s8,
-            vertical: WaxSpace.s8,
-          ),
-          // The row is the child on its own wherever there is no
-          // position to draw, so a surface that never had one lays out
-          // exactly as it did: a Column around it would take the row's
-          // vertical centring in the min-height box away from every list
-          // in the app to serve the one that resumes.
-          child: data.progress == null
-              ? row
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    row,
-                    // The resume sliver: how far in this row is, drawn
-                    // under it rather than as a ring, because a list row
-                    // has width and no artwork corner to spare.
-                    Padding(
-                      padding: const EdgeInsets.only(top: WaxSpace.s4),
-                      child: ClipRRect(
-                        borderRadius: WaxRadius.chip,
-                        child: LinearProgressIndicator(
-                          value: data.progress!.clamp(0.0, 1.0),
-                          minHeight: 2,
-                          backgroundColor: colors.surface2,
-                          color: colors.accent,
+      // As on the card: suppression follows the rows that answer the
+      // gesture, and nothing else on the page loses the browser's menu.
+      child: WaxSecondaryTapRegion(
+        enabled: onMore != null,
+        child: InkWell(
+          onTap: onTap,
+          onSecondaryTap: onMore,
+          onLongPress: onMore ?? onLongPress,
+          child: Container(
+            constraints: BoxConstraints(minHeight: layout.rowHeight),
+            padding: const EdgeInsets.symmetric(
+              horizontal: WaxSpace.s8,
+              vertical: WaxSpace.s8,
+            ),
+            // The row is the child on its own wherever there is no
+            // position to draw, so a surface that never had one lays out
+            // exactly as it did: a Column around it would take the row's
+            // vertical centring in the min-height box away from every list
+            // in the app to serve the one that resumes.
+            child: data.progress == null
+                ? row
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      row,
+                      // The resume sliver: how far in this row is, drawn
+                      // under it rather than as a ring, because a list row
+                      // has width and no artwork corner to spare.
+                      Padding(
+                        padding: const EdgeInsets.only(top: WaxSpace.s4),
+                        child: ClipRRect(
+                          borderRadius: WaxRadius.chip,
+                          child: LinearProgressIndicator(
+                            value: data.progress!.clamp(0.0, 1.0),
+                            minHeight: 2,
+                            backgroundColor: colors.surface2,
+                            color: colors.accent,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );

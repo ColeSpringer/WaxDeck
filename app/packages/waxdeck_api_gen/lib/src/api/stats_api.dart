@@ -301,8 +301,8 @@ class StatsApi {
     );
   }
 
-  /// Top artists, albums, genres, or shows
-  /// The caller&#39;s most-listened entries of one kind over a range, ranked by listening time. &#x60;shows&#x60; covers podcasts; spoken-word listening dominates by raw time, so music kinds only count music sessions and &#x60;shows&#x60; only counts podcast sessions. 
+  /// Top artists, albums, genres, shows, or stations
+  /// The caller&#39;s most-listened entries of one kind over a range, ranked by listening time. &#x60;shows&#x60; covers podcasts and &#x60;stations&#x60; covers radio; spoken-word listening dominates by raw time, so music kinds only count music sessions, &#x60;shows&#x60; only counts podcast sessions, and &#x60;stations&#x60; only counts radio. 
   ///
   /// Parameters:
   /// * [kind] - Which top list.

@@ -31,6 +31,70 @@ here waits on upstream.
 ## Playback and apps
 
 
+- `[in-repo]` **Riverpod 3's automatic retry is unaudited across the
+  app.** A provider that throws anything which is not an `Error` is
+  re-run ten times over about thirteen seconds, and between attempts it
+  reports `AsyncLoading` carrying the previous error - so `.future`
+  does not settle until the backoff is exhausted. Right for a dropped
+  connection, wrong for a refusal, and sharp for the nine places that
+  `await` a provider's `.future` (`auth_controller`, `prefs_controller`,
+  `account_sections`, `autoplay_gate`, `home_shelves`,
+  `downloads_controller`, `add_to_library`, `diagnostics_screen`): each
+  hangs for the whole backoff where it used to throw at once. Two
+  providers already answer it locally and differently -
+  `album_detail.dart`'s private `_retryUnlessRefused` (4xx is final,
+  everything else keeps the default) and `trackWaveformProvider`'s flat
+  `retry: (_, _) => null` - which is the shape of the fix: promote the
+  predicate somewhere shared, then decide per provider whether a
+  failure is final. Recorded rather than swept because the decision is
+  per provider and there is no default that is right for all of them.
+  The rule for new code is in CLAUDE.md.
+
+- `[in-repo]` **Most content rows still have no menu to answer a
+  secondary tap with.** The right-click policy landed - the browser's
+  own menu is back everywhere the app has nothing of its own to show,
+  and `WaxSecondaryTapRegion` suppresses it only while the pointer is
+  over a surface that answers - but the surfaces that answer are the
+  ones that already had a menu: the four that pass `onMore` to
+  `MediaCard`/`ListRow`, the pinned shelf, the station tiles, and the
+  saved-radio rows. Album and playlist track rows, book, podcast and
+  playlist tiles, home's item and mix shelves, and the queue rows have
+  no per-row menu at all, so there was nothing to wire the gesture to -
+  and inventing one per surface is a design question rather than a
+  wiring change. Episode rows are a separate case: they spend their
+  long press on starting a multi-select, so a menu there has to decide
+  what the two gestures each mean first. Recorded because a reader of
+  the right-click fix will reasonably expect right-click to work on a
+  track row, and today it hands back the browser's menu.
+
+  A second gap in the same policy, narrower: `WaxSecondaryTapRegion` is
+  pointer-driven, and Flutter's mouse tracker raises enter and exit for
+  mouse and stylus only, so a touch never holds the browser menu off.
+  The window that matters is covered from the other side -
+  `waxWithoutBrowserMenu` holds it across the menu route, whatever
+  opened it - which leaves only the long press itself, before the menu
+  appears. On a canvas-drawn card no browser has much to offer there, so
+  this is recorded rather than fixed: closing it properly means raising
+  the hold on a touch pointer-down and releasing it on up, and a
+  `Listener` per row on every platform is a poor trade for a menu that
+  may never render.
+
+- `[in-repo]` **The command palette re-reads a track's waveform on every
+  open.** `trackWaveformProvider` is `autoDispose`, the palette is a
+  `showDialog` (so it unmounts on close), and `_visualizable` reads the
+  envelope above the needle filter to decide whether to offer the
+  visualizer - so with the player face unmounted the palette is the only
+  listener and each open pays for a fresh read. Nothing revalidates it:
+  the generated client sends no `If-None-Match` and dio carries no
+  cache, so this is a full re-download of the peaks rather than a 304,
+  and for the unanalyzed track the gate exists for the server answers
+  `Cache-Control: no-store` anyway. The obvious fix - a short
+  `ref.keepAlive()` grace on the family - was tried and backed out: a
+  kept-alive provider never reaches `onDispose`, so its timer outlives
+  the widget tree and fifteen widget tests fail on a pending timer.
+  Doing it properly means a cache link the test binding can retire, or
+  moving the gate off the envelope entirely.
+
 - `[in-repo]` **An NSP export's loss list is not pinned to the rule it
   was computed from.** The report is asked at one moment and
   `partial=true` is applied to whatever the rule is when the person taps
@@ -793,6 +857,15 @@ here waits on upstream.
   one-time sweep - rather than special-casing ALAC.
 
 ## Discovery and stats
+
+- `[in-repo]` **The per-media-type listening split is drawn by no client
+  surface.** `ListeningStats.byMediaType` and `YearInReview.byMediaType`
+  have always shipped and no screen reads either. Radio now has a slice
+  in both - it is the reason the field gained a value - so the wire is
+  answering a question nothing asks on screen. Recorded rather than
+  answered here because the fix is a chart nobody specified, and the
+  question of what the stats screen should show alongside the total is
+  a design one.
 
 - `[in-repo]` **The album pid is a seed and a share target the clients
   never send.** Both surfaces take one server-side and neither app offers

@@ -35,7 +35,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: "3.44.9"
+  FLUTTER_VERSION: "3.47.1"
   # inputs.pack_version is empty outside workflow_call, so pushes and
   # manual runs keep the run-numbered CI pre-release version.
   PACK_VERSION: ${{ inputs.pack_version || format('0.1.0-ci.{0}', github.run_number) }}

@@ -30,7 +30,7 @@ Builds:
       - apt-get update
       - apt-get install -y openjdk-21-jdk-headless
     srclibs:
-      - flutter@3.44.9
+      - flutter@3.47.1
     output: build/app/outputs/flutter-apk/app-release.apk
     scandelete:
       - .pub-cache

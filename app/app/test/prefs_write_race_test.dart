@@ -179,11 +179,9 @@ void main() {
       await container.read(prefsControllerProvider.future);
       await pending;
 
-      expect(
-        repo.prefs.radioFavorites,
-        <String>['rs-9'],
-        reason: "the previous account's write must not land here",
-      );
+      expect(repo.prefs.radioFavorites, <String>[
+        'rs-9',
+      ], reason: "the previous account's write must not land here");
       expect(
         repo.putPrefsCalls.where(
           (p) => p.radioFavorites?.contains('rs-2') ?? false,
@@ -243,11 +241,9 @@ void main() {
       container.invalidate(prefsControllerProvider);
 
       final loaded = await container.read(prefsControllerProvider.future);
-      expect(
-        loaded.radioFavorites,
-        <String>['rs-9'],
-        reason: 'the held document belongs to the account that stored it',
-      );
+      expect(loaded.radioFavorites, <String>[
+        'rs-9',
+      ], reason: 'the held document belongs to the account that stored it');
     },
   );
 }

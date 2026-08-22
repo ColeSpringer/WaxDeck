@@ -126,6 +126,23 @@ Future<void> _systemBack(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Whether a system back press reached the platform, which is what
+/// leaving the app looks like from inside a test: nothing in the app
+/// answered the press, so the binding asked the platform to pop.
+Future<bool> _systemBackLeftTheApp(WidgetTester tester) async {
+  var left = false;
+  final messenger = tester.binding.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+    if (call.method == 'SystemNavigator.pop') left = true;
+    return null;
+  });
+  addTearDown(
+    () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+  );
+  await _systemBack(tester);
+  return left;
+}
+
 String _location(ProviderContainer container) => container
     .read(routerProvider)
     .routerDelegate
@@ -671,17 +688,69 @@ void main() {
   testWidgets('back steps from a domain to home once, then leaves', (
     tester,
   ) async {
-    final container = await _pumpShell(tester, size: const Size(400, 800));
+    await _pumpShell(tester, size: const Size(400, 800));
 
     await _tapNav(tester, WaxNavTarget.radio.name);
     await _systemBack(tester);
     expect(find.byType(HomeScreen), findsOneWidget);
 
-    // Home's own root has nothing behind it, so the press falls through to
-    // the platform and the app closes.
+    // Home's own root has nothing behind it, so the press falls through
+    // to the platform and the app closes.
+    //
+    // Asserted through the platform channel rather than by calling the
+    // delegate, and that is the whole value of this line: the delegate
+    // never consults the back-button dispatcher, so it cannot see the
+    // shell's own handler at all. Driven that way, the step to Home
+    // above recorded itself as somewhere to come back to, the next
+    // press spent that record returning to Radio, and back alternated
+    // between two tabs forever without ever reaching the platform - and
+    // a test that skips the dispatcher passes throughout.
+    expect(await _systemBackLeftTheApp(tester), isTrue);
+  });
+
+  testWidgets('back returns to a tab that was tapped while already on it', (
+    tester,
+  ) async {
+    // Tapping the tab you are showing, at its root, navigates to where
+    // the router already is: nothing rebuilds, so nothing consumes the
+    // mark that tap left behind. Left set, it was spent on the *next*
+    // move instead - which then went unrecorded, and back skipped past
+    // the spot that move actually left.
+    final container = await _pumpShell(tester, size: const Size(400, 800));
+
+    await _tapNav(tester, WaxNavTarget.radio.name);
+    await _tapNav(tester, WaxNavTarget.radio.name);
+    expect(_location(container), WaxRoute.radio);
+
+    container.read(routerProvider).go(WaxRoute.search);
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchScreen), findsOneWidget);
+
+    await _systemBack(tester);
+    expect(find.byType(RadioScreen), findsOneWidget);
+    expect(_location(container), WaxRoute.radio);
+  });
+
+  testWidgets('back inside one branch keeps the query it left with', (
+    tester,
+  ) async {
+    // The shell is handed the matched path, which carries no query, so a
+    // step back inside a branch used to `go` to the bare location - and
+    // search is in the same branch as playlists, so returning to it
+    // landed on an empty screen with the results gone.
+    final container = await _pumpShell(tester, size: const Size(400, 800));
+    final router = container.read(routerProvider);
+
+    router.go('${WaxRoute.search}?${WaxRoute.searchParam}=jazz');
+    await tester.pumpAndSettle();
+    router.go(WaxRoute.playlists);
+    await tester.pumpAndSettle();
+
+    await _systemBack(tester);
+    expect(find.byType(SearchScreen), findsOneWidget);
     expect(
-      await container.read(routerProvider).routerDelegate.popRoute(),
-      isFalse,
+      _location(container),
+      '${WaxRoute.search}?${WaxRoute.searchParam}=jazz',
     );
   });
 
@@ -717,6 +786,89 @@ void main() {
 
     expect(find.byType(HomeScreen), findsOneWidget);
     expect(_location(container), WaxRoute.home);
+  });
+
+  group('leaving search', () {
+    testWidgets(
+      'goes back to the domain it was opened over, drill-in and all',
+      (tester) async {
+        // The whole point of recording a branch index rather than a
+        // location: the show is a pushed-under drill-in the branch's own
+        // navigator is still holding, and `goBranch` hands it back. A
+        // recorded location could only have rebuilt the hub.
+        final container = await _pumpShell(tester);
+        final router = container.read(routerProvider);
+
+        router.go(WaxRoute.show(_showPid));
+        await tester.pumpAndSettle();
+        expect(find.byType(ShowScreen), findsOneWidget);
+
+        router.go(WaxRoute.search);
+        await tester.pumpAndSettle();
+        expect(find.byType(SearchScreen), findsOneWidget);
+
+        await tester.tap(find.bySemanticsLabel('Back'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ShowScreen), findsOneWidget);
+        expect(_location(container), WaxRoute.show(_showPid));
+      },
+    );
+
+    testWidgets('uses the location for a hop inside the shared branch', (
+      tester,
+    ) async {
+      // Playlists and search share the last branch, so the index alone
+      // says nothing about which of them to go back to.
+      final container = await _pumpShell(tester);
+      final router = container.read(routerProvider);
+
+      router.go(WaxRoute.playlists);
+      await tester.pumpAndSettle();
+      router.go(WaxRoute.search);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Back'));
+      await tester.pumpAndSettle();
+
+      expect(_location(container), WaxRoute.playlists);
+      expect(find.byType(SearchScreen), findsNothing);
+    });
+
+    testWidgets('falls to home when the link went straight there', (
+      tester,
+    ) async {
+      final container = await _pumpShell(tester);
+
+      container.read(routerProvider).go(WaxRoute.search);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Back'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(_location(container), WaxRoute.home);
+    });
+
+    testWidgets('answers the system back the same way', (tester) async {
+      final container = await _pumpShell(tester, size: const Size(400, 800));
+      final router = container.read(routerProvider);
+
+      await _tapNav(tester, WaxNavTarget.radio.name);
+      router.go(WaxRoute.search);
+      await tester.pumpAndSettle();
+
+      await _systemBack(tester);
+
+      expect(find.byType(RadioScreen), findsOneWidget);
+      expect(_location(container), WaxRoute.radio);
+
+      // And the rung after it is the convention as it was: a domain tab
+      // steps to home once, then the press leaves the app.
+      await _systemBack(tester);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(await router.routerDelegate.popRoute(), isFalse);
+    });
   });
 
   group('the sidebar search field', () {

@@ -317,7 +317,7 @@ func (l *Library) TopListFor(ctx context.Context, uc *UserCtx, kind, rng string,
 		return TopList{}, errInvalid("unknown range " + rng)
 	}
 	switch kind {
-	case "artists", "albums", "genres", "shows":
+	case "artists", "albums", "genres", "shows", "stations":
 	default:
 		return TopList{}, errInvalid("unknown kind " + kind)
 	}
@@ -325,12 +325,15 @@ func (l *Library) TopListFor(ctx context.Context, uc *UserCtx, kind, rng string,
 	if d, ok := statsRanges[rng]; ok {
 		from = time.Now().Add(-d)
 	}
-	// Shows aggregate podcast sessions; the music kinds aggregate music
-	// sessions, so audiobook and spoken-word hours never drown a music
-	// top list.
+	// Shows aggregate podcast sessions and stations aggregate radio;
+	// the music kinds aggregate music sessions, so audiobook and
+	// spoken-word hours never drown a music top list.
 	wantMedia := "music"
-	if kind == "shows" {
+	switch kind {
+	case "shows":
 		wantMedia = "podcast"
+	case "stations":
+		wantMedia = "radio"
 	}
 	totals := map[string]*itemTotals{}
 	err := l.db.ListensInRange(ctx, uc.ID, from, time.Now().Add(time.Hour), func(r wdb.ListenRow) {
@@ -348,11 +351,69 @@ func (l *Library) TopListFor(ctx context.Context, uc *UserCtx, kind, rng string,
 	if err != nil {
 		return TopList{}, &Error{Kind: KindInternal, Err: err}
 	}
+	// Stations resolve from the station table rather than through
+	// `groupTotals`, whose whole path is the catalog: a station has no
+	// item view, no artist, and no album to group by, and its artwork
+	// comes from the logo proxy rather than from an item.
+	if kind == "stations" {
+		entries, err := l.stationTotals(ctx, totals, limit)
+		if err != nil {
+			return TopList{}, err
+		}
+		return TopList{Kind: kind, Range: rng, Entries: entries}, nil
+	}
 	entries, err := l.groupTotals(ctx, totals, kind, limit)
 	if err != nil {
 		return TopList{}, err
 	}
 	return TopList{Kind: kind, Range: rng, Entries: entries}, nil
+}
+
+// stationNames reads the station library once and maps bare id to name.
+//
+// One query rather than a lookup per row, the way [liveStationPIDs]
+// already reads this table: it is capped at five hundred shared rows, so
+// the whole of it costs less than the per-row form does on a page that
+// is mostly radio - and the per-row form ran before the ranking was
+// truncated, so most of what it fetched was discarded.
+//
+// Best effort. A read that failed leaves every station unnamed, which is
+// what a deleted one already looks like, rather than failing the page.
+func (l *Library) stationNames(ctx context.Context) map[string]string {
+	rows, err := l.db.ListRadioStations(ctx)
+	if err != nil {
+		l.log.Debug("reading stations for listening stats", "err", err)
+		return nil
+	}
+	names := make(map[string]string, len(rows))
+	for _, r := range rows {
+		names[r.ID] = r.Name
+	}
+	return names
+}
+
+// stationTotals ranks per-station totals, naming each from the station
+// library. A station that has since been deleted keeps its time under
+// its pid with no name, for the reason tracks do: time is never
+// silently dropped from a list that claims to total it. It keeps no art
+// handle, for the reason a deleted track keeps none - a cover URL for a
+// row nothing answers for is a 404 per entry, and the client draws its
+// own placeholder from the domain either way.
+func (l *Library) stationTotals(ctx context.Context, totals map[string]*itemTotals, limit int) ([]TopEntry, error) {
+	if len(totals) == 0 {
+		return nil, nil
+	}
+	names := l.stationNames(ctx)
+	entries := make([]TopEntry, 0, len(totals))
+	for pid, t := range totals {
+		station := apiPID(PrefixRadioStation, model.PID(pid))
+		e := TopEntry{PID: station, Plays: t.plays, Ms: t.ms}
+		if name, ok := names[pid]; ok {
+			e.Name, e.ArtItemPID = name, station
+		}
+		entries = append(entries, e)
+	}
+	return rankTopEntries(entries, limit), nil
 }
 
 // groupTotals resolves item metadata and folds per-item totals into
@@ -449,16 +510,33 @@ func (l *Library) groupTotals(ctx context.Context, totals map[string]*itemTotals
 	for _, g := range groups {
 		entries = append(entries, g.entry)
 	}
+	return rankTopEntries(entries, limit), nil
+}
+
+// rankTopEntries orders a top list and cuts it to limit.
+//
+// Ranking by listening time, name-ascending on a tie, and pid last so a
+// list is stable between two reads that measured the same thing. The pid
+// is what makes that true rather than nearly true: `sort.Slice` is not a
+// stable sort, and every entry whose item has left the catalog carries
+// the same empty name - so a tie between two of those decided on name
+// alone leaves their order to the sort, and `entries[:limit]` can answer
+// with a different set each time it is asked.
+func rankTopEntries(entries []TopEntry, limit int) []TopEntry {
 	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Ms != entries[j].Ms {
-			return entries[i].Ms > entries[j].Ms
+		a, b := entries[i], entries[j]
+		if a.Ms != b.Ms {
+			return a.Ms > b.Ms
 		}
-		return entries[i].Name < entries[j].Name
+		if a.Name != b.Name {
+			return a.Name < b.Name
+		}
+		return a.PID < b.PID
 	})
 	if len(entries) > limit {
 		entries = entries[:limit]
 	}
-	return entries, nil
+	return entries
 }
 
 // ListenLog pages the caller's session log newest first.
@@ -477,11 +555,27 @@ func (l *Library) ListenLog(ctx context.Context, uc *UserCtx, client, cursor str
 	}
 	pids := make([]model.PID, 0, len(rows))
 	seen := map[string]bool{}
+	anyRadio := false
 	for _, r := range rows {
-		if !seen[r.ItemPID] {
-			seen[r.ItemPID] = true
-			pids = append(pids, model.PID(r.ItemPID))
+		// A station is not in the catalog, so asking the item store for
+		// one would be a miss the log then renders as a nameless row.
+		// The station library is what answers for it.
+		if r.MediaType == "radio" {
+			anyRadio = true
+			continue
 		}
+		if seen[r.ItemPID] {
+			continue
+		}
+		seen[r.ItemPID] = true
+		pids = append(pids, model.PID(r.ItemPID))
+	}
+	// Read whole, once, and only for a page that holds a radio row: the
+	// non-radio pids beside it are already one GetMany rather than a
+	// query each, and this table is small and capped.
+	var stationNames map[string]string
+	if anyRadio {
+		stationNames = l.stationNames(ctx)
 	}
 	byPID := map[string]*model.ItemView{}
 	if len(pids) > 0 {
@@ -505,6 +599,14 @@ func (l *Library) ListenLog(ctx context.Context, uc *UserCtx, client, cursor str
 			Client:    r.Client,
 			Source:    r.Source,
 		}
+		// Keyed by bare id in a map that now holds every station rather
+		// than only this page's, so the media type is what says the
+		// lookup applies at all.
+		if r.MediaType == "radio" {
+			if name, ok := stationNames[r.ItemPID]; ok {
+				e.Title = name
+			}
+		}
 		if v := byPID[r.ItemPID]; v != nil {
 			e.Title, e.Artist = v.Title, v.Artist
 			e.PID = itemAPIPID(v)
@@ -526,6 +628,11 @@ func prefixForMediaType(mt string) string {
 		return PrefixEpisode
 	case "audiobook":
 		return PrefixBook
+	case "radio":
+		// Not an item prefix at all: a station is addressable but is
+		// not in the catalog, so nothing downstream may try to resolve
+		// this through the item store.
+		return PrefixRadioStation
 	default:
 		return PrefixTrack
 	}
@@ -587,7 +694,12 @@ func (l *Library) UserYearInReview(ctx context.Context, uc *UserCtx, year int) (
 		out.TotalMs += r.MsPlayed
 		out.Sessions++
 		out.TimeSavedMs += r.SkippedMs
-		distinct[r.ItemPID] = true
+		// A station is not an item, so it counts toward the time and
+		// toward its own media slice but never toward "how many
+		// different things did you listen to".
+		if r.MediaType != "radio" {
+			distinct[r.ItemPID] = true
+		}
 		days[dayNumber(local)] = true
 		months[local.Month()-1].Ms += r.MsPlayed
 		months[local.Month()-1].Sessions++
@@ -721,6 +833,12 @@ func (l *Library) ServerWideYearInReview(ctx context.Context, year int) (ServerY
 		if r.StartedAt.In(m.loc).Year() != year {
 			return
 		}
+		// Deliberately before the media-type check, and radio now lands
+		// here: the server-wide recap counts listening time, and a
+		// listener whose year was radio has listened. It follows that
+		// radio-only accounts start appearing in the participant count,
+		// which is the intended reading rather than a side effect to be
+		// discovered later.
 		participants[r.UserID] = true
 		out.TotalMs += r.MsPlayed
 		out.Sessions++

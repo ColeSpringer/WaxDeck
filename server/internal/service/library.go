@@ -4,6 +4,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -91,6 +92,11 @@ type Config struct {
 	// the last metadata block of any kind. Zero means the default of two
 	// minutes; tests set it short to cross the bound without waiting.
 	RadioTitleFreshFor time.Duration
+	// RadioListenMinListen is how long a tune-in must run before it is
+	// recorded as listening. Zero means the default of
+	// [RadioListenMinListen]; tests set it short to cross the bound
+	// without waiting half a minute per relay.
+	RadioListenMinListen time.Duration
 	// AllowPrivateScrobbleHosts disables the private-address guard on
 	// caller-supplied ListenBrainz API bases, for self-hosted LAN
 	// instances (Maloja and friends).
@@ -382,20 +388,22 @@ type Library struct {
 	// lookup) still runs under the recover boundary every WaxDeck
 	// goroutine goes through. Nothing here may spawn a bare one.
 	workers *supervise.Group
+	// radioListenFloor mirrors Config.RadioListenMinListen, resolved.
+	radioListenFloor time.Duration
 	// radioArtResolver mirrors Config.RadioArtResolver, and
 	// radioArtCache holds what it has answered.
 	radioArtResolver RadioArtResolver
 	radioArtCache    radioArt
-	// radioScrobbles hands a finished radio segment from the goroutine
-	// relaying that listener's audio to the writer Open starts, which is
-	// the only one of the three service calls in the relay loop that
-	// touches SQLite.
-	radioScrobbles chan radioSegmentPlay
-	// radioScrobbleWritten, when set, is called after each queued
-	// segment has been written, so a test can wait for the writer
+	// radioWrites hands radio bookkeeping from the goroutine relaying a
+	// listener's audio to the writer Open starts. Everything the relay
+	// loop does that touches SQLite goes through here, and nothing else
+	// in that loop does.
+	radioWrites chan radioWrite
+	// radioWriteDone, when set, is called after each queued piece of
+	// bookkeeping has been written, so a test can wait for the writer
 	// instead of sleeping; nothing in the server sets it. Atomic because
 	// the writer is already running by the time a test can install one.
-	radioScrobbleWritten atomic.Pointer[func()]
+	radioWriteDone atomic.Pointer[func()]
 	// podping holds the feed-URL index a chain notification resolves
 	// against, and the per-show floor between two podping-driven syncs.
 	podping podpingIndex
@@ -508,7 +516,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		catalogWake:              make(chan struct{}, 1),
 		userWake:                 make(chan string, 64),
 		matchWake:                make(chan struct{}, 1),
-		radioScrobbles:           make(chan radioSegmentPlay, radioScrobbleQueue),
+		radioWrites:              make(chan radioWrite, radioWriteQueue),
 		sealer:                   cfg.Sealer,
 		podcastDir:               cfg.PodcastDir,
 		podcastRootName:          cfg.PodcastRootName,
@@ -516,6 +524,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		retentionInUseWindow:     cfg.RetentionInUseWindow,
 		allowPrivateFeedHosts:    cfg.AllowPrivateFeedHosts,
 		allowPrivateRadioHosts:   cfg.AllowPrivateRadioHosts,
+		radioListenFloor:         cmp.Or(cfg.RadioListenMinListen, RadioListenMinListen),
 		radioTitleFresh:          cfg.RadioTitleFreshFor,
 		radioDirectoryBase:       cfg.RadioDirectoryBase,
 		radioDirectoryMirrorList: cfg.RadioDirectoryMirrors,
@@ -613,11 +622,12 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// the event hub's invalidation fan-out.
 	group.Go(ctx, "catalog-feed", l.runCatalogFeed)
 
-	// The radio scrobble writer. Started here rather than on the first
-	// segment a listener produces: spawning it from a request goroutine
-	// would add to the group's wait counter while shutdown may already
-	// be waiting on it, which is a panic rather than a late worker.
-	group.Go(ctx, "radio-scrobble", l.writeRadioScrobbles)
+	// The radio bookkeeping writer. Started here rather than on the
+	// first segment a listener produces: spawning it from a request
+	// goroutine would add to the group's wait counter while shutdown may
+	// already be waiting on it, which is a panic rather than a late
+	// worker.
+	group.Go(ctx, "radio-writes", l.writeRadioBookkeeping)
 
 	// A waxbin upgrade can change the sort-key fold, and no scan rewrites
 	// an existing key, so every boot sweeps the stale ones; rewritten rows
@@ -654,6 +664,13 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 // Close releases the catalog (flushing playback state) and the path
 // cache.
 func (l *Library) Close() error {
+	// The radio queue's last word, and this is the only place it can be
+	// had. A tune-in writes its closing checkpoint as the relay unwinds,
+	// which happens when requests are cancelled - after the signal that
+	// stopped the writer, and after the wait that would otherwise be the
+	// obvious place to flush. Close runs behind both, so by here nothing
+	// can be relaying and nothing more can arrive.
+	l.drainRadioWrites()
 	if err := l.paths.Close(); err != nil {
 		l.log.Warn("closing pid path cache", "err", err)
 	}

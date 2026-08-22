@@ -8,7 +8,7 @@ part of 'media_type_listening.dart';
 
 class _$MediaTypeListening extends MediaTypeListening {
   @override
-  final MediaType mediaType;
+  final StatsMediaType mediaType;
   @override
   final int ms;
   @override
@@ -65,9 +65,9 @@ class MediaTypeListeningBuilder
     implements Builder<MediaTypeListening, MediaTypeListeningBuilder> {
   _$MediaTypeListening? _$v;
 
-  MediaType? _mediaType;
-  MediaType? get mediaType => _$this._mediaType;
-  set mediaType(MediaType? mediaType) => _$this._mediaType = mediaType;
+  StatsMediaType? _mediaType;
+  StatsMediaType? get mediaType => _$this._mediaType;
+  set mediaType(StatsMediaType? mediaType) => _$this._mediaType = mediaType;
 
   int? _ms;
   int? get ms => _$this._ms;

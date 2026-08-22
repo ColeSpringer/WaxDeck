@@ -321,6 +321,83 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    testWidgets('an unmeasured track gets the row greyed with a reason', (
+      tester,
+    ) async {
+      // `pending` is what a server whose analyze pass has never run says
+      // about every track, so this is the common case rather than the
+      // exotic one. Shown and disabled rather than hidden: a row that
+      // vanished would say nothing about why.
+      _phone(tester);
+      final repo = FakeRepository();
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: testItem(_pid),
+        host: (player) => routedHost(player),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerMore));
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.playerVisualizer),
+        findsOneWidget,
+      );
+      expect(
+        find.text('This track has not been analyzed yet.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playerVisualizer),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(VisualizerScreen), findsNothing);
+
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a read that never landed leaves the row alone', (
+      tester,
+    ) async {
+      // Greying a control out because a connection dropped takes away
+      // something that would have worked, so a refusal is not an absence.
+      _phone(tester);
+      final repo = FakeRepository()
+        ..waveformError = const WaxDeckApiException(
+          code: 'catalog-maintenance',
+          message: 'the catalog is being rebuilt',
+          statusCode: 503,
+        );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: testItem(_pid),
+        host: (player) => routedHost(player),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerMore));
+      await tester.pumpAndSettle();
+      expect(find.text('This track has not been analyzed yet.'), findsNothing);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playerVisualizer),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(VisualizerScreen), findsOneWidget);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.visualizerClose),
+      );
+      await tester.pumpAndSettle();
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('the menu row opens the visualizer over the player', (
       tester,
     ) async {

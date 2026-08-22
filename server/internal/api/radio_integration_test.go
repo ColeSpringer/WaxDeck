@@ -136,6 +136,95 @@ func TestRadioStationCrud(t *testing.T) {
 	resp.Body.Close()
 }
 
+// The relay is where radio listening is measured: nothing on the other
+// end of the socket knows it is playing something stats can name, so the
+// row is written here or nowhere.
+func TestRadioRelayRecordsTheListen(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+		// The real floor is half a minute of listening, which is not a
+		// thing to wait for per relay.
+		cfg.RadioListenMinListen = time.Millisecond
+	})
+
+	// Sent in two halves with a pause between them, so the relay lasts
+	// long enough to measure: a station that answers in one write is
+	// over inside a millisecond and would record a listen of zero.
+	payload := bytes.Repeat([]byte("waxdeck-radio-bytes."), 512)
+	station := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.Write(payload[:len(payload)/2])
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(30 * time.Millisecond)
+		w.Write(payload[len(payload)/2:])
+	}))
+	t.Cleanup(station.Close)
+
+	resp := h.postJSON(t, "/api/v1/radio/stations", map[string]any{
+		"name": "Measured FM", "streamUrl": station.URL + "/stream",
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	st := decode[RadioStation](t, resp)
+
+	resp = get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/play-info", h.token)
+	pi := decode[RadioPlayInfo](t, resp)
+	streamResp, err := http.Get(h.ts.URL + pi.Url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, streamResp.Body)
+	streamResp.Body.Close()
+
+	// The close checkpoint is a queued write on a supervised worker, so
+	// the row appears shortly after the body ends rather than with it.
+	var top TopList
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		resp = get(t, h.ts, "/api/v1/stats/top?kind=stations&range=30d", h.token)
+		if resp.StatusCode != 200 {
+			t.Fatalf("top stations status = %d", resp.StatusCode)
+		}
+		top = decode[TopList](t, resp)
+		if len(top.Entries) > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(top.Entries) != 1 {
+		t.Fatalf("a relayed stream left no listen: %+v", top.Entries)
+	}
+	e := top.Entries[0]
+	if e.Name != "Measured FM" || e.Pid == nil || *e.Pid != st.Pid {
+		t.Fatalf("top station entry: %+v", e)
+	}
+	// The station's picture comes from the logo proxy; the item art
+	// route would answer 404 for every entry in this list.
+	if e.ArtUrl == nil || *e.ArtUrl != "/api/v1/radio/stations/"+st.Pid+"/logo" {
+		t.Fatalf("top station artUrl: %+v", e.ArtUrl)
+	}
+
+	// And the same listen is in the totals, under its own media type.
+	resp = get(t, h.ts, "/api/v1/stats/listening?range=30d", h.token)
+	stats := decode[ListeningStats](t, resp)
+	if stats.TotalMs < 20 || stats.Sessions != 1 {
+		t.Fatalf("radio is missing from the totals: %+v", stats)
+	}
+	found := false
+	for _, m := range stats.ByMediaType {
+		if m.MediaType == StatsMediaTypeRadio {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no radio slice: %+v", stats.ByMediaType)
+	}
+}
+
 func TestRadioPlayInfoAndProxy(t *testing.T) {
 	t.Parallel()
 	// The proxy's guarded client refuses loopback by default, so the

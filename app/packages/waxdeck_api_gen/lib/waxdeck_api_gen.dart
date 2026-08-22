@@ -319,6 +319,7 @@ export 'package:waxdeck_api_gen/src/model/sonic_path.dart';
 export 'package:waxdeck_api_gen/src/model/soundbite.dart';
 export 'package:waxdeck_api_gen/src/model/star_update.dart';
 export 'package:waxdeck_api_gen/src/model/starred_entities.dart';
+export 'package:waxdeck_api_gen/src/model/stats_media_type.dart';
 export 'package:waxdeck_api_gen/src/model/subscribe_request.dart';
 export 'package:waxdeck_api_gen/src/model/subscription.dart';
 export 'package:waxdeck_api_gen/src/model/subscription_page.dart';

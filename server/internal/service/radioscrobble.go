@@ -21,16 +21,36 @@ import (
 // before its transition scrobbles it; the proxy applies it.
 const RadioScrobbleMinListen = 30 * time.Second
 
-// radioScrobbleQueue is how many finished segments may be waiting on
-// the writer before new ones are dropped. One listener produces a
-// segment every few minutes, so only a writer that has stopped moving
-// reaches the end of this.
-const radioScrobbleQueue = 64
+// radioWriteQueue is how much radio bookkeeping may be waiting on the
+// writer before new work is dropped. One listener produces a scrobble
+// every few minutes and a checkpoint every minute, so only a writer
+// that has stopped moving reaches the end of this.
+const radioWriteQueue = 64
 
-// radioScrobbleDrain bounds the shutdown drain. Well inside the ten
+// radioWriteDrain bounds the shutdown drain. Well inside the ten
 // seconds the process gives itself, because a queue this deep is a
 // handful of small writes and the rest of the drain is waiting on it.
-const radioScrobbleDrain = 3 * time.Second
+const radioWriteDrain = 3 * time.Second
+
+// radioWrite is one piece of radio bookkeeping on its way to the
+// writer.
+//
+// One channel carries two payloads, and they do not have the same
+// tolerance for being dropped - which is worth stating rather than
+// leaving to be discovered. Dropping a scrobble on a full buffer is
+// right: it is best-effort by design, and the audio is not. Dropping a
+// checkpoint is survivable for a narrower reason - [radioListenPoint]
+// carries the elapsed total rather than a delta, so the next tick
+// supersedes whatever was lost and the row lands short at worst. A
+// delta-carrying payload could not share this queue.
+type radioWrite interface {
+	// writeTo does the bookkeeping. On the Library rather than the
+	// payload so both stay small structs on the channel.
+	writeTo(ctx context.Context, l *Library)
+	// kind names the payload for the drop warning, so an operator can
+	// tell a best-effort loss from an unrecoverable one.
+	kind() string
+}
 
 // radioSegmentPlay is one finished segment on its way to the writer.
 type radioSegmentPlay struct {
@@ -39,6 +59,12 @@ type radioSegmentPlay struct {
 	rawTitle   string
 	startedAt  time.Time
 }
+
+func (p radioSegmentPlay) writeTo(ctx context.Context, l *Library) {
+	l.writeRadioScrobble(ctx, p)
+}
+
+func (radioSegmentPlay) kind() string { return "scrobble" }
 
 // ScrobbleRadioPlay queues a finished radio segment to every scrobble
 // connection the listener holds. rawTitle is the ICY StreamTitle the
@@ -55,74 +81,93 @@ type radioSegmentPlay struct {
 // instant the last segment is reported; the writer runs on the process
 // context instead.
 func (l *Library) ScrobbleRadioPlay(_ context.Context, userID, apiStationPID, rawTitle string, startedAt time.Time) {
-	select {
-	case l.radioScrobbles <- radioSegmentPlay{
+	l.queueRadioWrite(radioSegmentPlay{
 		userID:     userID,
 		stationPID: apiStationPID,
 		rawTitle:   rawTitle,
 		startedAt:  startedAt,
-	}:
+	}, apiStationPID)
+}
+
+// queueRadioWrite hands one piece of bookkeeping to the writer without
+// blocking. See [radioWrite] for why a full buffer drops rather than
+// waits, and for what that costs each payload.
+//
+// The warning names what was lost, because the two payloads do not cost
+// the same: a dropped scrobble is one missing play on a third-party
+// profile, and a dropped closing checkpoint is listening time that no
+// later tick will restate.
+func (l *Library) queueRadioWrite(w radioWrite, apiStationPID string) {
+	select {
+	case l.radioWrites <- w:
 	default:
-		l.log.Warn("dropping radio scrobble; the writer is behind", "station", apiStationPID)
+		l.log.Warn("dropping radio bookkeeping; the writer is behind",
+			"kind", w.kind(), "station", apiStationPID)
 	}
 }
 
-// writeRadioScrobbles is the queue's one drainer, started by Open and
+// writeRadioBookkeeping is the queue's one drainer, started by Open and
 // ending with the process.
-func (l *Library) writeRadioScrobbles(ctx context.Context) error {
+func (l *Library) writeRadioBookkeeping(ctx context.Context) error {
 	for {
 		select {
-		case play := <-l.radioScrobbles:
+		case play := <-l.radioWrites:
 			// Both cases go ready together at shutdown and select picks
 			// between them at random, so a segment reaches here with the
 			// context already cancelled about half the time - and every
 			// read the write makes would fail on it. Carried into the
 			// drain instead, which has a context of its own.
 			if ctx.Err() != nil {
-				l.drainRadioScrobbles(play)
+				l.drainRadioWrites(play)
 				return nil
 			}
-			l.writeRadioScrobble(ctx, play)
-			l.noteRadioScrobbleWritten()
+			play.writeTo(ctx, l)
+			l.noteRadioWriteDone()
 		case <-ctx.Done():
-			// Leaving here is leaving whatever is still queued behind -
-			// listens that were synchronous writes before the queue
-			// existed.
-			l.drainRadioScrobbles()
+			// What is queued right now, and then [Library.Close] takes
+			// the rest. This runs on the signal context, which is the
+			// one the listeners' relays have *not* unwound from yet:
+			// the process cancels requests and drains the HTTP server
+			// after this returns, so every open tune-in's closing
+			// checkpoint is still to come.
+			l.drainRadioWrites()
 			return nil
 		}
 	}
 }
 
-// drainRadioScrobbles writes held, then what is already queued, on a
+// drainRadioWrites writes held, then what is already queued, on a
 // context of its own: the one the writer runs on is the one that just
 // ended, and handing it to the store would fail every read on the way
 // out.
 //
-// What is in the buffer now and no more. The relays are unwinding as
-// this runs, and a segment only scrobbles when its ending transition is
-// heard, so a disconnecting listener adds nothing here.
-func (l *Library) drainRadioScrobbles(held ...radioSegmentPlay) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(l.procCtx), radioScrobbleDrain)
+// What is in the buffer now and no more, so it is called twice at
+// shutdown. A disconnecting listener adds nothing to the scrobble half
+// - a segment only scrobbles when its ending transition is heard - but
+// it adds exactly one closing checkpoint, and the relay that sends it
+// is still running when the writer stops. [Library.Close] is the second
+// call, once nothing can be relaying any more.
+func (l *Library) drainRadioWrites(held ...radioWrite) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(l.procCtx), radioWriteDrain)
 	defer cancel()
 	for _, play := range held {
-		l.writeRadioScrobble(ctx, play)
-		l.noteRadioScrobbleWritten()
+		play.writeTo(ctx, l)
+		l.noteRadioWriteDone()
 	}
 	for {
 		select {
-		case play := <-l.radioScrobbles:
-			l.writeRadioScrobble(ctx, play)
-			l.noteRadioScrobbleWritten()
+		case play := <-l.radioWrites:
+			play.writeTo(ctx, l)
+			l.noteRadioWriteDone()
 		default:
 			return
 		}
 	}
 }
 
-// noteRadioScrobbleWritten fires the test hook if one is installed.
-func (l *Library) noteRadioScrobbleWritten() {
-	if hook := l.radioScrobbleWritten.Load(); hook != nil {
+// noteRadioWriteDone fires the test hook if one is installed.
+func (l *Library) noteRadioWriteDone() {
+	if hook := l.radioWriteDone.Load(); hook != nil {
 		(*hook)()
 	}
 }

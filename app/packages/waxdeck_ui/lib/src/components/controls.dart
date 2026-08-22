@@ -10,6 +10,7 @@ import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
+import 'secondary_tap.dart';
 import '../tokens/typography.dart';
 import '../theme/wax_layout.dart';
 
@@ -1313,6 +1314,7 @@ class WaxMenuItem<T> {
     this.selected = false,
     this.destructive = false,
     this.enabled = true,
+    this.help,
     this.semanticsId,
   });
 
@@ -1321,6 +1323,15 @@ class WaxMenuItem<T> {
 
   final String label;
   final WaxGlyph? glyph;
+
+  /// A dimmer second line under the label, for a row whose state needs a
+  /// sentence - most often why it is disabled.
+  ///
+  /// A line rather than a [Tooltip]: a tooltip on a disabled row never
+  /// appears on touch at all, and the reason has to be readable on a
+  /// phone. It is folded into the row's own accessible name for the same
+  /// reason - the name and the reason are one thing to hear.
+  final String? help;
 
   /// Drawn checked, for the rows that are a standing choice (a sort
   /// order) rather than a verb.
@@ -1334,6 +1345,132 @@ class WaxMenuItem<T> {
   /// This row's own handle. A menu row is a control, so it gets one of
   /// its own rather than being found by its text.
   final String? semanticsId;
+}
+
+/// A menu row's ink: [on] normally, and the disabled tone for a row that
+/// is showing but cannot be chosen.
+///
+/// The rows set their colours explicitly, so `PopupMenuItem`'s own
+/// disabled styling - which works through the inherited text style -
+/// never reaches them, and a disabled row would otherwise look exactly
+/// like one that works.
+Color _menuInk<T>(WaxColors colors, WaxMenuItem<T> item, {required Color on}) {
+  if (!item.enabled) return colors.textDisabled;
+  return item.destructive ? colors.error : on;
+}
+
+/// Opens [items] as a popup menu anchored under [context]'s own box,
+/// and answers what was chosen.
+///
+/// Shared with [WaxMenuButton] rather than living inside it, so a
+/// surface that answers a secondary tap can raise the same menu its
+/// overflow button raises instead of assembling a second one.
+Future<T?> showWaxMenu<T>(
+  BuildContext context,
+  List<WaxMenuItem<T>> items, {
+  String? emptyLabel,
+}) async {
+  final colors = WaxColors.of(context);
+  final trigger = context.findRenderObject()! as RenderBox;
+  final overlay =
+      Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+  final origin = trigger.localToGlobal(Offset.zero, ancestor: overlay);
+  // Held across the whole route, not just while the pointer rests on the
+  // trigger: the menu's own modal barrier takes the pointer away from
+  // whatever was suppressing the browser's, so without this the browser
+  // menu comes back the instant WaxDeck's own appears.
+  final chosen = await waxWithoutBrowserMenu(
+    () => showMenu<T>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        origin.dx,
+        origin.dy + trigger.size.height,
+        overlay.size.width - origin.dx - trigger.size.width,
+        overlay.size.height - origin.dy,
+      ),
+      items: <PopupMenuEntry<T>>[
+        if (items.isEmpty && emptyLabel != null)
+          PopupMenuItem<T>(
+            enabled: false,
+            child: Text(
+              emptyLabel,
+              style: WaxType.body.copyWith(color: colors.textTertiary),
+            ),
+          ),
+        for (final item in items)
+          PopupMenuItem<T>(
+            value: item.value,
+            enabled: item.enabled,
+            // A help line makes the row two lines tall, and a popup row
+            // states its own height or clips.
+            height: item.help == null
+                ? kMinInteractiveDimension
+                : kMinInteractiveDimension + WaxSpace.s16,
+            child: Semantics(
+              identifier: item.semanticsId,
+              selected: item.selected,
+              enabled: item.enabled,
+              // The reason reads with the name rather than as a node
+              // after it, so the text below is excluded when it is the
+              // container speaking for both.
+              label: item.help == null ? null : '${item.label}. ${item.help}',
+              child: ExcludeSemantics(
+                excluding: item.help != null,
+                child: Row(
+                  children: <Widget>[
+                    if (item.glyph != null) ...<Widget>[
+                      WaxIcon(
+                        item.glyph!,
+                        size: 16,
+                        color: _menuInk(colors, item, on: colors.textSecondary),
+                      ),
+                      const SizedBox(width: WaxSpace.s12),
+                    ],
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            item.label,
+                            style: WaxType.body.copyWith(
+                              color: _menuInk(
+                                colors,
+                                item,
+                                on: colors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          if (item.help != null)
+                            Text(
+                              item.help!,
+                              style: WaxType.caption.copyWith(
+                                color: item.enabled
+                                    ? colors.textTertiary
+                                    : colors.textDisabled,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (item.selected)
+                      WaxIcon(
+                        WaxIcons.check,
+                        size: 16,
+                        // Greyed with the rest of the row. A full-strength
+                        // accent tick on a disabled row reads as the one
+                        // live thing in it.
+                        color: _menuInk(colors, item, on: colors.accent),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+  return chosen;
 }
 
 /// An overflow menu behind one icon button.
@@ -1380,65 +1517,7 @@ class WaxMenuButton<T> extends StatelessWidget {
   final String? emptyLabel;
 
   Future<void> _open(BuildContext context) async {
-    final colors = WaxColors.of(context);
-    final trigger = context.findRenderObject()! as RenderBox;
-    final overlay =
-        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-    final origin = trigger.localToGlobal(Offset.zero, ancestor: overlay);
-    final chosen = await showMenu<T>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        origin.dx,
-        origin.dy + trigger.size.height,
-        overlay.size.width - origin.dx - trigger.size.width,
-        overlay.size.height - origin.dy,
-      ),
-      items: <PopupMenuEntry<T>>[
-        if (items.isEmpty && emptyLabel != null)
-          PopupMenuItem<T>(
-            enabled: false,
-            child: Text(
-              emptyLabel!,
-              style: WaxType.body.copyWith(color: colors.textTertiary),
-            ),
-          ),
-        for (final item in items)
-          PopupMenuItem<T>(
-            value: item.value,
-            enabled: item.enabled,
-            child: Semantics(
-              identifier: item.semanticsId,
-              selected: item.selected,
-              child: Row(
-                children: <Widget>[
-                  if (item.glyph != null) ...<Widget>[
-                    WaxIcon(
-                      item.glyph!,
-                      size: 16,
-                      color: item.destructive
-                          ? colors.error
-                          : colors.textSecondary,
-                    ),
-                    const SizedBox(width: WaxSpace.s12),
-                  ],
-                  Expanded(
-                    child: Text(
-                      item.label,
-                      style: WaxType.body.copyWith(
-                        color: item.destructive
-                            ? colors.error
-                            : colors.textPrimary,
-                      ),
-                    ),
-                  ),
-                  if (item.selected)
-                    WaxIcon(WaxIcons.check, size: 16, color: colors.accent),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
+    final chosen = await showWaxMenu<T>(context, items, emptyLabel: emptyLabel);
     if (chosen != null) onSelected(chosen);
   }
 

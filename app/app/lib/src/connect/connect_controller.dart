@@ -261,19 +261,30 @@ class ConnectEndpointController {
           mirrorSessionId = sessionId != null && sessionId.isNotEmpty
               ? sessionId
               : null;
+        // The three transport verbs go through the gateway rather than
+        // at the engine, which is what the gateway is for and what the
+        // media session already does. Straight at the engine, `play`
+        // could not restart a queue whose start failed - the case
+        // `QueueGateway.play` was written for - and neither `pause` nor
+        // `stop` let go of a tuned station, so a routed stop during
+        // live radio left the face and the deck bar naming a station
+        // nothing was playing.
         case 'play':
-          await engine.play();
+          if (!await queue.play()) throw _nothingToPlay();
         case 'pause':
-          await engine.pause();
+          await queue.pause();
         case 'stop':
           queue.clear();
-          // The engine is silenced here rather than left to the
-          // session's teardown, which flushes a checkpoint and a listen
-          // report before it gets there: on a slow link that is two
-          // round trips of audio after the sender was told it stopped.
-          // The queue verb runs first, because the checkpoint it takes
-          // reads the engine's position and a stopped engine has none.
-          await engine.stop();
+          // Both, and in this order. `clear` first because the
+          // checkpoint it takes reads the engine's live position and a
+          // stopped engine has none; `stop` after it because
+          // `QueueGateway.stop` deliberately leaves the queue standing,
+          // and a routed stop means the end of both. The engine is
+          // silenced here rather than left to the session's teardown,
+          // which flushes a checkpoint and a listen report before it
+          // gets there: on a slow link that is two round trips of audio
+          // after the sender was told it stopped.
+          await queue.stop();
         case 'next':
           if (!await queue.next()) throw _nowhereToGo(forward: true);
         case 'previous':
@@ -329,6 +340,16 @@ class ConnectEndpointController {
   /// verbatim on whoever asked: an end of the queue is one thing, and
   /// no local playback at all (an empty queue, or live radio holding
   /// the engine) is another.
+  /// A play with nothing behind it, which is what a play after a pause
+  /// during live radio is: the pause let the station go, and there is
+  /// no session and no queue to fall back on. Refused rather than
+  /// answered `ok`, so the sender sees a button that did nothing as a
+  /// button that did nothing.
+  _Refused _nothingToPlay() => const _Refused(
+    'invalid-request',
+    'there is nothing to play on this device',
+  );
+
   _Refused _nowhereToGo({required bool forward}) {
     if (queue.snapshot() == null) {
       // These go out over the socket to whoever sent the command, so

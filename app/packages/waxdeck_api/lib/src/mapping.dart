@@ -32,6 +32,17 @@ MediaType mediaTypeFromGen(gen.MediaType type) {
 gen.MediaType mediaTypeToGen(MediaType type) =>
     gen.MediaType.valueOf(type.wireName);
 
+/// The listening record's own media type, which carries `radio` where
+/// [MediaType] carries only the item kinds. Unknown falls to `music`,
+/// as the item mapping does: a value this build has not heard of is a
+/// newer server, not a reason to fail a page of stats.
+StatsMediaType statsMediaTypeFromGen(gen.StatsMediaType type) {
+  return StatsMediaType.values.firstWhere(
+    (m) => m.wireName == type.name,
+    orElse: () => StatsMediaType.music,
+  );
+}
+
 gen.DiscoveryList discoveryListToGen(DiscoveryList list) {
   return switch (list) {
     DiscoveryList.newest => gen.DiscoveryList.newest,
@@ -2203,7 +2214,7 @@ ListeningBucket listeningBucketFromGen(gen.ListeningBucket bucket) {
 
 MediaTypeListening mediaTypeListeningFromGen(gen.MediaTypeListening m) {
   return MediaTypeListening(
-    mediaType: mediaTypeFromGen(m.mediaType),
+    mediaType: statsMediaTypeFromGen(m.mediaType),
     ms: m.ms,
     sessions: m.sessions,
   );
@@ -2268,7 +2279,7 @@ ListenLogEntry listenLogEntryFromGen(gen.ListenLogEntry entry) {
     pid: entry.pid,
     title: entry.title,
     artist: entry.artist,
-    mediaType: mediaTypeFromGen(entry.mediaType),
+    mediaType: statsMediaTypeFromGen(entry.mediaType),
     startedAt: entry.startedAt.toUtc(),
     msPlayed: entry.msPlayed,
     skippedMs: entry.skippedMs,

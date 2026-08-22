@@ -44,6 +44,39 @@ func (d *DB) InsertListen(ctx context.Context, s ListenSession) (inserted bool, 
 	return n > 0, nil
 }
 
+// UpsertRadioListen records - or extends - one radio tune-in.
+//
+// Insert-or-update on (user_id, session_id) rather than the plain
+// insert a client-reported session gets, because the two are written
+// at different moments. A client reports a listen once, when it is
+// over; the stream proxy is holding the connection while it happens
+// and has no way to know how long it will last, so it checkpoints as
+// it goes. Every checkpoint carries the elapsed total rather than a
+// delta, which is what makes a dropped one survivable: the next one
+// supersedes it, and a server that restarts mid-listen leaves a row
+// short rather than leaving no row at all.
+//
+// ItemPID carries the station's bare ULID and MediaType is `radio`. A
+// station is not a catalog item, so nothing downstream may resolve it
+// through the item store - the station table answers for it.
+func (d *DB) UpsertRadioListen(ctx context.Context, s ListenSession) error {
+	_, err := d.w.ExecContext(ctx, `
+		INSERT INTO listen_sessions
+			(user_id, session_id, item_pid, media_type, started_at_ns,
+			 ms_played, skipped_ms, finished, client, source, received_at_ns)
+		VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+		ON CONFLICT (user_id, session_id) DO UPDATE SET
+			ms_played = excluded.ms_played,
+			received_at_ns = excluded.received_at_ns`,
+		s.UserID, s.SessionID, s.ItemPID, s.MediaType, s.StartedAt.UnixNano(),
+		s.MsPlayed, s.Client, s.Source, time.Now().UnixNano(),
+	)
+	if err != nil {
+		return fmt.Errorf("db: recording radio listen: %w", err)
+	}
+	return nil
+}
+
 // DeleteListen removes one session by its idempotency key. Ingest uses
 // it as a compensating delete: when the played-mark that belongs with a
 // freshly inserted session fails transiently, the row is removed so the

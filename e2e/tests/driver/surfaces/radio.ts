@@ -4,7 +4,7 @@ import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickInView } from '../gestures';
+import { clickInView, typeInto } from '../gestures';
 
 export class Radio extends Surface {
   /// One station's row in the library.
@@ -102,6 +102,31 @@ export class Radio extends Surface {
   /// rather than as absent.
   deckStar(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.deckStar));
+  }
+
+  /// Edit a station through the dialog, the way a person does: open its
+  /// menu, choose Edit, retype the two fields, save.
+  ///
+  /// Exists for the report that the dialog dropped a save. The widget
+  /// test beside it cannot settle that one: what produced the report was
+  /// semantics-driven text entry through a real browser, and that is
+  /// what this drives.
+  async editStation(
+    pid: string,
+    fields: { name: string; streamUrl: string },
+  ): Promise<void> {
+    const page = this.ctx.page;
+    await clickInView(page, page.locator(sem(SemanticsIds.radioMenu(pid))));
+    await clickInView(page, page.locator(sem(SemanticsIds.radioEdit(pid))));
+    const url = page.locator(sem(SemanticsIds.radioUrlField));
+    await url.waitFor({ timeout: T.nav });
+    await typeInto(page, page.locator(sem(SemanticsIds.radioNameField)), fields.name);
+    await typeInto(page, url, fields.streamUrl);
+    await clickInView(page, page.locator(sem(SemanticsIds.radioAddConfirm)));
+    // The dialog pops only on a save the server took, so its going is
+    // the client's own claim that the write landed - which is exactly
+    // the claim the report says was false.
+    await expect(url).toHaveCount(0, { timeout: T.nav });
   }
 
   /// The hub's row into the songs kept off the air.

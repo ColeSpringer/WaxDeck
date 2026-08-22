@@ -21,7 +21,7 @@ abstract class TopList implements Built<TopList, TopListBuilder> {
   /// Which top list this is.
   @BuiltValueField(wireName: r'kind')
   TopListKindEnum get kind;
-  // enum kindEnum {  artists,  albums,  genres,  shows,  };
+  // enum kindEnum {  artists,  albums,  genres,  shows,  stations,  };
 
   /// The range that was aggregated.
   @BuiltValueField(wireName: r'range')
@@ -157,6 +157,9 @@ class TopListKindEnum extends EnumClass {
   /// Which top list this is.
   @BuiltValueEnumConst(wireName: r'shows')
   static const TopListKindEnum shows = _$topListKindEnum_shows;
+  /// Which top list this is.
+  @BuiltValueEnumConst(wireName: r'stations')
+  static const TopListKindEnum stations = _$topListKindEnum_stations;
   /// Which top list this is.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const TopListKindEnum unknownDefaultOpenApi = _$topListKindEnum_unknownDefaultOpenApi;

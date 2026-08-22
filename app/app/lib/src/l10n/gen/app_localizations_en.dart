@@ -4517,6 +4517,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerVisualizer => 'Visualizer';
 
   @override
+  String get playerVisualizerAnalysisNeeded =>
+      'This track has not been analyzed yet.';
+
+  @override
   String get playerVisualizerIdleMessage =>
       'Start a track and its shape shows up here.';
 
@@ -8497,6 +8501,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statsKindShows => 'Shows';
 
   @override
+  String get statsKindStations => 'Stations';
+
+  @override
   String get statsListened => 'listened';
 
   @override
@@ -8591,6 +8598,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'albums': 'A longer range, or an album you have actually played.',
       'genres': 'A longer range, or a genre you have actually played.',
       'shows': 'A longer range, or a show you have actually played.',
+      'stations': 'A longer range, or a station you have actually tuned in.',
       'other': 'A longer range, or something you have actually played.',
     });
     return '$_temp0';

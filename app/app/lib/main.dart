@@ -1,8 +1,4 @@
-import 'dart:async';
-
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/semantics.dart';
-import 'package:flutter/services.dart' show BrowserContextMenu;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
@@ -22,11 +18,6 @@ Future<void> main() async {
   // locations live in the path, so this has to be set before anything
   // parses one. No-op off the web.
   useWaxUrlStrategy();
-  // The design system answers right-click itself - a card's secondary
-  // tap is its More menu - so the browser's own menu would stack on top
-  // of every one. Unawaited: first paint must not wait on a menu
-  // preference.
-  if (kIsWeb) unawaited(BrowserContextMenu.disableContextMenu());
   // Before anything can decode a cover: this app draws grids of them,
   // and the framework's defaults are sized for apps that draw a few.
   applyArtworkImageCacheBounds();

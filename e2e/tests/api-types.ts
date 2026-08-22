@@ -3851,8 +3851,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Top artists, albums, genres, or shows
-         * @description The caller's most-listened entries of one kind over a range, ranked by listening time. `shows` covers podcasts; spoken-word listening dominates by raw time, so music kinds only count music sessions and `shows` only counts podcast sessions.
+         * Top artists, albums, genres, shows, or stations
+         * @description The caller's most-listened entries of one kind over a range, ranked by listening time. `shows` covers podcasts and `stations` covers radio; spoken-word listening dominates by raw time, so music kinds only count music sessions, `shows` only counts podcast sessions, and `stations` only counts radio.
          */
         get: operations["getTopList"];
         put?: never;
@@ -8927,9 +8927,15 @@ export interface components {
             /** @description Listen sessions in the bucket. */
             sessions: number;
         };
+        /**
+         * @description What a recorded listen was. The three first-class item kinds plus `radio`, which is measured in the stream proxy rather than reported by a client and belongs to no item.
+         *     Deliberately not the shared `MediaType`: that enum is the item kinds browse, items, and uploads answer with, and none of them will ever answer `radio`. Named to stay clear of `MediaTypeListening`, the per-media total object one word-order away.
+         * @enum {string}
+         */
+        StatsMediaType: "music" | "podcast" | "audiobook" | "radio";
         /** @description Listening total for one media type. */
         MediaTypeListening: {
-            mediaType: components["schemas"]["MediaType"];
+            mediaType: components["schemas"]["StatsMediaType"];
             /**
              * Format: int64
              * @description Milliseconds listened.
@@ -8978,7 +8984,7 @@ export interface components {
              * @description Which top list this is.
              * @enum {string}
              */
-            kind: "artists" | "albums" | "genres" | "shows";
+            kind: "artists" | "albums" | "genres" | "shows" | "stations";
             /**
              * @description The range that was aggregated.
              * @enum {string}
@@ -8995,7 +9001,7 @@ export interface components {
              */
             name: string;
             /**
-             * @description The entry's pid when the entry is a catalog entity (absent for genres, and for names that no longer resolve).
+             * @description The entry's pid when the entry is a catalog entity (absent for genres, and for names that no longer resolve). A `stations` entry carries the station's `rs-` pid, which is not a catalog entity but is addressable all the same.
              * @example ar-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             pid?: string;
@@ -9029,7 +9035,7 @@ export interface components {
             title?: string;
             /** @description The item's display artist, author, or show. */
             artist?: string;
-            mediaType: components["schemas"]["MediaType"];
+            mediaType: components["schemas"]["StatsMediaType"];
             /**
              * Format: date-time
              * @description When playback started.
@@ -9053,10 +9059,10 @@ export interface components {
              */
             client: string;
             /**
-             * @description `live` playback or a backdated `import`.
+             * @description Who measured the session. `live` is a WaxDeck client reporting its own playback and `import` a backdated session from another service's history; `radio` is the server's own stream proxy, which times a tune-in because no client is holding the stream to report it.
              * @enum {string}
              */
-            source: "live" | "import";
+            source: "live" | "import" | "radio";
         };
         /** @description One user's listening recap for one calendar year, computed in the caller's preferred timezone. */
         YearInReview: {
@@ -16350,7 +16356,7 @@ export interface operations {
         parameters: {
             query: {
                 /** @description Which top list. */
-                kind: "artists" | "albums" | "genres" | "shows";
+                kind: "artists" | "albums" | "genres" | "shows" | "stations";
                 /** @description How far back to aggregate, ending now. */
                 range?: "7d" | "30d" | "90d" | "365d" | "all";
                 /** @description Maximum entries returned. */

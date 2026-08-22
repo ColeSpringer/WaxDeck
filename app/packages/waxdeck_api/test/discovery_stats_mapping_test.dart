@@ -161,7 +161,7 @@ void main() {
             ..byMediaType.add(
               gen.MediaTypeListening(
                 (m) => m
-                  ..mediaType = gen.MediaType.music
+                  ..mediaType = gen.StatsMediaType.music
                   ..ms = 7200000
                   ..sessions = 40,
               ),
@@ -197,7 +197,7 @@ void main() {
       expect(mapped.byMonth, hasLength(12));
       expect(mapped.byMonth[6].month, 7);
       expect(mapped.byMonth[6].ms, 7200000);
-      expect(mapped.byMediaType.single.mediaType, MediaType.music);
+      expect(mapped.byMediaType.single.mediaType, StatsMediaType.music);
       final artist = mapped.topArtists.single;
       expect(artist.name, 'Muddy Waters');
       expect(artist.pid, 'ar-01JZX5N8QW3F4V9T2B7KDARTIST');

@@ -375,6 +375,26 @@ class _StationTile extends ConsumerWidget {
   final WaxArtwork? artwork;
   final RadioPlayback playback;
 
+  /// The rows behind the overflow button. One declaration rather than
+  /// one instance - the button and the card's secondary tap each build
+  /// it - so the two cannot drift into offering different menus.
+  List<WaxMenuItem<String>> _menuItems(
+    AppLocalizations l10n,
+  ) => <WaxMenuItem<String>>[
+    WaxMenuItem<String>(
+      value: 'edit',
+      label: l10n.radioEditStation,
+      semanticsId: SemanticsIds.radioEdit(station.pid),
+    ),
+    if (station.homepageUrl != null)
+      WaxMenuItem<String>(value: 'homepage', label: l10n.radioStationWebsite),
+    WaxMenuItem<String>(
+      value: 'delete',
+      label: l10n.radioRemoveStation,
+      semanticsId: SemanticsIds.radioDelete(station.pid),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
@@ -397,6 +417,11 @@ class _StationTile extends ConsumerWidget {
           width: width,
           playing: playing,
           onTap: () => unawaited(_tune(context, ref, station, playback)),
+          // The same menu the overflow button raises. Right-click on a
+          // pointer, long-press on touch: the tile is the surface
+          // somebody will try either on, and until now the only way in
+          // was a 16-pixel button in its corner.
+          onMore: () => unawaited(_openMenu(context, ref, l10n)),
         ),
         // Beside the card rather than inside it: both are controls, and a
         // card that swallowed them would announce one node for three
@@ -420,23 +445,7 @@ class _StationTile extends ConsumerWidget {
                 glyph: WaxIcons.more,
                 label: l10n.radioStationMore(station.name),
                 semanticsId: SemanticsIds.radioMenu(station.pid),
-                items: <WaxMenuItem<String>>[
-                  WaxMenuItem<String>(
-                    value: 'edit',
-                    label: l10n.radioEditStation,
-                    semanticsId: SemanticsIds.radioEdit(station.pid),
-                  ),
-                  if (station.homepageUrl != null)
-                    WaxMenuItem<String>(
-                      value: 'homepage',
-                      label: l10n.radioStationWebsite,
-                    ),
-                  WaxMenuItem<String>(
-                    value: 'delete',
-                    label: l10n.radioRemoveStation,
-                    semanticsId: SemanticsIds.radioDelete(station.pid),
-                  ),
-                ],
+                items: _menuItems(l10n),
                 onSelected: (choice) => unawaited(_menu(context, ref, choice)),
               ),
             ],
@@ -444,6 +453,18 @@ class _StationTile extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  /// Raises the station's menu from the card itself, anchored on
+  /// whatever the gesture landed on.
+  Future<void> _openMenu(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) async {
+    final choice = await showWaxMenu<String>(context, _menuItems(l10n));
+    if (choice == null || !context.mounted) return;
+    await _menu(context, ref, choice);
   }
 
   /// Pins or unpins, saying so when the write did not land. The star has no

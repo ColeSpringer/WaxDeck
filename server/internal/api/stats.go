@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/url"
+	"strings"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
@@ -50,7 +51,7 @@ func (s *Server) GetListeningStats(ctx context.Context, req GetListeningStatsReq
 	}
 	for _, m := range res.ByMediaType {
 		out.ByMediaType = append(out.ByMediaType, MediaTypeListening{
-			MediaType: MediaType(m.MediaType), Ms: m.Ms, Sessions: m.Sessions,
+			MediaType: StatsMediaType(m.MediaType), Ms: m.Ms, Sessions: m.Sessions,
 		})
 	}
 	return GetListeningStats200JSONResponse(out), nil
@@ -126,7 +127,15 @@ func topEntriesJSON(entries []service.TopEntry) []TopEntry {
 			te.Pid = ptr(e.PID)
 		}
 		if e.ArtItemPID != "" {
-			te.ArtUrl = ptr("/api/v1/items/" + url.PathEscape(e.ArtItemPID) + "/art")
+			// A station's picture comes from the logo proxy, not from
+			// the item store: it is not a catalog item, and the item
+			// art route would answer 404 for every entry in a Top
+			// stations list.
+			if strings.HasPrefix(e.ArtItemPID, service.PrefixRadioStation+"-") {
+				te.ArtUrl = ptr("/api/v1/radio/stations/" + url.PathEscape(e.ArtItemPID) + "/logo")
+			} else {
+				te.ArtUrl = ptr("/api/v1/items/" + url.PathEscape(e.ArtItemPID) + "/art")
+			}
 		}
 		out = append(out, te)
 	}
@@ -154,7 +163,7 @@ func (s *Server) ListListenLog(ctx context.Context, req ListListenLogRequestObje
 	for _, e := range res.Sessions {
 		entry := ListenLogEntry{
 			Pid:       e.PID,
-			MediaType: MediaType(e.MediaType),
+			MediaType: StatsMediaType(e.MediaType),
 			StartedAt: e.StartedAt,
 			MsPlayed:  e.MsPlayed,
 			Finished:  e.Finished,
@@ -216,7 +225,7 @@ func (s *Server) GetYearInReview(ctx context.Context, req GetYearInReviewRequest
 	}
 	for _, m := range res.ByMediaType {
 		out.ByMediaType = append(out.ByMediaType, MediaTypeListening{
-			MediaType: MediaType(m.MediaType), Ms: m.Ms, Sessions: m.Sessions,
+			MediaType: StatsMediaType(m.MediaType), Ms: m.Ms, Sessions: m.Sessions,
 		})
 	}
 	return GetYearInReview200JSONResponse(out), nil

@@ -176,7 +176,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     return WaxScaffold(
       title: l10n.searchTitle,
       largeTitle: false,
-      onBack: () => context.go(WaxRoute.home),
+      // Back to whichever domain the visitor searched from, drill-in
+      // and all; home only when nothing was recorded to go back to.
+      onBack: () => ShellBackScope.goBack(context, fallback: WaxRoute.home),
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: Padding(

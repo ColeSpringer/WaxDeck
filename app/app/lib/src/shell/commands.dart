@@ -14,6 +14,7 @@ import '../l10n/l10n.dart';
 import '../player/lyrics.dart';
 import '../player/now_playing_controller.dart';
 import '../player/output_volume.dart';
+import '../player/waveform.dart';
 import '../playlists/playlist_create.dart';
 import '../queue/queue_controller.dart';
 import '../settings/settings_registry.dart';
@@ -85,6 +86,14 @@ class WaxCommand {
   /// Whether it can do anything right now; null means always. Read by
   /// the palette, never by the binding map - bindings built from live
   /// state would rebuild on every position tick.
+  ///
+  /// The palette asks during its own build, so a predicate may `watch`
+  /// as well as `read` - and one gated on anything asynchronous has to,
+  /// because a `read` of an auto-disposing provider builds it, drops it,
+  /// and never sees it land. Keep a *bound* command's predicate on
+  /// `read`: the binding map consults it from a keystroke callback, and
+  /// a watch there subscribes the shortcut host to live state, which is
+  /// the rebuild-per-tick this note already warns about.
   final bool Function(WidgetRef ref)? enabled;
 
   /// Whether this build has the command at all; null means every build
@@ -292,7 +301,10 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
     id: 'visualizer',
     section: WaxCommandSection.view,
     glyph: WaxIcons.waveform,
-    enabled: _somethingToPlay,
+    // The third door onto the visualizer, and the same gate as the
+    // player's own row: it used to open on anything playing, so the
+    // palette could take a listener to an empty state during a podcast.
+    enabled: _visualizable,
     run: (context, ref) => context.push(WaxRoute.visualizer),
   ),
   WaxCommand(
@@ -408,6 +420,24 @@ List<ShortcutActivator> _chord(LogicalKeyboardKey key) => <ShortcutActivator>[
 bool _somethingToPlay(WidgetRef ref) =>
     ref.read(nowPlayingProvider).entry != null ||
     ref.read(radioPlaybackProvider).station != null;
+
+/// A music item whose shape has been measured.
+///
+/// Both visualizer modes draw the peak envelope, so there is nothing to
+/// show without one. Unknown counts as yes, for the reason
+/// [waveformMayHavePeaks] states: a read still in flight, or one a
+/// dropped connection lost, is not an absence.
+///
+/// Watched rather than read, and it is the one predicate here that has
+/// to be: the envelope auto-disposes, so a `read` from the palette's
+/// build creates it, releases it, and reads `AsyncLoading` again on the
+/// next keystroke - forever. The visualizer binds no key, so nothing
+/// but the palette's build ever asks; see [WaxCommand.enabled].
+bool _visualizable(WidgetRef ref) {
+  final item = ref.watch(nowPlayingProvider).item;
+  if (item == null || item.mediaType != MediaType.music) return false;
+  return waveformMayHavePeaks(ref.watch(trackWaveformProvider(item.pid)));
+}
 
 /// Radio never queues, so there is nothing to step through.
 bool _queuedPlayback(WidgetRef ref) =>

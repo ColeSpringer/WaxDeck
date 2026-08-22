@@ -399,11 +399,10 @@ void main() {
     expect(volumes(), [0.6], reason: 'the first change goes now');
 
     await tester.pump(const Duration(milliseconds: 200));
-    expect(
-      volumes(),
-      [0.6, 0.5],
-      reason: 'the gap closes on the newest level, skipping the stale one',
-    );
+    expect(volumes(), [
+      0.6,
+      0.5,
+    ], reason: 'the gap closes on the newest level, skipping the stale one');
 
     // Nothing pending: the follow-up gap closes silently.
     await tester.pump(const Duration(milliseconds: 200));
@@ -608,11 +607,10 @@ void main() {
     unawaited(controller.setVolume(0.3));
     bus.handleFrame({'type': 'ack', 'id': cmdIds().first});
     await tester.pump();
-    expect(
-      volumes(),
-      [0.6, 0.4],
-      reason: 'the stale ack does not flush the new session\'s trailing',
-    );
+    expect(volumes(), [
+      0.6,
+      0.4,
+    ], reason: 'the stale ack does not flush the new session\'s trailing');
 
     bus.handleFrame({'type': 'ack', 'id': cmdIds().last});
     await tester.pump(const Duration(milliseconds: 200));

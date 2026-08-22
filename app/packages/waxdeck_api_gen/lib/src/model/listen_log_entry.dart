@@ -4,7 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
-import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/stats_media_type.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -22,7 +22,7 @@ part 'listen_log_entry.g.dart';
 /// * [skippedMs] - Milliseconds saved by silence trimming and speed-up, when the client reported them. 
 /// * [finished] - Whether playback reached the end of the item.
 /// * [client] - The reporting client label.
-/// * [source_] - `live` playback or a backdated `import`.
+/// * [source_] - Who measured the session. `live` is a WaxDeck client reporting its own playback and `import` a backdated session from another service's history; `radio` is the server's own stream proxy, which times a tune-in because no client is holding the stream to report it. 
 @BuiltValue()
 abstract class ListenLogEntry implements Built<ListenLogEntry, ListenLogEntryBuilder> {
   /// The item that was played.
@@ -38,8 +38,8 @@ abstract class ListenLogEntry implements Built<ListenLogEntry, ListenLogEntryBui
   String? get artist;
 
   @BuiltValueField(wireName: r'mediaType')
-  MediaType get mediaType;
-  // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
+  StatsMediaType get mediaType;
+  // enum mediaTypeEnum {  music,  podcast,  audiobook,  radio,  };
 
   /// When playback started.
   @BuiltValueField(wireName: r'startedAt')
@@ -61,10 +61,10 @@ abstract class ListenLogEntry implements Built<ListenLogEntry, ListenLogEntryBui
   @BuiltValueField(wireName: r'client')
   String get client;
 
-  /// `live` playback or a backdated `import`.
+  /// Who measured the session. `live` is a WaxDeck client reporting its own playback and `import` a backdated session from another service's history; `radio` is the server's own stream proxy, which times a tune-in because no client is holding the stream to report it. 
   @BuiltValueField(wireName: r'source')
   ListenLogEntrySource_Enum get source_;
-  // enum source_Enum {  live,  import,  };
+  // enum source_Enum {  live,  import,  radio,  };
 
   ListenLogEntry._();
 
@@ -111,7 +111,7 @@ class _$ListenLogEntrySerializer implements PrimitiveSerializer<ListenLogEntry> 
     yield r'mediaType';
     yield serializers.serialize(
       object.mediaType,
-      specifiedType: const FullType(MediaType),
+      specifiedType: const FullType(StatsMediaType),
     );
     yield r'startedAt';
     yield serializers.serialize(
@@ -192,8 +192,8 @@ class _$ListenLogEntrySerializer implements PrimitiveSerializer<ListenLogEntry> 
         case r'mediaType':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(MediaType),
-          ) as MediaType;
+            specifiedType: const FullType(StatsMediaType),
+          ) as StatsMediaType;
           result.mediaType = valueDes;
           break;
         case r'startedAt':
@@ -269,13 +269,16 @@ class _$ListenLogEntrySerializer implements PrimitiveSerializer<ListenLogEntry> 
 
 class ListenLogEntrySource_Enum extends EnumClass {
 
-  /// `live` playback or a backdated `import`.
+  /// Who measured the session. `live` is a WaxDeck client reporting its own playback and `import` a backdated session from another service's history; `radio` is the server's own stream proxy, which times a tune-in because no client is holding the stream to report it. 
   @BuiltValueEnumConst(wireName: r'live')
   static const ListenLogEntrySource_Enum live = _$listenLogEntrySourceEnum_live;
-  /// `live` playback or a backdated `import`.
+  /// Who measured the session. `live` is a WaxDeck client reporting its own playback and `import` a backdated session from another service's history; `radio` is the server's own stream proxy, which times a tune-in because no client is holding the stream to report it. 
   @BuiltValueEnumConst(wireName: r'import')
   static const ListenLogEntrySource_Enum import_ = _$listenLogEntrySourceEnum_import_;
-  /// `live` playback or a backdated `import`.
+  /// Who measured the session. `live` is a WaxDeck client reporting its own playback and `import` a backdated session from another service's history; `radio` is the server's own stream proxy, which times a tune-in because no client is holding the stream to report it. 
+  @BuiltValueEnumConst(wireName: r'radio')
+  static const ListenLogEntrySource_Enum radio = _$listenLogEntrySourceEnum_radio;
+  /// Who measured the session. `live` is a WaxDeck client reporting its own playback and `import` a backdated session from another service's history; `radio` is the server's own stream proxy, which times a tune-in because no client is holding the stream to report it. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const ListenLogEntrySource_Enum unknownDefaultOpenApi = _$listenLogEntrySourceEnum_unknownDefaultOpenApi;
 

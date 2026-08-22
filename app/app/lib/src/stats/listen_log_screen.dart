@@ -54,7 +54,14 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen> {
     final clients = <String>{
       _allClients,
       ?filter,
-      for (final entry in entries) entry.client,
+      // Radio is measured in the server's stream proxy rather than
+      // reported by a device, so its rows name no client. Belt and
+      // braces: `_allClients` is itself the empty string, so a set
+      // already folds a nameless client into the "all" row rather than
+      // drawing a blank one beside it - this is the half that survives
+      // that constant becoming a sentinel of its own.
+      for (final entry in entries)
+        if (entry.client.isNotEmpty) entry.client,
     }.toList()..sort();
     final sizeClass = WaxSizeClass.of(context);
     final l10n = context.l10n;
@@ -132,7 +139,10 @@ class _ListenLogRow extends StatelessWidget {
     final played = l10n.formatListenTime(entry.msPlayed);
     final details = <String>[
       ?entry.artist,
-      entry.client,
+      // Skipped when empty, the way the filter above skips it: a radio
+      // row is measured by the server and names no client, and joining
+      // an empty string in leads the subtitle with a bare separator.
+      if (entry.client.isNotEmpty) entry.client,
       l10n.formatStamp(entry.startedAt),
     ];
     return MediaListRow(
@@ -142,8 +152,8 @@ class _ListenLogRow extends StatelessWidget {
         // since is still a listen that happened.
         title: entry.title ?? l10n.statsLogRemovedItem,
         subtitle: details.join(' · '),
-        domain: waxDomainOf(entry.mediaType),
-        shape: waxShapeOf(entry.mediaType),
+        domain: waxDomainOfStats(entry.mediaType),
+        shape: waxShapeOfStats(entry.mediaType),
         trailingText: played,
         // The tick is the whole of what "finished" means here, and the
         // row reads it out rather than leaving it to a glyph.

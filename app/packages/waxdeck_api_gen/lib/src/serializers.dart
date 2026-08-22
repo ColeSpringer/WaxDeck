@@ -297,6 +297,7 @@ import 'package:waxdeck_api_gen/src/model/sonic_path.dart';
 import 'package:waxdeck_api_gen/src/model/soundbite.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
 import 'package:waxdeck_api_gen/src/model/starred_entities.dart';
+import 'package:waxdeck_api_gen/src/model/stats_media_type.dart';
 import 'package:waxdeck_api_gen/src/model/subscribe_request.dart';
 import 'package:waxdeck_api_gen/src/model/subscription.dart';
 import 'package:waxdeck_api_gen/src/model/subscription_page.dart';
@@ -642,6 +643,7 @@ part 'serializers.g.dart';
   Soundbite,
   StarUpdate,
   StarredEntities,
+  StatsMediaType,
   SubscribeRequest,
   Subscription,
   SubscriptionPage,

@@ -59,6 +59,19 @@ FakeRepository _statsRepo() => FakeRepository()
     kind: 'albums',
     range: '30d',
     entries: [TopEntry(name: 'Songs of the Shire', plays: 8, ms: 3600000)],
+  )
+  ..topLists['stations'] = const TopList(
+    kind: 'stations',
+    range: '30d',
+    entries: [
+      TopEntry(
+        name: 'Bree Radio',
+        pid: 'rs-01JZX5N8QW3F4V9T2B7KDSTN001',
+        artUrl: '/api/v1/radio/stations/rs-01JZX5N8QW3F4V9T2B7KDSTN001/logo',
+        plays: 3,
+        ms: 5400000,
+      ),
+    ],
   );
 
 void main() {
@@ -201,6 +214,25 @@ void main() {
     expect(find.text('The Bree Trio'), findsNothing);
   });
 
+  testWidgets('top stations is a list of its own', (tester) async {
+    // Radio time used to be invisible: nothing wrote a listen row for a
+    // station, so no total counted it and no list could rank it.
+    final repo = _statsRepo();
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.bySemanticsIdentifier(SemanticsIds.top('stations')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.top('stations')));
+    await tester.pumpAndSettle();
+
+    expect(repo.topListCalls.last.kind, 'stations');
+    expect(find.text('Bree Radio'), findsOneWidget);
+  });
+
   testWidgets('the listen log pages and filters by client', (tester) async {
     final repo = _statsRepo()
       ..listenLog = [
@@ -208,7 +240,7 @@ void main() {
           pid: 'tr-01JZX5N8QW3F4V9T2B7KDLOG001',
           title: 'Prancing Pony Blues',
           artist: 'The Bree Trio',
-          mediaType: MediaType.music,
+          mediaType: StatsMediaType.music,
           startedAt: DateTime.utc(2026, 7, 20, 12),
           msPlayed: 214000,
           finished: true,
@@ -219,7 +251,7 @@ void main() {
           pid: 'tr-01JZX5N8QW3F4V9T2B7KDLOG002',
           title: 'Pipeweed Economics',
           artist: 'Barliman Butterbur',
-          mediaType: MediaType.podcast,
+          mediaType: StatsMediaType.podcast,
           startedAt: DateTime.utc(2026, 7, 19, 8),
           msPlayed: 1800000,
           finished: false,
@@ -251,5 +283,58 @@ void main() {
     expect(repo.listenLogCalls.last.client, 'waxdeck-flutter-web');
     expect(find.text('Prancing Pony Blues'), findsNothing);
     expect(find.text('Pipeweed Economics'), findsOneWidget);
+  });
+
+  testWidgets('the log draws a station as radio', (tester) async {
+    // A radio row carries no client - the server measured it rather
+    // than a device reporting it - and its media type is one the item
+    // enum has no value for, which is why the log maps through the
+    // stats sibling.
+    final repo = _statsRepo()
+      ..listenLog = [
+        ListenLogEntry(
+          pid: 'rs-01JZX5N8QW3F4V9T2B7KDSTN001',
+          title: 'Bree Radio',
+          mediaType: StatsMediaType.radio,
+          startedAt: DateTime.utc(2026, 7, 21, 9),
+          msPlayed: 5400000,
+          finished: false,
+          client: '',
+          source: 'radio',
+        ),
+      ];
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.bySemanticsIdentifier(SemanticsIds.openListenLog),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.openListenLog));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bree Radio'), findsOneWidget);
+
+    // Its subtitle leads with the stamp rather than with a separator:
+    // there is no artist and no client, and an empty client joined in
+    // anyway would put a bare " · " in front of the date.
+    expect(find.textContaining(RegExp(r'^\s*·')), findsNothing);
+
+    // And it adds no nameless entry to the "reported by" filter: a row
+    // the server measured has no client to filter on. Counted rather
+    // than searched for by its text - what a stray option draws is an
+    // empty string, and asserting `findsNothing` on that is asserting
+    // nothing at all.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.listenLogClientFilter),
+    );
+    await tester.pumpAndSettle();
+    final options = find.byType(PopupMenuItem<String>);
+    expect(options, findsOneWidget);
+    expect(
+      find.descendant(of: options, matching: find.text('All clients')),
+      findsOneWidget,
+    );
   });
 }

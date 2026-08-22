@@ -7125,6 +7125,12 @@ abstract class AppLocalizations {
   /// **'Visualizer'**
   String get playerVisualizer;
 
+  /// Why the visualizer row is disabled: nothing has measured the track's shape, so there is nothing to draw.
+  ///
+  /// In en, this message translates to:
+  /// **'This track has not been analyzed yet.'**
+  String get playerVisualizerAnalysisNeeded;
+
   /// Under the idle heading on the visualizer.
   ///
   /// In en, this message translates to:
@@ -13442,6 +13448,12 @@ abstract class AppLocalizations {
   /// **'Shows'**
   String get statsKindShows;
 
+  /// Chip choosing which ranked list to show; radio stations.
+  ///
+  /// In en, this message translates to:
+  /// **'Stations'**
+  String get statsKindStations;
+
   /// Caption under the total listening time. Lower case: it sits under a figure and reads as one phrase with it.
   ///
   /// In en, this message translates to:
@@ -13571,7 +13583,7 @@ abstract class AppLocalizations {
   /// Empty state of a ranked list, naming what it lists. Whole sentences per kind rather than a noun in a frame, because the article follows the noun's gender.
   ///
   /// In en, this message translates to:
-  /// **'{kind, select, artists{A longer range, or an artist you have actually played.} albums{A longer range, or an album you have actually played.} genres{A longer range, or a genre you have actually played.} shows{A longer range, or a show you have actually played.} other{A longer range, or something you have actually played.}}'**
+  /// **'{kind, select, artists{A longer range, or an artist you have actually played.} albums{A longer range, or an album you have actually played.} genres{A longer range, or a genre you have actually played.} shows{A longer range, or a show you have actually played.} stations{A longer range, or a station you have actually tuned in.} other{A longer range, or something you have actually played.}}'**
   String statsTopEmptyMessage(String kind);
 
   /// Empty state of a ranked list.

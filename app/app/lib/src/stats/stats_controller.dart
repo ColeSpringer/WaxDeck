@@ -10,7 +10,7 @@ const statsRanges = ['7d', '30d', '90d', '365d', 'all'];
 const statsBuckets = ['day', 'week', 'month'];
 
 /// Top-list kinds, in display order.
-const topListKinds = ['artists', 'albums', 'genres', 'shows'];
+const topListKinds = ['artists', 'albums', 'genres', 'shows', 'stations'];
 
 /// The range the listening chart and top lists aggregate over.
 class StatsRangeController extends Notifier<String> {

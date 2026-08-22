@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oklog/ulid/v2"
+
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/pagetext"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -549,6 +551,27 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 			s.svc.ScrobbleRadioPlay(r.Context(), user, pid, title, since)
 		},
 	}
+	// The listening record, which is a different question from
+	// scrobbling and is answered here rather than by a client: nothing
+	// on the other end of this socket knows it is listening to a
+	// station the stats can name, and the proxy knows the account, the
+	// station, and how long the connection stayed open.
+	//
+	// One session id per connection, checkpointed as it runs and once
+	// more at the close, so a listen that outlives the server is short
+	// rather than absent.
+	listenID := ulid.Make().String()
+	listenStart := time.Now()
+	// Seeded with the start, so the first tick is due one interval in
+	// rather than on the first chunk.
+	checkpointed := listenStart
+	checkpoint := func(now time.Time) {
+		s.svc.RecordRadioListen(r.Context(), user, listenID, pid, listenStart, now.Sub(listenStart))
+		checkpointed = now
+	}
+	// Runs however the relay leaves: a read error, a write error, the
+	// idle guard cutting it, or the listener going away.
+	defer func() { checkpoint(time.Now()) }()
 	onBlock := func(block []byte) {
 		// The one thing every block says whatever is in it: the station is
 		// still sending. Unconditional and first, because the blocks that
@@ -606,6 +629,15 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 				rc.Flush()
 			}
 			done()
+			// The listening clock, ticked here rather than from the ICY
+			// block handler: `metaint` is zero for a station that sends
+			// no metadata, so there is no block handler at all for one -
+			// and a listener on a plain stream is listening just the
+			// same. Bytes relayed is what proves it. A non-blocking
+			// queue send, like everything else this loop calls.
+			if now := time.Now(); now.Sub(checkpointed) >= service.RadioListenCheckpoint {
+				checkpoint(now)
+			}
 			if writeErr != nil {
 				return
 			}
