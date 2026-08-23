@@ -32,6 +32,9 @@ import 'package:waxdeck_api_gen/src/model/schedule_list.dart';
 import 'package:waxdeck_api_gen/src/model/schedule_put.dart';
 import 'package:waxdeck_api_gen/src/model/scrobbling_admin_config.dart';
 import 'package:waxdeck_api_gen/src/model/scrobbling_admin_config_put.dart';
+import 'package:waxdeck_api_gen/src/model/thumbnail_cache_report.dart';
+import 'package:waxdeck_api_gen/src/model/thumbnail_prune_request.dart';
+import 'package:waxdeck_api_gen/src/model/thumbnail_prune_result.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task.dart';
 import 'package:waxdeck_api_gen/src/model/transcoding_activity.dart';
 import 'package:waxdeck_api_gen/src/model/transcoding_limits.dart';
@@ -1409,6 +1412,90 @@ class AdminApi {
     );
   }
 
+  /// Census the generated thumbnail cache
+  /// Reports what the derived-artwork cache holds - rows, bytes, how many source images have at least one derivative, and a breakdown by ladder rung - beside what the source images themselves cost, which is the figure the cache size is read against. Read-only. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ThumbnailCacheReport] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ThumbnailCacheReport>> getThumbnailCache({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/thumbnails';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ThumbnailCacheReport? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ThumbnailCacheReport),
+      ) as ThumbnailCacheReport;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ThumbnailCacheReport>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Read what the transcoder is doing right now
   /// The engine-backed streams in flight, for reading beside the limits that bound them. A separate read from &#x60;getTranscodingLimits&#x60; because configuration and telemetry have different lifetimes: the limits are a form somebody is editing, this is a number that moves under them, and &#x60;PUT&#x60; echoes the limits schema. Administrators only. 
   ///
@@ -2218,6 +2305,112 @@ class AdminApi {
     }
 
     return Response<TrashList>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Prune the generated thumbnail cache
+  /// Drops cached thumbnails to fit the policy and reports what went. Nothing is lost: every entry is regenerated on the next request that asks for it, so a prune costs decode time rather than pictures. The rows are freed inside the catalog file; returning that space to the filesystem takes a vacuum. At least one bound must be given. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [thumbnailPruneRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ThumbnailPruneResult] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ThumbnailPruneResult>> pruneThumbnailCache({ 
+    required ThumbnailPruneRequest thumbnailPruneRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/thumbnails/prune';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(ThumbnailPruneRequest);
+      _bodyData = _serializers.serialize(thumbnailPruneRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ThumbnailPruneResult? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ThumbnailPruneResult),
+      ) as ThumbnailPruneResult;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ThumbnailPruneResult>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

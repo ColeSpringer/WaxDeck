@@ -85,7 +85,7 @@ void main() {
     expect(repo.transcodingLimits.maxConcurrent, 4);
     expect(repo.transcodingLimits.defaultMaxBitrateKbps, 256);
     expect(
-      container.read(shellMessengerProvider)?.text,
+      shellMessageText(container.read(shellMessengerProvider)),
       'Transcoding limits saved',
     );
   });
@@ -160,7 +160,7 @@ void main() {
 
     // Named, not just refused: one save writes two windows.
     expect(
-      container.read(shellMessengerProvider)?.text,
+      shellMessageText(container.read(shellMessengerProvider)),
       allOf(contains('whole number of days'), contains('Purge trashed files')),
     );
 
@@ -202,7 +202,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      container.read(shellMessengerProvider)?.text,
+      shellMessageText(container.read(shellMessengerProvider)),
       allOf(contains('whole number of days'), contains('Clear finished tasks')),
     );
     // And nothing was stored: a refused save writes neither window.

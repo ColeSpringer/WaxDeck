@@ -232,13 +232,18 @@ class PlayerScreen extends ConsumerWidget {
             retrySemanticsId: SemanticsIds.playerRetry,
           ),
         ),
-        // Both, always: the state publishes a session and the item it is
-        // for together.
-        NowPlaying(:final PlaybackSession session, :final ItemSummary item) =>
-          PlayerFace(session: session, item: item),
-        _ => _PlayerShell(
+        // The entry alone, which is what the deck bar branches on and
+        // why it does not flash. A start occupies the state with an
+        // entry and no session for as long as the resolve and the load
+        // take, and reading that window as "not playing yet" swapped
+        // this branch for a spinner on every advance - a widget-type
+        // change, so the face, its hero, its ticker and its artwork
+        // were torn down and rebuilt each time. The face tolerates a
+        // session-less state instead, and stays the same element.
+        _ => PlayerFace(
+          session: nowPlaying.session,
+          item: nowPlaying.item,
           domain: domain,
-          child: const Center(child: CircularProgressIndicator()),
         ),
       };
     }
@@ -253,6 +258,12 @@ class PlayerScreen extends ConsumerWidget {
       // Radio draws its own picture and asks for no accent from it: the
       // cover it shows is borrowed and turns over with the songs.
       artUrl: onAir ? null : item?.artUrl,
+      // A start publishes its entry before the summary behind it
+      // resolves, and a queue handed over from another device arrives
+      // with pids this layer has never seen - so a null item here is
+      // usually "not yet" rather than "no cover", and the accent holds
+      // instead of crossfading through the domain hue and back.
+      resolving: !onAir && nowPlaying?.entry != null && item == null,
       domain: domain,
       child: face,
     );
@@ -345,12 +356,38 @@ void leaveWith(GoRouter? router) {
   router.go(WaxRoute.home);
 }
 
-/// One item playing, drawn through the scaffold.
+/// The player while the queue has an entry: playing, loading, or
+/// standing where a start left it.
+///
+/// Both halves of what it draws are nullable, and for the same reason.
+/// A start publishes the entry first and the session only once the load
+/// lands, so a face that demanded a session would be replaced by a
+/// spinner on every advance - a different widget type, which tears down
+/// the hero, the ticker and the artwork it was holding. The summary is
+/// normally in hand from the preload's own resolve; when it is not, the
+/// last one is held rather than dropped, so the face persists for the
+/// frames a fetch takes instead of blinking. A face with no summary yet
+/// draws the spinner itself, which is the cold open and the one case
+/// where there is genuinely nothing to show.
 class PlayerFace extends ConsumerStatefulWidget {
-  const PlayerFace({required this.session, required this.item, super.key});
+  const PlayerFace({
+    required this.session,
+    required this.item,
+    this.domain = WaxDomain.music,
+    super.key,
+  });
 
-  final PlaybackSession session;
-  final ItemSummary item;
+  /// Null while a start is between its entry and its load. Seeking and
+  /// the spoken-word controls are off for that window; the transport
+  /// stays, because pressing play during it is a real intent the
+  /// controller already answers.
+  final PlaybackSession? session;
+
+  /// Null only until the summary resolves. [_shown] is what is drawn.
+  final ItemSummary? item;
+
+  /// Drawn by the spinner shell, which has no item to derive one from.
+  final WaxDomain domain;
 
   @override
   ConsumerState<PlayerFace> createState() => _PlayerFaceState();
@@ -364,22 +401,32 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
   StreamSubscription<Duration>? _feed;
 
+  /// The last summary this face was given, which is what it keeps
+  /// drawing while the next one resolves.
+  ItemSummary? _shown;
+
   @override
   void initState() {
     super.initState();
+    _shown = widget.item;
     _follow();
   }
 
   @override
   void didUpdateWidget(covariant PlayerFace old) {
     super.didUpdateWidget(old);
+    if (widget.item != null) _shown = widget.item;
     if (!identical(old.session, widget.session)) _follow();
   }
 
   void _follow() {
     unawaited(_feed?.cancel());
-    _position.value = widget.session.displayPosition;
-    _feed = widget.session.displayPositionStream.listen((position) {
+    final session = widget.session;
+    // Zero rather than the outgoing position: the next track starts at
+    // its own beginning, and holding the old number would run the bar
+    // backwards from wherever the last one ended.
+    _position.value = session?.displayPosition ?? Duration.zero;
+    _feed = session?.displayPositionStream.listen((position) {
       _position.value = position;
     });
   }
@@ -391,8 +438,8 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     super.dispose();
   }
 
-  ItemSummary get _item => widget.item;
-  PlaybackSession get _session => widget.session;
+  ItemSummary get _item => _shown!;
+  PlaybackSession? get _session => widget.session;
   bool get _music => _item.mediaType == MediaType.music;
   bool get _book => _item.mediaType == MediaType.audiobook;
 
@@ -406,7 +453,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   /// Read at tap time, never at build time: this rebuilds when what is
   /// playing changes, not as it plays, so a captured position would be
   /// where the item stood when it started.
-  int get _positionMs => _session.displayPosition.inMilliseconds;
+  int get _positionMs => _session?.displayPosition.inMilliseconds ?? 0;
 
   /// What the scaffold draws from: the identity half of the item.
   ///
@@ -432,7 +479,10 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
       domain: waxDomainOf(_item.mediaType),
       shape: waxShapeOf(_item.mediaType),
       position: _position.value,
-      duration: _session.mediaDuration,
+      // The summary's own length until the session can answer, so the
+      // bar has a scale to draw before the load lands.
+      duration:
+          _session?.mediaDuration ?? Duration(milliseconds: _item.durationMs),
       playing: playing,
       shuffled: shuffled,
       repeat: switch (repeat) {
@@ -445,6 +495,16 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
 
   @override
   Widget build(BuildContext context) {
+    // Nothing has ever resolved here, which is the cold open. Every
+    // other pass has a summary to hold, so this is the only state that
+    // draws a spinner - and it is a shell rather than a face, so the
+    // hero is never built with nothing in it.
+    if (_shown == null) {
+      return _PlayerShell(
+        domain: widget.domain,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
     // The two standing modes plus where the queue came from, and nothing
     // else about it: watching the whole queue rebuilds this face on
     // every edit, and a drag reorder in the panel beside it emits one
@@ -483,9 +543,14 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     final playback = ref.read(nowPlayingProvider.notifier);
     final queue = ref.read(queueControllerProvider.notifier);
 
+    // The engine rather than the session's handle on it: they are the
+    // same object, and reading it from the provider is what lets the
+    // transport keep ticking through the window where there is no
+    // session to reach it through.
+    final engine = ref.watch(audioEngineProvider);
     return StreamBuilder<bool>(
-      stream: _session.engine.playingStream,
-      initialData: _session.engine.playing,
+      stream: engine.playingStream,
+      initialData: engine.playing,
       builder: (context, snapshot) {
         final playing = snapshot.data ?? false;
         return PlayerScaffold(
@@ -523,18 +588,23 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
               ? null
               : ShowOverline(episode: _episode!),
           subtitleOverride:
-              _book && (_session.book?.chapters.isNotEmpty ?? false)
+              _book && (_session?.book?.chapters.isNotEmpty ?? false)
               ? BookSubtitle(
-                  chapters: _session.book!.chapters,
+                  chapters: _session!.book!.chapters,
                   position: _position,
                 )
               : null,
           titleTrailing: ItemStarRatingRow(pid: _item.pid),
-          seek: _book
+          // The chapter bar needs a session to seek within; without
+          // one the plain cluster stands in, which is the same bar with
+          // its handle inert. Not a spinner and not nothing: the scale
+          // is the item's own length and it is honest for the frames
+          // this lasts.
+          seek: _book && _session != null
               ? BookSeek(
-                  session: _session,
+                  session: _session!,
                   position: _position,
-                  chapters: _session.book?.chapters ?? const <ChapterMark>[],
+                  chapters: _session!.book?.chapters ?? const <ChapterMark>[],
                 )
               : _Seek(
                   session: _session,
@@ -547,7 +617,10 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             playing: playing,
             shuffled: modes.$1,
             repeat: modes.$2 != QueueRepeat.off,
-            onPlayPause: _session.toggle,
+            // Through the controller rather than the session: with no
+            // session yet this is a resume, which is what the
+            // controller answers a play press with.
+            onPlayPause: playback.togglePlayback,
             onPrevious: _music ? () => unawaited(playback.previous()) : null,
             onNext: _music ? () => unawaited(playback.next()) : null,
             canNext: ref.watch(queueCanAdvanceProvider),
@@ -564,17 +637,19 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           ),
           volume: const _VolumeRow(),
           actionRow: _actionRow(context, carMode: carMode),
-          bottomRegion: _music
+          bottomRegion: _music || _session == null
               ? const _UpNextPeek()
-              : SpokenBottomRegion(session: _session, position: _position),
+              : SpokenBottomRegion(session: _session!, position: _position),
         );
       },
     );
   }
 
-  Future<void> _seekBy(Duration delta) {
-    final target = _session.displayPosition + delta;
-    return _session.seek(target < Duration.zero ? Duration.zero : target);
+  Future<void> _seekBy(Duration delta) async {
+    final session = _session;
+    if (session == null) return;
+    final target = session.displayPosition + delta;
+    await session.seek(target < Duration.zero ? Duration.zero : target);
   }
 
   /// Cast and the one overflow. Everything else that acts on the item
@@ -830,8 +905,14 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
               _ => openSimilarTracks(context, ref, _item),
             }),
           ),
-        ] else
-          ...spokenActionChips(_session),
+        ] else if (_session != null)
+          // Gated like the seek cluster and the bottom region above:
+          // every chip here drives a live session (its rate, its
+          // trim, its bookmarks), so the resolve window has nothing
+          // for them to act on. Absent for those frames rather than
+          // inert, which is what the rest of the spoken-word face
+          // does.
+          ...spokenActionChips(_session!),
         // Every face, not only the spoken-word ones 5.3 lists it under:
         // falling asleep to a record is what the control is for, and it
         // is about the device rather than the medium.
@@ -864,7 +945,10 @@ class _Seek extends ConsumerWidget {
     required this.playing,
   });
 
-  final PlaybackSession session;
+  /// Null between a start's entry and its load. The bar still draws -
+  /// the scale is the item's own length - and its handle is inert,
+  /// because there is nothing yet to seek within.
+  final PlaybackSession? session;
   final ItemSummary item;
   final ValueListenable<Duration> position;
 
@@ -889,11 +973,12 @@ class _Seek extends ConsumerWidget {
         now: NowPlayingData(
           title: item.title,
           position: at,
-          duration: session.mediaDuration,
+          duration:
+              session?.mediaDuration ?? Duration(milliseconds: item.durationMs),
           playing: playing,
         ),
         peaks: peaks,
-        onSeek: (to) => unawaited(session.seek(to)),
+        onSeek: session == null ? null : (to) => unawaited(session!.seek(to)),
         semanticsId: SemanticsIds.playerSeek,
       ),
     );
@@ -957,15 +1042,26 @@ class _UpNextPeek extends ConsumerWidget {
               WaxSpace.s16,
             ),
             child: Column(
+              // Left, like the header row above it and like every other
+              // block on this screen. Centring was the Column's default
+              // rather than a decision, and it put the track's name in
+              // the middle of the peek under a heading pinned to the
+              // left - two alignments in a strip four lines tall.
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: WaxSpace.s8),
-                  decoration: BoxDecoration(
-                    color: colors.textTertiary,
-                    borderRadius: WaxRadius.pill,
+                // The one thing that is centred, and now says so: it is
+                // a grab handle, and a handle belongs in the middle of
+                // what it drags.
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: WaxSpace.s8),
+                    decoration: BoxDecoration(
+                      color: colors.textTertiary,
+                      borderRadius: WaxRadius.pill,
+                    ),
                   ),
                 ),
                 Row(
@@ -996,26 +1092,56 @@ class _UpNextPeek extends ConsumerWidget {
                 // out left to right and runs out at the end, which is
                 // where an ellipsis belongs. The remaining count is on
                 // the line above and keeps the right edge to itself.
-                Text.rich(
-                  TextSpan(
-                    children: <InlineSpan>[
-                      TextSpan(
-                        text: item?.title ?? context.l10n.commonLoadingTitle,
-                        style: WaxType.body.copyWith(color: colors.textPrimary),
-                      ),
-                      if (item?.artist != null) ...<InlineSpan>[
-                        const WidgetSpan(child: SizedBox(width: WaxSpace.s8)),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text.rich(
                         TextSpan(
-                          text: item!.artist!,
-                          style: WaxType.caption.copyWith(
-                            color: colors.textSecondary,
-                          ),
+                          children: <InlineSpan>[
+                            TextSpan(
+                              text:
+                                  item?.title ??
+                                  context.l10n.commonLoadingTitle,
+                              style: WaxType.body.copyWith(
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            if (item?.artist != null) ...<InlineSpan>[
+                              const WidgetSpan(
+                                child: SizedBox(width: WaxSpace.s8),
+                              ),
+                              TextSpan(
+                                text: item!.artist!,
+                                style: WaxType.caption.copyWith(
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                      ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // The right edge had nothing on it but the count two
+                    // lines up, so the name sat against a stretch of
+                    // empty bar. The cover of what is coming is the
+                    // thing that belongs there: it says the same as the
+                    // line beside it, faster.
+                    if (item != null) ...<Widget>[
+                      const SizedBox(width: WaxSpace.s12),
+                      ArtworkImage(
+                        size: 32,
+                        artwork: waxArtwork(
+                          ref.watch(artworkStoreProvider),
+                          item.artUrl,
+                        ),
+                        monogram: item.title,
+                        shape: waxShapeOf(item.mediaType),
+                        domain: waxDomainOf(item.mediaType),
+                      ),
                     ],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  ],
                 ),
               ],
             ),

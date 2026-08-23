@@ -4,8 +4,20 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
+
+/// The words a shell message would draw, for a test asserting one
+/// without a widget tree to draw it in.
+///
+/// English, which is the locale a test host builds in. Through
+/// `resolve` rather than off a field, because a message raised from a
+/// notifier carries what to say rather than the sentence - and there is
+/// no reading of one that does not name a locale.
+String? shellMessageText(ShellMessage? message) =>
+    message?.resolve(AppLocalizationsEn());
 
 /// In-memory repository for widget tests. Pagination uses the item index as
 /// the cursor, which is enough to exercise keyset-style paging end to end.
@@ -4479,6 +4491,88 @@ class FakeRepository implements WaxDeckRepository {
     if (index < 0) return 0;
     final entry = trashEntries.removeAt(index);
     return entry.sizeBytes;
+  }
+
+  /// The generated-thumbnail census served by [getThumbnailCache], and
+  /// the prunes asked for against it.
+  ThumbnailCacheReport thumbnailCache = const ThumbnailCacheReport(
+    rows: 0,
+    bytes: 0,
+    sources: 0,
+    artSources: 0,
+    artSourceBytes: 0,
+    rungs: <ThumbnailRung>[],
+  );
+
+  /// Each prune as (olderThanSeconds, maxBytes), absences included: the
+  /// difference between an unset bound and a zero is the thing the
+  /// server refuses on, so a test asserting the call has to see it.
+  final List<(int?, int?)> thumbnailPrunes = [];
+
+  @override
+  Future<ThumbnailCacheReport> getThumbnailCache() async {
+    final error = adminError;
+    if (error != null) throw error;
+    return thumbnailCache;
+  }
+
+  @override
+  Future<ThumbnailPruneResult> pruneThumbnailCache({
+    int? olderThanSeconds,
+    int? maxBytes,
+  }) async {
+    final error = adminError;
+    if (error != null) throw error;
+    thumbnailPrunes.add((olderThanSeconds, maxBytes));
+    final dropped = thumbnailCache;
+    thumbnailCache = ThumbnailCacheReport(
+      rows: 0,
+      bytes: 0,
+      sources: 0,
+      artSources: dropped.artSources,
+      artSourceBytes: dropped.artSourceBytes,
+      rungs: const <ThumbnailRung>[],
+    );
+    return ThumbnailPruneResult(
+      removed: dropped.rows,
+      freedBytes: dropped.bytes,
+    );
+  }
+
+  /// Every set of exit requests built, so a test can assert what a
+  /// closing tab would have sent without a browser to close.
+  final List<List<ExitRequest>> exitBuilds = [];
+
+  /// The CSRF token this fake authenticates with, as the real client
+  /// does after a web sign-in. Present so a test can assert the beacons
+  /// carry a credential: nothing waits for one of these, so a request
+  /// that goes out unauthenticated fails invisibly.
+  String? csrfToken = 'csrf-test-token';
+
+  @override
+  List<ExitRequest> exitRequests({
+    required String pid,
+    required int positionMs,
+    ListenSession? listen,
+  }) {
+    final headers = <String, String>{'X-CSRF-Token': ?csrfToken};
+    final built = <ExitRequest>[
+      ExitRequest(
+        path: '/api/v1/items/${Uri.encodeComponent(pid)}/play-state',
+        method: 'PUT',
+        body: '{"positionMs":$positionMs}',
+        headers: headers,
+      ),
+      if (listen != null)
+        ExitRequest(
+          path: '/api/v1/listens',
+          method: 'POST',
+          body: '{"sessions":[{"sessionId":"${listen.sessionId}"}]}',
+          headers: headers,
+        ),
+    ];
+    exitBuilds.add(built);
+    return built;
   }
 
   /// Background jobs served by [listJobs].

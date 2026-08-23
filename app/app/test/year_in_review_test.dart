@@ -278,7 +278,10 @@ void main() {
     // wraps the card's own 1080-wide layout and the shrinking is a
     // transform above it.
     expect(_pngSize(exporter.exports.single.png), (1080, 1080));
-    expect(container.read(shellMessengerProvider)?.text, 'Saved to Downloads');
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Saved to Downloads',
+    );
   });
 
   // The card used to be names alone, with `TopEntry.artUrl` arriving on

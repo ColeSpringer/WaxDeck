@@ -76,6 +76,29 @@ abstract interface class MiniWindowPort {
   /// Ends the app. The tray's Quit, which has to work from a menu that
   /// is not part of any window.
   Future<void> quit();
+
+  /// Runs [onClose] when the window's own close is asked for, then ends
+  /// the app.
+  ///
+  /// The window is what a listener presses to leave, and until this it
+  /// meant nothing to playback: the tray plugin keeps the process alive
+  /// after the X, so the music played on out of a window that was gone.
+  /// A close is a stop, and a stop has state to finalize - the
+  /// checkpoint, the listen report, the session Connect is advertising -
+  /// so the app is given a chance to write it before the process goes.
+  ///
+  /// Bounded by the implementation rather than by the callback: a
+  /// server that has stopped answering must not be able to hold a
+  /// window open. Minimizing and losing focus are not this; only the
+  /// close.
+  Future<void> bindClose(Future<void> Function() onClose);
+
+  /// Forgets whatever [bindClose] bound, for a binder going out of
+  /// scope: the app signing out has no session to finalize, and a
+  /// closure still holding a torn-down one is worse than no handler at
+  /// all. The window keeps listening - what it heard is what stops
+  /// meaning anything.
+  Future<void> unbindClose();
 }
 
 /// What the tray icon says and what its menu offers.
@@ -153,6 +176,12 @@ class NoMiniWindow implements MiniWindowPort {
 
   @override
   Future<void> quit() async {}
+
+  @override
+  Future<void> bindClose(Future<void> Function() onClose) async {}
+
+  @override
+  Future<void> unbindClose() async {}
 }
 
 class NoTray implements TrayPort {

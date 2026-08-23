@@ -16,6 +16,7 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     this.browse,
     this.onPlay,
     this.onStop,
+    this.onGoingAway,
     this.onSkipNext,
     this.onSkipPrevious,
     this.onSkipToQueueItem,
@@ -61,6 +62,18 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   /// holds state the engine does not - live radio keeps a tuned station
   /// beside it. Absent, this falls through to the engine.
   final Future<void> Function()? onStop;
+
+  /// How the app finalizes when it is being thrown away rather than
+  /// stopped: the checkpoint, the listen report, the session Connect is
+  /// advertising, the queue the next launch offers to resume.
+  ///
+  /// Apart from [onStop] because they are different events with
+  /// different endings. A stop silences what is playing and leaves the
+  /// queue standing, which is what a lock-screen stop means; this is
+  /// the app going, and everything a stop leaves standing has to be
+  /// written down first. Absent, [onTaskRemoved] falls back to the
+  /// stop, which is the old behaviour rather than a broken one.
+  final Future<void> Function()? onGoingAway;
 
   /// Queue steps, when the app runs a queue (a Connect load, a
   /// browse-tree folder played through). Absent callbacks hide the
@@ -202,6 +215,38 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   @override
   Future<void> stop() => onStop?.call() ?? engine.stop();
 
+  /// The app was swiped out of the recents list.
+  ///
+  /// Android keeps the foreground service alive after that, which is
+  /// what makes a queue survive an app switch - and what left music
+  /// playing out of a window the listener had just thrown away. The
+  /// base handler's default is to do nothing, so this is where "closing
+  /// it stops the music" is said on this platform.
+  ///
+  /// Routed to the app's finalize rather than to a stop: the state a
+  /// departure has to write down - the checkpoint, the listen report,
+  /// the session Connect is advertising, the queue the next launch
+  /// offers - lives above the engine, and a stop is defined as the verb
+  /// that leaves all of it standing. Silencing the audio alone would
+  /// have left the listener where they were two sessions ago.
+  ///
+  /// Only the task being removed does this. `androidStopForegroundOnPause`
+  /// stays false so backgrounding the app keeps playing, which is the
+  /// half of the behaviour nobody complained about.
+  @override
+  Future<void> onTaskRemoved() async {
+    final goingAway = onGoingAway;
+    if (goingAway == null) {
+      await stop();
+      return;
+    }
+    await goingAway();
+    // The engine goes with the process, but not necessarily at once:
+    // the foreground service outlives the task, which is what left
+    // music playing out of a window somebody had thrown away.
+    await engine.stop();
+  }
+
   @override
   Future<void> seek(Duration position) => engine.seek(position);
 
@@ -278,6 +323,7 @@ Future<WaxDeckAudioHandler> initWaxDeckAudioService({
   BrowseSourcePort? browse,
   Future<void> Function()? onPlay,
   Future<void> Function()? onStop,
+  Future<void> Function()? onGoingAway,
   Future<void> Function()? onSkipNext,
   Future<void> Function()? onSkipPrevious,
   Future<void> Function(int index)? onSkipToQueueItem,
@@ -290,6 +336,7 @@ Future<WaxDeckAudioHandler> initWaxDeckAudioService({
       onPlayFromMediaId: onPlayFromMediaId,
       onPlay: onPlay,
       onStop: onStop,
+      onGoingAway: onGoingAway,
       onSkipNext: onSkipNext,
       onSkipPrevious: onSkipPrevious,
       onSkipToQueueItem: onSkipToQueueItem,

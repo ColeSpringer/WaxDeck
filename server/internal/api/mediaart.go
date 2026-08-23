@@ -8,12 +8,10 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
-// castArtSize is the longest edge minted art URLs ask for. Cast
-// receivers and DLNA renderers paint album art on a television or a
-// small panel, so the original is wasted bytes over a LAN and a
-// thumbnail rung is the honest request. 600 is what the public share
-// page already uses for the same job.
-const castArtSize = 600
+// castArtSize is the longest edge minted art URLs ask for. From the
+// service, which is the layer that can see the catalog's ladder and the
+// one place these are kept on it.
+const castArtSize = service.ArtSizeCast
 
 // mediaArtURL builds the origin-relative tokenized art URL. Like the
 // enclosure relay, the pid is the only thing that selects what is

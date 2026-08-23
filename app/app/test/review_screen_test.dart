@@ -210,7 +210,10 @@ void main() {
       repo.reviewEntries.where((e) => e.status == 'skipped'),
       hasLength(2),
     );
-    expect(container.read(shellMessengerProvider)?.text, 'Decided 2 entries');
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Decided 2 entries',
+    );
   });
 
   testWidgets('a failing queue shows the error with a retry', (tester) async {

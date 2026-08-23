@@ -647,6 +647,107 @@ void main() {
       );
     });
 
+    testWidgets('a pointer over it says so without a rebuild', (tester) async {
+      // Two halves of one gesture. The cursor is what tells a mouse the
+      // hairline is reachable; the knob growing under it is the
+      // confirmation. Both cost a repaint of one layer and nothing
+      // else - the bar around them spells three durations, runs a
+      // LayoutBuilder, and rebuilds a map of gesture factories, none of
+      // which two pixels of playhead have any business re-running on a
+      // pointer crossing a strip that sits beside the transport.
+      await _pump(
+        tester,
+        SizedBox(
+          width: 400,
+          child: WaxSeekBar(
+            position: const Duration(seconds: 25),
+            duration: const Duration(seconds: 100),
+            onSeek: (_) {},
+          ),
+        ),
+      );
+
+      final region = find.descendant(
+        of: find.byType(WaxSeekBar),
+        matching: find.byType(MouseRegion),
+      );
+      expect(
+        tester.widget<MouseRegion>(region.first).cursor,
+        SystemMouseCursors.click,
+      );
+
+      final paintBefore = tester.widget<CustomPaint>(
+        find
+            .descendant(
+              of: find.byType(WaxSeekBar),
+              matching: find.byType(CustomPaint),
+            )
+            .first,
+      );
+
+      // Settled, so the frame the hover asks for is the hover's.
+      await tester.pumpAndSettle();
+      expect(tester.binding.hasScheduledFrame, isFalse);
+
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        pointer.addPointer(location: tester.getCenter(find.byType(WaxSeekBar))),
+      );
+      addTearDown(() => tester.sendEventToBinding(pointer.removePointer()));
+
+      // Something has to be redrawn - the knob is bigger now.
+      expect(tester.binding.hasScheduledFrame, isTrue);
+      await tester.pump();
+
+      // And it is the layer, not the widget: the same CustomPaint, and
+      // a painter that reports nothing worth comparing. A repaint that
+      // arrives with neither is one driven by `repaint`.
+      expect(
+        tester.widget<CustomPaint>(
+          find
+              .descendant(
+                of: find.byType(WaxSeekBar),
+                matching: find.byType(CustomPaint),
+              )
+              .first,
+        ),
+        same(paintBefore),
+      );
+      expect(paintBefore.painter!.shouldRepaint(paintBefore.painter!), isFalse);
+    });
+
+    testWidgets('a bar a listener cannot seek offers no cursor', (
+      tester,
+    ) async {
+      // A track with no length is inert, and a hand cursor over
+      // something that does nothing is a lie.
+      await _pump(
+        tester,
+        const SizedBox(
+          width: 400,
+          child: WaxSeekBar(
+            position: Duration.zero,
+            duration: Duration.zero,
+            onSeek: null,
+          ),
+        ),
+      );
+
+      expect(
+        tester
+            .widget<MouseRegion>(
+              find
+                  .descendant(
+                    of: find.byType(WaxSeekBar),
+                    matching: find.byType(MouseRegion),
+                  )
+                  .first,
+            )
+            .cursor,
+        MouseCursor.defer,
+      );
+    });
+
     testWidgets('the plain bar is a full touch target', (tester) async {
       // A 24 px box over a 4 px track demanded the accuracy the bug
       // report named; the box is the touch target whatever is drawn.

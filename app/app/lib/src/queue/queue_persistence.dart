@@ -248,26 +248,24 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
   /// serve this yet, is a launch with nothing to offer - not a failed
   /// one, and certainly not a deck bar stuck on an error.
   Future<RestorableQueue?> _fromServer() async {
-    final List<PlaybackSessionHistoryEntry> sessions;
-    try {
-      sessions = await ref
-          .read(repositoryProvider)
-          .listPlaybackSessionHistory();
-    } on Object catch (error) {
-      debugPrint('session history unavailable: $error');
-      return null;
-    }
-    // The store promises never to throw and this does not rely on being
-    // lucky about it: the whole cost of losing here is an offer that
-    // comes back after it was declined, which is not worth failing a
-    // launch for.
-    final declined = DateTime.tryParse(
-      await ref
-              .read(clientSettingsStoreProvider)
-              .read(ClientSettingKeys.resumeDeclinedThrough)
-              .catchError((Object _) => null) ??
-          '',
-    );
+    // Together: what the server was playing and whether this device
+    // already said no to it are independent facts, and the deck bar
+    // waits on the whole of this. Asked in turn, a launch on the web
+    // build spent a local read's worth of nothing before the round trip
+    // it actually needed.
+    final (sessions, declinedThrough) = await (
+      _sessionHistory(),
+      // The store promises never to throw and this does not rely on
+      // being lucky about it: the whole cost of losing here is an offer
+      // that comes back after it was declined, which is not worth
+      // failing a launch for.
+      ref
+          .read(clientSettingsStoreProvider)
+          .read(ClientSettingKeys.resumeDeclinedThrough)
+          .catchError((Object _) => null),
+    ).wait;
+    if (sessions == null) return null;
+    final declined = DateTime.tryParse(declinedThrough ?? '');
     for (final session in sessions) {
       if (session.entries.isEmpty) continue;
       if (declined != null && !session.positionAt.isAfter(declined)) continue;
@@ -276,23 +274,55 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
         queue: queueFromSession(session),
         savedAt: session.positionAt,
         sessionId: session.id,
-        currentItem: current == null
-            ? null
-            : ItemSummary(
-                pid: current.pid,
-                // A session entry carries no media type; the pid says
-                // it, since every API pid is a type prefix in front of a
-                // ULID. It decides the offer's artwork shape and glyph,
-                // so a book offered as a track would be the wrong shape
-                // on the bar.
-                mediaType: mediaTypeOfPid(current.pid),
-                title: current.title,
-                artist: current.artist,
-                durationMs: current.durationMs ?? 0,
-              ),
+        currentItem: current == null ? null : await _offeredItem(current),
       );
     }
     return null;
+  }
+
+  /// The account's recent server-side sessions, or null where they
+  /// could not be asked for. A launch offline, or against a server that
+  /// does not serve this yet, is a launch with nothing to offer.
+  Future<List<PlaybackSessionHistoryEntry>?> _sessionHistory() async {
+    try {
+      return await ref.read(repositoryProvider).listPlaybackSessionHistory();
+    } on Object catch (error) {
+      debugPrint('session history unavailable: $error');
+      return null;
+    }
+  }
+
+  /// The full summary for the entry a server-side session was left on.
+  ///
+  /// A session entry is the wire's own record of what played - a pid, a
+  /// title, an artist - and it carries no artwork and no media type.
+  /// Built from that alone, the offer drew a monogram where the cover
+  /// belongs and guessed the shape from the pid, so coming back to a
+  /// session looked nothing like leaving it. One read per launch fixes
+  /// both, and it is the item already on screen when the offer is
+  /// accepted, so the fetch is one the next frame would make anyway.
+  ///
+  /// Falls back to the entry's own fields rather than to nothing: the
+  /// item may have been deleted while the account was away, and an
+  /// offer that names what it was playing beats no offer at all.
+  Future<ItemSummary> _offeredItem(PlaybackSessionEntry entry) async {
+    final inline = ItemSummary(
+      pid: entry.pid,
+      // A session entry carries no media type; the pid says it, since
+      // every API pid is a type prefix in front of a ULID. It decides
+      // the offer's artwork shape and glyph, so a book offered as a
+      // track would be the wrong shape on the bar.
+      mediaType: mediaTypeOfPid(entry.pid),
+      title: entry.title,
+      artist: entry.artist,
+      durationMs: entry.durationMs ?? 0,
+    );
+    try {
+      return await ref.read(repositoryProvider).getItem(entry.pid);
+    } on Object catch (error) {
+      debugPrint('offered item ${entry.pid} unavailable: $error');
+      return inline;
+    }
   }
 
   /// Puts the restored queue back in play. Through the playback layer,

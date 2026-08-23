@@ -1013,14 +1013,18 @@ func TestSetArtworkTakesWhatTheCatalogRecognizes(t *testing.T) {
 
 	// And the byte endpoint labels it honestly, both whole and scaled.
 	// The 6x5 source is smaller than the smallest legal size, so the
-	// scaling legs get a 40x30: a size it already fits answers the
-	// source as itself, and a smaller one is a real thumbnail, which a
-	// non-JPEG source re-encodes as PNG.
+	// scaling legs get a 40x30. TIFF is the format the catalog decodes
+	// and no client paints, so every sized request re-encodes it - the
+	// one that fits inside its box at the source's own size, and the
+	// smaller one as a real thumbnail. Both come back PNG, since only a
+	// JPEG source re-encodes as JPEG. Asking for no size at all is the
+	// request that means "the original", and that still answers the
+	// stored bytes as themselves.
 	resp = metadataPutBytes(t, h.ts, "/api/v1/items/"+pid+"/artwork", h.token, tiffImage(t, 40, 30))
 	wantStatus(t, resp, 200, "a TIFF big enough to scale")
 	for path, want := range map[string]string{
 		"/api/v1/items/" + pid + "/art":         "image/tiff",
-		"/api/v1/items/" + pid + "/art?size=64": "image/tiff",
+		"/api/v1/items/" + pid + "/art?size=64": "image/png",
 		"/api/v1/items/" + pid + "/art?size=16": "image/png",
 	} {
 		resp = get(t, h.ts, path, h.token)

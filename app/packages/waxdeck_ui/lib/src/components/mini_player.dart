@@ -6,6 +6,7 @@ import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
+import 'marquee.dart';
 import 'artwork.dart';
 import 'controls.dart';
 import 'deck_bar.dart' show DeckBarActions;
@@ -169,24 +170,21 @@ class MiniPlayer extends StatelessWidget {
         valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
       );
 
+  /// The same self-scrolling line the deck bar draws, and for a
+  /// stronger reason: this window is the narrowest surface in the app
+  /// and has no player behind it to open for the rest of the name.
   Widget _titles(WaxColors colors) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisAlignment: MainAxisAlignment.center,
     mainAxisSize: MainAxisSize.min,
     children: <Widget>[
-      Text(
+      WaxMarqueeText(
         now.title,
-        maxLines: 1,
-        overflow: TextOverflow.fade,
-        softWrap: false,
         style: WaxType.titleItem.copyWith(color: colors.textPrimary),
       ),
       if (now.subtitle != null)
-        Text(
+        WaxMarqueeText(
           now.subtitle!,
-          maxLines: 1,
-          overflow: TextOverflow.fade,
-          softWrap: false,
           style: WaxType.caption.copyWith(color: colors.textSecondary),
         ),
     ],

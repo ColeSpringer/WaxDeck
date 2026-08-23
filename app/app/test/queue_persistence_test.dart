@@ -7,6 +7,7 @@ import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -60,13 +61,18 @@ const _tick = Duration(milliseconds: 5);
 
 Future<void> _settle() => Future<void>.delayed(_tick * 4);
 
-ProviderContainer _container(RecordingQueueStore store, {MirrorDatabase? db}) {
+ProviderContainer _container(
+  RecordingQueueStore store, {
+  MirrorDatabase? db,
+  FakeRepository? repository,
+}) {
   final container = ProviderContainer(
     overrides: [
       queueStoreProvider.overrideWithValue(store),
       queueSaveDebounceProvider.overrideWithValue(_tick),
       repositoryProvider.overrideWithValue(
-        FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]),
+        repository ??
+            FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]),
       ),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
       // Accepting a restore offer hands the queue to playback, which
@@ -292,6 +298,96 @@ void main() {
 
       expect(offer!.currentItem!.title, 'So What');
       expect(offer.savedAt, DateTime.utc(2026, 7, 25));
+    });
+
+    test(
+      'a server-side session is offered with the real item behind it',
+      () async {
+        // The session history is the wire's own record of what played: a
+        // pid, a title, an artist, and no artwork or media type at all.
+        // Built from that alone the offer drew an initials monogram where
+        // the cover belongs and guessed the shape from the pid prefix, so
+        // coming back to a session looked nothing like leaving it. The
+        // catalogue is asked for the item instead.
+        final repository =
+            FakeRepository(
+                items: [
+                  ItemSummary(
+                    pid: 'tr-A',
+                    mediaType: MediaType.audiobook,
+                    title: 'So What',
+                    artist: 'Miles Davis',
+                    durationMs: 545000,
+                    artUrl: '/api/v1/items/tr-A/art',
+                  ),
+                ],
+              )
+              ..sessionHistory = <PlaybackSessionHistoryEntry>[
+                PlaybackSessionHistoryEntry(
+                  id: 'ps-1',
+                  endpointId: 'pe-1',
+                  authority: 'mirror',
+                  index: 0,
+                  positionMs: 42000,
+                  positionAt: DateTime.utc(2026, 7, 28, 9),
+                  rate: 1,
+                  entries: const <PlaybackSessionEntry>[
+                    PlaybackSessionEntry(
+                      pid: 'tr-A',
+                      title: 'So What',
+                      artist: 'Miles Davis',
+                    ),
+                  ],
+                ),
+              ];
+
+        final offer = await _container(
+          RecordingQueueStore(),
+          repository: repository,
+        ).read(queueRestoreProvider.future);
+
+        final item = offer!.currentItem!;
+        expect(
+          item.artUrl,
+          isNotNull,
+          reason: 'the offer draws the real cover',
+        );
+        expect(item.mediaType, MediaType.audiobook);
+        expect(item.durationMs, 545000);
+      },
+    );
+
+    test('an offered item the catalogue lost still names itself', () async {
+      // Deleted while the account was away. An offer that names what it
+      // was playing beats no offer at all, so the entry's own fields
+      // stand in rather than the whole thing being dropped.
+      final repository = FakeRepository()
+        ..sessionHistory = <PlaybackSessionHistoryEntry>[
+          PlaybackSessionHistoryEntry(
+            id: 'ps-1',
+            endpointId: 'pe-1',
+            authority: 'mirror',
+            index: 0,
+            positionMs: 42000,
+            positionAt: DateTime.utc(2026, 7, 28, 9),
+            rate: 1,
+            entries: const <PlaybackSessionEntry>[
+              PlaybackSessionEntry(
+                pid: 'tr-GONE',
+                title: 'So What',
+                artist: 'Miles Davis',
+              ),
+            ],
+          ),
+        ];
+
+      final offer = await _container(
+        RecordingQueueStore(),
+        repository: repository,
+      ).read(queueRestoreProvider.future);
+
+      expect(offer!.currentItem!.title, 'So What');
+      expect(offer.currentItem!.artUrl, isNull);
     });
 
     test('accepting puts the queue back and retires the offer', () async {

@@ -169,6 +169,7 @@ class _StatusTiles extends ConsumerWidget {
     final schedules = ref.watch(schedulesProvider).value ?? const <Schedule>[];
     final similarity = ref.watch(similarityStatusProvider).value;
     final sessions = ref.watch(playbackSessionsProvider).value;
+    final thumbs = ref.watch(thumbnailCacheProvider).value;
 
     final running = jobs.where((j) => j.state == 'running').length;
     final lastBackup = backups.where((b) => b.state == 'done').firstOrNull;
@@ -267,6 +268,28 @@ class _StatusTiles extends ConsumerWidget {
               semanticsId: SemanticsIds.adminTile('similarity'),
             ),
           ),
+        _tile(
+          width: 220,
+          child: StatTile(
+            label: l10n.adminTileArtworkCache,
+            value: thumbs == null ? '--' : l10n.formatBytes(thumbs.bytes),
+            // What the cache costs is only readable against what it was
+            // derived from: 40 MB is small beside 400 MB of covers and
+            // large beside 20. A cache with nothing in it has no share
+            // to state, and so does one whose sources somehow measure
+            // zero - which is a division, not a percentage.
+            caption: thumbs == null
+                ? l10n.adminTileLoading
+                : thumbs.rows == 0 || thumbs.artSourceBytes <= 0
+                ? l10n.adminTileArtworkCacheEmpty
+                : l10n.adminTileArtworkCacheShare(
+                    (thumbs.bytes * 100 / thumbs.artSourceBytes).round(),
+                  ),
+            glyph: WaxIcons.albums,
+            semanticsId: SemanticsIds.adminTile('thumbnails'),
+            onTap: () => context.go(WaxRoute.trash),
+          ),
+        ),
         _tile(
           width: 220,
           child: StatTile(

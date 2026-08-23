@@ -130,6 +130,41 @@ it, restart. Without the old keyfile everything restores except sealed
 credentials (app passwords, scrobbling connections, private feed
 logins, notification target configurations), which need re-entering.
 
+## Upgrades that reset the catalog
+
+Before 1.0 the catalog's schema baseline is edited in place rather
+than migrated, so an upgrade whose release notes say the baseline
+moved is one your existing catalog cannot be opened with. The server
+refuses to start rather than failing later on whichever write first
+reaches a column that is not there.
+
+The cure is `WAXDECK_RESET_CATALOG=true` (or `-reset-catalog`), set
+once for that upgrade and removed afterwards. Two things make it safe
+to set and worth removing:
+
+- **It fires only on the refusal.** The server probes the catalog's
+  baseline fingerprint and resets only when that is what refused the
+  open. A healthy catalog starts normally with the flag on, and a
+  catalog that is broken for some other reason is still refused rather
+  than discarded.
+- **The old catalog is set aside, not deleted.** It is renamed to a
+  timestamped `<catalog>.stale-<ts>.bak` beside itself, WAL and shm
+  included, so a reset you did not mean is recoverable by renaming the
+  files back under the older server.
+
+Leave it set and you have armed the same reset for the next refusal -
+including the one a version *rollback* produces, since a fingerprint
+that moved back looks the same from here as one that moved forward.
+That reset would be silent and automatic. Set it for the upgrade,
+restart, take it out.
+
+What a reset discards is everything the catalog holds that is not on
+disk: play positions, ratings, stars, playlists, curation edits,
+podcast subscriptions, and trash. Media files are untouched, and the
+startup scan re-indexes them. Library roots added at runtime rather
+than through configuration are the part startup will not put back -
+the reset report names them.
+
 ## Scheduled jobs
 
 Three schedules, each a five-field cron expression in server-local

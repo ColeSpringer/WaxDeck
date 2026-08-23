@@ -144,7 +144,10 @@ void main() {
 
     expect(repo.fixHealthCalls, hasLength(1));
     expect(repo.fixHealthCalls.single.rule, 'missing-art');
-    expect(container.read(shellMessengerProvider)?.text, 'Queued 5 items');
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Queued 5 items',
+    );
   });
 
   testWidgets('a rule opens its paginated issue list', (tester) async {

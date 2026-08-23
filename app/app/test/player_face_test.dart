@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
@@ -105,6 +107,65 @@ void main() {
         harness.container.read(queueControllerProvider).repeat,
         QueueRepeat.all,
       );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('an advance keeps the same face rather than flashing one', (
+      tester,
+    ) async {
+      // A start publishes the entry first and the session only once the
+      // load lands. Reading that window as "not playing yet" put a
+      // spinner shell on screen for every track change - a different
+      // widget type, so the face and everything it was holding (the
+      // hero, the position ticker, the artwork) were torn down and
+      // rebuilt. Web hit it on every advance, having no preload.
+      final repo = FakeRepository(
+        items: [_track(_first, 'Salt Harbour'), _track(_second, 'Gullwing')],
+      );
+      final engine = FakeEngine();
+      final harness = PlayerHarness(
+        playbackContainer(repo: repo, engine: engine),
+      );
+      harness.play([
+        _track(_first, 'Salt Harbour'),
+        _track(_second, 'Gullwing'),
+      ]);
+      await pumpPlayerInto(tester, harness);
+
+      final face = find.byType(PlayerFace);
+      expect(face, findsOneWidget);
+      // The element, not the widget: a rebuild is fine and expected,
+      // and a *replacement* is the bug. Identity of the State survives
+      // the first and not the second.
+      final before = tester.state(face);
+      expect(find.text('Salt Harbour'), findsWidgets);
+
+      // The window this is about is the one where the entry is
+      // published and the session is not, and against fakes that
+      // resolve in a microtask it does not survive to a frame. Held
+      // open on purpose, which is also what it is on web: no preload,
+      // so every advance loads across the network.
+      final gate = Completer<void>();
+      engine.loadGate = gate;
+      final advancing = harness.playback.next();
+      await tester.pump();
+
+      expect(
+        face,
+        findsOneWidget,
+        reason: 'the face stands through the load window',
+      );
+      expect(tester.state(face), same(before));
+      // And it is the outgoing track it stands as, rather than a
+      // spinner: the summary is in hand well before the session is.
+      expect(find.text('Gullwing'), findsWidgets);
+
+      gate.complete();
+      await advancing;
+      await tester.pumpAndSettle();
+
+      expect(tester.state(face), same(before));
+      expect(find.text('Gullwing'), findsWidgets);
       await harness.endPlayback(tester);
     });
 
@@ -310,6 +371,48 @@ void main() {
   });
 
   group('the spoken-word face', () {
+    testWidgets('stands through a load window like the music one', (
+      tester,
+    ) async {
+      // Every other half of this face is guarded against the window
+      // where the entry is published and the session is not - the
+      // chapter seek, the bottom region, the sleep timer. The chip row
+      // was not, and each of its four chips drives a live session, so
+      // an advance in a podcast queue replaced the whole player with a
+      // red box for the length of the resolve. On web that is every
+      // advance.
+      final first = testItem(
+        'tr-01JZX5N8QW3F4V9T2B7KDEP0001',
+        mediaType: MediaType.podcast,
+      );
+      final second = testItem(
+        'tr-01JZX5N8QW3F4V9T2B7KDEP0002',
+        mediaType: MediaType.podcast,
+      );
+      final repo = FakeRepository(items: [first, second])
+        ..addSubscription(testShow('pc-1'));
+      final engine = FakeEngine(mediaDuration: const Duration(minutes: 30));
+      final harness = PlayerHarness(
+        playbackContainer(repo: repo, engine: engine),
+      );
+      harness.play([first, second]);
+      await pumpPlayerInto(tester, harness);
+      expect(find.byType(PlayerFace), findsOneWidget);
+
+      final gate = Completer<void>();
+      engine.loadGate = gate;
+      final advancing = harness.playback.next();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PlayerFace), findsOneWidget);
+
+      gate.complete();
+      await advancing;
+      await tester.pumpAndSettle();
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('swaps the transport for interval seeks', (tester) async {
       final repo = FakeRepository()..addSubscription(testShow('pc-1'));
       final episode = testItem(

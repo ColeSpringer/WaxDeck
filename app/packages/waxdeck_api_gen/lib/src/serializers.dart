@@ -306,6 +306,10 @@ import 'package:waxdeck_api_gen/src/model/synced_line.dart';
 import 'package:waxdeck_api_gen/src/model/tag_edit.dart';
 import 'package:waxdeck_api_gen/src/model/tag_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/tag_rule.dart';
+import 'package:waxdeck_api_gen/src/model/thumbnail_cache_report.dart';
+import 'package:waxdeck_api_gen/src/model/thumbnail_prune_request.dart';
+import 'package:waxdeck_api_gen/src/model/thumbnail_prune_result.dart';
+import 'package:waxdeck_api_gen/src/model/thumbnail_rung.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_boundary.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_create.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_info.dart';
@@ -652,6 +656,10 @@ part 'serializers.g.dart';
   TagEdit,
   TagEditResult,
   TagRule,
+  ThumbnailCacheReport,
+  ThumbnailPruneRequest,
+  ThumbnailPruneResult,
+  ThumbnailRung,
   TimelineBoundary,
   TimelineCreate,
   TimelineInfo,

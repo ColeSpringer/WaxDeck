@@ -371,6 +371,31 @@ class _ComponentsPageState extends State<ComponentsPage> {
         ),
         const SizedBox(height: WaxSpace.s24),
 
+        const SectionHeader(overline: 'Content', title: 'Scrolling titles'),
+        // Both cases side by side in the same slot, because the whole
+        // design is that they are the same widget: the long one travels
+        // and pauses at each end, the short one is a plain line with no
+        // ticker behind it. Under reduced motion both draw as the short
+        // one does.
+        SizedBox(
+          width: 220,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              WaxMarqueeText(
+                'Concerto for Two Violins in D minor, BWV 1043: II. Largo',
+                style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+              ),
+              const SizedBox(height: WaxSpace.s8),
+              WaxMarqueeText(
+                'Salt Harbour',
+                style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
         const SectionHeader(overline: 'Content', title: 'Artwork shapes'),
         Row(
           children: <Widget>[

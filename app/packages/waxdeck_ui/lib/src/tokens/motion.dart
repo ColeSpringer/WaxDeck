@@ -45,8 +45,9 @@ class WaxMotion {
   final Duration artworkCrossfade;
 
   /// False when the platform asks for reduced motion. Widgets that
-  /// animate continuously (the row bars, the platter ring, marquees that
-  /// do not exist) check this and hold a static pose instead.
+  /// animate continuously (the row bars, the platter ring, the deck
+  /// bar's scrolling titles) check this and hold a static pose
+  /// instead.
   final bool animationsEnabled;
 
   /// Emphasized: the house curve for anything spatial.

@@ -323,6 +323,36 @@
   "@playerSimilarTracks": {
     "description": "Menu item that lists tracks that sound like what is playing."
   },
+  "playerSkippedUnplayable": "Skipped {title} - this file can't be played",
+  "@playerSkippedUnplayable": {
+    "description": "Message after an item was skipped because the audio engine refused it. {title} is the item's title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Salt Harbour"
+      }
+    }
+  },
+  "playerSkippedUnplayableMany": "Skipped {count} tracks that can't be played",
+  "@playerSkippedUnplayableMany": {
+    "description": "Message replacing the per-track one once several unplayable items have been skipped in a row. {count} is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "playerSkipsGaveUp": "Stopped after {count} files that can't be played",
+  "@playerSkipsGaveUp": {
+    "description": "Message when a run of unplayable items hit the cap and playback stopped rather than walking the whole queue. {count} is how many were skipped.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "playerSleepTimer": "Sleep timer",
   "@playerSleepTimer": {
     "description": "Accessible name of the sleep timer control while no timer is running."

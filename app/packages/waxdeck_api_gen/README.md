@@ -354,6 +354,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**getLibraryReadOnly**](doc/AdminApi.md#getlibraryreadonly) | **GET** /libraries/{pid}/read-only | Read a library&#39;s read-only mode
 [*AdminApi*](doc/AdminApi.md) | [**getScrobblingConfig**](doc/AdminApi.md#getscrobblingconfig) | **GET** /admin/scrobbling | Read the server&#39;s scrobbling credentials state
 [*AdminApi*](doc/AdminApi.md) | [**getStagedRestore**](doc/AdminApi.md#getstagedrestore) | **GET** /admin/backups/restore | Inspect the staged restore
+[*AdminApi*](doc/AdminApi.md) | [**getThumbnailCache**](doc/AdminApi.md#getthumbnailcache) | **GET** /admin/thumbnails | Census the generated thumbnail cache
 [*AdminApi*](doc/AdminApi.md) | [**getTranscodingActivity**](doc/AdminApi.md#gettranscodingactivity) | **GET** /admin/transcoding/activity | Read what the transcoder is doing right now
 [*AdminApi*](doc/AdminApi.md) | [**getTranscodingLimits**](doc/AdminApi.md#gettranscodinglimits) | **GET** /admin/transcoding | Read the transcoding limits
 [*AdminApi*](doc/AdminApi.md) | [**importBackup**](doc/AdminApi.md#importbackup) | **POST** /admin/backups/import | Upload a backup archive
@@ -363,6 +364,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**listLibraries**](doc/AdminApi.md#listlibraries) | **GET** /libraries | List libraries
 [*AdminApi*](doc/AdminApi.md) | [**listSchedules**](doc/AdminApi.md#listschedules) | **GET** /admin/schedules | List the scheduled jobs
 [*AdminApi*](doc/AdminApi.md) | [**listTrash**](doc/AdminApi.md#listtrash) | **GET** /admin/trash | List the trash
+[*AdminApi*](doc/AdminApi.md) | [**pruneThumbnailCache**](doc/AdminApi.md#prunethumbnailcache) | **POST** /admin/thumbnails/prune | Prune the generated thumbnail cache
 [*AdminApi*](doc/AdminApi.md) | [**purgeTrashEntry**](doc/AdminApi.md#purgetrashentry) | **DELETE** /admin/trash/{trashId} | Purge one trashed file
 [*AdminApi*](doc/AdminApi.md) | [**putAdminSettings**](doc/AdminApi.md#putadminsettings) | **PUT** /admin/settings | Replace the server&#39;s runtime settings
 [*AdminApi*](doc/AdminApi.md) | [**putGenreTree**](doc/AdminApi.md#putgenretree) | **PUT** /admin/genre-tree | Replace the canonical genre vocabulary
@@ -895,6 +897,10 @@ Class | Method | HTTP request | Description
  - [TagEdit](doc/TagEdit.md)
  - [TagEditResult](doc/TagEditResult.md)
  - [TagRule](doc/TagRule.md)
+ - [ThumbnailCacheReport](doc/ThumbnailCacheReport.md)
+ - [ThumbnailPruneRequest](doc/ThumbnailPruneRequest.md)
+ - [ThumbnailPruneResult](doc/ThumbnailPruneResult.md)
+ - [ThumbnailRung](doc/ThumbnailRung.md)
  - [TimelineBoundary](doc/TimelineBoundary.md)
  - [TimelineCreate](doc/TimelineCreate.md)
  - [TimelineInfo](doc/TimelineInfo.md)

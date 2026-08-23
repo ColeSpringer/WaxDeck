@@ -94,7 +94,7 @@ void main() {
 
     expect(repo.libraries.map((l) => l.name), contains('audiobooks'));
     expect(
-      container.read(shellMessengerProvider)?.text,
+      shellMessageText(container.read(shellMessengerProvider)),
       contains('Library "audiobooks" created'),
     );
     // The list picked the new root up.
@@ -119,7 +119,7 @@ void main() {
 
     expect(repo.libraries, isEmpty);
     expect(
-      container.read(shellMessengerProvider)?.text,
+      shellMessageText(container.read(shellMessengerProvider)),
       contains('name and an absolute path are required'),
     );
   });

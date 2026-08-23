@@ -9,6 +9,7 @@ import '../tokens/colors.dart';
 import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
+import 'marquee.dart';
 import 'artwork.dart';
 import 'controls.dart';
 import 'semantics_slots.dart';
@@ -603,19 +604,23 @@ class DeckBar extends StatelessWidget {
     required bool compact,
   }) {
     final l10n = context.waxL10n;
-    // One line, fade-clipped. No marquee anywhere: it is motion and an
-    // accessibility liability, and the full text is always reachable
-    // through the player or a tooltip.
+    // One line that scrolls itself when the name does not fit, and sits
+    // still when it does. This block used to be fade-clipped on the
+    // argument that a marquee is motion and an accessibility liability
+    // and the player is one tap away - all true, and beside the point:
+    // the bar is the surface on screen, and the strip is narrow enough
+    // that ordinary album and station names run off the end of it, so
+    // "there is more" was the only thing it said. WaxMarqueeText is the
+    // answer to the objection rather than a reversal of it: it moves
+    // only on overflow, pauses at both ends, holds still under reduced
+    // motion, and reads the whole string to a screen reader.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Text(
+        WaxMarqueeText(
           now.title,
-          maxLines: 1,
-          overflow: TextOverflow.fade,
-          softWrap: false,
           style: WaxType.titleItem.copyWith(color: colors.textPrimary),
         ),
         Row(
@@ -629,7 +634,7 @@ class DeckBar extends StatelessWidget {
               const SizedBox(width: WaxSpace.s8),
             ],
             Flexible(
-              child: Text(
+              child: WaxMarqueeText(
                 // Composed from whole sentences rather than joined from
                 // fragments: where the sound comes out goes before what
                 // is playing in plenty of languages.
@@ -640,9 +645,6 @@ class DeckBar extends StatelessWidget {
                   (final subtitle?, null) => subtitle,
                   _ => '',
                 },
-                maxLines: 1,
-                overflow: TextOverflow.fade,
-                softWrap: false,
                 style: WaxType.caption.copyWith(color: colors.textSecondary),
               ),
             ),
@@ -835,6 +837,7 @@ class DeckBarOffer extends StatelessWidget {
     this.domain = WaxDomain.music,
     this.shape = ArtworkShape.square,
     this.resumeLabel,
+    this.sizeClass,
     this.semanticsId,
     this.resumeSemanticsId,
     this.dismissSemanticsId,
@@ -853,6 +856,12 @@ class DeckBarOffer extends StatelessWidget {
   final String? resumeLabel;
   final VoidCallback onResume;
   final VoidCallback onDismiss;
+
+  /// Defaults to the class of the current window, as [DeckBar]'s does -
+  /// and injectable for the same reason: the offer stands in the deck
+  /// slot at whichever height the bar would, so a golden that cannot
+  /// pin the class cannot pin the form either.
+  final WaxSizeClass? sizeClass;
 
   final String? semanticsId;
   final String? resumeSemanticsId;
@@ -877,7 +886,15 @@ class DeckBarOffer extends StatelessWidget {
           border: Border(top: BorderSide(color: colors.hairline)),
         ),
         child: SizedBox(
-          height: WaxShellMetrics.deckBarCompactHeight,
+          // The height the live bar would stand at in this window, not
+          // the compact one everywhere. The offer occupies the deck
+          // slot and is replaced by the bar the moment it is accepted,
+          // so a fixed 64 was a strip that grew to 88 under the
+          // listener's cursor - and, at sidebar width, an offer visibly
+          // shorter than the thing it was offering to bring back.
+          height: (sizeClass ?? WaxSizeClass.of(context)).hasSidebar
+              ? WaxShellMetrics.deckBarExpandedHeight
+              : WaxShellMetrics.deckBarCompactHeight,
           // See [DeckBar]: the offer stands in the same slot, with the
           // same lack of a Material around it.
           child: Material(
@@ -899,25 +916,23 @@ class DeckBarOffer extends StatelessWidget {
                   const SizedBox(width: WaxSpace.s12),
                   Expanded(
                     child: ExcludeSemantics(
+                      // The bar's own title block, down to the
+                      // scrolling: what is offered back is named the
+                      // way what is playing is named, so accepting the
+                      // offer changes the buttons and nothing else.
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          Text(
+                          WaxMarqueeText(
                             title,
-                            maxLines: 1,
-                            overflow: TextOverflow.fade,
-                            softWrap: false,
                             style: WaxType.titleItem.copyWith(
                               color: colors.textPrimary,
                             ),
                           ),
-                          Text(
+                          WaxMarqueeText(
                             subtitle ?? l10n.deckBarOfferTitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.fade,
-                            softWrap: false,
                             style: WaxType.caption.copyWith(
                               color: colors.textSecondary,
                             ),

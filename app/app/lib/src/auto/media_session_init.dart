@@ -4,7 +4,9 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../connect/queue_gateway.dart';
+import '../player/now_playing_controller.dart';
 import '../providers.dart';
+import '../queue/queue_persistence.dart';
 import '../sync/sync_providers.dart';
 import 'auto_browse.dart';
 
@@ -43,6 +45,17 @@ Future<void> initMediaSession(ProviderContainer container) async {
       // The engine cannot let go of a tuned station. Pause stays its
       // own, being a gap rather than an end.
       onStop: queue.stop,
+      // Swiping the app out of the recents list, which is a departure
+      // rather than a stop: the same two things the desktop close does,
+      // and for the same reason. The foreground service outlives the
+      // task, so without this the checkpoint, the listen report and the
+      // queue were left exactly where a stop leaves them - standing.
+      onGoingAway: () async {
+        await Future.wait(<Future<void>>[
+          container.read(nowPlayingProvider.notifier).goingAway(),
+          container.read(queuePersistenceProvider).flush(),
+        ]);
+      },
       onSkipNext: queue.next,
       onSkipPrevious: queue.previous,
       onPlayFromMediaId: queue.playItem,

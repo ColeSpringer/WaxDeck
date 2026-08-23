@@ -4175,6 +4175,93 @@ class TrashEmptyResult {
   final int reclaimedBytes;
 }
 
+/// One fully-addressed request a client can hand to the platform on
+/// its way out.
+///
+/// Everything is resolved: the absolute URL, the method, the encoded
+/// body, and the headers that authenticate it. Nothing about sending it
+/// belongs to this package - a browser tab uses `fetch(keepalive: true)`
+/// so the request outlives the document - so this is the shape that
+/// crosses the line, not a call.
+class ExitRequest {
+  const ExitRequest({
+    required this.path,
+    required this.method,
+    required this.body,
+    required this.headers,
+  });
+
+  final String path;
+  final String method;
+
+  /// The already-encoded JSON body.
+  final String body;
+
+  /// Everything but `Content-Type`, which the sender adds.
+  final Map<String, String> headers;
+}
+
+/// What the generated-thumbnail cache holds, beside what the source
+/// images behind it cost.
+///
+/// Every row is derived: a re-encode of a stored source at one rung of
+/// the size ladder. [bytes] is read against [artSourceBytes] - a cache
+/// smaller than the originals it was derived from is doing its job.
+class ThumbnailCacheReport {
+  const ThumbnailCacheReport({
+    required this.rows,
+    required this.bytes,
+    required this.sources,
+    required this.artSources,
+    required this.artSourceBytes,
+    required this.rungs,
+    this.oldestAt,
+    this.newestAt,
+  });
+
+  final int rows;
+  final int bytes;
+
+  /// Source images with at least one derivative, out of [artSources].
+  final int sources;
+  final int artSources;
+  final int artSourceBytes;
+
+  /// Null together when the cache is empty: an empty cache has no
+  /// oldest entry rather than one at the epoch.
+  final DateTime? oldestAt;
+  final DateTime? newestAt;
+
+  /// Per-rung breakdown, largest box first.
+  final List<ThumbnailRung> rungs;
+}
+
+/// One ladder rung's share of the thumbnail cache.
+class ThumbnailRung {
+  const ThumbnailRung({
+    required this.size,
+    required this.rows,
+    required this.bytes,
+  });
+
+  /// The rung in pixels. A requested box rounds up to one of these,
+  /// which is what bounds how many derivatives one cover accumulates.
+  final int size;
+  final int rows;
+  final int bytes;
+}
+
+/// What a thumbnail-cache prune dropped.
+class ThumbnailPruneResult {
+  const ThumbnailPruneResult({required this.removed, required this.freedBytes});
+
+  final int removed;
+
+  /// Freed inside the catalog file rather than returned to the
+  /// filesystem.
+  final int freedBytes;
+}
+
 /// What one server-side migration import should carry over.
 class MigrationOptions {
   const MigrationOptions({

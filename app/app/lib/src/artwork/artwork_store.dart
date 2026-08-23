@@ -20,6 +20,12 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 /// per distinct size, and a client that asked for 337 pixels here and
 /// 341 there would make it render one per screen width in the house. Five
 /// rungs cover every surface from a queue row to a tablet player hero.
+///
+/// Every entry is also a rung of the catalog's own ladder
+/// (`waxbin/art.Rungs()`, 32 through 2048), which is the authoritative
+/// list: the server rounds a requested box up to the next one of those
+/// and answers there, so asking off-ladder buys nothing but a taller
+/// picture than was asked for. A size added here picks from that list.
 const List<int> kArtworkRungs = <int>[64, 128, 256, 512, 1024];
 
 /// The rungs kept on disk for an item downloaded for offline: one big

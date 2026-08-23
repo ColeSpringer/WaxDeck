@@ -974,7 +974,63 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se han podido cargar los enlaces compartidos';
 
   @override
+  String get adminThumbsBlurb =>
+      'Copias redimensionadas de tus portadas, generadas a demanda. Vaciarlas cuesta un momento de decodificación la próxima vez que se dibuje cada una, nunca una imagen.';
+
+  @override
+  String get adminThumbsClearAction => 'Vaciar la caché';
+
+  @override
+  String get adminThumbsClearBody =>
+      'Cada copia generada se descarta y se vuelve a generar la próxima vez que se dibuje una portada. No se pierde ninguna imagen. El espacio se libera dentro del archivo del catálogo, no se devuelve al disco.';
+
+  @override
+  String get adminThumbsClearTitle => '¿Vaciar la caché de portadas?';
+
+  @override
+  String adminThumbsCleared(int rows, String size) {
+    return 'Se vaciaron $rows copias y se liberaron $size';
+  }
+
+  @override
+  String get adminThumbsEmpty => 'Aún no se ha generado nada';
+
+  @override
+  String adminThumbsOldest(String when) {
+    return 'La más antigua se generó $when';
+  }
+
+  @override
+  String adminThumbsRung(int size, int rows) {
+    return '$size px: $rows';
+  }
+
+  @override
+  String adminThumbsSize(String size, int rows) {
+    return '$size en $rows copias';
+  }
+
+  @override
+  String adminThumbsSources(int sources, int total, String size) {
+    return 'De $sources de $total portadas, que ocupan $size';
+  }
+
+  @override
+  String get adminThumbsTitle => 'Caché de portadas';
+
+  @override
   String get adminTileAlbumsToDecide => 'álbumes por decidir';
+
+  @override
+  String get adminTileArtworkCache => 'Caché de portadas';
+
+  @override
+  String get adminTileArtworkCacheEmpty => 'aún no se ha generado nada';
+
+  @override
+  String adminTileArtworkCacheShare(int percent) {
+    return '$percent% de los originales';
+  }
 
   @override
   String adminTileChecked(int checked, int total) {
@@ -4437,6 +4493,21 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerSimilarTracks => 'Pistas similares';
+
+  @override
+  String playerSkippedUnplayable(String title) {
+    return 'Se ha omitido $title: este archivo no se puede reproducir';
+  }
+
+  @override
+  String playerSkippedUnplayableMany(int count) {
+    return 'Se han omitido $count pistas que no se pueden reproducir';
+  }
+
+  @override
+  String playerSkipsGaveUp(int count) {
+    return 'Se ha detenido tras $count archivos que no se pueden reproducir';
+  }
 
   @override
   String get playerSleepTimer => 'Temporizador de apagado';

@@ -752,6 +752,7 @@ func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID, role string, siz
 		Source:     l.artSourceFor(ctx, ref, artSourceFromBlob(blob)),
 		Width:      blob.Width,
 		Height:     blob.Height,
+		Box:        blob.Box,
 	}, nil
 }
 

@@ -786,12 +786,12 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       final action = next.onAction;
       final label = next.actionLabel;
       final messenger = ScaffoldMessenger.of(context);
-      // Only an offer this one supersedes. One messenger serves the
+      // Only a message this one supersedes. One messenger serves the
       // whole app, so hiding unconditionally eats unread errors.
-      if (_lastRaised != null && _lastRaised == next.actionSemanticsId) {
+      if (_lastRaised != null && _lastRaised == next.channel) {
         messenger.removeCurrentSnackBar();
       }
-      _lastRaised = next.actionSemanticsId;
+      _lastRaised = next.channel;
       // Delivered, so the action closure is not held for the session.
       ref.read(shellMessengerProvider.notifier).clear();
       messenger.showSnackBar(
@@ -801,7 +801,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
           // the UI through those.
           content: Row(
             children: <Widget>[
-              Expanded(child: Text(next.text)),
+              Expanded(child: Text(next.resolve(context.l10n))),
               if (action != null && label != null)
                 WaxButton(
                   label: label,

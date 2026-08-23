@@ -69,7 +69,7 @@ void main() {
 
     expect(repo.putScheduleCalls.single.kind, 'scan');
     expect(
-      container.read(shellMessengerProvider)?.text,
+      shellMessageText(container.read(shellMessengerProvider)),
       'invalid cron expression',
     );
     // The stored schedule is untouched.

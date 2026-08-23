@@ -173,6 +173,50 @@ void main() {
       await tester.pumpWidget(host('/art/cold'));
       expect(seen, _red);
     });
+
+    testWidgets('an item not resolved yet holds it too', (tester) async {
+      // The other way a URL goes null, and the opposite of "no cover":
+      // a start publishes its entry before the summary behind it
+      // arrives, and a queue handed over from another device arrives as
+      // pids this layer has never seen. Read as an absent cover, every
+      // one of those crossfaded to the domain hue and back - the flash
+      // the holding exists to stop, coming in by the other door.
+      final cache = ArtworkPaletteCache()..remember('/art/a', _red);
+      late WaxPalette seen;
+      Widget host({required String? artUrl, required bool resolving}) =>
+          ProviderScope(
+            overrides: [
+              paletteCacheProvider.overrideWithValue(cache),
+              artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
+            ],
+            child: localizedHost(
+              ArtworkAccent(
+                artUrl: artUrl,
+                resolving: resolving,
+                domain: WaxDomain.music,
+                child: Builder(
+                  builder: (context) {
+                    seen = WaxAccent.of(context);
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(host(artUrl: '/art/a', resolving: false));
+      expect(seen, _red);
+      await tester.pumpWidget(host(artUrl: null, resolving: true));
+      expect(seen, _red);
+
+      // And an item that really has no cover still settles on the
+      // domain hue, which is what makes the two different. Settled
+      // rather than pumped once: letting go is a crossfade, so one
+      // frame into it is still mostly the colour it is leaving.
+      await tester.pumpWidget(host(artUrl: null, resolving: false));
+      await tester.pumpAndSettle();
+      expect(seen.isFallback, isTrue);
+    });
   });
 
   group('decoding for extraction', () {

@@ -2,17 +2,25 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/session_registry.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+
+/// The messages playback raises carry what to say rather than the words
+/// themselves - a notifier has no `BuildContext` to read a locale from -
+/// so a test that asserts on one picks the locale here.
+final _l10n = AppLocalizationsEn();
 
 const _a = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
 const _b = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKB';
@@ -1000,5 +1008,134 @@ void main() {
 
     expect(h.container.queueState.currentPid, _a);
     expect(h.engine.loadedUrl, contains('/media/radio/'));
+  });
+
+  group('an unplayable file', () {
+    test('is skipped past rather than stopping the queue', () async {
+      final h = _harness();
+      // Read so the controller exists to follow the queue; nothing
+      // plays until something is watching.
+      h.container.playback;
+      h.container.queue.playNow([_a, _b, _c], source: _album);
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingProvider).session, isNotNull);
+
+      // The next load throws the way media that will not open throws.
+      // The queue behind it is fine, and stopping there is what left a
+      // whole album dead behind one bad rip.
+      h.engine.failNextLoad = true;
+      await h.container.playback.next();
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      expect(h.container.queueState.currentPid, _c);
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.error, isNull, reason: 'the queue moved, so there is no pane');
+      expect(now.session, isNotNull);
+      expect(
+        h.container.read(shellMessengerProvider)?.resolve(_l10n),
+        contains('Skipped'),
+      );
+
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    test('a stream that could not be fetched is not one of them', () async {
+      // The other half of the split, and the one that costs a listener
+      // their queue if it is read wrong: a server restart, a 502, a
+      // token that aged out. Nothing is wrong with the file, so walking
+      // past it would spend a library one track at a time on a dropped
+      // connection - and the retry the pane offers is a real offer,
+      // because the state it failed on is one that changes.
+      final h = _harness();
+      h.container.playback;
+      h.container.queue.playNow([_a, _b, _c], source: _album);
+      await pumpEventQueue();
+
+      h.engine.failNextLoad = true;
+      h.engine.loadFault = MediaFault.transport;
+      await h.container.playback.next();
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      expect(h.container.queueState.currentPid, _b, reason: 'it stayed put');
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.error, isA<MediaLoadException>());
+      expect(now.session, isNull);
+
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    test('stops with the pane when there is nowhere to go', () async {
+      final h = _harness();
+      // One entry, and it is the one that refuses. A skip has nothing
+      // to skip to, so the failure is the end of the line and the pane
+      // with its retry is the honest answer.
+      h.engine.failNextLoad = true;
+      h.container.playback;
+      h.container.queue.playNow([_a], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.error, isA<MediaLoadException>());
+      expect(now.session, isNull);
+      expect(h.container.queueState.currentPid, _a);
+
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    test(
+      'gives up after a run of them rather than walking the queue',
+      () async {
+        // Deliberately longer than the cap plus one: the point of the cap
+        // is that it stops while the queue still has somewhere to go, so
+        // a queue that runs out from under it would prove nothing.
+        final broken = <String>[for (var i = 0; i < 6; i++) 'tr-broken-$i'];
+        final h = _harness(items: [for (final pid in broken) testItem(pid)]);
+        h.container.playback;
+        // Every message the run raises, since the messenger holds only
+        // the newest and what matters here is that they line up.
+        final raised = <ShellMessage>[];
+        h.container.listen(shellMessengerProvider, (_, next) {
+          if (next != null) raised.add(next);
+        });
+        h.container.queue.playNow(broken, source: _album);
+        await pumpEventQueue();
+        expect(h.container.read(nowPlayingProvider).session, isNotNull);
+
+        // Every load from here refuses. Without the cap this walks the
+        // whole queue, one toast per entry, and calls it playback.
+        h.engine.failEveryLoad = true;
+        await h.container.playback.next();
+        for (var i = 0; i < 12; i++) {
+          await pumpEventQueue();
+        }
+
+        expect(
+          h.container.read(nowPlayingProvider).error,
+          isA<MediaLoadException>(),
+        );
+        final gaveUp = h.container.read(shellMessengerProvider);
+        expect(gaveUp?.resolve(_l10n), contains('Stopped after 3'));
+        // On the channel the skips used, so the shell replaces the
+        // count still standing rather than stacking a second bar over
+        // it. A channel rather than a button identifier: none of these
+        // messages has a button, and inventing one to be coalesced by
+        // is a hand-typed semantics string.
+        expect(gaveUp?.channel, isNotNull);
+        expect(gaveUp?.channel, raised.first.channel);
+        expect(gaveUp?.actionSemanticsId, isNull);
+        // And it stopped where it stopped rather than at the end: the
+        // last entry is still ahead of it.
+        expect(h.container.queueState.currentPid, isNot(broken.last));
+
+        h.container.queue.clear();
+        await pumpEventQueue();
+      },
+    );
   });
 }

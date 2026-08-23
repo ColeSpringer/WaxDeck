@@ -93,6 +93,9 @@ abstract final class SemanticsIds {
   static String tagRuleAdd(Object list) => '$list-add';
   static String tagRuleKey(Object list) => '$list-key';
   static String tagRuleValue(Object list) => '$list-value';
+  static const String thumbsCard = 'thumbs-card';
+  static const String thumbsClear = 'thumbs-clear';
+  static const String thumbsClearConfirm = 'thumbs-clear-confirm';
   static const String transcodingActivity = 'transcoding-activity';
   static const String transcodingActivityRefresh =
       'transcoding-activity-refresh';

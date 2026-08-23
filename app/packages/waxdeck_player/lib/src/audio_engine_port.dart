@@ -21,6 +21,43 @@ enum EngineProcessingState {
   completed,
 }
 
+/// Which half of a failed [AudioEnginePort.load] is at fault.
+///
+/// The split is the only one a caller can act differently on: one of
+/// these says the queue behind this item is fine and the next press
+/// will fail the same way, and the other says the opposite.
+enum MediaFault {
+  /// The media itself: a container nothing here decodes, a truncated
+  /// rip, a codec the platform does not carry. Trying again gets the
+  /// same answer, so the useful response is to move past it.
+  source,
+
+  /// Fetching the media: the server, the network, the token. Nothing is
+  /// wrong with the file, so the useful response is to offer a retry -
+  /// and never to walk the queue, which would spend a listener's
+  /// library one track at a time on a dropped connection.
+  transport,
+}
+
+/// A [AudioEnginePort.load] that did not produce playable media.
+///
+/// The type an engine throws out of `load`, and the only one: an engine
+/// that cannot classify a failure says [MediaFault.transport], because
+/// the cost of reading a bad file as a bad connection is one retry and
+/// the cost of the reverse is a queue skipped past on a flaky network.
+class MediaLoadException implements Exception {
+  const MediaLoadException(this.fault, this.cause);
+
+  final MediaFault fault;
+
+  /// What the plugin threw, kept for the log. Never matched on above
+  /// this line - that is what [fault] is for.
+  final Object cause;
+
+  @override
+  String toString() => 'MediaLoadException(${fault.name}): $cause';
+}
+
 /// Small, honest facade over whatever audio plugin actually plays sound.
 ///
 /// App code depends on this interface only. Community plugins (just_audio
@@ -35,6 +72,10 @@ abstract interface class AudioEnginePort {
   /// window were the whole media, with positions, duration, and
   /// completion all window-relative ([initialPosition] included). A
   /// null [clipEnd] with a set [clipStart] runs to the source's end.
+  ///
+  /// Throws [MediaLoadException] and nothing else: classifying the
+  /// plugin's own exception is the engine's job, because the plugin is
+  /// the thing an engine exists to know about.
   Future<void> load(
     String url, {
     String? mimeType,

@@ -21,3 +21,7 @@ dependencies:
 
 dev_dependencies:
   flutter_lints: ^6.0.0
+  # For the fault-table test alone, which feeds the plugin's own
+  # exception to the classifier that reads it. Exact, like every pin in
+  # waxdeck_player, since the codes are that version's.
+  just_audio: 0.10.6

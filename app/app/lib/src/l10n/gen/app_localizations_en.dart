@@ -949,7 +949,63 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminSharesLoadError => 'Could not load the share links';
 
   @override
+  String get adminThumbsBlurb =>
+      'Resized copies of your covers, generated on demand. Clearing them costs a moment of decoding the next time each one is drawn, never a picture.';
+
+  @override
+  String get adminThumbsClearAction => 'Clear cache';
+
+  @override
+  String get adminThumbsClearBody =>
+      'Every generated copy is dropped and regenerated the next time a cover is drawn. No artwork is lost. The space is freed inside the catalog file rather than returned to the disk.';
+
+  @override
+  String get adminThumbsClearTitle => 'Clear the artwork cache?';
+
+  @override
+  String adminThumbsCleared(int rows, String size) {
+    return 'Cleared $rows copies, freeing $size';
+  }
+
+  @override
+  String get adminThumbsEmpty => 'Nothing generated yet';
+
+  @override
+  String adminThumbsOldest(String when) {
+    return 'Oldest generated $when';
+  }
+
+  @override
+  String adminThumbsRung(int size, int rows) {
+    return '$size px: $rows';
+  }
+
+  @override
+  String adminThumbsSize(String size, int rows) {
+    return '$size in $rows copies';
+  }
+
+  @override
+  String adminThumbsSources(int sources, int total, String size) {
+    return 'From $sources of $total covers, which hold $size';
+  }
+
+  @override
+  String get adminThumbsTitle => 'Artwork cache';
+
+  @override
   String get adminTileAlbumsToDecide => 'albums to decide';
+
+  @override
+  String get adminTileArtworkCache => 'Artwork cache';
+
+  @override
+  String get adminTileArtworkCacheEmpty => 'nothing generated yet';
+
+  @override
+  String adminTileArtworkCacheShare(int percent) {
+    return '$percent% of the originals';
+  }
 
   @override
   String adminTileChecked(int checked, int total) {
@@ -4384,6 +4440,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerSimilarTracks => 'Similar tracks';
+
+  @override
+  String playerSkippedUnplayable(String title) {
+    return 'Skipped $title - this file can\'t be played';
+  }
+
+  @override
+  String playerSkippedUnplayableMany(int count) {
+    return 'Skipped $count tracks that can\'t be played';
+  }
+
+  @override
+  String playerSkipsGaveUp(int count) {
+    return 'Stopped after $count files that can\'t be played';
+  }
 
   @override
   String get playerSleepTimer => 'Sleep timer';

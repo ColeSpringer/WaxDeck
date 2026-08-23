@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:built_collection/built_collection.dart';
+import 'package:built_value/serializer.dart' show FullType;
 import 'package:built_value/json_object.dart';
 import 'package:dio/dio.dart';
 import 'package:waxdeck_api_gen/waxdeck_api_gen.dart' as gen;
@@ -1496,6 +1497,41 @@ abstract interface class WaxDeckRepository {
   /// returning the bytes reclaimed (administrators).
   Future<int> purgeTrashEntry(String trashId);
 
+  /// `GET /admin/thumbnails`: censuses the generated artwork cache
+  /// (administrators).
+  Future<ThumbnailCacheReport> getThumbnailCache();
+
+  /// `POST /admin/thumbnails/prune`: drops cached thumbnails to fit the
+  /// policy (administrators).
+  ///
+  /// Both bounds are optional and an absent one leaves that axis
+  /// unbounded, but at least one must be given - the server refuses a
+  /// request with neither rather than reading it as "everything". Zero
+  /// is a value here and not an absence: an age of zero drops every
+  /// entry, a budget of zero empties the cache.
+  Future<ThumbnailPruneResult> pruneThumbnailCache({
+    int? olderThanSeconds,
+    int? maxBytes,
+  });
+
+  /// The two requests a client that is about to stop existing has to
+  /// get out, already addressed, encoded, and carrying whatever
+  /// authenticates a mutation here.
+  ///
+  /// Built rather than sent, because the caller is a browser tab in
+  /// `pagehide` and nothing this layer could await would survive the
+  /// document. The web build hands these to `fetch(keepalive: true)`;
+  /// every other platform has a close handler and never asks.
+  ///
+  /// [listen] is the session's own listen report, sent only when the
+  /// client is really ending - a tab merely going hidden checkpoints
+  /// and nothing else.
+  List<ExitRequest> exitRequests({
+    required String pid,
+    required int positionMs,
+    ListenSession? listen,
+  });
+
   /// `GET /jobs`: currently known background jobs (administrators).
   Future<List<Job>> listJobs();
 
@@ -1567,24 +1603,38 @@ class WaxDeckClient implements WaxDeckRepository {
           if (options.extra[_longOperation] == true) {
             options.receiveTimeout = const Duration(minutes: 30);
           }
-          final token = _authToken;
-          if (token != null && !options.headers.containsKey('Authorization')) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-          // Cookie-authenticated mutations (web after a reload: no bearer
-          // in memory, the HttpOnly cookie authenticates) must echo the
-          // CSRF token from login/getSession. Bearer requests are exempt.
-          final csrf = _csrfToken;
-          if (token == null &&
-              csrf != null &&
-              _isMutation(options.method) &&
-              !options.headers.containsKey('X-CSRF-Token')) {
-            options.headers['X-CSRF-Token'] = csrf;
-          }
+          _applyAuth(options.headers, options.method);
           handler.next(options);
         },
       ),
     );
+  }
+
+  /// Puts this client's credential on an outgoing request.
+  ///
+  /// The one author of "bearer where one is held, the CSRF token where
+  /// the cookie is the credential". Every ordinary call reaches it
+  /// through the interceptor; [exitRequests] calls it directly, because
+  /// what it builds is sent by the browser rather than by Dio and would
+  /// otherwise be a second copy of this policy that nothing would
+  /// notice going stale - a beacon that authenticates is indistinguishable
+  /// from one that does not, since neither is waited for.
+  ///
+  /// Cookie-authenticated mutations (web after a reload: no bearer in
+  /// memory, the HttpOnly cookie authenticates) must echo the CSRF token
+  /// from login/getSession. Bearer requests are exempt.
+  void _applyAuth(Map<String, dynamic> headers, String method) {
+    final token = _authToken;
+    if (token != null && !headers.containsKey('Authorization')) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    final csrf = _csrfToken;
+    if (token == null &&
+        csrf != null &&
+        _isMutation(method) &&
+        !headers.containsKey('X-CSRF-Token')) {
+      headers['X-CSRF-Token'] = csrf;
+    }
   }
 
   static bool _isMutation(String method) {
@@ -4434,6 +4484,91 @@ class WaxDeckClient implements WaxDeckRepository {
     );
     return body.reclaimedBytes;
   });
+
+  @override
+  Future<ThumbnailCacheReport> getThumbnailCache() => _guard(() async {
+    final body = _require((await _gen.getAdminApi().getThumbnailCache()).data);
+    return ThumbnailCacheReport(
+      rows: body.rows,
+      bytes: body.bytes,
+      sources: body.sources,
+      artSources: body.artSources,
+      artSourceBytes: body.artSourceBytes,
+      oldestAt: body.oldestAt,
+      newestAt: body.newestAt,
+      rungs: body.rungs
+          .map((r) => ThumbnailRung(size: r.size, rows: r.rows, bytes: r.bytes))
+          .toList(growable: false),
+    );
+  });
+
+  @override
+  Future<ThumbnailPruneResult> pruneThumbnailCache({
+    int? olderThanSeconds,
+    int? maxBytes,
+  }) => _guard(() async {
+    final body = _require(
+      (await _gen.getAdminApi().pruneThumbnailCache(
+        // Left unset rather than defaulted: an absent bound is
+        // unbounded on that axis, and a zero is a real bound, so the
+        // two cannot be folded into one number on the way out.
+        thumbnailPruneRequest: gen.ThumbnailPruneRequest(
+          (b) => b
+            ..olderThanSeconds = olderThanSeconds
+            ..maxBytes = maxBytes,
+        ),
+      )).data,
+    );
+    return ThumbnailPruneResult(
+      removed: body.removed,
+      freedBytes: body.freedBytes,
+    );
+  });
+
+  @override
+  List<ExitRequest> exitRequests({
+    required String pid,
+    required int positionMs,
+    ListenSession? listen,
+  }) {
+    // Whatever the interceptor would have added, added by the same
+    // code: these go out through the browser rather than through Dio,
+    // and building them here is the only way to have a credential on
+    // them at all. Both are mutations, which is what decides the CSRF
+    // half.
+    final headers = <String, String>{};
+    _applyAuth(headers, 'POST');
+    // Through the generated serializers rather than a hand-written map:
+    // these are contract bodies, and a second spelling of them beside
+    // the one `make generate` produces is a spelling that drifts.
+    String encode(Object value, FullType type) => jsonEncode(
+      gen.standardSerializers.serialize(value, specifiedType: type),
+    );
+
+    return <ExitRequest>[
+      ExitRequest(
+        path: '$_baseUrl/api/v1/items/${Uri.encodeComponent(pid)}/play-state',
+        method: 'PUT',
+        headers: headers,
+        body: encode(
+          gen.PlayStateUpdate((b) => b..positionMs = positionMs),
+          const FullType(gen.PlayStateUpdate),
+        ),
+      ),
+      if (listen != null)
+        ExitRequest(
+          path: '$_baseUrl/api/v1/listens',
+          method: 'POST',
+          headers: headers,
+          body: encode(
+            gen.ListenReport(
+              (b) => b..sessions.add(listenSessionToGen(listen)),
+            ),
+            const FullType(gen.ListenReport),
+          ),
+        ),
+    ];
+  }
 
   @override
   Future<List<Job>> listJobs() => _guard(() async {

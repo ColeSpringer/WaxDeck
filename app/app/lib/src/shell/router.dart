@@ -51,6 +51,7 @@ import '../player/autoplay_gate.dart';
 import '../player/car_mode_screen.dart';
 import '../player/idle_visualizer.dart';
 import '../player/now_playing_controller.dart';
+import '../player/page_exit_binder.dart';
 import '../player/player_screen.dart';
 import '../player/visualizer_screen.dart';
 import '../providers.dart';
@@ -829,6 +830,11 @@ class _SignedInScope extends ConsumerWidget {
     // bar it feeds is mounted only once there is something to show.
     ref.watch(nowPlayingProvider.notifier);
     ref.watch(autoplayBlockedProvider.notifier);
+    // What the web build says on its way out. A no-op everywhere else,
+    // where a closing window and a swiped-away task both get to run
+    // ordinary code; a browser tab gets none, so the last checkpoint
+    // and the listen report have to leave as beacons instead.
+    ref.watch(pageExitBinderProvider);
     // Around everything signed in, including the pushed overlays: being
     // left alone on the queue screen is being left alone.
     //

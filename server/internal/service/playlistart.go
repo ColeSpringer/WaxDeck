@@ -31,8 +31,10 @@ import (
 // coverMosaicSize is the stored mosaic's edge in pixels. The catalog
 // derives every thumbnail from it, so it is sized for the largest
 // surface that shows a playlist cover full width rather than for a
-// grid tile.
-const coverMosaicSize = 1000
+// grid tile. A ladder rung ([ArtSizeMosaic]): a stored source that sits
+// on one is served whole at that rung instead of being re-encoded down
+// to the rung just below its own edge.
+const coverMosaicSize = ArtSizeMosaic
 
 // coverScanDepth bounds how many members are resolved looking for four
 // distinct covers. A playlist whose first few dozen tracks share one

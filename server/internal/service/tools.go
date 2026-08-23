@@ -18,6 +18,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/colespringer/waxbin"
+	waxart "github.com/colespringer/waxbin/art"
 	"github.com/colespringer/waxbin/inbox"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
@@ -798,10 +799,48 @@ func (l *Library) tagToolTrackFile(ctx context.Context, path string, seed *model
 	return l.executeToolTagPlan(ctx, ed, path)
 }
 
+// toolCoverRung is the box a non-displayable cover is re-resolved at
+// before it goes into a file: [ArtSizeToolCover], the ladder's top
+// rung, so the embedded picture is the largest the resolver will
+// re-encode rather than a thumbnail.
+const toolCoverRung = ArtSizeToolCover
+
 // addToolCover attaches the item's resolved cover art, best effort.
+//
+// The stored original is what goes in when a player can paint it. When
+// it cannot - a TIFF, which the catalog decodes and no player draws -
+// the resolve is asked for a rung instead, because a sized resolve
+// re-encodes a non-displayable source into one that paints. What comes
+// back still unpaintable is an exotic nothing could decode either, and
+// that stays out of the file: a frame holding bytes the player renders
+// as a broken image is worse than a file with no cover.
+//
+// Which of the two to ask for is decided before either is asked for.
+// `ArtProvenance` answers what a resolve would return without loading
+// the picture, and follows the same fallback chain, so the format is a
+// row read rather than a stored original - up to sixteen megabytes -
+// pulled and decoded only to be thrown away. This runs once per file a
+// split writes, so on a library of TIFF covers that discarded read was
+// per track.
 func (l *Library) addToolCover(ctx context.Context, ed *waxlabel.Editor, pid model.PID) {
-	blob, err := l.lib.ResolveArt(ctx, model.EntityRef{Type: model.ArtTrack, PID: pid}, model.ArtRoleFront, 0)
+	ref := model.EntityRef{Type: model.ArtTrack, PID: pid}
+	prov, err := l.lib.ArtProvenance(ctx, ref, model.ArtRoleFront)
+	if err != nil || prov == nil {
+		return
+	}
+	// Zero asks for the stored bytes; a rung asks for the re-encode.
+	size := 0
+	if !waxart.Displayable(prov.Format) {
+		size = toolCoverRung
+	}
+	blob, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, size)
 	if err != nil || blob == nil || len(blob.Bytes) == 0 {
+		return
+	}
+	// Re-checked on what came back rather than trusted from the
+	// provenance: a source the resolver could not re-encode comes back
+	// as itself, and that is the exotic nothing can decode.
+	if !waxart.Displayable(blob.Format) {
 		return
 	}
 	// A cover artMime cannot name (an SVG a provider slipped in) stays

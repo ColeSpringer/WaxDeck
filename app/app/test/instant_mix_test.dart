@@ -96,7 +96,7 @@ void main() {
     // beside it can carry a semantics identifier - so the message is
     // read off that rather than found on a screen this host has none of.
     final message = harness.container.read(shellMessengerProvider);
-    expect(message?.text, 'Added 2 tracks to the queue');
+    expect(shellMessageText(message), 'Added 2 tracks to the queue');
     expect(message?.actionLabel, 'Open');
     expect(message?.actionSemanticsId, SemanticsIds.queueOpen);
     expect(find.text('Instant mix'), findsNothing);

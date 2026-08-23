@@ -80,8 +80,12 @@ void main() {
     var dragged = 0;
     await _pump(tester, MiniPlayer(now: _music, onDrag: () => dragged++));
 
+    // The title slot rather than the text in it: at this width the
+    // name scrolls itself, and the copy that moves ignores the pointer
+    // on purpose - a handle that slid out from under the cursor would
+    // be a poor one. The slot does not move.
     await tester.timedDrag(
-      find.text('Salt Harbour'),
+      find.byType(WaxMarqueeText).first,
       const Offset(40, 0),
       const Duration(milliseconds: 100),
     );
@@ -121,9 +125,10 @@ void main() {
     var restored = 0;
     await _pump(tester, MiniPlayer(now: _music, onRestore: () => restored++));
 
-    await tester.tap(find.text('Salt Harbour'));
+    final handle = find.byType(WaxMarqueeText).first;
+    await tester.tap(handle);
     await tester.pump(kDoubleTapMinTime);
-    await tester.tap(find.text('Salt Harbour'));
+    await tester.tap(handle);
     await tester.pumpAndSettle();
 
     expect(restored, 1);

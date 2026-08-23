@@ -53,7 +53,7 @@ bool get _isWayland =>
         (Platform.environment['WAYLAND_DISPLAY']?.isNotEmpty ?? false));
 
 /// The mini window over `window_manager`.
-class PluginMiniWindow implements MiniWindowPort {
+class PluginMiniWindow with WindowListener implements MiniWindowPort {
   /// Where the window stood before it shrank, so leaving is a restore
   /// rather than a guess. Held rather than recomputed: a mini window
   /// that came back at a default size and position would move a window
@@ -141,12 +141,103 @@ class PluginMiniWindow implements MiniWindowPort {
     }
   }
 
+  /// Ends the process, through whatever finalization is bound.
+  ///
+  /// Two routes, and which one runs is decided by whether anything is
+  /// still waiting to finalize. With a close handler bound, this asks
+  /// the platform to close, which is the same gesture as the window's
+  /// X and lands in [onWindowClose] - so the tray's Quit and the X
+  /// share one budget, one finalize and one destroy rather than each
+  /// growing its own. Once that has run (or where nothing bound one),
+  /// `destroy` is the end: `close` on a window that no longer prevents
+  /// it is the same thing with a round trip in front.
   @override
   Future<void> quit() async {
     try {
-      // Through the window layer rather than `exit(0)`: this runs the
-      // close handlers, and the queue's last edit is written on the way
-      // out by one of them.
+      if (_onClose != null) {
+        await windowManager.close();
+        return;
+      }
+      await windowManager.destroy();
+    } on Object catch (failure) {
+      debugPrint('window would not close: $failure');
+    }
+  }
+
+  /// What the close runs before the process goes. Null until bound,
+  /// and null again once it has run: [onWindowClose] takes it before
+  /// calling it, so the `destroy` underneath does not try to finalize a
+  /// session that has already let go.
+  Future<void> Function()? _onClose;
+
+  /// Whether this port has installed itself as a window listener.
+  ///
+  /// `WindowManager.addListener` is a bare add on an `ObserverList` with
+  /// no dedupe, and the binder that calls [bindClose] is scoped to the
+  /// signed-in session: signing out and back in would otherwise leave
+  /// two listeners, the second of which would reach `destroy` while the
+  /// first was still finalizing.
+  bool _listening = false;
+
+  /// How long the app gets to finalize before the window closes anyway.
+  ///
+  /// The work behind it is a checkpoint and a listen report, both a
+  /// single round trip; this is well past a slow one and well short of
+  /// a window that will not shut. A close nobody can complete is a
+  /// worse failure than a checkpoint that did not land, because the
+  /// listener is already trying to leave.
+  static const Duration _closeBudget = Duration(seconds: 3);
+
+  @override
+  Future<void> bindClose(Future<void> Function() onClose) async {
+    if (!_isDesktop) return;
+    // Rebinding replaces the handler and nothing else: a second sign-in
+    // has a new session to finalize, and the listener that was added
+    // for the first one is the one that will hear the close.
+    _onClose = onClose;
+    if (_listening) return;
+    try {
+      // Both halves: the listener is where the app is told, and
+      // preventClose is what stops the platform closing the window out
+      // from under it first.
+      windowManager.addListener(this);
+      _listening = true;
+      await windowManager.setPreventClose(true);
+    } on Object catch (failure) {
+      // Unbound is the old behaviour - the window closes and the
+      // process lives on in the tray - rather than a broken one.
+      debugPrint('close handler not installed: $failure');
+      _onClose = null;
+      windowManager.removeListener(this);
+      _listening = false;
+    }
+  }
+
+  @override
+  Future<void> unbindClose() async {
+    _onClose = null;
+  }
+
+  @override
+  Future<void> onWindowClose() async {
+    final onClose = _onClose;
+    // Taken rather than read: `destroy` below is the platform's close
+    // again, and a `timeout` does not cancel what it gave up on, so a
+    // handler that hangs is still running when the next close arrives.
+    // Nulled here, this window finalizes once however many closes it is
+    // asked for.
+    _onClose = null;
+    if (onClose != null) {
+      try {
+        await onClose().timeout(_closeBudget);
+      } on Object catch (failure) {
+        debugPrint('close handler did not finish: $failure');
+      }
+    }
+    // Straight to `destroy`, not through `quit`: with the handler taken
+    // there is nothing left to finalize, and `close` from inside a
+    // close is a round trip to the same place.
+    try {
       await windowManager.destroy();
     } on Object catch (failure) {
       debugPrint('window would not close: $failure');

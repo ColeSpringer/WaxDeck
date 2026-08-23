@@ -1252,9 +1252,121 @@
   "@adminSharesLoadError": {
     "description": "Title of the error state when the server-wide share list could not be read."
   },
+  "adminThumbsBlurb": "Resized copies of your covers, generated on demand. Clearing them costs a moment of decoding the next time each one is drawn, never a picture.",
+  "@adminThumbsBlurb": {
+    "description": "Line under the artwork-cache heading, saying what the cache is and what clearing it costs."
+  },
+  "adminThumbsClearAction": "Clear cache",
+  "@adminThumbsClearAction": {
+    "description": "Button on the artwork-cache card that drops every generated thumbnail."
+  },
+  "adminThumbsClearBody": "Every generated copy is dropped and regenerated the next time a cover is drawn. No artwork is lost. The space is freed inside the catalog file rather than returned to the disk.",
+  "@adminThumbsClearBody": {
+    "description": "Body of the clear-artwork-cache dialog."
+  },
+  "adminThumbsClearTitle": "Clear the artwork cache?",
+  "@adminThumbsClearTitle": {
+    "description": "Title of the dialog confirming that every generated thumbnail is dropped."
+  },
+  "adminThumbsCleared": "Cleared {rows} copies, freeing {size}",
+  "@adminThumbsCleared": {
+    "description": "Confirmation after clearing the artwork cache. {rows} is a count, {size} a formatted byte size.",
+    "placeholders": {
+      "rows": {
+        "type": "int",
+        "example": "1204"
+      },
+      "size": {
+        "type": "String",
+        "example": "42 MB"
+      }
+    }
+  },
+  "adminThumbsEmpty": "Nothing generated yet",
+  "@adminThumbsEmpty": {
+    "description": "Shown on the artwork-cache card when the cache holds nothing."
+  },
+  "adminThumbsOldest": "Oldest generated {when}",
+  "@adminThumbsOldest": {
+    "description": "Third line on the artwork-cache card. {when} is a relative time such as \"3 days ago\".",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "3 days ago"
+      }
+    }
+  },
+  "adminThumbsRung": "{size} px: {rows}",
+  "@adminThumbsRung": {
+    "description": "One rung in the artwork-cache breakdown: the box in pixels and how many cached copies sit at it.",
+    "placeholders": {
+      "size": {
+        "type": "int",
+        "example": "256"
+      },
+      "rows": {
+        "type": "int",
+        "example": "180"
+      }
+    }
+  },
+  "adminThumbsSize": "{size} in {rows} copies",
+  "@adminThumbsSize": {
+    "description": "Primary figure on the artwork-cache card. {size} is a formatted byte size, {rows} the number of cached images.",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "42 MB"
+      },
+      "rows": {
+        "type": "int",
+        "example": "1204"
+      }
+    }
+  },
+  "adminThumbsSources": "From {sources} of {total} covers, which hold {size}",
+  "@adminThumbsSources": {
+    "description": "Second line on the artwork-cache card: how many source images have derivatives, out of those held, and what the sources themselves cost.",
+    "placeholders": {
+      "sources": {
+        "type": "int",
+        "example": "310"
+      },
+      "total": {
+        "type": "int",
+        "example": "402"
+      },
+      "size": {
+        "type": "String",
+        "example": "180 MB"
+      }
+    }
+  },
+  "adminThumbsTitle": "Artwork cache",
+  "@adminThumbsTitle": {
+    "description": "Heading over the generated-thumbnail card on the trash screen."
+  },
   "adminTileAlbumsToDecide": "albums to decide",
   "@adminTileAlbumsToDecide": {
     "description": "Caption of the review tile, naming what its number counts. Lower case: it reads as a continuation of the number above it."
+  },
+  "adminTileArtworkCache": "Artwork cache",
+  "@adminTileArtworkCache": {
+    "description": "Dashboard tile label for the generated-thumbnail cache: the derived copies of covers the server keeps."
+  },
+  "adminTileArtworkCacheEmpty": "nothing generated yet",
+  "@adminTileArtworkCacheEmpty": {
+    "description": "Caption under the artwork-cache tile when no thumbnails have been generated."
+  },
+  "adminTileArtworkCacheShare": "{percent}% of the originals",
+  "@adminTileArtworkCacheShare": {
+    "description": "Caption under the artwork-cache tile, the cache size as a share of what the source images cost. {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "23"
+      }
+    }
   },
   "adminTileChecked": "{checked} of {total} checked",
   "@adminTileChecked": {
@@ -5756,6 +5868,36 @@
   "playerSimilarTracks": "Similar tracks",
   "@playerSimilarTracks": {
     "description": "Menu item that lists tracks that sound like what is playing."
+  },
+  "playerSkippedUnplayable": "Skipped {title} - this file can't be played",
+  "@playerSkippedUnplayable": {
+    "description": "Message after an item was skipped because the audio engine refused it. {title} is the item's title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Salt Harbour"
+      }
+    }
+  },
+  "playerSkippedUnplayableMany": "Skipped {count} tracks that can't be played",
+  "@playerSkippedUnplayableMany": {
+    "description": "Message replacing the per-track one once several unplayable items have been skipped in a row. {count} is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "playerSkipsGaveUp": "Stopped after {count} files that can't be played",
+  "@playerSkipsGaveUp": {
+    "description": "Message when a run of unplayable items hit the cap and playback stopped rather than walking the whole queue. {count} is how many were skipped.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   },
   "playerSleepTimer": "Sleep timer",
   "@playerSleepTimer": {

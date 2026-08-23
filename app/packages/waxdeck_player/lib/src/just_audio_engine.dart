@@ -4,6 +4,113 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'audio_engine_port.dart';
+import 'fetchable/fetchable.dart';
+
+/// Which half of a failed load a just_audio failure describes.
+///
+/// `PlayerException.code` is a different number on every platform - a
+/// `MediaError.code` on web, an `ExoPlaybackException.type` on Android,
+/// an `NSError.code` on Apple - so there is no one reading of it, and
+/// this is a table per platform rather than a clever one for all of
+/// them.
+///
+/// Only positive evidence answers [MediaFault.source]. Every code
+/// nothing here recognizes, and every failure that is not a
+/// `PlayerException` at all, is [MediaFault.transport], because the two
+/// mistakes do not cost the same: reading a dropped connection as a bad
+/// file walks a listener's queue one track at a time on a server
+/// restart, and reading a bad file as a dropped connection costs one
+/// retry press.
+///
+/// Which leaves platforms that classify less than they could, and this
+/// is measured rather than assumed - `integration_test/load_fault_test.dart`
+/// is what measured it. On Android every failure there is, from garbage
+/// bytes to a DNS failure, arrives as `PlayerException(0, "Source
+/// error")`: one `TYPE_SOURCE` and one constant string, with the cause
+/// that would separate them left on the far side of the plugin's
+/// channel. The `TYPE_RENDERER` row below is from ExoPlayer's contract
+/// rather than from that run, which produced no such code. The Apple
+/// rows are unmeasured too. [probedMediaFaultOf] is the second step
+/// that covers the difference: where this table has no verdict, it
+/// asks the network for one.
+///
+/// Desktop is not in this table at all: mpv through media_kit does not
+/// report a failed load, it simply never finishes one, so nothing
+/// reaches here to be classified. That is a bug rather than a gap and
+/// sits in `docs/bugs.md`.
+@visibleForTesting
+MediaFault mediaFaultOf(Object failure) {
+  if (failure is! PlayerException) return MediaFault.transport;
+  // `MediaError.code`: 3 is MEDIA_ERR_DECODE and 4 is
+  // MEDIA_ERR_SRC_NOT_SUPPORTED, which are the element saying it cannot
+  // make sound out of these bytes. 1 (aborted) and 2 (network) are not
+  // the file.
+  if (kIsWeb) {
+    return failure.code == 3 || failure.code == 4
+        ? MediaFault.source
+        : MediaFault.transport;
+  }
+  return switch (defaultTargetPlatform) {
+    // `ExoPlaybackException.type`: 1 is TYPE_RENDERER, a decoder that
+    // would not take the stream it was handed.
+    TargetPlatform.android when failure.code == 1 => MediaFault.source,
+    // `NSError.code` in AVFoundationErrorDomain: the file the framework
+    // could not make sense of. Everything else there - -1009 for
+    // offline, -11800 for unknown - is not the file.
+    TargetPlatform.iOS || TargetPlatform.macOS =>
+      _appleFormatErrors.contains(failure.code)
+          ? MediaFault.source
+          : MediaFault.transport,
+    _ => MediaFault.transport,
+  };
+}
+
+/// `AVErrorFileFormatNotRecognized` and `AVErrorFailedToParse`.
+const Set<int> _appleFormatErrors = <int>{-11828, -11829};
+
+/// [mediaFaultOf], then one question the platform cannot refuse to
+/// answer: when the code carried no verdict, is the URL fetchable at
+/// all?
+///
+/// On Android every load failure arrives as `TYPE_SOURCE` with a
+/// constant string (measured; see [mediaFaultOf]), so the code alone
+/// left a bad rip standing on the retry pane. The probe separates the
+/// halves from outside the plugin: a URL that answers a ranged GET has
+/// nothing wrong with its server, its network, or its token, so what
+/// refused was the bytes - [MediaFault.source]. WaxDeck's stream URLs
+/// are HMAC-signed and replayable (`auth/mediatoken.go`), so the
+/// request consumes nothing, and it is spent only on a load that has
+/// already failed.
+///
+/// Refinement runs one way. A probe that fails proves nothing new -
+/// the transport verdict it would confirm is already the answer - so
+/// an unfetchable URL and a probe that breaks both leave
+/// [MediaFault.transport] standing, and a [MediaFault.source] from the
+/// table is never second-guessed. Only a `PlayerException` is probed:
+/// the player refusing for a reason it will not name is the ambiguity
+/// this resolves, and a failure from anywhere else says nothing about
+/// the media. The residual risk is a connection that dropped and came
+/// back within the probe's window, which reads as the file and skips
+/// one good track; the reverse mistake walks the queue, which is why
+/// the default stays transport.
+@visibleForTesting
+Future<MediaFault> probedMediaFaultOf(
+  Object failure,
+  String url, {
+  Future<bool> Function(String url) probe = fetchable,
+}) async {
+  final fault = mediaFaultOf(failure);
+  if (fault != MediaFault.transport || failure is! PlayerException) {
+    return fault;
+  }
+  try {
+    return await probe(url) ? MediaFault.source : fault;
+  } on Object {
+    // The port promises MediaLoadException and nothing else; a probe
+    // that broke does not get to break that.
+    return fault;
+  }
+}
 
 /// [AudioEnginePort] backed by just_audio.
 ///
@@ -97,6 +204,8 @@ class JustAudioEngine implements AudioEnginePort {
         initialIndex: 0,
         initialPosition: initialPosition,
       );
+    } on Object catch (failure) {
+      throw MediaLoadException(await probedMediaFaultOf(failure, url), failure);
     } finally {
       // An edit already in flight when this load started can put its
       // source into the list the load just built: both go through the

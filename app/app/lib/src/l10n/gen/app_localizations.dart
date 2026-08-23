@@ -1743,11 +1743,95 @@ abstract class AppLocalizations {
   /// **'Could not load the share links'**
   String get adminSharesLoadError;
 
+  /// Line under the artwork-cache heading, saying what the cache is and what clearing it costs.
+  ///
+  /// In en, this message translates to:
+  /// **'Resized copies of your covers, generated on demand. Clearing them costs a moment of decoding the next time each one is drawn, never a picture.'**
+  String get adminThumbsBlurb;
+
+  /// Button on the artwork-cache card that drops every generated thumbnail.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear cache'**
+  String get adminThumbsClearAction;
+
+  /// Body of the clear-artwork-cache dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Every generated copy is dropped and regenerated the next time a cover is drawn. No artwork is lost. The space is freed inside the catalog file rather than returned to the disk.'**
+  String get adminThumbsClearBody;
+
+  /// Title of the dialog confirming that every generated thumbnail is dropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the artwork cache?'**
+  String get adminThumbsClearTitle;
+
+  /// Confirmation after clearing the artwork cache. {rows} is a count, {size} a formatted byte size.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared {rows} copies, freeing {size}'**
+  String adminThumbsCleared(int rows, String size);
+
+  /// Shown on the artwork-cache card when the cache holds nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing generated yet'**
+  String get adminThumbsEmpty;
+
+  /// Third line on the artwork-cache card. {when} is a relative time such as "3 days ago".
+  ///
+  /// In en, this message translates to:
+  /// **'Oldest generated {when}'**
+  String adminThumbsOldest(String when);
+
+  /// One rung in the artwork-cache breakdown: the box in pixels and how many cached copies sit at it.
+  ///
+  /// In en, this message translates to:
+  /// **'{size} px: {rows}'**
+  String adminThumbsRung(int size, int rows);
+
+  /// Primary figure on the artwork-cache card. {size} is a formatted byte size, {rows} the number of cached images.
+  ///
+  /// In en, this message translates to:
+  /// **'{size} in {rows} copies'**
+  String adminThumbsSize(String size, int rows);
+
+  /// Second line on the artwork-cache card: how many source images have derivatives, out of those held, and what the sources themselves cost.
+  ///
+  /// In en, this message translates to:
+  /// **'From {sources} of {total} covers, which hold {size}'**
+  String adminThumbsSources(int sources, int total, String size);
+
+  /// Heading over the generated-thumbnail card on the trash screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Artwork cache'**
+  String get adminThumbsTitle;
+
   /// Caption of the review tile, naming what its number counts. Lower case: it reads as a continuation of the number above it.
   ///
   /// In en, this message translates to:
   /// **'albums to decide'**
   String get adminTileAlbumsToDecide;
+
+  /// Dashboard tile label for the generated-thumbnail cache: the derived copies of covers the server keeps.
+  ///
+  /// In en, this message translates to:
+  /// **'Artwork cache'**
+  String get adminTileArtworkCache;
+
+  /// Caption under the artwork-cache tile when no thumbnails have been generated.
+  ///
+  /// In en, this message translates to:
+  /// **'nothing generated yet'**
+  String get adminTileArtworkCacheEmpty;
+
+  /// Caption under the artwork-cache tile, the cache size as a share of what the source images cost. {percent} is a whole number.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% of the originals'**
+  String adminTileArtworkCacheShare(int percent);
 
   /// Caption of the health tile, saying how much of the library the score covers.
   ///
@@ -6920,6 +7004,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Similar tracks'**
   String get playerSimilarTracks;
+
+  /// Message after an item was skipped because the audio engine refused it. {title} is the item's title.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped {title} - this file can\'t be played'**
+  String playerSkippedUnplayable(String title);
+
+  /// Message replacing the per-track one once several unplayable items have been skipped in a row. {count} is how many.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped {count} tracks that can\'t be played'**
+  String playerSkippedUnplayableMany(int count);
+
+  /// Message when a run of unplayable items hit the cap and playback stopped rather than walking the whole queue. {count} is how many were skipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped after {count} files that can\'t be played'**
+  String playerSkipsGaveUp(int count);
 
   /// Accessible name of the sleep timer control while no timer is running.
   ///

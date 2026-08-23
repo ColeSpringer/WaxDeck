@@ -548,6 +548,12 @@ const (
 	// Generous for a real cover address, well under where an
 	// intermediary's own header limits begin.
 	maxArtHeaderURL = 2048
+	// minArtSize is the smallest box a client may name. Below the
+	// ladder's bottom rung rather than on it - a size in here rounds up
+	// to that rung - so it is a number of its own rather than one of the
+	// service's art sizes, and it is the spec's `minimum` for the same
+	// parameter.
+	minArtSize = 16
 )
 
 // maxUnscaledArtBytes bounds what a request that asked for a thumbnail
@@ -556,14 +562,20 @@ const (
 // The resolver answers a sized request with the original whenever it
 // could not measure the source - after BMP and TIFF became first-class,
 // that means AVIF, HEIC, and bytes nothing could read. A source it did
-// measure never lands here: one larger than the box comes back scaled,
-// and one already inside the box is the picture the caller asked for at
-// that rung, however many bytes it is. For an unmeasurable cover a
-// little over the bound the original is the right answer; for a large
-// one it is not, because a caller asking for a 64-pixel tile is asking
-// for something small and nothing here can paint these bytes anyway.
-// Well above any real thumbnail at the 2048-pixel ceiling and far below
-// the 16 MiB an upload may be.
+// measure never lands here: one larger than the rung comes back scaled,
+// and one already inside the rung is the picture the caller asked for,
+// however many bytes it is. For an unmeasurable cover a little over the
+// bound the original is the right answer; for a large one it is not,
+// because a caller asking for a 64-pixel tile is asking for something
+// small and nothing here can paint these bytes anyway. Well above any
+// real thumbnail at the 2048-pixel ceiling and far below the 16 MiB an
+// upload may be.
+//
+// The rung and not the raw request is what the picture is measured
+// against, because the rung is what the resolver answered at: a request
+// for 600 is served the 768 derivative, and reading a 700-pixel answer
+// against the 600 that was typed would refuse bytes that are exactly
+// what was asked for.
 //
 // Applied on this endpoint alone. `Art` also answers the Subsonic
 // adapter, whose clients have no designed placeholder to fall back to,
@@ -576,12 +588,16 @@ const maxUnscaledArtBytes = 2 << 20
 // artTooBigForSize reports whether a sized request was answered with an
 // original bigger than a thumbnail slot has any business holding: one
 // never measured, or one the thumbnailer failed on and the resolver fell
-// back to whole. A request that asked for no size is never refused, and
-// neither is a source already within the requested box.
-func artTooBigForSize(blob service.ArtBlob, size int) bool {
-	return size > 0 && len(blob.Bytes) > maxUnscaledArtBytes &&
+// back to whole. A request that asked for no size is never refused (the
+// resolver leaves Box zero for one), and neither is a source already
+// within the rung that answered.
+//
+// It reads the size off the blob rather than taking the request, so a
+// caller cannot hand it a number the resolve did not round to.
+func artTooBigForSize(blob service.ArtBlob) bool {
+	return blob.Box > 0 && len(blob.Bytes) > maxUnscaledArtBytes &&
 		(blob.Width == 0 && blob.Height == 0 ||
-			blob.Width > size || blob.Height > size)
+			blob.Width > blob.Box || blob.Height > blob.Box)
 }
 
 // artHeaderValues renders one resolved cover's provenance as the four
@@ -610,8 +626,13 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	size := 0
 	if req.Params.Size != nil {
 		size = *req.Params.Size
-		if size < 16 || size > 2048 {
-			return GetItemArt400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "size must be between 16 and 2048"))}, nil
+		// The ceiling is the ladder's top rung: past it a request is
+		// asking for an enlargement. The floor sits below the bottom
+		// rung and rounds up onto it, which is why it is a number of its
+		// own. The spec carries the same pair as schema bounds; this is
+		// what a client that ignores them meets.
+		if size < minArtSize || size > service.ArtSizeMax {
+			return GetItemArt400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", fmt.Sprintf("size must be between %d and %d", minArtSize, service.ArtSizeMax)))}, nil
 		}
 	}
 	uc, _, err := s.requireUserCtx(ctx)
@@ -631,13 +652,17 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	// A thumbnail slot is not where an unscaled original belongs; see
 	// maxUnscaledArtBytes. Before the validator, so a caller cannot
 	// revalidate its way into the bytes this refuses.
-	if artTooBigForSize(blob, size) {
+	if artTooBigForSize(blob) {
 		return GetItemArt404JSONResponse{NotFoundJSONResponse(errObj("not-found",
 			"no thumbnail of that size for pid "+req.Pid))}, nil
 	}
-	// The validator is the source image hash scoped by the requested
-	// size: same source, different thumbnail sizes, different bytes.
-	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", blob.SourceHash, size))
+	// The validator is the source image hash scoped by the rung that
+	// answered: same source, different rungs, different bytes. Scoping
+	// it by the raw request instead would survive a change to the
+	// ladder - the same URL would answer new bytes under the validator
+	// the old ones were cached with, and a browser holding the old copy
+	// would revalidate into a 304 and keep it indefinitely.
+	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", blob.SourceHash, blob.Box))
 	cacheControl, vary := artCacheControl, artVary
 	if req.Params.IfNoneMatch != nil && httpcache.ETagMatches(*req.Params.IfNoneMatch, etag) {
 		// A 304 repeats the validator and the freshness the body would

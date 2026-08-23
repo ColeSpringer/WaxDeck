@@ -27,6 +27,7 @@ export 'src/components/fast_scroll.dart';
 export 'src/components/indicators.dart';
 export 'src/components/inputs.dart';
 export 'src/components/lyrics.dart';
+export 'src/components/marquee.dart';
 export 'src/components/mini_player.dart';
 export 'src/components/navigation.dart';
 export 'src/components/panel.dart';

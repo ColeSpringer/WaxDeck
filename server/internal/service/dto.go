@@ -121,6 +121,12 @@ type ArtBlob struct {
 	// one case a resolve hands back bytes it could not scale.
 	Width  int
 	Height int
+	// Box is the ladder rung this resolve answered at: the requested
+	// size rounded up (waxbin/art.Rung), or 0 when no size was asked
+	// for. Every request rounding to the same rung gets the same bytes,
+	// so it - not the raw request - is what a cache key or a size guard
+	// is written against.
+	Box int
 }
 
 // ArtSourceDTO says where a picture came from: the producer, the

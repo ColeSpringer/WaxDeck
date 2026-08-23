@@ -236,7 +236,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.rescans, 1);
-    expect(container.read(shellMessengerProvider)?.text, 'Scan started');
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Scan started',
+    );
   });
 
   testWidgets('the genre editor edits a draft and saves it whole', (
@@ -281,7 +284,10 @@ void main() {
 
     final doom = repo.genreTree.firstWhere((g) => g.name == 'Doom Metal');
     expect(doom.aliases, <String>['Funeral Doom', 'Sludge']);
-    expect(container.read(shellMessengerProvider)?.text, 'Genre tree saved');
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Genre tree saved',
+    );
   });
 
   // Removing a parent must not take its children with it: they come up a

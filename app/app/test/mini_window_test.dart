@@ -36,6 +36,22 @@ class _FakeWindow implements MiniWindowPort {
 
   @override
   Future<void> quit() async => calls.add('quit');
+
+  /// What the app asked to run when the window is closed, so a test can
+  /// close the window by calling it.
+  Future<void> Function()? onClose;
+
+  @override
+  Future<void> bindClose(Future<void> Function() handler) async {
+    calls.add('bindClose');
+    onClose = handler;
+  }
+
+  @override
+  Future<void> unbindClose() async {
+    calls.add('unbindClose');
+    onClose = null;
+  }
 }
 
 ProviderContainer _container(_FakeWindow window) {

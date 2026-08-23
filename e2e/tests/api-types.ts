@@ -556,6 +556,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/thumbnails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Census the generated thumbnail cache
+         * @description Reports what the derived-artwork cache holds - rows, bytes, how many source images have at least one derivative, and a breakdown by ladder rung - beside what the source images themselves cost, which is the figure the cache size is read against. Read-only. Administrators only.
+         */
+        get: operations["getThumbnailCache"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/thumbnails/prune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prune the generated thumbnail cache
+         * @description Drops cached thumbnails to fit the policy and reports what went. Nothing is lost: every entry is regenerated on the next request that asks for it, so a prune costs decode time rather than pictures. The rows are freed inside the catalog file; returning that space to the filesystem takes a vacuum. At least one bound must be given. Administrators only.
+         */
+        post: operations["pruneThumbnailCache"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/migrations": {
         parameters: {
             query?: never;
@@ -5032,6 +5072,72 @@ export interface components {
         TrashList: {
             /** @description Entries, newest first. */
             entries: components["schemas"]["TrashEntry"][];
+        };
+        /** @description What the generated thumbnail cache holds, and what the source images behind it cost. */
+        ThumbnailCacheReport: {
+            /** @description Cached thumbnails held. */
+            rows: number;
+            /**
+             * Format: int64
+             * @description What those thumbnails cost.
+             */
+            bytes: number;
+            /** @description Source images with at least one derivative, out of `artSources`. */
+            sources: number;
+            /** @description Source images held. */
+            artSources: number;
+            /**
+             * Format: int64
+             * @description What those originals cost. The figure `bytes` is read against: a cache smaller than its own sources is doing its job.
+             */
+            artSourceBytes: number;
+            /**
+             * Format: date-time
+             * @description When the oldest cached thumbnail was generated. Absent when the cache is empty.
+             */
+            oldestAt?: string;
+            /**
+             * Format: date-time
+             * @description When the newest cached thumbnail was generated. Absent when the cache is empty.
+             */
+            newestAt?: string;
+            /** @description Per-rung breakdown, largest box first. */
+            rungs: components["schemas"]["ThumbnailRung"][];
+        };
+        /** @description One ladder rung's share of the thumbnail cache. */
+        ThumbnailRung: {
+            /** @description The rung in pixels. A requested box is rounded up to one of these, which is what bounds how many derivatives a single cover can accumulate. */
+            size: number;
+            /** @description Cached thumbnails at this rung. */
+            rows: number;
+            /**
+             * Format: int64
+             * @description What they cost.
+             */
+            bytes: number;
+        };
+        /** @description Which cached thumbnails to drop. Both bounds are optional and an absent one leaves that axis unbounded, but at least one must be given - a request with neither is refused rather than read as "everything". Zero is a value, not an absence: `olderThanSeconds: 0` drops every entry, and `maxBytes: 0` evicts the cache entirely. */
+        ThumbnailPruneRequest: {
+            /**
+             * Format: int64
+             * @description Drop entries generated at least this long ago. Absent leaves the age unbounded.
+             */
+            olderThanSeconds?: number;
+            /**
+             * Format: int64
+             * @description Evict oldest-first until the cache fits this many bytes. Absent leaves the size unbounded.
+             */
+            maxBytes?: number;
+        };
+        /** @description What a thumbnail-cache prune dropped. */
+        ThumbnailPruneResult: {
+            /** @description Cached thumbnails dropped. */
+            removed: number;
+            /**
+             * Format: int64
+             * @description What they held. Freed inside the catalog file rather than returned to the filesystem.
+             */
+            freedBytes: number;
         };
         /** @description What an empty-trash pass did. */
         TrashEmptyResult: {
@@ -10918,6 +11024,57 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    getThumbnailCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cache census. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThumbnailCacheReport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    pruneThumbnailCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThumbnailPruneRequest"];
+            };
+        };
+        responses: {
+            /** @description What the prune dropped. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThumbnailPruneResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };

@@ -332,7 +332,7 @@ class PlaybackSession {
         // A span means the URL carries the whole backing file (direct
         // playback of a carved track); the engine clips to the window
         // and every position stays track-relative.
-        await engine.load(
+        await _loadMedia(
           info.url,
           mimeType: info.mimeType,
           initialPosition: resumeAt,
@@ -387,7 +387,7 @@ class PlaybackSession {
         // Downloaded originals carry the same window; clipping here is
         // what makes an offline carved track play as itself instead of
         // the whole rip.
-        await engine.load(
+        await _loadMedia(
           Uri.file(local.parts.first.path).toString(),
           initialPosition: resumeAt,
           clipStart: local.spanStartMs == null
@@ -481,6 +481,39 @@ class PlaybackSession {
     final fetched = detail.settings ?? const SubscriptionSettings();
     _showSettings = fetched;
     return fetched;
+  }
+
+  /// Every load this session makes, so the guarantee the caller reads
+  /// the failure against is made in one place rather than at five call
+  /// sites: what comes out of here is a [MediaLoadException] and
+  /// nothing else.
+  ///
+  /// The engine port promises that already. This holds the promise for
+  /// an engine that broke it - a plugin exception escaping an
+  /// implementation that forgot to classify one - and holds it the safe
+  /// way round, as [MediaFault.transport]: a start that stops on a
+  /// retryable pane costs a press, and one that walks the queue costs
+  /// the listening.
+  Future<void> _loadMedia(
+    String url, {
+    String? mimeType,
+    Duration? initialPosition,
+    Duration? clipStart,
+    Duration? clipEnd,
+  }) async {
+    try {
+      await engine.load(
+        url,
+        mimeType: mimeType,
+        initialPosition: initialPosition,
+        clipStart: clipStart,
+        clipEnd: clipEnd,
+      );
+    } on MediaLoadException {
+      rethrow;
+    } on Object catch (error) {
+      throw MediaLoadException(MediaFault.transport, error);
+    }
   }
 
   /// Fetches the per-show or per-book playback config; playback works
@@ -582,7 +615,7 @@ class PlaybackSession {
     // load would leave trimming silently dead for a part still playing.
     final partStartMs = info.partStartMs ?? 0;
     final inPartMs = bookMs - partStartMs;
-    await engine.load(
+    await _loadMedia(
       info.url,
       mimeType: info.mimeType,
       initialPosition: inPartMs > 0 ? Duration(milliseconds: inPartMs) : null,
@@ -624,7 +657,7 @@ class PlaybackSession {
     // checkpoint no server write would ever correct - a downloaded part
     // pruned or corrupt would leave the final checkpoint claiming the
     // next part at the previous part's position, offline, for good.
-    await engine.load(
+    await _loadMedia(
       Uri.file(at.part.path).toString(),
       initialPosition: inPartMs > 0 ? Duration(milliseconds: inPartMs) : null,
     );
@@ -892,7 +925,7 @@ class PlaybackSession {
     // source" for a source it is asked to begin at or past the end, and
     // an episode toggled at its own end is exactly where this lands.
     if (info.durationMs > 0 && at >= info.durationMs) at = 0;
-    await engine.load(
+    await _loadMedia(
       info.url,
       mimeType: info.mimeType,
       initialPosition: at > 0 ? Duration(milliseconds: at) : null,
@@ -995,6 +1028,58 @@ class PlaybackSession {
     finished: true,
     stopEngine: false,
   );
+
+  /// What has to reach the server if this client vanishes right now,
+  /// built without awaiting anything.
+  ///
+  /// The web build's answer to a closing tab. Every path that ends a
+  /// session ordinarily - [dispose], [handOver], [finishAtBoundary] -
+  /// is a sequence of awaited round trips, and there are none of those
+  /// left once `pagehide` has fired. So the two facts a stop records
+  /// are read off here synchronously and sent as they are.
+  ///
+  /// [ending] separates the two callers. A closing document is the end
+  /// of the session and reports the listen; a tab merely going hidden
+  /// is not, and reports only where the listener had got to - a tab
+  /// switch that closed the session would end a listen the moment
+  /// somebody checked their mail.
+  ///
+  /// Null when there is nothing to say: a session that never loaded has
+  /// no position of its own, and the engine's belongs to whatever
+  /// played before it.
+  ({int positionMs, ListenSession? listen})? exitReport({
+    required bool ending,
+  }) {
+    if (_disposed || !_loaded) return null;
+    // `_endedAt` first, exactly as `dispose` and `handOver` read it: an
+    // outro cutoff pauses the engine before the credits and records the
+    // real end, so reading the engine here would put the resume point
+    // back before the cutoff and fire it again next time - the loop the
+    // held end exists to break.
+    final positionMs = _display(_endedAt ?? engine.position).inMilliseconds;
+    if (!ending) return (positionMs: positionMs, listen: null);
+    final sessionId = _sessionId;
+    final startedAt = _startedAt;
+    if (sessionId == null || startedAt == null || _msPlayed <= 0) {
+      return (positionMs: positionMs, listen: null);
+    }
+    final skipped = _timeSavedMs();
+    return (
+      positionMs: positionMs,
+      listen: ListenSession(
+        sessionId: sessionId,
+        pid: item.pid,
+        startedAt: startedAt,
+        msPlayed: _msPlayed,
+        skippedMs: skipped > 0 ? skipped : null,
+        // A tab that closed mid-track did not finish it. The server
+        // deduplicates on the session id, so a later report from a
+        // path that knows better wins rather than double-counting.
+        finished: _finished,
+        client: clientId,
+      ),
+    );
+  }
 
   Future<void> _shutdown({
     required Duration at,

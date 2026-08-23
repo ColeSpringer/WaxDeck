@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_controller.dart';
+import '../queue/queue_persistence.dart';
 import '../radio/radio_controller.dart';
 import 'desktop_ports.dart';
 import 'desktop_ports_io.dart'
@@ -66,6 +68,33 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
   final binder = TrayBinder(ref.watch(trayPortProvider));
   final window = ref.read(miniWindowPortProvider);
 
+  /// Leaving for good: stop what is playing, and get the queue's last
+  /// edit onto the disk before the process goes.
+  ///
+  /// Both, and together rather than in turn. The stop finalizes the
+  /// checkpoint, the listen report and the session Connect is
+  /// advertising; the flush writes the queue the next launch offers to
+  /// resume. They share no state, so serializing them buys nothing but
+  /// latency - and under a budget it buys worse than nothing: a server
+  /// that has stopped answering would spend the whole of it on the stop
+  /// and the local write would never run, which is the failure this is
+  /// here to prevent.
+  ///
+  /// Unbounded and non-quitting on purpose. The window layer holds the
+  /// budget and ends the process, because it is the one that has to
+  /// answer for a close that cannot complete; this is the finalizing
+  /// half alone, and every caller reaches it through that close.
+  Future<void> shutdown() async {
+    try {
+      await Future.wait(<Future<void>>[
+        ref.read(nowPlayingProvider.notifier).goingAway(),
+        ref.read(queuePersistenceProvider).flush(),
+      ]);
+    } on Object catch (failure) {
+      debugPrint('shutdown did not finish cleanly: $failure');
+    }
+  }
+
   unawaited(
     binder.install(
       TrayActions(
@@ -78,10 +107,27 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
         onPrevious: () =>
             unawaited(ref.read(nowPlayingProvider.notifier).previous()),
         onShow: () => unawaited(window.show()),
+        // The window's close, not a shutdown of its own: with a
+        // handler bound, quitting asks the platform to close, which
+        // runs the finalize under the window's budget and destroys
+        // once. Two ways of saying the same thing, one path.
         onQuit: () => unawaited(window.quit()),
       ),
     ),
   );
+
+  // The window's own close, which until now meant nothing to playback:
+  // the tray keeps the process alive after the X, so the music played
+  // on out of a window the listener had closed. Bound here rather than
+  // in the port because the verbs are the app's - and beside the tray's
+  // Quit because they are the same gesture said two ways, so they run
+  // the same thing.
+  unawaited(window.bindClose(shutdown));
+
+  // This binder is scoped to the signed-in session, and the closure it
+  // just bound holds a ref into it. Signing out leaves a window whose
+  // close would finalize a session that no longer exists.
+  ref.onDispose(() => unawaited(window.unbindClose()));
 
   void publish() {
     final station = ref.read(radioPlaybackProvider).station;

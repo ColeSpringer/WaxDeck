@@ -216,9 +216,159 @@ class TrashScreen extends ConsumerWidget {
               ),
               _ => const SkeletonShapes(shape: SkeletonShape.list),
             },
+            const SizedBox(height: WaxSpace.s32),
+            const _ArtworkCacheCard(),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The generated-artwork cache, on the page that already answers "what
+/// is this server holding that it does not have to".
+///
+/// It sits beside the trash and is the opposite of it in the one way
+/// that matters: the trash holds the only copy of a file and this holds
+/// copies of pictures the catalog still has. Clearing it cannot lose
+/// anything, which is why the action is a plain confirm rather than the
+/// typed word emptying the trash takes.
+class _ArtworkCacheCard extends ConsumerWidget {
+  const _ArtworkCacheCard();
+
+  Future<void> _clear(BuildContext context, WidgetRef ref) async {
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.adminThumbsClearTitle),
+        content: Text(l10n.adminThumbsClearBody),
+        actions: <Widget>[
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+          ),
+          WaxButton(
+            label: l10n.adminThumbsClearAction,
+            semanticsId: SemanticsIds.thumbsClearConfirm,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final result = await ref.read(thumbnailCacheProvider.notifier).clear();
+      messenger.show(
+        l10n.adminThumbsCleared(
+          result.removed,
+          l10n.formatBytes(result.freedBytes),
+        ),
+      );
+    } on WaxDeckApiException catch (error) {
+      messenger.show(explainError(l10n, error));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    final cache = ref.watch(thumbnailCacheProvider);
+    return Semantics(
+      identifier: SemanticsIds.thumbsCard,
+      explicitChildNodes: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SectionHeader(title: l10n.adminThumbsTitle),
+          Text(
+            l10n.adminThumbsBlurb,
+            style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+          ),
+          const SizedBox(height: WaxSpace.s16),
+          switch (cache) {
+            AsyncData(:final value) => _CacheFigures(report: value),
+            AsyncError(:final error) => ErrorState(
+              title: l10n.adminThumbsTitle,
+              message: context.explain(error),
+              onRetry: () => ref.invalidate(thumbnailCacheProvider),
+            ),
+            _ => const SkeletonShapes(shape: SkeletonShape.list),
+          },
+          if (cache.value case final report? when report.rows > 0) ...<Widget>[
+            const SizedBox(height: WaxSpace.s16),
+            WaxButton(
+              label: l10n.adminThumbsClearAction,
+              semanticsId: SemanticsIds.thumbsClear,
+              onPressed: () => _clear(context, ref),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// What the census says, in the order an operator reads it: what the
+/// cache costs, what it was derived from, how old it is, and where it
+/// sits on the ladder.
+class _CacheFigures extends StatelessWidget {
+  const _CacheFigures({required this.report});
+
+  final ThumbnailCacheReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    if (report.rows == 0) {
+      return Text(
+        l10n.adminThumbsEmpty,
+        style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+      );
+    }
+    final secondary = WaxType.bodySmall.copyWith(color: colors.textSecondary);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          l10n.adminThumbsSize(l10n.formatBytes(report.bytes), report.rows),
+          style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+        ),
+        const SizedBox(height: WaxSpace.s4),
+        Text(
+          l10n.adminThumbsSources(
+            report.sources,
+            report.artSources,
+            l10n.formatBytes(report.artSourceBytes),
+          ),
+          style: secondary,
+        ),
+        if (report.oldestAt case final oldest?) ...<Widget>[
+          const SizedBox(height: WaxSpace.s4),
+          Text(
+            l10n.adminThumbsOldest(l10n.relativeSpaced(oldest)),
+            style: secondary,
+          ),
+        ],
+        const SizedBox(height: WaxSpace.s12),
+        // The breakdown is a reading, not a set of controls: a pill
+        // here would be a row of buttons that do nothing.
+        Wrap(
+          spacing: WaxSpace.s12,
+          runSpacing: WaxSpace.s4,
+          children: <Widget>[
+            for (final rung in report.rungs)
+              Text(
+                l10n.adminThumbsRung(rung.size, rung.rows),
+                style: WaxType.monoData.copyWith(color: colors.textTertiary),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

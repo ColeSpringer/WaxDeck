@@ -13,6 +13,7 @@ import '../settings/client_prefs.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_state.dart';
 import '../radio/radio_controller.dart';
+import '../shell/shell_messages.dart';
 import '../sync/sync_providers.dart';
 import 'playback_session.dart';
 import 'session_registry.dart';
@@ -97,6 +98,21 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// playback settings hang off that.
   final Map<String, ItemSummary> _known = {};
 
+  /// How many unplayable items a single run may skip past before
+  /// playback stops and says so.
+  ///
+  /// A queue of broken files would otherwise walk itself to the end
+  /// with a toast per item, which is neither playback nor a report. The
+  /// count resets on any item that does load, so a bad file in the
+  /// middle of a good album costs one skip and nothing else.
+  static const int _maxConsecutiveSkips = 3;
+
+  /// Unplayable items skipped since the last item that loaded. Also
+  /// what turns a stack of per-track messages into one line: the second
+  /// and later skips in a run replace the first message rather than
+  /// piling on top of it.
+  int _skipRun = 0;
+
   /// The entry handed to the engine to play next, with the play-info it
   /// was minted from; null when nothing is prepared.
   ({QueueEntry entry, PlayInfo info})? _preload;
@@ -178,7 +194,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     }
     ref.onDispose(() {
       unawaited(_boundarySub?.cancel());
-      _release(_session, _Farewell.stop);
+      unawaited(_release(_session, _Farewell.stop));
       // Not through _setSession: the container is going away, and there
       // is nothing left for Connect to report to.
       _session = null;
@@ -311,6 +327,11 @@ class NowPlayingController extends Notifier<NowPlaying> {
     bool autoplay = true,
   }) {
     if (pids.isEmpty) return Future<void>.value();
+    // A deliberate play is a fresh start, so a run of skipped files
+    // left over from the last queue does not spend this one's budget:
+    // three bad rips yesterday must not make the first bad file today
+    // the one that stops everything.
+    _skipRun = 0;
     _pendingPositionMs = positionMs;
     _pendingPaused = !autoplay;
     ref
@@ -612,6 +633,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
       _install(session, entry);
       await starting;
       if (_superseded(token)) return;
+      _skipRun = 0;
       state = NowPlaying(entry: entry, item: item, session: session);
       await _syncPreload();
     } on Object catch (error) {
@@ -624,9 +646,9 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // too, or Connect keeps reporting an endpoint playing an item that
       // never loaded, and anything reaching for the live session finds
       // one that cannot drive the engine.
-      _release(_session, _Farewell.stop);
+      unawaited(_release(_session, _Farewell.stop));
       _setSession(null);
-      state = NowPlaying(entry: entry, item: _known[entry.pid], error: error);
+      _startFailed(entry, _known[entry.pid], error);
     } finally {
       // Only if it is still this start's window: a newer one that
       // superseded this has its own to close.
@@ -668,6 +690,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // for it from here, so a crossing with the summary in hand
       // publishes exactly once, whole, with no frame in between where
       // the transport has nothing to bind to.
+      _skipRun = 0;
       state = NowPlaying(entry: entry, item: item, session: session);
       await adopting;
       if (_superseded(token)) return;
@@ -675,9 +698,9 @@ class NowPlayingController extends Notifier<NowPlaying> {
     } on Object catch (error) {
       if (_superseded(token)) return;
       debugPrint('playback rollover failed: $error');
-      _release(_session, _Farewell.stop);
+      unawaited(_release(_session, _Farewell.stop));
       _setSession(null);
-      state = NowPlaying(entry: entry, item: _known[entry.pid], error: error);
+      _startFailed(entry, _known[entry.pid], error);
     } finally {
       if (_starting == token) _starting = null;
     }
@@ -708,7 +731,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     unawaited(_dropPreload());
     final session = _session;
     if (session == null) return;
-    _release(session, _Farewell.handOver);
+    unawaited(_release(session, _Farewell.handOver));
     _setSession(null);
     state = NowPlaying(entry: state.entry, item: state.item);
   }
@@ -719,9 +742,48 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _adopting = null;
     _sessionEntryId = null;
     unawaited(_dropPreload());
-    _release(_session, _Farewell.stop);
+    unawaited(_release(_session, _Farewell.stop));
     _setSession(null);
     state = NowPlaying.nothing;
+  }
+
+  /// This client is going away: stop, and wait for the state a stop
+  /// finalizes to actually land.
+  ///
+  /// The one verb here that is worth awaiting. Everywhere else a
+  /// release is fired and forgotten, because the app is still running
+  /// and the writes it makes will land in their own time; here the
+  /// process is about to end, and a checkpoint still in flight when it
+  /// does is a listener who comes back to a book at the position it
+  /// stood at the last time they closed it properly.
+  ///
+  /// Deliberately not what backgrounding does. Closing the window is
+  /// the gesture that means "stop"; minimizing, switching apps, and
+  /// losing focus all keep playing, which is what a music player is
+  /// for. A remote session is left alone for the same reason - the
+  /// speaker in the other room is not this window.
+  Future<void> goingAway() async {
+    if (_radioOwnsEngine) {
+      await ref.read(radioPlaybackProvider.notifier).interrupt();
+      return;
+    }
+    final session = _session;
+    _startToken++;
+    _adopting = null;
+    _sessionEntryId = null;
+    unawaited(_dropPreload());
+    if (session == null) return;
+    // The one release that is awaited, and awaited through the release
+    // itself: a second `handOver` beside it would meet the disposed
+    // guard and return on the next microtask having waited for neither
+    // the checkpoint nor the listen report, which is the whole of what
+    // this call is for. `handOver` rather than `dispose` because it
+    // finalizes without touching the engine, and the engine is going
+    // with the process anyway.
+    final farewell = _release(session, _Farewell.handOver);
+    _setSession(null);
+    state = NowPlaying(entry: state.entry, item: state.item);
+    await farewell;
   }
 
   PlaybackSession _build(ItemSummary item, {int? initialPositionMs}) =>
@@ -749,7 +811,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// and the session registry are pointed here, and the feeds this layer
   /// runs on hang off it.
   void _install(PlaybackSession session, QueueEntry entry) {
-    _release(_session, _Farewell.stop);
+    unawaited(_release(_session, _Farewell.stop));
     _sessionEntryId = entry.queueId;
     _registry.register(session);
     _setSession(session);
@@ -776,21 +838,118 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// [_setSession], which is the one place Connect hears about it: what
   /// the endpoint mirrors is whichever session owns the engine, and
   /// between these two calls that is nothing.
-  void _release(PlaybackSession? session, _Farewell farewell) {
+  ///
+  /// Returns the farewell rather than swallowing it. Three of the four
+  /// callers ignore it, which is the design; [goingAway] is the one
+  /// that has to know the checkpoint and the listen report landed
+  /// before the process goes, and a session finalizes once - a second
+  /// `handOver` beside this one returns on the disposed guard without
+  /// waiting for anything.
+  ///
+  /// Everything before the farewell runs synchronously, so a caller
+  /// that drops the future still has the feeds cancelled and the
+  /// registry cleared by the time it returns.
+  Future<void> _release(PlaybackSession? session, _Farewell farewell) {
     unawaited(_completedSub?.cancel());
     unawaited(_failedSub?.cancel());
     unawaited(_positionFeed?.cancel());
     _completedSub = null;
     _failedSub = null;
     _positionFeed = null;
-    if (session == null) return;
+    if (session == null) return Future<void>.value();
     _registry.unregister(session);
-    unawaited(switch (farewell) {
+    return switch (farewell) {
       _Farewell.stop => session.dispose(),
       _Farewell.boundary => session.finishAtBoundary(),
       _Farewell.handOver => session.handOver(),
-    });
+    };
   }
+
+  /// Where a start that did not survive lands: skipped past when the
+  /// media itself is the problem and there is somewhere to go, and left
+  /// on the error pane otherwise.
+  ///
+  /// The split is what refused, which is why the engine types it
+  /// ([MediaFault]) rather than leaving it to be guessed at from the
+  /// wording. A file the platform will not decode is not going to
+  /// decode on the next press, and the queue behind it has nothing
+  /// wrong with it: one bad rip should cost the track rather than the
+  /// listening. Everything else keeps the pane - a server that answered
+  /// an error, a stream that could not be fetched, a bug in here - and
+  /// the retry there is a real offer, because all three are states that
+  /// change.
+  ///
+  /// [mayAdvance] is false for a session that failed after it was
+  /// already playing. A part of a book that will not load is still a
+  /// bad file, but the queue entry it belongs to is the whole book:
+  /// stepping past it leaves the book six hours in, and reports the
+  /// listen ended at a part boundary. That one stops where it is.
+  void _startFailed(
+    QueueEntry? entry,
+    ItemSummary? item,
+    Object error, {
+    bool mayAdvance = true,
+  }) {
+    if (error is MediaLoadException &&
+        error.fault == MediaFault.source &&
+        mayAdvance &&
+        ref.read(queueControllerProvider).canAdvance) {
+      if (_skipRun < _maxConsecutiveSkips) {
+        _skipRun++;
+        _announceSkip(item);
+        // Not awaited: this runs from a catch inside the start it is
+        // replacing, and the next start has to begin after that one has
+        // finished unwinding.
+        Future<void>.microtask(next);
+        // No error on the state: the queue is moving, and a pane that
+        // appeared for a frame between two tracks is the flash this
+        // exists to avoid.
+        state = NowPlaying(entry: entry, item: item);
+        return;
+      }
+      // The run hit its cap. Stopping is the honest answer - a queue
+      // that is all bad files is a library problem, not a skip - and
+      // the message says how far it got rather than repeating the last
+      // filename.
+      final skipped = _skipRun;
+      _skipRun = 0;
+      ref
+          .read(shellMessengerProvider.notifier)
+          .showLocalized(
+            (l10n) => l10n.playerSkipsGaveUp(skipped),
+            // The same channel the skips used: this is the last thing
+            // that run has to say, and it belongs in place of the
+            // count still standing rather than behind it.
+            channel: _skipChannel,
+          );
+    }
+    state = NowPlaying(entry: entry, item: item, error: error);
+  }
+
+  /// Says what was skipped, as one line however many there have been.
+  ///
+  /// The first names the track, because that is the useful sentence
+  /// when a single file in an album is bad. From the second on it is a
+  /// count: three toasts naming three files nobody chose is noise, and
+  /// the shell replaces the standing message rather than queueing it.
+  void _announceSkip(ItemSummary? item) {
+    final run = _skipRun;
+    final title = item?.title;
+    ref
+        .read(shellMessengerProvider.notifier)
+        .showLocalized(
+          (l10n) => run > 1 || title == null
+              ? l10n.playerSkippedUnplayableMany(run)
+              : l10n.playerSkippedUnplayable(title),
+          channel: _skipChannel,
+        );
+  }
+
+  /// Shared by every message a skip run raises, so the shell supersedes
+  /// the standing one instead of stacking a second bar over it. Not a
+  /// semantics identifier: none of these has a button, and there is
+  /// nothing here for a test to press.
+  static const String _skipChannel = 'player-skipped-unplayable';
 
   /// Points [liveSession] at [session] and tells Connect, whose reports
   /// follow whatever owns the engine: a fresh session mirrors from here,
@@ -807,13 +966,17 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// error pane and retry stand where the transport was. The release
   /// flushes the checkpoint at the position the failure left, which is
   /// where the retry resumes.
+  ///
+  /// Never a skip, however the failure classifies. What failed here is
+  /// part of something already underway, and the entry a skip would
+  /// step past is the whole of it.
   void _onSessionFailed(Object error) {
     final session = _session;
     if (session == null) return;
     debugPrint('playback session failed: $error');
-    _release(session, _Farewell.stop);
+    unawaited(_release(session, _Farewell.stop));
     _setSession(null);
-    state = NowPlaying(entry: state.entry, item: state.item, error: error);
+    _startFailed(state.entry, state.item, error, mayAdvance: false);
   }
 
   /// The item ended with nothing behind it in the engine: step the
@@ -851,14 +1014,14 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // has nowhere to go, that item plays on and the log is the only
       // record of it.
       debugPrint('playback: crossed into an item the queue had let go');
-      _release(_session, _Farewell.boundary);
+      unawaited(_release(_session, _Farewell.boundary));
       _setSession(null);
       _recoverFromStray();
       return;
     }
     // The outgoing item is finalized at its own end, not at the engine's
     // position, which already belongs to the item now playing.
-    _release(_session, _Farewell.boundary);
+    unawaited(_release(_session, _Farewell.boundary));
     _setSession(null);
     _adopting = crossed;
     final queue = ref.read(queueControllerProvider);

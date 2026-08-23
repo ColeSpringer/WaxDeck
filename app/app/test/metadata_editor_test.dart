@@ -272,7 +272,10 @@ void main() {
     expect(repo.setItemArtworkCalls, hasLength(1));
     expect(repo.setItemArtworkCalls.single.role, 'booklet');
     expect(repo.setItemArtworkCalls.single.bytes, 64);
-    expect(container.read(shellMessengerProvider)?.text, 'Booklet replaced');
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Booklet replaced',
+    );
   });
 
   testWidgets('a cover nothing could measure says so rather than nothing', (
@@ -312,7 +315,7 @@ void main() {
 
     expect(repo.setItemArtworkCalls, isEmpty);
     expect(
-      container.read(shellMessengerProvider)?.text,
+      shellMessageText(container.read(shellMessengerProvider)),
       'huge.png is larger than the 16 MB an image may be',
     );
   });
@@ -496,7 +499,7 @@ void main() {
     // The server's own sentence names the field that refused; the app
     // adds the switch that overrides it.
     expect(
-      container.read(shellMessengerProvider)?.text,
+      shellMessageText(container.read(shellMessengerProvider)),
       'field locked. Check "Force" to overwrite locked fields.',
     );
   });
@@ -598,7 +601,7 @@ void main() {
 
     expect(repo.rematchCalls, ['tr-1']);
     final message = container.read(shellMessengerProvider);
-    expect(message?.text, 'Queued for identification');
+    expect(shellMessageText(message), 'Queued for identification');
     expect(message?.actionLabel, 'Open review');
   });
 

@@ -44,6 +44,14 @@ import (
 // apiVersion is the Subsonic protocol version this surface speaks.
 const apiVersion = "1.16.1"
 
+// maxCoverArtSize bounds the size a getCoverArt caller may name. The
+// same ceiling the first-party art endpoint refuses above, from the one
+// place the ladder's top rung is written down: anything at or below it
+// rounds to a rung the rest of the server already shares, and anything
+// above it would be served as asked and cached under a size nothing
+// else ever requests.
+const maxCoverArtSize = service.ArtSizeMax
+
 // streamer is the slice of the WaxFlow bridge the adapter needs; nil
 // when streaming is not configured.
 type streamer interface {
@@ -606,6 +614,14 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 		pid = tracks[0].PID
 	}
 	size := formInt(r, "size", 0)
+	// The protocol lets a client name any size, and a size past the top
+	// of the ladder is served as asked rather than rounded - so an
+	// arbitrary one would mint a bespoke derivative row per client whim.
+	// Clamped to the ceiling the first-party endpoint enforces, which is
+	// the top rung.
+	if size > maxCoverArtSize {
+		size = maxCoverArtSize
+	}
 	// Subsonic has no artwork-slot concept; it always serves the front cover.
 	blob, err := h.svc.Art(r.Context(), uc, pid, "", size)
 	if err != nil {
@@ -613,10 +629,10 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 		return
 	}
 	// The same validator the first-party art endpoint mints: the source
-	// hash scoped by the requested size. Covers are the bulkiest thing
-	// these clients refetch, and the protocol says nothing against
-	// ordinary HTTP revalidation.
-	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", blob.SourceHash, size))
+	// hash scoped by the rung that answered, not by the size typed into
+	// the query. Covers are the bulkiest thing these clients refetch,
+	// and the protocol says nothing against ordinary HTTP revalidation.
+	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", blob.SourceHash, blob.Box))
 	w.Header().Set("ETag", etag)
 	if httpcache.ETagMatches(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)

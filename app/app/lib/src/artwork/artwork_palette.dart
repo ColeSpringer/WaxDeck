@@ -119,12 +119,27 @@ class ArtworkAccent extends ConsumerStatefulWidget {
     required this.artUrl,
     required this.domain,
     required this.child,
+    this.resolving = false,
     super.key,
   });
 
   /// Null draws the domain hue and asks for nothing: an item with no
-  /// cover is a real state, not a pending one.
+  /// cover is a real state, not a pending one - unless [resolving] says
+  /// it is.
   final String? artUrl;
+
+  /// Whether a null [artUrl] means "not known yet" rather than "no
+  /// cover".
+  ///
+  /// The two look identical from here and are opposites to draw. An
+  /// item with no artwork should settle on the domain hue; an item
+  /// whose summary has not arrived should hold what the surface already
+  /// had, because the cover it is about to name is very often the one
+  /// already showing. Without the distinction, every advance into a
+  /// track this layer had not seen before crossfaded to the domain hue
+  /// and back - which is the flash the holding exists to stop, arriving
+  /// by the other door.
+  final bool resolving;
 
   final WaxDomain domain;
   final Widget child;
@@ -169,8 +184,12 @@ class _ArtworkAccentState extends ConsumerState<ArtworkAccent> {
         // to the domain hue for a cover that may decode next time.
         extracted = _held;
       }
-    } else {
+    } else if (!widget.resolving) {
       _held = null;
+    } else {
+      // Nothing to ask for yet, so nothing to change: what this surface
+      // knows stands until an item says otherwise.
+      extracted = _held;
     }
     final palette =
         extracted ?? WaxPalette.forDomain(WaxColors.of(context), widget.domain);

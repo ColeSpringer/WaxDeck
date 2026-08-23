@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -686,9 +687,15 @@ class _TrackGestures extends StatefulWidget {
     required this.onCommit,
     required this.onAbandon,
     required this.child,
+    this.onHover,
   });
 
   final bool enabled;
+
+  /// Whether a pointer is over the track, for a caller that wants to
+  /// draw the difference. Only a device that hovers reports one, so
+  /// touch never sees it.
+  final ValueChanged<bool>? onHover;
 
   /// The gesture box's width, which every caller already knows - the
   /// slider sizes its own box and the seek bar has measured its row - so
@@ -923,7 +930,17 @@ class _TrackGesturesState extends State<_TrackGestures> {
         onPointerMove: !widget.enabled ? null : _move,
         onPointerUp: !widget.enabled ? null : _up,
         onPointerCancel: !widget.enabled ? null : _cancel,
-        child: widget.child,
+        // Both halves of "this is a control", in the one place every
+        // track already goes through: the cursor says so before the
+        // click, and the flag lets the painter say so too. A dead
+        // track claims neither - a pointing hand over something that
+        // does nothing is a worse lie than no cursor at all.
+        child: MouseRegion(
+          cursor: widget.enabled ? SystemMouseCursors.click : MouseCursor.defer,
+          onEnter: widget.enabled ? (_) => widget.onHover?.call(true) : null,
+          onExit: (_) => widget.onHover?.call(false),
+          child: widget.child,
+        ),
       ),
     );
   }
@@ -1050,6 +1067,19 @@ class _WaxSliderState extends State<WaxSlider> {
   /// behind each one. Null outside a gesture and after touch presses,
   /// which apply nothing until release.
   double? _sent;
+
+  /// A pointer is over the track, so the knob draws a size up. Only a
+  /// device that hovers ever sets it, so touch never sees the state.
+  ///
+  /// A notifier the painter repaints from, rather than state the slider
+  /// rebuilds for: the whole of what it decides is two pixels of knob.
+  final ValueNotifier<bool> _hovered = ValueNotifier<bool>(false);
+
+  @override
+  void dispose() {
+    _hovered.dispose();
+    super.dispose();
+  }
 
   @override
   void didUpdateWidget(WaxSlider old) {
@@ -1196,6 +1226,9 @@ class _WaxSliderState extends State<WaxSlider> {
           onDrag: _drag,
           onCommit: _commit,
           onAbandon: _abandon,
+          onHover: (over) {
+            _hovered.value = over;
+          },
           child: SizedBox(
             width: double.infinity,
             // The touch target, not the drawn track: a 4 px bar is
@@ -1208,6 +1241,7 @@ class _WaxSliderState extends State<WaxSlider> {
                 track: colors.hairline,
                 fill: enabled ? colors.accent : colors.textDisabled,
                 knob: enabled ? colors.accent : colors.textDisabled,
+                hovered: _hovered,
               ),
             ),
           ),
@@ -1256,7 +1290,8 @@ class _LevelPainter extends CustomPainter {
     required this.track,
     required this.fill,
     required this.knob,
-  });
+    required this.hovered,
+  }) : super(repaint: hovered);
 
   final double fraction;
 
@@ -1268,6 +1303,18 @@ class _LevelPainter extends CustomPainter {
   final Color track;
   final Color fill;
   final Color knob;
+
+  /// A pointer is over the track. Drawn as a slightly larger knob
+  /// rather than a colour change: the accent is already the fill, so a
+  /// brighter one would read as a different value.
+  ///
+  /// A listenable rather than a value, passed to `repaint`: this feeds
+  /// two pixels of knob radius and nothing else, and a `setState` for it
+  /// would re-run the whole slider - its duration strings, its
+  /// `LayoutBuilder`, and the gesture map's factories and closures -
+  /// every time a cursor crossed a bar that sits inches from the
+  /// transport buttons.
+  final ValueListenable<bool> hovered;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1288,7 +1335,7 @@ class _LevelPainter extends CustomPainter {
     );
     canvas.drawCircle(
       Offset(inset + width * fraction, size.height / 2),
-      5,
+      hovered.value ? 7 : 5,
       Paint()..color = knob,
     );
   }
@@ -1302,6 +1349,10 @@ class _LevelPainter extends CustomPainter {
       // The knob moves on a theme flip that changes no other field here;
       // same reasoning as the seek painter's palette comparisons.
       old.knob != knob;
+  // `hovered` is deliberately absent: it repaints through `repaint`
+  // rather than through a rebuild, so what there is to compare here is
+  // a notifier identity rather than a drawn state - and two bars drawn
+  // the same way hold two different notifiers.
 }
 
 /// One row of a [WaxMenuButton].
@@ -1644,6 +1695,18 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
   /// sending stop moving the scrub preview; reset by the next press.
   bool _dead = false;
 
+  /// A pointer is over the bar, so the playhead draws a size up. Only a
+  /// device that hovers ever sets it.
+  ///
+  /// A notifier, for the reason [WaxSlider]'s is one.
+  final ValueNotifier<bool> _hovered = ValueNotifier<bool>(false);
+
+  @override
+  void dispose() {
+    _hovered.dispose();
+    super.dispose();
+  }
+
   /// The peaks reduced to the number of bars this width draws.
   ///
   /// Held rather than recomputed in `paint`: the playhead moves several
@@ -1791,6 +1854,9 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
               },
               onCommit: commit,
               onAbandon: abandon,
+              onHover: (over) {
+                _hovered.value = over;
+              },
               child: SizedBox(
                 // Width has to be claimed explicitly: inside a centred
                 // Column the constraints are loose, and a CustomPaint
@@ -1819,6 +1885,7 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
                     fill: colors.accent,
                     knob: enabled ? colors.accent : colors.textDisabled,
                     mark: colors.textTertiary.withValues(alpha: 0.5),
+                    hovered: _hovered,
                   ),
                 ),
               ),
@@ -1881,7 +1948,8 @@ class _SeekPainter extends CustomPainter {
     required this.fill,
     required this.knob,
     required this.mark,
-  });
+    required this.hovered,
+  }) : super(repaint: hovered);
 
   final double fraction;
   final double buffered;
@@ -1898,6 +1966,13 @@ class _SeekPainter extends CustomPainter {
   final Color fill;
   final Color knob;
   final Color mark;
+
+  /// A pointer is over the bar. The playhead grows; nothing else
+  /// changes, because a track that lights up under the cursor reads as
+  /// having moved rather than as being reachable.
+  ///
+  /// A listenable, for the reason [_LevelPainter.hovered] is one.
+  final ValueListenable<bool> hovered;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1961,7 +2036,7 @@ class _SeekPainter extends CustomPainter {
     _paintMarks(canvas, size, height * 2.5);
     canvas.drawCircle(
       Offset(size.width * fraction, size.height / 2),
-      6,
+      hovered.value ? 8 : 6,
       Paint()..color = knob,
     );
   }
@@ -1997,4 +2072,5 @@ class _SeekPainter extends CustomPainter {
       old.bufferTint != bufferTint ||
       old.mark != mark ||
       old.knob != knob;
+  // `hovered` is absent, as in [_LevelPainter].
 }

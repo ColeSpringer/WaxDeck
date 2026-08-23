@@ -75,7 +75,7 @@ void main() {
     // admin screen's, so it is asserted where it is raised rather than
     // in a snackbar this screen would have to host itself.
     final raised = container.read(shellMessengerProvider);
-    expect(raised?.text, 'Import started');
+    expect(shellMessageText(raised), 'Import started');
     // And it carries the way to watch the import, which is the whole
     // point of saying it started.
     expect(raised?.actionLabel, 'Tasks');

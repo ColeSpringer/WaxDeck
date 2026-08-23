@@ -49,6 +49,20 @@ class FakeEngine implements AudioEnginePort {
   /// alone are the ones this exists to catch out.
   bool failNextLoad = false;
 
+  /// Fails every [load] rather than one, standing in for a queue of
+  /// files none of which will open. What a skip-past-the-broken-one
+  /// policy has to stop walking, as opposed to the single bad rip
+  /// [failNextLoad] covers.
+  bool failEveryLoad = false;
+
+  /// Which fault a refused [load] reports.
+  ///
+  /// [MediaFault.source] by default, which is the file that will not
+  /// open. A test arranging a server restart or a dropped connection
+  /// sets [MediaFault.transport] instead - the two are opposite
+  /// instructions to a caller, and only one of them may walk a queue.
+  MediaFault loadFault = MediaFault.source;
+
   /// Fails the next [setVolume] the way a platform that will not take the
   /// write fails: it throws and the gain does not move. Cleared as it
   /// fires.
@@ -175,9 +189,13 @@ class FakeEngine implements AudioEnginePort {
     Duration? clipStart,
     Duration? clipEnd,
   }) async {
-    if (failNextLoad) {
+    if (failNextLoad || failEveryLoad) {
       failNextLoad = false;
-      throw const MediaWillNotOpen();
+      // Through the port's own type, because that is the port's own
+      // promise: a caller reads the fault to decide whether to skip
+      // past the item or offer a retry, and a fake that threw something
+      // untyped would exercise the fallback rather than the decision.
+      throw MediaLoadException(loadFault, const MediaWillNotOpen());
     }
     // The real facade stops the transport before replacing sources (the
     // web platform's per-playlist player cache makes the stop
@@ -393,7 +411,8 @@ class _RefusedByPlatform implements Exception {
   String toString() => 'the platform refused to start playback';
 }
 
-/// What [FakeEngine.failNextLoad] throws.
+/// What [FakeEngine.failNextLoad] puts inside the [MediaLoadException]
+/// it throws.
 ///
 /// Public, so a test can name the failure it arranged rather than
 /// asserting on whatever type happened to come out.

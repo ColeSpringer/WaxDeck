@@ -168,4 +168,31 @@ func TestArtCacheHeaders(t *testing.T) {
 	if got := again.Header.Get("Vary"); got != artVary {
 		t.Errorf("304 Vary = %q, want %q", got, artVary)
 	}
+
+	// The validator names the rung that answered, not the size that was
+	// typed. Two requests that round to one rung are one picture and
+	// share a validator; keying by the raw request instead would
+	// survive a change to the ladder, so a browser holding pre-flip
+	// bytes would revalidate into a 304 and keep the stale image for
+	// as long as it held it.
+	rounded := getArt(t, h, "/api/v1/items/"+pid+"/art?size=200", "")
+	roundedETag := rounded.Header.Get("ETag")
+	rounded.Body.Close()
+	if !strings.HasSuffix(strings.TrimSuffix(roundedETag, `"`), "-256") {
+		t.Errorf("ETag for size=200 = %q, want it keyed by the 256 rung", roundedETag)
+	}
+	sibling := getArt(t, h, "/api/v1/items/"+pid+"/art?size=250", "")
+	siblingETag := sibling.Header.Get("ETag")
+	sibling.Body.Close()
+	if siblingETag != roundedETag {
+		t.Errorf("size=250 ETag = %q, size=200 ETag = %q; one rung answers both",
+			siblingETag, roundedETag)
+	}
+	// And the conditional request across the pair is honoured, which is
+	// the behaviour the shared validator exists to buy.
+	shared := getArt(t, h, "/api/v1/items/"+pid+"/art?size=250", roundedETag)
+	shared.Body.Close()
+	if shared.StatusCode != 304 {
+		t.Errorf("If-None-Match across the rung status = %d, want 304", shared.StatusCode)
+	}
 }

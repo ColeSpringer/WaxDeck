@@ -1043,6 +1043,65 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /admin/thumbnails:
+    get:
+      operationId: getThumbnailCache
+      summary: Census the generated thumbnail cache
+      description: >
+        Reports what the derived-artwork cache holds - rows, bytes, how
+        many source images have at least one derivative, and a
+        breakdown by ladder rung - beside what the source images
+        themselves cost, which is the figure the cache size is read
+        against. Read-only. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: The cache census.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThumbnailCacheReport"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /admin/thumbnails/prune:
+    post:
+      operationId: pruneThumbnailCache
+      summary: Prune the generated thumbnail cache
+      description: >
+        Drops cached thumbnails to fit the policy and reports what
+        went. Nothing is lost: every entry is regenerated on the next
+        request that asks for it, so a prune costs decode time rather
+        than pictures. The rows are freed inside the catalog file;
+        returning that space to the filesystem takes a vacuum. At least
+        one bound must be given. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThumbnailPruneRequest"
+      responses:
+        "200":
+          description: What the prune dropped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThumbnailPruneResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /admin/migrations:
     post:
       operationId: createMigration
@@ -1733,6 +1792,113 @@ components:
           description: Entries, newest first.
           items:
             $ref: "#/components/schemas/TrashEntry"
+
+    ThumbnailCacheReport:
+      type: object
+      description: >
+        What the generated thumbnail cache holds, and what the source
+        images behind it cost.
+      required:
+        [rows, bytes, sources, artSources, artSourceBytes, rungs]
+      properties:
+        rows:
+          type: integer
+          description: Cached thumbnails held.
+        bytes:
+          type: integer
+          format: int64
+          description: What those thumbnails cost.
+        sources:
+          type: integer
+          description: >
+            Source images with at least one derivative, out of
+            `artSources`.
+        artSources:
+          type: integer
+          description: Source images held.
+        artSourceBytes:
+          type: integer
+          format: int64
+          description: >
+            What those originals cost. The figure `bytes` is read
+            against: a cache smaller than its own sources is doing its
+            job.
+        oldestAt:
+          type: string
+          format: date-time
+          description: >
+            When the oldest cached thumbnail was generated. Absent when
+            the cache is empty.
+        newestAt:
+          type: string
+          format: date-time
+          description: >
+            When the newest cached thumbnail was generated. Absent when
+            the cache is empty.
+        rungs:
+          type: array
+          description: Per-rung breakdown, largest box first.
+          items:
+            $ref: "#/components/schemas/ThumbnailRung"
+
+    ThumbnailRung:
+      type: object
+      description: One ladder rung's share of the thumbnail cache.
+      required: [size, rows, bytes]
+      properties:
+        size:
+          type: integer
+          description: >
+            The rung in pixels. A requested box is rounded up to one of
+            these, which is what bounds how many derivatives a single
+            cover can accumulate.
+        rows:
+          type: integer
+          description: Cached thumbnails at this rung.
+        bytes:
+          type: integer
+          format: int64
+          description: What they cost.
+
+    ThumbnailPruneRequest:
+      type: object
+      description: >
+        Which cached thumbnails to drop. Both bounds are optional and
+        an absent one leaves that axis unbounded, but at least one must
+        be given - a request with neither is refused rather than read
+        as "everything". Zero is a value, not an absence:
+        `olderThanSeconds: 0` drops every entry, and `maxBytes: 0`
+        evicts the cache entirely.
+      properties:
+        olderThanSeconds:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Drop entries generated at least this long ago. Absent
+            leaves the age unbounded.
+        maxBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Evict oldest-first until the cache fits this many bytes.
+            Absent leaves the size unbounded.
+
+    ThumbnailPruneResult:
+      type: object
+      description: What a thumbnail-cache prune dropped.
+      required: [removed, freedBytes]
+      properties:
+        removed:
+          type: integer
+          description: Cached thumbnails dropped.
+        freedBytes:
+          type: integer
+          format: int64
+          description: >
+            What they held. Freed inside the catalog file rather than
+            returned to the filesystem.
 
     TrashEmptyResult:
       type: object

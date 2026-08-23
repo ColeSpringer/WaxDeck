@@ -26,6 +26,11 @@ import (
 // maxShareStreams bounds concurrent anonymous streams per share.
 const maxShareStreams = 4
 
+// shareArtSize is the box the share page's cover is resolved at. From
+// the service, which is the layer that can see the catalog's ladder and
+// the one place these are kept on it.
+const shareArtSize = service.ArtSizeShare
+
 // shareStreamGate counts live streams per share id.
 type shareStreamGate struct {
 	mu   sync.Mutex
@@ -292,14 +297,14 @@ func (s *Server) ServeShareArt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not-found", "no artwork")
 		return
 	}
-	blob, err := s.svc.PublicArt(r.Context(), pub.ArtItemPID, 600)
+	blob, err := s.svc.PublicArt(r.Context(), pub.ArtItemPID, shareArtSize)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not-found", "no artwork")
 		return
 	}
 	// The same bound the sized item endpoint applies; the page renders
 	// its placeholder instead of hauling an unscalable original.
-	if artTooBigForSize(blob, 600) {
+	if artTooBigForSize(blob) {
 		writeError(w, http.StatusNotFound, "not-found", "no artwork")
 		return
 	}

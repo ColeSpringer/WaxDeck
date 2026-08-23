@@ -5,6 +5,7 @@ import 'package:waxdeck/src/connect/queue_gateway.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
@@ -316,7 +317,9 @@ void main() {
     // either way and the item's own state cannot be read off it.
     engine.failNextLoad = true;
     await first;
-    await expectLater(second, throwsA(isA<MediaWillNotOpen>()));
+    // The engine's own type, which is what the port promises out of a
+    // load: the fake puts its [MediaWillNotOpen] inside one.
+    await expectLater(second, throwsA(isA<MediaLoadException>()));
     await tester.pumpAndSettle();
 
     expect(

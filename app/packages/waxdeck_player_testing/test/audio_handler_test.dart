@@ -135,4 +135,49 @@ void main() {
   test('the browse tree is empty where the build has no mirror', () async {
     expect(await handler.getChildren(browseRootId), isEmpty);
   });
+
+  test('a swiped-away task finalizes, and is not a stop', () async {
+    // Android keeps the foreground service alive after the app leaves
+    // recents, which is what makes a queue survive an app switch - and
+    // what left music playing out of a window somebody had thrown
+    // away. Routed to the app's finalize rather than to its stop, and
+    // the difference is the whole point: a stop is defined as the verb
+    // that silences playback and leaves the checkpoint, the listen
+    // report and the session Connect is advertising exactly where they
+    // stood.
+    var stopped = 0;
+    var finalized = 0;
+    // Its own engine, not the shared one: a handler subscribes to four
+    // of the engine's streams in its constructor and has nothing that
+    // unsubscribes, so a second one over `engine` would publish state
+    // beside the setUp handler for the rest of the file.
+    final ownEngine = FakeEngine();
+    final routed = WaxDeckAudioHandler(
+      engine: ownEngine,
+      onPlayFromMediaId: (_) async {},
+      onStop: () async => stopped++,
+      onGoingAway: () async => finalized++,
+    );
+    // Loaded first, so the engine's state is one it could have left
+    // rather than the one it was born in.
+    await ownEngine.load('https://example.test/a.flac');
+
+    await routed.onTaskRemoved();
+
+    expect(finalized, 1);
+    expect(stopped, 0, reason: 'a departure is not a stop');
+    // And the sound goes with it: the service outlives the task, so
+    // finalizing without silencing would leave music playing out of an
+    // app that is gone.
+    expect(ownEngine.processingState, EngineProcessingState.idle);
+  });
+
+  test('a task removed with no app behind it still stops the sound', () async {
+    // The fallback the whole handler is written around: a build with no
+    // session layer has nobody to route to, and silence is still the
+    // right answer.
+    await engine.load('https://example.test/a.flac');
+    await handler.onTaskRemoved();
+    expect(engine.processingState, EngineProcessingState.idle);
+  });
 }

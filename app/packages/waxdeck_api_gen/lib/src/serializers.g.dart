@@ -323,6 +323,10 @@ Serializers _$serializers =
           ..add(TagEdit.serializer)
           ..add(TagEditResult.serializer)
           ..add(TagRule.serializer)
+          ..add(ThumbnailCacheReport.serializer)
+          ..add(ThumbnailPruneRequest.serializer)
+          ..add(ThumbnailPruneResult.serializer)
+          ..add(ThumbnailRung.serializer)
           ..add(TimelineBoundary.serializer)
           ..add(TimelineCreate.serializer)
           ..add(TimelineInfo.serializer)
@@ -1118,6 +1122,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(TagRule)]),
             () => ListBuilder<TagRule>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ThumbnailRung)]),
+            () => ListBuilder<ThumbnailRung>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(TimelineBoundary)]),

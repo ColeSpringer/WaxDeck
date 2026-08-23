@@ -22,6 +22,12 @@ func TestArtMime(t *testing.T) {
 		{"gif", "image/gif"},
 		{"bmp", "image/bmp"},
 		{"x-ms-bmp", "image/bmp"},
+		{"x-windows-bmp", "image/bmp"},
+		// Progressive JPEG's legacy media type and the JFIF spelling,
+		// both of which are ordinary JPEG bytes.
+		{"pjpeg", "image/jpeg"},
+		{"image/pjpeg", "image/jpeg"},
+		{"jfif", "image/jpeg"},
 		{"tif", "image/tiff"},
 		{"image/tiff", "image/tiff"},
 		// Held without decoding, and mislabelled as jpeg by the table

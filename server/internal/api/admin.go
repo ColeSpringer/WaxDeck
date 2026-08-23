@@ -362,6 +362,67 @@ func (s *Server) PurgeTrashEntry(ctx context.Context, req PurgeTrashEntryRequest
 	return PurgeTrashEntry200JSONResponse(TrashPurgeResult{ReclaimedBytes: reclaimed}), nil
 }
 
+// --- thumbnail cache ---------------------------------------------------------------
+
+func (s *Server) GetThumbnailCache(ctx context.Context, _ GetThumbnailCacheRequestObject) (GetThumbnailCacheResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return GetThumbnailCache403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	rep, err := s.svc.ThumbCacheStats(ctx, uc)
+	if err != nil {
+		return nil, err
+	}
+	out := ThumbnailCacheReport{
+		Rows: rep.Rows, Bytes: rep.Bytes,
+		Sources: rep.Sources, ArtSources: rep.ArtSources,
+		ArtSourceBytes: rep.ArtSourceBytes,
+		Rungs:          make([]ThumbnailRung, 0, len(rep.Rungs)),
+	}
+	// Both timestamps are zero together on an empty cache, and an empty
+	// cache has no oldest entry rather than one at the epoch.
+	if rep.OldestAtNS != 0 {
+		out.OldestAt = ptr(time.Unix(0, rep.OldestAtNS).UTC())
+	}
+	if rep.NewestAtNS != 0 {
+		out.NewestAt = ptr(time.Unix(0, rep.NewestAtNS).UTC())
+	}
+	for _, r := range rep.Rungs {
+		out.Rungs = append(out.Rungs, ThumbnailRung{Size: r.Size, Rows: r.Rows, Bytes: r.Bytes})
+	}
+	return GetThumbnailCache200JSONResponse(out), nil
+}
+
+func (s *Server) PruneThumbnailCache(ctx context.Context, req PruneThumbnailCacheRequestObject) (PruneThumbnailCacheResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return PruneThumbnailCache403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Body == nil {
+		return PruneThumbnailCache400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	// The two bounds are forwarded as they arrived, absences included:
+	// an absent field is unbounded on that axis and a zero is a real
+	// bound, so folding them into numbers here would lose the
+	// difference the service refuses on.
+	rep, err := s.svc.PruneThumbnails(ctx, uc, req.Body.OlderThanSeconds, req.Body.MaxBytes)
+	if err != nil {
+		if service.KindOf(err) == service.KindInvalid {
+			return PruneThumbnailCache400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return PruneThumbnailCache200JSONResponse(ThumbnailPruneResult{
+		Removed: rep.Removed, FreedBytes: rep.FreedBytes,
+	}), nil
+}
+
 // --- deletion ----------------------------------------------------------------------
 
 func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsRequestObject) (DeleteLibraryItemsResponseObject, error) {

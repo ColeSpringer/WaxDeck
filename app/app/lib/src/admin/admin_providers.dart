@@ -209,6 +209,44 @@ final trashProvider = AsyncNotifierProvider<TrashController, TrashList>(
   TrashController.new,
 );
 
+/// The generated-thumbnail cache, with the prune acting on it.
+///
+/// Read on the dashboard tile and on the trash screen's card, which is
+/// why it is a notifier rather than two reads: a prune invalidates the
+/// one provider and both surfaces re-read.
+class ThumbnailCacheController extends AsyncNotifier<ThumbnailCacheReport> {
+  @override
+  Future<ThumbnailCacheReport> build() =>
+      ref.watch(repositoryProvider).getThumbnailCache();
+
+  /// Drops every generated copy. A budget of zero is the request, not
+  /// an absent bound: the server refuses a policy with neither axis
+  /// set rather than reading it as "everything".
+  Future<ThumbnailPruneResult> clear() async {
+    final result = await ref
+        .read(repositoryProvider)
+        .pruneThumbnailCache(maxBytes: 0);
+    if (ref.mounted) ref.invalidateSelf();
+    return result;
+  }
+}
+
+/// No retry, which is what makes a failure visible.
+///
+/// Riverpod 3 re-runs a build that threw - ten attempts over about
+/// thirteen seconds - and reports `AsyncLoading` carrying the previous
+/// error in between, so the error arm is never selected and both
+/// surfaces draw their skeleton for the whole backoff. A census is a
+/// read of something already computed: a server that predates the
+/// endpoint answers 404 and will keep answering 404, and one that is
+/// busy is worth telling the operator about rather than hiding from
+/// them.
+final thumbnailCacheProvider =
+    AsyncNotifierProvider<ThumbnailCacheController, ThumbnailCacheReport>(
+      ThumbnailCacheController.new,
+      retry: (_, _) => null,
+    );
+
 /// Pending signup requests, oldest first.
 final signupRequestsProvider = FutureProvider<List<UserAccount>>(
   (ref) async =>

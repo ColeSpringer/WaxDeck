@@ -61,6 +61,30 @@ test('a cover the standard library cannot sniff is set, measured, and served as 
     expect(thumb.status()).toBe(200);
     expect(thumb.headers()['content-type']).not.toContain('image/tiff');
     expect((await thumb.body()).length).toBeLessThan((await whole.body()).length);
+
+    // The picture is 240 across, so this box is one it already fits, and
+    // "already fits" used to mean the stored bytes came back whole -
+    // which handed a browser a TIFF under a request that meant "give me
+    // something to draw". A sized resolve now re-encodes a format a
+    // client cannot paint, at the source's own size, so the same
+    // request answers a picture instead.
+    const roomy = await app.api.raw.get('/items/{pid}/art', {
+      path: { pid },
+      query: { size: 512 },
+    });
+    expect(roomy.status()).toBe(200);
+    expect(roomy.headers()['content-type']).not.toContain('image/tiff');
+
+    // Which leaves omitting the parameter as the one way to ask for the
+    // stored bytes - the request that means "the original", where the
+    // format is the caller's problem by construction. Naming a size is
+    // never that: the endpoint refuses anything under 16, so there is no
+    // number that means "unsized".
+    const zero = await app.api.raw.get('/items/{pid}/art', {
+      path: { pid },
+      query: { size: 0 },
+    });
+    expect(zero.status()).toBe(400);
   } finally {
     // Clears the cover; the pin the set created stays, by ClearItemArtwork
     // design ("there is no cover", not "refill this"). Inert here: the

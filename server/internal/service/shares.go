@@ -441,6 +441,12 @@ func (l *Library) PublicArt(ctx context.Context, apiItemPID string, size int) (A
 		SourceHash: blob.SourceHash,
 		Width:      blob.Width,
 		Height:     blob.Height,
+		// The rung this answered at, same as the authenticated read.
+		// The share page's oversize guard reads it: without it every
+		// blob looks unsized, and an original too big to paint would be
+		// streamed to anonymous visitors under an hour of public
+		// caching instead of falling back to the placeholder.
+		Box: blob.Box,
 	}, nil
 }
 

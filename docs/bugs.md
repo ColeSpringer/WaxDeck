@@ -2,6 +2,22 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
+- [8-23-2026] [desktop] A track that cannot be played hangs the desktop player instead of failing it. Measured through `integration_test/load_fault_test.dart -d linux` with a positive control: a good FLAC loads, and then garbage bytes, a truncated file, a missing file, an HTTP 404, an HTTP 502, a refused connection and a DNS failure all leave `engine.load` unsettled - no throw, no completion - for at least twenty seconds each. mpv through media_kit never reports the failure at all, so the session's load never returns, no error pane appears, and nothing gives up: the player sits on the last face indefinitely. Android throws promptly for the same seven, so this is media_kit rather than something shared. The fix is a load deadline in `JustAudioEngine` - past it the load is abandoned and reported as a `MediaLoadException` - which also gives the desktop a fault to classify at all.
+
+- [8-23-2026] In home and music pages, I dont think we need 2 descriptive lines for each section. For example we have " New to the collection" right above "Recently added". they say the same thing. if the one main line is not obvious then we should change it. not add a descriptive line above it.
+
+- [8-23-2026] [web] the extended sidebar i think takes up too much horizonal space. we can shrink the horizonal by a little bit. On a related note, the suggestion text in the search bar can be different. It currenly doesn't even fully show as is in extended sidebar mode and with the horizonal reduction will be even less visible.
+
+- [8-23-2026] I dont think there is horizonal scrolling on the home page? when you adjust the window size on web it doesnt adjust to the new size at all by adding rows nor does it allow you to scroll to see the now missing items that were visible with the large window size.
+
+- [8-23-2026] "From the file's tags" is again nonsensical. We just tried to address it but thats a no go. It should be something like "Art from File" or something like that. short and to the point but actually descriptive of what it is talking about so users know why its there.
+
+- [8-23-2026] when you add music the home screen takes a long time to refresh.
+
+- [8-23-2026] why are "Upload Files" and "Upload a Folder" different options when selecting the add sign on home and music? They open the same thing from what I can tell. It just uploading. also, the upload a folder option seems to be straight up broken.
+
+- [8-23-2026] when adding a radio station, it takes a lot of time for the station image to be populated by anything. it sits blank for 20-30 seconds or so.
+
 - [8-23-2026] i think clients all try to look at a specific port thats only available over LAN. we need to make sure clients work over non local networks with vpns, tailscale, through reverse proxies, etc. 
 
 - [8-23-2026] clients dont have ability to adjust streaming quality. necessary for off LAN streaming.
@@ -9,8 +25,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 - [8-22-2026] we need a way to handle users putting their files in the library location manually (not through our clients). do we ignore the files? if not, how do we intake them? maybe default to just taking them as is. no metadata search or anything. Not sure how we would handle differentiating between music, podcast, or audiobook (likely mostly music and audiobooks). maybe flags can be set for how a user wants that to be dealt with as have them as settings wouldnt be useful until after setup. the discovery of them at all is something we need to look into as well.
 
 - [8-22-2026] maybe reject file types that we dont support such as audible files (aax, aaxc). need to look into / confirm exactly what we can/want to support.
-
-- [8-22-2026] A track the engine refuses stops the queue dead instead of being skipped. `/media/stream` reverse-proxies WaxFlow, which answers 415 for a file it cannot decode - the fixture library's deliberately corrupt FLAC is one, and a real library has its own. The client treats that as the end of playback: the player's whole body is replaced by "Playback stopped / Playback failed to start / Try again" and the queue does not advance, so one bad file in a queue of fifty ends the sitting. The engine is right to refuse; the decision is what the client should do with a refusal - skipping to the next entry and saying which one was skipped is the shape every other player has. Reproduced with `flac-garbage-1000ms-44100hz-2ch.flac` reached through "Keep playing similar", which is how an ordinary listener meets it.
 
 - [8-22-2026] An instant mix with nothing left to add says the track has no mix. `InstantMixSheet._mix` passes the whole standing queue as `excludePids`, which is right - a mix must not repeat what is already queued - but playing a row on a listing screen queues the whole loaded listing, so on a small library the exclusion is the whole catalog and the mix comes back empty. The sheet then shows "No mix available for this track", which says the seed has no neighbours; it has plenty, they are all already queued. Two different answers wearing one sentence. Either the empty result needs to say which it is, or the exclusion needs to be the part of the queue still ahead rather than all of it. `discovery.spec.ts:13` met this and now plays from an album so its own subject is testable, which is a spec working around it rather than the thing being fixed.
 
