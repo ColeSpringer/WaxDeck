@@ -55,67 +55,6 @@ const maxNSPBytes = 1 << 20
 // multi-megabyte log line, and a dialog nobody can scroll.
 const maxNSPGaps = 12
 
-// nspEngineAliases are field spellings WaxDeck stores that WaxBin's
-// query engine accepts as one field under another canonical name, and
-// whose .nsp table is keyed on the other one.
-//
-// `album_artist` and `albumartist` are the same column upstream, so
-// nothing about evaluation says which is canonical - but `nspFieldToWB`
-// is keyed on `albumartist`, and the inverse map an export walks is
-// built from it. A rule stored under WaxDeck's spelling therefore
-// reports a gap on a field .nsp genuinely carries, and a partial export
-// drops a condition it could have written.
-//
-// Not a second field table: every entry is one engine field under two
-// spellings, and the mapping .nsp itself needs stays upstream's
-// throughout. Filed in docs/upstream-requests.md; this goes when the
-// inverse map covers the aliases the query engine accepts.
-var nspEngineAliases = map[string]string{"album_artist": "albumartist"}
-
-// nspExportQuery is the rule as the converter's field table spells it.
-// Only the aliases above move; everything else is handed over as stored.
-func nspExportQuery(q query.Query) query.Query {
-	q.Where = nspAliasNode(q.Where)
-	if len(q.Sorts) > 0 {
-		// Copied rather than written through: the caller handed us the
-		// stored rule, and exporting one must not edit it.
-		sorts := make([]query.Sort, len(q.Sorts))
-		copy(sorts, q.Sorts)
-		for i, s := range sorts {
-			if alias, ok := nspEngineAliases[s.Field]; ok {
-				sorts[i].Field = alias
-			}
-		}
-		q.Sorts = sorts
-	}
-	return q
-}
-
-func nspAliasNode(n query.Node) query.Node {
-	switch v := n.(type) {
-	case query.And:
-		return query.And{Nodes: nspAliasNodes(v.Nodes)}
-	case query.Or:
-		return query.Or{Nodes: nspAliasNodes(v.Nodes)}
-	case query.Not:
-		return query.Not{Node: nspAliasNode(v.Node)}
-	case query.Cond:
-		if alias, ok := nspEngineAliases[v.Field]; ok {
-			v.Field = alias
-		}
-		return v
-	}
-	return n
-}
-
-func nspAliasNodes(in []query.Node) []query.Node {
-	out := make([]query.Node, len(in))
-	for i, n := range in {
-		out[i] = nspAliasNode(n)
-	}
-	return out
-}
-
 // nspMessage is WaxBin's own sentence without the operation prefix its
 // error type formats in. `waxerr.Error()` renders "<Op>: <Msg>", and Op
 // is a package path - an internal name, never something to answer a
@@ -415,7 +354,7 @@ func (l *Library) ReportPlaylistNSPExport(ctx context.Context, uc *UserCtx, apiP
 	if err != nil {
 		return NSPReport{}, err
 	}
-	return nspReport(playlist.CheckNSPExport(nspExportQuery(*pl.Rule))), nil
+	return nspReport(playlist.CheckNSPExport(*pl.Rule)), nil
 }
 
 // ExportPlaylistNSP renders a smart playlist's rule as an NSP document.
@@ -427,7 +366,7 @@ func (l *Library) ExportPlaylistNSP(ctx context.Context, uc *UserCtx, apiPlaylis
 	if err != nil {
 		return nil, err
 	}
-	rule := nspExportQuery(*pl.Rule)
+	rule := *pl.Rule
 	var raw []byte
 	if partial {
 		// Refuses only when nothing survives: a document with every

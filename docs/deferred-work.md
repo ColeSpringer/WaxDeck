@@ -95,6 +95,22 @@ here waits on upstream.
   Doing it properly means a cache link the test binding can retire, or
   moving the gate off the envelope entirely.
 
+- `[in-repo]` **A shell message raised from outside the shell is
+  dropped.** `_listenForMessages` (`adaptive_shell.dart`) is what draws
+  `shellMessengerProvider`, and it lives inside `AdaptiveShell` - which
+  is mounted only for the locations in `shellRoutes()`. A message raised
+  from login, setup, or any other public route reaches the notifier and
+  is never drawn. Unreachable today: every raiser in the app is a
+  signed-in screen inside the shell, and `shell_messages_test.dart`
+  covers the two positions that do occur (an ordinary screen, and the
+  player pushed over it). Closing it means a listener above the router
+  in `app.dart`, which drags the rest of the shape with it - the
+  snackbar would then present into an app-level Scaffold rather than the
+  screen's own, so FAB lift and per-screen bottom insets stop applying
+  to it, and `PlayerScreen`'s compensating Scaffold and `DeckBarHost`
+  both want checking against the move. Worth doing when a public route
+  first needs to say something, not before.
+
 - `[in-repo]` **An NSP export's loss list is not pinned to the rule it
   was computed from.** The report is asked at one moment and
   `partial=true` is applied to whatever the rule is when the person taps
@@ -134,6 +150,16 @@ here waits on upstream.
   `ruleToQuery` always builds `query.EntityItems` and WaxBin's single
   export note fires on `EntityTracks`, so no WaxDeck rule can produce a
   notes-only report.
+
+  Upstream has since shipped the coarse half of the same question:
+  `playlist.NSPExportableFields()` lists every WaxBin query field that
+  has an `.nsp` name at all, alias spellings included. It is not the
+  rendering above - a field on the list can still be dropped for the
+  operator or the value it carries, which is what `CheckNSPExport`
+  answers - but it is enough to grey an unexportable field in the rule
+  editor, or to say up front that a rule can never export. Deliberately
+  not adopted with the alias fix; it is here so whoever builds the
+  rendering knows it exists.
 
 - `[in-repo]` **Preference writes have no offline outbox.** Play-state
   and entity-state writes queue through `OptimisticStateController`,

@@ -13,6 +13,7 @@ import '../artwork/artwork_providers.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../metadata/artwork_manager.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
@@ -1123,7 +1124,7 @@ class _Overflow extends ConsumerWidget {
   }
 
   /// What the picker offers; the server decides what it accepts.
-  static const _coverExtensions = <String>{'jpg', 'jpeg', 'png', 'webp', 'gif'};
+  static const _coverExtensions = kArtworkExtensions;
 
   /// Uploads a picked image as the cover. Read whole rather than
   /// streamed: covers are small and the server caps the body.

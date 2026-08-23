@@ -13,10 +13,10 @@ part 'art_role_info.g.dart';
 ///
 /// Properties:
 /// * [role] 
-/// * [format] - The stored image format (`jpeg`, `png`, `webp`, `gif`). Absent when the slot holds no image, which happens only on a locked-and-cleared `front`. 
-/// * [width] - Pixel width, 0 when the image was not decodable.
-/// * [height] - Pixel height, 0 when the image was not decodable.
-/// * [source_] - Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`). A string, not a closed enum. 
+/// * [format] - The format token the catalog stored for this image, lowercase (`jpeg`, `png`, `webp`, `gif`, `bmp`, `tiff`, and the exotics a caller declared or the bytes announced). An open set, not a fixed list: it widens whenever a decoder or a sniffer is added, so treat an unfamiliar token as a format this client does not draw rather than as an error. Absent when the slot holds no image, which happens only on a locked-and-cleared `front`. 
+/// * [width] - Pixel width, 0 when nothing could measure the image. A cover the server cannot decode may still report real dimensions when its tag declared them, so 0 means \"unmeasured\" rather than \"undecodable\" and is not a count to divide by. 
+/// * [height] - Pixel height, 0 when nothing could measure the image. See `width`. 
+/// * [source_] - Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`, `generated`). A string, not a closed enum. 
 /// * [provider] - The provider that supplied an `enrichment` cover.
 /// * [sourceUrl] - Where a fetched cover's bytes came from.
 /// * [updatedAt] - When this slot was last written.
@@ -27,19 +27,19 @@ abstract class ArtRoleInfo implements Built<ArtRoleInfo, ArtRoleInfoBuilder> {
   ArtRole get role;
   // enum roleEnum {  front,  back,  disc,  booklet,  background,  };
 
-  /// The stored image format (`jpeg`, `png`, `webp`, `gif`). Absent when the slot holds no image, which happens only on a locked-and-cleared `front`. 
+  /// The format token the catalog stored for this image, lowercase (`jpeg`, `png`, `webp`, `gif`, `bmp`, `tiff`, and the exotics a caller declared or the bytes announced). An open set, not a fixed list: it widens whenever a decoder or a sniffer is added, so treat an unfamiliar token as a format this client does not draw rather than as an error. Absent when the slot holds no image, which happens only on a locked-and-cleared `front`. 
   @BuiltValueField(wireName: r'format')
   String? get format;
 
-  /// Pixel width, 0 when the image was not decodable.
+  /// Pixel width, 0 when nothing could measure the image. A cover the server cannot decode may still report real dimensions when its tag declared them, so 0 means \"unmeasured\" rather than \"undecodable\" and is not a count to divide by. 
   @BuiltValueField(wireName: r'width')
   int? get width;
 
-  /// Pixel height, 0 when the image was not decodable.
+  /// Pixel height, 0 when nothing could measure the image. See `width`. 
   @BuiltValueField(wireName: r'height')
   int? get height;
 
-  /// Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`). A string, not a closed enum. 
+  /// Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`, `generated`). A string, not a closed enum. 
   @BuiltValueField(wireName: r'source')
   String? get source_;
 

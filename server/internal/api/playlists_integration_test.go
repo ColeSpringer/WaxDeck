@@ -1279,9 +1279,11 @@ func TestPlaylistNspExportReportIsEmptyWhenNothingIsLost(t *testing.T) {
 
 // albumArtist is a field .nsp genuinely carries, and it has to survive
 // both directions. WaxDeck stores the engine spelling `album_artist`
-// while WaxBin's .nsp table is keyed on `albumartist`; the query engine
-// accepts both as one field, so nothing about evaluation says which is
-// canonical, and only the round trip does.
+// while the document spells it `albumartist`; the query engine accepts
+// both as one field, so nothing about evaluation says which is
+// canonical, and only the round trip does. The converter's reverse map
+// is widened over the engine's alias table, so no spelling WaxDeck
+// stores exports as a gap on a field .nsp carries perfectly well.
 func TestPlaylistNspCarriesAlbumArtistBothWays(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -1436,5 +1438,55 @@ func TestPlaylistNspRefusalsCarryNoInternalNames(t *testing.T) {
 	}
 	if !strings.Contains(msg, "nothing in this rule") {
 		t.Errorf("refusal lost WaxBin's own sentence: %q", msg)
+	}
+}
+
+// `starred isNot` is the one rule shape where WaxDeck's own lowering and
+// the .nsp converter's could disagree without anybody noticing. The
+// converter turns the document's boolean into the 0/1 the column holds;
+// WaxDeck's editor lowers "false" to the same 0 by its own route. If the
+// two ever drifted, an editor-authored rule and an imported one would
+// select different tracks while reading identically, so the round trip is
+// what has to be asserted rather than the operator list.
+func TestPlaylistNspCarriesStarredIsNot(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Not starred", "kind": "smart",
+		"rule": map[string]any{
+			"root": map[string]any{"type": "all", "nodes": []any{
+				map[string]any{"field": "starred", "op": "isNot", "type": "condition", "value": "true"},
+			}},
+		},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d, want 201; the editor refuses an operator the importer accepts", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	authored, _ := json.Marshal(pl.Rule)
+
+	// Out as a document, with the boolean .nsp spells rather than the 0/1
+	// the column holds.
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("export status = %d, want 200", resp.StatusCode)
+	}
+	doc := decode[map[string]any](t, resp)
+	raw, _ := json.Marshal(doc)
+	if !strings.Contains(string(raw), `"isNot":{"starred":true}`) {
+		t.Fatalf("export did not carry starred isNot as a boolean: %s", raw)
+	}
+
+	// And back, to the same rule. Not just the same shape: the same
+	// lowered value, which is the half a second conversion could break.
+	resp = h.postJSON(t, "/api/v1/playlists/nsp?name=Back+Again", doc)
+	if resp.StatusCode != 201 {
+		t.Fatalf("re-import status = %d", resp.StatusCode)
+	}
+	back := decode[Playlist](t, resp)
+	imported, _ := json.Marshal(back.Rule)
+	if string(imported) != string(authored) {
+		t.Fatalf("round trip changed the rule:\n authored %s\n imported %s", authored, imported)
 	}
 }

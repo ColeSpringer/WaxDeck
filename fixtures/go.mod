@@ -3,9 +3,10 @@ module github.com/colespringer/waxdeck/fixtures
 go 1.26
 
 require (
-	github.com/colespringer/waxbin v0.0.0-20260819062337-3faaa1f7fb00
+	github.com/colespringer/waxbin v0.0.0-20260822110521-f6071768ecbc
 	github.com/colespringer/waxflow v0.0.0-20260816051810-ba4adcdb22b9
 	github.com/colespringer/waxlabel v1.4.2
+	golang.org/x/image v0.44.0
 )
 
 require (
@@ -17,7 +18,6 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect

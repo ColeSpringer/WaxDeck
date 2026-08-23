@@ -1611,7 +1611,7 @@ export interface paths {
         get?: never;
         /**
          * Set item artwork
-         * @description Stores the raw image bytes in one of the item's artwork slots (`role`, default `front`), locking the artifact by default. The body is the image itself, up to 16 MiB; the server sniffs the format. `writeBack=true` embeds a front cover into every backing file (write-back applies to the front slot only). Existing art in the slot is replaced; the request never downgrades silently because the caller chose the image.
+         * @description Stores the raw image bytes in one of the item's artwork slots (`role`, default `front`), locking the artifact by default. The body is the image itself, up to 16 MiB, in any format the catalog recognizes: JPEG, PNG, GIF, WebP, BMP and TIFF by decoding them, and AVIF and HEIC by their container magic. `writeBack=true` embeds a front cover into every backing file (write-back applies to the front slot only). Existing art in the slot is replaced; the request never downgrades silently because the caller chose the image.
          */
         put: operations["setItemArtwork"];
         post?: never;
@@ -4609,7 +4609,7 @@ export interface components {
          */
         ArtSource: {
             /**
-             * @description The producer: `tag` (the file's own embedded cover), `sidecar` (a cover image beside the audio), `user` (set through the curation surface), `enrichment` (fetched from a metadata provider, named in `provider`), or `feed` (a podcast feed's image, or a radio station's own announcement). A string, not a closed enum: treat an unknown value as unattributed and draw nothing.
+             * @description The producer: `tag` (the file's own embedded cover), `sidecar` (a cover image beside the audio), `user` (set through the curation surface), `enrichment` (fetched from a metadata provider, named in `provider`), `feed` (a podcast feed's image, or a radio station's own announcement), or `generated` (composed by the server from what the catalog already holds, which is what a playlist mosaic is - nobody chose it). A string, not a closed enum: treat an unknown value as unattributed and draw nothing.
              * @example enrichment
              */
             source: string;
@@ -6294,14 +6294,14 @@ export interface components {
          */
         ArtRoleInfo: {
             role: components["schemas"]["ArtRole"];
-            /** @description The stored image format (`jpeg`, `png`, `webp`, `gif`). Absent when the slot holds no image, which happens only on a locked-and-cleared `front`. */
+            /** @description The format token the catalog stored for this image, lowercase (`jpeg`, `png`, `webp`, `gif`, `bmp`, `tiff`, and the exotics a caller declared or the bytes announced). An open set, not a fixed list: it widens whenever a decoder or a sniffer is added, so treat an unfamiliar token as a format this client does not draw rather than as an error. Absent when the slot holds no image, which happens only on a locked-and-cleared `front`. */
             format?: string;
-            /** @description Pixel width, 0 when the image was not decodable. */
+            /** @description Pixel width, 0 when nothing could measure the image. A cover the server cannot decode may still report real dimensions when its tag declared them, so 0 means "unmeasured" rather than "undecodable" and is not a count to divide by. */
             width?: number;
-            /** @description Pixel height, 0 when the image was not decodable. */
+            /** @description Pixel height, 0 when nothing could measure the image. See `width`. */
             height?: number;
             /**
-             * @description Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`). A string, not a closed enum.
+             * @description Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`, `generated`). A string, not a closed enum.
              * @example tag
              */
             source?: string;
@@ -12134,7 +12134,11 @@ export interface operations {
             query?: {
                 /** @description Which artwork slot to read. Only `front` (the default) walks the album/artist fallback chain; `back`, `disc`, `booklet`, and `background` resolve at the requested entity's own level and 404 when that entity holds no image in the slot. */
                 role?: components["schemas"]["ArtRole"];
-                /** @description Longest-edge bound in pixels for a thumbnail. Omit for the original image. */
+                /**
+                 * @description Longest-edge bound in pixels for a thumbnail. Omit for the original image.
+                 *
+                 *     Best effort, and the two exceptions are worth knowing. A source already inside the box is answered unscaled, since there is nothing to scale down to. And a source the server could not measure cannot be scaled at all, so a sized request for one is answered with the original - which is right for a cover a little over the bound and wrong for a large one, since a thumbnail slot is where a client asks for something small. Past a couple of megabytes such a request is answered 404 rather than with the original: there is no thumbnail of that picture, which is a different answer from "here is one" and a client draws its own placeholder for it. After BMP and TIFF became first-class the unmeasurable set is AVIF, HEIC, and images nothing could decode. A request with no `size` always answers the original, however large.
+                 */
                 size?: number;
                 /** @description Opaque cache-buster, ignored by the server. Artwork lives at one URL whatever it holds, and this response is cacheable for a day, so a client that has just replaced an entity's cover would otherwise keep painting the old bytes out of its own cache. Varying this asks for the same image under a name no cache has seen. */
                 v?: string;
@@ -12151,12 +12155,12 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The artwork image. */
+            /** @description The artwork image, under the type the stored picture actually is. A generated thumbnail is re-encoded and arrives as one of the listed types, but a `size` request that had nothing to scale answers the source itself, so the type may be one the list does not name - the exotics this server stores without decoding (AVIF, HEIC) among them. Decode from the bytes rather than from the header if that distinction matters. */
             200: {
                 headers: {
                     /** @description Content-addressed validator for the returned bytes. */
                     ETag?: string;
-                    /** @description Where the answering image came from: `tag`, `sidecar`, `user`, `enrichment`, or `feed`. Omitted when the store holds no attribution for it. */
+                    /** @description Where the answering image came from: `tag`, `sidecar`, `user`, `enrichment`, `feed`, or `generated` for a picture this server built (a playlist mosaic). Omitted when the store holds no attribution for it. */
                     "X-Art-Source"?: string;
                     /** @description The provider that supplied an `enrichment` cover. Omitted for every other source. */
                     "X-Art-Provider"?: string;
@@ -12168,6 +12172,10 @@ export interface operations {
                     "Cache-Control"?: string;
                     /** @description `Cookie, Authorization`: the credential is what decides whether these bytes exist for a caller, so a cached copy is never reused across sessions on a shared browser or across tokens on a shared cache. */
                     Vary?: string;
+                    /** @description `nosniff`. A cover reaches the catalog from a provider, a feed, or an upload, and it is served from this origin, so a browser must not be free to decide the body is really markup. */
+                    "X-Content-Type-Options"?: string;
+                    /** @description `default-src 'none'; sandbox; style-src 'unsafe-inline'`, neutralizing script and navigation for a document opened straight from this URL. */
+                    "Content-Security-Policy"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -12175,6 +12183,8 @@ export interface operations {
                     "image/png": string;
                     "image/webp": string;
                     "image/gif": string;
+                    "image/bmp": string;
+                    "image/tiff": string;
                 };
             };
             /**

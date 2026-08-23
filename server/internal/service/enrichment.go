@@ -506,10 +506,13 @@ func (l *Library) enrichCover(ctx context.Context, it *model.ItemView, locked ma
 		// The cover is stamped with the provider that supplied it, so a
 		// fetched picture is not reported as one a person chose. The lock is
 		// left alone: enrichment forms no pin intent, and an unlocked slot is
-		// already the only one it reaches.
+		// already the only one it reaches. The format is what the provider
+		// read off the transport, and it is a fallback the bytes beat: it
+		// only decides for a picture that neither decodes nor sniffs, which
+		// is otherwise stored with no name for what it is.
 		if err := l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, cand.Cover.Data, waxbin.ArtEditOptions{
 			Source: model.SourceEnrichment, Provider: p.Name(), SourceURL: cand.Cover.SourceURL,
-			Lock: model.LockUnchanged,
+			Format: cand.Cover.Format, Lock: model.LockUnchanged,
 		}); err != nil {
 			l.log.Warn("enrich: applying cover", "provider", p.Name(), "item", it.PID, "err", err)
 			continue

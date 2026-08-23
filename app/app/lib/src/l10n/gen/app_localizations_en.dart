@@ -1490,6 +1490,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get artSourceFeed => 'From the feed';
 
   @override
+  String get artSourceGenerated => 'Made by the server';
+
+  @override
   String get artSourceLyricsSidecar => 'From an .lrc file';
 
   @override
@@ -1607,6 +1610,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String artworkStateSize(int width, int height) {
     return '$width x $height';
   }
+
+  @override
+  String get artworkStateSizeUnknown => 'Size unknown';
 
   @override
   String get artworkTitle => 'Artwork';

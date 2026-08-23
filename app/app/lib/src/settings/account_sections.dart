@@ -10,6 +10,7 @@ import 'about_screen.dart';
 import 'integrations_sections.dart';
 import 'listening_sections.dart';
 import 'sessions_controller.dart';
+import 'setting_anchor.dart';
 
 /// The signed-in account's own record.
 ///
@@ -62,25 +63,31 @@ class AccountSectionBody extends ConsumerWidget {
         // section gap, so a hand-written 16 here is the same body-to-body
         // jump under one app bar that the rest of this fixed.
         SizedBox(height: sectionGap),
-        WaxOptionRow(
-          title: user?.label ?? l10n.settingsAccountSignedIn,
-          subtitle: user?.username,
-          glyph: WaxIcons.settings,
-          semanticsId: SemanticsIds.setting('display-name'),
+        SettingAnchor(
+          id: 'display-name',
+          child: WaxOptionRow(
+            title: user?.label ?? l10n.settingsAccountSignedIn,
+            subtitle: user?.username,
+            glyph: WaxIcons.settings,
+            semanticsId: SemanticsIds.setting('display-name'),
+          ),
         ),
-        WaxSettingRow(
-          title: l10n.settingsPasswordTitle,
-          help: l10n.settingsPasswordHelp,
-          control: WaxButton(
-            label: l10n.settingsPasswordChangeAction,
-            kind: WaxButtonKind.tonal,
-            semanticsId: SemanticsIds.setting('password'),
-            onPressed: user == null
-                ? null
-                : () => showDialog<void>(
-                    context: context,
-                    builder: (_) => _PasswordDialog(userId: user.id),
-                  ),
+        SettingAnchor(
+          id: 'password',
+          child: WaxSettingRow(
+            title: l10n.settingsPasswordTitle,
+            help: l10n.settingsPasswordHelp,
+            control: WaxButton(
+              label: l10n.settingsPasswordChangeAction,
+              kind: WaxButtonKind.tonal,
+              semanticsId: SemanticsIds.setting('password'),
+              onPressed: user == null
+                  ? null
+                  : () => showDialog<void>(
+                      context: context,
+                      builder: (_) => _PasswordDialog(userId: user.id),
+                    ),
+            ),
           ),
         ),
         SizedBox(height: sectionGap),
@@ -90,18 +97,27 @@ class AccountSectionBody extends ConsumerWidget {
         // it. These two are lists rather than single controls, and a
         // registry entry has to point at something that is there whether
         // the list is empty or full.
-        Semantics(
-          identifier: SemanticsIds.setting('devices'),
-          child: const _DeviceSessions(),
+        SettingAnchor(
+          id: 'devices',
+          child: Semantics(
+            identifier: SemanticsIds.setting('devices'),
+            child: const _DeviceSessions(),
+          ),
         ),
         SizedBox(height: sectionGap),
-        Semantics(
-          identifier: SemanticsIds.setting('app-passwords'),
-          child: const AppPasswordsSection(),
+        SettingAnchor(
+          id: 'app-passwords',
+          child: Semantics(
+            identifier: SemanticsIds.setting('app-passwords'),
+            child: const AppPasswordsSection(),
+          ),
         ),
         SizedBox(height: sectionGap),
         SectionHeader(title: l10n.settingsGroupAbout),
-        const AboutRow(semanticsId: SemanticsIds.aboutRow),
+        const SettingAnchor(
+          id: 'about',
+          child: AboutRow(semanticsId: SemanticsIds.aboutRow),
+        ),
         SizedBox(height: sectionGap),
         WaxButton(
           label: l10n.settingsSignOut,

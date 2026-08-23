@@ -10,6 +10,7 @@ import '../shell/semantics_ids.dart';
 import 'client_prefs.dart';
 import 'integrations_controller.dart';
 import 'notify_labels.dart';
+import 'setting_anchor.dart';
 
 /// Scrobbling connections: Last.fm through the browser authorization
 /// flow, ListenBrainz through a token dialog.
@@ -485,14 +486,17 @@ class _DiscordPresenceSectionState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(title: l10n.settingsGroupDiscord),
-        WaxSettingRow(
-          title: l10n.settingsDiscordPresenceRowTitle,
-          help: l10n.settingsDiscordPresenceHelp,
-          control: WaxSwitch(
-            value: on,
-            label: l10n.settingsDiscordPresenceTitle,
-            semanticsId: SemanticsIds.setting('discord-presence'),
-            onChanged: ref.read(discordPresenceEnabledProvider.notifier).set,
+        SettingAnchor(
+          id: 'discord-presence',
+          child: WaxSettingRow(
+            title: l10n.settingsDiscordPresenceRowTitle,
+            help: l10n.settingsDiscordPresenceHelp,
+            control: WaxSwitch(
+              value: on,
+              label: l10n.settingsDiscordPresenceTitle,
+              semanticsId: SemanticsIds.setting('discord-presence'),
+              onChanged: ref.read(discordPresenceEnabledProvider.notifier).set,
+            ),
           ),
         ),
         if (on)

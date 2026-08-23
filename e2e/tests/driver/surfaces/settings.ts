@@ -91,4 +91,44 @@ export class Settings extends Surface {
   buttonNamed(name: string | RegExp): Locator {
     return this.ctx.page.getByRole('button', { name });
   }
+
+  /// Plant a device preference before the app next boots, for a spec
+  /// whose subject one of the defaults would otherwise hide.
+  ///
+  /// These never reach the server - they describe the device, and the
+  /// app keeps them in `localStorage` - so there is no API hand for
+  /// them and no session to carry them. Walking the settings screen
+  /// instead would work and is what `openSection` is for; this is the
+  /// cheaper form for a spec that only needs the state, not the walk.
+  ///
+  /// Applies from the next navigation, which `nav.enter` always is.
+  async presetDevice(pref: DevicePref, value: string): Promise<void> {
+    await this.ctx.page.addInitScript(
+      ([key, stored]) => {
+        try {
+          window.localStorage.setItem(key, stored);
+        } catch {
+          // A browser refusing site data leaves the default standing,
+          // which is a spec that fails rather than one that lies.
+        }
+      },
+      [pref, value] as const,
+    );
+  }
 }
+
+/// The device preferences a spec may plant, spelled as the app stores
+/// them.
+///
+/// The app's own list is `ClientSettingKeys` in
+/// `app/packages/waxdeck_data/lib/src/client_settings_store.dart`.
+/// Unlike the semantics identifiers, these are not generated into the
+/// suite, so a key named here is a duplicated spelling; keep the list to
+/// the ones a spec actually plants.
+export const DevicePref = {
+  /// Whether a music queue that has run out keeps going with similar
+  /// music. On by default.
+  keepPlayingSimilar: 'waxdeck.playback.keepPlayingSimilar',
+} as const;
+
+export type DevicePref = (typeof DevicePref)[keyof typeof DevicePref];

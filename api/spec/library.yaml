@@ -539,6 +539,22 @@ paths:
           description: >
             Longest-edge bound in pixels for a thumbnail. Omit for the
             original image.
+
+
+            Best effort, and the two exceptions are worth knowing. A
+            source already inside the box is answered unscaled, since
+            there is nothing to scale down to. And a source the server
+            could not measure cannot be scaled at all, so a sized request
+            for one is answered with the original - which is right for a
+            cover a little over the bound and wrong for a large one,
+            since a thumbnail slot is where a client asks for something
+            small. Past a couple of megabytes such a request is answered
+            404 rather than with the original: there is no thumbnail of
+            that picture, which is a different answer from "here is one"
+            and a client draws its own placeholder for it. After BMP and
+            TIFF became first-class the unmeasurable set is AVIF, HEIC,
+            and images nothing could decode. A request with no `size`
+            always answers the original, however large.
           schema:
             type: integer
             minimum: 16
@@ -561,7 +577,14 @@ paths:
             type: string
       responses:
         "200":
-          description: The artwork image.
+          description: >
+            The artwork image, under the type the stored picture actually
+            is. A generated thumbnail is re-encoded and arrives as one of
+            the listed types, but a `size` request that had nothing to
+            scale answers the source itself, so the type may be one the
+            list does not name - the exotics this server stores without
+            decoding (AVIF, HEIC) among them. Decode from the bytes
+            rather than from the header if that distinction matters.
           headers:
             ETag:
               description: Content-addressed validator for the returned bytes.
@@ -570,8 +593,9 @@ paths:
             X-Art-Source:
               description: >
                 Where the answering image came from: `tag`, `sidecar`,
-                `user`, `enrichment`, or `feed`. Omitted when the store
-                holds no attribution for it.
+                `user`, `enrichment`, `feed`, or `generated` for a picture
+                this server built (a playlist mosaic). Omitted when the
+                store holds no attribution for it.
               schema:
                 type: string
             X-Art-Provider:
@@ -608,6 +632,21 @@ paths:
                 across tokens on a shared cache.
               schema:
                 type: string
+            X-Content-Type-Options:
+              description: >
+                `nosniff`. A cover reaches the catalog from a provider, a
+                feed, or an upload, and it is served from this origin, so
+                a browser must not be free to decide the body is really
+                markup.
+              schema:
+                type: string
+            Content-Security-Policy:
+              description: >
+                `default-src 'none'; sandbox; style-src 'unsafe-inline'`,
+                neutralizing script and navigation for a document opened
+                straight from this URL.
+              schema:
+                type: string
           content:
             image/jpeg:
               schema:
@@ -622,6 +661,14 @@ paths:
                 type: string
                 format: binary
             image/gif:
+              schema:
+                type: string
+                format: binary
+            image/bmp:
+              schema:
+                type: string
+                format: binary
+            image/tiff:
               schema:
                 type: string
                 format: binary
@@ -1261,21 +1308,32 @@ components:
         format:
           type: string
           description: >
-            The stored image format (`jpeg`, `png`, `webp`, `gif`).
-            Absent when the slot holds no image, which happens only on a
-            locked-and-cleared `front`.
+            The format token the catalog stored for this image, lowercase
+            (`jpeg`, `png`, `webp`, `gif`, `bmp`, `tiff`, and the exotics
+            a caller declared or the bytes announced). An open set, not a
+            fixed list: it widens whenever a decoder or a sniffer is
+            added, so treat an unfamiliar token as a format this client
+            does not draw rather than as an error. Absent when the slot
+            holds no image, which happens only on a locked-and-cleared
+            `front`.
         width:
           type: integer
-          description: Pixel width, 0 when the image was not decodable.
+          description: >
+            Pixel width, 0 when nothing could measure the image. A cover
+            the server cannot decode may still report real dimensions
+            when its tag declared them, so 0 means "unmeasured" rather
+            than "undecodable" and is not a count to divide by.
         height:
           type: integer
-          description: Pixel height, 0 when the image was not decodable.
+          description: >
+            Pixel height, 0 when nothing could measure the image. See
+            `width`.
         source:
           type: string
           description: >
             Where this slot's image came from, in `ArtSource`'s
-            vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`).
-            A string, not a closed enum.
+            vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`,
+            `generated`). A string, not a closed enum.
           example: tag
         provider:
           type: string

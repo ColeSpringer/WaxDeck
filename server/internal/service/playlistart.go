@@ -129,8 +129,14 @@ func (l *Library) syncPlaylistCover(ctx context.Context, pl *model.Playlist, ite
 	}
 	// Empty bytes clear the slot: a playlist whose members all lost their
 	// art should lose the mosaic built from it, not keep a stale one.
+	//
+	// Stamped as generated, which is what it is: nobody chose this
+	// picture, it was drawn here from the members' covers. Without the
+	// source the store's default records `user`, and the byte endpoint's
+	// X-Art-Source then tells another client a hand picked it. No provider
+	// and no source URL, which is what the pairing rule requires.
 	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, model.ArtRoleFront, raw, waxbin.ArtEditOptions{
-		Lock: model.LockOff, Force: true,
+		Lock: model.LockOff, Force: true, Source: model.SourceGenerated,
 	}); err != nil {
 		l.log.Warn("storing playlist cover", "playlist", pl.PID, "err", err)
 		return

@@ -107,6 +107,9 @@ export const accountShapes: Record<string, AccountShape> = {
   'review-queue': { role: 'admin' },
   'signup-ui': { role: 'admin' },
   uploads: { role: 'admin' },
+  // The metadata editor is administrators and the uploader; the cover
+  // this sets belongs to a scanned track nobody uploaded.
+  artwork: { role: 'admin' },
 };
 
 /// The bootstrap administrator's token. The first caller opens the

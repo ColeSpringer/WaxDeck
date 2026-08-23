@@ -197,10 +197,12 @@ components:
             The producer: `tag` (the file's own embedded cover),
             `sidecar` (a cover image beside the audio), `user` (set
             through the curation surface), `enrichment` (fetched from a
-            metadata provider, named in `provider`), or `feed` (a podcast
-            feed's image, or a radio station's own announcement). A
-            string, not a closed enum: treat an unknown value as
-            unattributed and draw nothing.
+            metadata provider, named in `provider`), `feed` (a podcast
+            feed's image, or a radio station's own announcement), or
+            `generated` (composed by the server from what the catalog
+            already holds, which is what a playlist mosaic is - nobody
+            chose it). A string, not a closed enum: treat an unknown
+            value as unattributed and draw nothing.
           example: enrichment
         provider:
           type: string

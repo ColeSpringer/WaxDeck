@@ -578,6 +578,11 @@ List<RouteBase> shellRoutes() => <RouteBase>[
                   section: SettingsSection.bySegment(
                     state.pathParameters['section']!,
                   )!,
+                  // A settings search result names the row it found, so
+                  // arriving lands on it rather than at the top of a long
+                  // section. User input in a URL: an id no section draws
+                  // is ignored rather than refused or redirected.
+                  setting: state.uri.queryParameters[WaxRoute.settingParam],
                 ),
               ),
             ],

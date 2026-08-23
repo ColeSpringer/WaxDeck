@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	waxart "github.com/colespringer/waxbin/art"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
@@ -672,14 +673,56 @@ func (l *Library) Album(ctx context.Context, uc *UserCtx, apiAlbumPID string) (A
 	return out, nil
 }
 
-// artMimes maps the catalog's stored art formats to media types. An
-// unknown format falls back to jpeg, the dominant case.
-var artMimes = map[string]string{
-	"jpeg": "image/jpeg",
-	"jpg":  "image/jpeg",
-	"png":  "image/png",
-	"webp": "image/webp",
-	"gif":  "image/gif",
+// The hardening pair every response carrying a picture from this origin
+// sets, wherever it is served from.
+//
+// These bytes came from a host somebody named - a provider, a feed, a
+// station, a file somebody uploaded - and they go out under a URL a
+// browser can simply open. artMime already refuses to declare a type a
+// browser executes; these two make that hold even if it stops holding.
+// `nosniff` stops a browser deciding the body is really markup, and the
+// policy neutralizes script and navigation for a document opened
+// straight from the URL. Cheap, and exactly the layer that turns a
+// future mistake in the type derivation from a stored-XSS hole into a
+// broken image.
+const (
+	ArtNoSniff = "nosniff"
+	ArtCSP     = "default-src 'none'; sandbox; style-src 'unsafe-inline'"
+)
+
+// artScriptable are the stored formats a browser opens as a document
+// rather than paints. SVG is markup, and markup served from this origin
+// is script running as the reader; a cover can reach the catalog under
+// one, because a provider naming `image/svg+xml` is enough, so the byte
+// endpoints answer with a type a browser downloads instead. Nothing
+// WaxDeck draws with renders SVG, so no picture is lost.
+var artScriptable = map[string]bool{"svg": true, "svg+xml": true}
+
+// artMime names what the resolver actually handed back. Every format the
+// catalog can hold spells its media type as `image/` plus the stored
+// token - png, webp, gif, bmp and tiff, and every exotic it holds without
+// decoding - so the derivation covers more than a table could be kept in
+// step with: the resolver serves an unthumbnailable source unscaled,
+// which after bmp and tiff became first-class means avif and heic, and
+// claiming jpeg for those is a mislabel a client draws a broken image
+// for.
+//
+// The token is normalized before it reaches a header. It is stored data,
+// and a stored format ultimately came from a fetched picture's media type
+// or a file's own tag; NormalizeFormat is idempotent on anything it
+// produced, reads a whole media type as well as a bare token, and turns
+// anything it cannot read into the empty answer below.
+//
+// No format at all is bytes nothing could name. The store refuses to
+// hold one, so this is the unreachable case rather than the common one,
+// and octet-stream is what it would mean - every client that draws
+// artwork decodes from the bytes, so naming them honestly costs nothing.
+func artMime(format string) string {
+	f := waxart.NormalizeFormat(format)
+	if f == "" || artScriptable[f] {
+		return "application/octet-stream"
+	}
+	return "image/" + f
 }
 
 // Art resolves artwork: original when size is 0, square-fit thumbnail
@@ -702,15 +745,13 @@ func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID, role string, siz
 	if err != nil {
 		return ArtBlob{}, classify(err)
 	}
-	mime := artMimes[strings.TrimPrefix(blob.Format, "image/")]
-	if mime == "" {
-		mime = "image/jpeg"
-	}
 	return ArtBlob{
 		Bytes:      blob.Bytes,
-		MimeType:   mime,
+		MimeType:   artMime(blob.Format),
 		SourceHash: blob.SourceHash,
 		Source:     l.artSourceFor(ctx, ref, artSourceFromBlob(blob)),
+		Width:      blob.Width,
+		Height:     blob.Height,
 	}, nil
 }
 

@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/colespringer/waxbin/art"
 )
 
 func TestCoreThrottledSentinel(t *testing.T) {
@@ -85,6 +87,9 @@ func TestFetchImageContentType(t *testing.T) {
 		case "/cover.webp":
 			w.Header().Set("Content-Type", "image/webp; charset=binary")
 			w.Write([]byte("RIFFxxxxWEBP"))
+		case "/cover.svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+			w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>`))
 		default:
 			w.Header().Set("Content-Type", "text/html")
 			w.Write([]byte("<html>not an image</html>"))
@@ -103,13 +108,21 @@ func TestFetchImageContentType(t *testing.T) {
 	if !bytes.Equal(data, []byte("RIFFxxxxWEBP")) {
 		t.Fatalf("unexpected image bytes %q", data)
 	}
-	if got := imageFormat(mediaType); got != "webp" {
-		t.Fatalf("imageFormat = %q, want webp", got)
+	if got := art.NormalizeFormat(mediaType); got != "webp" {
+		t.Fatalf("NormalizeFormat = %q, want webp", got)
 	}
 
 	if _, _, err := fetchImage(context.Background(), c, srv.URL+"/page.html"); err == nil ||
 		!strings.Contains(err.Error(), "not an image") {
 		t.Fatalf("want non-image content type error, got %v", err)
+	}
+
+	// An image type by the letter and a document in fact. Nothing here
+	// decodes one, and it would be stored under the remote's own word for
+	// it and served back from WaxDeck's origin, so it stops at the door.
+	if _, _, err := fetchImage(context.Background(), c, srv.URL+"/cover.svg"); err == nil ||
+		!strings.Contains(err.Error(), "is markup") {
+		t.Fatalf("want markup content type error, got %v", err)
 	}
 }
 

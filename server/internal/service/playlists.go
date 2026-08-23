@@ -159,10 +159,15 @@ const (
 // nothing (the engine already rejects ordered operators on tags, and
 // the text set has none).
 var ruleOpsByKind = map[string][]string{
-	ruleKindText:      {"is", "isNot", "contains", "startsWith", "endsWith", "isPresent", "isMissing"},
-	ruleKindNumber:    {"is", "isNot", "gt", "lt", "gte", "lte", "inTheRange", "isPresent", "isMissing"},
-	ruleKindDate:      {"before", "after", "inTheRange", "inTheLast", "notInTheLast", "isPresent", "isMissing"},
-	ruleKindBoolean:   {"is"},
+	ruleKindText:   {"is", "isNot", "contains", "startsWith", "endsWith", "isPresent", "isMissing"},
+	ruleKindNumber: {"is", "isNot", "gt", "lt", "gte", "lte", "inTheRange", "isPresent", "isMissing"},
+	ruleKindDate:   {"before", "after", "inTheRange", "inTheLast", "notInTheLast", "isPresent", "isMissing"},
+	// `isNot` alongside `is`, which says the same thing on a two-valued
+	// column but is what a rule arriving through the .nsp converter can
+	// hold: the importer accepts both on `starred`, and an editor that
+	// offers only `is` renders such a rule and refuses it on the next
+	// save. The engine compiles OpIsNot on all three of these columns.
+	ruleKindBoolean:   {"is", "isNot"},
 	ruleKindMediaType: {"is", "isNot"},
 	// Two operators, and the exclusions are deliberate. `in`/`notIn`
 	// are deferred rather than refused: no rule kind offers list values
@@ -268,13 +273,14 @@ func init() {
 		ruleFieldsByAPI[s.api] = s
 		ruleFieldsByEngine[s.engine] = s
 	}
-	// Read aliases, on top of the spellings WaxDeck writes. A rule that
-	// arrived through the .nsp converter carries the engine's other name
-	// for the same field (nspEngineAliases in nsp.go), and reading it
-	// back as anything but WaxDeck's own name gives the rule editor a
-	// field it cannot draw and a later PATCH one it will refuse.
-	for engine, alias := range nspEngineAliases {
-		if spec, ok := ruleFieldsByEngine[engine]; ok {
+	// Read aliases, on top of the spellings WaxDeck writes. The query
+	// engine accepts both spellings of each of these as one column, so
+	// which one a stored rule holds is arbitrary - a rule that arrived
+	// through the .nsp converter carries whichever the document used.
+	// Reading one back as anything but WaxDeck's own name gives the rule
+	// editor a field it cannot draw and a later PATCH one it will refuse.
+	for alias, canonical := range model.QueryFieldAliases() {
+		if spec, ok := ruleFieldsByEngine[canonical]; ok {
 			ruleFieldsByEngine[alias] = spec
 		}
 	}

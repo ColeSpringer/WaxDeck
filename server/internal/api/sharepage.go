@@ -298,6 +298,11 @@ func (s *Server) ServeShareArt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", blob.MimeType)
+	// The one art response with no session behind it and an hour of
+	// public caching in front of it, which is where the hardening pair
+	// earns the most.
+	w.Header().Set("X-Content-Type-Options", service.ArtNoSniff)
+	w.Header().Set("Content-Security-Policy", service.ArtCSP)
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = w.Write(blob.Bytes)
 }

@@ -153,15 +153,12 @@ const radioLogoCacheControl = artCacheControl
 //
 // The service is what makes the response safe - it serves only raster
 // types, decided by sniffing the bytes rather than by trusting the host,
-// so nothing that can carry script gets this far. These two make that
-// hold even if it stops holding. `nosniff` stops a browser from deciding
-// the body is really markup, and the policy neutralizes script and
-// navigation for a document opened straight from this URL. Cheap, and
-// exactly the layer that turns a future mistake in the type check from a
-// stored-XSS hole into a broken image.
+// so nothing that can carry script gets this far. The shared pair makes
+// that hold even if it stops holding, for the same reason it does over
+// item artwork.
 const (
-	radioLogoNoSniff = "nosniff"
-	radioLogoCSP     = "default-src 'none'; sandbox; style-src 'unsafe-inline'"
+	radioLogoNoSniff = service.ArtNoSniff
+	radioLogoCSP     = service.ArtCSP
 )
 
 // radioStreamContentType is the type the stream proxy serves for a

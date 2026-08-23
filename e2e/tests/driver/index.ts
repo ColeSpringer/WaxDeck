@@ -19,6 +19,7 @@ import { Seed } from './seed';
 import { Ctx } from './context';
 import { Auth, Shell } from './surfaces/auth';
 import { Admin } from './surfaces/admin';
+import { Artwork } from './surfaces/artwork';
 import { Books } from './surfaces/books';
 import { Cast } from './surfaces/cast';
 import { Discovery } from './surfaces/discovery';
@@ -44,6 +45,7 @@ export class App {
   readonly auth: Auth;
   readonly shell: Shell;
   readonly admin: Admin;
+  readonly artwork: Artwork;
   readonly books: Books;
   readonly cast: Cast;
   readonly home: Home;
@@ -68,6 +70,7 @@ export class App {
     this.auth = new Auth(ctx);
     this.shell = new Shell(ctx);
     this.admin = new Admin(ctx);
+    this.artwork = new Artwork(ctx);
     this.books = new Books(ctx);
     this.cast = new Cast(ctx);
     this.home = new Home(ctx);

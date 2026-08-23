@@ -2637,6 +2637,12 @@ abstract class AppLocalizations {
   /// **'From the feed'**
   String get artSourceFeed;
 
+  /// Source mark under a picture the server composed from what the catalog already holds, rather than one anybody chose. A playlist's mosaic of its members' covers is the case it exists for.
+  ///
+  /// In en, this message translates to:
+  /// **'Made by the server'**
+  String get artSourceGenerated;
+
   /// Provenance of lyrics that came from a companion file beside the audio. The artwork wording (a folder image) is wrong for lyrics, which arrive as an .lrc.
   ///
   /// In en, this message translates to:
@@ -2822,6 +2828,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{width} x {height}'**
   String artworkStateSize(int width, int height);
+
+  /// Stands where an artwork tile normally reads its pixel size, for a cover the server stored but never measured - an exotic container it has no decoder for. Distinguishes "the server does not know" from "nobody asked".
+  ///
+  /// In en, this message translates to:
+  /// **'Size unknown'**
+  String get artworkStateSizeUnknown;
 
   /// Heading over an item's images.
   ///

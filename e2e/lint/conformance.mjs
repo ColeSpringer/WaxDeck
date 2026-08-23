@@ -38,6 +38,7 @@ const ADMIN_SHAPES = [
   'admin-console',
   'admin-ops',
   'admin-readonly',
+  'artwork',
   'driver-smoke',
   'notifications',
   'review-queue',

@@ -152,8 +152,24 @@ abstract final class WaxRoute {
   /// a set of directions.
   static const settings = '/settings';
 
-  static String settingsSection(SettingsSection section) =>
-      '$settings/${section.segment}';
+  /// A section, optionally naming the setting inside it the reader is
+  /// being taken to.
+  ///
+  /// The setting rides as a query parameter rather than a second path
+  /// segment: the `:section` route keeps its shape, and the location
+  /// stays something a stranger can open - which is why a search result
+  /// still `go`es rather than pushing. An id no section draws lands at
+  /// the top of the section and says nothing, the way an anchor nobody
+  /// declared does on the web.
+  static String settingsSection(SettingsSection section, {String? setting}) {
+    final at = '$settings/${section.segment}';
+    return setting == null || setting.isEmpty
+        ? at
+        : '$at?$settingParam=${Uri.encodeQueryComponent(setting)}';
+  }
+
+  /// The query parameter [settingsSection] carries a setting id in.
+  static const settingParam = 'setting';
 
   /// What this build is and what it is talking to. A location like any
   /// other section: a stranger opening it gets the page, which is the

@@ -95,7 +95,17 @@ func (s *Server) ServeMediaArt(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	// No unscalable-original bound here, unlike the session-authenticated
+	// read: `size` is stamped into the URL this endpoint mints and is
+	// bounded to a thumbnail rung, so a renderer has no way to ask for
+	// the original instead. Refusing would leave it with the blank tile
+	// this endpoint exists to have fixed, and a receiver has no designed
+	// placeholder of its own to draw in the meantime.
 	w.Header().Set("Content-Type", blob.MimeType)
+	// The bytes came from a picture some remote named, and they are
+	// served from this origin under a URL a device can simply open.
+	w.Header().Set("X-Content-Type-Options", service.ArtNoSniff)
+	w.Header().Set("Content-Security-Policy", service.ArtCSP)
 	w.Header().Set("Content-Length", strconv.Itoa(len(blob.Bytes)))
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method == http.MethodHead {

@@ -623,6 +623,12 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 		return
 	}
 	w.Header().Set("Content-Type", blob.MimeType)
+	// A Subsonic client carries its credentials in the query string, so
+	// this URL is one a browser can open by hand; the hardening pair is
+	// what keeps a picture that turned out to be markup from running as
+	// the reader.
+	w.Header().Set("X-Content-Type-Options", service.ArtNoSniff)
+	w.Header().Set("Content-Security-Policy", service.ArtCSP)
 	w.Write(blob.Bytes)
 }
 

@@ -310,8 +310,10 @@ paths:
       description: >
         Stores the raw image bytes in one of the item's artwork slots
         (`role`, default `front`), locking the artifact by default. The
-        body is the image itself, up to 16 MiB; the server sniffs the
-        format. `writeBack=true` embeds a front cover into every backing
+        body is the image itself, up to 16 MiB, in any format the catalog
+        recognizes: JPEG, PNG, GIF, WebP, BMP and TIFF by decoding them,
+        and AVIF and HEIC by their container magic.
+        `writeBack=true` embeds a front cover into every backing
         file (write-back applies to the front slot only). Existing art in
         the slot is replaced; the request never downgrades silently because
         the caller chose the image.

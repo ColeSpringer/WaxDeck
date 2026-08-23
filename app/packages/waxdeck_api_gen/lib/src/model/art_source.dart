@@ -11,7 +11,7 @@ part 'art_source.g.dart';
 /// Where the picture a caller is about to draw came from, so a surface that shows a cover large enough to carry a caption can say so. Reported on the entity detail reads (which already carry the identity the cover belongs to) rather than on list rows: a grid thumbnail has no room for a mark, and putting this on every summary row would cost a lookup per row for a caption nothing draws.  This describes the picture that a front-cover resolve actually answers with, which for an album with no durable cover of its own is a member track's - reported honestly as that track's source, with `derived` marking that the album did not choose it. 
 ///
 /// Properties:
-/// * [source_] - The producer: `tag` (the file's own embedded cover), `sidecar` (a cover image beside the audio), `user` (set through the curation surface), `enrichment` (fetched from a metadata provider, named in `provider`), or `feed` (a podcast feed's image, or a radio station's own announcement). A string, not a closed enum: treat an unknown value as unattributed and draw nothing. 
+/// * [source_] - The producer: `tag` (the file's own embedded cover), `sidecar` (a cover image beside the audio), `user` (set through the curation surface), `enrichment` (fetched from a metadata provider, named in `provider`), `feed` (a podcast feed's image, or a radio station's own announcement), or `generated` (composed by the server from what the catalog already holds, which is what a playlist mosaic is - nobody chose it). A string, not a closed enum: treat an unknown value as unattributed and draw nothing. 
 /// * [provider] - The provider that supplied an `enrichment` cover, as an id (`deezer`, `coverartarchive`, `fanarttv`). Empty for every other source. 
 /// * [sourceUrl] - Where the bytes were fetched from, for a cover that came off the network (`enrichment`, `feed`). Empty otherwise. 
 /// * [level] - Which rung of the fallback chain answered: `track`, `book`, `episode`, `album`, `artist`, `release_group`, `genre`, `podcast`, or `playlist`. Absent where there is no chain (radio, which resolves nothing from the catalog). Open set; a client that does not recognise a value should name no rung rather than guess. 
@@ -19,7 +19,7 @@ part 'art_source.g.dart';
 /// * [updatedAt] - When this attachment was last written.
 @BuiltValue()
 abstract class ArtSource implements Built<ArtSource, ArtSourceBuilder> {
-  /// The producer: `tag` (the file's own embedded cover), `sidecar` (a cover image beside the audio), `user` (set through the curation surface), `enrichment` (fetched from a metadata provider, named in `provider`), or `feed` (a podcast feed's image, or a radio station's own announcement). A string, not a closed enum: treat an unknown value as unattributed and draw nothing. 
+  /// The producer: `tag` (the file's own embedded cover), `sidecar` (a cover image beside the audio), `user` (set through the curation surface), `enrichment` (fetched from a metadata provider, named in `provider`), `feed` (a podcast feed's image, or a radio station's own announcement), or `generated` (composed by the server from what the catalog already holds, which is what a playlist mosaic is - nobody chose it). A string, not a closed enum: treat an unknown value as unattributed and draw nothing. 
   @BuiltValueField(wireName: r'source')
   String get source_;
 

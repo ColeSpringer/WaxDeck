@@ -272,6 +272,14 @@ func fetchImage(ctx context.Context, c *core, rawURL string) ([]byte, string, er
 	if !strings.HasPrefix(mediaType, "image/") {
 		return nil, "", fmt.Errorf("providers: fetch image %s: content type %q is not an image", rawURL, mediaType)
 	}
+	// SVG is the one image type a browser runs rather than paints, and
+	// this type is taken on the remote's word: the bytes behind it reach
+	// the catalog as a cover and are served back from WaxDeck's own
+	// origin. Nothing here can draw one either, so refusing at the door
+	// costs no picture anybody would have seen.
+	if strings.HasSuffix(mediaType, "/svg+xml") || strings.HasSuffix(mediaType, "/svg") {
+		return nil, "", fmt.Errorf("providers: fetch image %s: content type %q is markup", rawURL, mediaType)
+	}
 	body, err := readCapped(resp.Body, maxImageBytes)
 	if err != nil {
 		return nil, "", fmt.Errorf("providers: read image %s: %w", rawURL, err)

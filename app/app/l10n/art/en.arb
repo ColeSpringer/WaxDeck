@@ -61,6 +61,10 @@
   "@artSourceFeed": {
     "description": "Source mark under a cover a podcast feed supplied, or one a radio station announced in its own stream."
   },
+  "artSourceGenerated": "Made by the server",
+  "@artSourceGenerated": {
+    "description": "Source mark under a picture the server composed from what the catalog already holds, rather than one anybody chose. A playlist's mosaic of its members' covers is the case it exists for."
+  },
   "artSourceLyricsSidecar": "From an .lrc file",
   "@artSourceLyricsSidecar": {
     "description": "Provenance of lyrics that came from a companion file beside the audio. The artwork wording (a folder image) is wrong for lyrics, which arrive as an .lrc."
@@ -262,6 +266,10 @@
         "example": "1000"
       }
     }
+  },
+  "artworkStateSizeUnknown": "Size unknown",
+  "@artworkStateSizeUnknown": {
+    "description": "Stands where an artwork tile normally reads its pixel size, for a cover the server stored but never measured - an exotic container it has no decoder for. Distinguishes \"the server does not know\" from \"nobody asked\"."
   },
   "artworkTitle": "Artwork",
   "@artworkTitle": {

@@ -132,7 +132,9 @@ class _Results extends StatelessWidget {
             glyph: entry.section.glyph,
             semanticsId: SemanticsIds.settingsResult(entry.id),
             trailing: const WaxIcon(WaxIcons.forward, size: 16),
-            onTap: () => context.go(WaxRoute.settingsSection(entry.section)),
+            onTap: () => context.go(
+              WaxRoute.settingsSection(entry.section, setting: entry.id),
+            ),
           );
         },
       ),

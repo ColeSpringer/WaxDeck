@@ -9,6 +9,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'prefs_controller.dart';
 import 'save_setting.dart';
+import 'setting_anchor.dart';
 
 /// Listening preferences: shared-stats participation, the stats
 /// timezone, and the door into the share-links list.
@@ -30,35 +31,41 @@ class ListeningSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(title: l10n.settingsGroupListening),
-        WaxSettingRow(
-          key: const Key(SemanticsIds.sharedStatsSwitch),
-          title: l10n.settingsSharedStatsSwitchTitle,
-          help: l10n.settingsSharedStatsHelp,
-          glyph: WaxIcons.stats,
-          control: WaxSwitch(
-            value: !optedOut,
-            label: l10n.settingsSharedStatsSwitchTitle,
-            semanticsId: SemanticsIds.sharedStatsSwitch,
-            onChanged: prefs == null
-                ? null
-                : (include) => saveSetting(
-                    context,
-                    ref
-                        .read(prefsControllerProvider.notifier)
-                        .setSharedStatsOptOut(!include),
-                  ),
+        SettingAnchor(
+          id: 'shared-stats',
+          child: WaxSettingRow(
+            key: const Key(SemanticsIds.sharedStatsSwitch),
+            title: l10n.settingsSharedStatsSwitchTitle,
+            help: l10n.settingsSharedStatsHelp,
+            glyph: WaxIcons.stats,
+            control: WaxSwitch(
+              value: !optedOut,
+              label: l10n.settingsSharedStatsSwitchTitle,
+              semanticsId: SemanticsIds.sharedStatsSwitch,
+              onChanged: prefs == null
+                  ? null
+                  : (include) => saveSetting(
+                      context,
+                      ref
+                          .read(prefsControllerProvider.notifier)
+                          .setSharedStatsOptOut(!include),
+                    ),
+            ),
           ),
         ),
-        WaxOptionRow(
-          key: const Key(SemanticsIds.timezoneEdit),
-          title: l10n.settingsTimezoneTitle,
-          subtitle: prefs?.timezone ?? l10n.settingsTimezoneServerDefault,
-          glyph: WaxIcons.clock,
-          semanticsId: SemanticsIds.timezoneEdit,
-          trailing: const WaxIcon(WaxIcons.edit, size: 16),
-          onTap: prefs == null
-              ? null
-              : () => _editTimezone(context, prefs.timezone),
+        SettingAnchor(
+          id: 'timezone',
+          child: WaxOptionRow(
+            key: const Key(SemanticsIds.timezoneEdit),
+            title: l10n.settingsTimezoneTitle,
+            subtitle: prefs?.timezone ?? l10n.settingsTimezoneServerDefault,
+            glyph: WaxIcons.clock,
+            semanticsId: SemanticsIds.timezoneEdit,
+            trailing: const WaxIcon(WaxIcons.edit, size: 16),
+            onTap: prefs == null
+                ? null
+                : () => _editTimezone(context, prefs.timezone),
+          ),
         ),
         WaxOptionRow(
           key: const Key(SemanticsIds.openShareLinks),

@@ -27,6 +27,11 @@ const _providerNames = <String, String>{
 /// source draws nothing: the vocabulary is open, and inventing a
 /// sentence for a word this build does not know would be worse than
 /// saying nothing.
+///
+/// There is no `organize` case and there should not be: the organizer
+/// moves files and never produces a picture, which is why the server's
+/// own gate for an art attachment excludes it. Every other value the
+/// gate accepts is here.
 String? artSourceLabel(AppLocalizations l10n, ArtSource? source) {
   final from = source?.source;
   if (from == null || from.isEmpty) return null;
@@ -39,6 +44,8 @@ String? artSourceLabel(AppLocalizations l10n, ArtSource? source) {
       return l10n.artSourceFeed;
     case 'user':
       return l10n.artSourceUser;
+    case 'generated':
+      return l10n.artSourceGenerated;
     case 'enrichment':
       final provider = source!.provider;
       if (provider == null || provider.isEmpty) {

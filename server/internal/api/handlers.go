@@ -550,6 +550,38 @@ const (
 	maxArtHeaderURL = 2048
 )
 
+// maxUnscaledArtBytes bounds what a request that asked for a thumbnail
+// may be answered with when the picture could not be scaled.
+//
+// The resolver answers a sized request with the original whenever it
+// could not measure the source - after BMP and TIFF became first-class,
+// that means AVIF, HEIC, and bytes nothing could read. A source it did
+// measure never lands here: one larger than the box comes back scaled,
+// and one already inside the box is the picture the caller asked for at
+// that rung, however many bytes it is. For an unmeasurable cover a
+// little over the bound the original is the right answer; for a large
+// one it is not, because a caller asking for a 64-pixel tile is asking
+// for something small and nothing here can paint these bytes anyway.
+// Well above any real thumbnail at the 2048-pixel ceiling and far below
+// the 16 MiB an upload may be.
+//
+// Applied on this endpoint alone. `Art` also answers the Subsonic
+// adapter, whose clients have no designed placeholder to fall back to,
+// and the radio snapshot, which already applies a cap of its own; the
+// tokenized cast endpoint stamps a size into every URL it mints, so
+// refusing there would leave a renderer no way to ask for the picture at
+// all.
+const maxUnscaledArtBytes = 2 << 20
+
+// artTooBigForSize reports whether a sized request was answered with an
+// unmeasurable original bigger than a thumbnail slot has any business
+// holding. A request that asked for no size is never refused, however
+// large the picture, and neither is one the resolver could measure.
+func artTooBigForSize(blob service.ArtBlob, size int) bool {
+	return size > 0 && blob.Width == 0 && blob.Height == 0 &&
+		len(blob.Bytes) > maxUnscaledArtBytes
+}
+
 // artHeaderValues renders one resolved cover's provenance as the four
 // response headers, for the 200 and the 304 alike.
 func artHeaderValues(src service.ArtSourceDTO) (source, provider, sourceURL, level *string) {
@@ -594,6 +626,13 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 		}
 		return nil, err
 	}
+	// A thumbnail slot is not where an unscaled original belongs; see
+	// maxUnscaledArtBytes. Before the validator, so a caller cannot
+	// revalidate its way into the bytes this refuses.
+	if artTooBigForSize(blob, size) {
+		return GetItemArt404JSONResponse{NotFoundJSONResponse(errObj("not-found",
+			"no thumbnail of that size for pid "+req.Pid))}, nil
+	}
 	// The validator is the source image hash scoped by the requested
 	// size: same source, different thumbnail sizes, different bytes.
 	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", blob.SourceHash, size))
@@ -618,10 +657,13 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	}
 	body := bytes.NewReader(blob.Bytes)
 	length := int64(len(blob.Bytes))
+	noSniff, csp := service.ArtNoSniff, service.ArtCSP
 	headers := GetItemArt200ResponseHeaders{
-		ETag:         &etag,
-		CacheControl: &cacheControl,
-		Vary:         &vary,
+		ETag:                  &etag,
+		CacheControl:          &cacheControl,
+		Vary:                  &vary,
+		XContentTypeOptions:   &noSniff,
+		ContentSecurityPolicy: &csp,
 	}
 	// The provenance of the bytes being served, for a consumer that has
 	// only this response to read. WaxDeck's own clients take the same
@@ -630,6 +672,10 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	if src := blob.Source; src.Attributed() {
 		headers.XArtSource, headers.XArtProvider, headers.XArtSourceUrl, headers.XArtLevel = artHeaderValues(src)
 	}
+	// One variant per type the response declares. A stored format outside
+	// that set - an AVIF or HEIC original, which the resolver serves
+	// unscaled because nothing here can thumbnail it - has no variant to
+	// answer with and falls to jpeg, which the response documents.
 	switch blob.MimeType {
 	case "image/png":
 		return GetItemArt200ImagepngResponse{Body: body, ContentLength: length, Headers: headers}, nil
@@ -637,6 +683,10 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 		return GetItemArt200ImagewebpResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	case "image/gif":
 		return GetItemArt200ImagegifResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/bmp":
+		return GetItemArt200ImagebmpResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/tiff":
+		return GetItemArt200ImagetiffResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	default:
 		return GetItemArt200ImagejpegResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	}

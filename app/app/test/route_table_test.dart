@@ -137,6 +137,17 @@ final _locations = <String, Type>{
   // One location per section, so "it is under Playback" is a link.
   for (final section in SettingsSection.values)
     WaxRoute.settingsSection(section): SettingsSectionScreen,
+  // The same location naming a setting inside it, which is what a
+  // settings search result opens. A query parameter rather than a path
+  // segment, so the `:section` route answers both.
+  WaxRoute.settingsSection(SettingsSection.playback, setting: 'replay-gain'):
+      SettingsSectionScreen,
+  // And one no section draws. Not a redirect and not a refusal: the id
+  // names nothing, so the section opens and says nothing about it.
+  WaxRoute.settingsSection(
+    SettingsSection.playback,
+    setting: 'no-such-setting',
+  ): SettingsSectionScreen,
   // A literal beside the `:section` pattern, which would otherwise match
   // it and the redirect would bounce it back to the settings home.
   WaxRoute.settingsAbout: AboutScreen,
@@ -217,6 +228,13 @@ final _stackedInShell = <String>{
   WaxRoute.yearInReview,
   for (final section in SettingsSection.values)
     WaxRoute.settingsSection(section),
+  // A named setting is the same location with a query on it, so it
+  // stacks under the settings home exactly as the bare section does.
+  WaxRoute.settingsSection(SettingsSection.playback, setting: 'replay-gain'),
+  WaxRoute.settingsSection(
+    SettingsSection.playback,
+    setting: 'no-such-setting',
+  ),
   WaxRoute.settingsAbout,
   // Two deep: About under settings, and the log under About, so back
   // walks the way it was opened.

@@ -26,6 +26,7 @@
     }
   },
   "artSourceFeed": "Del feed",
+  "artSourceGenerated": "Creada por el servidor",
   "artSourceLyricsSidecar": "De un archivo .lrc",
   "@artSourceLyricsSidecar": {
     "description": "Provenance of lyrics that came from a companion file beside the audio. The artwork wording (a folder image) is wrong for lyrics, which arrive as an .lrc."
@@ -60,6 +61,7 @@
   "artworkStateInherited": "Heredada",
   "artworkStatePinned": "Fijada, sin imagen",
   "artworkStateSize": "{width} x {height}",
+  "artworkStateSizeUnknown": "Tamaño desconocido",
   "artworkTitle": "Ilustraciones",
   "artworkTooLarge": "{file} supera los 16 MB que puede ocupar una imagen",
   "artworkUnreadable": "No se ha podido leer {file}"

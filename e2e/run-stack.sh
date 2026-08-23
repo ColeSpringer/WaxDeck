@@ -25,6 +25,9 @@ mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,fe
 mkdir -p "$RUN_DIR/upload-src/Harbour Lights/Disc 1"
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src/Harbour Lights/Disc 1" -preset upload-folder >/dev/null)
 echo "not audio" >"$RUN_DIR/upload-src/Harbour Lights/notes.txt"
+# A cover to set by hand. Beside the upload sources rather than in the
+# library: it is a file a picker walks to, not media under scan.
+(cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset cover >/dev/null)
 (cd "$E2E_DIR/../server" && go build -o "$RUN_DIR_NATIVE/waxflow-catalog" ./cmd/waxflow-catalog)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/testidp" ./cmd/testidp)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/feedserv" ./cmd/feedserv)

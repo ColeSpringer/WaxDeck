@@ -15,6 +15,8 @@ github.com/colespringer/waxbin v0.0.0-20260819062337-3faaa1f7fb00 h1:ekAKZ/ktytS
 github.com/colespringer/waxbin v0.0.0-20260819062337-3faaa1f7fb00/go.mod h1:kq6giZqBktYTWq3ZswxkGvphRpOL8nvMCFJVg8vT7ww=
 github.com/colespringer/waxbin v0.0.0-20260821012704-49e88a188577 h1:rBx+vLEp+S4zvlCo21fSK7xLmasSrUZsUSaSflTCBpk=
 github.com/colespringer/waxbin v0.0.0-20260821012704-49e88a188577/go.mod h1:kq6giZqBktYTWq3ZswxkGvphRpOL8nvMCFJVg8vT7ww=
+github.com/colespringer/waxbin v0.0.0-20260822110521-f6071768ecbc h1:ItEVtNrUwTULQNUpee8BXndkC7N+vrf5F0crBZnNbPI=
+github.com/colespringer/waxbin v0.0.0-20260822110521-f6071768ecbc/go.mod h1:kq6giZqBktYTWq3ZswxkGvphRpOL8nvMCFJVg8vT7ww=
 github.com/colespringer/waxflow v0.0.0-20260816051810-ba4adcdb22b9 h1:suooNbL35TyaEAJ0nqK6FDQr4iJ7a82+2MXFQyDF2Co=
 github.com/colespringer/waxflow v0.0.0-20260816051810-ba4adcdb22b9/go.mod h1:8mAo9F494kAckHAdJRd6xQa3xJsjOYhy+6C096s1ans=
 github.com/colespringer/waxflow/cli v0.0.0-20260816051810-ba4adcdb22b9 h1:cOLlj/wQ3oJ8aDfEIuxKlHODnasiJPXBNxZ1Lx4JhyA=

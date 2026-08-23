@@ -212,6 +212,11 @@ cover authority is its own uploaded-versus-generated marker, and
 clearing an uploaded playlist cover hands the slot back to the mosaic
 built from the members.
 
+That mosaic marks itself. It is stored with the source `generated`, so
+the source mark under it reads as the server's own composition rather
+than as a picture somebody chose - which is what it read as before the
+vocabulary had a word for it.
+
 ### Editing a release
 
 An album's own fields are edited on their own screen, reached from the

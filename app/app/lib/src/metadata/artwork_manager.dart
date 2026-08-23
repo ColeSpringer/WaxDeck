@@ -13,10 +13,23 @@ import '../shell/shell_messages.dart';
 import '../uploads/audio_drop_area.dart';
 import '../uploads/file_picker_port.dart';
 
-/// The image formats the artwork endpoints accept. The server sniffs
-/// the bytes rather than trusting the name, so this only decides what
-/// the picker offers and what a drop is allowed to be.
-const kArtworkExtensions = {'jpg', 'jpeg', 'png', 'webp', 'gif'};
+/// The image formats the artwork endpoints accept: the six the catalog
+/// decodes, plus the two exotic containers it recognizes by their magic
+/// and stores without decoding. This set decides what the picker offers
+/// and what a drop is allowed to be; a file picked through "any" still
+/// reaches the server, which refuses anything it cannot recognize.
+const kArtworkExtensions = {
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'gif',
+  'bmp',
+  'tif',
+  'tiff',
+  'avif',
+  'heic',
+};
 
 /// The endpoint's own ceiling. Checked here so a picked 40 MB scan is
 /// refused with a sentence rather than with a 400 after the upload.
@@ -426,10 +439,15 @@ class _SlotTile extends ConsumerWidget {
     // exactly the confusion the upstream lock report exists to end.
     if (held != null && held.pinnedEmpty) return l10n.artworkStatePinned;
     if (held != null) {
+      // Zero is the catalog saying it never measured this picture, not
+      // that it is nothing wide. Saying so is the point: a bare "tiff"
+      // reads as though nobody asked, and the two are different states -
+      // one is a cover the server cannot decode, the other is one it
+      // decoded and whose numbers this row simply left out.
       final size = (held.width ?? 0) > 0 && (held.height ?? 0) > 0
           ? l10n.artworkStateSize(held.width!, held.height!)
-          : null;
-      return <String>[held.format ?? l10n.artworkStateImage, ?size].join(', ');
+          : l10n.artworkStateSizeUnknown;
+      return <String>[held.format ?? l10n.artworkStateImage, size].join(', ');
     }
     return inherited ? l10n.artworkStateInherited : l10n.artworkStateEmpty;
   }

@@ -275,6 +275,20 @@ void main() {
     expect(container.read(shellMessengerProvider)?.text, 'Booklet replaced');
   });
 
+  testWidgets('a cover nothing could measure says so rather than nothing', (
+    tester,
+  ) async {
+    // Zero is the catalog saying it never measured this picture - an
+    // exotic container it has no decoder for. A row that just reads
+    // "tiff" cannot be told from one whose numbers were left out.
+    final repo = _repo()
+      ..ownArtworkPids.add('tr-1')
+      ..artRoles.add(const ArtRoleInfo(role: 'front', format: 'tiff'));
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('tiff, Size unknown'), findsOneWidget);
+  });
+
   testWidgets('an image over the endpoint ceiling is refused before upload', (
     tester,
   ) async {

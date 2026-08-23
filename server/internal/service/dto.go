@@ -115,6 +115,12 @@ type ArtBlob struct {
 	MimeType   string
 	SourceHash string
 	Source     ArtSourceDTO
+	// Width and Height are the pixel dimensions of what is being served:
+	// a thumbnail's own, or the source's for an unscaled answer. Both
+	// zero means nothing here could measure the picture, which is the
+	// one case a resolve hands back bytes it could not scale.
+	Width  int
+	Height int
 }
 
 // ArtSourceDTO says where a picture came from: the producer, the

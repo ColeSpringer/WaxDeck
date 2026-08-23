@@ -431,11 +431,17 @@ func (l *Library) PublicArt(ctx context.Context, apiItemPID string, size int) (A
 	if err != nil {
 		return ArtBlob{}, classify(err)
 	}
-	mime := artMimes[strings.TrimPrefix(blob.Format, "image/")]
-	if mime == "" {
-		mime = "image/jpeg"
-	}
-	return ArtBlob{Bytes: blob.Bytes, MimeType: mime, SourceHash: blob.SourceHash}, nil
+	// artMime, not a table of its own: this is the one art response with
+	// no session behind it and an hour of public caching in front of it,
+	// so the type it declares has to be the same one the authenticated
+	// endpoints derive rather than a second opinion that drifts.
+	return ArtBlob{
+		Bytes:      blob.Bytes,
+		MimeType:   artMime(blob.Format),
+		SourceHash: blob.SourceHash,
+		Width:      blob.Width,
+		Height:     blob.Height,
+	}, nil
 }
 
 func shareInfo(r wdb.Share) ShareInfo {

@@ -804,12 +804,8 @@ func (l *Library) addToolCover(ctx context.Context, ed *waxlabel.Editor, pid mod
 	if err != nil || blob == nil || len(blob.Bytes) == 0 {
 		return
 	}
-	mime := blob.Format
-	if mime != "" && !strings.HasPrefix(mime, "image/") {
-		mime = "image/" + mime
-	}
 	ed.AddPicture(waxlabel.Picture{
-		Type: waxlabel.PicFrontCover, MIME: mime,
+		Type: waxlabel.PicFrontCover, MIME: artMime(blob.Format),
 		Width: blob.Width, Height: blob.Height, Data: blob.Bytes,
 	})
 }

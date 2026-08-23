@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin"
+	waxart "github.com/colespringer/waxbin/art"
 	"github.com/colespringer/waxbin/model"
 	waxlabel "github.com/colespringer/waxlabel"
 )
@@ -747,8 +747,19 @@ func validateChapterList(chapters []ChapterMark) error {
 
 // --- artwork ----------------------------------------------------------------------
 
-// validateArtworkBytes enforces the size cap and that the body is an
-// image the server recognizes.
+// validateArtworkBytes enforces the size cap and that the body is a
+// picture the catalog can recognize.
+//
+// The recognizer is the store's own: art.Describe decodes what there is
+// a decoder for - JPEG, PNG, GIF, WebP, BMP, TIFF - and magic-sniffs the
+// exotic ISOBMFF containers (AVIF, HEIC) it cannot decode, which is
+// exactly the set the store will hold. Asking it here rather than
+// letting the store refuse further in keeps a refusal a 415 with a
+// sentence instead of a write that fails halfway, and it is the one
+// check that cannot be talked out of: the store falls back to a
+// caller-named format for bytes it does not recognize, so an nginx error
+// page named as a TIFF would otherwise be stored as somebody's cover and
+// embedded into every backing file behind it.
 func validateArtworkBytes(raw []byte) error {
 	if len(raw) == 0 {
 		return errInvalid("an image body is required")
@@ -756,7 +767,7 @@ func validateArtworkBytes(raw []byte) error {
 	if len(raw) > maxArtworkBytes {
 		return errInvalid("artwork is limited to 16 MiB")
 	}
-	if !strings.HasPrefix(http.DetectContentType(raw), "image/") {
+	if waxart.Describe(raw).Format == "" {
 		return &Error{Kind: KindFormat, Msg: "the body is not a recognized image"}
 	}
 	return nil

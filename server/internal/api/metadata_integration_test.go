@@ -7,6 +7,8 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/image/tiff"
 
 	"github.com/colespringer/waxdeck/fixtures"
 )
@@ -916,4 +920,205 @@ func TestMetadataBookChapters(t *testing.T) {
 		"fields": map[string]string{"isbn": "978-0-306-40615-8"},
 	})
 	wantStatus(t, resp, 400, "bad isbn checksum")
+}
+
+// derefIntOr reads an optional pixel count, absent meaning unmeasured.
+func derefIntOr(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+// tinyTIFF encodes a small valid TIFF. Go's http.DetectContentType has no
+// TIFF entry (its table is BMP, GIF, JPEG, PNG, WebP and ICO), so these
+// bytes are the case that separates the two recognizers: only the
+// catalog's own decodes them.
+func tinyTIFF(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 6, 5))
+	for x := 0; x < 6; x++ {
+		for y := 0; y < 5; y++ {
+			img.Set(x, y, color.RGBA{R: uint8(30 * x), G: 90, B: uint8(40 * y), A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := tiff.Encode(&buf, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// The artwork guard asks the catalog's own recognizer, which is the one
+// that decides what can be stored: decode for the six formats it has a
+// decoder for, container magic for the exotics it does not. Nothing a
+// caller can say widens it, which is what keeps an error page out of a
+// cover slot and out of every backing file behind it.
+func TestSetArtworkTakesWhatTheCatalogRecognizes(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	page := h.items(t, "")
+	if len(page.Items) == 0 {
+		t.Fatal("the fixture library scanned no items")
+	}
+	pid := page.Items[0].Pid
+	base := "/api/v1/items/" + pid + "/artwork"
+
+	tiffBytes := tinyTIFF(t)
+
+	// Bytes that are not a picture stay out, whatever the request looks
+	// like. An HTML error page is the case worth naming: a proxy answers
+	// one where a picture was expected, and with write-back on it would
+	// otherwise be embedded into every backing file.
+	resp := metadataPutBytes(t, h.ts, base, h.token,
+		[]byte("<html><head><title>502 Bad Gateway</title></head></html>"))
+	wantStatus(t, resp, 415, "an error page as a cover")
+
+	resp = metadataPutBytes(t, h.ts, base+"?role=front", h.token, []byte("this is not an image at all"))
+	wantStatus(t, resp, 415, "junk as a cover")
+
+	// TIFF decodes here and nowhere else in this process: Go's sniff table
+	// stops at BMP, so this is the case that proves the guard asks the
+	// catalog rather than the standard library.
+	resp = metadataPutBytes(t, h.ts, base, h.token, tiffBytes)
+	wantStatus(t, resp, 200, "a TIFF cover")
+
+	// Stored, measured, thumbnailed, and reported as what it is - not as
+	// the jpeg the mime table used to claim for everything it did not know.
+	resp = get(t, h.ts, "/api/v1/items/"+pid+"/art-roles", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("art-roles status = %d", resp.StatusCode)
+	}
+	roles := decode[ArtRoles](t, resp)
+	var front *ArtRoleInfo
+	for i := range roles.Roles {
+		if string(roles.Roles[i].Role) == "front" {
+			front = &roles.Roles[i]
+		}
+	}
+	if front == nil {
+		t.Fatalf("no front role after the TIFF set: %+v", roles.Roles)
+	}
+	if deref(front.Format) != "tiff" {
+		t.Errorf("stored format = %q, want tiff", deref(front.Format))
+	}
+	if derefIntOr(front.Width) != 6 || derefIntOr(front.Height) != 5 {
+		t.Errorf("stored size = %dx%d, want 6x5", derefIntOr(front.Width), derefIntOr(front.Height))
+	}
+
+	// And the byte endpoint labels it honestly, both whole and scaled.
+	for _, path := range []string{
+		"/api/v1/items/" + pid + "/art",
+		"/api/v1/items/" + pid + "/art?size=32",
+	} {
+		resp = get(t, h.ts, path, h.token)
+		if resp.StatusCode != 200 {
+			t.Fatalf("%s status = %d", path, resp.StatusCode)
+		}
+		got := resp.Header.Get("Content-Type")
+		resp.Body.Close()
+		if !strings.HasPrefix(got, "image/tiff") && !strings.HasPrefix(got, "image/jpeg") {
+			t.Errorf("%s content type = %q, want the source's or a thumbnail's", path, got)
+		}
+		if strings.HasPrefix(got, "image/jpeg") && !strings.Contains(path, "size=") {
+			t.Errorf("the unscaled TIFF is served as %q", got)
+		}
+	}
+}
+
+// bigAVIF is an ISOBMFF header with the AVIF brand and enough padding to
+// pass the thumbnail-slot cap, standing in for the exotic covers the
+// catalog stores without decoding. Nothing here decodes it either, which
+// is the point: with no dimensions to scale from, the resolver can only
+// serve it whole.
+func bigAVIF(size int) []byte {
+	data := make([]byte, size)
+	copy(data, []byte{0, 0, 0, 0x18})
+	copy(data[4:], "ftypavif")
+	return data
+}
+
+// bigPNG encodes a PNG of a given square side, padded past the
+// thumbnail-slot cap so a size request at or above that side is answered
+// with the source itself - measured, and therefore never refused.
+func bigPNG(t *testing.T, side int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, side, side))
+	// Seeded noise, so the picture is the same every run and the encoder
+	// has nothing to compress it down past the bound with.
+	rng := rand.New(rand.NewSource(1))
+	for x := 0; x < side; x++ {
+		for y := 0; y < side; y++ {
+			img.Set(x, y, color.RGBA{
+				R: uint8(rng.Intn(256)), G: uint8(rng.Intn(256)),
+				B: uint8(rng.Intn(256)), A: 255,
+			})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// A cover the server could not measure is served whole, and a thumbnail
+// slot is not where a whole one belongs. The bound is on the answer
+// rather than on the picture: asking for the original always gets it,
+// however large, and so does asking for a size a measured picture
+// already fits.
+func TestArtRefusesAnUnscalableOriginalAsAThumbnail(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	page := h.items(t, "")
+	if len(page.Items) == 0 {
+		t.Fatal("the fixture library scanned no items")
+	}
+	pid := page.Items[0].Pid
+
+	resp := metadataPutBytes(t, h.ts, "/api/v1/items/"+pid+"/artwork", h.token, bigAVIF(3<<20))
+	wantStatus(t, resp, 200, "an AVIF cover")
+
+	// Whole: the caller asked for the picture, not for a thumbnail.
+	readAll(t, get(t, h.ts, "/api/v1/items/"+pid+"/art", h.token), 200, "unscaled art")
+
+	// Sized: there is no thumbnail of this picture, which is a different
+	// answer from three megabytes into a 64-pixel tile.
+	resp = get(t, h.ts, "/api/v1/items/"+pid+"/art?size=64", h.token)
+	wantStatus(t, resp, 404, "a thumbnail of an unscalable original")
+
+	resp = get(t, h.ts, "/api/v1/items/"+pid+"/art?size=2048", h.token)
+	wantStatus(t, resp, 404, "the largest thumbnail rung")
+
+	// A picture that can be scaled is unaffected at every rung - including
+	// the rungs at or above its own longest edge, where the resolver has
+	// nothing to scale down to and answers the source itself. Those bytes
+	// are over the bound and must still be served: the caller asked for a
+	// box this picture already fits.
+	big := bigPNG(t, 1000)
+	if len(big) <= 2<<20 {
+		t.Fatalf("the measured fixture is %d bytes, under the bound this test is about", len(big))
+	}
+	resp = metadataPutBytes(t, h.ts, "/api/v1/items/"+pid+"/artwork", h.token, big)
+	wantStatus(t, resp, 200, "a measured cover over the bound")
+	for _, size := range []int{64, 1024, 2048} {
+		path := fmt.Sprintf("/api/v1/items/%s/art?size=%d", pid, size)
+		readAll(t, get(t, h.ts, path, h.token), 200, path)
+	}
+}
+
+// readAll asserts a status and drains the body, which a test that leaves
+// a large one unread would otherwise turn into a "superfluous
+// response.WriteHeader" line in an otherwise clean run.
+func readAll(t *testing.T, resp *http.Response, want int, what string) []byte {
+	t.Helper()
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("reading %s: %v", what, err)
+	}
+	if resp.StatusCode != want {
+		t.Fatalf("%s status = %d, want %d", what, resp.StatusCode, want)
+	}
+	return body
 }

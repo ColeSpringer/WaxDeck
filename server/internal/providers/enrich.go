@@ -29,19 +29,6 @@ func collapseSpace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// imageFormat maps an image media type to the model.ArtImage format
-// vocabulary (jpeg|png|webp|gif); unknown subtypes pass through so the
-// ingestor can decide.
-func imageFormat(mediaType string) string {
-	sub := strings.TrimPrefix(strings.ToLower(mediaType), "image/")
-	switch sub {
-	case "jpg", "jpeg", "pjpeg":
-		return "jpeg"
-	default:
-		return sub
-	}
-}
-
 // coverImage builds the cover a provider hands back to the enrichment
 // pass, content-addressed and measured.
 //
@@ -52,16 +39,15 @@ func imageFormat(mediaType string) string {
 // format for bytes that neither decode nor magic-sniff, and the media
 // type is the only other thing that knows what they are.
 //
-// That answer reaches one of the two paths a cover takes. The catalog's
-// whole-library pass carries this whole value to the store, so the media
-// type's format lands with it. WaxDeck's own enrich-now button hands the
-// facade raw bytes, because no setter takes a stamped *model.ArtImage
-// (recorded in docs/upstream-requests.md), so the store re-derives from
-// the bytes alone and refuses what it cannot recognize - a truncated
-// image or an exotic container this build does not sniff is a CodeInvalid
-// there and a stored cover on the library pass. Empty bytes are no cover
-// at all, which is a nil result rather than an image that cannot be
-// stored.
+// Both paths a cover takes now carry it. The catalog's whole-library
+// pass hands the store this whole value, and WaxDeck's own enrich-now
+// button passes the same format through ArtEditOptions.Format, so a
+// picture that neither decodes nor sniffs stores under the same name
+// either way. The fold is art.NormalizeFormat's, which is the facade's
+// own, so a media type this file read and one a person typed at the
+// artwork endpoint cannot land under two tokens. Empty bytes are no
+// cover at all, which is a nil result rather than an image that cannot
+// be stored.
 func coverImage(data []byte, mediaType, sourceURL string) *model.ArtImage {
 	if len(data) == 0 {
 		return nil
@@ -69,7 +55,7 @@ func coverImage(data []byte, mediaType, sourceURL string) *model.ArtImage {
 	info := art.Describe(data)
 	format := info.Format
 	if format == "" {
-		format = imageFormat(mediaType)
+		format = art.NormalizeFormat(mediaType)
 	}
 	return &model.ArtImage{
 		Data:        data,

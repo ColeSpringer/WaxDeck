@@ -1493,7 +1493,7 @@ class MetadataApi {
   }
 
   /// Set item artwork
-  /// Stores the raw image bytes in one of the item&#39;s artwork slots (&#x60;role&#x60;, default &#x60;front&#x60;), locking the artifact by default. The body is the image itself, up to 16 MiB; the server sniffs the format. &#x60;writeBack&#x3D;true&#x60; embeds a front cover into every backing file (write-back applies to the front slot only). Existing art in the slot is replaced; the request never downgrades silently because the caller chose the image. 
+  /// Stores the raw image bytes in one of the item&#39;s artwork slots (&#x60;role&#x60;, default &#x60;front&#x60;), locking the artifact by default. The body is the image itself, up to 16 MiB, in any format the catalog recognizes: JPEG, PNG, GIF, WebP, BMP and TIFF by decoding them, and AVIF and HEIC by their container magic. &#x60;writeBack&#x3D;true&#x60; embeds a front cover into every backing file (write-back applies to the front slot only). Existing art in the slot is replaced; the request never downgrades silently because the caller chose the image. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

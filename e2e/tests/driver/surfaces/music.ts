@@ -36,6 +36,17 @@ export class Music extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.indexItem(nth)));
   }
 
+  /// How many rows an opened bucket is showing.
+  ///
+  /// For a spec whose subject is what happens to the queue afterwards:
+  /// playing a row queues the whole listing, so this is what a mix
+  /// landing behind it has to be counted against rather than assumed.
+  async entryCount(): Promise<number> {
+    const rows = this.ctx.page.locator(semPrefix(SemanticsIdPrefixes.indexItem));
+    await rows.first().waitFor({ timeout: T.nav });
+    return rows.count();
+  }
+
   /// Open a bucket, which is a location of its own - the point being
   /// that a stranger can be sent to it.
   async openBucket(nth = 0): Promise<void> {
