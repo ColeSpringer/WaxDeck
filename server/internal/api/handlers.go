@@ -574,12 +574,14 @@ const (
 const maxUnscaledArtBytes = 2 << 20
 
 // artTooBigForSize reports whether a sized request was answered with an
-// unmeasurable original bigger than a thumbnail slot has any business
-// holding. A request that asked for no size is never refused, however
-// large the picture, and neither is one the resolver could measure.
+// original bigger than a thumbnail slot has any business holding: one
+// never measured, or one the thumbnailer failed on and the resolver fell
+// back to whole. A request that asked for no size is never refused, and
+// neither is a source already within the requested box.
 func artTooBigForSize(blob service.ArtBlob, size int) bool {
-	return size > 0 && blob.Width == 0 && blob.Height == 0 &&
-		len(blob.Bytes) > maxUnscaledArtBytes
+	return size > 0 && len(blob.Bytes) > maxUnscaledArtBytes &&
+		(blob.Width == 0 && blob.Height == 0 ||
+			blob.Width > size || blob.Height > size)
 }
 
 // artHeaderValues renders one resolved cover's provenance as the four
@@ -672,10 +674,9 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	if src := blob.Source; src.Attributed() {
 		headers.XArtSource, headers.XArtProvider, headers.XArtSourceUrl, headers.XArtLevel = artHeaderValues(src)
 	}
-	// One variant per type the response declares. A stored format outside
-	// that set - an AVIF or HEIC original, which the resolver serves
-	// unscaled because nothing here can thumbnail it - has no variant to
-	// answer with and falls to jpeg, which the response documents.
+	// One variant per type the response declares; a stored format outside
+	// the set (a provider-named oddball) falls to jpeg, which the
+	// response documents.
 	switch blob.MimeType {
 	case "image/png":
 		return GetItemArt200ImagepngResponse{Body: body, ContentLength: length, Headers: headers}, nil
@@ -687,6 +688,10 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 		return GetItemArt200ImagebmpResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	case "image/tiff":
 		return GetItemArt200ImagetiffResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/avif":
+		return GetItemArt200ImageavifResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/heic":
+		return GetItemArt200ImageheicResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	default:
 		return GetItemArt200ImagejpegResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	}

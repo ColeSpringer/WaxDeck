@@ -935,10 +935,15 @@ func derefIntOr(p *int) int {
 // bytes are the case that separates the two recognizers: only the
 // catalog's own decodes them.
 func tinyTIFF(t *testing.T) []byte {
+	return tiffImage(t, 6, 5)
+}
+
+// tiffImage encodes a valid TIFF of the given dimensions.
+func tiffImage(t *testing.T, w, h int) []byte {
 	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, 6, 5))
-	for x := 0; x < 6; x++ {
-		for y := 0; y < 5; y++ {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for x := 0; x < w; x++ {
+		for y := 0; y < h; y++ {
 			img.Set(x, y, color.RGBA{R: uint8(30 * x), G: 90, B: uint8(40 * y), A: 255})
 		}
 	}
@@ -1007,9 +1012,16 @@ func TestSetArtworkTakesWhatTheCatalogRecognizes(t *testing.T) {
 	}
 
 	// And the byte endpoint labels it honestly, both whole and scaled.
-	for _, path := range []string{
-		"/api/v1/items/" + pid + "/art",
-		"/api/v1/items/" + pid + "/art?size=32",
+	// The 6x5 source is smaller than the smallest legal size, so the
+	// scaling legs get a 40x30: a size it already fits answers the
+	// source as itself, and a smaller one is a real thumbnail, which a
+	// non-JPEG source re-encodes as PNG.
+	resp = metadataPutBytes(t, h.ts, "/api/v1/items/"+pid+"/artwork", h.token, tiffImage(t, 40, 30))
+	wantStatus(t, resp, 200, "a TIFF big enough to scale")
+	for path, want := range map[string]string{
+		"/api/v1/items/" + pid + "/art":         "image/tiff",
+		"/api/v1/items/" + pid + "/art?size=64": "image/tiff",
+		"/api/v1/items/" + pid + "/art?size=16": "image/png",
 	} {
 		resp = get(t, h.ts, path, h.token)
 		if resp.StatusCode != 200 {
@@ -1017,11 +1029,8 @@ func TestSetArtworkTakesWhatTheCatalogRecognizes(t *testing.T) {
 		}
 		got := resp.Header.Get("Content-Type")
 		resp.Body.Close()
-		if !strings.HasPrefix(got, "image/tiff") && !strings.HasPrefix(got, "image/jpeg") {
-			t.Errorf("%s content type = %q, want the source's or a thumbnail's", path, got)
-		}
-		if strings.HasPrefix(got, "image/jpeg") && !strings.Contains(path, "size=") {
-			t.Errorf("the unscaled TIFF is served as %q", got)
+		if !strings.HasPrefix(got, want) {
+			t.Errorf("%s content type = %q, want %s", path, got, want)
 		}
 	}
 }
@@ -1079,8 +1088,13 @@ func TestArtRefusesAnUnscalableOriginalAsAThumbnail(t *testing.T) {
 	resp := metadataPutBytes(t, h.ts, "/api/v1/items/"+pid+"/artwork", h.token, bigAVIF(3<<20))
 	wantStatus(t, resp, 200, "an AVIF cover")
 
-	// Whole: the caller asked for the picture, not for a thumbnail.
-	readAll(t, get(t, h.ts, "/api/v1/items/"+pid+"/art", h.token), 200, "unscaled art")
+	// Whole: the caller asked for the picture, not for a thumbnail -
+	// and it arrives as what it is, not as the jpeg fallback.
+	resp = get(t, h.ts, "/api/v1/items/"+pid+"/art", h.token)
+	if got := resp.Header.Get("Content-Type"); !strings.HasPrefix(got, "image/avif") {
+		t.Errorf("unscaled AVIF content type = %q, want image/avif", got)
+	}
+	readAll(t, resp, 200, "unscaled art")
 
 	// Sized: there is no thumbnail of this picture, which is a different
 	// answer from three megabytes into a 64-pixel tile.
@@ -1105,6 +1119,34 @@ func TestArtRefusesAnUnscalableOriginalAsAThumbnail(t *testing.T) {
 		path := fmt.Sprintf("/api/v1/items/%s/art?size=%d", pid, size)
 		readAll(t, get(t, h.ts, path, h.token), 200, path)
 	}
+}
+
+// The other way a thumbnail slot can be handed the whole original: a
+// measured source whose decode fails at scale time, which the resolver
+// answers with the source itself. The bound is on the answer, so it has
+// to catch that fallback too, not only the never-measured exotics.
+func TestArtRefusesAnUndecodableMeasuredOriginalAsAThumbnail(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	page := h.items(t, "")
+	if len(page.Items) == 0 {
+		t.Fatal("the fixture library scanned no items")
+	}
+	pid := page.Items[0].Pid
+
+	// A PNG whose header measures but whose pixel data does not decode:
+	// the store records 1000x1000, and the thumbnailer fails on it.
+	img := bigPNG(t, 1000)
+	for i := 2 << 10; i < len(img)-8; i++ {
+		img[i] = 0
+	}
+	resp := metadataPutBytes(t, h.ts, "/api/v1/items/"+pid+"/artwork", h.token, img)
+	wantStatus(t, resp, 200, "a measured cover that cannot decode")
+
+	readAll(t, get(t, h.ts, "/api/v1/items/"+pid+"/art", h.token), 200, "the whole original")
+
+	resp = get(t, h.ts, "/api/v1/items/"+pid+"/art?size=64", h.token)
+	wantStatus(t, resp, 404, "a thumbnail of an undecodable measured original")
 }
 
 // readAll asserts a status and drains the body, which a test that leaves

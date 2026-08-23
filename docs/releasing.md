@@ -10,11 +10,13 @@ git push origin v0.2.0
 The release workflow (`.github/workflows/release.yaml`) does the rest:
 
 - **Container images.** Multi-arch (linux/amd64 + linux/arm64) builds
-  of `deploy/Dockerfile` and `deploy/Dockerfile.waxflow`, pushed to
-  `ghcr.io/colespringer/waxdeck` and
-  `ghcr.io/colespringer/waxdeck-waxflow`, each tagged with the git tag
-  and `latest`. These are the images `deploy/compose.yaml` references,
-  so `docker compose pull` picks up a release without edits.
+  of `deploy/Dockerfile`, `deploy/Dockerfile.waxflow`, and
+  `deploy/Dockerfile.analyzer`, pushed to
+  `ghcr.io/colespringer/waxdeck`, `-waxflow`, and `-analyzer`, each
+  tagged with the git tag and `latest`. These are the images
+  `deploy/compose.yaml` references, so `docker compose pull` picks up a
+  release without edits - or pins one, with `WAXDECK_TAG=v1.2.3` in
+  `deploy/.env`.
 - **Server binaries.** The server cross-compiled for linux, macOS, and
   Windows on amd64 and arm64, each with the web UI embedded
   (`-tags withweb`), attached to a GitHub Release created from the tag
@@ -36,7 +38,7 @@ The release workflow (`.github/workflows/release.yaml`) does the rest:
 
 The tag, minus its `v` prefix, becomes the version everywhere:
 
-- The server binary and both images build with
+- The server binary and the images build with
   `-ldflags "-X main.version=<version>"`, the mechanism
   `cmd/waxdeck/main.go` documents. It surfaces in `waxdeck --version`,
   the startup log, and the `waxdeck_build_info` metric. Local builds

@@ -48,10 +48,15 @@ test('an instant mix starts from any playing track', async ({ app }) => {
   await app.music.openBucket(0);
   // Playing a row queues the whole listing, so what the album
   // contributed to up next is everything behind the one now playing.
-  // Counted rather than assumed: this is what the mix has to be measured
-  // against, and a spec that hardcoded it would stay green with its
-  // subject broken the day the fixture album gains a track.
-  const fromAlbum = (await app.music.entryCount()) - 1;
+  // Counted off the server's own album read rather than off the DOM: a
+  // lazily built list undercounts, and an undercount here would let an
+  // empty mix pass the assertion this spec exists for.
+  const albumPid = new URL(app.nav.location()).pathname.split('/').pop()!;
+  const album = await app.api.get('/albums/{pid}', {
+    path: { pid: albumPid },
+  });
+  expect(album.itemCount, 'the opened bucket is an album').toBeGreaterThan(0);
+  const fromAlbum = album.itemCount! - 1;
   await app.music.playEntry(0);
   await app.discovery.runInstantMix();
 

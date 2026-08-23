@@ -34,6 +34,13 @@ an empty `deploy/library`), then `make up` again. Open
 use the rescan endpoint or restart after adding files. Uploads and
 YouTube downloads are enabled and land in the library out of the box.
 
+That file is also where every other setting goes: compose hands it to
+the server verbatim, so adding a `WAXDECK_*` line to `deploy/.env` and
+`make up` again is the whole procedure. The
+[configuration reference](configuration.md) lists everything there is
+- single sign-on, scrobbling, casting, similarity workers, and the
+rest.
+
 The stack is two services. `waxdeck` owns the catalog, the API, and the
 web UI, and is the only published port. `waxflow` is the streaming
 engine (WaxDeck's own build of the WaxFlow engine, an optional upgrade

@@ -18,9 +18,10 @@ environment:
 # carry ~80 strings of their own - mostly accessibility labels nobody can
 # pass in - so the package owns a WaxLocalizations delegate the way
 # Material owns MaterialLocalizations, and gen-l10n's output imports intl.
-# It is a first-party Dart team package, pinned exact to the same version
-# app/app takes; the rule's targets (waxdeck_api, community plugins) stay
-# excluded.
+# It is a first-party Dart team package, held to the same range app/app
+# takes - flutter_localizations pins intl exactly and pins a different
+# version per SDK, so an exact pin here builds under one Flutter only.
+# The rule's targets (waxdeck_api, community plugins) stay excluded.
 #
 # The icon set is vendored rather than depended on: phosphor_flutter
 # subclasses IconData, which Flutter 3.44 made a final class, so the
@@ -31,7 +32,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  intl: 0.20.3
+  intl: ">=0.20.2 <0.21.0"
 
 dev_dependencies:
   flutter_test:

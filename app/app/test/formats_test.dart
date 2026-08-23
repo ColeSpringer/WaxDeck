@@ -26,6 +26,32 @@ void main() {
       expect(es.formatDate(at), '12 ago 2026');
     });
 
+    test('the es month abbreviations the server pages hand-copy hold', () {
+      // server/internal/pagetext/es.go copies these from intl, so the
+      // share and status pages agree with the app; an intl bump that
+      // moves one has to move both, and this is what reds first.
+      const copied = [
+        'ene',
+        'feb',
+        'mar',
+        'abr',
+        'may',
+        'jun',
+        'jul',
+        'ago',
+        'sept',
+        'oct',
+        'nov',
+        'dic',
+      ];
+      for (var month = 1; month <= 12; month++) {
+        expect(
+          es.formatDate(DateTime(2026, month, 3)),
+          '3 ${copied[month - 1]} 2026',
+        );
+      }
+    });
+
     test('a stamp carries the time of day', () {
       // The gap before the meridiem is CLDR's narrow no-break space, not
       // a plain one. Pinned here because it is invisible in a diff and a

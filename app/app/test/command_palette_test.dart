@@ -386,14 +386,16 @@ void main() {
     await _type(tester, 'podcasts');
     expect(_row('go-podcasts'), findsOne);
 
-    // Running a settings row lands on the section it named.
+    // Running a settings row lands on the section, carrying the setting
+    // id so the row is marked and scrolled to - the same deep link the
+    // settings screen's own results mint.
     await _type(tester, 'theme');
     expect(_row('set-theme'), findsOne);
     await tester.tap(_row('set-theme'));
     await tester.pumpAndSettle();
     expect(
       shell.location,
-      WaxRoute.settingsSection(SettingsSection.appearance),
+      WaxRoute.settingsSection(SettingsSection.appearance, setting: 'theme'),
     );
   });
 

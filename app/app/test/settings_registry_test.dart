@@ -478,6 +478,61 @@ void main() {
     );
   });
 
+  // Reduced motion holds the mark flat and then drops it. The drop has
+  // to survive the release path too: a row unmarked mid-hold resets the
+  // controller to zero, which must read as unmarked, not full-strength.
+  testWidgets('reduced motion drops the wash when the row is released', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final wanted = ValueNotifier<String?>('wanted');
+    addTearDown(wanted.dispose);
+
+    bool washOn() => tester
+        .widgetList<DecoratedBox>(
+          find.descendant(
+            of: find.byType(SettingAnchor),
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .isNotEmpty;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: Scaffold(
+              body: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: ValueListenableBuilder<String?>(
+                      valueListenable: wanted,
+                      builder: (context, id, child) =>
+                          WantedSetting(id: id, child: child!),
+                      child: const SettingAnchor(
+                        id: 'wanted',
+                        child: SizedBox(height: 40, child: Text('the row')),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(washOn(), isTrue, reason: 'the mark holds while wanted');
+
+    wanted.value = null;
+    await tester.pump();
+    expect(washOn(), isFalse, reason: 'released is unmarked');
+  });
+
   // go_router keys a page by its path, and `?setting=` is neither a path
   // nor a path parameter, so a second search into the same section reuses
   // the screen that is already up - and with it every anchor's state. A

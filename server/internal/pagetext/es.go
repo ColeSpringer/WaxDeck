@@ -5,10 +5,11 @@ import (
 	"time"
 )
 
-// esShortMonths is CLDR's Spanish abbreviations, copied from intl
-// 0.20.2 as the app ships it rather than written from memory: the app
-// formats the same dates through that package, so verbatim is what
-// keeps the two agreeing. September is "sept", and none take a period.
+// esShortMonths is CLDR's Spanish abbreviations, copied from intl as
+// the app ships it rather than written from memory: the app formats the
+// same dates through that package, so verbatim is what keeps the two
+// agreeing. Unchanged across the 0.20.x the app's pubspec admits.
+// September is "sept", and none take a period.
 var esShortMonths = [12]string{
 	"ene", "feb", "mar", "abr", "may", "jun",
 	"jul", "ago", "sept", "oct", "nov", "dic",

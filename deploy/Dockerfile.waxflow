@@ -16,13 +16,20 @@
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 
 WORKDIR /src
+# Both go.mods: the server module replaces the sibling fixtures module by
+# relative path. Download is its own layer so source edits reuse it.
+COPY server/go.mod server/go.sum server/
+COPY fixtures/go.mod fixtures/go.sum fixtures/
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd server && go mod download
 COPY server/ server/
 COPY fixtures/ fixtures/
 ARG VERSION=dev
 ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    cd server && go mod download && \
+    cd server && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
       -ldflags "-s -w -X main.version=${VERSION}" \
       -o /out/waxflow ./cmd/waxflow-catalog
@@ -35,6 +42,10 @@ RUN mkdir -p /out/state/data /out/state/cache \
 ## --- stage 2: runtime -----------------------------------------------------------
 FROM gcr.io/distroless/static-debian12
 
+LABEL org.opencontainers.image.source="https://github.com/ColeSpringer/WaxDeck" \
+      org.opencontainers.image.description="WaxDeck's WaxFlow streaming sidecar: the stock waxflow CLI plus a catalog resolver for pid: sources" \
+      org.opencontainers.image.licenses="GPL-3.0-only"
+
 COPY --from=build /out/waxflow /usr/local/bin/waxflow
 COPY --from=build /out/state/ /
 
@@ -43,6 +54,8 @@ ENV WAXFLOW_DATA_DIR=/data \
     WAXFLOW_CACHE_DIR=/cache
 EXPOSE 4418
 
-HEALTHCHECK CMD ["/usr/local/bin/waxflow", "ping"]
+# start-interval: probe every 2s until first success, so --wait is fast.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s \
+  CMD ["/usr/local/bin/waxflow", "ping"]
 ENTRYPOINT ["/usr/local/bin/waxflow"]
 CMD ["server"]

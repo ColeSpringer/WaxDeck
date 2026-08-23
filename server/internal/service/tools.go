@@ -804,8 +804,14 @@ func (l *Library) addToolCover(ctx context.Context, ed *waxlabel.Editor, pid mod
 	if err != nil || blob == nil || len(blob.Bytes) == 0 {
 		return
 	}
+	// A cover artMime cannot name (an SVG a provider slipped in) stays
+	// out of the file: octet-stream in a picture frame helps nobody.
+	mime := artMime(blob.Format)
+	if mime == "application/octet-stream" {
+		return
+	}
 	ed.AddPicture(waxlabel.Picture{
-		Type: waxlabel.PicFrontCover, MIME: artMime(blob.Format),
+		Type: waxlabel.PicFrontCover, MIME: mime,
 		Width: blob.Width, Height: blob.Height, Data: blob.Bytes,
 	})
 }

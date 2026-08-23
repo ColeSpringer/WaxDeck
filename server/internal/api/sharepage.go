@@ -297,6 +297,12 @@ func (s *Server) ServeShareArt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not-found", "no artwork")
 		return
 	}
+	// The same bound the sized item endpoint applies; the page renders
+	// its placeholder instead of hauling an unscalable original.
+	if artTooBigForSize(blob, 600) {
+		writeError(w, http.StatusNotFound, "not-found", "no artwork")
+		return
+	}
 	w.Header().Set("Content-Type", blob.MimeType)
 	// The one art response with no session behind it and an hour of
 	// public caching in front of it, which is where the hardening pair

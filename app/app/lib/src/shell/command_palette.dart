@@ -248,7 +248,9 @@ class _CommandPaletteDialog extends ConsumerWidget {
           label: setting.title,
           detail: setting.section.titleOf(l10n),
           glyph: setting.section.glyph,
-          run: () => host.go(WaxRoute.settingsSection(setting.section)),
+          run: () => host.go(
+            WaxRoute.settingsSection(setting.section, setting: setting.id),
+          ),
         ),
       // The cap says so. A settings search is screen state rather than a
       // location, so this row promises the screen, not the query.

@@ -280,20 +280,22 @@ void main() {
     expect(cache.fetches, 1);
 
     // Now the monogram is the first thing drawn rather than the thing
-    // drawn after a round trip, at every size, and nothing else asks.
+    // drawn after a round trip - at that rung. Another rung still asks:
+    // the server refuses some sizes of a cover it serves whole.
     expect(store404.imageFor(_art, 128), isNull);
-    expect(store404.imageFor(_art, 512), isNull);
     expect(store404.source(_art)!(128), isNull);
-    expect(await store404.bytesFor(_art, 256), isNull);
-    await store404.warm(_art, 256);
+    await store404.warm(_art, 128);
     expect(cache.fetches, 1);
+    expect(store404.imageFor(_art, 512), isNotNull);
+    expect(await store404.bytesFor(_art, 256), isNull);
+    expect(cache.fetches, 2);
 
     // A cover appearing outlives the absence: the invalidation that
     // drops the old bytes drops this too.
     await store404.evict(_art);
     expect(store404.imageFor(_art, 128), isNotNull);
     expect(await store404.bytesFor(_art, 128), isNull);
-    expect(cache.fetches, 2);
+    expect(cache.fetches, 3);
 
     // As does signing out.
     await store404.forgetEverything();

@@ -294,11 +294,12 @@ void main() {
       expect(absent.imageFor(_art, 128), isNotNull, reason: 'the first draw');
       expect(await absent.bytesFor(_art, 128), isNull);
 
-      // Every size, not just the one that answered: the item has no
-      // artwork at any rung.
+      // The rung that answered is settled - and only that rung: an
+      // unscalable original 404s a thumbnail rung while a larger one,
+      // or the whole picture, still answers.
       expect(absent.imageFor(_art, 128), isNull);
-      expect(absent.imageFor(_art, 512), isNull);
       expect(absent.source(_art)!(128), isNull);
+      expect(absent.imageFor(_art, 512), isNotNull);
 
       // Another cover is not caught up in it.
       expect(absent.imageFor(_station, 96), isNotNull);
@@ -400,10 +401,12 @@ void main() {
         await draw(store, _art, 128);
         expect(client.requests, 1);
 
-        // The next row drawing the same cover gets the monogram with no
-        // provider at all, so there is nothing left to ask with.
+        // The next row drawing the same cover at the same rung gets the
+        // monogram with no provider at all; another rung still asks,
+        // since the server refuses some sizes of a cover it serves
+        // whole.
         expect(store.imageFor(_art, 128), isNull);
-        expect(store.imageFor(_art, 512), isNull);
+        expect(store.imageFor(_art, 512), isNotNull);
         expect(client.requests, 1);
       });
 
@@ -622,9 +625,9 @@ class _AbsenceProbe extends ArtworkStore {
   @override
   String get baseUrl => '';
 
-  void note(String artUrl) => noteAbsent(artUrl);
+  void note(String artUrl, [int? rung]) => noteAbsent(artUrl, rung);
 
-  bool knows(String artUrl) => knownAbsent(artUrl);
+  bool knows(String artUrl, [int? rung]) => knownAbsent(artUrl, rung);
 
   @override
   ImageProvider? imageFor(String? artUrl, int px) => null;

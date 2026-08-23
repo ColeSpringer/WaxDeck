@@ -117,8 +117,13 @@ class _SettingAnchorState extends State<SettingAnchor>
     _landed = true;
     _revealed = null;
     _travel = WaxMotion.of(context).standard;
-    (_glow ??= AnimationController(vsync: this, duration: _marked)
-        ..addListener(_follow))
+    (_glow ??= AnimationController(
+        vsync: this,
+        duration: _marked,
+        // The controller times the hold and the follow window, so
+        // platform reduced motion must not collapse it to nothing.
+        animationBehavior: AnimationBehavior.preserve,
+      )..addListener(_follow))
       ..reset()
       ..forward();
   }
@@ -133,7 +138,7 @@ class _SettingAnchorState extends State<SettingAnchor>
   /// controller, which is what guarantees a frame to check on and bounds
   /// the chasing to the moment the reader is being shown something.
   void _follow() {
-    if (!mounted) return;
+    if (!mounted || !_landed) return;
     final at = _revealOffset();
     if (at == null) return;
     if (_revealed != null && (at - _revealed!).abs() < 0.5) return;
@@ -187,7 +192,7 @@ class _SettingAnchorState extends State<SettingAnchor>
         // this row not to do.
         final t = glow.value;
         final strength = still
-            ? (t < 1 ? 1.0 : 0.0)
+            ? (t > 0 && t < 1 ? 1.0 : 0.0)
             : (t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8);
         if (strength <= 0) return child!;
         return DecoratedBox(

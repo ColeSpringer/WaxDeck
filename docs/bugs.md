@@ -2,6 +2,10 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
+- [8-23-2026] i think clients all try to look at a specific port thats only available over LAN. we need to make sure clients work over non local networks with vpns, tailscale, through reverse proxies, etc. 
+
+- [8-23-2026] clients dont have ability to adjust streaming quality. necessary for off LAN streaming.
+
 - [8-22-2026] we need a way to handle users putting their files in the library location manually (not through our clients). do we ignore the files? if not, how do we intake them? maybe default to just taking them as is. no metadata search or anything. Not sure how we would handle differentiating between music, podcast, or audiobook (likely mostly music and audiobooks). maybe flags can be set for how a user wants that to be dealt with as have them as settings wouldnt be useful until after setup. the discovery of them at all is something we need to look into as well.
 
 - [8-22-2026] maybe reject file types that we dont support such as audible files (aax, aaxc). need to look into / confirm exactly what we can/want to support.

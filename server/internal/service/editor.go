@@ -767,8 +767,10 @@ func validateArtworkBytes(raw []byte) error {
 	if len(raw) > maxArtworkBytes {
 		return errInvalid("artwork is limited to 16 MiB")
 	}
-	if waxart.Describe(raw).Format == "" {
-		return &Error{Kind: KindFormat, Msg: "the body is not a recognized image"}
+	if _, _, _, err := waxart.Probe(raw); err != nil {
+		if _, ok := waxart.SniffExotic(raw); !ok {
+			return &Error{Kind: KindFormat, Msg: "the body is not a recognized image"}
+		}
 	}
 	return nil
 }

@@ -5,9 +5,7 @@
 # WaxDeck
 
 Self-hosted player, library manager, and metadata completer for music,
-podcasts, and audiobooks. One server, one origin: the REST API, the
-streaming surface, the web app, and the compatibility APIs all live on
-port 4420.
+podcasts, and audiobooks.
 
 - Metadata completion: a matching engine, a review queue, and a full
   editor. New audio arrives by upload or straight from a URL.
@@ -37,7 +35,7 @@ your music and `make up` again. Open http://localhost:4420 and create
 the administrator. `make down` stops the stack and keeps your data;
 your library is bind-mounted, never copied.
 
-Without Docker, `make run` (Go 1.26, Flutter 3.44) serves the same
+Without Docker, `make run` (Go and Flutter, versions per CI) serves the same
 thing as a single binary with the web UI embedded: originals stream
 directly, and transcoding, gapless playback, and voice boost arrive
 when you add the streaming engine.

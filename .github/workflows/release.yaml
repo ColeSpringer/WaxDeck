@@ -58,6 +58,7 @@ jobs:
           push: true
           build-args: |
             VERSION=${{ needs.version.outputs.version }}
+            FLUTTER_VERSION=${{ env.FLUTTER_VERSION }}
           tags: |
             ghcr.io/colespringer/waxdeck:${{ github.ref_name }}
             ghcr.io/colespringer/waxdeck:latest

@@ -15,9 +15,9 @@ import { test, expect } from './fixtures';
 const coverSrc = path.join(__dirname, '..', '.run', 'upload-src', 'sleeve.tiff');
 
 // Artwork is a catalog fact rather than an account's, so a cover set
-// here is one every other spec's account sees on the same track for the
-// rest of the run. The least-contended fixture track, and the slot put
-// back either way: this spec's subject is the setting, not the holding.
+// here is one every other spec's account sees on the same track until
+// the teardown clears it. The least-contended fixture track, no other
+// spec asserts its art, and the scan gave it none to restore.
 const TRACK = 'Delta Song';
 
 test('a cover the standard library cannot sniff is set, measured, and served as itself', async ({
@@ -62,8 +62,9 @@ test('a cover the standard library cannot sniff is set, measured, and served as 
     expect(thumb.headers()['content-type']).not.toContain('image/tiff');
     expect((await thumb.body()).length).toBeLessThan((await whole.body()).length);
   } finally {
-    // Back to whatever the scan gave it. The lock goes with the artifact,
-    // so clearing the slot also clears the hold this put on enrichment.
+    // Clears the cover; the pin the set created stays, by ClearItemArtwork
+    // design ("there is no cover", not "refill this"). Inert here: the
+    // suite runs with matching off, so nothing would refill it anyway.
     await app.api.delete('/items/{pid}/artwork', {
       path: { pid },
       query: { role: 'front' },

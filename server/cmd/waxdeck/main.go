@@ -139,12 +139,16 @@ func run() error {
 
 		showVer     = flag.Bool("version", false, "print version and exit")
 		showNotices = flag.Bool("third-party-notices", false, "print the third-party license notices bundled in this binary and exit")
+		ping        = flag.Bool("ping", false, "probe the health endpoint of the server listening on -addr and exit 0 when it answers (the container HEALTHCHECK)")
 	)
 	flag.Parse()
 
 	if *showVer {
 		fmt.Println(version)
 		return nil
+	}
+	if *ping {
+		return pingServer(*addr)
 	}
 	if *showNotices {
 		fmt.Print(notices.Text)

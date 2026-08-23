@@ -87,13 +87,15 @@ class CachedArtworkStore extends ArtworkStore {
   @override
   ImageProvider? imageFor(String? artUrl, int px) {
     if (artUrl == null || artUrl.isEmpty) return null;
-    if (knownAbsent(artUrl)) return null;
-    return _StoredArtwork(store: this, artUrl: artUrl, px: artworkDrawSize(px));
+    final draw = artworkDrawSize(px);
+    if (knownAbsent(artUrl, absentRung(artUrl, draw))) return null;
+    return _StoredArtwork(store: this, artUrl: artUrl, px: draw);
   }
 
   @override
   Future<Uint8List?> bytesFor(String artUrl, int px) async {
-    if (knownAbsent(artUrl)) return null;
+    final rung = absentRung(artUrl, px);
+    if (knownAbsent(artUrl, rung)) return null;
     final url = requestUrl(artUrl, px);
     try {
       final file = await _cache.getSingleFile(
@@ -111,7 +113,7 @@ class CachedArtworkStore extends ArtworkStore {
       // every art-less cell in the grid. Remembered, so scrolling back
       // over the same art-less row does not ask a second time.
       if (e.statusCode == 404) {
-        noteAbsent(artUrl);
+        noteAbsent(artUrl, rung);
         return null;
       }
       return _fallbackBytes(artUrl, url, px);
@@ -142,7 +144,7 @@ class CachedArtworkStore extends ArtworkStore {
 
   @override
   Future<void> warm(String artUrl, int px) async {
-    if (knownAbsent(artUrl)) return;
+    if (knownAbsent(artUrl, absentRung(artUrl, px))) return;
     try {
       // Into the disk cache, and no further: reading the file back would
       // be work for a cover nobody has asked to paint yet.
@@ -159,14 +161,14 @@ class CachedArtworkStore extends ArtworkStore {
   Future<void> pinForOffline(String pid, String? artUrl) async {
     if (artUrl == null || artUrl.isEmpty) return;
     if (!isWaxDeckUrl(artUrl, baseUrl)) return;
-    // An item known to have no cover has none at either rung; there is
-    // nothing to pin and no reason to ask twice to find that out.
-    if (knownAbsent(artUrl)) return;
     final dir = await _pinDirectory();
     final held = <int, ArtworkPinRecord>{
       for (final pin in await pins.pinsFor(pid)) pin.sizePx: pin,
     };
     for (final rung in kOfflineArtworkRungs) {
+      // Absence is per rung: the server refuses some sizes of a cover
+      // it still serves at others.
+      if (knownAbsent(artUrl, rung)) continue;
       final existing = held[rung];
       // A validator is only worth presenting when the file it validates
       // is still there; a 304 against a deleted pin would leave the row
@@ -181,14 +183,12 @@ class CachedArtworkStore extends ArtworkStore {
         headers: authHeadersFor(artUrl, baseUrl, token),
         ifNoneMatch: have ? existing.etag : null,
         // A download of an art-less item is as good a way to learn
-        // there is no cover as a draw is, and it stops the second rung
-        // asking again.
-        onAbsent: () => noteAbsent(artUrl),
+        // there is no cover at this rung as a draw is.
+        onAbsent: () => noteAbsent(artUrl, rung),
       );
       if (fetched == null) {
-        // Absent, unchanged, or unreachable. Absent settles both rungs
-        // at once, so stop rather than ask the same question again.
-        if (knownAbsent(artUrl)) return;
+        // Absent, unchanged, or unreachable; the next rung asks its
+        // own question either way.
         continue;
       }
       final file = File(p.join(dir.path, '${_fileSafe(pid)}-$rung.img'));

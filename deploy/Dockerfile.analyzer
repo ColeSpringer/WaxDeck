@@ -18,19 +18,30 @@
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 
 WORKDIR /src
+# Both go.mods: the server module replaces the sibling fixtures module by
+# relative path. Download is its own layer so source edits reuse it.
+COPY server/go.mod server/go.sum server/
+COPY fixtures/go.mod fixtures/go.sum fixtures/
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd server && go mod download
 COPY server/ server/
 COPY fixtures/ fixtures/
 ARG VERSION=dev
 ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    cd server && go mod download && \
+    cd server && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
       -ldflags "-s -w -X main.version=${VERSION}" \
       -o /out/waxdeck-analyzer ./cmd/waxdeck-analyzer
 
 ## --- stage 2: runtime -----------------------------------------------------------
 FROM gcr.io/distroless/static-debian12
+
+LABEL org.opencontainers.image.source="https://github.com/ColeSpringer/WaxDeck" \
+      org.opencontainers.image.description="WaxDeck's reference sonic-similarity analyzer worker" \
+      org.opencontainers.image.licenses="GPL-3.0-only"
 
 COPY --from=build /out/waxdeck-analyzer /usr/local/bin/waxdeck-analyzer
 

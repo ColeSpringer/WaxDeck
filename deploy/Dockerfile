@@ -1,35 +1,55 @@
 # syntax=docker/dockerfile:1
-# WaxDeck server image. Build context is the REPO ROOT:
-#   docker build -f deploy/Dockerfile .
-#
-# Generated code (server/internal/api/gen.go, Dart client) is committed to
-# git, so no codegen toolchain is needed here: only Flutter (web build) and Go.
+# WaxDeck server image. Build context is the REPO ROOT (the root
+# .dockerignore admits only what these stages COPY). Generated code is
+# committed, so the only toolchains here are Flutter (web) and Go.
 
 ## --- stage 1: Flutter web build ----------------------------------------------
-# Pin note: 3.44.0 is the newest tag published at ghcr.io/cirruslabs/flutter
-# as of 2026-08-22 - nothing in 3.45, 3.46 or 3.47 has an image yet, so this
-# now trails CI's 3.47.1 by three minor releases rather than one patch.
-# Bump when cirruslabs catches up. Worth watching rather than ignoring: the
-# gap is wide enough that the image's analyzer, formatter and golden
-# rendering are not the ones the gates ran against, and only the web bundle
-# is built here - a divergence would surface as a rendering difference in a
-# container image nothing else covers.
-#
-# --platform=$BUILDPLATFORM: the web bundle is architecture-independent, so
-# multi-arch builds (release workflow) run this stage once on the build host
-# instead of re-running Flutter under emulation per target platform.
-FROM --platform=$BUILDPLATFORM ghcr.io/cirruslabs/flutter:3.44.0 AS web
+# Flutter from the official release archive (as tools/goldens.Dockerfile
+# does), so the image builds with the SDK the gates ran. The ARG default
+# is the pin for compose builds; CI fails if it drifts from the workflows.
 
-# Flutter prints a "running as root" advisory here. Expected and
-# accepted: docker build steps run as root, this stage is discarded
-# after the web bundle is copied out, and silencing it would mean
-# chown-ing the multi-gigabyte SDK to a build user (a full extra layer
-# in the build cache) for zero runtime effect. The runtime stage below
-# already runs as the non-root waxdeck user.
+# BUILDPLATFORM: the web bundle is arch-independent, so multi-arch builds
+# run this stage once, on the build host - which must be x64 (Flutter
+# publishes no linux-arm64 SDK archive).
+FROM --platform=$BUILDPLATFORM debian:bookworm-slim AS web
+
+ARG FLUTTER_VERSION=3.47.1
+
+# git: the flutter tool reads its own SDK version through it.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git unzip xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# --no-same-owner: root's tar would keep the packager's uid, and git then
+# refuses the SDK as dubiously owned.
+RUN curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+      -o /tmp/flutter.tar.xz \
+    && tar xf /tmp/flutter.tar.xz -C /opt --no-same-owner \
+    && rm /tmp/flutter.tar.xz
+ENV PATH=/opt/flutter/bin:$PATH
+# Warms the tool and the web engine artifacts; fails here, not
+# mid-compile, on a bad archive. Rebuilds only on a version bump.
+RUN flutter --version && flutter precache --web
+
+# Flutter's "running as root" advisory is expected: build stages run as
+# root and this one is discarded; the runtime stage is non-root.
 WORKDIR /src
-COPY app/ app/
-# Pub workspace: resolve at the workspace root, build in the application package.
+
+# Pub workspace: resolve at the root, build in app/app. Pubspecs first,
+# so source edits reuse the resolved layer; a new workspace member needs
+# a COPY line here (pub get fails loudly until it gets one).
+COPY app/pubspec.yaml app/pubspec.lock app/
+COPY app/app/pubspec.yaml app/app/
+COPY app/packages/waxdeck_api/pubspec.yaml app/packages/waxdeck_api/
+COPY app/packages/waxdeck_api_gen/pubspec.yaml app/packages/waxdeck_api_gen/
+COPY app/packages/waxdeck_data/pubspec.yaml app/packages/waxdeck_data/
+COPY app/packages/waxdeck_player/pubspec.yaml app/packages/waxdeck_player/
+COPY app/packages/waxdeck_player_testing/pubspec.yaml app/packages/waxdeck_player_testing/
+COPY app/packages/waxdeck_ui/pubspec.yaml app/packages/waxdeck_ui/
+COPY app/packages/waxdeck_ui/example/pubspec.yaml app/packages/waxdeck_ui/example/
 RUN cd app && flutter pub get
+
+COPY app/ app/
 RUN cd app/app && flutter build web --wasm
 
 ## --- stage 2: Go server build -------------------------------------------------
@@ -39,8 +59,13 @@ FROM --platform=$BUILDPLATFORM golang:1.26 AS build
 
 ENV CGO_ENABLED=0
 WORKDIR /src
-# The server module replaces the sibling fixtures module by relative
-# path, so both trees are needed to resolve the build list.
+# Both go.mods: the server module replaces the sibling fixtures module by
+# relative path. Download is its own layer so source edits reuse it.
+COPY server/go.mod server/go.sum server/
+COPY fixtures/go.mod fixtures/go.sum fixtures/
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd server && go mod download
 COPY server/ server/
 COPY fixtures/ fixtures/
 WORKDIR /src/server
@@ -52,7 +77,6 @@ ARG VERSION=0.1.0-dev
 ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go mod download && \
     GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -tags withweb -trimpath \
       -ldflags "-X main.version=${VERSION}" \
@@ -61,6 +85,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 ## --- stage 3: runtime ----------------------------------------------------------
 FROM debian:bookworm-slim
 
+LABEL org.opencontainers.image.source="https://github.com/ColeSpringer/WaxDeck" \
+      org.opencontainers.image.description="WaxDeck: self-hosted player and library manager for music, podcasts, and audiobooks" \
+      org.opencontainers.image.licenses="GPL-3.0-only"
+
 # libchromaprint-tools: fpcalc for AcoustID fingerprinting, the single
 # external tool this image ships. Decode and DSP are pure Go (WaxFlow
 # codec packages); there is no ffmpeg anywhere in the stack.
@@ -68,11 +96,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libchromaprint-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# UID 10001 matches the Wax* container convention (see WaxFlow), and is the
-# default. The compose stack overrides it with the host user's UID/GID (so the
-# bind-mounted library, owned by the host user, is writable); the Docker-managed
-# data and podcast volumes are made world-writable so they accept whatever UID
-# the container runs as, without an entrypoint chown dance.
+# UID 10001 per the Wax* container convention. Compose overrides it with
+# the host user's uid, so /data and /podcasts are world-writable to
+# accept any uid without an entrypoint chown dance.
 RUN groupadd --system --gid 10001 waxdeck \
     && useradd --system --uid 10001 --gid 10001 --home-dir /data --shell /usr/sbin/nologin waxdeck \
     && mkdir -p /data /library /podcasts \
@@ -80,17 +106,20 @@ RUN groupadd --system --gid 10001 waxdeck \
     && chmod 0777 /data /podcasts
 
 COPY --from=build /out/waxdeck /usr/local/bin/waxdeck
-# The artifact conveys its own terms: the GPL text beside the
-# third-party notices; the binary also prints the latter
-# (--third-party-notices).
+# The artifact conveys its own terms; the binary also prints the
+# notices (--third-party-notices).
 COPY LICENSE /usr/local/share/doc/waxdeck/LICENSE
 COPY --from=build /src/server/internal/notices/third_party_notices.txt /usr/local/share/doc/waxdeck/THIRD-PARTY-NOTICES.txt
 
 ENV WAXDECK_ADDR=0.0.0.0:4420 \
     WAXDECK_DATA_DIR=/data
 
-VOLUME /data
 EXPOSE 4420
 USER waxdeck:waxdeck
+
+# The binary dials its own health endpoint (no curl in the image);
+# start-interval probes every 2s until first success, so --wait is fast.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --start-interval=2s \
+  CMD ["/usr/local/bin/waxdeck", "-ping"]
 
 ENTRYPOINT ["/usr/local/bin/waxdeck"]

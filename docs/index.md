@@ -16,6 +16,8 @@ Docker Compose stack and the fast single-binary path.
 
 - [Getting started](getting-started.md): run the stack, point it at
   your library, first login.
+- [Configuration reference](configuration.md): every knob the server
+  and the compose stack read, and how a setting reaches the server.
 - [Curation and metadata](curation-and-metadata.md): the matching
   engine, the review queue, the editor, the genre vocabulary, uploads,
   and acquiring from URLs.

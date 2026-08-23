@@ -19,10 +19,12 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   # ICU plurals and CLDR dates behind the generated localizations.
-  # Pinned to exactly what this Flutter's flutter_localizations takes:
-  # another version would move the date symbols the app and the server's
-  # pages were made to agree on.
-  intl: 0.20.3
+  # A range, not a pin: flutter_localizations pins intl exactly and the
+  # version it pins moves with the SDK, so an exact pin here would tie
+  # the resolve to a single Flutter install. The SDK still picks the
+  # exact version, and a Dart test pins the es date symbols the server's
+  # pages hand-copy, so a drift inside the range cannot land silently.
+  intl: ">=0.20.2 <0.21.0"
   # Riverpod is pinned exact: state-management idioms shift between minors and
   # this codebase tracks v3 idioms only. Note that 3.4 added a dependency on
   # `listen`, whose only release is 1.0.0-beta.4, so a prerelease sits in the

@@ -277,6 +277,11 @@ jobs:
       # load: true and the exact `image:` names from compose.yaml, so
       # `up --no-build` finds them locally and cannot quietly rebuild or
       # pull `latest` from the registry instead of testing this commit.
+      # The Dockerfile's ARG default is the Flutter pin for `docker
+      # compose build` on a dev box; this job builds with the workflow's
+      # own pin and fails first if the two ever drift apart.
+      - name: Image toolchain pin agrees with CI
+        run: grep -qxF "ARG FLUTTER_VERSION=$FLUTTER_VERSION" deploy/Dockerfile
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -284,6 +289,8 @@ jobs:
           push: false
           load: true
           tags: ghcr.io/colespringer/waxdeck:latest
+          build-args: |
+            FLUTTER_VERSION=${{ env.FLUTTER_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - uses: docker/build-push-action@v7
@@ -312,35 +319,26 @@ jobs:
           cd fixtures
           go run ./cmd/fixturegen -out "$RUNNER_TEMP/library" -preset all >/dev/null
           ls "$RUNNER_TEMP/library" | head
+      # Overrides ride deploy/.env (compose hands it to the container
+      # verbatim). Matching off, or every push runs paced live
+      # MusicBrainz lookups per fixture; run-stack.sh does the same.
       - name: Seed the deployment config
-        run: make deploy/.env deploy/waxflow-config/waxflow.json
-      # --wait blocks on health where an image declares it (waxflow bakes
-      # a HEALTHCHECK), which replaces polling for the sidecar by hand.
-      # waxdeck declares none, so its readiness is the HTTP poll below.
+        run: |
+          set -euo pipefail
+          make deploy/.env deploy/waxflow-config/waxflow.json
+          echo "WAXDECK_MATCHING=false" >> deploy/.env
+      # --wait blocks until every container reports healthy (both images
+      # bake HEALTHCHECKs), so "up" already means answering; the curl
+      # only proves the port is published to the host.
       - name: Bring the stack up
         env:
           WAXDECK_LIBRARY: ${{ runner.temp }}/library
-          # compose defaults this on and .env.example does not set it, so
-          # without this every push would start paced live MusicBrainz and
-          # Cover Art Archive lookups for every scanned fixture - third
-          # party traffic on each run, and throttling inside the smoke's
-          # budget. run-stack.sh silences it for the same reason.
-          WAXDECK_MATCHING: "false"
         run: |
           set -euo pipefail
           WAXDECK_UID=$(id -u) WAXDECK_GID=$(id -g) \
             docker compose -f deploy/compose.yaml up -d --wait --no-build
-      - name: Wait for the server
-        run: |
-          set -euo pipefail
-          for _ in $(seq 1 60); do
-            if curl -sfo /dev/null http://localhost:4420/api/v1/health; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "::error::the server never answered /api/v1/health"
-          exit 1
+          curl -sfo /dev/null --retry 5 --retry-delay 1 --retry-all-errors \
+            http://localhost:4420/api/v1/health
       # The same readiness idiom run-desktop.sh uses: bootstrap the first
       # administrator (a no-op 409 afterwards), log in, and search for
       # something the scan should have found. A stack that comes up and
@@ -415,26 +413,17 @@ jobs:
       # asked to play something. External mode - the stack is already up,
       # so playwright starts no server of its own.
       #
-      # The origin lands only now, after the default-config boot and
-      # smoke: Feishin's page calls the server cross-origin, so waxdeck
-      # is recreated naming it, and the health poll covers the restart.
-      # Every variable the boot step set rides along - a recreate that
-      # dropped WAXDECK_LIBRARY would re-bind the container to nothing.
+      # Only now, after the default-shape boot has answered: the origin
+      # is appended to .env and waxdeck recreated on the changed config.
+      # WAXDECK_LIBRARY rides along or the recreate re-binds to nothing.
       - name: Name the Feishin origin
         env:
-          WAXDECK_CORS_ORIGINS: http://localhost:19180
           WAXDECK_LIBRARY: ${{ runner.temp }}/library
-          WAXDECK_MATCHING: "false"
         run: |
           set -euo pipefail
+          echo "WAXDECK_CORS_ORIGINS=http://localhost:19180" >> deploy/.env
           WAXDECK_UID=$(id -u) WAXDECK_GID=$(id -g) \
-            docker compose -f deploy/compose.yaml up -d --no-build waxdeck
-          for _ in $(seq 1 60); do
-            curl -sf http://localhost:4420/api/v1/health >/dev/null 2>&1 && exit 0
-            sleep 2
-          done
-          echo "::error::waxdeck never came back after the CORS recreate"
-          exit 1
+            docker compose -f deploy/compose.yaml up -d --wait --no-build waxdeck
       - name: Serve Feishin beside the stack
         run: docker compose -f e2e/clients/compose.yaml up -d --wait
       - uses: actions/setup-node@v7

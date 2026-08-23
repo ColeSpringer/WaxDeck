@@ -184,9 +184,9 @@ abstract class ArtworkStore {
   /// the session, and turns the monogram into the first thing drawn
   /// rather than the thing drawn after a failed round trip.
   ///
-  /// Keyed on the art URL rather than the sized request, because the
-  /// answer does not vary by size: an item with no artwork has none at
-  /// any rung.
+  /// Keyed per rung: the server refuses some sizes of a cover it still
+  /// serves whole (an unscalable original in a thumbnail slot), so one
+  /// rung's 404 must not silence the others.
   final Set<String> _absent = <String>{};
 
   /// How many absences are worth remembering. A library's art-less
@@ -218,8 +218,19 @@ abstract class ArtworkStore {
   @protected
   void noteReplaced(String artUrl) {
     _replaced[artUrl] = ++_replacements;
-    _absent.remove(artUrl);
+    forgetAbsent(artUrl);
   }
+
+  /// The rung an absence at [px] is recorded under; null where requests
+  /// carry no size (a stranger's URL, a one-rendition endpoint).
+  @protected
+  int? absentRung(String artUrl, int px) =>
+      !isWaxDeckUrl(artUrl, baseUrl) || isUnsizedArtUrl(artUrl)
+      ? null
+      : artworkRung(px);
+
+  String _absentKey(String artUrl, int? rung) =>
+      rung == null ? artUrl : '$artUrl#$rung';
 
   /// Records that the server has no artwork at [artUrl].
   ///
@@ -227,8 +238,8 @@ abstract class ArtworkStore {
   /// routine: several providers for the same cover at different sizes
   /// can be in flight at once, and each 404 arrives separately.
   @protected
-  void noteAbsent(String artUrl) {
-    if (!_absent.add(artUrl)) return;
+  void noteAbsent(String artUrl, int? rung) {
+    if (!_absent.add(_absentKey(artUrl, rung))) return;
     if (_absent.length > _maxAbsent) {
       // Insertion-ordered, so this is the least recently learned.
       _absent.remove(_absent.first);
@@ -237,7 +248,8 @@ abstract class ArtworkStore {
 
   /// Whether the server has already said there is nothing at [artUrl].
   @protected
-  bool knownAbsent(String artUrl) => _absent.contains(artUrl);
+  bool knownAbsent(String artUrl, int? rung) =>
+      _absent.contains(_absentKey(artUrl, rung));
 
   /// Forgets which covers are missing, so they are asked for again.
   ///
@@ -254,7 +266,8 @@ abstract class ArtworkStore {
   /// Forgets that one cover was missing. For an invalidation that names
   /// the URL it is about.
   @protected
-  void forgetAbsent(String artUrl) => _absent.remove(artUrl);
+  void forgetAbsent(String artUrl) =>
+      _absent.removeWhere((k) => k == artUrl || k.startsWith('$artUrl#'));
 
   /// The artwork at [artUrl] ready to paint at [px] physical pixels, or
   /// null when there is no artwork. Null is a real state (fresh imports,
@@ -330,8 +343,8 @@ class NetworkArtworkStore extends ArtworkStore {
   @override
   ImageProvider? imageFor(String? artUrl, int px) {
     if (artUrl == null || artUrl.isEmpty) return null;
-    if (knownAbsent(artUrl)) return null;
     final draw = artworkDrawSize(px);
+    if (knownAbsent(artUrl, absentRung(artUrl, draw))) return null;
     return _WatchedArtwork(
       NetworkImage(
         requestUrl(artUrl, draw),
@@ -355,12 +368,13 @@ class NetworkArtworkStore extends ArtworkStore {
 
   @override
   Future<Uint8List?> bytesFor(String artUrl, int px) async {
-    if (knownAbsent(artUrl)) return null;
+    final rung = absentRung(artUrl, px);
+    if (knownAbsent(artUrl, rung)) return null;
     final fetched = await fetchArtwork(
       _dio,
       requestUrl(artUrl, px),
       headers: authHeadersFor(artUrl, baseUrl, token),
-      onAbsent: () => noteAbsent(artUrl),
+      onAbsent: () => noteAbsent(artUrl, rung),
     );
     return fetched?.bytes;
   }
@@ -437,8 +451,8 @@ class _WatchedArtwork extends ResizeImage {
 
   final ArtworkStore store;
 
-  /// The unsized URL the absence is recorded against: what the server is
-  /// answering about is the item, not the rung.
+  /// The unsized URL the absence is recorded against, at the rung the
+  /// fetch carried.
   final String artUrl;
 
   @override
@@ -452,7 +466,11 @@ class _WatchedArtwork extends ResizeImage {
     // disposal, so watching costs the image cache nothing.
     completer.addEphemeralErrorListener((Object error, StackTrace? stack) {
       if (error is NetworkImageLoadException && error.statusCode == 404) {
-        store.noteAbsent(artUrl);
+        final w = width;
+        store.noteAbsent(
+          artUrl,
+          w == null ? null : store.absentRung(artUrl, w),
+        );
       }
     });
     return completer;

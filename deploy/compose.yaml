@@ -1,152 +1,45 @@
-# WaxDeck production stack (skeleton).
-#
-# Topology: waxdeck is the single published port (4420) of the whole stack;
-# everything else lives on the private `internal` network. Copy .env.example
-# to .env beside this file before `docker compose up`.
-#
-# Exposure note: the containers listen on 0.0.0.0
-# *inside* the network namespace. Put TLS in front (reverse proxy) before
-# exposing port 4420 beyond your LAN.
+# WaxDeck server + streaming engine (docs/getting-started.md).
+# Settings go in .env, which waxdeck reads wholesale - see
+# docs/configuration.md; the environment blocks here only wire containers.
+
+# 4420 is the only published port. Put TLS in front before exposing it
+# beyond your LAN (docs/reverse-proxy.md).
 
 name: waxdeck
 
 services:
   waxdeck:
-    image: ghcr.io/colespringer/waxdeck:latest
+    image: ghcr.io/colespringer/waxdeck:${WAXDECK_TAG:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    # Run as the host user so the bind-mounted library (owned by whoever ran
-    # `make up`) is writable for imports and organization. `make up` sets these
-    # to the current user; they default to the image's built-in 10001 for a
-    # bare `docker compose up` (point WAXDECK_LIBRARY at a 10001-writable dir, or
-    # set WAXDECK_UID/WAXDECK_GID in .env, in that case).
+    # The host user, so the bind-mounted library stays writable.
     user: "${WAXDECK_UID:-10001}:${WAXDECK_GID:-10001}"
     ports:
-      # The ONLY published port of the stack.
       - "4420:4420"
+    env_file: [.env]
     environment:
       WAXDECK_ADDR: 0.0.0.0:4420
       WAXDECK_DATA_DIR: /data
-      # Root names must match the sidecar's roots (waxflow-config below):
-      # streams address sources as <name>/<relpath> against the sidecar.
       WAXDECK_LIBRARY_ROOTS: lib=/library
-      # The sidecar's config file, which WaxDeck owns and the sidecar
-      # reads. Creating a library at runtime rewrites its roots array and
-      # posts /roots/reload, so the new root streams without a sidecar
-      # restart. `make up` seeds the file.
       WAXDECK_FLOW_CONFIG: /waxflow-config/waxflow.json
-      # Roots (by name) the catalog may place files into, for uploads
-      # and URL acquisitions. The compose library is WaxDeck-managed by
-      # design (mounted read-write above), so it defaults to "lib"; set
-      # empty to keep the library strictly scan-only.
-      WAXDECK_MANAGED_ROOTS: ${WAXDECK_MANAGED_ROOTS:-lib}
-      # WaxFlow is reached over the internal network only.
       WAXDECK_FLOW_URL: http://waxflow:4418
-      # Must be one of the keys in WAXFLOW_API_KEYS below (see .env.example).
-      WAXDECK_FLOW_API_KEY: ${WAXDECK_FLOW_API_KEY:?set WAXDECK_FLOW_API_KEY (must match a key in WAXFLOW_API_KEYS)}
-      # Set to "true" whenever the deployed origin is HTTPS so session
-      # cookies never ride cleartext.
-      WAXDECK_COOKIE_SECURE: ${WAXDECK_COOKIE_SECURE:-false}
-      # The externally reachable base URL, e.g. https://wax.example.com.
-      # Required for single sign-on (the OIDC callback derives from it).
-      WAXDECK_PUBLIC_BASE: ${WAXDECK_PUBLIC_BASE:-}
-      # The reverse proxies whose X-Forwarded-For may be believed, so the
-      # login limiter counts the caller rather than the proxy. Empty keeps
-      # the socket address.
-      WAXDECK_TRUSTED_PROXIES: ${WAXDECK_TRUSTED_PROXIES:-}
-      # Origins allowed to call this server from a browser page served
-      # somewhere else, for a self-hosted Subsonic client. Empty serves
-      # same-origin only, which is every deployment that just uses the
-      # bundled web app.
-      WAXDECK_CORS_ORIGINS: ${WAXDECK_CORS_ORIGINS:-}
-      # Optional OIDC single sign-on; leave the issuer empty to disable.
-      # Local accounts always keep working.
-      WAXDECK_OIDC_ISSUER: ${WAXDECK_OIDC_ISSUER:-}
-      WAXDECK_OIDC_ID: ${WAXDECK_OIDC_ID:-sso}
-      WAXDECK_OIDC_NAME: ${WAXDECK_OIDC_NAME:-}
-      WAXDECK_OIDC_CLIENT_ID: ${WAXDECK_OIDC_CLIENT_ID:-}
-      WAXDECK_OIDC_CLIENT_SECRET: ${WAXDECK_OIDC_CLIENT_SECRET:-}
-      WAXDECK_OIDC_GROUPS_CLAIM: ${WAXDECK_OIDC_GROUPS_CLAIM:-}
-      WAXDECK_OIDC_ADMIN_GROUP: ${WAXDECK_OIDC_ADMIN_GROUP:-}
-      # Episode downloads live in their own directory (the catalog
-      # refuses a podcast dir inside a library root); the sidecar
-      # mounts the same volume read-only under the matching root name.
       WAXDECK_PODCAST_DIR: /podcasts
       WAXDECK_PODCAST_ROOT_NAME: podcasts
-      WAXDECK_FEED_REFRESH_MINUTES: ${WAXDECK_FEED_REFRESH_MINUTES:-30}
-      WAXDECK_PODCAST_RETENTION_DEFAULT: ${WAXDECK_PODCAST_RETENTION_DEFAULT:-0}
-      # PodPing: refresh a show within seconds of its host announcing a
-      # new episode on the Hive blockchain, instead of at the next
-      # scheduled refresh. Off by default (a standing outbound
-      # connection to a third-party public node); polling stays the
-      # floor either way.
-      WAXDECK_PODPING: ${WAXDECK_PODPING:-false}
-      WAXDECK_PODPING_NODE: ${WAXDECK_PODPING_NODE:-}
-      WAXDECK_PODPING_WRITERS: ${WAXDECK_PODPING_WRITERS:-}
-      # Set to "true" when your feeds live on the LAN (relaxes the
-      # private-address guard on feed and enclosure fetches).
-      WAXDECK_ALLOW_PRIVATE_FEED_HOSTS: ${WAXDECK_ALLOW_PRIVATE_FEED_HOSTS:-false}
-      # YouTube acquisition bridge: download videos, playlists, and
-      # channels, and subscribe to channels as podcasts. On by default
-      # (set WAXDECK_YOUTUBE=false to disable). Pair with the youtube
-      # profile's waxseal sidecar for the full-quality path.
-      WAXDECK_YOUTUBE: ${WAXDECK_YOUTUBE:-true}
-      # Embed the source thumbnail as cover art on acquired audio (until
-      # enrichment finds official artwork). On by default.
-      WAXDECK_YOUTUBE_THUMBNAIL: ${WAXDECK_YOUTUBE_THUMBNAIL:-true}
-      WAXDECK_SEAL_URL: ${WAXDECK_SEAL_URL:-}
-      WAXDECK_SEAL_API_KEY: ${WAXDECK_SEAL_API_KEY:-}
-      WAXDECK_YOUTUBE_SPONSORBLOCK: ${WAXDECK_YOUTUBE_SPONSORBLOCK:-}
-      # Last.fm scrobbling needs server API credentials (each install
-      # registers its own API account at last.fm/api/account/create);
-      # without them the Last.fm connect button stays disabled.
-      # ListenBrainz needs nothing here (users paste their own token).
-      WAXDECK_LASTFM_API_KEY: ${WAXDECK_LASTFM_API_KEY:-}
-      WAXDECK_LASTFM_SECRET: ${WAXDECK_LASTFM_SECRET:-}
-      # LAN opt-ins for self-hosted scrobble targets (Maloja and
-      # friends) and LAN icecast radio streams.
-      WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS: ${WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS:-false}
-      WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS: ${WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS:-false}
-      WAXDECK_RADIO_DIRECTORY_BASE: ${WAXDECK_RADIO_DIRECTORY_BASE:-}
-      # Matching and enrichment providers. AcoustID enables fingerprint
-      # evidence; fanart.tv enables that artwork provider; the
-      # MusicBrainz base override points at a local mirror.
-      WAXDECK_MATCHING: ${WAXDECK_MATCHING:-true}
-      WAXDECK_ACOUSTID_KEY: ${WAXDECK_ACOUSTID_KEY:-}
-      WAXDECK_FANARTTV_KEY: ${WAXDECK_FANARTTV_KEY:-}
-      WAXDECK_MUSICBRAINZ_BASE: ${WAXDECK_MUSICBRAINZ_BASE:-}
-      # Prometheus metrics: set a token to enable GET /metrics.
-      WAXDECK_METRICS_TOKEN: ${WAXDECK_METRICS_TOKEN:-}
-      # Similarity worker tokens, comma separated; empty disables the
-      # worker API. The similarity profile's analyzer presents this
-      # value as its token.
-      WAXDECK_SONIC_ANALYSIS: ${WAXDECK_SONIC_ANALYSIS:-true}
-      WAXDECK_WORKER_TOKENS: ${WAXDECK_WORKER_TOKENS:-}
-      # Set to "true" to expose library-relative source paths in work
-      # items, so a same-host worker (the similarity profile mounts
-      # /library read-only) decodes locally instead of pulling audio
-      # over HTTP.
-      WAXDECK_WORKER_LOCAL_PATHS: ${WAXDECK_WORKER_LOCAL_PATHS:-false}
+      # `-` not `:-`: an empty value means scan-only and must survive.
+      WAXDECK_MANAGED_ROOTS: ${WAXDECK_MANAGED_ROOTS-lib}
+      WAXDECK_FLOW_API_KEY: ${WAXDECK_FLOW_API_KEY:?set WAXDECK_FLOW_API_KEY in deploy/.env (must match a key in WAXFLOW_API_KEYS)}
     volumes:
-      # Holds waxbin.db + waxdeck.db (and their -wal/-shm sidecars).
       - waxdeck-data:/data
-      # WaxDeck manages the library (imports, sidecars, organization): read-write.
       - ${WAXDECK_LIBRARY:-./library}:/library
-      # Episode downloads: WaxDeck writes, WaxFlow streams.
       - waxdeck-podcasts:/podcasts
-      # The sidecar's roots config: WaxDeck is its only writer, so this
-      # side is read-write. A directory, not a single file, because the
-      # rewrite is a rename over the old file and a bind-mounted file
-      # cannot be replaced that way.
+      # A directory rather than the file: WaxDeck swaps the config by
+      # atomic rename, which a single-file bind mount cannot follow.
       - ./waxflow-config:/waxflow-config
     networks: [internal]
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-    # read_only is intentionally NOT set yet: WaxDeck writes temp files during
-    # import/transcode before the atomic rename into /data or /library.
-    # Revisit once the write paths are pinned down.
     restart: unless-stopped
     logging:
       driver: json-file
@@ -155,56 +48,30 @@ services:
         max-file: "3"
 
   waxflow:
-    # WaxDeck's flavored WaxFlow build (stock CLI + a catalog resolver
-    # for pid: sources). Env contract per WaxFlow's own compose files.
-    image: ghcr.io/colespringer/waxdeck-waxflow:latest
+    image: ghcr.io/colespringer/waxdeck-waxflow:${WAXDECK_TAG:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.waxflow
-    # Same user as waxdeck: the two share the catalog volume (waxbin.db plus its
-    # WAL sidecars, written by whichever opens it), so they must agree on UID.
+    # Must match waxdeck's user: the two share the catalog volume.
     user: "${WAXDECK_UID:-10001}:${WAXDECK_GID:-10001}"
-    # No `ports:`, internal network only; WaxDeck proxies anything clients need.
     environment:
       WAXFLOW_ADDR: 0.0.0.0:4418
-      # WaxFlow fails closed: a non-loopback listen address requires API keys.
-      WAXFLOW_API_KEYS: ${WAXFLOW_API_KEYS:?set WAXFLOW_API_KEYS (comma-separated; generate with openssl rand -hex 24)}
-      # Roots come from the shared config file rather than WAXFLOW_ROOTS:
-      # the env form is read once at process start, so WaxFlow wires
-      # /roots/reload (and advertises delivery.rootsReload) only for a
-      # file-configured daemon. Everything else here stays environment;
-      # the reload re-runs config.Load, which reapplies env precedence.
+      WAXFLOW_API_KEYS: ${WAXFLOW_API_KEYS:?set WAXFLOW_API_KEYS in deploy/.env (openssl rand -hex 24)}
       WAXFLOW_CONFIG: /waxflow-config/waxflow.json
-      # The catalog resolver behind pid: sources reads waxbin.db.
       WAXFLOW_CATALOG_DB: /catalog/waxbin.db
     volumes:
-      # WaxDeck writes this file; the sidecar only reads it.
       - ./waxflow-config:/waxflow-config:ro
-      # Same library as waxdeck, but WaxFlow only reads it.
       - ${WAXDECK_LIBRARY:-./library}:/library:ro
-      # Episode downloads, read-only for streaming.
       - waxdeck-podcasts:/podcasts:ro
-      # WaxDeck's data volume for pid resolution. The resolver opens the
-      # catalog read-only, but the mount stays writable: SQLite WAL
-      # readers need write access to the -shm/-wal sidecar files while
-      # WaxDeck holds the database open in WAL mode. That write access
-      # works because both images deliberately run as UID 10001; keep the
-      # Dockerfiles' user IDs in lockstep or this mount breaks.
+      # Read use, writable mount: SQLite WAL readers touch the -wal and
+      # -shm files beside the database.
       - waxdeck-data:/catalog
       - waxflow-data:/data
       - waxflow-cache:/cache
     networks: [internal]
-    # Ordering, not readiness: waxdeck has to be the container that first
-    # mounts the shared waxdeck-data volume. Docker seeds a new named
-    # volume from the image directory behind the mount, ownership and
-    # mode included, and waxdeck's image carries /data at 0777 precisely
-    # so an arbitrary WAXDECK_UID can write there. This image is
-    # distroless and has no /catalog at all, so a fresh volume it mounted
-    # first would stay root-owned 0755 and waxdeck could not create
-    # waxbin.db. A dev box hides this - the volume survives the first
-    # good run - but CI builds one from scratch every push.
+    # Start order, not readiness: on a first run, waxdeck's image seeds
+    # the shared data volume with permissions this image cannot.
     depends_on: [waxdeck]
-    # Hardening mirrored from WaxFlow's compose.base.yaml.
     read_only: true
     tmpfs:
       - /tmp
@@ -218,11 +85,8 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Optional. Full-quality YouTube: docker compose --profile youtube up -d
   waxseal:
-    # YouTube PO-token attestation for the full-quality acquisition
-    # path. Optional: the bridge works without it at reduced quality.
-    # Enable with --profile youtube and set WAXDECK_YOUTUBE=true plus
-    # WAXDECK_SEAL_URL=http://waxseal:4416 in .env.
     image: ghcr.io/colespringer/waxseal:latest
     profiles: [youtube]
     environment:
@@ -236,62 +100,51 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Casting profile: Chromecast and DLNA discovery speak multicast
-  # (mDNS and SSDP), which never crosses the default bridge network.
-  # `docker compose --profile cast up` runs a second waxdeck on host
-  # networking that CAN discover devices; the bridged instance stays
-  # the default for installs that do not cast, and static devices work
-  # everywhere through WAXDECK_CAST_DEVICES / WAXDECK_DLNA_DEVICES.
-  # Alternatives (macvlan, an avahi reflector) are in the docs.
+  # Optional. Chromecast/DLNA discovery needs multicast, which never
+  # crosses the bridge network: docker compose --profile cast up -d
+  # runs a second waxdeck on host networking that can discover devices.
   waxdeck-cast:
-    image: ghcr.io/colespringer/waxdeck
-    profiles: ["cast"]
+    image: ghcr.io/colespringer/waxdeck:${WAXDECK_TAG:-latest}
+    profiles: [cast]
     network_mode: host
+    env_file: [.env]
     environment:
-      WAXDECK_ADDR: "0.0.0.0:4420"
-      WAXDECK_LIBRARY_ROOTS: "lib=/library"
+      WAXDECK_ADDR: 0.0.0.0:4420
       WAXDECK_DATA_DIR: /data
-      WAXDECK_FLOW_URL: "http://127.0.0.1:4418"
-      WAXDECK_FLOW_API_KEY: ${WAXDECK_FLOW_API_KEY:-change-me}
-      WAXDECK_PUBLIC_BASE: ${WAXDECK_PUBLIC_BASE:-}
-      WAXDECK_ADVERTISE_BASE: ${WAXDECK_ADVERTISE_BASE:-}
+      WAXDECK_LIBRARY_ROOTS: lib=/library
+      WAXDECK_FLOW_URL: http://127.0.0.1:4418
+      WAXDECK_PODCAST_DIR: /podcasts
+      WAXDECK_PODCAST_ROOT_NAME: podcasts
+      # `-` not `:-`: an empty value means scan-only and must survive.
+      WAXDECK_MANAGED_ROOTS: ${WAXDECK_MANAGED_ROOTS-lib}
     volumes:
       - ${WAXDECK_LIBRARY:-./library}:/library
       - waxdeck-data:/data
       - waxdeck-podcasts:/podcasts
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # Similarity profile: the reference sonic-similarity analyzer.
-  # `docker compose --profile similarity up` runs it against the
-  # stack's waxdeck over the internal network: it pulls decode-ready
-  # audio from the worker API, computes embeddings, and posts them
-  # back. The server stores the vectors, so the worker keeps no state
-  # and needs no volume of its own. Requires WAXDECK_WORKER_TOKENS in
-  # .env (`make up` seeds one). The analyzer presents that value
-  # verbatim as its token, so with several comma-separated tokens on
-  # the server, point WAXDECK_ANALYZER_TOKEN below at a single one.
+  # Optional. External analysis worker, stateless:
+  # docker compose --profile similarity up -d
   waxdeck-analyzer:
-    image: ghcr.io/colespringer/waxdeck-analyzer:latest
+    image: ghcr.io/colespringer/waxdeck-analyzer:${WAXDECK_TAG:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.analyzer
-    profiles: ["similarity"]
+    profiles: [similarity]
+    env_file: [.env]
     environment:
       WAXDECK_ANALYZER_URL: http://waxdeck:4420
       WAXDECK_ANALYZER_TOKEN: ${WAXDECK_WORKER_TOKENS:-}
-      # wav needs no worker-side decode; flac halves the bytes on the
-      # wire. Same-network transfers default to wav.
-      WAXDECK_ANALYZER_FORMAT: ${WAXDECK_ANALYZER_FORMAT:-wav}
-      # With WAXDECK_WORKER_LOCAL_PATHS=true on waxdeck above, work
-      # items carry library-relative paths and the analyzer decodes
-      # straight from the read-only mount below instead of pulling
-      # audio over HTTP.
       WAXDECK_ANALYZER_LIBRARY: /library
     volumes:
       - ${WAXDECK_LIBRARY:-./library}:/library:ro
     depends_on: [waxdeck]
     networks: [internal]
-    # No `ports:`: the analyzer only dials out, nothing dials in.
     read_only: true
     cap_drop: [ALL]
     security_opt:
@@ -302,14 +155,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-  # --- notes ---------------------------------------------------------
-  #
-  # jukebox: not a separate service; set WAXDECK_JUKEBOX=true on the
-  #   waxdeck service and mount the sound device:
-  #     devices: ["/dev/snd:/dev/snd"]
-  #   The jukebox pipes engine WAV into aplay (WAXDECK_JUKEBOX_CMD
-  #   overrides; PipeWire hosts use "pw-cat -p -").
 
 networks:
   internal:

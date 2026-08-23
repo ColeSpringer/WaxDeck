@@ -242,7 +242,8 @@ run: $(WEB_STAMP)
 
 COMPOSE := docker compose -f deploy/compose.yaml
 
-# The full stack. The preflight proves WAXDECK_LIBRARY writable first
+# The full stack; --wait returns only once the containers report
+# healthy. The preflight proves WAXDECK_LIBRARY writable first
 # (docker creates a missing bind source root-owned), resolving it the way
 # compose resolves it. id -u/-g are skipped only on Windows, where MSYS
 # ids are SID-derived noise; macOS keeps them so volumes stay readable.
@@ -261,8 +262,8 @@ up: deploy/.env deploy/waxflow-config/waxflow.json
 	 fi; \
 	 rm -f "$$lib/.write-probe"
 	@case "$$(uname -s)" in \
-	   MINGW*|MSYS*|CYGWIN*) $(COMPOSE) up --build -d ;; \
-	   *) WAXDECK_UID=$$(id -u) WAXDECK_GID=$$(id -g) $(COMPOSE) up --build -d ;; \
+	   MINGW*|MSYS*|CYGWIN*) $(COMPOSE) up --build -d --wait ;; \
+	   *) WAXDECK_UID=$$(id -u) WAXDECK_GID=$$(id -g) $(COMPOSE) up --build -d --wait ;; \
 	 esac
 	@echo "WaxDeck is up on http://localhost:4420  (make logs / make down)"
 
@@ -276,7 +277,8 @@ deploy/waxflow-config/waxflow.json: deploy/waxflow-config.example.json
 
 # deploy/.env from the example, with matching generated internal keys.
 deploy/.env:
-	@key=$$(openssl rand -hex 24); \
+	@umask 077; \
+	 key=$$(openssl rand -hex 24); \
 	 worker=$$(openssl rand -hex 24); \
 	 sed -e "s|^WAXFLOW_API_KEYS=.*|WAXFLOW_API_KEYS=$$key|" \
 	     -e "s|^WAXDECK_FLOW_API_KEY=.*|WAXDECK_FLOW_API_KEY=$$key|" \

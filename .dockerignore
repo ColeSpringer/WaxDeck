@@ -1,0 +1,34 @@
+# Allowlist for the deploy/ images: admit only what their Dockerfiles
+# COPY, so .git, docs, e2e, and deploy/ (keys, library) never reach the
+# daemon. A COPY of an unadmitted path fails loudly - admit it below.
+*
+!app
+!server
+!fixtures
+!LICENSE
+
+# Generated and per-machine trees inside the admitted paths, and the
+# test trees: not build inputs, and golden churn would bust the COPY
+# layer right before the wasm compile.
+app/**/test
+app/**/integration_test
+app/**/build
+app/**/.dart_tool
+app/**/.flutter-plugins*
+app/**/pubspec_overrides.yaml
+app/.pub-cache
+app/**/android/.gradle
+app/**/android/.kotlin
+app/**/android/local.properties
+app/**/flutter/ephemeral
+app/**/Flutter/ephemeral
+app/**/test/failures
+
+# Host-built server artifacts; the image builds its own.
+server/waxdeck
+server/waxdeck-analyzer
+server/perfgate
+server/**/*.test
+server/**/*.out
+# The image builds its own web bundle over this path.
+server/internal/web/dist

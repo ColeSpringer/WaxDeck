@@ -12155,7 +12155,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The artwork image, under the type the stored picture actually is. A generated thumbnail is re-encoded and arrives as one of the listed types, but a `size` request that had nothing to scale answers the source itself, so the type may be one the list does not name - the exotics this server stores without decoding (AVIF, HEIC) among them. Decode from the bytes rather than from the header if that distinction matters. */
+            /** @description The artwork image, under the type the stored picture actually is. A generated thumbnail is re-encoded and arrives as JPEG or PNG; a `size` request that had nothing to scale answers the source itself, which is how the undecoded exotics (AVIF, HEIC) arrive. A stored format outside this list entirely - a provider-named oddball - falls back to `image/jpeg`, so decode from the bytes if that tail matters. */
             200: {
                 headers: {
                     /** @description Content-addressed validator for the returned bytes. */
@@ -12185,6 +12185,8 @@ export interface operations {
                     "image/gif": string;
                     "image/bmp": string;
                     "image/tiff": string;
+                    "image/avif": string;
+                    "image/heic": string;
                 };
             };
             /**
