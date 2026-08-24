@@ -1577,6 +1577,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get artSourceFeed => 'Del feed';
 
   @override
+  String get artSourceFromFile => 'Del archivo';
+
+  @override
   String get artSourceGenerated => 'Creada por el servidor';
 
   @override
@@ -1594,7 +1597,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get artSourceSidecar => 'De una imagen de la carpeta';
 
   @override
-  String get artSourceTag => 'De las etiquetas del archivo';
+  String get artSourceTag => 'Ilustración del archivo';
 
   @override
   String get artSourceUser => 'Establecida a mano';
@@ -2058,9 +2061,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get booksContinueOverline => 'A medias';
-
-  @override
   String get booksContinueTitle => 'Seguir escuchando';
 
   @override
@@ -2205,6 +2205,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get commonLoadingTitle => 'Cargando…';
+
+  @override
+  String get commonOpenReview => 'Abrir la revisión';
 
   @override
   String get commonRetry => 'Reintentar';
@@ -2613,6 +2616,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get errorDirectoryUnavailable =>
       'El servicio de directorio no ha respondido. Inténtalo más tarde.';
+
+  @override
+  String get errorDrmProtected =>
+      'Los archivos de Audible con DRM no se pueden reproducir.';
 
   @override
   String get errorEndpointFailed =>
@@ -3051,13 +3058,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeAddAction => 'Añadir a la biblioteca';
 
   @override
-  String get homeContinueOverline => 'Donde lo dejaste';
-
-  @override
   String get homeContinueTitle => 'Seguir escuchando';
-
-  @override
-  String get homeDownloadedOverline => 'Se reproduce sin red';
 
   @override
   String get homeDownloadedTitle => 'En este dispositivo';
@@ -3068,9 +3069,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeEmptyTitle => 'Todavía no hay nada aquí';
-
-  @override
-  String get homeEpisodesOverline => 'De los programas que sigues';
 
   @override
   String get homeEpisodesTitle => 'Episodios nuevos';
@@ -3089,19 +3087,10 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get homeMixesOverline => 'Mezclas a partir de lo que escuchas';
-
-  @override
   String get homeMixesTitle => 'Hecho para ti';
 
   @override
-  String get homeMostPlayedOverline => 'A lo que vuelves';
-
-  @override
   String get homeMostPlayedTitle => 'Lo más reproducido';
-
-  @override
-  String get homeNeverPlayedOverline => 'En tu biblioteca, aún sin estrenar';
 
   @override
   String get homeNeverPlayedTitle => 'Sin reproducir';
@@ -3167,23 +3156,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homePinnedKindReleaseGroup => 'Grupo de lanzamientos';
 
   @override
-  String get homePinnedOverline => 'Lo que guardas';
-
-  @override
   String get homePinnedTitle => 'Fijado';
-
-  @override
-  String get homeRecentOverline => 'Nuevo en la biblioteca';
 
   @override
   String get homeRecentTitle => 'Añadido recientemente';
 
   @override
-  String get homeRediscoverOverline =>
-      'Marcado, y sin escuchar desde hace meses';
+  String get homeRediscoverTitle => 'Redescubre';
 
   @override
-  String get homeRediscoverTitle => 'Redescubre';
+  String homeReviewPending(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos están esperando revisión',
+      one: '1 elemento está esperando revisión',
+    );
+    return '$_temp0';
+  }
 
   @override
   String homeShelfRemaining(String span) {
@@ -3519,9 +3509,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataOpenReleaseGroup => 'Abrir el grupo de lanzamiento';
-
-  @override
-  String get metadataOpenReview => 'Abrir la revisión';
 
   @override
   String get metadataQueuedForIdentification => 'En cola para identificar';
@@ -4080,19 +4067,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get musicPlay => 'Reproducir';
 
   @override
-  String get musicShelfMostPlayedOverline => 'A lo que vuelves';
-
-  @override
   String get musicShelfMostPlayedTitle => 'Lo más reproducido';
 
   @override
-  String get musicShelfRecentOverline => 'Nuevo en la colección';
-
-  @override
   String get musicShelfRecentTitle => 'Añadido recientemente';
-
-  @override
-  String get musicShelfStarredOverline => 'Guardado a propósito';
 
   @override
   String get musicShelfStarredTitle => 'Favoritos';
@@ -5661,9 +5639,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastKeepFiles => 'Conservar los archivos';
 
   @override
-  String get podcastLatestOverline => 'Nuevos';
-
-  @override
   String podcastLatestPublished(String date) {
     return 'Último: $date';
   }
@@ -6068,9 +6043,6 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get podcastUpNextOverline => 'A medio escuchar';
 
   @override
   String get podcastUpNextTitle => 'A continuación';
@@ -7021,6 +6993,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get searchShowsToSubscribe => 'Programas a los que suscribirse';
+
+  @override
+  String get searchSidebarHint => 'Buscar en la biblioteca';
 
   @override
   String get searchStationsToAdd => 'Emisoras para añadir';
@@ -8388,7 +8363,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCommandVolumeUp => 'Subir el volumen';
 
   @override
-  String get shellNavAdmin => 'Consola de administración';
+  String get shellNavAdmin => 'Administración';
 
   @override
   String get shellNavAlbums => 'Álbumes';
@@ -8415,7 +8390,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellNavNotifications => 'Notificaciones';
 
   @override
-  String get shellNavPlaylists => 'Listas de reproducción';
+  String get shellNavPlaylists => 'Listas';
 
   @override
   String get shellNavPodcasts => 'Pódcast';
@@ -8427,10 +8402,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellNavReview => 'Cola de revisión';
 
   @override
-  String get shellNavSettings => 'Ajustes de la aplicación';
+  String get shellNavSettings => 'Ajustes';
 
   @override
-  String get shellNavStats => 'Estadísticas de escucha';
+  String get shellNavStats => 'Estadísticas';
 
   @override
   String get shellNavTasks => 'Tareas';
@@ -9144,6 +9119,19 @@ class AppLocalizationsEs extends AppLocalizations {
       'Espera tu decisión. Desactivado, lo añade con las etiquetas que trae';
 
   @override
+  String uploadsIdentifying(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Se han subido $count archivos. Se están identificando y aparecerán cuando pasen la revisión',
+      one:
+          'Se ha subido 1 archivo. Se está identificando y aparecerá cuando pase la revisión',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get uploadsLoadError => 'No se han podido cargar las subidas';
 
   @override
@@ -9169,10 +9157,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get uploadsPickFolderSubtitle =>
-      'Un álbum o una colección, con su jerarquía';
+      'Conserva la organización de tus carpetas, subcarpetas de disco incluidas';
 
   @override
-  String get uploadsPickSubtitle => 'Una pista, o un conjunto que elijas tú';
+  String get uploadsPickSubtitle =>
+      'Pistas que eliges a mano, agrupadas por sus etiquetas';
 
   @override
   String get uploadsQuotaHelp =>
@@ -9207,6 +9196,30 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get uploadsSessionsTitle => 'Subidas anteriores';
+
+  @override
+  String uploadsSkippedDrm(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Se han omitido $count archivos de Audible; el audio con DRM no se puede reproducir',
+      one:
+          'Se ha omitido 1 archivo de Audible; el audio con DRM no se puede reproducir',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String uploadsSkippedUnsupported(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se han omitido $count archivos no compatibles',
+      one: 'Se ha omitido 1 archivo no compatible',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get uploadsSourceUrl => 'URL de origen';

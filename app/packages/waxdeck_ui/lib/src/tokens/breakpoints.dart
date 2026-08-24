@@ -63,7 +63,7 @@ enum WaxSizeClass {
 /// Shell metrics that are fixed by the layout system rather than by
 /// density or theme.
 abstract final class WaxShellMetrics {
-  static const double sidebarWidth = 248;
+  static const double sidebarWidth = 224;
   static const double railWidth = 72;
   static const double rightPanelWidth = 360;
   static const double deckBarCompactHeight = 64;

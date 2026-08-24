@@ -119,9 +119,11 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       // star, a rating) can shift a user-state smart rule's evaluation.
       playlistsProvider,
       // Review, upload, and tool-task markers ride the user stream; the
-      // curation screens refetch their lists and open details.
+      // curation screens refetch their lists and open details, and
+      // home's review notice moves with them.
       reviewQueueProvider,
       reviewStatsProvider,
+      pendingReviewCountProvider,
       uploadsProvider,
       toolTasksProvider,
     ],

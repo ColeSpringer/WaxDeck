@@ -13,12 +13,45 @@ const kAcceptedAudioExtensions = {
   'wav', 'aif', 'aiff', 'mka', 'webm',
 };
 
-/// Whether the file name's extension is in the accepted set
+/// Extensions the server refuses outright rather than merely not
+/// accepting: a mirror of its DRM deny-list (drmFormats in
+/// server/internal/service/uploads.go - keep in step). The folder walk
+/// counts these apart from the rest of what its filter drops, so the
+/// skip report can say the files can never play instead of lumping an
+/// encrypted audiobook in with cover images.
+const kRejectedAudioExtensions = {'aax', 'aaxc'};
+
+/// Whether the file name's extension is in the given set
 /// (case-insensitive; extensionless names never match).
 bool hasAcceptedExtension(String name, Set<String> extensions) {
   final dot = name.lastIndexOf('.');
   if (dot < 0 || dot == name.length - 1) return false;
   return extensions.contains(name.substring(dot + 1).toLowerCase());
+}
+
+/// Whether the file name's extension is on the DRM deny-list.
+bool hasRejectedExtension(String name) =>
+    hasAcceptedExtension(name, kRejectedAudioExtensions);
+
+/// One folder pick: the audio that survived the extension filter, plus
+/// counts of what the filter dropped. Split, because the two halves
+/// mean different things to the person who picked the folder - a cover
+/// image was never going to upload, an Audible file looks like audio
+/// and can never play - and the report words them apart.
+class FolderPick {
+  const FolderPick({
+    this.files = const [],
+    this.skippedUnsupported = 0,
+    this.skippedDrm = 0,
+  });
+
+  final List<PickedAudioFile> files;
+
+  /// Files outside the accepted set, [skippedDrm] not included.
+  final int skippedUnsupported;
+
+  /// Files on the DRM deny-list ([kRejectedAudioExtensions]).
+  final int skippedDrm;
 }
 
 /// One picked or dropped file as a lazy reference: the transfer pulls
@@ -72,8 +105,9 @@ abstract interface class FilePickerPort {
 
   /// Picks a folder and returns its audio files recursively, with
   /// [PickedAudioFile.relativeDir] carrying the in-folder hierarchy
-  /// rooted at the folder's own name; empty when the user cancels.
-  Future<List<PickedAudioFile>> pickAudioFolder();
+  /// rooted at the folder's own name, plus what the extension filter
+  /// dropped; empty when the user cancels.
+  Future<FolderPick> pickAudioFolder();
 
   /// Picks one arbitrary file filtered to [extensions] (the backup
   /// archive case); null when the user cancels. [label] and [anyLabel]

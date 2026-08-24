@@ -59,7 +59,6 @@ class HomeComposite extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           ShelfRow(
-            overline: 'Pick up where you left off',
             title: 'Continue listening',
             items: SampleLibrary.continueListening(art),
             onTapItem: (_) {},
@@ -67,7 +66,6 @@ class HomeComposite extends StatelessWidget {
           ),
           SizedBox(height: WaxLayout.of(context).sectionGap),
           ShelfRow(
-            overline: 'From your subscriptions',
             title: 'New episodes',
             actionLabel: 'See all',
             onAction: () {},
@@ -77,7 +75,6 @@ class HomeComposite extends StatelessWidget {
           ),
           SizedBox(height: WaxLayout.of(context).sectionGap),
           ShelfRow(
-            overline: 'Added this month',
             title: 'Recently added',
             actionLabel: 'See all',
             onAction: () {},

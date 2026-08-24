@@ -54,6 +54,11 @@ const (
 	// KindFormat marks a file whose format the server does not accept
 	// (415 unsupported-format at the API).
 	KindFormat ErrorKind = "unsupported-format"
+	// KindDRM marks a DRM-encrypted container (415 drm-protected at the
+	// API). Apart from KindFormat because the refusal is permanent: no
+	// format set makes the file playable, and a client wording the code
+	// must not read it as a codec gap an operator could widen away.
+	KindDRM ErrorKind = "drm-protected"
 	// KindFeature marks a request needing an optional capability this
 	// server is not running, such as the streaming engine (501
 	// feature-unavailable at the API).

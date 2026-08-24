@@ -13,12 +13,14 @@ import '../notifications/notifications_bell.dart';
 import '../player/play_progress.dart';
 import '../podcasts/episode_actions.dart';
 import '../podcasts/podcast_shelves.dart';
+import '../review/review_controller.dart';
 import '../search/search_chrome.dart';
 import '../sync/sync_providers.dart';
 import '../shell/account_chrome.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../uploads/add_to_library.dart';
 import '../uploads/audio_drop_area.dart';
 import 'home_shelves.dart';
@@ -53,6 +55,14 @@ class HomeScreen extends ConsumerWidget {
       enabled: canAdd,
       hint: l10n.uploadsDropHint,
       onDropped: (files) => uploadPickedFiles(context, ref, files),
+      onSkipped: ({required unsupported, required drm, required nothingKept}) =>
+          reportSkippedFiles(
+            ref.read(shellMessengerProvider.notifier),
+            l10n,
+            unsupported: unsupported,
+            drm: drm,
+            nothingKept: nothingKept,
+          ),
       child: WaxScaffold(
         title: l10n.homeTitle,
         semanticsId: SemanticsIds.homeScreen,
@@ -116,27 +126,77 @@ class _OnlineHome extends ConsumerWidget {
     // which a switch on the runtime type matches nowhere, and the whole
     // screen blanks to a skeleton and back. Whether the library holds
     // anything does not change on a scan tick.
-    return AsyncSliverFace<bool>(
-      state: ref.watch(libraryHasAnythingProvider),
-      skeleton: SkeletonShape.shelf,
-      errorTitle: l10n.homeLibraryLoadError,
-      onRetry: () => ref.invalidate(libraryHasAnythingProvider),
-      // A server with nothing in it gets the first-run state rather
-      // than eight empty shelves.
-      isEmpty: (hasAnything) => !hasAnything,
-      empty: (context) => SliverFillRemaining(
-        hasScrollBody: false,
-        child: EmptyState(
-          title: l10n.homeEmptyTitle,
-          message: l10n.homeEmptyMessage,
-          glyph: WaxIcons.home,
-          actionLabel: canUpload ? l10n.homeAddAction : null,
-          onAction: canUpload
-              ? () => showAddToLibrarySheet(context, ref)
-              : null,
+    return SliverMainAxisGroup(
+      slivers: <Widget>[
+        // Above the has-anything gate on purpose: the person this
+        // notice matters most to has just uploaded into an empty
+        // library, whose home is the first-run invitation - exactly the
+        // screen that otherwise says their music does not exist.
+        const _ReviewPendingNotice(),
+        AsyncSliverFace<bool>(
+          state: ref.watch(libraryHasAnythingProvider),
+          skeleton: SkeletonShape.shelf,
+          errorTitle: l10n.homeLibraryLoadError,
+          onRetry: () => ref.invalidate(libraryHasAnythingProvider),
+          // A server with nothing in it gets the first-run state rather
+          // than eight empty shelves.
+          isEmpty: (hasAnything) => !hasAnything,
+          empty: (context) => SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              title: l10n.homeEmptyTitle,
+              message: l10n.homeEmptyMessage,
+              glyph: WaxIcons.home,
+              actionLabel: canUpload ? l10n.homeAddAction : null,
+              onAction: canUpload
+                  ? () => showAddToLibrarySheet(context, ref)
+                  : null,
+            ),
+          ),
+          builder: (context, _) => const _Shelves(),
+        ),
+      ],
+    );
+  }
+}
+
+/// The slim door onto review while the caller's own additions wait
+/// there. What was added with identification on is in the queue rather
+/// than on the shelves, and without this nothing on home says so - the
+/// "added music and home never refreshed" report was this silence.
+/// Hidden the moment the count is zero, unknown, or the caller cannot
+/// upload (their queue view is empty by construction).
+class _ReviewPendingNotice extends ConsumerWidget {
+  const _ReviewPendingNotice();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The same gate as the review nav entry: the endpoint scopes rather
+    // than refuses, but an account that cannot add has nothing waiting.
+    if (!canAddToLibrary(ref)) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    final count = ref.watch(pendingReviewCountProvider).value ?? 0;
+    if (count == 0) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    final l10n = context.l10n;
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: WaxSpace.s16),
+        // The notice tone's own info glyph, not a checkmark: a check
+        // reads as done, the opposite of waiting.
+        child: WaxBanner(
+          tone: WaxBannerTone.notice,
+          message: l10n.homeReviewPending(count),
+          semanticsId: SemanticsIds.homeReviewPending,
+          actionLabel: l10n.commonOpenReview,
+          actionSemanticsId: SemanticsIds.homeReviewPendingOpen,
+          // Gone to, not pushed: the queue is a canonical destination
+          // with a nav entry of its own.
+          onAction: () => context.go(WaxRoute.review),
         ),
       ),
-      builder: (context, _) => const _Shelves(),
     );
   }
 }
@@ -151,7 +211,6 @@ class _Shelves extends StatelessWidget {
       ItemShelf(
         shelf: 'continue',
         title: context.l10n.homeContinueTitle,
-        overline: context.l10n.homeContinueOverline,
         provider: continueListeningShelfProvider,
         withProgress: true,
       ),
@@ -163,27 +222,23 @@ class _Shelves extends StatelessWidget {
       ItemShelf(
         shelf: 'recent',
         title: context.l10n.homeRecentTitle,
-        overline: context.l10n.homeRecentOverline,
         provider: recentlyAddedShelfProvider,
         allLocation: WaxRoute.musicTracks,
       ),
       ItemShelf(
         shelf: 'sealed',
         title: context.l10n.homeNeverPlayedTitle,
-        overline: context.l10n.homeNeverPlayedOverline,
         provider: neverPlayedShelfProvider,
       ),
       const MixShelf(),
       ItemShelf(
         shelf: 'rediscover',
         title: context.l10n.homeRediscoverTitle,
-        overline: context.l10n.homeRediscoverOverline,
         provider: rediscoverShelfProvider,
       ),
       ItemShelf(
         shelf: 'most-played',
         title: context.l10n.homeMostPlayedTitle,
-        overline: context.l10n.homeMostPlayedOverline,
         provider: mostPlayedShelfProvider,
       ),
     ],
@@ -237,7 +292,6 @@ class _DownloadedShelf extends ConsumerWidget {
           ),
           child: ShelfRow(
             title: context.l10n.homeDownloadedTitle,
-            overline: context.l10n.homeDownloadedOverline,
             items: tiles,
             actionLabel: context.l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll('downloaded'),
@@ -320,7 +374,6 @@ class _NewEpisodesShelf extends ConsumerWidget {
           padding: const EdgeInsets.only(bottom: WaxSpace.s24),
           child: ShelfRow(
             title: context.l10n.homeEpisodesTitle,
-            overline: context.l10n.homeEpisodesOverline,
             items: tiles,
             actionLabel: context.l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll('episodes'),

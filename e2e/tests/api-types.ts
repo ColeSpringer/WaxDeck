@@ -10012,7 +10012,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The file's format is not accepted (code `unsupported-format`): the extension is outside the server's accepted set, or the audio did not decode. */
+        /** @description The file's format is not accepted (code `unsupported-format`): the extension is outside the server's accepted set, or the audio did not decode. A DRM-encrypted container (an Audible `aax`/`aaxc`) answers with the same status but code `drm-protected`, because that refusal is permanent - no format set can make the file playable - and must not read as a codec gap an operator could widen away. */
         UnsupportedFormat: {
             headers: {
                 [name: string]: unknown;

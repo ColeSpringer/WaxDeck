@@ -115,7 +115,10 @@ Conventions:
   so the caller has nothing to clear), `field-locked`
   (the edit targets a locked metadata field and did not set
   `force`), `unsupported-format` (the uploaded file's format
-  is not accepted by this server), `read-only` (the target
+  is not accepted by this server), `drm-protected` (the uploaded
+  file is a DRM-encrypted container, such as an Audible aax or
+  aaxc; unlike `unsupported-format` this is permanent - no server
+  configuration can make the file playable), `read-only` (the target
   library, or the whole server, is in read-only mode: uploads,
   organizing, file write-back, deletion, and the file tools are
   refused while reads and playback keep working),

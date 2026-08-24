@@ -409,25 +409,13 @@
   "@musicPlay": {
     "description": "Button on an album's or an artist's header that plays it from the start."
   },
-  "musicShelfMostPlayedOverline": "What you come back to",
-  "@musicShelfMostPlayedOverline": {
-    "description": "Overline above the most-played shelf on the music hub."
-  },
   "musicShelfMostPlayedTitle": "Most played",
   "@musicShelfMostPlayedTitle": {
     "description": "Shelf on the music hub holding what has been played most."
   },
-  "musicShelfRecentOverline": "New to the collection",
-  "@musicShelfRecentOverline": {
-    "description": "Overline above the recently-added shelf on the music hub."
-  },
   "musicShelfRecentTitle": "Recently added",
   "@musicShelfRecentTitle": {
     "description": "Shelf on the music hub holding what arrived in the library most recently."
-  },
-  "musicShelfStarredOverline": "Kept on purpose",
-  "@musicShelfStarredOverline": {
-    "description": "Overline above the starred shelf on the music hub."
   },
   "musicShelfStarredTitle": "Starred",
   "@musicShelfStarredTitle": {

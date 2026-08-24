@@ -318,7 +318,6 @@ class _ContinueShelf extends ConsumerWidget {
       padding: const EdgeInsets.only(top: WaxSpace.s8, bottom: WaxSpace.s16),
       child: ShelfRow(
         title: l10n.booksContinueTitle,
-        overline: l10n.booksContinueOverline,
         items: tiles,
         // By position rather than by title: a tile carries no value
         // equality, and two editions of one book share a name.

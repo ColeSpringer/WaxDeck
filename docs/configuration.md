@@ -102,6 +102,10 @@ Read by compose itself, not the server.
   a separate root if your main library is managed by beets or Picard.
 - `WAXDECK_SCAN_ON_START` (default `true`): launch a library scan at
   startup.
+- `WAXDECK_UPLOAD_FORMATS`: file extensions uploads accept, comma
+  separated. Replaces the default set (see
+  [uploads](curation-and-metadata.md)) rather than extending it; empty
+  keeps the default. DRM containers (aax, aaxc) are refused regardless.
 - `WAXDECK_RESET_CATALOG` (default `false`): when the catalog was
   built from a different schema baseline (which pre-1.0 is edited in
   place rather than migrated), move it aside and start on a fresh one

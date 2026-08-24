@@ -271,10 +271,6 @@
   "@podcastKeepFiles": {
     "description": "Unfollows the show and leaves the downloads alone."
   },
-  "podcastLatestOverline": "New",
-  "@podcastLatestOverline": {
-    "description": "Overline above the latest-episodes section."
-  },
   "podcastLatestPublished": "Latest {date}",
   "@podcastLatestPublished": {
     "description": "When a show last published, in the line under its title.",
@@ -782,10 +778,6 @@
         "type": "int"
       }
     }
-  },
-  "podcastUpNextOverline": "Half heard",
-  "@podcastUpNextOverline": {
-    "description": "Overline above the up-next shelf."
   },
   "podcastUpNextTitle": "Up next",
   "@podcastUpNextTitle": {

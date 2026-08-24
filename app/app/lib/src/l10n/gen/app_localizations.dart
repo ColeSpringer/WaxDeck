@@ -2721,6 +2721,12 @@ abstract class AppLocalizations {
   /// **'From the feed'**
   String get artSourceFeed;
 
+  /// Provenance of an artifact read out of the audio file's own tags, on the rows that already name the artifact ("Artwork · {source}", "Lyrics · {source}"). Bare on purpose: the standalone artSourceTag would stutter behind the Artwork prefix and call a lyric a picture behind the Lyrics one.
+  ///
+  /// In en, this message translates to:
+  /// **'From the file'**
+  String get artSourceFromFile;
+
   /// Source mark under a picture the server composed from what the catalog already holds, rather than one anybody chose. A playlist's mosaic of its members' covers is the case it exists for.
   ///
   /// In en, this message translates to:
@@ -2751,10 +2757,10 @@ abstract class AppLocalizations {
   /// **'From a folder image'**
   String get artSourceSidecar;
 
-  /// Source mark under a cover read out of the audio file's own tags. The provenance rows draw it for an embedded lyric as well, which arrives the same way.
+  /// Source mark under a cover read out of the audio file itself (its embedded tags). Says what the mark is about, not the mechanism: "from the file's tags" read as nonsense under a picture. The provenance rows, already prefixed with the artifact's name, draw the bare artSourceFromFile instead.
   ///
   /// In en, this message translates to:
-  /// **'From the file\'s tags'**
+  /// **'Art from the file'**
   String get artSourceTag;
 
   /// Source mark under a cover somebody chose through the curation surface.
@@ -3501,12 +3507,6 @@ abstract class AppLocalizations {
   /// **'{name} ({count})'**
   String booksAuthorChip(String name, int count);
 
-  /// Overline above the continue-listening shelf.
-  ///
-  /// In en, this message translates to:
-  /// **'Part way through'**
-  String get booksContinueOverline;
-
   /// Shelf on the audiobook hub holding the books part way through.
   ///
   /// In en, this message translates to:
@@ -3674,6 +3674,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Loading…'**
   String get commonLoadingTitle;
+
+  /// Action that opens the review queue, wherever something just landed there: home's pending banner, the post-upload message, the metadata editor's rematch message.
+  ///
+  /// In en, this message translates to:
+  /// **'Open review'**
+  String get commonOpenReview;
 
   /// Button that runs the request that just failed again.
   ///
@@ -4274,6 +4280,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The directory service did not answer. Try again later.'**
   String get errorDirectoryUnavailable;
+
+  /// Error sentence for the spec code `drm-protected`: an encrypted container (Audible aax/aaxc) was refused. Permanent, unlike `unsupported-format` - no server setting makes the file playable - and the sentence says so instead of implying a codec gap.
+  ///
+  /// In en, this message translates to:
+  /// **'Audible DRM files can\'t be played.'**
+  String get errorDrmProtected;
 
   /// Error sentence for the spec code `endpoint-failed`: the other device took the command and failed at it, unlike `endpoint-offline`, where it never got it.
   ///
@@ -4959,23 +4971,11 @@ abstract class AppLocalizations {
   /// **'Add to library'**
   String get homeAddAction;
 
-  /// Overline above the Continue listening shelf.
-  ///
-  /// In en, this message translates to:
-  /// **'Where you left off'**
-  String get homeContinueOverline;
-
   /// Shelf of items with a saved position.
   ///
   /// In en, this message translates to:
   /// **'Continue listening'**
   String get homeContinueTitle;
-
-  /// Overline above the On this device shelf.
-  ///
-  /// In en, this message translates to:
-  /// **'Plays with no network'**
-  String get homeDownloadedOverline;
 
   /// Shelf of downloaded items, the only one home draws with no server to ask.
   ///
@@ -4994,12 +4994,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing here yet'**
   String get homeEmptyTitle;
-
-  /// Overline above the New episodes shelf.
-  ///
-  /// In en, this message translates to:
-  /// **'From the shows you follow'**
-  String get homeEpisodesOverline;
 
   /// Shelf of the newest episodes across the shows the listener follows.
   ///
@@ -5025,35 +5019,17 @@ abstract class AppLocalizations {
   /// **'More like {artist}'**
   String homeMixMoreLike(String artist);
 
-  /// Overline above the Made for you shelf.
-  ///
-  /// In en, this message translates to:
-  /// **'Mixes from what you play'**
-  String get homeMixesOverline;
-
   /// Shelf of mixes built from what this listener plays.
   ///
   /// In en, this message translates to:
   /// **'Made for you'**
   String get homeMixesTitle;
 
-  /// Overline above the Most played shelf.
-  ///
-  /// In en, this message translates to:
-  /// **'What you come back to'**
-  String get homeMostPlayedOverline;
-
   /// Shelf of the items with the highest play counts.
   ///
   /// In en, this message translates to:
   /// **'Most played'**
   String get homeMostPlayedTitle;
-
-  /// Overline above the Never played shelf. The image is a record still in its shrink wrap.
-  ///
-  /// In en, this message translates to:
-  /// **'In your library, still sealed'**
-  String get homeNeverPlayedOverline;
 
   /// Shelf of items in the library that have never been played.
   ///
@@ -5139,23 +5115,11 @@ abstract class AppLocalizations {
   /// **'Release group'**
   String get homePinnedKindReleaseGroup;
 
-  /// Overline above the Pinned shelf.
-  ///
-  /// In en, this message translates to:
-  /// **'What you keep'**
-  String get homePinnedOverline;
-
   /// Shelf of what this listener pinned to home.
   ///
   /// In en, this message translates to:
   /// **'Pinned'**
   String get homePinnedTitle;
-
-  /// Overline above the Recently added shelf.
-  ///
-  /// In en, this message translates to:
-  /// **'New to the library'**
-  String get homeRecentOverline;
 
   /// Shelf of what the library gained most recently.
   ///
@@ -5163,17 +5127,17 @@ abstract class AppLocalizations {
   /// **'Recently added'**
   String get homeRecentTitle;
 
-  /// Overline above the Rediscover shelf. Marked means starred or otherwise singled out.
-  ///
-  /// In en, this message translates to:
-  /// **'Marked, and not heard in months'**
-  String get homeRediscoverOverline;
-
   /// Shelf of items the listener marked and has not played in months.
   ///
   /// In en, this message translates to:
   /// **'Rediscover'**
   String get homeRediscoverTitle;
+
+  /// Banner over the shelves while additions sit in the review queue. Items, not uploads: an administrator's count covers the whole queue, and a scan can open entries nobody uploaded. Non-administrators count their own uploads' entries, capped at one queue page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 item is waiting in review} other{{count} items are waiting in review}}'**
+  String homeReviewPending(int count);
 
   /// How much of a half-finished item is left, under its card on home. {span} arrives already worded as a duration.
   ///
@@ -5319,7 +5283,7 @@ abstract class AppLocalizations {
   /// **'Add tag'**
   String get metadataAddTag;
 
-  /// The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file's tags', 'Set by hand', 'From Deezer').
+  /// The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').
   ///
   /// In en, this message translates to:
   /// **'Artwork · {source}'**
@@ -5720,12 +5684,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open release group'**
   String get metadataOpenReleaseGroup;
-
-  /// Button on the rematch message that opens the review entry it created.
-  ///
-  /// In en, this message translates to:
-  /// **'Open review'**
-  String get metadataOpenReview;
 
   /// Message after an item was sent back for matching.
   ///
@@ -6321,35 +6279,17 @@ abstract class AppLocalizations {
   /// **'Play'**
   String get musicPlay;
 
-  /// Overline above the most-played shelf on the music hub.
-  ///
-  /// In en, this message translates to:
-  /// **'What you come back to'**
-  String get musicShelfMostPlayedOverline;
-
   /// Shelf on the music hub holding what has been played most.
   ///
   /// In en, this message translates to:
   /// **'Most played'**
   String get musicShelfMostPlayedTitle;
 
-  /// Overline above the recently-added shelf on the music hub.
-  ///
-  /// In en, this message translates to:
-  /// **'New to the collection'**
-  String get musicShelfRecentOverline;
-
   /// Shelf on the music hub holding what arrived in the library most recently.
   ///
   /// In en, this message translates to:
   /// **'Recently added'**
   String get musicShelfRecentTitle;
-
-  /// Overline above the starred shelf on the music hub.
-  ///
-  /// In en, this message translates to:
-  /// **'Kept on purpose'**
-  String get musicShelfStarredOverline;
 
   /// Shelf on the music hub holding what the listener starred.
   ///
@@ -8864,12 +8804,6 @@ abstract class AppLocalizations {
   /// **'Keep files'**
   String get podcastKeepFiles;
 
-  /// Overline above the latest-episodes section.
-  ///
-  /// In en, this message translates to:
-  /// **'New'**
-  String get podcastLatestOverline;
-
   /// When a show last published, in the line under its title.
   ///
   /// In en, this message translates to:
@@ -9421,12 +9355,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 unplayed} other{{count} unplayed}}'**
   String podcastUnplayedCount(int count);
-
-  /// Overline above the up-next shelf.
-  ///
-  /// In en, this message translates to:
-  /// **'Half heard'**
-  String get podcastUpNextOverline;
 
   /// Shelf on the podcast hub holding episodes that were started and not finished.
   ///
@@ -10693,7 +10621,7 @@ abstract class AppLocalizations {
   /// **'Could not search'**
   String get searchFailedTitle;
 
-  /// Placeholder in the search field, naming what can be found. Drawn on the search screen and in the sidebar header alike.
+  /// Placeholder in the search screen's field, naming what can be found. The sidebar's field draws searchSidebarHint instead: this sentence needs more room than the sidebar has.
   ///
   /// In en, this message translates to:
   /// **'Artists, albums, shows, books'**
@@ -10824,6 +10752,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Shows to subscribe to'**
   String get searchShowsToSubscribe;
+
+  /// Placeholder in the sidebar's search field. Short on purpose: the sidebar gives the field far less room than the search screen, and the descriptive searchFieldHint truncated there.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the library'**
+  String get searchSidebarHint;
 
   /// Heading over directory stations this server does not have yet.
   ///
@@ -13063,7 +12997,7 @@ abstract class AppLocalizations {
   /// **'Volume up'**
   String get shellCommandVolumeUp;
 
-  /// Navigation entry for the administration console.
+  /// Navigation entry for the administration console. Every shellNav* label draws in a 224px sidebar (about 150px of text room, 20px less for the indented music indexes), so translations stay short - a label past that ellipsizes.
   ///
   /// In en, this message translates to:
   /// **'Admin console'**
@@ -14228,6 +14162,12 @@ abstract class AppLocalizations {
   /// **'Waits for your decision. Off adds it with the tags it has'**
   String get uploadsIdentifyOtherHelp;
 
+  /// Raised after an identify-on upload finishes: what arrived is in the review queue rather than on the shelves, and this is what says so. Counts what actually uploaded, not what was picked.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Uploaded 1 file. It\'s being identified and will appear once it clears review} other{Uploaded {count} files. They\'re being identified and will appear once they clear review}}'**
+  String uploadsIdentifying(int count);
+
   /// Title of the error state on the uploads screen.
   ///
   /// In en, this message translates to:
@@ -14276,16 +14216,16 @@ abstract class AppLocalizations {
   /// **'Upload a folder'**
   String get uploadsPickFolder;
 
-  /// Second line of the upload-folder row.
+  /// Second line of the upload-folder row. Names what the folder pick does that the file pick does not - the hierarchy rides along as the grouping hint - because the two rows otherwise read as the same thing.
   ///
   /// In en, this message translates to:
-  /// **'An album or a collection, hierarchy and all'**
+  /// **'Keeps your folder grouping, disc subfolders and all'**
   String get uploadsPickFolderSubtitle;
 
-  /// Second line of the upload-files row in the add sheet.
+  /// Second line of the upload-files row in the add sheet. Contrasts with the folder row: picked files carry no folder hierarchy, so grouping falls back to tags.
   ///
   /// In en, this message translates to:
-  /// **'One track, or a set you pick yourself'**
+  /// **'Tracks you choose by hand, grouped by their tags'**
   String get uploadsPickSubtitle;
 
   /// Under the staging figure, saying what the cap is a cap on.
@@ -14341,6 +14281,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Past uploads'**
   String get uploadsSessionsTitle;
+
+  /// Raised when a folder pick or a drop filtered out Audible files. Says why they can never upload, instead of the silence that made the folder pick look broken.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Skipped 1 Audible file; DRM audio can\'t be played} other{Skipped {count} Audible files; DRM audio can\'t be played}}'**
+  String uploadsSkippedDrm(int count);
+
+  /// Raised only when a folder pick or drop kept nothing at all, to explain the silence; a pick that keeps audio stays quiet about the cover images and logs it expects to leave behind.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Skipped 1 unsupported file} other{Skipped {count} unsupported files}}'**
+  String uploadsSkippedUnsupported(int count);
 
   /// The field taking the address the server downloads from.
   ///

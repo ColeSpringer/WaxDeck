@@ -28,7 +28,7 @@ void main() {
   }
 
   test('a picked folder keeps its audio, in tree order', () {
-    final picked = pickedFromDirectory(<DirectoryEntry>[
+    final pick = pickedFromDirectory(<DirectoryEntry>[
       entry('The Wall/CD2/b.flac'),
       entry('The Wall/cover.jpg'),
       entry('The Wall/top.mp3'),
@@ -36,29 +36,44 @@ void main() {
       entry('The Wall/notes.txt'),
     ], kAcceptedAudioExtensions);
 
-    expect(picked.map((f) => f.name).toList(), <String>[
+    expect(pick.files.map((f) => f.name).toList(), <String>[
       'top.mp3',
       'a.mp3',
       'b.flac',
     ]);
-    expect(picked.map((f) => f.relativeDir).toList(), <String>[
+    expect(pick.files.map((f) => f.relativeDir).toList(), <String>[
       'The Wall',
       'The Wall/CD1',
       'The Wall/CD2',
     ]);
+    // What the filter dropped is counted, not silent: the cover and the
+    // notes here, and never as DRM.
+    expect(pick.skippedUnsupported, 2);
+    expect(pick.skippedDrm, 0);
+  });
+
+  test('audible files count apart from the rest of the filtered', () {
+    final pick = pickedFromDirectory(<DirectoryEntry>[
+      entry('Book/part1.aax'),
+      entry('Book/part2.AAXC'),
+      entry('Book/cover.jpg'),
+    ], kAcceptedAudioExtensions);
+    expect(pick.files, isEmpty);
+    expect(pick.skippedDrm, 2);
+    expect(pick.skippedUnsupported, 1);
   });
 
   test('a browser that fills no relative path lands the file at the top', () {
-    final picked = pickedFromDirectory(<DirectoryEntry>[
+    final pick = pickedFromDirectory(<DirectoryEntry>[
       entry('lonely.mp3'),
     ], kAcceptedAudioExtensions);
-    expect(picked.single.relativeDir, isEmpty);
+    expect(pick.files.single.relativeDir, isEmpty);
   });
 
   test('a picked file is a window over its handle, not its bytes', () async {
     final picked = pickedFromDirectory(<DirectoryEntry>[
       entry('Album/a.mp3', <int>[0, 1, 2, 3, 4, 5, 6, 7]),
-    ], kAcceptedAudioExtensions).single;
+    ], kAcceptedAudioExtensions).files.single;
 
     expect(picked.size, 8);
     // Web picks carry no filesystem path; the transfer dispatches on

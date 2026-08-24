@@ -881,7 +881,9 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       sidebarHeader: SearchField(
         controller: _searchField,
         focusNode: _searchFocus,
-        hint: l10n.searchFieldHint,
+        // Its own short key, not the search screen's: this field has a
+        // sidebar's width, and the descriptive sentence truncated in it.
+        hint: l10n.searchSidebarHint,
         semanticsId: SemanticsIds.searchField,
         clearSemanticsId: SemanticsIds.searchClear,
         onChanged: _onSearchChanged,

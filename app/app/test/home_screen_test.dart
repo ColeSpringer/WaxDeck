@@ -308,4 +308,60 @@ void main() {
     // than a filtered list.
     expect(kHomeShelfWindow, greaterThan(kHomeShelfCards));
   });
+
+  testWidgets('additions waiting in review get a door on home', (tester) async {
+    final repo = _repo()
+      ..sessionState = const SessionState(authenticated: true, user: _uploader)
+      ..reviewEntries = <ReviewEntry>[
+        _pendingEntry('rv-1'),
+        _pendingEntry('rv-2'),
+      ];
+    await _pumpHome(tester, repo);
+
+    expect(_byId(SemanticsIds.homeReviewPending), findsOneWidget);
+    expect(find.text('2 items are waiting in review'), findsOneWidget);
+    expect(_byId(SemanticsIds.homeReviewPendingOpen), findsOneWidget);
+  });
+
+  testWidgets('the review door stands over the first-run state too', (
+    tester,
+  ) async {
+    // The person the notice matters most to has just uploaded into an
+    // empty library, whose home is the invitation that otherwise says
+    // their music does not exist.
+    final repo = FakeRepository()
+      ..sessionState = const SessionState(authenticated: true, user: _uploader)
+      ..reviewEntries = <ReviewEntry>[_pendingEntry('rv-1')];
+    await _pumpHome(tester, repo);
+
+    expect(find.text('Nothing here yet'), findsOneWidget);
+    expect(find.text('1 item is waiting in review'), findsOneWidget);
+  });
+
+  testWidgets('nothing pending, no review banner', (tester) async {
+    final repo = _repo()
+      ..sessionState = const SessionState(authenticated: true, user: _uploader);
+    await _pumpHome(tester, repo);
+    expect(_byId(SemanticsIds.homeReviewPending), findsNothing);
+  });
+
+  testWidgets('a listener without the upload right sees no review door', (
+    tester,
+  ) async {
+    // The endpoint would answer them an empty queue anyway; the gate
+    // keeps home from even asking.
+    final repo = _repo()..reviewEntries = <ReviewEntry>[_pendingEntry('rv-1')];
+    await _pumpHome(tester, repo);
+    expect(_byId(SemanticsIds.homeReviewPending), findsNothing);
+  });
 }
+
+ReviewEntry _pendingEntry(String id) => ReviewEntry(
+  id: id,
+  kind: 'import',
+  status: 'pending',
+  mediaType: MediaType.music,
+  origin: 'upload',
+  trackCount: 1,
+  createdAt: DateTime.utc(2026, 8, 20),
+);

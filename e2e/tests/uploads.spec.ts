@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures';
 import * as path from 'node:path';
 import { J, T } from './driver';
+import { SemanticsIds } from './semantics-ids';
 
 // The manual-upload journey: pick files in the web UI, group them as
 // one album through the upload batch, watch the batch finalize into a
@@ -128,6 +129,22 @@ test('a picked folder uploads its audio and leaves the rest', async ({ app }) =>
   // Auto-detect, which is what a folder is picked for: the disc
   // subfolder rides along as the clustering hint.
   await app.uploads.groupAs('auto');
+  // What the flow says once the dialog is gone (a toast under a modal
+  // is hidden from the semantics tree): the identify announcement
+  // first, then the DRM report the messenger queued behind it - the
+  // memoir.aax was left behind by name, while the text file is shed
+  // without commentary. The announcement's sentence lives on its
+  // snackbar's group label - the action button folds the row into one
+  // node - so its button is what a locator can hold; the DRM toast has
+  // no button and its text stands as a node of its own. T.fetch for
+  // the first: it appears only after every member uploads and the
+  // batch finalizes, the same work the poll below budgets T.fetch for.
+  await expect(
+    app.uploads.control(SemanticsIds.uploadIdentifyingReview),
+  ).toBeVisible({ timeout: T.fetch });
+  await expect(app.uploads.text('Skipped 1 Audible file')).toBeVisible({
+    timeout: T.assert,
+  });
 
   await expect(async () => {
     const fresh = (await uploads()).filter(
@@ -139,8 +156,9 @@ test('a picked folder uploads its audio and leaves the rest', async ({ app }) =>
     const batchId = fresh[0]?.batchId;
     expect(batchId, 'the picked folder should stage under a batch of its own').toBeTruthy();
     const members = fresh.filter((r) => r.batchId === batchId && r.state === 'staged');
-    // Two, not three: the folder holds a text file the dialog could not
-    // filter out, so the picker's own filtering is what left it behind.
+    // Two, not four: the folder holds a text file and an Audible
+    // container the dialog could not filter out, so the picker's own
+    // filtering is what left them behind.
     expect(members).toHaveLength(2);
     expect(members.map((r) => r.fileName).sort()).toEqual([...HARBOUR].sort());
     expect(members[0].reviewEntryId, 'finalize linked the entry').toBeTruthy();

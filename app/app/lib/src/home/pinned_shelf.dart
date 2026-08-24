@@ -57,7 +57,6 @@ class PinnedShelf extends ConsumerWidget {
                   const EdgeInsets.only(bottom: WaxSpace.s24),
               child: SectionHeader(
                 title: l10n.homePinnedTitle,
-                overline: l10n.homePinnedOverline,
                 actionLabel: l10n.homeShelfRetry,
                 onAction: () => ref.invalidate(pinnedCardsProvider),
               ),
@@ -66,10 +65,7 @@ class PinnedShelf extends ConsumerWidget {
         );
       }
       return SliverToBoxAdapter(
-        child: DelayedShelfSkeleton(
-          title: l10n.homePinnedTitle,
-          overline: l10n.homePinnedOverline,
-        ),
+        child: DelayedShelfSkeleton(title: l10n.homePinnedTitle),
       );
     }
     final cards = async.value ?? const <EntityCard>[];
@@ -109,7 +105,6 @@ class PinnedShelf extends ConsumerWidget {
           padding: const EdgeInsets.only(bottom: WaxSpace.s24),
           child: ShelfRow(
             title: l10n.homePinnedTitle,
-            overline: l10n.homePinnedOverline,
             items: tiles,
             // By position, like every other shelf here: a tile carries no
             // value equality and two releases can share a title.

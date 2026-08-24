@@ -97,11 +97,20 @@ into review entries when the transfer finishes - or within a day,
 with whatever arrived, if the client vanished. Files shared to the
 Android app group by auto-detection without asking.
 
-The client's pick dialogs filter to the default accepted-format set
-(a hardcoded mirror of the server's list); a server running a custom
-`WAXDECK_UPLOAD_FORMATS` still accepts its formats through the
-dialogs' "All files" group, and the server-side format check at
-session create is the real gate either way.
+Uploads accept flac, mp3, m4a, m4b, aac, ogg, oga, opus, wav, aif,
+aiff, mka, and webm by default; `WAXDECK_UPLOAD_FORMATS` swaps in an
+operator's own list (replacing that set, not extending it). Audible's
+DRM containers (aax, aaxc) are refused by name whatever the set says -
+the files are encrypted, so no format list can make them playable -
+and the refusal says so instead of implying a codec gap. The client's
+pick dialogs filter to the default accepted-format set (a hardcoded
+mirror of the server's list); a server running a custom format set
+still accepts its formats through the dialogs' "All files" group, and
+the server-side format check at session create is the real gate either
+way. A folder pick or a drop reports DRM files it filtered out by
+name, and explains itself when nothing survived the filter at all;
+the cover images and logs an album folder is expected to shed are
+left behind without commentary.
 
 Three ceilings sit on a session before a byte moves, alongside the
 per-account pending-upload limit: one file may declare at most 16 GiB,

@@ -6,6 +6,7 @@
   "errorCatalogMaintenance": "La biblioteca está en mantenimiento. Inténtalo de nuevo en un momento.",
   "errorConflict": "Otra cosa ha cambiado esto antes. Vuelve a mirarlo e inténtalo de nuevo.",
   "errorDirectoryUnavailable": "El servicio de directorio no ha respondido. Inténtalo más tarde.",
+  "errorDrmProtected": "Los archivos de Audible con DRM no se pueden reproducir.",
   "errorEndpointFailed": "Ese dispositivo no ha podido hacerlo. Sigue conectado, así que merece la pena intentarlo de nuevo.",
   "errorEndpointOffline": "Ese dispositivo no está conectado. Actualiza la lista de dispositivos.",
   "errorFeatureUnavailable": "Este servidor no tiene activa la función que hace falta.",

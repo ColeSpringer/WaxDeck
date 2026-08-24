@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../podcasts/podcast_shelves.dart';
 import '../providers.dart';
+import '../review/review_controller.dart';
 import 'pinned_controller.dart';
 
 /// How many cards a home shelf holds.
@@ -295,6 +296,9 @@ Future<void> refreshHome(WidgetRef ref) async {
     ref.invalidate(provider);
   }
   ref.invalidate(latestEpisodesProvider);
+  // The review banner is on this screen too, and the pull gesture is
+  // the one way somebody asks home to re-check itself.
+  ref.invalidate(pendingReviewCountProvider);
   // Awaited so the gesture's spinner lasts as long as the reads do. The
   // first shelf is representative: they run concurrently against one
   // server, and holding the indicator for the slowest of eight would

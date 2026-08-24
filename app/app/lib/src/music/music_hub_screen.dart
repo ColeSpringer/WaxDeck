@@ -145,20 +145,17 @@ class MusicHubScreen extends ConsumerWidget {
         ItemShelf(
           shelf: 'music-recent',
           title: l10n.musicShelfRecentTitle,
-          overline: l10n.musicShelfRecentOverline,
           provider: musicRecentlyAddedShelfProvider,
           allLocation: WaxRoute.musicTracks,
         ),
         ItemShelf(
           shelf: 'music-most-played',
           title: l10n.musicShelfMostPlayedTitle,
-          overline: l10n.musicShelfMostPlayedOverline,
           provider: musicMostPlayedShelfProvider,
         ),
         ItemShelf(
           shelf: 'music-starred',
           title: l10n.musicShelfStarredTitle,
-          overline: l10n.musicShelfStarredOverline,
           provider: musicStarredShelfProvider,
         ),
         const MixShelf(),

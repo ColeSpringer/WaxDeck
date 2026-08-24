@@ -112,6 +112,8 @@ func run() error {
 
 		managedRoots = flag.String("managed-roots", envOr("WAXDECK_MANAGED_ROOTS", ""), "library root names (comma separated) the catalog may place files into: uploads import there and the organizer may move files there; unlisted roots stay strictly in place")
 
+		uploadFormats = flag.String("upload-formats", envOr("WAXDECK_UPLOAD_FORMATS", ""), "file extensions uploads accept, comma separated. Replaces the default set rather than extending it; empty keeps the default (every format the catalog scans and the decode stack reads). DRM containers (aax, aaxc) are refused regardless")
+
 		matchingOn   = flag.Bool("matching", envOr("WAXDECK_MATCHING", "true") == "true", "identify new and uploaded music against MusicBrainz (paced background lookups)")
 		mbBase       = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override (a local mirror, or a stub in tests)")
 		coverArtBase = flag.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override (a mirror, or a stub in tests); the archive rung only exists when matching is on")
@@ -322,6 +324,7 @@ func run() error {
 		SonicAnalysisDefault:      *sonicAnalysis,
 		WorkerAPIConfigured:       len(workerTokenList) > 0,
 		Roots:                     svcRoots,
+		UploadFormats:             splitNonEmpty(*uploadFormats, ","),
 		ScanOnStart:               *scanStart && len(roots) > 0,
 		ResetStaleCatalog:         *resetStale,
 		Sealer:                    sealer,

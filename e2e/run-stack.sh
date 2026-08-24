@@ -25,6 +25,9 @@ mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,fe
 mkdir -p "$RUN_DIR/upload-src/Harbour Lights/Disc 1"
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src/Harbour Lights/Disc 1" -preset upload-folder >/dev/null)
 echo "not audio" >"$RUN_DIR/upload-src/Harbour Lights/notes.txt"
+# An Audible container beside the album: the picker's DRM deny-list is
+# what leaves it behind, and the journey asserts the refusal is said.
+echo "not really encrypted" >"$RUN_DIR/upload-src/Harbour Lights/memoir.aax"
 # A cover to set by hand. Beside the upload sources rather than in the
 # library: it is a file a picker walks to, not media under scan.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset cover >/dev/null)

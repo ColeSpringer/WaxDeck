@@ -13,10 +13,10 @@ Future<bool> droppedPathIsDirectory(String path) async => false;
 
 /// Web directory drops arrive as recursive drop items, never as bare
 /// paths; nothing to expand here.
-Future<List<PickedAudioFile>> expandDroppedDirectory(
+Future<FolderPick> expandDroppedDirectory(
   String path,
   Set<String> extensions,
-) async => const [];
+) async => const FolderPick();
 
 /// Converts one picker or drop XFile: a lazy browser-file reference
 /// whose ranged openRead slices the underlying Blob, so only the
@@ -55,7 +55,7 @@ class _WebFilePickerPort implements FilePickerPort {
   }
 
   @override
-  Future<List<PickedAudioFile>> pickAudioFolder() async =>
+  Future<FolderPick> pickAudioFolder() async =>
       pickedFromDirectory(await _pickDirectory(), kAcceptedAudioExtensions);
 
   @override
@@ -76,21 +76,27 @@ class _WebFilePickerPort implements FilePickerPort {
 
 /// The folder pick's conversion step: files whose extension is in
 /// [extensions], each a lazy window over its browser file, ordered the
-/// way the desktop walk orders what it lists.
+/// way the desktop walk orders what it lists - plus a count of what
+/// the filter dropped, DRM apart.
 ///
 /// Split out from the dialog because only the browser can mint a real
 /// `webkitRelativePath`, so this is the seam a test drives.
-List<PickedAudioFile> pickedFromDirectory(
+FolderPick pickedFromDirectory(
   List<DirectoryEntry> entries,
   Set<String> extensions,
 ) {
   final out = <PickedAudioFile>[];
+  var skippedUnsupported = 0;
+  var skippedDrm = 0;
   for (final entry in entries) {
     final file = entry.file;
     // A directory pick cannot be filtered by the dialog - `accept` is
     // ignored once `webkitdirectory` is set - so the tree is filtered
     // here, the way the desktop walk filters what it lists.
-    if (!hasAcceptedExtension(file.name, extensions)) continue;
+    if (!hasAcceptedExtension(file.name, extensions)) {
+      hasRejectedExtension(file.name) ? skippedDrm++ : skippedUnsupported++;
+      continue;
+    }
     out.add(
       PickedAudioFile(
         name: file.name,
@@ -106,7 +112,11 @@ List<PickedAudioFile> pickedFromDirectory(
     final byDir = a.relativeDir.compareTo(b.relativeDir);
     return byDir != 0 ? byDir : a.name.compareTo(b.name);
   });
-  return out;
+  return FolderPick(
+    files: out,
+    skippedUnsupported: skippedUnsupported,
+    skippedDrm: skippedDrm,
+  );
 }
 
 /// One file of a folder pick: the browser's handle and the path it was
@@ -127,10 +137,8 @@ Future<List<DirectoryEntry>> _pickDirectory() {
     ..multiple = true
     ..webkitdirectory = true
     ..style.display = 'none';
-  web.EventListener? onFocus;
   void finish(List<DirectoryEntry> entries) {
     if (completer.isCompleted) return;
-    if (onFocus != null) web.window.removeEventListener('focus', onFocus);
     // The File handles outlive the element they came from, so the input
     // goes back out of the document however the pick ended - including
     // the dismissals that used to leave one behind per attempt.
@@ -148,19 +156,18 @@ Future<List<DirectoryEntry>> _pickDirectory() {
     ]);
   });
   // Dismissing the dialog, which the port answers as an empty pick the
-  // way the desktop one does. `cancel` is the direct signal and not
-  // every engine fires it, so the page regaining focus is the fallback:
-  // a chooser is modal, so focus coming back means the dialog is gone,
-  // and a moment later either the change event has landed or nothing
-  // was picked. Without one of the two an await here never returns and
-  // the affordance is dead for the rest of the session.
+  // way the desktop one does. `cancel` alone, deliberately: every
+  // engine that runs this build fires it on a dismissed file input
+  // (Baseline 2023 - Chrome 113, Firefox 91, Safari 16.4 - all older
+  // than the oldest browser Flutter's web output supports), and there
+  // is no honest feature probe for it (`'oncancel' in input` is true on
+  // every HTMLElement, dialog's handler slot, years before file inputs
+  // fired the event). The window-focus fallback this replaced could not
+  // tell a dismissal from a confirm still enumerating a large folder -
+  // `change` waits out the walk plus Chrome's own "upload N files?"
+  // dialog - so it resolved real picks empty, which read as the
+  // affordance being broken.
   input.addEventListener('cancel', ((web.Event _) => finish(const [])).toJS);
-  onFocus = ((web.Event _) {
-    Future<void>.delayed(const Duration(milliseconds: 400), () {
-      finish(const []);
-    });
-  }).toJS;
-  web.window.addEventListener('focus', onFocus);
   web.document.body!.appendChild(input);
   input.click();
   return completer.future;

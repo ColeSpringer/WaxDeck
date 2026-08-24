@@ -249,10 +249,6 @@
       }
     }
   },
-  "booksContinueOverline": "Part way through",
-  "@booksContinueOverline": {
-    "description": "Overline above the continue-listening shelf."
-  },
   "booksContinueTitle": "Continue listening",
   "@booksContinueTitle": {
     "description": "Shelf on the audiobook hub holding the books part way through."

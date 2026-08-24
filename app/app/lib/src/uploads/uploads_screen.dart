@@ -66,6 +66,14 @@ class UploadsScreen extends ConsumerWidget {
       enabled: canUpload,
       hint: l10n.uploadsDropHint,
       onDropped: (files) => uploadPickedFiles(context, ref, files),
+      onSkipped: ({required unsupported, required drm, required nothingKept}) =>
+          reportSkippedFiles(
+            ref.read(shellMessengerProvider.notifier),
+            l10n,
+            unsupported: unsupported,
+            drm: drm,
+            nothingKept: nothingKept,
+          ),
       child: WaxScaffold(
         title: l10n.uploadsTitle,
         largeTitle: false,

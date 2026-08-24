@@ -121,7 +121,10 @@ info:
       so the caller has nothing to clear), `field-locked`
       (the edit targets a locked metadata field and did not set
       `force`), `unsupported-format` (the uploaded file's format
-      is not accepted by this server), `read-only` (the target
+      is not accepted by this server), `drm-protected` (the uploaded
+      file is a DRM-encrypted container, such as an Audible aax or
+      aaxc; unlike `unsupported-format` this is permanent - no server
+      configuration can make the file playable), `read-only` (the target
       library, or the whole server, is in read-only mode: uploads,
       organizing, file write-back, deletion, and the file tools are
       refused while reads and playback keep working),
@@ -10664,7 +10667,11 @@ components:
       description: >
         The file's format is not accepted (code `unsupported-format`):
         the extension is outside the server's accepted set, or the
-        audio did not decode.
+        audio did not decode. A DRM-encrypted container (an Audible
+        `aax`/`aaxc`) answers with the same status but code
+        `drm-protected`, because that refusal is permanent - no format
+        set can make the file playable - and must not read as a codec
+        gap an operator could widen away.
       content:
         application/json:
           schema:

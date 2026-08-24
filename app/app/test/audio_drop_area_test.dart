@@ -30,14 +30,19 @@ void main() {
         file('loose.mp3'),
       ];
 
-      final picked = await normalizeDrop(items, kAcceptedAudioExtensions);
+      final drop = await normalizeDrop(items, kAcceptedAudioExtensions);
+      final picked = drop.files;
       expect(picked, hasLength(3));
       final byName = {for (final p in picked) p.name: p};
       expect(byName['one.flac']!.relativeDir, 'Boxset/CD1');
       expect(byName['two.flac']!.relativeDir, 'Boxset/CD2');
       expect(byName['loose.mp3']!.relativeDir, '');
-      // The jpg fell to the extension filter.
+      // The jpg fell to the extension filter, and was counted rather
+      // than lost: the drop path reports skips the way a folder pick
+      // does.
       expect(byName.containsKey('cover.jpg'), isFalse);
+      expect(drop.skippedUnsupported, 1);
+      expect(drop.skippedDrm, 0);
     },
   );
 
@@ -51,10 +56,12 @@ void main() {
     await File('${disc.path}/notes.txt').writeAsString('skip me');
 
     // Linux and Windows deliver a dropped folder as a plain path item.
-    final picked = await normalizeDrop([
+    final drop = await normalizeDrop([
       DropItemFile(root.path),
     ], kAcceptedAudioExtensions);
+    final picked = drop.files;
     expect(picked, hasLength(2));
+    expect(drop.skippedUnsupported, 1, reason: 'notes.txt was counted');
     final byName = {for (final p in picked) p.name: p};
     final rootName = root.path.split(Platform.pathSeparator).last;
     expect(byName['top.mp3']!.relativeDir, rootName);
@@ -70,12 +77,17 @@ void main() {
       length: 2,
       path: '/drop-fake/$name',
     );
-    final picked = await normalizeDrop([
+    final drop = await normalizeDrop([
       data('keep.OPUS'),
       data('drop.pdf'),
       data('extensionless'),
+      data('book.aax'),
     ], kAcceptedAudioExtensions);
-    expect(picked.map((p) => p.name), ['keep.OPUS']);
+    expect(drop.files.map((p) => p.name), ['keep.OPUS']);
+    // The Audible file counts apart: its report is a refusal with a
+    // reason, not a filter.
+    expect(drop.skippedUnsupported, 2);
+    expect(drop.skippedDrm, 1);
   });
 
   test('the zip set admits archives only', () async {
@@ -85,10 +97,10 @@ void main() {
       length: 2,
       path: '/drop-fake/$name',
     );
-    final picked = await normalizeDrop(
+    final drop = await normalizeDrop(
       [data('backup.zip'), data('song.mp3')],
       {'zip'},
     );
-    expect(picked.map((p) => p.name), ['backup.zip']);
+    expect(drop.files.map((p) => p.name), ['backup.zip']);
   });
 }

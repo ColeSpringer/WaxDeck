@@ -31,7 +31,7 @@ class _ImagePicker implements FilePickerPort {
   }) async => const [];
 
   @override
-  Future<List<PickedAudioFile>> pickAudioFolder() async => const [];
+  Future<FolderPick> pickAudioFolder() async => const FolderPick();
 
   @override
   Future<PickedAudioFile?> pickFile({
@@ -146,7 +146,7 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.text('From Cover Art Archive'), findsOneWidget);
-    expect(find.text('From the file\'s tags'), findsOneWidget);
+    expect(find.text('Art from the file'), findsOneWidget);
   });
 
   testWidgets('an inherited front cover names the rung that answered', (
@@ -165,7 +165,7 @@ void main() {
 
     expect(find.text('Inherited'), findsOneWidget);
     expect(
-      find.text('From the file\'s tags · Borrowed from a track'),
+      find.text('Art from the file · Borrowed from a track'),
       findsOneWidget,
     );
   });
@@ -202,10 +202,24 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.text('1 from you'), findsOneWidget);
-    expect(find.text('Artwork · From the file\'s tags'), findsOneWidget);
+    expect(find.text('Artwork · From the file'), findsOneWidget);
     // A cover's sidecar is a folder image; lyrics arrive as an .lrc, and
     // one wording cannot honestly describe both files.
     expect(find.text('Lyrics · From an .lrc file'), findsOneWidget);
+  });
+
+  testWidgets('an embedded lyric is not called art', (tester) async {
+    // The art mark for `tag` says "Art from the file"; a lyric that
+    // arrived the same way needs its own sentence, not that one.
+    final repo = _repo()
+      ..lyricsByPid['tr-1'] = const LyricsState(synced: false, source: 'tag')
+      ..itemProvenance['tr-1'] = const <FieldProvenance>[
+        FieldProvenance(field: 'lyrics', source: 'tag', locked: false),
+      ];
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('Lyrics · From the file'), findsOneWidget);
+    expect(find.text('Lyrics · Art from the file'), findsNothing);
   });
 
   testWidgets('a lock-only artifact row states no source', (tester) async {
@@ -236,7 +250,7 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.text('No recorded sources'), findsOneWidget);
-    expect(find.text('Artwork · From the file\'s tags'), findsOneWidget);
+    expect(find.text('Artwork · From the file'), findsOneWidget);
   });
 
   testWidgets('a front cover the item does not own reads as inherited', (

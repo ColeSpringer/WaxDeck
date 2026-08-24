@@ -2118,6 +2118,10 @@
   "@artSourceFeed": {
     "description": "Source mark under a cover a podcast feed supplied, or one a radio station announced in its own stream."
   },
+  "artSourceFromFile": "From the file",
+  "@artSourceFromFile": {
+    "description": "Provenance of an artifact read out of the audio file's own tags, on the rows that already name the artifact (\"Artwork · {source}\", \"Lyrics · {source}\"). Bare on purpose: the standalone artSourceTag would stutter behind the Artwork prefix and call a lyric a picture behind the Lyrics one."
+  },
   "artSourceGenerated": "Made by the server",
   "@artSourceGenerated": {
     "description": "Source mark under a picture the server composed from what the catalog already holds, rather than one anybody chose. A playlist's mosaic of its members' covers is the case it exists for."
@@ -2144,9 +2148,9 @@
   "@artSourceSidecar": {
     "description": "Source mark under a cover read from an image file sitting beside the audio, such as a cover.jpg."
   },
-  "artSourceTag": "From the file's tags",
+  "artSourceTag": "Art from the file",
   "@artSourceTag": {
-    "description": "Source mark under a cover read out of the audio file's own tags. The provenance rows draw it for an embedded lyric as well, which arrives the same way."
+    "description": "Source mark under a cover read out of the audio file itself (its embedded tags). Says what the mark is about, not the mechanism: \"from the file's tags\" read as nonsense under a picture. The provenance rows, already prefixed with the artifact's name, draw the bare artSourceFromFile instead."
   },
   "artSourceUser": "Set by hand",
   "@artSourceUser": {
@@ -2828,10 +2832,6 @@
       }
     }
   },
-  "booksContinueOverline": "Part way through",
-  "@booksContinueOverline": {
-    "description": "Overline above the continue-listening shelf."
-  },
   "booksContinueTitle": "Continue listening",
   "@booksContinueTitle": {
     "description": "Shelf on the audiobook hub holding the books part way through."
@@ -3006,6 +3006,10 @@
   "commonLoadingTitle": "Loading…",
   "@commonLoadingTitle": {
     "description": "Stands in for a track's name while the row it sits in is still resolving. The trailing character is a single-glyph ellipsis."
+  },
+  "commonOpenReview": "Open review",
+  "@commonOpenReview": {
+    "description": "Action that opens the review queue, wherever something just landed there: home's pending banner, the post-upload message, the metadata editor's rematch message."
   },
   "commonRetry": "Retry",
   "@commonRetry": {
@@ -3569,6 +3573,10 @@
   "@errorDirectoryUnavailable": {
     "description": "Error sentence for the spec code `directory-unavailable`, such as the radio station directory."
   },
+  "errorDrmProtected": "Audible DRM files can't be played.",
+  "@errorDrmProtected": {
+    "description": "Error sentence for the spec code `drm-protected`: an encrypted container (Audible aax/aaxc) was refused. Permanent, unlike `unsupported-format` - no server setting makes the file playable - and the sentence says so instead of implying a codec gap."
+  },
   "errorEndpointFailed": "That device could not carry that out. It is still connected, so it is worth trying again.",
   "@errorEndpointFailed": {
     "description": "Error sentence for the spec code `endpoint-failed`: the other device took the command and failed at it, unlike `endpoint-offline`, where it never got it."
@@ -4119,17 +4127,9 @@
   "@homeAddAction": {
     "description": "Opens the sheet that adds audio to the library. Both the top-right button on home and the action on its first-run empty state."
   },
-  "homeContinueOverline": "Where you left off",
-  "@homeContinueOverline": {
-    "description": "Overline above the Continue listening shelf."
-  },
   "homeContinueTitle": "Continue listening",
   "@homeContinueTitle": {
     "description": "Shelf of items with a saved position."
-  },
-  "homeDownloadedOverline": "Plays with no network",
-  "@homeDownloadedOverline": {
-    "description": "Overline above the On this device shelf."
   },
   "homeDownloadedTitle": "On this device",
   "@homeDownloadedTitle": {
@@ -4142,10 +4142,6 @@
   "homeEmptyTitle": "Nothing here yet",
   "@homeEmptyTitle": {
     "description": "Empty state of home on a server whose library holds nothing."
-  },
-  "homeEpisodesOverline": "From the shows you follow",
-  "@homeEpisodesOverline": {
-    "description": "Overline above the New episodes shelf."
   },
   "homeEpisodesTitle": "New episodes",
   "@homeEpisodesTitle": {
@@ -4175,25 +4171,13 @@
       }
     }
   },
-  "homeMixesOverline": "Mixes from what you play",
-  "@homeMixesOverline": {
-    "description": "Overline above the Made for you shelf."
-  },
   "homeMixesTitle": "Made for you",
   "@homeMixesTitle": {
     "description": "Shelf of mixes built from what this listener plays."
   },
-  "homeMostPlayedOverline": "What you come back to",
-  "@homeMostPlayedOverline": {
-    "description": "Overline above the Most played shelf."
-  },
   "homeMostPlayedTitle": "Most played",
   "@homeMostPlayedTitle": {
     "description": "Shelf of the items with the highest play counts."
-  },
-  "homeNeverPlayedOverline": "In your library, still sealed",
-  "@homeNeverPlayedOverline": {
-    "description": "Overline above the Never played shelf. The image is a record still in its shrink wrap."
   },
   "homeNeverPlayedTitle": "Never played",
   "@homeNeverPlayedTitle": {
@@ -4279,29 +4263,27 @@
   "@homePinnedKindReleaseGroup": {
     "description": "What a pinned card is, on the line under its title. A release group is one album across all its editions."
   },
-  "homePinnedOverline": "What you keep",
-  "@homePinnedOverline": {
-    "description": "Overline above the Pinned shelf."
-  },
   "homePinnedTitle": "Pinned",
   "@homePinnedTitle": {
     "description": "Shelf of what this listener pinned to home."
-  },
-  "homeRecentOverline": "New to the library",
-  "@homeRecentOverline": {
-    "description": "Overline above the Recently added shelf."
   },
   "homeRecentTitle": "Recently added",
   "@homeRecentTitle": {
     "description": "Shelf of what the library gained most recently."
   },
-  "homeRediscoverOverline": "Marked, and not heard in months",
-  "@homeRediscoverOverline": {
-    "description": "Overline above the Rediscover shelf. Marked means starred or otherwise singled out."
-  },
   "homeRediscoverTitle": "Rediscover",
   "@homeRediscoverTitle": {
     "description": "Shelf of items the listener marked and has not played in months."
+  },
+  "homeReviewPending": "{count, plural, =1{1 item is waiting in review} other{{count} items are waiting in review}}",
+  "@homeReviewPending": {
+    "description": "Banner over the shelves while additions sit in the review queue. Items, not uploads: an administrator's count covers the whole queue, and a scan can open entries nobody uploaded. Non-administrators count their own uploads' entries, capped at one queue page.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   },
   "homeShelfRemaining": "{span} left",
   "@homeShelfRemaining": {
@@ -4432,7 +4414,7 @@
   },
   "metadataArtworkSource": "Artwork · {source}",
   "@metadataArtworkSource": {
-    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file's tags', 'Set by hand', 'From Deezer').",
+    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').",
     "placeholders": {
       "source": {
         "type": "String",
@@ -4753,10 +4735,6 @@
   "metadataOpenReleaseGroup": "Open release group",
   "@metadataOpenReleaseGroup": {
     "description": "Door from the metadata editor to the release group this item belongs to: the album across its editions."
-  },
-  "metadataOpenReview": "Open review",
-  "@metadataOpenReview": {
-    "description": "Button on the rematch message that opens the review entry it created."
   },
   "metadataQueuedForIdentification": "Queued for identification",
   "@metadataQueuedForIdentification": {
@@ -5316,25 +5294,13 @@
   "@musicPlay": {
     "description": "Button on an album's or an artist's header that plays it from the start."
   },
-  "musicShelfMostPlayedOverline": "What you come back to",
-  "@musicShelfMostPlayedOverline": {
-    "description": "Overline above the most-played shelf on the music hub."
-  },
   "musicShelfMostPlayedTitle": "Most played",
   "@musicShelfMostPlayedTitle": {
     "description": "Shelf on the music hub holding what has been played most."
   },
-  "musicShelfRecentOverline": "New to the collection",
-  "@musicShelfRecentOverline": {
-    "description": "Overline above the recently-added shelf on the music hub."
-  },
   "musicShelfRecentTitle": "Recently added",
   "@musicShelfRecentTitle": {
     "description": "Shelf on the music hub holding what arrived in the library most recently."
-  },
-  "musicShelfStarredOverline": "Kept on purpose",
-  "@musicShelfStarredOverline": {
-    "description": "Overline above the starred shelf on the music hub."
   },
   "musicShelfStarredTitle": "Starred",
   "@musicShelfStarredTitle": {
@@ -7520,10 +7486,6 @@
   "@podcastKeepFiles": {
     "description": "Unfollows the show and leaves the downloads alone."
   },
-  "podcastLatestOverline": "New",
-  "@podcastLatestOverline": {
-    "description": "Overline above the latest-episodes section."
-  },
   "podcastLatestPublished": "Latest {date}",
   "@podcastLatestPublished": {
     "description": "When a show last published, in the line under its title.",
@@ -8031,10 +7993,6 @@
         "type": "int"
       }
     }
-  },
-  "podcastUpNextOverline": "Half heard",
-  "@podcastUpNextOverline": {
-    "description": "Overline above the up-next shelf."
   },
   "podcastUpNextTitle": "Up next",
   "@podcastUpNextTitle": {
@@ -9242,7 +9200,7 @@
   },
   "searchFieldHint": "Artists, albums, shows, books",
   "@searchFieldHint": {
-    "description": "Placeholder in the search field, naming what can be found. Drawn on the search screen and in the sidebar header alike."
+    "description": "Placeholder in the search screen's field, naming what can be found. The sidebar's field draws searchSidebarHint instead: this sentence needs more room than the sidebar has."
   },
   "searchForget": "Forget {query}",
   "@searchForget": {
@@ -9345,6 +9303,10 @@
   "searchShowsToSubscribe": "Shows to subscribe to",
   "@searchShowsToSubscribe": {
     "description": "Heading over podcast directory results this server is not subscribed to."
+  },
+  "searchSidebarHint": "Search the library",
+  "@searchSidebarHint": {
+    "description": "Placeholder in the sidebar's search field. Short on purpose: the sidebar gives the field far less room than the search screen, and the descriptive searchFieldHint truncated there."
   },
   "searchStationsToAdd": "Stations to add",
   "@searchStationsToAdd": {
@@ -11017,7 +10979,7 @@
   },
   "shellNavAdmin": "Admin console",
   "@shellNavAdmin": {
-    "description": "Navigation entry for the administration console."
+    "description": "Navigation entry for the administration console. Every shellNav* label draws in a 224px sidebar (about 150px of text room, 20px less for the indented music indexes), so translations stay short - a label past that ellipsizes."
   },
   "shellNavAlbums": "Albums",
   "@shellNavAlbums": {
@@ -12033,6 +11995,16 @@
   "@uploadsIdentifyOtherHelp": {
     "description": "Help under the review-before-adding switch."
   },
+  "uploadsIdentifying": "{count, plural, =1{Uploaded 1 file. It's being identified and will appear once it clears review} other{Uploaded {count} files. They're being identified and will appear once they clear review}}",
+  "@uploadsIdentifying": {
+    "description": "Raised after an identify-on upload finishes: what arrived is in the review queue rather than on the shelves, and this is what says so. Counts what actually uploaded, not what was picked.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "uploadsLoadError": "Could not load uploads",
   "@uploadsLoadError": {
     "description": "Title of the error state on the uploads screen."
@@ -12065,13 +12037,13 @@
   "@uploadsPickFolder": {
     "description": "Opens the folder picker, whose hierarchy rides along as a grouping hint."
   },
-  "uploadsPickFolderSubtitle": "An album or a collection, hierarchy and all",
+  "uploadsPickFolderSubtitle": "Keeps your folder grouping, disc subfolders and all",
   "@uploadsPickFolderSubtitle": {
-    "description": "Second line of the upload-folder row."
+    "description": "Second line of the upload-folder row. Names what the folder pick does that the file pick does not - the hierarchy rides along as the grouping hint - because the two rows otherwise read as the same thing."
   },
-  "uploadsPickSubtitle": "One track, or a set you pick yourself",
+  "uploadsPickSubtitle": "Tracks you choose by hand, grouped by their tags",
   "@uploadsPickSubtitle": {
-    "description": "Second line of the upload-files row in the add sheet."
+    "description": "Second line of the upload-files row in the add sheet. Contrasts with the folder row: picked files carry no folder hierarchy, so grouping falls back to tags."
   },
   "uploadsQuotaHelp": "This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.",
   "@uploadsQuotaHelp": {
@@ -12128,6 +12100,26 @@
   "uploadsSessionsTitle": "Past uploads",
   "@uploadsSessionsTitle": {
     "description": "Row in the add sheet that opens the upload sessions list. The list is not a navigation destination, so this is its lasting door."
+  },
+  "uploadsSkippedDrm": "{count, plural, =1{Skipped 1 Audible file; DRM audio can't be played} other{Skipped {count} Audible files; DRM audio can't be played}}",
+  "@uploadsSkippedDrm": {
+    "description": "Raised when a folder pick or a drop filtered out Audible files. Says why they can never upload, instead of the silence that made the folder pick look broken.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uploadsSkippedUnsupported": "{count, plural, =1{Skipped 1 unsupported file} other{Skipped {count} unsupported files}}",
+  "@uploadsSkippedUnsupported": {
+    "description": "Raised only when a folder pick or drop kept nothing at all, to explain the silence; a pick that keeps audio stays quiet about the cover images and logs it expects to leave behind.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
   },
   "uploadsSourceUrl": "Source URL",
   "@uploadsSourceUrl": {

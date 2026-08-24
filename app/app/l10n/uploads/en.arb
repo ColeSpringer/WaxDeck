@@ -195,6 +195,16 @@
   "@uploadsIdentifyOtherHelp": {
     "description": "Help under the review-before-adding switch."
   },
+  "uploadsIdentifying": "{count, plural, =1{Uploaded 1 file. It's being identified and will appear once it clears review} other{Uploaded {count} files. They're being identified and will appear once they clear review}}",
+  "@uploadsIdentifying": {
+    "description": "Raised after an identify-on upload finishes: what arrived is in the review queue rather than on the shelves, and this is what says so. Counts what actually uploaded, not what was picked.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "uploadsLoadError": "Could not load uploads",
   "@uploadsLoadError": {
     "description": "Title of the error state on the uploads screen."
@@ -227,13 +237,13 @@
   "@uploadsPickFolder": {
     "description": "Opens the folder picker, whose hierarchy rides along as a grouping hint."
   },
-  "uploadsPickFolderSubtitle": "An album or a collection, hierarchy and all",
+  "uploadsPickFolderSubtitle": "Keeps your folder grouping, disc subfolders and all",
   "@uploadsPickFolderSubtitle": {
-    "description": "Second line of the upload-folder row."
+    "description": "Second line of the upload-folder row. Names what the folder pick does that the file pick does not - the hierarchy rides along as the grouping hint - because the two rows otherwise read as the same thing."
   },
-  "uploadsPickSubtitle": "One track, or a set you pick yourself",
+  "uploadsPickSubtitle": "Tracks you choose by hand, grouped by their tags",
   "@uploadsPickSubtitle": {
-    "description": "Second line of the upload-files row in the add sheet."
+    "description": "Second line of the upload-files row in the add sheet. Contrasts with the folder row: picked files carry no folder hierarchy, so grouping falls back to tags."
   },
   "uploadsQuotaHelp": "This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.",
   "@uploadsQuotaHelp": {
@@ -290,6 +300,26 @@
   "uploadsSessionsTitle": "Past uploads",
   "@uploadsSessionsTitle": {
     "description": "Row in the add sheet that opens the upload sessions list. The list is not a navigation destination, so this is its lasting door."
+  },
+  "uploadsSkippedDrm": "{count, plural, =1{Skipped 1 Audible file; DRM audio can't be played} other{Skipped {count} Audible files; DRM audio can't be played}}",
+  "@uploadsSkippedDrm": {
+    "description": "Raised when a folder pick or a drop filtered out Audible files. Says why they can never upload, instead of the silence that made the folder pick look broken.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uploadsSkippedUnsupported": "{count, plural, =1{Skipped 1 unsupported file} other{Skipped {count} unsupported files}}",
+  "@uploadsSkippedUnsupported": {
+    "description": "Raised only when a folder pick or drop kept nothing at all, to explain the silence; a pick that keeps audio stays quiet about the cover images and logs it expects to leave behind.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
   },
   "uploadsSourceUrl": "Source URL",
   "@uploadsSourceUrl": {

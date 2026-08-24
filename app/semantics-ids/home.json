@@ -3,6 +3,8 @@
   "ids": {
     "homeAdd": "home-add",
     "homeMix": "home-mix-{index}",
+    "homeReviewPending": "home-review-pending",
+    "homeReviewPendingOpen": "home-review-pending-open",
     "homeScreen": "home-screen",
     "notificationRow": "notification-row-{kind}-{target}",
     "notificationRowPlain": "notification-row-{kind}-none",

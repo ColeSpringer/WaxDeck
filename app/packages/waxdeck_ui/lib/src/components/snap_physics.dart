@@ -26,7 +26,11 @@ class SnapScrollPhysics extends ScrollPhysics {
     parent: buildParent(ancestor),
   );
 
-  double _snap(double offset, ScrollMetrics position) {
+  /// The landing nearest [offset], clamped to the scrollable range: the
+  /// grid a flick settles on. Public so the shelf's paging chevrons aim
+  /// at the same grid through the same formula, rather than through a
+  /// copy that only a comment keeps in agreement.
+  double snapFor(double offset, ScrollMetrics position) {
     final target =
         ((offset - leadingInset) / itemExtent).roundToDouble() * itemExtent +
         leadingInset;
@@ -45,7 +49,7 @@ class SnapScrollPhysics extends ScrollPhysics {
     }
     final simulation = super.createBallisticSimulation(position, velocity);
     final landing = simulation?.x(double.infinity) ?? position.pixels;
-    final target = _snap(landing, position);
+    final target = snapFor(landing, position);
     if ((target - position.pixels).abs() < precisionErrorTolerance) return null;
     return ScrollSpringSimulation(
       spring,

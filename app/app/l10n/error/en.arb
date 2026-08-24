@@ -17,6 +17,10 @@
   "@errorDirectoryUnavailable": {
     "description": "Error sentence for the spec code `directory-unavailable`, such as the radio station directory."
   },
+  "errorDrmProtected": "Audible DRM files can't be played.",
+  "@errorDrmProtected": {
+    "description": "Error sentence for the spec code `drm-protected`: an encrypted container (Audible aax/aaxc) was refused. Permanent, unlike `unsupported-format` - no server setting makes the file playable - and the sentence says so instead of implying a codec gap."
+  },
   "errorEndpointFailed": "That device could not carry that out. It is still connected, so it is worth trying again.",
   "@errorEndpointFailed": {
     "description": "Error sentence for the spec code `endpoint-failed`: the other device took the command and failed at it, unlike `endpoint-offline`, where it never got it."

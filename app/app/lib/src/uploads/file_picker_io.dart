@@ -13,14 +13,15 @@ Future<bool> droppedPathIsDirectory(String path) =>
 
 /// Recursively lists a dropped or picked directory's files matching
 /// [extensions] as path-backed references, relativeDir rooted at the
-/// directory's own name. A path that vanished between drop and
-/// expansion reads as empty rather than blowing up the drop handler.
-Future<List<PickedAudioFile>> expandDroppedDirectory(
+/// directory's own name, with what the filter dropped counted. A path
+/// that vanished between drop and expansion reads as empty rather than
+/// blowing up the drop handler.
+Future<FolderPick> expandDroppedDirectory(
   String path,
   Set<String> extensions,
 ) async {
   final dir = Directory(path);
-  if (!await dir.exists()) return const [];
+  if (!await dir.exists()) return const FolderPick();
   return _filesUnder(dir, extensions);
 }
 
@@ -63,10 +64,10 @@ class _IoFilePickerPort implements FilePickerPort {
   }
 
   @override
-  Future<List<PickedAudioFile>> pickAudioFolder() async {
-    if (!canPickFolders) return const [];
+  Future<FolderPick> pickAudioFolder() async {
+    if (!canPickFolders) return const FolderPick();
     final dir = await getDirectoryPath();
-    if (dir == null) return const [];
+    if (dir == null) return const FolderPick();
     return expandDroppedDirectory(dir, kAcceptedAudioExtensions);
   }
 
@@ -87,17 +88,19 @@ class _IoFilePickerPort implements FilePickerPort {
   }
 }
 
-Future<List<PickedAudioFile>> _filesUnder(
-  Directory root,
-  Set<String> extensions,
-) async {
+Future<FolderPick> _filesUnder(Directory root, Set<String> extensions) async {
   final rootPath = root.path;
   final rootName = _baseName(rootPath);
   final out = <PickedAudioFile>[];
+  var skippedUnsupported = 0;
+  var skippedDrm = 0;
   await for (final entity in root.list(recursive: true, followLinks: false)) {
     if (entity is! File) continue;
     final name = _baseName(entity.path);
-    if (!hasAcceptedExtension(name, extensions)) continue;
+    if (!hasAcceptedExtension(name, extensions)) {
+      hasRejectedExtension(name) ? skippedDrm++ : skippedUnsupported++;
+      continue;
+    }
     out.add(
       PickedAudioFile(
         name: name,
@@ -114,7 +117,11 @@ Future<List<PickedAudioFile>> _filesUnder(
     final byDir = a.relativeDir.compareTo(b.relativeDir);
     return byDir != 0 ? byDir : a.name.compareTo(b.name);
   });
-  return out;
+  return FolderPick(
+    files: out,
+    skippedUnsupported: skippedUnsupported,
+    skippedDrm: skippedDrm,
+  );
 }
 
 /// The last separator position. On Windows both `\` and `/` count -

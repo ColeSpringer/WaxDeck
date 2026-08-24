@@ -5,17 +5,9 @@
   "@homeAddAction": {
     "description": "Opens the sheet that adds audio to the library. Both the top-right button on home and the action on its first-run empty state."
   },
-  "homeContinueOverline": "Where you left off",
-  "@homeContinueOverline": {
-    "description": "Overline above the Continue listening shelf."
-  },
   "homeContinueTitle": "Continue listening",
   "@homeContinueTitle": {
     "description": "Shelf of items with a saved position."
-  },
-  "homeDownloadedOverline": "Plays with no network",
-  "@homeDownloadedOverline": {
-    "description": "Overline above the On this device shelf."
   },
   "homeDownloadedTitle": "On this device",
   "@homeDownloadedTitle": {
@@ -28,10 +20,6 @@
   "homeEmptyTitle": "Nothing here yet",
   "@homeEmptyTitle": {
     "description": "Empty state of home on a server whose library holds nothing."
-  },
-  "homeEpisodesOverline": "From the shows you follow",
-  "@homeEpisodesOverline": {
-    "description": "Overline above the New episodes shelf."
   },
   "homeEpisodesTitle": "New episodes",
   "@homeEpisodesTitle": {
@@ -61,25 +49,13 @@
       }
     }
   },
-  "homeMixesOverline": "Mixes from what you play",
-  "@homeMixesOverline": {
-    "description": "Overline above the Made for you shelf."
-  },
   "homeMixesTitle": "Made for you",
   "@homeMixesTitle": {
     "description": "Shelf of mixes built from what this listener plays."
   },
-  "homeMostPlayedOverline": "What you come back to",
-  "@homeMostPlayedOverline": {
-    "description": "Overline above the Most played shelf."
-  },
   "homeMostPlayedTitle": "Most played",
   "@homeMostPlayedTitle": {
     "description": "Shelf of the items with the highest play counts."
-  },
-  "homeNeverPlayedOverline": "In your library, still sealed",
-  "@homeNeverPlayedOverline": {
-    "description": "Overline above the Never played shelf. The image is a record still in its shrink wrap."
   },
   "homeNeverPlayedTitle": "Never played",
   "@homeNeverPlayedTitle": {
@@ -165,29 +141,27 @@
   "@homePinnedKindReleaseGroup": {
     "description": "What a pinned card is, on the line under its title. A release group is one album across all its editions."
   },
-  "homePinnedOverline": "What you keep",
-  "@homePinnedOverline": {
-    "description": "Overline above the Pinned shelf."
-  },
   "homePinnedTitle": "Pinned",
   "@homePinnedTitle": {
     "description": "Shelf of what this listener pinned to home."
-  },
-  "homeRecentOverline": "New to the library",
-  "@homeRecentOverline": {
-    "description": "Overline above the Recently added shelf."
   },
   "homeRecentTitle": "Recently added",
   "@homeRecentTitle": {
     "description": "Shelf of what the library gained most recently."
   },
-  "homeRediscoverOverline": "Marked, and not heard in months",
-  "@homeRediscoverOverline": {
-    "description": "Overline above the Rediscover shelf. Marked means starred or otherwise singled out."
-  },
   "homeRediscoverTitle": "Rediscover",
   "@homeRediscoverTitle": {
     "description": "Shelf of items the listener marked and has not played in months."
+  },
+  "homeReviewPending": "{count, plural, =1{1 item is waiting in review} other{{count} items are waiting in review}}",
+  "@homeReviewPending": {
+    "description": "Banner over the shelves while additions sit in the review queue. Items, not uploads: an administrator's count covers the whole queue, and a scan can open entries nobody uploaded. Non-administrators count their own uploads' entries, capped at one queue page.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   },
   "homeShelfRemaining": "{span} left",
   "@homeShelfRemaining": {

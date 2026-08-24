@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 
@@ -185,6 +186,10 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
   void _refresh() {
     if (!ref.mounted) return;
     ref.invalidate(reviewStatsProvider);
+    // Home's count must move with the decision, not wait for the user
+    // stream: deciding the last entry and going home would otherwise
+    // leave the banner standing over an empty queue.
+    ref.invalidate(pendingReviewCountProvider);
     ref.invalidateSelf();
   }
 }
@@ -198,6 +203,40 @@ final reviewQueueProvider =
 final reviewStatsProvider = FutureProvider<ReviewStats>(
   (ref) => ref.watch(repositoryProvider).getReviewStats(),
 );
+
+/// How many pending entries the caller can see.
+///
+/// Feeds home's review notice, which says "your additions are waiting
+/// here", not the census - the endpoint scopes non-administrators to
+/// their own uploads' entries, and an administrator owns the whole
+/// queue anyway. An administrator reads the exact figure from the
+/// stats (their scope is the server's, and a bulk import would pin a
+/// page-length count at 50 while the real number was 900); everybody
+/// else counts their own page, capped at its size, which their own
+/// uploads rarely reach. Its own read rather than
+/// [reviewQueueProvider]: the queue watches the review screen's
+/// filter, and home's count must not change meaning when somebody
+/// flips that filter to Decided. Rides the user stream (the binder
+/// invalidates it) and the decision paths' [_refresh]es, so an upload
+/// finishing or a decision landing anywhere moves it. Never retried:
+/// it is a decoration that renders as nothing on failure, and the
+/// retry ladder would hammer the endpoint from every home mount that
+/// cannot read it.
+final pendingReviewCountProvider = FutureProvider<int>((ref) async {
+  final admin =
+      ref.watch(authControllerProvider).value?.user?.roles.contains('admin') ??
+      false;
+  if (admin) {
+    return (await ref.watch(reviewStatsProvider.future)).pending;
+  }
+  final page = await ref
+      .watch(repositoryProvider)
+      .listReviewQueue(
+        status: 'pending',
+        limit: ReviewQueueController.pageSize,
+      );
+  return page.entries.length;
+}, retry: (_, _) => null);
 
 /// Which candidate an entry is decided against. Shared state because
 /// two controls read it: the pane's Approve, and the queue's `a` on the
@@ -272,6 +311,8 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
     if (!ref.mounted) return;
     ref.invalidate(reviewQueueProvider);
     ref.invalidate(reviewStatsProvider);
+    // See ReviewQueueController._refresh: home's banner rides these.
+    ref.invalidate(pendingReviewCountProvider);
     ref.invalidateSelf();
   }
 }

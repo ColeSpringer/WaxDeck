@@ -37,10 +37,7 @@ class MixShelf extends ConsumerWidget {
         return const SliverToBoxAdapter(child: SizedBox.shrink());
       }
       return SliverToBoxAdapter(
-        child: DelayedShelfSkeleton(
-          title: l10n.homeMixesTitle,
-          overline: l10n.homeMixesOverline,
-        ),
+        child: DelayedShelfSkeleton(title: l10n.homeMixesTitle),
       );
     }
     final cards = state.value ?? const <MixCard>[];
@@ -69,7 +66,6 @@ class MixShelf extends ConsumerWidget {
           padding: const EdgeInsets.only(bottom: WaxSpace.s24),
           child: ShelfRow(
             title: l10n.homeMixesTitle,
-            overline: l10n.homeMixesOverline,
             items: tiles,
             onTapItem: (tile) {
               final at = tiles.indexOf(tile);

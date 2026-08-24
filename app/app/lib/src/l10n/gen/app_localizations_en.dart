@@ -1546,6 +1546,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get artSourceFeed => 'From the feed';
 
   @override
+  String get artSourceFromFile => 'From the file';
+
+  @override
   String get artSourceGenerated => 'Made by the server';
 
   @override
@@ -1563,7 +1566,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get artSourceSidecar => 'From a folder image';
 
   @override
-  String get artSourceTag => 'From the file\'s tags';
+  String get artSourceTag => 'Art from the file';
 
   @override
   String get artSourceUser => 'Set by hand';
@@ -2024,9 +2027,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get booksContinueOverline => 'Part way through';
-
-  @override
   String get booksContinueTitle => 'Continue listening';
 
   @override
@@ -2171,6 +2171,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get commonLoadingTitle => 'Loading…';
+
+  @override
+  String get commonOpenReview => 'Open review';
 
   @override
   String get commonRetry => 'Retry';
@@ -2578,6 +2581,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get errorDirectoryUnavailable =>
       'The directory service did not answer. Try again later.';
+
+  @override
+  String get errorDrmProtected => 'Audible DRM files can\'t be played.';
 
   @override
   String get errorEndpointFailed =>
@@ -3007,13 +3013,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeAddAction => 'Add to library';
 
   @override
-  String get homeContinueOverline => 'Where you left off';
-
-  @override
   String get homeContinueTitle => 'Continue listening';
-
-  @override
-  String get homeDownloadedOverline => 'Plays with no network';
 
   @override
   String get homeDownloadedTitle => 'On this device';
@@ -3024,9 +3024,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeEmptyTitle => 'Nothing here yet';
-
-  @override
-  String get homeEpisodesOverline => 'From the shows you follow';
 
   @override
   String get homeEpisodesTitle => 'New episodes';
@@ -3045,19 +3042,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get homeMixesOverline => 'Mixes from what you play';
-
-  @override
   String get homeMixesTitle => 'Made for you';
 
   @override
-  String get homeMostPlayedOverline => 'What you come back to';
-
-  @override
   String get homeMostPlayedTitle => 'Most played';
-
-  @override
-  String get homeNeverPlayedOverline => 'In your library, still sealed';
 
   @override
   String get homeNeverPlayedTitle => 'Never played';
@@ -3123,22 +3111,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homePinnedKindReleaseGroup => 'Release group';
 
   @override
-  String get homePinnedOverline => 'What you keep';
-
-  @override
   String get homePinnedTitle => 'Pinned';
-
-  @override
-  String get homeRecentOverline => 'New to the library';
 
   @override
   String get homeRecentTitle => 'Recently added';
 
   @override
-  String get homeRediscoverOverline => 'Marked, and not heard in months';
+  String get homeRediscoverTitle => 'Rediscover';
 
   @override
-  String get homeRediscoverTitle => 'Rediscover';
+  String homeReviewPending(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items are waiting in review',
+      one: '1 item is waiting in review',
+    );
+    return '$_temp0';
+  }
 
   @override
   String homeShelfRemaining(String span) {
@@ -3472,9 +3462,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataOpenReleaseGroup => 'Open release group';
-
-  @override
-  String get metadataOpenReview => 'Open review';
 
   @override
   String get metadataQueuedForIdentification => 'Queued for identification';
@@ -4032,19 +4019,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicPlay => 'Play';
 
   @override
-  String get musicShelfMostPlayedOverline => 'What you come back to';
-
-  @override
   String get musicShelfMostPlayedTitle => 'Most played';
 
   @override
-  String get musicShelfRecentOverline => 'New to the collection';
-
-  @override
   String get musicShelfRecentTitle => 'Recently added';
-
-  @override
-  String get musicShelfStarredOverline => 'Kept on purpose';
 
   @override
   String get musicShelfStarredTitle => 'Starred';
@@ -5592,9 +5570,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastKeepFiles => 'Keep files';
 
   @override
-  String get podcastLatestOverline => 'New';
-
-  @override
   String podcastLatestPublished(String date) {
     return 'Latest $date';
   }
@@ -5997,9 +5972,6 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get podcastUpNextOverline => 'Half heard';
 
   @override
   String get podcastUpNextTitle => 'Up next';
@@ -6941,6 +6913,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchShowsToSubscribe => 'Shows to subscribe to';
+
+  @override
+  String get searchSidebarHint => 'Search the library';
 
   @override
   String get searchStationsToAdd => 'Stations to add';
@@ -9013,6 +8988,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Waits for your decision. Off adds it with the tags it has';
 
   @override
+  String uploadsIdentifying(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Uploaded $count files. They\'re being identified and will appear once they clear review',
+      one:
+          'Uploaded 1 file. It\'s being identified and will appear once it clears review',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get uploadsLoadError => 'Could not load uploads';
 
   @override
@@ -9038,10 +9026,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsPickFolderSubtitle =>
-      'An album or a collection, hierarchy and all';
+      'Keeps your folder grouping, disc subfolders and all';
 
   @override
-  String get uploadsPickSubtitle => 'One track, or a set you pick yourself';
+  String get uploadsPickSubtitle =>
+      'Tracks you choose by hand, grouped by their tags';
 
   @override
   String get uploadsQuotaHelp =>
@@ -9076,6 +9065,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsSessionsTitle => 'Past uploads';
+
+  @override
+  String uploadsSkippedDrm(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skipped $count Audible files; DRM audio can\'t be played',
+      one: 'Skipped 1 Audible file; DRM audio can\'t be played',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String uploadsSkippedUnsupported(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skipped $count unsupported files',
+      one: 'Skipped 1 unsupported file',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get uploadsSourceUrl => 'Source URL';

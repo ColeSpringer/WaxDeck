@@ -87,7 +87,11 @@ components:
       description: >
         The file's format is not accepted (code `unsupported-format`):
         the extension is outside the server's accepted set, or the
-        audio did not decode.
+        audio did not decode. A DRM-encrypted container (an Audible
+        `aax`/`aaxc`) answers with the same status but code
+        `drm-protected`, because that refusal is permanent - no format
+        set can make the file playable - and must not read as a codec
+        gap an operator could widen away.
       content:
         application/json:
           schema:

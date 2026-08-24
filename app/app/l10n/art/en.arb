@@ -61,6 +61,10 @@
   "@artSourceFeed": {
     "description": "Source mark under a cover a podcast feed supplied, or one a radio station announced in its own stream."
   },
+  "artSourceFromFile": "From the file",
+  "@artSourceFromFile": {
+    "description": "Provenance of an artifact read out of the audio file's own tags, on the rows that already name the artifact (\"Artwork · {source}\", \"Lyrics · {source}\"). Bare on purpose: the standalone artSourceTag would stutter behind the Artwork prefix and call a lyric a picture behind the Lyrics one."
+  },
   "artSourceGenerated": "Made by the server",
   "@artSourceGenerated": {
     "description": "Source mark under a picture the server composed from what the catalog already holds, rather than one anybody chose. A playlist's mosaic of its members' covers is the case it exists for."
@@ -87,9 +91,9 @@
   "@artSourceSidecar": {
     "description": "Source mark under a cover read from an image file sitting beside the audio, such as a cover.jpg."
   },
-  "artSourceTag": "From the file's tags",
+  "artSourceTag": "Art from the file",
   "@artSourceTag": {
-    "description": "Source mark under a cover read out of the audio file's own tags. The provenance rows draw it for an embedded lyric as well, which arrives the same way."
+    "description": "Source mark under a cover read out of the audio file itself (its embedded tags). Says what the mark is about, not the mechanism: \"from the file's tags\" read as nonsense under a picture. The provenance rows, already prefixed with the artifact's name, draw the bare artSourceFromFile instead."
   },
   "artSourceUser": "Set by hand",
   "@artSourceUser": {

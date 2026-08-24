@@ -148,7 +148,7 @@ Future<void> acquireFromUrl(
   if (!context.mounted) return;
   final request =
       await showDialog<
-        ({String url, MediaType mediaType, String format, bool identify})
+        ({String url, MediaType mediaType, String format, bool? identify})
       >(
         context: context,
         builder: (_) => AcquireDialog(
@@ -200,18 +200,67 @@ Future<void> pickAndUpload(
   await uploadPickedFiles(context, ref, files, initial: initial);
 }
 
+/// What a walk's extension filter dropped, said where it is news and
+/// quiet where it is not. Two cases speak: files on the DRM deny-list,
+/// which look like audio and can never play, and a pick that kept
+/// nothing at all, which otherwise just looks broken. Ordinary album
+/// cruft - the cover image, the rip log, the cue sheet - is expected to
+/// be left behind, and announcing it on every folder would teach people
+/// to ignore the report that matters.
+void reportSkippedFiles(
+  ShellMessenger messenger,
+  AppLocalizations l10n, {
+  required int unsupported,
+  required int drm,
+  required bool nothingKept,
+}) {
+  if (drm > 0) {
+    messenger.show(l10n.uploadsSkippedDrm(drm));
+  } else if (nothingKept && unsupported > 0) {
+    messenger.show(l10n.uploadsSkippedUnsupported(unsupported));
+  }
+}
+
 /// Picks a folder and hands its audio files to the shared upload
 /// flow, their in-folder hierarchy riding along as the clustering
-/// hint.
+/// hint. What the filter dropped is reported per [reportSkippedFiles]:
+/// a folder of Audible files used to pick "nothing" with no word
+/// about why.
 Future<void> pickFolderAndUpload(
   BuildContext context,
   WidgetRef ref,
   FilePickerPort picker, {
   MediaType? initial,
 }) async {
-  final files = await picker.pickAudioFolder();
-  if (files.isEmpty || !context.mounted) return;
-  await uploadPickedFiles(context, ref, files, initial: initial);
+  final messenger = ref.read(shellMessengerProvider.notifier);
+  final l10n = context.l10n;
+  final pick = await picker.pickAudioFolder();
+  if (pick.files.isEmpty) {
+    reportSkippedFiles(
+      messenger,
+      l10n,
+      unsupported: pick.skippedUnsupported,
+      drm: pick.skippedDrm,
+      nothingKept: true,
+    );
+    return;
+  }
+  if (!context.mounted) return;
+  await uploadPickedFiles(context, ref, pick.files, initial: initial);
+  // After the flow rather than before it: the media-type dialog is
+  // modal, and a toast raised under a modal is hidden from the
+  // semantics tree and can expire before the dialog closes. The
+  // messenger queues, so this shows after the identify announcement
+  // rather than eating it. It also fires when the dialog was
+  // cancelled, on purpose: the fact is about the pick, and "these
+  // files can never play" holds whether or not an upload followed.
+  reportSkippedFiles(
+    messenger,
+    l10n,
+    unsupported: pick.skippedUnsupported,
+    drm: pick.skippedDrm,
+    nothingKept: false,
+  );
 }
 
 /// The one upload flow behind picker, folder, and drop. A per-file
@@ -224,6 +273,7 @@ Future<void> uploadPickedFiles(
   MediaType? initial,
 }) async {
   final messenger = ref.read(shellMessengerProvider.notifier);
+  final router = GoRouter.of(context);
   // Held across the awaits below, which outlive the dialog: everything
   // this loop reports is worded from a code, and there is no context to
   // read a table through once the last upload settles.
@@ -232,7 +282,7 @@ Future<void> uploadPickedFiles(
   if (!context.mounted) return;
   final choice =
       await showDialog<
-        ({MediaType mediaType, UploadGrouping grouping, bool identify})
+        ({MediaType mediaType, UploadGrouping grouping, bool? identify})
       >(
         context: context,
         builder: (_) => MediaTypeDialog(
@@ -257,6 +307,7 @@ Future<void> uploadPickedFiles(
       return;
     }
   }
+  var uploaded = 0;
   for (final file in files) {
     try {
       await ref
@@ -267,6 +318,7 @@ Future<void> uploadPickedFiles(
             batchId: batchId,
             identify: choice.identify,
           );
+      uploaded++;
     } on WaxDeckApiException catch (e) {
       // explainRefusal, not explainError: a size or a format the server
       // will not take is a refusal of the file this person just picked,
@@ -278,15 +330,36 @@ Future<void> uploadPickedFiles(
       );
     }
   }
+  var finalized = true;
   if (batchId != null) {
     try {
       await repository.completeUploadBatch(batchId);
     } on WaxDeckApiException catch (e) {
+      // The error stands alone: a success announcement over a failed
+      // finalize would send somebody to a review queue holding none of
+      // their files.
+      finalized = false;
       messenger.show(explainError(l10n, e));
     }
     // Finalization filled the members' review entries; refresh the
     // rows.
     ref.invalidate(uploadsProvider);
+  }
+  // With identification on, what arrived is in review rather than on
+  // the shelves, and nothing on screen would otherwise say so - the
+  // report of "added music and home never refreshed" was this window.
+  // Only when the choice is known on: the switch's value is null only
+  // when the account preference could not be read, and the server then
+  // resolves the default itself - announcing review on a guess would
+  // tell an opted-out account its files are waiting where the server
+  // already shelved them.
+  if (finalized && uploaded > 0 && (choice.identify ?? false)) {
+    messenger.show(
+      l10n.uploadsIdentifying(uploaded),
+      actionLabel: l10n.commonOpenReview,
+      actionSemanticsId: SemanticsIds.uploadIdentifyingReview,
+      onAction: () => router.go(WaxRoute.review),
+    );
   }
 }
 

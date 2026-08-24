@@ -25,6 +25,13 @@ import (
 // scans or imports, it only opens sessions and is refused.
 func uploadFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 	t.Helper()
+	return uploadFixtureFormats(t, nil)
+}
+
+// uploadFixtureFormats is uploadFixture under an operator's own format
+// set, for the tests about the gate that set configures.
+func uploadFixtureFormats(t *testing.T, formats []string) (context.Context, *Library, *UserCtx) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -34,7 +41,7 @@ func uploadFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 		t.Fatal(err)
 	}
 	group := supervise.NewGroup(log)
-	svc, err := Open(ctx, Config{DataDir: dataDir, Logger: log}, store, group)
+	svc, err := Open(ctx, Config{DataDir: dataDir, UploadFormats: formats, Logger: log}, store, group)
 	if err != nil {
 		t.Fatal(err)
 	}

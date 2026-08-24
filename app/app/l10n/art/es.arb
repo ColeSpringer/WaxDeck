@@ -26,6 +26,7 @@
     }
   },
   "artSourceFeed": "Del feed",
+  "artSourceFromFile": "Del archivo",
   "artSourceGenerated": "Creada por el servidor",
   "artSourceLyricsSidecar": "De un archivo .lrc",
   "@artSourceLyricsSidecar": {
@@ -34,7 +35,7 @@
   "artSourceProvider": "De {provider}",
   "artSourceProviderUnnamed": "De un proveedor de metadatos",
   "artSourceSidecar": "De una imagen de la carpeta",
-  "artSourceTag": "De las etiquetas del archivo",
+  "artSourceTag": "Ilustración del archivo",
   "artSourceUser": "Establecida a mano",
   "artworkClearAction": "Borrar",
   "artworkClearBody": "El hueco queda vacío. No se hereda nada en su lugar.",

@@ -729,6 +729,18 @@ here waits on upstream.
   background, disc art) needs the candidate/provider model extended to
   carry per-role art first. The slots are readable and hand-settable
   meanwhile.
+- `[in-repo]` **The client's accepted-format set is a hardcoded mirror
+  that a custom `WAXDECK_UPLOAD_FORMATS` makes wrong.** Folder picks
+  and drops filter against `kAcceptedAudioExtensions` (the default
+  13-format set) before anything reaches the server, so an operator
+  who configures extra formats (`wv`, `ape`) sees them dropped
+  client-side - and, when nothing else survives, announced as
+  unsupported. File picks escape through the native dialogs'
+  "All files" group; a `webkitdirectory` or `getDirectoryPath` pick
+  has no such group. The real fix is the server exposing its accepted
+  set (a field on an existing read, or the health payload) and the
+  pickers filtering against that; until then the mirror and the docs
+  both say the server-side check at session create is the actual gate.
 - `[in-repo]` **Android folder picking is excluded from the upload
   surface.** File picking works on every platform (the endorsed
   `file_selector_android` implementation covers in-app file picks),

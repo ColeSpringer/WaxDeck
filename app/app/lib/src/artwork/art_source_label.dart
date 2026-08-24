@@ -105,18 +105,21 @@ String? artRoleSourceLabel(AppLocalizations l10n, ArtRoleInfo role) =>
           : ArtSource(source: role.source!, provider: role.provider),
     );
 
-/// The same for a provenance row. The editor's list carries an `art`
-/// and a `lyrics` row in one vocabulary, so one wording serves both -
-/// except `sidecar`, where the two artifacts mean different files. A
-/// cover's sidecar is the folder image beside the album; lyrics arrive
-/// as an `.lrc` beside the track, which "From a folder image" describes
-/// not at all.
+/// The same for a provenance row, which is always drawn behind a
+/// prefix naming the artifact ("Artwork · {source}", "Lyrics ·
+/// {source}"). That prefix is why two sources word themselves apart
+/// from the standalone marks: `tag` reads as the bare "From the file"
+/// - the standalone "Art from the file" would stutter behind "Artwork
+/// ·" and call a lyric a picture behind "Lyrics ·" - and a lyric's
+/// `sidecar` is an `.lrc` beside the track, which the artwork wording
+/// (a folder image) describes not at all.
 ///
 /// Callers must satisfy themselves that the item holds the artifact
 /// first. A row can exist with nothing behind it - that is what locking
 /// the field to stop a scan filling it looks like - and the source on
 /// such a row was invented by whichever writer took the lock.
 String? provenanceSourceLabel(AppLocalizations l10n, FieldProvenance row) {
+  if (row.source == 'tag') return l10n.artSourceFromFile;
   if (row.field == 'lyrics' && row.source == 'sidecar') {
     return l10n.artSourceLyricsSidecar;
   }

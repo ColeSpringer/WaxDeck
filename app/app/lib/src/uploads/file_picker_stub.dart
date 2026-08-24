@@ -8,10 +8,10 @@ FilePickerPort? createFilePickerPort() => null;
 
 Future<bool> droppedPathIsDirectory(String path) async => false;
 
-Future<List<PickedAudioFile>> expandDroppedDirectory(
+Future<FolderPick> expandDroppedDirectory(
   String path,
   Set<String> extensions,
-) async => const [];
+) async => const FolderPick();
 
 Future<PickedAudioFile> pickedFromXFile(
   XFile file, {

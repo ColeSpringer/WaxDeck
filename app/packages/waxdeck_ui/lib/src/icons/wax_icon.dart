@@ -366,6 +366,12 @@ abstract final class WaxIcons {
     IconData(0xE13A, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
+  /// Phosphor `caret-left`.
+  static const backward = WaxGlyph(
+    IconData(0xE138, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE138, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   /// Phosphor `funnel`.
   static const filter = WaxGlyph(
     IconData(0xE266, fontFamily: _regularFamily, fontPackage: _fontPackage),
@@ -591,6 +597,7 @@ abstract final class WaxIcons {
     'collapse': collapse,
     'expand': expand,
     'forward': forward,
+    'backward': backward,
     'filter': filter,
     'sort': sort,
     'edit': edit,

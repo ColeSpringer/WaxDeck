@@ -1,6 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart'
+    show ValueListenable, precisionErrorTolerance;
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 
 import '../icons/wax_icon.dart';
 import '../l10n/wax_l10n.dart';
@@ -932,11 +937,23 @@ class WaxOptionRow extends StatelessWidget {
 ///
 /// Shelves never animate their arrival. Staggered entrances make a fast
 /// app feel slow and regress badly on keyset-paginated lists.
-class ShelfRow extends StatelessWidget {
+///
+/// The header is the title alone, no eyebrow: a shelf title has to be
+/// self-evident, and every overline a shelf ever carried turned out to
+/// restate it ("New to the collection" over "Recently added"). Surfaces
+/// that are not shelves keep [SectionHeader.overline].
+///
+/// Under a pointer, paging chevrons appear over the row's edges - each
+/// only while there is somewhere to go that way - because a mouse has
+/// no horizontal wheel and a drag, though it works, is not something a
+/// desktop visitor discovers. A page is a viewport's worth of whole
+/// cards, landing on the same card grid a flick snaps to. Touch never
+/// sees them: the affordance is a hover, and a finger scrolls the row
+/// directly.
+class ShelfRow extends StatefulWidget {
   const ShelfRow({
     required this.title,
     required this.items,
-    this.overline,
     this.actionLabel,
     this.onAction,
     this.actionSemanticsId,
@@ -949,7 +966,6 @@ class ShelfRow extends StatelessWidget {
   });
 
   final String title;
-  final String? overline;
   final List<MediaTileData> items;
   final String? actionLabel;
   final VoidCallback? onAction;
@@ -970,48 +986,281 @@ class ShelfRow extends StatelessWidget {
   final EdgeInsets? padding;
 
   @override
+  State<ShelfRow> createState() => _ShelfRowState();
+}
+
+class _ShelfRowState extends State<ShelfRow> {
+  final _controller = ScrollController();
+  final _pointerOver = ValueNotifier<bool>(false);
+  final _canPage = ValueNotifier<({bool back, bool forward})>((
+    back: false,
+    forward: false,
+  ));
+  var _syncScheduled = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _pointerOver.dispose();
+    _canPage.dispose();
+    super.dispose();
+  }
+
+  /// Re-reads which directions have anywhere to go, a frame late on
+  /// purpose: metrics notifications can arrive during layout, where
+  /// rebuilding is illegal, and a chevron appearing a frame later is
+  /// invisible. Notifications rather than a controller listener, because
+  /// only they fire when the viewport resizes without a scroll - the
+  /// shrink that strands overflow is exactly when the forward chevron
+  /// has to arm. The answer lands in a ValueNotifier rather than
+  /// setState: a whole-row rebuild per scroll frame would re-run every
+  /// card's builder to move two booleans nothing else reads, and a
+  /// write with the same value notifies nobody.
+  bool _scheduleSync() {
+    if (_syncScheduled) return false;
+    _syncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncScheduled = false;
+      if (!mounted || !_controller.hasClients) return;
+      final position = _controller.position;
+      _canPage.value = (
+        back:
+            position.pixels >
+            position.minScrollExtent + precisionErrorTolerance,
+        forward:
+            position.pixels <
+            position.maxScrollExtent - precisionErrorTolerance,
+      );
+    });
+    // Metrics changes are dispatched from a post-layout microtask, so
+    // the callback above may be registered with no frame scheduled - and
+    // nothing else would schedule one, leaving the guard stuck and every
+    // later notification swallowed.
+    SchedulerBinding.instance.scheduleFrame();
+    return false;
+  }
+
+  void _page({required bool forward, required SnapScrollPhysics physics}) {
+    final position = _controller.position;
+    final pitch = physics.itemExtent;
+    // A viewport's worth of whole cards, at least one: paging by the
+    // raw viewport would land mid-card and leave the snap physics to
+    // finish the move somewhere nobody chose.
+    final cards = math.max(
+      1,
+      ((position.viewportDimension + WaxShellMetrics.gridGap) / pitch).floor(),
+    );
+    final raw = position.pixels + (forward ? cards : -cards) * pitch;
+    // The physics' own landing grid, through the physics' own formula,
+    // so a page and a flick cannot quietly disagree about where cards
+    // rest.
+    var target = physics.snapFor(raw, position);
+    // The grid's first landing sits one inset past the true start, and
+    // paging back would stop there - leading gutter scrolled away, back
+    // chevron still armed, a second click needed for sixteen pixels.
+    // Within a card of the start, go home.
+    if (!forward && target - position.minScrollExtent < pitch) {
+      target = position.minScrollExtent;
+    }
+    final motion = WaxMotion.of(context);
+    if (!motion.animationsEnabled) {
+      _controller.jumpTo(target);
+      return;
+    }
+    unawaited(
+      _controller.animateTo(
+        target,
+        duration: motion.standard,
+        curve: WaxMotion.emphasized,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
-    final gutter = padding ?? sizeClass.gutter;
-    final width = cardWidth ?? sizeClass.gridExtent;
+    final gutter = widget.padding ?? sizeClass.gutter;
+    final width = widget.cardWidth ?? sizeClass.gridExtent;
+    final physics = SnapScrollPhysics(
+      itemExtent: width + WaxShellMetrics.gridGap,
+      leadingInset: gutter.left,
+    );
+    final items = widget.items;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Padding(
           padding: gutter,
           child: SectionHeader(
-            title: title,
-            overline: overline,
-            actionLabel: actionLabel,
-            onAction: onAction,
-            semanticsId: actionSemanticsId,
+            title: widget.title,
+            actionLabel: widget.actionLabel,
+            onAction: widget.onAction,
+            semanticsId: widget.actionSemanticsId,
           ),
         ),
-        SizedBox(
-          height: MediaCard.heightFor(context, width: width),
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: gutter,
-            physics: SnapScrollPhysics(
-              itemExtent: width + WaxShellMetrics.gridGap,
-              leadingInset: gutter.left,
+        MouseRegion(
+          onEnter: (_) {
+            _pointerOver.value = true;
+            // Fresh availability for the pointer that just arrived:
+            // nothing re-reads it while the row sits still.
+            _scheduleSync();
+          },
+          onExit: (_) => _pointerOver.value = false,
+          child: SizedBox(
+            height: MediaCard.heightFor(context, width: width),
+            child: Stack(
+              children: <Widget>[
+                NotificationListener<ScrollMetricsNotification>(
+                  onNotification: (_) => _scheduleSync(),
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (_) => _scheduleSync(),
+                    // Mouse drag joins touch for this row alone. The
+                    // app-wide setting Flutter's own docs warn against
+                    // would take click-drag text selection with it
+                    // wherever prose sits inside a scrollable; a
+                    // horizontal shelf holds no prose, and a vertical
+                    // wheel cannot move it.
+                    child: ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(context).copyWith(
+                        dragDevices: <PointerDeviceKind>{
+                          ...ScrollConfiguration.of(context).dragDevices,
+                          PointerDeviceKind.mouse,
+                        },
+                      ),
+                      child: ListView.separated(
+                        controller: _controller,
+                        scrollDirection: Axis.horizontal,
+                        padding: gutter,
+                        physics: physics,
+                        itemCount: items.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(width: WaxShellMetrics.gridGap),
+                        itemBuilder: (context, index) {
+                          final item = items[index];
+                          final onTap = widget.onTapItem;
+                          final onPlay = widget.onPlayItem;
+                          final onMore = widget.onMoreItem;
+                          return MediaCard(
+                            data: item,
+                            width: width,
+                            onTap: onTap == null ? null : () => onTap(item),
+                            onPlay: onPlay == null ? null : () => onPlay(item),
+                            onMore: onMore == null ? null : () => onMore(item),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                // Centred on the artwork band rather than the whole
+                // cell, which also holds the captions under it. Faded
+                // through the switcher rather than popped: a chevron
+                // appearing under a click already in motion is a
+                // misclick nobody chose.
+                PositionedDirectional(
+                  start: WaxSpace.s8,
+                  top: width / 2 - _ShelfChevron.radius,
+                  child: _ChevronSlot(
+                    pointerOver: _pointerOver,
+                    canPage: _canPage,
+                    forward: false,
+                    glyph: WaxIcons.backward,
+                    onTap: () => _page(forward: false, physics: physics),
+                  ),
+                ),
+                PositionedDirectional(
+                  end: WaxSpace.s8,
+                  top: width / 2 - _ShelfChevron.radius,
+                  child: _ChevronSlot(
+                    pointerOver: _pointerOver,
+                    canPage: _canPage,
+                    forward: true,
+                    glyph: WaxIcons.forward,
+                    onTap: () => _page(forward: true, physics: physics),
+                  ),
+                ),
+              ],
             ),
-            itemCount: items.length,
-            separatorBuilder: (_, _) =>
-                const SizedBox(width: WaxShellMetrics.gridGap),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return MediaCard(
-                data: item,
-                width: width,
-                onTap: onTapItem == null ? null : () => onTapItem!(item),
-                onPlay: onPlayItem == null ? null : () => onPlayItem!(item),
-                onMore: onMoreItem == null ? null : () => onMoreItem!(item),
-              );
-            },
           ),
         ),
       ],
+    );
+  }
+}
+
+/// One chevron's corner of the shelf: listens to the two notifiers so
+/// hover and scroll move only this 32px circle, never the row of cards
+/// beside it, and fades the chevron in and out instead of popping it.
+class _ChevronSlot extends StatelessWidget {
+  const _ChevronSlot({
+    required this.pointerOver,
+    required this.canPage,
+    required this.forward,
+    required this.glyph,
+    required this.onTap,
+  });
+
+  final ValueListenable<bool> pointerOver;
+  final ValueListenable<({bool back, bool forward})> canPage;
+  final bool forward;
+  final WaxGlyph glyph;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final motion = WaxMotion.of(context);
+    return ValueListenableBuilder<bool>(
+      valueListenable: pointerOver,
+      builder: (context, over, _) =>
+          ValueListenableBuilder<({bool back, bool forward})>(
+            valueListenable: canPage,
+            builder: (context, can, _) => AnimatedSwitcher(
+              duration: motion.quick,
+              child: over && (forward ? can.forward : can.back)
+                  ? _ShelfChevron(glyph: glyph, onTap: onTap)
+                  : const SizedBox.shrink(),
+            ),
+          ),
+    );
+  }
+}
+
+/// One paging chevron over a shelf's edge.
+///
+/// Excluded from semantics the way a scrollbar is: it is a pointer
+/// convenience over a row that scrolls on its own, and a screen reader
+/// walks the cards directly. Out of the focus tree for the same reason -
+/// a tab stop with no readable name, torn out whenever the mouse moves
+/// off the row, would drop keyboard focus to the scope root mid-walk.
+/// Sized for a pointer, not a finger: touch never sees it, which is why
+/// it may sit under the 44px touch floor the real controls keep.
+class _ShelfChevron extends StatelessWidget {
+  const _ShelfChevron({required this.glyph, required this.onTap});
+
+  static const double radius = 16;
+
+  final WaxGlyph glyph;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return ExcludeSemantics(
+      child: Material(
+        color: colors.surface1,
+        shape: CircleBorder(side: BorderSide(color: colors.hairline)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          canRequestFocus: false,
+          child: SizedBox.square(
+            dimension: radius * 2,
+            child: Center(
+              child: WaxIcon(glyph, size: 18, color: colors.textPrimary),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

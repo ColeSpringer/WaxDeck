@@ -47,6 +47,7 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   'storage-full' => l.errorStorageFull,
   'field-locked' => l.errorFieldLocked,
   'unsupported-format' => l.errorUnsupportedFormat,
+  'drm-protected' => l.errorDrmProtected,
   'read-only' => l.errorReadOnly,
   'transcode-limited' => l.errorTranscodeLimited,
   'timeout' => l.errorTimeout,

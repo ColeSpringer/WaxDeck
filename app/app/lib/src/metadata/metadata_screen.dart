@@ -198,7 +198,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         .rematch();
     messenger.show(
       l10n.metadataQueuedForIdentification,
-      actionLabel: router == null ? null : l10n.metadataOpenReview,
+      actionLabel: router == null ? null : l10n.commonOpenReview,
       actionSemanticsId: SemanticsIds.metadataOpenReview,
       onAction: router == null
           ? null

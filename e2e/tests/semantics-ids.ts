@@ -291,6 +291,8 @@ export const SemanticsIds = {
   // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   homeAdd: 'home-add',
   homeMix: (index: string | number) => `home-mix-${index}`,
+  homeReviewPending: 'home-review-pending',
+  homeReviewPendingOpen: 'home-review-pending-open',
   homeScreen: 'home-screen',
   notificationRow: (kind: string | number, target: string | number) => `notification-row-${kind}-${target}`,
   notificationRowPlain: (kind: string | number) => `notification-row-${kind}-none`,
@@ -750,6 +752,7 @@ export const SemanticsIds = {
   uploadGrouping: 'upload-grouping',
   uploadGroupingOption: (wireName: string | number) => `upload-grouping-${wireName}`,
   uploadIdentify: 'upload-identify',
+  uploadIdentifyingReview: 'upload-identifying-review',
   uploadMediaConfirm: 'upload-media-confirm',
   uploadMediaType: 'upload-media-type',
   uploadPick: 'upload-pick',

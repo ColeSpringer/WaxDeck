@@ -21,6 +21,10 @@
   "@commonLoadingTitle": {
     "description": "Stands in for a track's name while the row it sits in is still resolving. The trailing character is a single-glyph ellipsis."
   },
+  "commonOpenReview": "Open review",
+  "@commonOpenReview": {
+    "description": "Action that opens the review queue, wherever something just landed there: home's pending banner, the post-upload message, the metadata editor's rematch message."
+  },
   "commonRetry": "Retry",
   "@commonRetry": {
     "description": "Button that runs the request that just failed again."

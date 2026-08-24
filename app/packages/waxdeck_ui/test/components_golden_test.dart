@@ -372,6 +372,42 @@ void main() {
     );
 
     goldenTest(
+      'a hovered shelf offers to page toward what is out of view',
+      fileName: 'shelf_chevrons',
+      whilePerforming: _hoverAll(find.byType(ShelfRow)),
+      builder: () => GoldenTestGroup(
+        columns: 1,
+        children: <Widget>[
+          for (final variant in <WaxThemeVariant>[
+            WaxThemeVariant.dark,
+            WaxThemeVariant.light,
+          ])
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 420,
+                  child: ShelfRow(
+                    title: 'Recently added',
+                    cardWidth: 120,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    items: <MediaTileData>[
+                      for (var i = 0; i < 6; i++)
+                        MediaTileData(
+                          title: 'Salt Harbour $i',
+                          subtitle: 'Nightjar',
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
       'playable artwork offers to play under a pointer',
       fileName: 'card_hover_play',
       whilePerforming: _hoverAll(find.byType(ArtworkImage)),

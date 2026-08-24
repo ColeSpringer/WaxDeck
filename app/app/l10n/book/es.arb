@@ -47,7 +47,6 @@
   "bookYes": "Sí",
   "booksAddToLibrary": "Añadir a la biblioteca",
   "booksAuthorChip": "{name} ({count})",
-  "booksContinueOverline": "A medias",
   "booksContinueTitle": "Seguir escuchando",
   "booksEmptyMessage": "Los libros van apareciendo aquí según los escanea la biblioteca. Apunta una biblioteca a tu carpeta de audiolibros y llegarán con sus capítulos.",
   "booksEmptyTitle": "Todavía no hay audiolibros",

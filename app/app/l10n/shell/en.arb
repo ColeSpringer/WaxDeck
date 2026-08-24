@@ -107,7 +107,7 @@
   },
   "shellNavAdmin": "Admin console",
   "@shellNavAdmin": {
-    "description": "Navigation entry for the administration console."
+    "description": "Navigation entry for the administration console. Every shellNav* label draws in a 224px sidebar (about 150px of text room, 20px less for the indented music indexes), so translations stay short - a label past that ellipsizes."
   },
   "shellNavAlbums": "Albums",
   "@shellNavAlbums": {

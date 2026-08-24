@@ -294,6 +294,8 @@ abstract final class SemanticsIds {
   // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   static const String homeAdd = 'home-add';
   static String homeMix(Object index) => 'home-mix-$index';
+  static const String homeReviewPending = 'home-review-pending';
+  static const String homeReviewPendingOpen = 'home-review-pending-open';
   static const String homeScreen = 'home-screen';
   static String notificationRow(Object kind, Object target) =>
       'notification-row-$kind-$target';
@@ -772,6 +774,7 @@ abstract final class SemanticsIds {
   static String uploadGroupingOption(Object wireName) =>
       'upload-grouping-$wireName';
   static const String uploadIdentify = 'upload-identify';
+  static const String uploadIdentifyingReview = 'upload-identifying-review';
   static const String uploadMediaConfirm = 'upload-media-confirm';
   static const String uploadMediaType = 'upload-media-type';
   static const String uploadPick = 'upload-pick';

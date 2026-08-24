@@ -1517,6 +1517,8 @@ func ResponseErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 		writeError(w, http.StatusConflict, "field-locked", kindMessage(err, "the field is locked; pass force to override"))
 	case service.KindFormat:
 		writeError(w, http.StatusUnsupportedMediaType, "unsupported-format", kindMessage(err, "the file's format is not accepted"))
+	case service.KindDRM:
+		writeError(w, http.StatusUnsupportedMediaType, "drm-protected", kindMessage(err, "the file is DRM-encrypted and can never play"))
 	case service.KindFeature:
 		writeError(w, http.StatusNotImplemented, "feature-unavailable", kindMessage(err, "this server is not running the needed capability"))
 	case service.KindReadOnly:

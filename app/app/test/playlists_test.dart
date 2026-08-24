@@ -69,7 +69,7 @@ class _CoverPicker implements FilePickerPort {
   }) async => const [];
 
   @override
-  Future<List<PickedAudioFile>> pickAudioFolder() async => const [];
+  Future<FolderPick> pickAudioFolder() async => const FolderPick();
 
   @override
   Future<PickedAudioFile?> pickFile({

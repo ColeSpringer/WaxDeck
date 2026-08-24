@@ -246,7 +246,6 @@ class _UpNextShelf extends ConsumerWidget {
       padding: const EdgeInsets.only(top: WaxSpace.s8, bottom: WaxSpace.s16),
       child: ShelfRow(
         title: l10n.podcastUpNextTitle,
-        overline: l10n.podcastUpNextOverline,
         items: tiles,
         // By position, not by title: two shows can publish an episode
         // under one name, and a tile carries no value equality, so this
@@ -517,10 +516,7 @@ class _LatestEpisodes extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: WaxSpace.s16),
-          SectionHeader(
-            title: l10n.podcastLatestTitle,
-            overline: l10n.podcastLatestOverline,
-          ),
+          SectionHeader(title: l10n.podcastLatestTitle),
           for (final row in latest)
             MediaListRow(
               data: MediaTileData(

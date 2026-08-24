@@ -7,7 +7,7 @@
   },
   "metadataArtworkSource": "Artwork · {source}",
   "@metadataArtworkSource": {
-    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file's tags', 'Set by hand', 'From Deezer').",
+    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').",
     "placeholders": {
       "source": {
         "type": "String",
@@ -328,10 +328,6 @@
   "metadataOpenReleaseGroup": "Open release group",
   "@metadataOpenReleaseGroup": {
     "description": "Door from the metadata editor to the release group this item belongs to: the album across its editions."
-  },
-  "metadataOpenReview": "Open review",
-  "@metadataOpenReview": {
-    "description": "Button on the rematch message that opens the review entry it created."
   },
   "metadataQueuedForIdentification": "Queued for identification",
   "@metadataQueuedForIdentification": {

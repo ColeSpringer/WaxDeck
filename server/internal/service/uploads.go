@@ -68,6 +68,15 @@ const stagingReserve = 512 << 20
 // an expiry at all, and which way the error runs.
 const stagingReservationWindow = time.Hour
 
+// drmFormats are containers that are encrypted by construction, refused
+// with their own sentence rather than the generic format refusal: "files
+// of type aax are not accepted" reads as a codec gap somebody might ask
+// to have widened, when no format set can ever make the file playable.
+// Checked before - and winning over - the operator's format set, which
+// replaces the default rather than extending it and so could otherwise
+// quietly admit them.
+var drmFormats = map[string]bool{"aax": true, "aaxc": true}
+
 // uploadFormatSet builds the accepted-extension set (lowercase, no
 // dot). The default is every format the catalog scans and the decode
 // stack reads.
@@ -212,6 +221,9 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 			MaxUploadSize, p.SizeBytes))
 	}
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
+	if drmFormats[ext] {
+		return UploadDTO{}, &Error{Kind: KindDRM, Msg: "Audible DRM files can't be played"}
+	}
 	if !l.uploadFormats[ext] {
 		return UploadDTO{}, &Error{Kind: KindFormat, Msg: fmt.Sprintf("files of type %q are not accepted", ext)}
 	}

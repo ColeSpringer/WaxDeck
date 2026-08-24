@@ -40,7 +40,6 @@ class ItemShelf extends ConsumerWidget {
     super.key,
     required this.shelf,
     required this.title,
-    required this.overline,
     required this.provider,
     this.withProgress = false,
     this.allLocation,
@@ -51,7 +50,6 @@ class ItemShelf extends ConsumerWidget {
   final String shelf;
 
   final String title;
-  final String overline;
   final FutureProvider<HomeShelfItems> provider;
 
   /// Whether cards draw a progress ring and a remaining-time readout.
@@ -79,7 +77,6 @@ class ItemShelf extends ConsumerWidget {
                   const EdgeInsets.only(bottom: WaxSpace.s24),
               child: SectionHeader(
                 title: title,
-                overline: overline,
                 actionLabel: context.l10n.homeShelfRetry,
                 onAction: () => ref.invalidate(provider),
               ),
@@ -87,9 +84,7 @@ class ItemShelf extends ConsumerWidget {
           ),
         );
       }
-      return SliverToBoxAdapter(
-        child: DelayedShelfSkeleton(title: title, overline: overline),
-      );
+      return SliverToBoxAdapter(child: DelayedShelfSkeleton(title: title));
     }
     final state = async.value;
     final items = state?.items ?? const <ItemSummary>[];
@@ -139,7 +134,6 @@ class ItemShelf extends ConsumerWidget {
           padding: const EdgeInsets.only(bottom: WaxSpace.s24),
           child: ShelfRow(
             title: title,
-            overline: overline,
             items: tiles,
             actionLabel: allLocation == null ? null : l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll(shelf),
@@ -191,14 +185,9 @@ class ItemShelf extends ConsumerWidget {
 /// it. Until then it takes no height, exactly like the hidden shelf it
 /// stands in for.
 class DelayedShelfSkeleton extends StatefulWidget {
-  const DelayedShelfSkeleton({
-    super.key,
-    required this.title,
-    required this.overline,
-  });
+  const DelayedShelfSkeleton({super.key, required this.title});
 
   final String title;
-  final String overline;
 
   @override
   State<DelayedShelfSkeleton> createState() => _DelayedShelfSkeletonState();
@@ -232,10 +221,7 @@ class _DelayedShelfSkeletonState extends State<DelayedShelfSkeleton> {
         children: <Widget>[
           Padding(
             padding: WaxSizeClass.of(context).gutter,
-            child: SectionHeader(
-              title: widget.title,
-              overline: widget.overline,
-            ),
+            child: SectionHeader(title: widget.title),
           ),
           const SkeletonShapes(shape: SkeletonShape.shelf),
         ],

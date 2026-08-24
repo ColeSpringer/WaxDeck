@@ -47,7 +47,7 @@
   },
   "searchFieldHint": "Artists, albums, shows, books",
   "@searchFieldHint": {
-    "description": "Placeholder in the search field, naming what can be found. Drawn on the search screen and in the sidebar header alike."
+    "description": "Placeholder in the search screen's field, naming what can be found. The sidebar's field draws searchSidebarHint instead: this sentence needs more room than the sidebar has."
   },
   "searchForget": "Forget {query}",
   "@searchForget": {
@@ -150,6 +150,10 @@
   "searchShowsToSubscribe": "Shows to subscribe to",
   "@searchShowsToSubscribe": {
     "description": "Heading over podcast directory results this server is not subscribed to."
+  },
+  "searchSidebarHint": "Search the library",
+  "@searchSidebarHint": {
+    "description": "Placeholder in the sidebar's search field. Short on purpose: the sidebar gives the field far less room than the search screen, and the descriptive searchFieldHint truncated there."
   },
   "searchStationsToAdd": "Stations to add",
   "@searchStationsToAdd": {

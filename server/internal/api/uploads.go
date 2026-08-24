@@ -123,6 +123,8 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 			return CreateUpload507JSONResponse{StorageFullJSONResponse(errObj("storage-full", err.Error()))}, nil
 		case service.KindFormat:
 			return CreateUpload415JSONResponse{UnsupportedFormatJSONResponse(errObj("unsupported-format", err.Error()))}, nil
+		case service.KindDRM:
+			return CreateUpload415JSONResponse{UnsupportedFormatJSONResponse(errObj("drm-protected", err.Error()))}, nil
 		}
 		return nil, err
 	}

@@ -35,6 +35,7 @@
   "searchScopeRadio": "Radio",
   "searchShowAll": "Ver todo",
   "searchShowsToSubscribe": "Programas a los que suscribirse",
+  "searchSidebarHint": "Buscar en la biblioteca",
   "searchStationsToAdd": "Emisoras para añadir",
   "searchSubscribe": "Suscribirse",
   "searchSubscribed": "Te has suscrito a {name}.",
