@@ -82,8 +82,11 @@ test('the hub sorts, filters, and marks a book finished', async ({ app }) => {
   await expect(card).toBeVisible();
 
   // Marking it finished is a position write at the book's own end,
-  // which is what the server derives "finished" from.
+  // which is what the server derives "finished" from. The state it
+  // replaces, read here the same way the client reads it, is what the
+  // undo below is measured against.
   await app.books.open(book.pid);
+  const before = await app.api.get('/items/{pid}/play-state', { path: { pid: book.pid } });
   await app.books.markFinished();
 
   await expect
@@ -95,16 +98,22 @@ test('the hub sorts, filters, and marks a book finished', async ({ app }) => {
     )
     .toBeTruthy();
 
-  // And the undo puts back where the listener was, which was the top.
+  // And the undo puts back where the listener was, which was the top -
+  // flags included, and the flags are the half worth waiting for. The
+  // undo is two writes, position then flags, and an end-of-book write
+  // slotting between them is refused its finished mark while `played`
+  // still stands, so a poll on the position alone let the seeder below
+  // race the flag write and lose the mark for good.
   await app.shell.snackAction('Undo').click();
   await expect
     .poll(
-      async () =>
-        (await app.api.tryGet('/items/{pid}/play-state', { path: { pid: book.pid } }))
-          ?.positionMs ?? -1,
-      { timeout: T.fetch, message: 'undo should restore the position it replaced' },
+      async () => {
+        const st = await app.api.tryGet('/items/{pid}/play-state', { path: { pid: book.pid } });
+        return st && { positionMs: st.positionMs, played: st.played, finished: st.finished };
+      },
+      { timeout: T.fetch, message: 'undo should restore the position and the flags it replaced' },
     )
-    .toBe(0);
+    .toEqual({ positionMs: 0, played: before.played, finished: before.finished });
 
   // The filters, against state this test establishes on purpose rather
   // than inherits. The undo above really does undo: it puts the flags
