@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:waxdeck/src/app.dart';
+import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
@@ -145,7 +146,15 @@ Future<void> _run(WidgetTester tester) async {
     token = await _apiToken(http);
   });
 
-  await tester.pumpWidget(const ProviderScope(child: WaxDeckApp()));
+  // The harness stack is the server, spelled out: main() never runs
+  // here, so nothing else seeds the address the provider chain builds
+  // from, and the unseeded default would pin every route to /connect.
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [bootServerAddressProvider.overrideWithValue(_base)],
+      child: const WaxDeckApp(),
+    ),
+  );
   await _pumpUntilFound(tester, find.byKey(const Key('login-username')));
 
   await tester.enterText(find.byKey(const Key('login-username')), 'admin');

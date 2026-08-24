@@ -704,6 +704,7 @@ class PlayInfo {
     this.partCount,
     this.partStartMs,
     this.voiceBoost = false,
+    this.appliedBitrateKbps,
     this.spanStartMs,
     this.spanEndMs,
   });
@@ -740,6 +741,12 @@ class PlayInfo {
 
   /// Whether server-side voice boost is actually applied to the stream.
   final bool voiceBoost;
+
+  /// The bitrate cap the minted stream carries, in kbps: the requested
+  /// cap after the server clamps it to the caller's transcode ceiling.
+  /// Null when no cap re-encodes the stream (none requested, or the
+  /// source already sits inside it).
+  final int? appliedBitrateKbps;
 
   /// Playback window within the served audio, present only when the
   /// url carries the item's whole backing file and the item is a
@@ -4334,10 +4341,19 @@ class SimilarTracks {
 
 /// A computed instant mix. Not persisted; order is play order.
 class InstantMix {
-  const InstantMix({required this.basis, this.items = const []});
+  const InstantMix({
+    required this.basis,
+    this.items = const [],
+    this.excluded = 0,
+  });
 
   final MixBasis basis;
   final List<ItemSummary> items;
+
+  /// Distinct candidates dropped because `excludePids` named them. What
+  /// tells an empty mix whose candidates are all queued apart from a
+  /// seed with none at all; zero from servers predating the field.
+  final int excluded;
 }
 
 /// A sonic path between two tracks, starting track first, destination

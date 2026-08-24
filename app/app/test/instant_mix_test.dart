@@ -15,6 +15,8 @@ import 'routed_host.dart';
 const _seedPid = 'tr-01JZX5N8QW3F4V9T2B7KDSEED01';
 const _mixPid1 = 'tr-01JZX5N8QW3F4V9T2B7KDMIX001';
 const _mixPid2 = 'tr-01JZX5N8QW3F4V9T2B7KDMIX002';
+const _playedPid = 'tr-01JZX5N8QW3F4V9T2B7KDPLAYED';
+const _upcomingPid = 'tr-01JZX5N8QW3F4V9T2B7KDNEXT01';
 
 /// A screen with nothing playing that can raise the sheet, for the one
 /// case the player cannot host: the empty queue.
@@ -195,6 +197,71 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.mixBasis('mix')),
       findsNothing,
     );
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a mix excludes what is coming, not what has played', (
+    tester,
+  ) async {
+    final repo =
+        FakeRepository(
+            items: [
+              testItem(_playedPid),
+              testItem(_seedPid),
+              testItem(_upcomingPid),
+            ],
+          )
+          ..instantMixResult = InstantMix(
+            basis: MixBasis.sonic,
+            items: [testItem(_mixPid1)],
+          );
+    final engine = FakeEngine();
+    final harness = PlayerHarness(
+      playbackContainer(repo: repo, engine: engine),
+    );
+    // A queue mid-listen: one entry behind the current track, one ahead.
+    harness.play([
+      testItem(_playedPid),
+      testItem(_seedPid),
+      testItem(_upcomingPid),
+    ], startIndex: 1);
+    await pumpPlayerInto(tester, harness, host: routedHost);
+
+    await _runSheet(tester);
+
+    // The played entry stays mixable: on a small library excluding the
+    // whole queue was the whole catalog, and every mix came back empty.
+    expect(repo.instantMixCalls.single.excludePids, <String>[
+      _seedPid,
+      _upcomingPid,
+    ]);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('an all-excluded empty mix says the queue already has it', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem(_seedPid)])
+      ..instantMixResult = const InstantMix(
+        basis: MixBasis.metadata,
+        excluded: 12,
+      );
+    final engine = FakeEngine();
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(_seedPid),
+      host: routedHost,
+    );
+
+    await _runSheet(tester);
+
+    expect(
+      find.text('Everything similar is already in your queue'),
+      findsOneWidget,
+    );
+    expect(find.text('No mix available for this track'), findsNothing);
     await harness.endPlayback(tester);
   });
 }

@@ -143,7 +143,7 @@ void main() {
     await tester.tap(_byId(SemanticsIds.shareCopy('sh-1')));
     await tester.pumpAndSettle();
 
-    expect(copied.single, 'http://localhost:4420/s/SECRET-sh-1');
+    expect(copied.single, 'http://server.test/s/SECRET-sh-1');
     expect(find.text('Link copied'), findsOneWidget);
   });
 }

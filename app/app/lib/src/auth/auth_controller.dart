@@ -15,10 +15,15 @@ import 'credential_store.dart';
 /// The pre-auth server probe: first-run setup state and whether open
 /// signup is on. Probed only while unauthenticated;
 /// [AuthController.bootstrap] invalidates it once setup completes so a
-/// later logout lands on the login screen.
-final bootstrapStatusProvider = FutureProvider<BootstrapStatus>(
-  (ref) => ref.watch(repositoryProvider).bootstrapStatus(),
-);
+/// later logout lands on the login screen. Behind the connect gate the
+/// probe never fires at all: there is no server to ask, and Riverpod's
+/// retry ladder would hammer a localhost nobody chose.
+final bootstrapStatusProvider = FutureProvider<BootstrapStatus>((ref) {
+  if (!ref.watch(serverConfiguredProvider)) {
+    return const BootstrapStatus(required: false);
+  }
+  return ref.watch(repositoryProvider).bootstrapStatus();
+});
 
 /// Whether the server is waiting for its first administrator.
 final bootstrapRequiredProvider = FutureProvider<bool>(
@@ -42,6 +47,11 @@ final signupEnabledProvider = FutureProvider<bool>(
 class AuthController extends AsyncNotifier<SessionState> {
   @override
   Future<SessionState> build() async {
+    // No server, no probe: an unconfigured native build answers signed
+    // out at once and the router's redirect owns the connect screen.
+    if (!ref.watch(serverConfiguredProvider)) {
+      return const SessionState(authenticated: false);
+    }
     final repo = ref.watch(repositoryProvider);
     final store = ref.watch(credentialStoreProvider);
     var restored = false;

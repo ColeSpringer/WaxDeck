@@ -70,7 +70,7 @@ void main() {
       allowDownload: true,
       positionMs: null,
     ));
-    expect(copied.single, 'http://localhost:4420/s/FAKESECRET0');
+    expect(copied.single, 'http://server.test/s/FAKESECRET0');
     expect(find.text('Link copied'), findsOneWidget);
     await harness.endPlayback(tester);
   });

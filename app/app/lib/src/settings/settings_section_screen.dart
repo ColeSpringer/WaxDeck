@@ -371,6 +371,34 @@ class _PlaybackBody extends ConsumerWidget {
             ),
           ],
         ),
+        _Group(
+          title: l10n.settingsGroupStreaming,
+          children: <Widget>[
+            // One choice where the platform cannot tell a metered
+            // connection apart (desktop, web); the mobile platforms
+            // split the decision by connection.
+            if (ref.watch(mobileProvider)) ...<Widget>[
+              _streamQualityRow(
+                id: 'stream-quality-wifi',
+                title: l10n.settingsStreamQualityWifiTitle,
+                help: l10n.settingsStreamQualityHelp,
+                provider: streamQualityWifiProvider,
+              ),
+              _streamQualityRow(
+                id: 'stream-quality-metered',
+                title: l10n.settingsStreamQualityMeteredTitle,
+                help: l10n.settingsStreamQualityHelp,
+                provider: streamQualityMeteredProvider,
+              ),
+            ] else
+              _streamQualityRow(
+                id: 'stream-quality-wifi',
+                title: l10n.settingsStreamQualityTitle,
+                help: l10n.settingsStreamQualityHelp,
+                provider: streamQualityWifiProvider,
+              ),
+          ],
+        ),
         if (!kIsWeb)
           _Group(
             title: l10n.settingsGroupData,
@@ -393,6 +421,40 @@ class _PlaybackBody extends ConsumerWidget {
       ],
     );
   }
+
+  Widget _streamQualityRow({
+    required String id,
+    required String title,
+    required String help,
+    required NotifierProvider<EnumSetting<StreamQuality>, StreamQuality>
+    provider,
+  }) => Consumer(
+    builder: (context, ref, _) {
+      final l10n = context.l10n;
+      return SettingAnchor(
+        id: id,
+        child: WaxSettingRow(
+          title: title,
+          help: help,
+          control: WaxChoice<StreamQuality>(
+            value: ref.watch(provider),
+            options: StreamQuality.values,
+            labelFor: (quality) => switch (quality) {
+              StreamQuality.auto => l10n.settingsStreamQualityAuto,
+              StreamQuality.high => l10n.settingsStreamQualityHigh,
+              StreamQuality.normal => l10n.settingsStreamQualityNormal,
+              StreamQuality.low => l10n.settingsStreamQualityLow,
+            },
+            label: title,
+            semanticsId: SemanticsIds.setting(id),
+            optionSemanticsIdFor: (quality) =>
+                SemanticsIds.settingOption(id, quality.name),
+            onChanged: ref.read(provider.notifier).set,
+          ),
+        ),
+      );
+    },
+  );
 }
 
 // --- Library and metadata ----------------------------------------------------

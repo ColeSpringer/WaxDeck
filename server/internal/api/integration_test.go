@@ -55,7 +55,7 @@ type harness struct {
 	connect *connect.Service
 	backups *service.Backups
 	group   *supervise.Group
-	flowReq struct{ apiKey, format, dynamics, gain string } // captured by the fake sidecar
+	flowReq struct{ apiKey, format, dynamics, gain, bitrate string } // captured by the fake sidecar
 }
 
 // skipWithoutUnwritablePaths skips a test that makes a path unwritable to
@@ -320,6 +320,7 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 			h.flowReq.format = r.URL.Query().Get("format")
 			h.flowReq.dynamics = r.URL.Query().Get("dynamics")
 			h.flowReq.gain = r.URL.Query().Get("gain")
+			h.flowReq.bitrate = r.URL.Query().Get("bitrate")
 			src := r.URL.Query().Get("src")
 			if r.URL.Query().Get("id") == "" {
 				http.Error(w, "missing id", http.StatusBadRequest)

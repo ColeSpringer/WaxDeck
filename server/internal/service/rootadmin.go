@@ -94,6 +94,12 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 	// Drop the path-to-library attribution cache so a lookup under the new
 	// root resolves immediately instead of waiting for the first miss.
 	l.invalidateAttribution()
+	// Wake the library watcher so the new root is armed without a
+	// restart; a no-op when the watcher is off.
+	select {
+	case l.watchNudge <- struct{}{}:
+	default:
+	}
 	streamWarning := l.syncFlowRoot(ctx, name, path)
 	// Scan the new root in the background. A scan (or other catalog job)
 	// already in flight was snapshotted before this root existed and will not

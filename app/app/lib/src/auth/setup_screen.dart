@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../l10n/l10n.dart';
+import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'auth_controller.dart';
 
@@ -176,6 +180,33 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                           : Text(l10n.authCreateAccount),
                     ),
                   ),
+                  // Which server this form would administer, native
+                  // only, with the way back out. A typo'd address that
+                  // reaches somebody's fresh install lands here, and
+                  // without this the only exits are creating an admin
+                  // account on the wrong server or clearing app data.
+                  if (!kIsWeb) ...[
+                    const SizedBox(height: WaxSpace.s24),
+                    Text(
+                      ref.watch(serverAddressProvider) ?? '',
+                      style: WaxType.bodySmall.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Semantics(
+                      identifier: SemanticsIds.connectServerOpen,
+                      child: TextButton(
+                        key: const Key(SemanticsIds.connectServerOpen),
+                        onPressed: _submitting
+                            ? null
+                            : () => context.go(WaxRoute.serverConnect),
+                        child: Text(l10n.authChangeServer),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

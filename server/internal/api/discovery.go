@@ -75,7 +75,7 @@ func (s *Server) CreateInstantMix(ctx context.Context, req CreateInstantMixReque
 	default:
 		return nil, err
 	}
-	out := InstantMix{Basis: MixBasis(res.Basis), Items: []ItemSummary{}}
+	out := InstantMix{Basis: MixBasis(res.Basis), Items: []ItemSummary{}, Excluded: &res.Excluded}
 	for _, it := range res.Items {
 		out.Items = append(out.Items, summaryJSON(it))
 	}

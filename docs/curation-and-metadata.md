@@ -17,10 +17,12 @@ A unit never half applies.
 
 Files reach the pipeline four ways: an upload, a URL acquisition, a
 rematch pressed on an item, and a scan. That last one is what covers
-files dropped into a library root by hand: a background pass follows the
-catalog's change log and opens an album-unit entry for what a scan
-added, waiting for the scan to settle first so an album arrives whole
-rather than one entry per file indexed so far. It watches from the
+files dropped into a library root by hand: the server watches its roots
+and scans a dropped directory seconds after it goes quiet (network
+mounts without change events lean on the scan schedule instead), and a
+background pass follows the catalog's change log and opens an album-unit
+entry for what a scan added, waiting for the scan to settle first so an
+album arrives whole rather than one entry per file indexed so far. It watches from the
 moment the feature lands rather than sweeping up what was already there,
 so an upgrade does not drop an existing library into the queue; a
 library set to **leave alone** in the console (matching mode `off`) is

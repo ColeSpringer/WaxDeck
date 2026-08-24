@@ -2949,6 +2949,12 @@ abstract class AppLocalizations {
   /// **'Back to sign-in'**
   String get authBackToSignIn;
 
+  /// The sign-in screen's link to the server-address screen, under the address it currently signs into. Native builds only.
+  ///
+  /// In en, this message translates to:
+  /// **'Change server'**
+  String get authChangeServer;
+
   /// Said under the password field on the sign-up screen when it is empty.
   ///
   /// In en, this message translates to:
@@ -3074,6 +3080,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Request account'**
   String get authRequestSubmit;
+
+  /// Placeholder inside the server-address field, showing the shapes an address can take. Not translated hostnames; example addresses.
+  ///
+  /// In en, this message translates to:
+  /// **'wax.example.com or 192.168.1.20:4420'**
+  String get authServerAddressHint;
+
+  /// Label on the server-address field of the connect screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Server address'**
+  String get authServerAddressLabel;
+
+  /// The connect screen's confirming button: probe the typed address and adopt it.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get authServerConnect;
+
+  /// Under the wordmark on the pre-login server-address screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to your server'**
+  String get authServerConnectTagline;
+
+  /// Under the connect form when the typed text cannot be an address at all (spaces, credentials, a non-web scheme).
+  ///
+  /// In en, this message translates to:
+  /// **'That does not look like a server address'**
+  String get authServerInvalid;
+
+  /// Under the connect form when every way of reaching the typed address failed the health probe.
+  ///
+  /// In en, this message translates to:
+  /// **'No WaxDeck server answered at that address'**
+  String get authServerUnreachable;
 
   /// Under the sign-in form when the server rejected the credentials just typed.
   ///
@@ -4040,6 +4082,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Mix'**
   String get discoveryMixAction;
+
+  /// Snackbar when a mix came back empty because every candidate was excluded as already queued. Sibling of discoveryMixEmpty, which covers a seed with no candidates at all.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything similar is already in your queue'**
+  String get discoveryMixAllQueued;
 
   /// Snackbar when the server built a mix with nothing in it.
   ///
@@ -11563,6 +11611,12 @@ abstract class AppLocalizations {
   /// **'Storage'**
   String get settingsGroupStorage;
 
+  /// Heading over the settings rows about stream quality.
+  ///
+  /// In en, this message translates to:
+  /// **'Streaming'**
+  String get settingsGroupStreaming;
+
   /// Heading over the Appearance settings stored on this device alone, rather than on the account.
   ///
   /// In en, this message translates to:
@@ -12540,6 +12594,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Rewind on resume'**
   String get settingsSmartRewindTitle;
+
+  /// Streaming quality option: no cap, the original plays directly whenever the server can manage it.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get settingsStreamQualityAuto;
+
+  /// The line under the streaming quality settings, naming the trade a cap makes so it arrives as a known one.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and instant seeking, applies from the next track, and never affects downloads'**
+  String get settingsStreamQualityHelp;
+
+  /// Streaming quality option: the 320 kbps cap. The number stays in the help line, never in this label.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get settingsStreamQualityHigh;
+
+  /// Comma-separated search keywords for the streaming quality settings - the words somebody would search by that are not in their names. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'bitrate, quality, bandwidth, data, transcode, cellular'**
+  String get settingsStreamQualityKeywords;
+
+  /// Streaming quality option: the 128 kbps cap.
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get settingsStreamQualityLow;
+
+  /// Name of the streaming quality setting for metered connections, drawn on the mobile platforms beside the Wi-Fi row.
+  ///
+  /// In en, this message translates to:
+  /// **'Streaming quality on mobile data'**
+  String get settingsStreamQualityMeteredTitle;
+
+  /// Streaming quality option: the 192 kbps cap.
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get settingsStreamQualityNormal;
+
+  /// Name of the streaming quality setting, drawn as the single row on platforms that cannot tell a metered connection apart, and as the settings-search name everywhere.
+  ///
+  /// In en, this message translates to:
+  /// **'Streaming quality'**
+  String get settingsStreamQualityTitle;
+
+  /// Name of the streaming quality setting for unmetered connections, drawn on the mobile platforms beside the mobile-data row.
+  ///
+  /// In en, this message translates to:
+  /// **'Streaming quality on Wi-Fi'**
+  String get settingsStreamQualityWifiTitle;
 
   /// The line under the technical details switch.
   ///

@@ -11,6 +11,7 @@
   "discoveryInstantMixFrom": "A partir de \"{title}\"",
   "discoveryInstantMixTitle": "Mezcla instantánea",
   "discoveryMixAction": "Mezclar",
+  "discoveryMixAllQueued": "Todo lo similar ya está en tu cola",
   "discoveryMixEmpty": "No hay ninguna mezcla disponible para esta pista",
   "discoverySimilarTitle": "Parecido a {title}"
 }

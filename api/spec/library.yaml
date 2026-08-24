@@ -1204,7 +1204,7 @@ components:
               example: 44100
             bitrate:
               type: integer
-              description: Source bitrate in bits per second, when known.
+              description: Source bitrate in kilobits per second, when known.
             addedAt:
               type: string
               format: date-time

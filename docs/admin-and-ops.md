@@ -167,12 +167,13 @@ the reset report names them.
 
 ## Scheduled jobs
 
-Three schedules, each a five-field cron expression in server-local
-time: **scan** (a full library scan), **backup**, and **prune** (event
-log, replay-guard stamps, audit history, ended playback sessions).
-Prune ships enabled at 03:30 nightly; scan and backup ship disabled
-until configured. Each schedule shows its last run, last error, and
-next firing time.
+Four schedules, each a five-field cron expression in server-local
+time: **scan** (a full library scan), **backup**, **prune** (event
+log, replay-guard stamps, audit history, ended playback sessions), and
+**analyze** (the audio-decoding loudness and fingerprint pass). Prune
+ships enabled at 03:30 nightly; the rest ship disabled until
+configured. Each schedule shows its last run, last error, and next
+firing time.
 
 ## The trash
 
@@ -267,6 +268,38 @@ working. Either way the library is created and keeps browsing and
 downloading; the reason streaming has to wait for an engine restart
 comes back on the create response, stays on the Libraries screen until
 the next one, and is recorded on the `library.create` audit entry.
+
+## Manual files in the library folders
+
+Dropping files into a library root by hand - a copy over the network, an
+rsync, a beets import - is a supported intake path, not something to
+clean up after. Roots are in-place by default: WaxDeck catalogs what it
+finds where it finds it and never moves a file it did not place. Only
+roots named in `WAXDECK_MANAGED_ROOTS` (or created as managed in the
+console) receive uploads and organizer moves.
+
+Discovery is live. The server watches the library roots
+(`WAXDECK_LIBRARY_WATCH`, on by default) and scans a directory once its
+contents have been event-quiet for ten seconds, so a multi-file album
+copy arrives whole instead of one file at a time. Watches are armed per
+directory; a very large library can exhaust the kernel's inotify budget,
+in which case the log says so and the unwatched remainder is covered by
+scans alone. Network mounts (NFS, SMB, 9p) rarely deliver change events
+at all: disable the watcher there and enable the daily **scan** schedule
+instead, which performs the same intake on a cadence. The two coexist
+fine - the watcher's scans are the ordinary incremental kind that
+fast-path unchanged files.
+
+Dropped files are cataloged as-is immediately; browsing and playback
+never wait on identification. A scan classifies music against audiobooks
+from the files' own tags, and a library's declared media type (chosen
+when it is added in the console) is what routes managed placement to
+type-specific roots. Whether identification then runs is the per-library
+matching mode on the Libraries screen - the intake flag for manual
+files: **automatic** opens album-unit review entries and applies
+confident matches itself, **ask me** holds every unit for review, and
+**leave alone** skips identification entirely, which is the right
+setting for a collection curated by beets or Picard.
 
 ## Transcoding limits
 

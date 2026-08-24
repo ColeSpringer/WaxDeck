@@ -9,6 +9,13 @@ abstract interface class CredentialStorePort {
   Future<String?> readToken();
   Future<void> writeToken(String token);
   Future<void> clearToken();
+
+  /// The adopted server address, beside the token because the two live
+  /// and die together: a token is only ever presented to the server
+  /// that minted it.
+  Future<String?> readServerAddress();
+  Future<void> writeServerAddress(String address);
+  Future<void> clearServerAddress();
 }
 
 /// OS-keychain-backed store over flutter_secure_storage.
@@ -21,6 +28,7 @@ class SecureCredentialStore implements CredentialStorePort {
 
   static const _storage = FlutterSecureStorage();
   static const _tokenKey = 'waxdeck.authToken';
+  static const _addressKey = 'waxdeck.serverAddress';
 
   @override
   Future<String?> readToken() async {
@@ -48,11 +56,39 @@ class SecureCredentialStore implements CredentialStorePort {
       // Nothing readable survives if the read path fails the same way.
     }
   }
+
+  @override
+  Future<String?> readServerAddress() async {
+    try {
+      return await _storage.read(key: _addressKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> writeServerAddress(String address) async {
+    try {
+      await _storage.write(key: _addressKey, value: address);
+    } catch (_) {
+      // Best effort; the address holds until the app exits.
+    }
+  }
+
+  @override
+  Future<void> clearServerAddress() async {
+    try {
+      await _storage.delete(key: _addressKey);
+    } catch (_) {
+      // Nothing readable survives if the read path fails the same way.
+    }
+  }
 }
 
 /// Non-persistent store for web builds and tests.
 class InMemoryCredentialStore implements CredentialStorePort {
   String? token;
+  String? serverAddress;
 
   @override
   Future<String?> readToken() async => token;
@@ -62,4 +98,14 @@ class InMemoryCredentialStore implements CredentialStorePort {
 
   @override
   Future<void> clearToken() async => token = null;
+
+  @override
+  Future<String?> readServerAddress() async => serverAddress;
+
+  @override
+  Future<void> writeServerAddress(String address) async =>
+      serverAddress = address;
+
+  @override
+  Future<void> clearServerAddress() async => serverAddress = null;
 }

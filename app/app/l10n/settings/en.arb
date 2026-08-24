@@ -553,6 +553,10 @@
   "@settingsGroupStorage": {
     "description": "Heading over the settings rows about space this device is using."
   },
+  "settingsGroupStreaming": "Streaming",
+  "@settingsGroupStreaming": {
+    "description": "Heading over the settings rows about stream quality."
+  },
   "settingsGroupThisDevice": "This device",
   "@settingsGroupThisDevice": {
     "description": "Heading over the Appearance settings stored on this device alone, rather than on the account."
@@ -1305,6 +1309,42 @@
   "settingsSmartRewindTitle": "Rewind on resume",
   "@settingsSmartRewindTitle": {
     "description": "Name of the \"Rewind on resume\" setting, drawn on its own row and in settings search."
+  },
+  "settingsStreamQualityAuto": "Auto",
+  "@settingsStreamQualityAuto": {
+    "description": "Streaming quality option: no cap, the original plays directly whenever the server can manage it."
+  },
+  "settingsStreamQualityHelp": "Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and instant seeking, applies from the next track, and never affects downloads",
+  "@settingsStreamQualityHelp": {
+    "description": "The line under the streaming quality settings, naming the trade a cap makes so it arrives as a known one."
+  },
+  "settingsStreamQualityHigh": "High",
+  "@settingsStreamQualityHigh": {
+    "description": "Streaming quality option: the 320 kbps cap. The number stays in the help line, never in this label."
+  },
+  "settingsStreamQualityKeywords": "bitrate, quality, bandwidth, data, transcode, cellular",
+  "@settingsStreamQualityKeywords": {
+    "description": "Comma-separated search keywords for the streaming quality settings - the words somebody would search by that are not in their names. Translate each word and keep the commas."
+  },
+  "settingsStreamQualityLow": "Low",
+  "@settingsStreamQualityLow": {
+    "description": "Streaming quality option: the 128 kbps cap."
+  },
+  "settingsStreamQualityMeteredTitle": "Streaming quality on mobile data",
+  "@settingsStreamQualityMeteredTitle": {
+    "description": "Name of the streaming quality setting for metered connections, drawn on the mobile platforms beside the Wi-Fi row."
+  },
+  "settingsStreamQualityNormal": "Normal",
+  "@settingsStreamQualityNormal": {
+    "description": "Streaming quality option: the 192 kbps cap."
+  },
+  "settingsStreamQualityTitle": "Streaming quality",
+  "@settingsStreamQualityTitle": {
+    "description": "Name of the streaming quality setting, drawn as the single row on platforms that cannot tell a metered connection apart, and as the settings-search name everywhere."
+  },
+  "settingsStreamQualityWifiTitle": "Streaming quality on Wi-Fi",
+  "@settingsStreamQualityWifiTitle": {
+    "description": "Name of the streaming quality setting for unmetered connections, drawn on the mobile platforms beside the mobile-data row."
   },
   "settingsTechnicalDetailsHelp": "Draws codec and format chips beside what they describe",
   "@settingsTechnicalDetailsHelp": {

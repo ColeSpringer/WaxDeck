@@ -36,6 +36,7 @@ class PlaybackSession {
     this.defaultTrimSilence = false,
     this.defaultVoiceBoost = false,
     this.smartRewind = SmartRewind.off,
+    this.maxBitrateKbps,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
@@ -80,6 +81,12 @@ class PlaybackSession {
   /// Playback setting. Read once at build for the same reason
   /// [defaultSpeed] is: a session outlives the frame it was made in.
   final SmartRewind smartRewind;
+
+  /// The bitrate cap every play-info this session mints asks for; null
+  /// streams the original. Read once at build for the same reason
+  /// [defaultSpeed] is: a changed quality setting applies from the next
+  /// track, never mid-stream.
+  final int? maxBitrateKbps;
 
   /// Wall clock behind the rewind's "how long ago", injectable so tests
   /// can put a pause in the past without waiting one out.
@@ -318,7 +325,10 @@ class PlaybackSession {
       if (_isBook) {
         await _loadPartFor(resumeMs, autoplay: false);
       } else {
-        final info = await repository.getPlayInfo(item.pid);
+        final info = await repository.getPlayInfo(
+          item.pid,
+          maxBitrateKbps: maxBitrateKbps,
+        );
         if (_disposed) return;
         _loadedDurationMs = info.durationMs;
         _applyOutroCutoff(info.durationMs);
@@ -592,7 +602,11 @@ class PlaybackSession {
     }
     final PlayInfo info;
     try {
-      info = await repository.getPlayInfo(item.pid, positionMs: bookMs);
+      info = await repository.getPlayInfo(
+        item.pid,
+        positionMs: bookMs,
+        maxBitrateKbps: maxBitrateKbps,
+      );
     } on WaxDeckApiException catch (e) {
       final local = await _localFallback(e);
       if (_disposed) return;
@@ -919,7 +933,10 @@ class PlaybackSession {
       await _loadPartFor(at, autoplay: playing);
       return;
     }
-    final info = await repository.getPlayInfo(item.pid);
+    final info = await repository.getPlayInfo(
+      item.pid,
+      maxBitrateKbps: maxBitrateKbps,
+    );
     if (_disposed) return;
     // The same guard the first load carries: web answers "no supported
     // source" for a source it is asked to begin at or past the end, and

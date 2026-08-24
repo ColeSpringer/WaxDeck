@@ -127,7 +127,11 @@ abstract final class SemanticsIds {
   static const String userSetPassword = 'user-set-password';
   static const String userUploadEnabled = 'user-upload-enabled';
 
-  // auth: Sign-in, first-run setup, and signup. The names here are frozen vocabulary for the accessibility audit.
+  // auth: Sign-in, first-run setup, signup, and the pre-login server-address screen. The names here are frozen vocabulary for the accessibility audit.
+  static const String connectServerAddress = 'connect-server-address';
+  static const String connectServerError = 'connect-server-error';
+  static const String connectServerOpen = 'connect-server-open';
+  static const String connectServerSubmit = 'connect-server-submit';
   static const String loginError = 'login-error';
   static const String loginPassword = 'login-password';
   static const String loginSubmit = 'login-submit';

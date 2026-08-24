@@ -41,6 +41,30 @@ void main() {
     expect(find.byKey(const Key('setup-username')), findsNothing);
   });
 
+  testWidgets('an unconfigured native launch lands on the connect gate', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(FakeRepository()),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+          // No stored address, no dart-define: the state main() seeds on
+          // a fresh desktop launch.
+          bootServerAddressProvider.overrideWithValue(null),
+        ],
+        child: const WaxDeckApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key(SemanticsIds.connectServerAddress)),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('login-username')), findsNothing);
+  });
+
   testWidgets('setup submits and lands signed in', (tester) async {
     final repo = FakeRepository(
       bootstrapNeeded: true,

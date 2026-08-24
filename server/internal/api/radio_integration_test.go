@@ -550,13 +550,13 @@ func TestRadioStationLogoProxy(t *testing.T) {
 	// A failure is remembered too, and that is the point of the shorter
 	// miss TTL rather than an oversight: a grid of thirty stations behind
 	// one dead host would otherwise cost thirty upstream fetches per paint,
-	// per device, forever.
-	htmlStation := create("cached-miss-fm", logoHost.URL+"/notanimage")
-	// From zero: the cache is keyed by pid rather than by URL, so the
-	// station created for the 404 sweep above fetched this same path once
-	// already, and correctly so - two stations naming one dead host are two
-	// stations.
+	// per device, forever. From zero: the cache is keyed by pid rather
+	// than by URL, so the sweep's html-fm fetched this same path once
+	// already, and correctly so - two stations naming one dead host are
+	// two stations. The one fetch is now the create's own warm; every
+	// paint joins it or reads the remembered miss.
 	misses = 0
+	htmlStation := create("cached-miss-fm", logoHost.URL+"/notanimage")
 	for range 3 {
 		resp := get(t, h.ts, "/api/v1/radio/stations/"+htmlStation.Pid+"/logo", h.token)
 		resp.Body.Close()

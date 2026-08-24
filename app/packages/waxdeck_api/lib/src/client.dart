@@ -200,7 +200,15 @@ abstract interface class WaxDeckRepository {
   /// audiobooks [positionMs] (book-timeline milliseconds) selects the part
   /// containing that position; [voiceBoost] requests server-side loudness
   /// normalization, overriding the caller's stored setting when present.
-  Future<PlayInfo> getPlayInfo(String pid, {int? positionMs, bool? voiceBoost});
+  /// [maxBitrateKbps] caps the stream's bitrate (32-320): a lossy source
+  /// already inside the cap streams unchanged, anything else re-encodes
+  /// down to it and reports the applied cap on the result.
+  Future<PlayInfo> getPlayInfo(
+    String pid, {
+    int? positionMs,
+    bool? voiceBoost,
+    int? maxBitrateKbps,
+  });
 
   /// `GET /items/{pid}/play-state`: the caller's resume state for one item.
   Future<PlayState> getPlayState(String pid);
@@ -1970,11 +1978,13 @@ class WaxDeckClient implements WaxDeckRepository {
     String pid, {
     int? positionMs,
     bool? voiceBoost,
+    int? maxBitrateKbps,
   }) => _guard(() async {
     final response = await _gen.getPlaybackApi().getPlayInfo(
       pid: pid,
       positionMs: positionMs,
       voiceBoost: voiceBoost,
+      maxBitrateKbps: maxBitrateKbps,
     );
     return playInfoFromGen(_require(response.data), baseUrl: _baseUrl);
   });

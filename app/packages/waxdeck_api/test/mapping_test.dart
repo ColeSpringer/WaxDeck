@@ -152,6 +152,24 @@ void main() {
       expect(info.durationMs, 214000);
       expect(info.seekable, isTrue);
       expect(info.expiresAt, expires);
+      expect(info.appliedBitrateKbps, isNull);
+    });
+
+    test('play-info carries an applied bitrate cap through', () {
+      final info = playInfoFromGen(
+        gen.PlayInfo(
+          (b) => b
+            ..pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE'
+            ..url = '/media/stream?pid=tr-x&mt=abc&fmt=opus&br=192'
+            ..mimeType = 'audio/ogg'
+            ..durationMs = 214000
+            ..seekable = false
+            ..expiresAt = DateTime.utc(2026, 7, 18, 12)
+            ..appliedBitrateKbps = 192,
+        ),
+      );
+      expect(info.appliedBitrateKbps, 192);
+      expect(info.seekable, isFalse);
     });
 
     test('play-state fields carry over', () {

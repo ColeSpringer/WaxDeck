@@ -223,7 +223,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     final repository = ref.watch(repositoryProvider);
     final live = LiveInvalidations(
       channelFactory: eventsChannelFactory(
-        baseUrl: waxDeckBaseUrl,
+        baseUrl: ref.watch(serverBaseUrlProvider),
         token: () => repository.authToken,
       ),
       onCatalog: catalog.hint,

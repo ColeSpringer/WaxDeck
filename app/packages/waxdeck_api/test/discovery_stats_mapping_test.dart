@@ -30,6 +30,28 @@ void main() {
     });
   });
 
+  group('instant mix response mapping', () {
+    test('carries the exclusion count through', () {
+      final mix = instantMixFromGen(
+        gen.InstantMix(
+          (b) => b
+            ..basis = gen.MixBasis.metadata
+            ..excluded = 7,
+        ),
+      );
+      expect(mix.basis, MixBasis.metadata);
+      expect(mix.items, isEmpty);
+      expect(mix.excluded, 7);
+    });
+
+    test('a server without the field reads as zero', () {
+      final mix = instantMixFromGen(
+        gen.InstantMix((b) => b..basis = gen.MixBasis.sonic),
+      );
+      expect(mix.excluded, 0);
+    });
+  });
+
   group('share mapping', () {
     gen.Share share({DateTime? expiresAt}) => gen.Share(
       (b) => b

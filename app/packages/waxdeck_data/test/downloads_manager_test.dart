@@ -144,8 +144,7 @@ void main() {
     repo = _DownloadRepository();
     manager = BackgroundDownloadManager(
       db: db,
-      repository: repo,
-      baseUrl: 'https://example.test',
+      repository: () => repo,
       engine: engine,
     );
     engine.settle = () => manager.settled;

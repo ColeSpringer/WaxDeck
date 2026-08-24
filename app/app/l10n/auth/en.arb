@@ -5,6 +5,10 @@
   "@authBackToSignIn": {
     "description": "Returns from the sign-up screen to the sign-in screen."
   },
+  "authChangeServer": "Change server",
+  "@authChangeServer": {
+    "description": "The sign-in screen's link to the server-address screen, under the address it currently signs into. Native builds only."
+  },
   "authChoosePassword": "Choose a password",
   "@authChoosePassword": {
     "description": "Said under the password field on the sign-up screen when it is empty."
@@ -94,6 +98,30 @@
   "authRequestSubmit": "Request account",
   "@authRequestSubmit": {
     "description": "The sign-up screen's confirming button."
+  },
+  "authServerAddressHint": "wax.example.com or 192.168.1.20:4420",
+  "@authServerAddressHint": {
+    "description": "Placeholder inside the server-address field, showing the shapes an address can take. Not translated hostnames; example addresses."
+  },
+  "authServerAddressLabel": "Server address",
+  "@authServerAddressLabel": {
+    "description": "Label on the server-address field of the connect screen."
+  },
+  "authServerConnect": "Connect",
+  "@authServerConnect": {
+    "description": "The connect screen's confirming button: probe the typed address and adopt it."
+  },
+  "authServerConnectTagline": "Connect to your server",
+  "@authServerConnectTagline": {
+    "description": "Under the wordmark on the pre-login server-address screen."
+  },
+  "authServerInvalid": "That does not look like a server address",
+  "@authServerInvalid": {
+    "description": "Under the connect form when the typed text cannot be an address at all (spaces, credentials, a non-web scheme)."
+  },
+  "authServerUnreachable": "No WaxDeck server answered at that address",
+  "@authServerUnreachable": {
+    "description": "Under the connect form when every way of reaching the typed address failed the health probe."
   },
   "authSignInRejected": "That username and password do not go together.",
   "@authSignInRejected": {

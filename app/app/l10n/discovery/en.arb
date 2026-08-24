@@ -49,6 +49,10 @@
   "@discoveryMixAction": {
     "description": "Confirming button of the instant-mix sheet. A verb."
   },
+  "discoveryMixAllQueued": "Everything similar is already in your queue",
+  "@discoveryMixAllQueued": {
+    "description": "Snackbar when a mix came back empty because every candidate was excluded as already queued. Sibling of discoveryMixEmpty, which covers a seed with no candidates at all."
+  },
   "discoveryMixEmpty": "No mix available for this track",
   "@discoveryMixEmpty": {
     "description": "Snackbar when the server built a mix with nothing in it."

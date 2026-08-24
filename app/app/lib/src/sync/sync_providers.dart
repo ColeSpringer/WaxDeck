@@ -24,7 +24,7 @@ final syncEngineProvider = Provider<SyncEngine?>((ref) {
     db: db,
     repository: repository,
     channelFactory: eventsChannelFactory(
-      baseUrl: waxDeckBaseUrl,
+      baseUrl: ref.watch(serverBaseUrlProvider),
       token: () => repository.authToken,
     ),
   );
@@ -38,12 +38,13 @@ final downloadManagerProvider = Provider<DownloadManagerPort?>((ref) {
   if (db == null) return null;
   final manager = BackgroundDownloadManager(
     db: db,
-    repository: ref.watch(repositoryProvider),
-    baseUrl: waxDeckBaseUrl,
-    // Read rather than watched: this provider builds the engine that
-    // owns every in-flight transfer, and rebuilding it because a switch
-    // moved would drop them all. The callback is what makes the setting
-    // reach the next download without that.
+    // Both read per call rather than watched: this provider builds the
+    // engine that owns every in-flight transfer, and rebuilding it
+    // because the address or a switch moved would orphan them all -
+    // completions with no ledger to land in. The callbacks are what
+    // make the current server and setting reach the next download
+    // without that.
+    repository: () => ref.read(repositoryProvider),
     wifiOnly: () => ref.read(downloadsOnWifiOnlyProvider),
   );
   ref.onDispose(manager.dispose);

@@ -119,6 +119,13 @@ abstract final class ClientSettingKeys {
   /// Whether gapless preloading waits for an unmetered connection.
   static const preloadOnWifiOnly = 'waxdeck.playback.preloadOnWifiOnly';
 
+  /// The streaming quality cap, split by connection: capping over the
+  /// home Wi-Fi and capping on a phone plan are different decisions.
+  /// Platforms that cannot tell a metered connection apart (desktop,
+  /// web) store and resolve the Wi-Fi value alone.
+  static const streamQualityWifi = 'waxdeck.playback.streamQualityWifi';
+  static const streamQualityMetered = 'waxdeck.playback.streamQualityMetered';
+
   /// Whether a music queue that has run out keeps going with a mix
   /// seeded on what it ended on. Per device, like the rest of playback.
   static const keepPlayingSimilar = 'waxdeck.playback.keepPlayingSimilar';

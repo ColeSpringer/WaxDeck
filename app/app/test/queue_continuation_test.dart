@@ -87,10 +87,14 @@ void main() {
     });
   });
 
-  test('the mix does not repeat what is already queued', () async {
+  test('the mix does not repeat anything the queue held', () async {
     final h = _harness();
     h.repo.instantMixResult = mix;
 
+    // The whole queue, played history included: the continuation runs
+    // standing on the last entry, and the seed's nearest neighbours are
+    // what just played - excluding only the upcoming side would loop a
+    // small library's album straight back with repeat off.
     h.container.playback.play(
       [testItem(_a), testItem(_b)],
       source: _album,

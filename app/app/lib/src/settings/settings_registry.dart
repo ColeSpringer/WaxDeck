@@ -102,6 +102,7 @@ class SettingEntry {
     this.adminOnly = false,
     this.nativeOnly = false,
     this.desktopOnly = false,
+    this.mobileOnly = false,
   });
 
   /// A stable handle, also this setting's e2e identifier suffix. Renaming
@@ -146,6 +147,11 @@ class SettingEntry {
   /// and a browser tab is not a room's stereo, so the one setting this
   /// covers would be a switch with nothing behind it on both.
   final bool desktopOnly;
+
+  /// Absent off the mobile platforms, which are the only ones that can
+  /// tell a metered connection apart; everywhere else the per-network
+  /// split collapses to one setting.
+  final bool mobileOnly;
 }
 
 /// The search words for one setting, out of the comma-separated string
@@ -284,6 +290,19 @@ List<SettingEntry> settingsEntries(AppLocalizations l10n) => <SettingEntry>[
     section: SettingsSection.playback,
     keywords: _words(l10n.settingsPreloadWifiKeywords),
     nativeOnly: true,
+  ),
+  SettingEntry(
+    id: 'stream-quality-wifi',
+    title: l10n.settingsStreamQualityTitle,
+    section: SettingsSection.playback,
+    keywords: _words(l10n.settingsStreamQualityKeywords),
+  ),
+  SettingEntry(
+    id: 'stream-quality-metered',
+    title: l10n.settingsStreamQualityMeteredTitle,
+    section: SettingsSection.playback,
+    keywords: _words(l10n.settingsStreamQualityKeywords),
+    mobileOnly: true,
   ),
   SettingEntry(
     id: 'autoplay',
@@ -492,14 +511,16 @@ List<SettingEntry> settingsEntries(AppLocalizations l10n) => <SettingEntry>[
 /// tie-break nobody could predict, and this list is short enough that
 /// the honest ordering is the useful one.
 ///
-/// [isAdmin], [isNative], and [isDesktop] drop what this caller cannot
-/// reach, rather than offering a row that opens a section without it.
+/// [isAdmin], [isNative], [isDesktop], and [isMobile] drop what this
+/// caller cannot reach, rather than offering a row that opens a section
+/// without it.
 List<SettingEntry> searchSettings(
   String query, {
   required AppLocalizations l10n,
   required bool isAdmin,
   required bool isNative,
   required bool isDesktop,
+  bool isMobile = false,
 }) {
   final needle = foldForSearch(query.trim());
   if (needle.isEmpty) return const <SettingEntry>[];
@@ -511,6 +532,7 @@ List<SettingEntry> searchSettings(
     if (entry.section.adminOnly && !isAdmin) continue;
     if (entry.nativeOnly && !isNative) continue;
     if (entry.desktopOnly && !isDesktop) continue;
+    if (entry.mobileOnly && !isMobile) continue;
     final title = foldForSearch(entry.title);
     if (title.startsWith(needle)) {
       starts.add(entry);

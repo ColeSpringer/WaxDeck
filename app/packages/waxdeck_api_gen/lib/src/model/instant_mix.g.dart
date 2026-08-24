@@ -11,11 +11,14 @@ class _$InstantMix extends InstantMix {
   final MixBasis basis;
   @override
   final BuiltList<ItemSummary> items;
+  @override
+  final int? excluded;
 
   factory _$InstantMix([void Function(InstantMixBuilder)? updates]) =>
       (InstantMixBuilder()..update(updates))._build();
 
-  _$InstantMix._({required this.basis, required this.items}) : super._();
+  _$InstantMix._({required this.basis, required this.items, this.excluded})
+    : super._();
   @override
   InstantMix rebuild(void Function(InstantMixBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -26,7 +29,10 @@ class _$InstantMix extends InstantMix {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is InstantMix && basis == other.basis && items == other.items;
+    return other is InstantMix &&
+        basis == other.basis &&
+        items == other.items &&
+        excluded == other.excluded;
   }
 
   @override
@@ -34,6 +40,7 @@ class _$InstantMix extends InstantMix {
     var _$hash = 0;
     _$hash = $jc(_$hash, basis.hashCode);
     _$hash = $jc(_$hash, items.hashCode);
+    _$hash = $jc(_$hash, excluded.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -42,7 +49,8 @@ class _$InstantMix extends InstantMix {
   String toString() {
     return (newBuiltValueToStringHelper(r'InstantMix')
           ..add('basis', basis)
-          ..add('items', items))
+          ..add('items', items)
+          ..add('excluded', excluded))
         .toString();
   }
 }
@@ -59,6 +67,10 @@ class InstantMixBuilder implements Builder<InstantMix, InstantMixBuilder> {
       _$this._items ??= ListBuilder<ItemSummary>();
   set items(ListBuilder<ItemSummary>? items) => _$this._items = items;
 
+  int? _excluded;
+  int? get excluded => _$this._excluded;
+  set excluded(int? excluded) => _$this._excluded = excluded;
+
   InstantMixBuilder() {
     InstantMix._defaults(this);
   }
@@ -68,6 +80,7 @@ class InstantMixBuilder implements Builder<InstantMix, InstantMixBuilder> {
     if ($v != null) {
       _basis = $v.basis;
       _items = $v.items.toBuilder();
+      _excluded = $v.excluded;
       _$v = null;
     }
     return this;
@@ -98,6 +111,7 @@ class InstantMixBuilder implements Builder<InstantMix, InstantMixBuilder> {
               'basis',
             ),
             items: items.build(),
+            excluded: excluded,
           );
     } catch (_) {
       late String _$failedField;

@@ -46,6 +46,12 @@ func icyStationServer(t *testing.T, st icyStation) *httptest.Server {
 		wire = icyWire(st.metaint, st.audio, st.blocks)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The logo warm a station create kicks probes this host for a
+		// favicon; only the stream request itself carries the ICY ask.
+		if r.URL.Path == "/favicon.ico" {
+			http.NotFound(w, r)
+			return
+		}
 		if got := r.Header.Get("Icy-MetaData"); got != "1" {
 			t.Errorf("station was asked with Icy-MetaData %q, want 1", got)
 		}

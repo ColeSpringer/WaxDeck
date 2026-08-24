@@ -217,6 +217,9 @@ class FakeRepository implements WaxDeckRepository {
   WaxDeckApiException? createBookmarkError;
   int _bookmarkCounter = 0;
   final List<({String pid, int? positionMs})> playInfoCalls = [];
+
+  /// The maxBitrateKbps each [getPlayInfo] call carried, in order.
+  final List<int?> playInfoMaxBitrates = [];
   final List<String> importedOpml = [];
   int refreshCalls = 0;
   int _subscribeCounter = 0;
@@ -665,10 +668,12 @@ class FakeRepository implements WaxDeckRepository {
     String pid, {
     int? positionMs,
     bool? voiceBoost,
+    int? maxBitrateKbps,
   }) async {
     final error = playInfoError;
     if (error != null) throw error;
     playInfoCalls.add((pid: pid, positionMs: positionMs));
+    playInfoMaxBitrates.add(maxBitrateKbps);
     await playInfoGate?.future;
     final episode = _findEpisode(pid);
     // Enclosure passthrough: an unfetched episode still

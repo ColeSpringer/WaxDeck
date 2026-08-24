@@ -5,10 +5,13 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 
 import 'src/app.dart';
 import 'src/artwork/artwork_providers.dart';
+import 'src/auth/credential_store.dart';
+import 'src/auth/server_address.dart';
 import 'src/auto/media_session_init.dart';
 import 'src/diagnostics/defect_log.dart';
 import 'src/desktop/desktop_ports_io.dart'
     if (dart.library.js_interop) 'src/desktop/desktop_ports_stub.dart';
+import 'src/providers.dart';
 import 'src/shell/url_strategy/url_strategy.dart';
 import 'src/sync/refresh_pacing.dart';
 
@@ -30,11 +33,21 @@ Future<void> main() async {
   // Tells the window plugin the window exists, before anything asks it
   // to shrink; no-op off the desktops.
   ensureDesktopWindowInitialized();
+  // The server address has to be known before the container exists:
+  // repositoryProvider builds from it, and everything builds from the
+  // repository. Read from the credential store on native; a no-op null
+  // on web, which talks to its own origin.
+  final bootAddress = await resolveBootServerAddress(
+    const SecureCredentialStore(),
+  );
   // The media session and the app share one provider world, so the
   // Android Auto browse tree reads the same mirror the UI does. The
   // observer is the live fan-out's ledger of in-flight first builds; it
   // only works registered here, from the first element.
-  final container = ProviderContainer(observers: [FirstBuildObserver()]);
+  final container = ProviderContainer(
+    observers: [FirstBuildObserver()],
+    overrides: [bootServerAddressProvider.overrideWithValue(bootAddress)],
+  );
   // Before anything else can raise: the paged controllers rethrow the
   // defects they cannot handle on purpose, and until this is installed
   // there is nothing on the other end of that.

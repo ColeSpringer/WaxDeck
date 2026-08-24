@@ -85,6 +85,7 @@ func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) 
 	src.Size = f.Size
 	src.MTimeNS = f.MTimeNS
 	src.EssenceHash = f.EssenceHash
+	src.BitrateKbps = f.Bitrate
 
 	// Read here only for the content voice boost is for. Every stream
 	// request runs through this, and a caller that wants music loudness

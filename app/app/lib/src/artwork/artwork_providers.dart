@@ -33,7 +33,7 @@ final artworkPinStoreProvider = Provider<ArtworkPinStore>((ref) {
 /// that to the design system, which decides what size to ask for.
 final artworkStoreProvider = Provider<ArtworkStore>((ref) {
   final store = createArtworkStore(
-    baseUrl: waxDeckBaseUrl,
+    baseUrl: ref.watch(serverBaseUrlProvider),
     pins: ref.watch(artworkPinStoreProvider),
     // Read per request rather than captured: the token rotates, and a
     // store holding the one it was built with would start answering 401

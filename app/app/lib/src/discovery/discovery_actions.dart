@@ -70,11 +70,13 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
     final l10n = context.l10n;
     final playback = ref.read(nowPlayingProvider.notifier);
     // What the mix must not repeat, as it stands when the mix is asked
-    // for. The branch below reads the queue again: a track started while
-    // the mix built is a standing queue too, and wiping it because it
-    // was empty a moment ago is the destruction this whole branch exists
-    // to avoid.
-    final queued = ref.read(queueControllerProvider).pids;
+    // for: the current entry and what is still coming. Played history is
+    // left mixable - on a small library the whole queue was the whole
+    // catalog, and the mix came back empty for it. The branch below
+    // reads the queue again: a track started while the mix built is a
+    // standing queue too, and wiping it because it was empty a moment
+    // ago is the destruction this whole branch exists to avoid.
+    final queued = ref.read(queueControllerProvider).upcomingPids;
     // Read here for the same reason as the four above: the message's
     // action fires after this sheet has popped. Over the shell, because
     // the sheet's own route is over the player, which is over the shell:
@@ -97,9 +99,20 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
       if (!mounted) return;
       navigator.pop();
       if (mix.items.isEmpty) {
+        // Two different empty answers: candidates that are all already
+        // queued, and a seed with no candidates at all. The count is
+        // what tells them apart.
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(l10n.discoveryMixEmpty)));
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                mix.excluded > 0
+                    ? l10n.discoveryMixAllQueued
+                    : l10n.discoveryMixEmpty,
+              ),
+            ),
+          );
         return;
       }
       // Read again rather than reusing the snapshot above: `mounted` is

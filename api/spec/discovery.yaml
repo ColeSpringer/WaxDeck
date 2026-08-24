@@ -210,6 +210,16 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ItemSummary"
+        excluded:
+          type: integer
+          minimum: 0
+          description: >
+            How many distinct candidate tracks were dropped because
+            `excludePids` named them. The seed's own drop is not
+            counted. Lets a client tell an empty mix whose candidates
+            are all excluded ("everything similar is already queued")
+            apart from a seed with no candidates at all. Absent only
+            from servers predating the field; readers treat that as 0.
 
     SonicPath:
       type: object

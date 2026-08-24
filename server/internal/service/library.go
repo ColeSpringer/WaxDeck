@@ -54,6 +54,14 @@ type Config struct {
 	Roots []Root
 	// ScanOnStart launches a scan as soon as the service is up.
 	ScanOnStart bool
+	// WatchLibraries arms a live filesystem watcher on the roots, so
+	// files placed there by hand are cataloged without waiting for a
+	// manual rescan or the scan schedule.
+	WatchLibraries bool
+	// WatchSettle is how long a directory must stay event-quiet before
+	// its scoped rescan fires; zero means the ten-second default. Tests
+	// set it short.
+	WatchSettle time.Duration
 	// ResetStaleCatalog moves a catalog built on a different schema
 	// baseline aside at startup instead of refusing to start. See
 	// staleBaseline for what it does and does not distinguish.
@@ -302,12 +310,18 @@ type Library struct {
 	// radioLogoHints are the logo URLs stations named in their own
 	// connect headers while somebody was listening, tried ahead of
 	// discovery. Under the same lock as the cache they feed.
+	// radioWarmSlots bounds concurrent warm lookups: a client restoring
+	// a whole station list creates in a burst, and an unbounded fan-out
+	// of discovery flights (each up to the 12s budget) is a lot of
+	// sockets for pictures. Queued warms hold only their claim; paints
+	// join the flight and wait the same either way.
 	radioLogos       map[string]radioLogo
 	radioLogosOrder  []string
 	radioLogosBytes  int
 	radioLogoFlights map[string]chan struct{}
 	radioLogoHints   map[string]string
 	radioLogosMu     sync.Mutex
+	radioWarmSlots   chan struct{}
 	// batchFinalizeMu serializes upload-batch finalization (the flip,
 	// entry opening, and member linking as one unit): two concurrent
 	// finalizes of one batch would otherwise both gather the same
@@ -407,6 +421,18 @@ type Library struct {
 	// podping holds the feed-URL index a chain notification resolves
 	// against, and the per-show floor between two podping-driven syncs.
 	podping podpingIndex
+	// watchQueue holds the event-touched directories waiting out their
+	// settle window; watchScans carries settled batches to the scan
+	// worker, so scans never run on the event loop; watchNudge wakes
+	// the library watcher to re-arm over a fresh root table after a
+	// runtime library create; watchReady closes once the first arm
+	// pass finishes, so a test can order its drop after the watches
+	// exist.
+	watchQueue     *watchPending
+	watchScans     chan []string
+	watchNudge     chan struct{}
+	watchReady     chan struct{}
+	watchReadyOnce sync.Once
 }
 
 // SocketFileName is the IPC socket beside the catalog DB. It is a local
@@ -531,6 +557,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		podcastDirectoryBase:     cfg.PodcastDirectoryBase,
 		radioTitles:              map[string]radioTitle{},
 		radioLogos:               map[string]radioLogo{},
+		radioWarmSlots:           make(chan struct{}, 4),
 		radioLogoFlights:         map[string]chan struct{}{},
 		listenbrainz:             scrobble.NewListenBrainz(),
 		sim:                      similarity.New(),
@@ -540,6 +567,10 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		workerAPIConfigured:      cfg.WorkerAPIConfigured,
 		workers:                  group,
 		radioArtResolver:         cfg.RadioArtResolver,
+		watchQueue:               newWatchPending(cfg.WatchSettle),
+		watchScans:               make(chan []string, 1),
+		watchNudge:               make(chan struct{}, 1),
+		watchReady:               make(chan struct{}),
 	}
 	if reset != nil {
 		l.logCatalogReset(reset)
@@ -657,6 +688,15 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			log.Info("startup scan launched", "job", string(pid))
 			return nil
 		})
+	}
+
+	// Files placed into the roots by hand reach the catalog through the
+	// watcher; the discovery sweeper then opens their review entries.
+	// Spawned even with no roots yet: a console-managed install adds
+	// its first library at runtime, and the watcher holds for the nudge.
+	if cfg.WatchLibraries {
+		group.Go(ctx, "library-watch", l.watchLibraries)
+		group.Go(ctx, "library-watch-scan", l.watchScanWorker)
 	}
 	return l, nil
 }

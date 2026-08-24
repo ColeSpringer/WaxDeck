@@ -134,8 +134,13 @@ class QueueContinuation extends Notifier<Set<String>> {
             seedPid: seed.pid,
             adventurousness: ref.read(mixAdventurousnessProvider),
             size: instantMixSize,
-            // Everything already queued, so a continuation does not play
-            // back what the listener has just heard.
+            // The whole queue, not upcomingPids: the continuation only
+            // ever runs standing on the last entry, where "current plus
+            // upcoming" is one track - and the seed's nearest
+            // neighbours are exactly what just played, so on a small
+            // library that would re-append the album that just ended,
+            // forever, with repeat off. Running dry and stopping is
+            // the honest end of "keep playing similar".
             excludePids: queue.pids,
           );
     } on Object catch (error) {

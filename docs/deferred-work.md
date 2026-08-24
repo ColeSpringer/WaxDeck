@@ -431,6 +431,18 @@ here waits on upstream.
   should take the web perf gate's corpus with them, since the two answer
   adjacent questions.
 
+- `[in-repo]` **Switching servers leaves the old server's downloads
+  behind.** Adopting a new address on the connect screen drops the
+  bearer token and lets the mirror heal itself - sync cursors are
+  generation-bound, so a genuinely different server answers
+  `sync-reset` and the mirror rebuilds - but downloaded files and their
+  records still name pids the new server never minted, and nothing
+  offers to reclaim them. Tolerable for what the feature ships for
+  (the same server reached a new way: a tailscale name, a reverse
+  proxy); a real cross-server move wants a "forget this server" wipe
+  that clears the mirror, the download store, and the artwork cache in
+  one deliberate action.
+
 - `[in-repo]` **The artwork precacher is built, tested, and wired to
   nothing.** `ArtworkPrecacher` warms the covers just past the viewport
   when a scroll stops - batched three at a time, superseded by the next
@@ -1089,20 +1101,12 @@ here waits on upstream.
   per-station bit, and the only per-user station state that exists is the
   favourites list; whoever adds a second one should decide whether they
   share a shape.
-- `[in-repo]` **A worker started from a request goroutine can panic the
-  process at shutdown.** `supervise.Group.Go`/`GoOnce` add to a
-  `sync.WaitGroup` that `Wait` may already be blocked on, which is the
-  documented misuse and panics from a zero counter - "Add called
-  concurrently with Wait", taking down the one process the package exists
-  to keep up. Two live callers spawn from a request: both radio artwork
-  lookups (`radionowplayingart.go`), which outlive the poll that asked
-  for them. The obvious guard - decline a spawn once `Wait` has begun -
-  deadlocks instead: teardown is itself supervised
-  (`connect.Service.endSession` hands `session-teardown-<id>` to the
-  group, and that worker is what cancels the session pump `Wait` is
-  waiting on), so declining it hangs shutdown rather than ending it.
-  Measured: `TestConnectCastSession` goes from 1.7s to the package
-  timeout. The real fix is a group that can be waited on while still
-  accepting work - a counter and a condition variable rather than a
-  `WaitGroup` - with `Wait` returning when the count reaches zero
-  whatever arrived meanwhile.
+- `[in-repo]` **Subsonic's `maxBitRate` is still documented-ignored.**
+  The capped-transcode machinery it needs now exists
+  (`flow.PlayOptions.MaxBitrateKbps`, minted as `fmt=`/`br=` on the
+  stream URL and clamped against the per-user ceiling at both mint and
+  fetch), so honoring the parameter is a small adapter change: read it
+  where the stream view resolves, pass it through `PlayOptions`, and
+  decide how it composes with a format the client may also pin - which
+  is the same decision the "forcing the source's own format" entry
+  above already holds.

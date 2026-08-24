@@ -65,7 +65,6 @@ class BackgroundDownloadManager implements DownloadManagerPort {
   BackgroundDownloadManager({
     required this.db,
     required this.repository,
-    required this.baseUrl,
     TransferEnginePort? engine,
     this.wifiOnly = _never,
   }) : engine = engine ?? BackgroundTransferEngine() {
@@ -81,11 +80,11 @@ class BackgroundDownloadManager implements DownloadManagerPort {
   final bool Function() wifiOnly;
 
   final MirrorDatabase db;
-  final WaxDeckRepository repository;
 
-  /// The server origin download URLs resolve against (native builds
-  /// always have an absolute one).
-  final String baseUrl;
+  /// Resolved per call, never captured: the manager outlives a server
+  /// switch on purpose (it owns every in-flight transfer), so the
+  /// repository it would have captured can go stale under it.
+  final WaxDeckRepository Function() repository;
 
   final TransferEnginePort engine;
 
@@ -145,7 +144,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   @override
   Future<void> download(String pid) async {
-    final info = await repository.getDownloadInfo(pid);
+    final info = await repository().getDownloadInfo(pid);
     for (var i = 0; i < info.files.length; i++) {
       final f = info.files[i];
       final existing =

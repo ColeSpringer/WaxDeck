@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -22,6 +23,7 @@ import '../auto/media_session_feed.dart';
 import '../desktop/discord_binder.dart';
 import '../diagnostics/defect_log_screen.dart';
 import '../desktop/tray_binder.dart';
+import '../auth/connect_server_screen.dart';
 import '../auth/login_screen.dart';
 import '../auth/setup_screen.dart';
 import '../auth/signup_screen.dart';
@@ -132,6 +134,9 @@ class _SessionRefresh extends ChangeNotifier {
     _subscriptions = [
       ref.listen(authControllerProvider, (_, _) => notifyListeners()),
       ref.listen(bootstrapRequiredProvider, (_, _) => notifyListeners()),
+      // Adopting a server address is what moves an unconfigured build
+      // off the connect screen; the redirect has to re-run to see it.
+      ref.listen(serverAddressProvider, (_, _) => notifyListeners()),
     ];
   }
 
@@ -185,6 +190,14 @@ String? _redirect(Ref ref, GoRouterState state) {
   // The prototype harness carries no session and is opened cold.
   if (location == WaxRoute.editingPrototype) return null;
 
+  // Before the session is even asked about: a native build with no
+  // adopted server address has nothing to probe, so everything lands on
+  // the connect screen. The web build talks to its own origin and can
+  // never be unconfigured.
+  if (!ref.read(serverConfiguredProvider)) {
+    return location == WaxRoute.serverConnect ? null : WaxRoute.serverConnect;
+  }
+
   final signedIn =
       ref.read(authControllerProvider).value?.authenticated ?? false;
   if (signedIn) {
@@ -207,11 +220,21 @@ String? _redirect(Ref ref, GoRouterState state) {
 
   // A server with no accounts has exactly one thing to offer. An
   // unresolved probe reads as "has accounts" and lands on login;
-  // _SessionRefresh brings the redirect back when it answers.
+  // _SessionRefresh brings the redirect back when it answers. The
+  // connect screen stays reachable on native even here: an adopted
+  // address that turns out to be somebody's un-set-up server needs a
+  // way back out that is not creating an admin account on it.
   final needsSetup = ref.read(bootstrapRequiredProvider).value ?? false;
-  if (needsSetup) return location == WaxRoute.setup ? null : WaxRoute.setup;
+  if (needsSetup) {
+    if (location == WaxRoute.serverConnect && !kIsWeb) return null;
+    return location == WaxRoute.setup ? null : WaxRoute.setup;
+  }
 
   if (location == WaxRoute.login || location == WaxRoute.signup) return null;
+  // Signed out and configured, the connect screen stays reachable on
+  // native ("Change server" on the login screen); the web build always
+  // has its origin and is sent to sign in instead.
+  if (location == WaxRoute.serverConnect && !kIsWeb) return null;
   final target = Uri(
     path: WaxRoute.login,
     queryParameters: location == WaxRoute.home
@@ -337,6 +360,10 @@ Widget _userEdit(BuildContext context, GoRouterState state) {
 /// Locations that do not need a session: the auth surfaces themselves,
 /// and the prototype harness.
 final publicRoutes = <RouteBase>[
+  GoRoute(
+    path: WaxRoute.serverConnect,
+    builder: (context, state) => const ConnectServerScreen(),
+  ),
   GoRoute(
     path: WaxRoute.login,
     builder: (context, state) => const LoginScreen(),

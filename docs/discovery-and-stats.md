@@ -35,7 +35,11 @@ the genre bound instead, mixing in more of the wider catalog.
 
 Mixes are computed fresh per request and never persisted. For endless
 radio, request another mix and pass what already played in
-`excludePids`.
+`excludePids`. The response's `excluded` count says how many candidates
+that list dropped, which is what tells an empty mix whose candidates
+are all queued apart from a seed with none at all. The apps exclude
+only the current track and what is still coming, so played history is
+mixable again.
 
 ## Similar tracks
 

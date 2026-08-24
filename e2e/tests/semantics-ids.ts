@@ -126,7 +126,11 @@ export const SemanticsIds = {
   userSetPassword: 'user-set-password',
   userUploadEnabled: 'user-upload-enabled',
 
-  // auth: Sign-in, first-run setup, and signup. The names here are frozen vocabulary for the accessibility audit.
+  // auth: Sign-in, first-run setup, signup, and the pre-login server-address screen. The names here are frozen vocabulary for the accessibility audit.
+  connectServerAddress: 'connect-server-address',
+  connectServerError: 'connect-server-error',
+  connectServerOpen: 'connect-server-open',
+  connectServerSubmit: 'connect-server-submit',
   loginError: 'login-error',
   loginPassword: 'login-password',
   loginSubmit: 'login-submit',
@@ -806,7 +810,7 @@ export const SemanticsIdPrefixes = {
   userLibrary: 'user-library-',
   userRow: 'user-row-',
 
-  // auth: Sign-in, first-run setup, and signup. The names here are frozen vocabulary for the accessibility audit.
+  // auth: Sign-in, first-run setup, signup, and the pre-login server-address screen. The names here are frozen vocabulary for the accessibility audit.
   oidcLogin: 'oidc-login-',
 
   // books: Audiobooks: the hub, the book screen, its chapters, and its per-book settings.

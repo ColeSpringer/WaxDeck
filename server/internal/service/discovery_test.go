@@ -268,4 +268,57 @@ func TestArtistMixHonorsExcludePids(t *testing.T) {
 			t.Fatalf("mix contains excluded pid %s", excluded)
 		}
 	}
+	if mix.Excluded != 1 {
+		t.Fatalf("excluded = %d, want the one dropped candidate counted", mix.Excluded)
+	}
+}
+
+func TestInstantMixCountsExclusions(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+
+	page, err := svc.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := ""
+	others := []string{}
+	for _, it := range page.Items {
+		if it.Title == "Amber Waves" {
+			seed = it.PID
+		} else {
+			others = append(others, it.PID)
+		}
+	}
+	if seed == "" || len(others) != 3 {
+		t.Fatalf("fixture library = %+v, want the seed plus three others", page.Items)
+	}
+
+	// Every other track excluded: the mix is empty, and the count says
+	// why - each of the three was met and dropped. The seed's own drop
+	// stays out of it, so a bare seed still reads as "no candidates".
+	mix, err := svc.InstantMix(ctx, uc, InstantMixInput{
+		SeedPID:     seed,
+		Size:        10,
+		ExcludePIDs: others,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mix.Items) != 0 {
+		t.Fatalf("mix = %+v, want empty with everything excluded", mix.Items)
+	}
+	if mix.Excluded != 3 {
+		t.Fatalf("excluded = %d, want 3", mix.Excluded)
+	}
+
+	// Nothing excluded: the count stays zero even though the seed
+	// itself was dropped from its own candidate pools.
+	open, err := svc.InstantMix(ctx, uc, InstantMixInput{SeedPID: seed, Size: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(open.Items) == 0 || open.Excluded != 0 {
+		t.Fatalf("open mix = %d items, excluded %d; want items with a zero count", len(open.Items), open.Excluded)
+	}
 }

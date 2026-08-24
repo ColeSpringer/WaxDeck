@@ -31,7 +31,7 @@ part 'item.g.dart';
 /// * [codec] - Source audio codec.
 /// * [container] - Source file container.
 /// * [sampleRate] - Source sample rate in Hz.
-/// * [bitrate] - Source bitrate in bits per second, when known.
+/// * [bitrate] - Source bitrate in kilobits per second, when known.
 /// * [addedAt] - When the item entered the library.
 /// * [artSource] 
 @BuiltValue()
@@ -59,7 +59,7 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   @BuiltValueField(wireName: r'genres')
   BuiltList<String>? get genres;
 
-  /// Source bitrate in bits per second, when known.
+  /// Source bitrate in kilobits per second, when known.
   @BuiltValueField(wireName: r'bitrate')
   int? get bitrate;
 

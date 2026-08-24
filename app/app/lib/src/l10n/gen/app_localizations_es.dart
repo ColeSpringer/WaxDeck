@@ -1721,6 +1721,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authBackToSignIn => 'Volver al inicio de sesión';
 
   @override
+  String get authChangeServer => 'Cambiar de servidor';
+
+  @override
   String get authChoosePassword => 'Elige una contraseña';
 
   @override
@@ -1786,6 +1789,25 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get authRequestSubmit => 'Solicitar la cuenta';
+
+  @override
+  String get authServerAddressHint => 'wax.example.com o 192.168.1.20:4420';
+
+  @override
+  String get authServerAddressLabel => 'Dirección del servidor';
+
+  @override
+  String get authServerConnect => 'Conectar';
+
+  @override
+  String get authServerConnectTagline => 'Conéctate a tu servidor';
+
+  @override
+  String get authServerInvalid => 'Eso no parece una dirección de servidor';
+
+  @override
+  String get authServerUnreachable =>
+      'Ningún servidor WaxDeck ha respondido en esa dirección';
 
   @override
   String get authSignInRejected => 'Ese usuario y esa contraseña no coinciden.';
@@ -2415,6 +2437,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get discoveryMixAction => 'Mezclar';
+
+  @override
+  String get discoveryMixAllQueued => 'Todo lo similar ya está en tu cola';
 
   @override
   String get discoveryMixEmpty =>
@@ -7471,6 +7496,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsGroupStorage => 'Almacenamiento';
 
   @override
+  String get settingsGroupStreaming => 'Streaming';
+
+  @override
   String get settingsGroupThisDevice => 'Este dispositivo';
 
   @override
@@ -8095,6 +8123,36 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsSmartRewindTitle => 'Retroceder al reanudar';
+
+  @override
+  String get settingsStreamQualityAuto => 'Automática';
+
+  @override
+  String get settingsStreamQualityHelp =>
+      'Automática transmite el original siempre que es posible. Un límite recodifica para ajustarse (Alta 320 kbps, Normal 192, Baja 128), lo que desactiva la reproducción sin pausas y el salto instantáneo, se aplica a partir de la siguiente pista y nunca afecta a las descargas';
+
+  @override
+  String get settingsStreamQualityHigh => 'Alta';
+
+  @override
+  String get settingsStreamQualityKeywords =>
+      'bitrate, calidad, ancho de banda, datos, transcodificar, móvil';
+
+  @override
+  String get settingsStreamQualityLow => 'Baja';
+
+  @override
+  String get settingsStreamQualityMeteredTitle =>
+      'Calidad de streaming con datos móviles';
+
+  @override
+  String get settingsStreamQualityNormal => 'Normal';
+
+  @override
+  String get settingsStreamQualityTitle => 'Calidad de streaming';
+
+  @override
+  String get settingsStreamQualityWifiTitle => 'Calidad de streaming por Wi-Fi';
 
   @override
   String get settingsTechnicalDetailsHelp =>

@@ -44,6 +44,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       isAdmin: isAdmin,
       isNative: !kIsWeb,
       isDesktop: ref.watch(desktopProvider),
+      isMobile: ref.watch(mobileProvider),
     );
     final sections = <SettingsSection>[
       for (final section in SettingsSection.values)

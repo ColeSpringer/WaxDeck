@@ -18,6 +18,7 @@ import '../sync/sync_providers.dart';
 import 'playback_session.dart';
 import 'session_registry.dart';
 import 'sleep_timer.dart';
+import 'stream_quality.dart';
 
 /// How close to the end of the playing item the next one is prepared.
 ///
@@ -805,6 +806,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
         defaultTrimSilence: ref.read(trimSilenceDefaultProvider),
         defaultVoiceBoost: ref.read(voiceBoostDefaultProvider),
         smartRewind: ref.read(smartRewindProvider),
+        maxBitrateKbps: ref.read(streamMaxBitrateKbpsProvider),
       );
 
   /// Makes [session] the live one: the previous session lets go, Connect
@@ -1158,13 +1160,18 @@ class NowPlayingController extends Notifier<NowPlaying> {
     // made the read a round trip per arm whose answer could not matter,
     // and it cost the gapless crossing into every track the listener had
     // once heard part of.
-    final info = await ref.read(repositoryProvider).getPlayInfo(next.pid);
+    final info = await ref
+        .read(repositoryProvider)
+        .getPlayInfo(
+          next.pid,
+          maxBitrateKbps: ref.read(streamMaxBitrateKbpsProvider),
+        );
     if (!ref.mounted) return;
     // Only passthrough streams: a preloaded transcode opens a second
     // server-side session, which double counts against the transcode
     // limiter or is refused outright in the middle of a queue. The
-    // server marks a cut or voice-boosted stream unseekable, so these
-    // two answers are the whole test.
+    // server marks a cut, capped, or voice-boosted stream unseekable,
+    // so these two answers are the whole test.
     if (!info.seekable || info.voiceBoost) {
       _refusedNext = next.queueId;
       return;

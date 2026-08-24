@@ -24,9 +24,13 @@ abstract final class WaxRoute {
   static const setup = '/setup';
   static const signup = '/signup';
 
+  /// The pre-login server-address screen, native only: the web build
+  /// talks to its own origin and never sees it.
+  static const serverConnect = '/connect';
+
   /// Locations that only make sense while signed out. The auth redirect
   /// bounces a signed-in session away from all of them.
-  static const authLocations = {login, setup, signup};
+  static const authLocations = {login, setup, signup, serverConnect};
 
   /// Query parameter carrying the location a signed-out visitor asked
   /// for, so the deep link survives the trip through the login form.

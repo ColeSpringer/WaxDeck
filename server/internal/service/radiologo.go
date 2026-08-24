@@ -40,12 +40,13 @@ const (
 	radioLogoCandidates = 5
 	// radioLogoDiscoveryBudget bounds a whole discovery, which the
 	// per-fetch timeout alone does not: a homepage read plus five
-	// candidate fetches at radioLogoTimeout each is a minute of held
-	// request for one tile, and the client now asks for every station,
+	// candidate fetches at radioLogoTimeout each is half a minute of
+	// held request for one tile, and the client asks for every station,
 	// so a cold hub of twelve logo-less stations would start twelve of
-	// them at once. The budget is what makes the worst case a wait
-	// somebody would sit through rather than one they would reload past.
-	radioLogoDiscoveryBudget = 15 * time.Second
+	// them at once. Held under the clients' 15-second artwork receive
+	// timeout so even a cold first paint settles as an answer rather
+	// than an abort.
+	radioLogoDiscoveryBudget = 12 * time.Second
 )
 
 // discoverRadioLogo finds and fetches a logo for a station whose row

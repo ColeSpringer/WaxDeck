@@ -21,10 +21,17 @@ const (
 )
 
 // Group tracks the workers it spawned so a caller can wait for them on
-// shutdown.
+// shutdown. The count is a counter under a condition variable rather
+// than a sync.WaitGroup, because workers keep arriving while Wait runs:
+// teardown is itself supervised, and request-time spawns (a radio
+// artwork lookup, a logo warm) can land mid-shutdown - the WaitGroup
+// shape panics on exactly that ("Add called concurrently with Wait").
+// Construct with [NewGroup].
 type Group struct {
-	log *slog.Logger
-	wg  sync.WaitGroup
+	log  *slog.Logger
+	mu   sync.Mutex
+	idle *sync.Cond
+	n    int
 }
 
 // NewGroup returns a Group logging through log (nil discards).
@@ -32,15 +39,46 @@ func NewGroup(log *slog.Logger) *Group {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Group{log: log}
+	g := &Group{log: log}
+	g.idle = sync.NewCond(&g.mu)
+	return g
+}
+
+// spawn runs body on a counted goroutine: the one goroutine statement
+// in the server, per the package lint.
+func (g *Group) spawn(body func()) {
+	g.mu.Lock()
+	g.n++
+	g.mu.Unlock()
+	go func() {
+		defer func() {
+			g.mu.Lock()
+			g.n--
+			if g.n == 0 {
+				g.idle.Broadcast()
+			}
+			g.mu.Unlock()
+		}()
+		body()
+	}()
 }
 
 // Go runs fn in a supervised goroutine named name. A panic or error is
 // logged and fn restarts with exponential backoff; a nil return or a
 // canceled ctx ends the worker for good. Wait returns once every worker
 // has ended.
-func (g *Group) Go(ctx context.Context, name string, fn func(context.Context) error) {
-	g.wg.Go(func() {
+//
+// It reports whether the worker started: a context already canceled is
+// refused, which keeps a request racing shutdown from spawning work
+// after the group has been waited out - work nothing would wait for. A
+// cancellation landing between this check and the spawn still leaves an
+// instant where a worker can slip past a concurrent Wait; every body
+// must therefore still honor its context promptly.
+func (g *Group) Go(ctx context.Context, name string, fn func(context.Context) error) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	g.spawn(func() {
 		backoff := initialBackoff
 		for {
 			err := g.run(ctx, name, fn)
@@ -60,17 +98,25 @@ func (g *Group) Go(ctx context.Context, name string, fn func(context.Context) er
 			backoff = min(backoff*2, maxBackoff)
 		}
 	})
+	return true
 }
 
 // GoOnce runs fn in a supervised goroutine without restarting: a panic
 // is contained and logged, and the worker ends. For one-shot work whose
-// failure should degrade, not loop.
-func (g *Group) GoOnce(ctx context.Context, name string, fn func(context.Context) error) {
-	g.wg.Go(func() {
+// failure should degrade, not loop. Like [Group.Go] it refuses an
+// already-canceled context and reports whether the worker started, so a
+// caller holding state the worker was meant to release can release it
+// itself.
+func (g *Group) GoOnce(ctx context.Context, name string, fn func(context.Context) error) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	g.spawn(func() {
 		if err := g.run(ctx, name, fn); err != nil && ctx.Err() == nil {
 			g.log.Error("worker failed", "worker", name, "err", err)
 		}
 	})
+	return true
 }
 
 // run invokes fn converting a panic into an error.
@@ -84,8 +130,16 @@ func (g *Group) run(ctx context.Context, name string, fn func(context.Context) e
 	return fn(ctx)
 }
 
-// Wait blocks until every spawned worker has returned.
-func (g *Group) Wait() { g.wg.Wait() }
+// Wait blocks until the group has no running workers, counting any that
+// were spawned after Wait began. It returns at the first moment the
+// count is zero.
+func (g *Group) Wait() {
+	g.mu.Lock()
+	for g.n > 0 {
+		g.idle.Wait()
+	}
+	g.mu.Unlock()
+}
 
 // PanicError reports a recovered worker panic.
 type PanicError struct {

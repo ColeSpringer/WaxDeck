@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -243,6 +244,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                     ],
+                  ],
+                  // Which server this form signs into, native only: the
+                  // web build is served by its own server and has no
+                  // other one to name.
+                  if (!kIsWeb) ...[
+                    const SizedBox(height: WaxSpace.s24),
+                    Text(
+                      ref.watch(serverAddressProvider) ?? '',
+                      style: WaxType.bodySmall.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Semantics(
+                      identifier: SemanticsIds.connectServerOpen,
+                      child: TextButton(
+                        key: const Key(SemanticsIds.connectServerOpen),
+                        onPressed: _submitting
+                            ? null
+                            : () => context.go(WaxRoute.serverConnect),
+                        child: Text(l10n.authChangeServer),
+                      ),
+                    ),
                   ],
                 ],
               ),

@@ -63,6 +63,61 @@ func TestShapeForVirtualTracks(t *testing.T) {
 	}
 }
 
+func TestCappedShape(t *testing.T) {
+	caps := testCaps()
+	cases := []struct {
+		name       string
+		src        Source
+		cap        int
+		wantFormat string
+		wantCapped bool
+	}{
+		// No cap changes nothing.
+		{"uncapped", Source{Codec: "flac"}, 0, "auto", false},
+		// A lossy source already inside the cap streams unchanged. The
+		// catalog stores kbps, so the case does too.
+		{"lossy inside the cap", Source{Codec: "mp3", BitrateKbps: 128}, 192, "auto", false},
+		// A lossy source over the cap is a real encode down to it.
+		{"lossy over the cap", Source{Codec: "mp3", BitrateKbps: 320}, 128, "opus", true},
+		// Unknown bitrate counts as over the cap, never under it.
+		{"unknown bitrate", Source{Codec: "mp3"}, 320, "opus", true},
+		// Lossless always re-encodes under a cap.
+		{"lossless", Source{Codec: "flac", BitrateKbps: 900}, 320, "opus", true},
+	}
+	for _, c := range cases {
+		shape, capped := CappedShape(c.src, caps, ShapeFor(c.src, caps, false), c.cap)
+		if capped != c.wantCapped || shape.Format != c.wantFormat {
+			t.Errorf("%s: (%q, %v), want (%q, %v)", c.name, shape.Format, capped, c.wantFormat, c.wantCapped)
+		}
+		if capped && shape.Seekable {
+			t.Errorf("%s: a capped shape must never be seekable", c.name)
+		}
+	}
+
+	// An encode already headed to a lossy format keeps it: a capped
+	// voice boost stays on the boost's own pick.
+	boosted := ShapeFor(Source{Codec: "flac"}, caps, true)
+	if shape, capped := CappedShape(Source{Codec: "flac"}, caps, boosted, 128); !capped || shape.Format != boosted.Format {
+		t.Errorf("capped boost = (%q, %v), want the boost format kept", shape.Format, capped)
+	}
+	// The source's own bitrate excuses only a direct play. A boosted
+	// episode under the cap on disk still encodes at the engine's
+	// choosing, so the cap rides along.
+	underCap := Source{Codec: "mp3", BitrateKbps: 96, SpokenWord: true}
+	boostedUnder := ShapeFor(underCap, caps, true)
+	if _, capped := CappedShape(underCap, caps, boostedUnder, 128); !capped {
+		t.Error("an under-cap source did not keep the cap on its voice-boost encode")
+	}
+	// A lossless cut re-shapes to the lossy tail, and the MP3 floor
+	// stands in where the sidecar lacks opus.
+	noOpus := testCaps()
+	noOpus.Outputs = []client.CapsOutput{{Name: "flac", Live: true}, {Name: "mp3", Live: true}}
+	cut := ShapeFor(Source{Virtual: true, Codec: "flac"}, noOpus, false)
+	if shape, capped := CappedShape(Source{Virtual: true, Codec: "flac"}, noOpus, cut, 192); !capped || shape.Format != "mp3" {
+		t.Errorf("capped lossless cut without opus = (%q, %v), want mp3", shape.Format, capped)
+	}
+}
+
 func TestDeviceFormat(t *testing.T) {
 	flacSrc := Source{Codec: "flac", Container: "flac"}
 	mp3Src := Source{Codec: "mp3", Container: "mp3"}

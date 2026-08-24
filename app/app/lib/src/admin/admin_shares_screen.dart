@@ -55,7 +55,9 @@ class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen> {
 
   Future<void> _copy(Share share) async {
     final l10n = context.l10n;
-    await Clipboard.setData(ClipboardData(text: shareAbsoluteUrl(share.url)));
+    await Clipboard.setData(
+      ClipboardData(text: shareAbsoluteUrl(ref, share.url)),
+    );
     if (!mounted) return;
     _report(l10n.adminShareCopied);
   }

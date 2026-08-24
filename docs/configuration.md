@@ -102,6 +102,10 @@ Read by compose itself, not the server.
   a separate root if your main library is managed by beets or Picard.
 - `WAXDECK_SCAN_ON_START` (default `true`): launch a library scan at
   startup.
+- `WAXDECK_LIBRARY_WATCH` (default `true`): watch the library roots
+  and catalog files placed there by hand without waiting for a rescan.
+  Network mounts (NFS, SMB, 9p) rarely deliver change events; disable
+  it there and enable the daily scan schedule instead.
 - `WAXDECK_UPLOAD_FORMATS`: file extensions uploads accept, comma
   separated. Replaces the default set (see
   [uploads](curation-and-metadata.md)) rather than extending it; empty

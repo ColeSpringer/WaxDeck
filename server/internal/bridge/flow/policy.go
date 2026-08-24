@@ -24,6 +24,11 @@ type Source struct {
 	// Codec and Container describe the source stream.
 	Codec     string
 	Container string
+	// BitrateKbps is the source's bitrate in kilobits per second, when
+	// known (zero otherwise) - the unit the catalog stores it in. A
+	// bitrate cap reads it to leave a lossy direct play already inside
+	// the cap alone.
+	BitrateKbps int
 	// DurationMS is the item's duration (the span's for virtual tracks,
 	// the resolved part's for multi-file books).
 	DurationMS int64
@@ -428,4 +433,41 @@ func hasOutput(caps *client.Caps, name string) bool {
 		}
 	}
 	return false
+}
+
+// MinStreamBitrateKbps and MaxStreamBitrateKbps bound a client bitrate
+// cap: below the floor no codec speaks, above the ceiling a cap cannot
+// beat direct play.
+const (
+	MinStreamBitrateKbps = 32
+	MaxStreamBitrateKbps = 320
+)
+
+// CappedShape narrows a shape to a bitrate cap. A lossy direct play
+// already at or below the cap streams unchanged - never transcode a
+// 128k MP3 to satisfy a 320 cap, and an unknown bitrate counts as over
+// the cap, never under it. Everything else becomes a real encode down
+// to the cap: an encode already headed to a lossy format keeps it, the
+// rest take the same lossy tail CUE cuts and voice boost get (Opus, or
+// the MP3 floor). A capped shape is never seekable, which is also what
+// routes it through session admission at fetch.
+func CappedShape(src Source, caps *client.Caps, shape Shape, capKbps int) (Shape, bool) {
+	if capKbps <= 0 {
+		return shape, false
+	}
+	// Only a direct play is excused by the source's own bitrate: a shape
+	// already headed for an encode (voice boost, a CUE cut) emits at the
+	// engine's choosing, so the cap has to ride along regardless of what
+	// the file on disk was.
+	if shape.Seekable && !lossless(src.Codec) && src.BitrateKbps > 0 && src.BitrateKbps <= capKbps {
+		return shape, false
+	}
+	format := shape.Format
+	if !lossyBitrateFormats[format] {
+		format = "mp3"
+		if hasOutput(caps, "opus") {
+			format = "opus"
+		}
+	}
+	return Shape{Format: format, MimeType: formatMime[format], Seekable: false}, true
 }

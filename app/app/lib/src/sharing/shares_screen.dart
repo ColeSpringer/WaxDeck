@@ -53,7 +53,9 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
   }
 
   Future<void> _copy(Share share) async {
-    await Clipboard.setData(ClipboardData(text: shareAbsoluteUrl(share.url)));
+    await Clipboard.setData(
+      ClipboardData(text: shareAbsoluteUrl(ref, share.url)),
+    );
     if (!mounted) return;
     _report(context.l10n.sharingLinkCopied);
   }

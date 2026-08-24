@@ -11,8 +11,7 @@ import 'transfer_engine.dart';
 class BackgroundDownloadManager implements DownloadManagerPort {
   BackgroundDownloadManager({
     required MirrorDatabase db,
-    required WaxDeckRepository repository,
-    required String baseUrl,
+    required WaxDeckRepository Function() repository,
     TransferEnginePort? engine,
     bool Function()? wifiOnly,
   }) {

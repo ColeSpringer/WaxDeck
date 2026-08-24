@@ -299,6 +299,7 @@ class PlaybackApi {
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [positionMs] - Book-timeline position in milliseconds; selects which part of a multi-file audiobook to resolve. Omitting it resolves the first part. Ignored for single-file items. 
   /// * [voiceBoost] - Request server-side spoken-word loudness normalization (compression plus leveling gain) applied to the stream, for clients without local DSP. Precedence is resolved here, at mint time: when this parameter is present it wins; when absent, the caller's stored setting for the show or book applies. Honored only for podcast episodes and audiobooks, only when the streaming engine supports it, and only when the item's measured loudness is known; the response's `voiceBoost` always reports the actual outcome. Applying it forces a transcode. 
+  /// * [maxBitrateKbps] - Cap the stream's bitrate, in kilobits per second. A lossy source already at or below the cap streams unchanged; anything else is re-encoded down to it, which turns off sample-exact seeking and gapless preloading and counts against the transcode session limits like any other transcode. The cap only narrows what the token authorizes: the server clamps it to the caller's own transcode ceiling, and `appliedBitrateKbps` reports the outcome. Honored only when the streaming engine is running; a server without one serves originals directly and ignores the cap. Omitted, streams shape exactly as they always have. Out-of-range values answer 400 `invalid-request`. 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -312,6 +313,7 @@ class PlaybackApi {
     required String pid,
     int? positionMs,
     bool? voiceBoost,
+    int? maxBitrateKbps,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -346,6 +348,7 @@ class PlaybackApi {
     final _queryParameters = <String, dynamic>{
       if (positionMs != null) r'positionMs': encodeQueryParameter(_serializers, positionMs, const FullType(int)),
       if (voiceBoost != null) r'voiceBoost': encodeQueryParameter(_serializers, voiceBoost, const FullType(bool)),
+      if (maxBitrateKbps != null) r'maxBitrateKbps': encodeQueryParameter(_serializers, maxBitrateKbps, const FullType(int)),
     };
 
     final _response = await _dio.request<Object>(

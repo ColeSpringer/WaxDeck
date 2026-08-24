@@ -258,6 +258,13 @@ class QueueState {
   /// and a timeline mint all consume.
   List<String> get pids => [for (final e in entries) e.pid];
 
+  /// The current entry and everything still to come, which is what an
+  /// instant mix must not repeat. Played history is deliberately not
+  /// here: what the listener has finished with is mixable again.
+  List<String> get upcomingPids => [
+    for (var i = currentIndex; i < entries.length; i++) entries[i].pid,
+  ];
+
   /// How many entries have not played yet, which is what decides when a
   /// rolling window draws again.
   int get unplayed => entries.isEmpty ? 0 : entries.length - 1 - currentIndex;

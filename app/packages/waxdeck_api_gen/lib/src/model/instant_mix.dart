@@ -16,6 +16,7 @@ part 'instant_mix.g.dart';
 /// Properties:
 /// * [basis] 
 /// * [items] 
+/// * [excluded] - How many distinct candidate tracks were dropped because `excludePids` named them. The seed's own drop is not counted. Lets a client tell an empty mix whose candidates are all excluded (\"everything similar is already queued\") apart from a seed with no candidates at all. Absent only from servers predating the field; readers treat that as 0. 
 @BuiltValue()
 abstract class InstantMix implements Built<InstantMix, InstantMixBuilder> {
   @BuiltValueField(wireName: r'basis')
@@ -24,6 +25,10 @@ abstract class InstantMix implements Built<InstantMix, InstantMixBuilder> {
 
   @BuiltValueField(wireName: r'items')
   BuiltList<ItemSummary> get items;
+
+  /// How many distinct candidate tracks were dropped because `excludePids` named them. The seed's own drop is not counted. Lets a client tell an empty mix whose candidates are all excluded (\"everything similar is already queued\") apart from a seed with no candidates at all. Absent only from servers predating the field; readers treat that as 0. 
+  @BuiltValueField(wireName: r'excluded')
+  int? get excluded;
 
   InstantMix._();
 
@@ -58,6 +63,13 @@ class _$InstantMixSerializer implements PrimitiveSerializer<InstantMix> {
       object.items,
       specifiedType: const FullType(BuiltList, [FullType(ItemSummary)]),
     );
+    if (object.excluded != null) {
+      yield r'excluded';
+      yield serializers.serialize(
+        object.excluded,
+        specifiedType: const FullType(int),
+      );
+    }
   }
 
   @override
@@ -94,6 +106,13 @@ class _$InstantMixSerializer implements PrimitiveSerializer<InstantMix> {
             specifiedType: const FullType(BuiltList, [FullType(ItemSummary)]),
           ) as BuiltList<ItemSummary>;
           result.items.replace(valueDes);
+          break;
+        case r'excluded':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.excluded = valueDes;
           break;
         default:
           unhandled.add(key);

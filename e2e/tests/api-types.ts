@@ -5576,6 +5576,8 @@ export interface components {
         InstantMix: {
             basis: components["schemas"]["MixBasis"];
             items: components["schemas"]["ItemSummary"][];
+            /** @description How many distinct candidate tracks were dropped because `excludePids` named them. The seed's own drop is not counted. Lets a client tell an empty mix whose candidates are all excluded ("everything similar is already queued") apart from a seed with no candidates at all. Absent only from servers predating the field; readers treat that as 0. */
+            excluded?: number;
         };
         /** @description A sonic path between two tracks, starting track first, destination last when `complete`. */
         SonicPath: {
@@ -6333,7 +6335,7 @@ export interface components {
              * @example 44100
              */
             sampleRate?: number;
-            /** @description Source bitrate in bits per second, when known. */
+            /** @description Source bitrate in kilobits per second, when known. */
             bitrate?: number;
             /**
              * Format: date-time
@@ -7286,6 +7288,11 @@ export interface components {
             partStartMs?: number;
             /** @description True when the stream applies server-side spoken-word loudness normalization. Absent or false otherwise, including when it was requested but cannot be applied yet (unsupported by the sidecar, or loudness not measured yet). */
             voiceBoost?: boolean;
+            /**
+             * @description The bitrate cap the minted stream carries, in kilobits per second: the requested `maxBitrateKbps` after clamping to the caller's transcode ceiling. Present exactly when the cap re-encodes the stream; a lossy source already at or below the cap streams unchanged and omits it, as does an uncapped request.
+             * @example 192
+             */
+            appliedBitrateKbps?: number;
             /**
              * Format: int64
              * @description Present exactly with `spanEndMs`, and only when the url serves the item's whole backing file while the item is a window into it (direct playback of a track carved from a larger rip, on a server running without the streaming engine): the client must play only the [`spanStartMs`, `spanEndMs`) window of the served audio. Absent whenever the server cuts the stream itself. `durationMs` remains the item's own duration, never the backing file's.
@@ -13622,6 +13629,8 @@ export interface operations {
                 positionMs?: number;
                 /** @description Request server-side spoken-word loudness normalization (compression plus leveling gain) applied to the stream, for clients without local DSP. Precedence is resolved here, at mint time: when this parameter is present it wins; when absent, the caller's stored setting for the show or book applies. Honored only for podcast episodes and audiobooks, only when the streaming engine supports it, and only when the item's measured loudness is known; the response's `voiceBoost` always reports the actual outcome. Applying it forces a transcode. */
                 voiceBoost?: boolean;
+                /** @description Cap the stream's bitrate, in kilobits per second. A lossy source already at or below the cap streams unchanged; anything else is re-encoded down to it, which turns off sample-exact seeking and gapless preloading and counts against the transcode session limits like any other transcode. The cap only narrows what the token authorizes: the server clamps it to the caller's own transcode ceiling, and `appliedBitrateKbps` reports the outcome. Honored only when the streaming engine is running; a server without one serves originals directly and ignores the cap. Omitted, streams shape exactly as they always have. Out-of-range values answer 400 `invalid-request`. */
+                maxBitrateKbps?: number;
             };
             header?: never;
             path: {
@@ -13641,6 +13650,7 @@ export interface operations {
                     "application/json": components["schemas"]["PlayInfo"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             /** @description The item cannot stream (code `conflict`): a podcast episode whose audio has not been fetched to the server and whose feed named no enclosure to relay. An unfetched episode that does have an enclosure answers 200 with a passthrough url instead. */

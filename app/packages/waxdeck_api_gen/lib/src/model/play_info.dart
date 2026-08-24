@@ -21,6 +21,7 @@ part 'play_info.g.dart';
 /// * [partCount] - Number of parts in a multi-file audiobook. Present only for multi-file books; single-file items omit the part fields entirely. 
 /// * [partStartMs] - Book-timeline millisecond offset where the resolved part begins. In-part positions plus this offset give the book-timeline positions that play-state expects. Present exactly when `partCount` is. 
 /// * [voiceBoost] - True when the stream applies server-side spoken-word loudness normalization. Absent or false otherwise, including when it was requested but cannot be applied yet (unsupported by the sidecar, or loudness not measured yet). 
+/// * [appliedBitrateKbps] - The bitrate cap the minted stream carries, in kilobits per second: the requested `maxBitrateKbps` after clamping to the caller's transcode ceiling. Present exactly when the cap re-encodes the stream; a lossy source already at or below the cap streams unchanged and omits it, as does an uncapped request. 
 /// * [spanStartMs] - Present exactly with `spanEndMs`, and only when the url serves the item's whole backing file while the item is a window into it (direct playback of a track carved from a larger rip, on a server running without the streaming engine): the client must play only the [`spanStartMs`, `spanEndMs`) window of the served audio. Absent whenever the server cuts the stream itself. `durationMs` remains the item's own duration, never the backing file's. 
 /// * [spanEndMs] - End of the playback window in served-audio milliseconds. Present exactly when `spanStartMs` is. 
 @BuiltValue()
@@ -64,6 +65,10 @@ abstract class PlayInfo implements Built<PlayInfo, PlayInfoBuilder> {
   /// True when the stream applies server-side spoken-word loudness normalization. Absent or false otherwise, including when it was requested but cannot be applied yet (unsupported by the sidecar, or loudness not measured yet). 
   @BuiltValueField(wireName: r'voiceBoost')
   bool? get voiceBoost;
+
+  /// The bitrate cap the minted stream carries, in kilobits per second: the requested `maxBitrateKbps` after clamping to the caller's transcode ceiling. Present exactly when the cap re-encodes the stream; a lossy source already at or below the cap streams unchanged and omits it, as does an uncapped request. 
+  @BuiltValueField(wireName: r'appliedBitrateKbps')
+  int? get appliedBitrateKbps;
 
   /// Present exactly with `spanEndMs`, and only when the url serves the item's whole backing file while the item is a window into it (direct playback of a track carved from a larger rip, on a server running without the streaming engine): the client must play only the [`spanStartMs`, `spanEndMs`) window of the served audio. Absent whenever the server cuts the stream itself. `durationMs` remains the item's own duration, never the backing file's. 
   @BuiltValueField(wireName: r'spanStartMs')
@@ -152,6 +157,13 @@ class _$PlayInfoSerializer implements PrimitiveSerializer<PlayInfo> {
       yield serializers.serialize(
         object.voiceBoost,
         specifiedType: const FullType(bool),
+      );
+    }
+    if (object.appliedBitrateKbps != null) {
+      yield r'appliedBitrateKbps';
+      yield serializers.serialize(
+        object.appliedBitrateKbps,
+        specifiedType: const FullType(int),
       );
     }
     if (object.spanStartMs != null) {
@@ -260,6 +272,13 @@ class _$PlayInfoSerializer implements PrimitiveSerializer<PlayInfo> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.voiceBoost = valueDes;
+          break;
+        case r'appliedBitrateKbps':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.appliedBitrateKbps = valueDes;
           break;
         case r'spanStartMs':
           final valueDes = serializers.deserialize(

@@ -111,6 +111,7 @@ func run() error {
 		jukeboxName   = flag.String("jukebox-name", envOr("WAXDECK_JUKEBOX_NAME", "Server audio"), "display name of the jukebox endpoint")
 
 		managedRoots = flag.String("managed-roots", envOr("WAXDECK_MANAGED_ROOTS", ""), "library root names (comma separated) the catalog may place files into: uploads import there and the organizer may move files there; unlisted roots stay strictly in place")
+		watchRoots   = flag.Bool("library-watch", envOr("WAXDECK_LIBRARY_WATCH", "true") == "true", "watch the library roots and catalog files placed there by hand without waiting for a rescan. On by default; set WAXDECK_LIBRARY_WATCH=false to disable. Network mounts (NFS, SMB, 9p) rarely deliver change events; enable the scan schedule there instead")
 
 		uploadFormats = flag.String("upload-formats", envOr("WAXDECK_UPLOAD_FORMATS", ""), "file extensions uploads accept, comma separated. Replaces the default set rather than extending it; empty keeps the default (every format the catalog scans and the decode stack reads). DRM containers (aax, aaxc) are refused regardless")
 
@@ -326,6 +327,7 @@ func run() error {
 		Roots:                     svcRoots,
 		UploadFormats:             splitNonEmpty(*uploadFormats, ","),
 		ScanOnStart:               *scanStart && len(roots) > 0,
+		WatchLibraries:            *watchRoots,
 		ResetStaleCatalog:         *resetStale,
 		Sealer:                    sealer,
 		SecretCipher:              catalogCipher,

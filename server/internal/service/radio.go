@@ -100,7 +100,11 @@ func (l *Library) CreateRadioStation(ctx context.Context, uc *UserCtx, edit Radi
 		}
 		return RadioStation{}, &Error{Kind: KindInternal, Err: err}
 	}
-	return radioStationDTO(row), nil
+	station := radioStationDTO(row)
+	// Warm the logo now rather than on the first paint, which raced the
+	// client's own artwork timeout and was abandoned with it.
+	l.warmRadioLogo(station.PID, row)
+	return station, nil
 }
 
 // UpdateRadioStation replaces a station's fields.
@@ -125,10 +129,17 @@ func (l *Library) UpdateRadioStation(ctx context.Context, apiStationPID string, 
 		}
 		return RadioStation{}, &Error{Kind: KindInternal, Err: err}
 	}
-	// The logo cache is keyed by pid, which an edit does not change, so a
-	// new logo URL would be shadowed by a day-old copy of the old one.
-	if row.LogoURL != existing.LogoURL {
+	// The logo cache is keyed by pid, which an edit does not change, so
+	// fresh inputs would be shadowed by a day-old copy of the old
+	// answer. All three feed the lookup: the declared URL directly, the
+	// homepage and stream through discovery. The re-warm is the create
+	// path's reasoning applied to an edit - the new answer is resolved
+	// now, not at somebody's first paint.
+	if row.LogoURL != existing.LogoURL ||
+		row.HomepageURL != existing.HomepageURL ||
+		row.StreamURL != existing.StreamURL {
 		l.forgetRadioLogo(apiStationPID)
+		l.warmRadioLogo(apiStationPID, row)
 	}
 	return radioStationDTO(row), nil
 }
@@ -568,7 +579,7 @@ const (
 	radioLogoMissFreshFor = time.Hour
 	// radioLogoTimeout bounds one upstream fetch. A logo nobody can get
 	// in this long is a monogram; the grid is not waiting on it.
-	radioLogoTimeout = 10 * time.Second
+	radioLogoTimeout = 5 * time.Second
 )
 
 // RadioLogo is a station logo ready to serve.
@@ -640,65 +651,61 @@ var radioLogoMimes = map[string]string{
 // Not-found is the answer to every way there is no picture, all cached
 // alike: the caller draws a monogram either way, and none of them is
 // worth retrying per paint.
+//
+// The fetch itself runs on the server's own context, warm-style, so an
+// impatient caller abandons only its wait, never the lookup: the answer
+// still lands in the cache for the next paint. This is what keeps a
+// slow discovery on a pre-existing station from re-running on every
+// paint after each client gives up on it.
 func (l *Library) RadioStationLogo(ctx context.Context, apiStationPID string) (RadioLogo, error) {
 	row, err := l.radioStationRow(ctx, apiStationPID)
 	if err != nil {
 		return RadioLogo{}, err
 	}
+	l.warmRadioLogo(apiStationPID, row)
 	cached, hit, wait := l.claimRadioLogo(apiStationPID)
 	if hit {
 		return radioLogoOrNotFound(cached, apiStationPID)
 	}
-	if wait != nil {
-		// Somebody is already asking this host; wait for their answer.
-		select {
-		case <-wait:
-		case <-ctx.Done():
-			return RadioLogo{}, errNotFound("no logo for station " + apiStationPID)
-		}
-		cached, hit, wait = l.claimRadioLogo(apiStationPID)
-		if hit {
-			return radioLogoOrNotFound(cached, apiStationPID)
-		}
-		// One wait is the limit: the fetch waited on stored nothing because
-		// its caller went away, and queueing behind a chain of those would
-		// report a logo missing that is not. Falls through owning nothing.
-	}
 	if wait == nil {
-		defer l.endRadioLogoFetch(apiStationPID)
+		// The warm's flight ended between the kick and this look, and
+		// the look claimed a fresh one: answer it inline.
+		return l.paintRadioLogoInline(ctx, apiStationPID, row)
 	}
-	// A station whose row names no logo is not a station with no logo:
-	// every By-URL add and every directory entry whose favicon was
-	// blank, SVG, or dead arrives this way, which is most of them. Go
-	// and look before answering the monogram. The result is cached like
-	// any other, so the search happens once per station per refresh
-	// window rather than per paint.
-	// Read once, before the branch. Tested and then read again, a
-	// listener opening the stream between the two would have the branch
-	// taken on one URL and the fetch run against another.
-	hint := l.radioLogoHint(apiStationPID)
-	logo, fetchErr := RadioLogo{}, error(nil)
-	switch {
-	case row.LogoURL != "":
-		logo, fetchErr = l.fetchRadioLogo(ctx, row.LogoURL)
-	// What the station said about itself while somebody was listening to
-	// it, which beats going looking: the operator named this URL in the
-	// stream's own headers. Only tried before discovery, never instead
-	// of it - a hint that does not answer falls through to the search
-	// rather than costing the station its picture.
-	case hint != "":
-		logo, fetchErr = l.fetchRadioLogo(ctx, hint)
-		if fetchErr != nil {
-			logo, fetchErr = l.discoverRadioLogo(ctx, row.HomepageURL, row.StreamURL)
-		}
-	default:
-		logo, fetchErr = l.discoverRadioLogo(ctx, row.HomepageURL, row.StreamURL)
+	// The warm owns the flight; wait for its answer.
+	select {
+	case <-wait:
+	case <-ctx.Done():
+		return RadioLogo{}, errNotFound("no logo for station " + apiStationPID)
 	}
-	// A failure is remembered, unreachable hosts included: thirty stations
-	// behind one dead host would otherwise cost thirty ten-second waits per
-	// paint. The exception is the caller going away, which says nothing
-	// about the station; the parent context is what tells them apart, since
-	// the fetch's own deadline is a child of it.
+	cached, hit, wait = l.claimRadioLogo(apiStationPID)
+	if hit {
+		return radioLogoOrNotFound(cached, apiStationPID)
+	}
+	if wait != nil {
+		// One wait is the limit: queueing behind a chain of flights
+		// would report a logo missing that is not.
+		return RadioLogo{}, errNotFound("no logo for station " + apiStationPID)
+	}
+	// The flight ended without storing - a hint arrived too late for it,
+	// or the station changed under it - and this look owns a fresh
+	// claim: answer it inline against the current state.
+	return l.paintRadioLogoInline(ctx, apiStationPID, row)
+}
+
+// paintRadioLogoInline resolves a logo on the caller's own claim and
+// context, the pre-warm shape kept for the paints that end up owning a
+// flight themselves. The hint is read once, before the lookup - tested
+// and then read again, a listener opening the stream between the two
+// would have the branch taken on one URL and the fetch run against
+// another.
+func (l *Library) paintRadioLogoInline(ctx context.Context, apiStationPID string, row wdb.RadioStation) (RadioLogo, error) {
+	defer l.endRadioLogoFetch(apiStationPID)
+	logo, fetchErr := l.resolveRadioLogo(ctx, row, l.radioLogoHint(apiStationPID))
+	// A failure is remembered, unreachable hosts included: thirty
+	// stations behind one dead host would otherwise cost thirty
+	// timed-out fetches per paint. The exception is the caller going
+	// away, which says nothing about the station.
 	callerLeft := fetchErr != nil && ctx.Err() != nil
 	if !callerLeft {
 		l.storeRadioLogo(apiStationPID, logo)
@@ -707,6 +714,102 @@ func (l *Library) RadioStationLogo(ctx context.Context, apiStationPID string) (R
 		return RadioLogo{}, errNotFound("no logo for station " + apiStationPID)
 	}
 	return logo, nil
+}
+
+// resolveRadioLogo runs one logo lookup for a station row: the declared
+// URL when the row names one, else the hint the stream's own headers
+// carried, else discovery.
+//
+// A station whose row names no logo is not a station with no logo:
+// every By-URL add and every directory entry whose favicon was blank,
+// SVG, or dead arrives this way, which is most of them. Go and look
+// before answering the monogram. The caller caches the result, so the
+// search happens once per station per refresh window, not per paint.
+func (l *Library) resolveRadioLogo(ctx context.Context, row wdb.RadioStation, hint string) (RadioLogo, error) {
+	switch {
+	case row.LogoURL != "":
+		return l.fetchRadioLogo(ctx, row.LogoURL)
+	// What the station said about itself while somebody was listening to
+	// it, which beats going looking: the operator named this URL in the
+	// stream's own headers. Only tried before discovery, never instead
+	// of it - a hint that does not answer falls through to the search
+	// rather than costing the station its picture.
+	case hint != "":
+		logo, err := l.fetchRadioLogo(ctx, hint)
+		if err != nil {
+			return l.discoverRadioLogo(ctx, row.HomepageURL, row.StreamURL)
+		}
+		return logo, nil
+	default:
+		return l.discoverRadioLogo(ctx, row.HomepageURL, row.StreamURL)
+	}
+}
+
+// warmRadioLogo resolves a station's logo on the server's own context,
+// so the answer is cached hit or miss with nobody waiting: first paints
+// join this flight instead of starting a discovery whose result dies
+// with their request. Kicked at create and edit, and by every paint
+// that finds nothing cached.
+func (l *Library) warmRadioLogo(apiStationPID string, row wdb.RadioStation) {
+	if _, hit, wait := l.claimRadioLogo(apiStationPID); hit || wait != nil {
+		return
+	}
+	started := l.workers.GoOnce(l.procCtx, "radio-logo-warm", func(ctx context.Context) error {
+		defer l.endRadioLogoFetch(apiStationPID)
+		select {
+		case l.radioWarmSlots <- struct{}{}:
+			defer func() { <-l.radioWarmSlots }()
+		case <-ctx.Done():
+			return nil
+		}
+		triedHint := l.radioLogoHint(apiStationPID)
+		logo, err := l.resolveRadioLogo(ctx, row, triedHint)
+		if err != nil && ctx.Err() == nil {
+			// A hint the stream produced while the search ran - the
+			// station is moments old, so any hint is news - is the one
+			// URL the search may not have tried; one more look before
+			// an hour of remembered miss.
+			if hint := l.radioLogoHint(apiStationPID); hint != "" {
+				triedHint = hint
+				logo, err = l.fetchRadioLogo(ctx, hint)
+			}
+		}
+		if ctx.Err() != nil {
+			// Shutdown mid-fetch says nothing about the station.
+			return nil
+		}
+		// The answer belongs to the inputs it was resolved from. An edit
+		// or delete landing mid-flight would otherwise be shadowed for
+		// the whole refresh window by a result for a station that no
+		// longer says those things - the edit's own warm covers it.
+		if fresh, ferr := l.radioStationRow(ctx, apiStationPID); ferr != nil ||
+			fresh.LogoURL != row.LogoURL ||
+			fresh.HomepageURL != row.HomepageURL ||
+			fresh.StreamURL != row.StreamURL {
+			return nil
+		}
+		// A miss must not bury a hint this flight never tried: the
+		// stream can name its mark at any point after the last look
+		// here, and storing the miss anyway would hide it for the whole
+		// freshness window. Left uncached, the very next paint tries it.
+		if err != nil {
+			if hint := l.radioLogoHint(apiStationPID); hint != "" && hint != triedHint {
+				return nil
+			}
+		}
+		l.storeRadioLogo(apiStationPID, logo)
+		if err == nil {
+			// A tuned placeholder repaints on the wake, not on its next
+			// interaction.
+			l.wakeRadioListeners()
+		}
+		return nil
+	})
+	if !started {
+		// Shutdown refused the spawn; the claim must not outlive it, or
+		// every later paint would wait on a flight that never flies.
+		l.endRadioLogoFetch(apiStationPID)
+	}
 }
 
 // fetchRadioLogo gets one logo URL through the guarded client. Every

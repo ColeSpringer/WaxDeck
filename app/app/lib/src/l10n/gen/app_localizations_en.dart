@@ -1690,6 +1690,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authBackToSignIn => 'Back to sign-in';
 
   @override
+  String get authChangeServer => 'Change server';
+
+  @override
   String get authChoosePassword => 'Choose a password';
 
   @override
@@ -1755,6 +1758,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authRequestSubmit => 'Request account';
+
+  @override
+  String get authServerAddressHint => 'wax.example.com or 192.168.1.20:4420';
+
+  @override
+  String get authServerAddressLabel => 'Server address';
+
+  @override
+  String get authServerConnect => 'Connect';
+
+  @override
+  String get authServerConnectTagline => 'Connect to your server';
+
+  @override
+  String get authServerInvalid => 'That does not look like a server address';
+
+  @override
+  String get authServerUnreachable =>
+      'No WaxDeck server answered at that address';
 
   @override
   String get authSignInRejected =>
@@ -2381,6 +2403,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discoveryMixAction => 'Mix';
+
+  @override
+  String get discoveryMixAllQueued =>
+      'Everything similar is already in your queue';
 
   @override
   String get discoveryMixEmpty => 'No mix available for this track';
@@ -7374,6 +7400,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGroupStorage => 'Storage';
 
   @override
+  String get settingsGroupStreaming => 'Streaming';
+
+  @override
   String get settingsGroupThisDevice => 'This device';
 
   @override
@@ -7982,6 +8011,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSmartRewindTitle => 'Rewind on resume';
+
+  @override
+  String get settingsStreamQualityAuto => 'Auto';
+
+  @override
+  String get settingsStreamQualityHelp =>
+      'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and instant seeking, applies from the next track, and never affects downloads';
+
+  @override
+  String get settingsStreamQualityHigh => 'High';
+
+  @override
+  String get settingsStreamQualityKeywords =>
+      'bitrate, quality, bandwidth, data, transcode, cellular';
+
+  @override
+  String get settingsStreamQualityLow => 'Low';
+
+  @override
+  String get settingsStreamQualityMeteredTitle =>
+      'Streaming quality on mobile data';
+
+  @override
+  String get settingsStreamQualityNormal => 'Normal';
+
+  @override
+  String get settingsStreamQualityTitle => 'Streaming quality';
+
+  @override
+  String get settingsStreamQualityWifiTitle => 'Streaming quality on Wi-Fi';
 
   @override
   String get settingsTechnicalDetailsHelp =>

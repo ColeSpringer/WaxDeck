@@ -314,6 +314,60 @@ final preloadOnWifiOnlyProvider = NotifierProvider<PreloadOnWifiOnly, bool>(
   PreloadOnWifiOnly.new,
 );
 
+/// A streaming quality level. Words, not numbers: the number is a
+/// detail the help copy carries.
+enum StreamQuality { auto, high, normal, low }
+
+/// The bitrate cap a quality level asks the server for, in kbps. Null
+/// for Auto, which is direct play of the original whenever the server
+/// can manage it.
+int? streamQualityKbps(StreamQuality quality) => switch (quality) {
+  StreamQuality.auto => null,
+  StreamQuality.high => 320,
+  StreamQuality.normal => 192,
+  StreamQuality.low => 128,
+};
+
+/// Streaming quality on an unmetered connection - and on every
+/// connection where the platform cannot tell a metered one apart
+/// (desktop, web), which store and resolve this value alone.
+///
+/// Auto by default: a cap is a deliberate trade (no gapless, no
+/// instant seek) that off-LAN listeners opt into.
+class StreamQualityWifi extends EnumSetting<StreamQuality> {
+  @override
+  String get settingKey => ClientSettingKeys.streamQualityWifi;
+
+  @override
+  StreamQuality get defaultValue => StreamQuality.auto;
+
+  @override
+  List<StreamQuality> get options => StreamQuality.values;
+}
+
+final streamQualityWifiProvider =
+    NotifierProvider<StreamQualityWifi, StreamQuality>(StreamQualityWifi.new);
+
+/// Streaming quality on a metered connection (the mobile platforms,
+/// which can tell). Stored separately from the Wi-Fi value because
+/// capping over the home network and capping on a phone plan are
+/// different decisions.
+class StreamQualityMetered extends EnumSetting<StreamQuality> {
+  @override
+  String get settingKey => ClientSettingKeys.streamQualityMetered;
+
+  @override
+  StreamQuality get defaultValue => StreamQuality.auto;
+
+  @override
+  List<StreamQuality> get options => StreamQuality.values;
+}
+
+final streamQualityMeteredProvider =
+    NotifierProvider<StreamQualityMetered, StreamQuality>(
+      StreamQualityMetered.new,
+    );
+
 /// Whether a music queue that has run out keeps going with similar
 /// music, rather than ending where it was built to end.
 ///

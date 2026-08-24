@@ -28,6 +28,8 @@ class _$PlayInfo extends PlayInfo {
   @override
   final bool? voiceBoost;
   @override
+  final int? appliedBitrateKbps;
+  @override
   final int? spanStartMs;
   @override
   final int? spanEndMs;
@@ -46,6 +48,7 @@ class _$PlayInfo extends PlayInfo {
     this.partCount,
     this.partStartMs,
     this.voiceBoost,
+    this.appliedBitrateKbps,
     this.spanStartMs,
     this.spanEndMs,
   }) : super._();
@@ -70,6 +73,7 @@ class _$PlayInfo extends PlayInfo {
         partCount == other.partCount &&
         partStartMs == other.partStartMs &&
         voiceBoost == other.voiceBoost &&
+        appliedBitrateKbps == other.appliedBitrateKbps &&
         spanStartMs == other.spanStartMs &&
         spanEndMs == other.spanEndMs;
   }
@@ -87,6 +91,7 @@ class _$PlayInfo extends PlayInfo {
     _$hash = $jc(_$hash, partCount.hashCode);
     _$hash = $jc(_$hash, partStartMs.hashCode);
     _$hash = $jc(_$hash, voiceBoost.hashCode);
+    _$hash = $jc(_$hash, appliedBitrateKbps.hashCode);
     _$hash = $jc(_$hash, spanStartMs.hashCode);
     _$hash = $jc(_$hash, spanEndMs.hashCode);
     _$hash = $jf(_$hash);
@@ -106,6 +111,7 @@ class _$PlayInfo extends PlayInfo {
           ..add('partCount', partCount)
           ..add('partStartMs', partStartMs)
           ..add('voiceBoost', voiceBoost)
+          ..add('appliedBitrateKbps', appliedBitrateKbps)
           ..add('spanStartMs', spanStartMs)
           ..add('spanEndMs', spanEndMs))
         .toString();
@@ -155,6 +161,11 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
   bool? get voiceBoost => _$this._voiceBoost;
   set voiceBoost(bool? voiceBoost) => _$this._voiceBoost = voiceBoost;
 
+  int? _appliedBitrateKbps;
+  int? get appliedBitrateKbps => _$this._appliedBitrateKbps;
+  set appliedBitrateKbps(int? appliedBitrateKbps) =>
+      _$this._appliedBitrateKbps = appliedBitrateKbps;
+
   int? _spanStartMs;
   int? get spanStartMs => _$this._spanStartMs;
   set spanStartMs(int? spanStartMs) => _$this._spanStartMs = spanStartMs;
@@ -180,6 +191,7 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
       _partCount = $v.partCount;
       _partStartMs = $v.partStartMs;
       _voiceBoost = $v.voiceBoost;
+      _appliedBitrateKbps = $v.appliedBitrateKbps;
       _spanStartMs = $v.spanStartMs;
       _spanEndMs = $v.spanEndMs;
       _$v = null;
@@ -230,6 +242,7 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
           partCount: partCount,
           partStartMs: partStartMs,
           voiceBoost: voiceBoost,
+          appliedBitrateKbps: appliedBitrateKbps,
           spanStartMs: spanStartMs,
           spanEndMs: spanEndMs,
         );

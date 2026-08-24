@@ -1,6 +1,5 @@
 import { test, expect } from './fixtures';
 import { J, T } from './driver';
-import { DevicePref } from './driver/surfaces/settings';
 
 // The discovery slice over the real stack: an instant mix started from
 // a playing track in the browser, the sonic surfaces (similar tracks
@@ -12,17 +11,6 @@ import { DevicePref } from './driver/surfaces/settings';
 const WORKER_TOKEN = 'e2e-worker-token';
 
 test('an instant mix starts from any playing track', async ({ app }) => {
-  // A mix never repeats what is already queued, so this spec needs a
-  // standing queue the library is bigger than. Both of the defaults that
-  // fill one are turned off or avoided below, and on a fixture library
-  // either of them is the whole catalog - which makes the mix correctly
-  // empty and the message this spec is about never raised.
-  //
-  // "Keep playing similar" is the first: a queue that has run out is
-  // continued with a mix, and a one-track queue has run out from the
-  // moment it starts.
-  await app.settings.presetDevice(DevicePref.keepPlayingSimilar, 'false');
-
   const { pid } = await app.seed.item('Bravo Song');
 
   // The API half first: a seed track answers a mix on either engine.
@@ -35,47 +23,50 @@ test('an instant mix starts from any playing track', async ({ app }) => {
   });
   expect(['metadata', 'sonic']).toContain(mix.basis);
   expect(mix.items.length).toBeGreaterThan(0);
+  expect(mix.excluded, 'nothing was excluded, so nothing counts').toBe(0);
 
-  // The browser journey: play something, open Discover, run the mix with
-  // the default adventurousness.
-  //
-  // From an album rather than the tracks index, which is the second
-  // queue-filling default: a row there plays the whole listing, so on
-  // this library the queue would be every track and the mix would have
-  // nothing left to draw on. An album is the standing queue a listener
-  // actually has, and it leaves the rest of the library for the mix.
-  await app.nav.enter('albums');
-  await app.music.openBucket(0);
-  // Playing a row queues the whole listing, so what the album
-  // contributed to up next is everything behind the one now playing.
-  // Counted off the server's own album read rather than off the DOM: a
-  // lazily built list undercounts, and an undercount here would let an
-  // empty mix pass the assertion this spec exists for.
-  const albumPid = new URL(app.nav.location()).pathname.split('/').pop()!;
-  const album = await app.api.get('/albums/{pid}', {
-    path: { pid: albumPid },
+  // Asked again with everything it just answered excluded, the count
+  // says why the result thinned out: the candidates were met and
+  // dropped, which is what lets the app tell "already queued" apart
+  // from "no mix exists".
+  const excludePids = [pid, ...mix.items.map((it) => it.pid)];
+  const rerun = await app.api.post('/mixes/instant', {
+    data: { seedPid: pid, size: 20, adventurousness: 0.4, excludePids },
   });
-  expect(album.itemCount, 'the opened bucket is an album').toBeGreaterThan(0);
-  const fromAlbum = album.itemCount! - 1;
-  await app.music.playEntry(0);
+  expect(rerun.excluded).toBeGreaterThan(0);
+  for (const it of rerun.items) {
+    expect(excludePids).not.toContain(it.pid);
+  }
+
+  // The browser journey: play the seed from the tracks index, open
+  // Discover, run the mix with the default adventurousness. A row on
+  // the index plays the whole listing from that row, so the exclusion -
+  // the current track and what is still coming - leaves the rows above
+  // the seed mixable. On this library those rows are the only mixable
+  // tracks there are: any mix at all is drawn from played history,
+  // which is the reopened pool this spec pins. Paused at once so the
+  // second-long fixture tracks cannot march the queue while it runs.
+  await app.nav.enter('tracks');
+  await app.music.play(pid);
+  await app.player.pause();
   await app.discovery.runInstantMix();
 
   // A mix started from a playing track lands behind it. Nothing is
   // replaced and nothing is pushed - the track that was playing is
   // still playing - so the message the sheet leaves is the only way to
-  // what changed.
+  // what changed; an empty mix leaves a plain sentence with no Open,
+  // so this visibility is the assertion an empty mix fails.
   const open = app.discovery.queueFromMessage();
   await expect(open).toBeVisible({ timeout: T.nav });
   await open.click();
 
-  // The queue, over the player: what was playing still holds the current
-  // row, and the mix is behind it. Strictly more than the album put
-  // there, which is the only form of this assertion an empty mix fails.
+  // The queue, over the player: what was playing still holds the
+  // current row, and the mix is behind what the listing queued.
   await expect(app.queue.screen()).toBeVisible({ timeout: T.nav });
   expect(
     await app.queue.upNextCount(),
-    'the mix is queued behind what the album already queued',
-  ).toBeGreaterThan(fromAlbum);
+    'the mix is queued behind what is playing',
+  ).toBeGreaterThan(0);
 });
 
 test('sonic coverage answers similar tracks and a sonic path', async ({ app }) => {

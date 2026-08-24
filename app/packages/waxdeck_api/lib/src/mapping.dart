@@ -333,6 +333,7 @@ PlayInfo playInfoFromGen(gen.PlayInfo info, {String baseUrl = ''}) {
     partCount: info.partCount,
     partStartMs: info.partStartMs,
     voiceBoost: info.voiceBoost ?? false,
+    appliedBitrateKbps: info.appliedBitrateKbps,
     spanStartMs: info.spanStartMs,
     spanEndMs: info.spanEndMs,
   );
@@ -2181,6 +2182,7 @@ InstantMix instantMixFromGen(gen.InstantMix mix, {String baseUrl = ''}) {
     items: mix.items
         .map((i) => itemSummaryFromGen(i, baseUrl: baseUrl))
         .toList(growable: false),
+    excluded: mix.excluded ?? 0,
   );
 }
 

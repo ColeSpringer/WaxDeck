@@ -240,6 +240,7 @@ class _CommandPaletteDialog extends ConsumerWidget {
       isAdmin: ref.watch(isAdminProvider),
       isNative: !kIsWeb,
       isDesktop: ref.watch(desktopProvider),
+      isMobile: ref.watch(mobileProvider),
     );
     final settings = <WaxPaletteEntry>[
       for (final setting in matchedSettings.take(kPaletteSettingLimit))

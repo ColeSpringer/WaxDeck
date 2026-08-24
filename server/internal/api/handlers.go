@@ -901,6 +901,15 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 		return nil, err
 	}
 
+	maxKbps := 0
+	if req.Params.MaxBitrateKbps != nil {
+		maxKbps = *req.Params.MaxBitrateKbps
+		if maxKbps < flow.MinStreamBitrateKbps || maxKbps > flow.MaxStreamBitrateKbps {
+			return GetPlayInfo400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request",
+				fmt.Sprintf("maxBitrateKbps must be between %d and %d", flow.MinStreamBitrateKbps, flow.MaxStreamBitrateKbps)))}, nil
+		}
+	}
+
 	// Without the streaming engine the original bytes serve directly:
 	// ranged, untranscoded, through the same token-authenticated
 	// endpoint downloads use. Span items ride whole with the window in
@@ -959,8 +968,9 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	}
 
 	info, err := s.bridge.PlayInfoFor(ctx, uc.ID, req.Pid, flow.PlayOptions{
-		FilePID:    part.FilePID,
-		VoiceBoost: boost,
+		FilePID:        part.FilePID,
+		VoiceBoost:     boost,
+		MaxBitrateKbps: maxKbps,
 	})
 	if err != nil {
 		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, req.Pid, err); ok {
@@ -985,6 +995,9 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	if info.VoiceBoost {
 		vb := true
 		out.VoiceBoost = &vb
+	}
+	if info.AppliedBitrateKbps > 0 {
+		out.AppliedBitrateKbps = &info.AppliedBitrateKbps
 	}
 	if part.MultiPart {
 		out.PartIndex = &part.Index

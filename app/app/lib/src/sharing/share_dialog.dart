@@ -31,9 +31,9 @@ enum ShareExpiry {
 /// The full URL a share link is copied as. The server resolves share
 /// URLs against the client base, which is empty on web builds (the URL
 /// stays origin-relative there); the page origin completes those.
-String shareAbsoluteUrl(String url) {
+String shareAbsoluteUrl(WidgetRef ref, String url) {
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  final base = waxDeckBaseUrl;
+  final base = ref.read(serverBaseUrlProvider);
   if (base.isEmpty) return Uri.base.resolve(url).toString();
   return '$base$url';
 }
@@ -99,7 +99,9 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
             allowDownload: _allowDownload,
             positionMs: _startAtPosition ? widget.positionMs : null,
           );
-      await Clipboard.setData(ClipboardData(text: shareAbsoluteUrl(share.url)));
+      await Clipboard.setData(
+        ClipboardData(text: shareAbsoluteUrl(ref, share.url)),
+      );
       // The lists this link just joined, so a shares screen left open
       // behind the dialog is not a list missing its newest row - and
       // the console's oversight listing, which holds this row too.
