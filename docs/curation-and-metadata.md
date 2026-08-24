@@ -166,6 +166,27 @@ entities, custom tags (which are full browse dimensions), and entity
 edits (sort names, identifiers, release group types) with their own
 provenance.
 
+Each field is edited with the control its type wants rather than a
+bare text box: counts (year, track and disc numbers, seasons) take
+digits only, booleans (compilation, an episode's explicit flag) are
+switches, an episode's type is a closed choice over the three values
+the server accepts, and genres are chips backed by a picker. An administrator's
+picker lists the canonical genre tree - the vocabulary the normalizer
+rewrites onto - and anyone may still type a genre as free text, which
+is what the server accepts from every session. Credits are chips per
+role, driven by the same per-kind role vocabulary the server
+advertises: remove a name from its chip, add names under a chosen
+role, and only the roles that changed are written. A track's `artist`
+credit is shown but not chip-edited - the artist field is what
+resolves it.
+
+Everything on the screen stages into one draft, and the sticky save
+bar at the bottom is the only thing that writes: fields, credits,
+tags, lyrics (emptying the lyrics field removes them on save), and
+the release status go in one press, with the bar counting what is
+unsaved. Write-back failures are reported beside that bar, where the
+next save is decided.
+
 The catalog database is the working copy: edits land there first and
 touch files only when the request opts into write-back. Edits lock
 their fields by default so scans and enrichment respect curation;
@@ -246,6 +267,11 @@ and its edition columns (barcode, label, catalog number, media,
 country), each showing where its current value came from and whether
 it is locked. Only the fields that changed are sent, so a one-word
 correction does not lock the other six.
+
+Total tracks appears among them as a derived number, not a field:
+nothing stores it - it is the release's membership counted - so the
+row shows the count, marks it derived, and says that editing the
+tracks is what changes it.
 
 ## The genre vocabulary
 

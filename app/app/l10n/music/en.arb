@@ -65,6 +65,14 @@
   "@musicAlbumEditorSectionTitle": {
     "description": "Heading over the album editor's five fields."
   },
+  "musicAlbumEditorTotalTracks": "Total tracks",
+  "@musicAlbumEditorTotalTracks": {
+    "description": "Label of the read-only track count in the album editor."
+  },
+  "musicAlbumEditorTotalTracksHelp": "Counted from the tracks on this release. Add or remove tracks to change it; it is not a field anything stores.",
+  "@musicAlbumEditorTotalTracksHelp": {
+    "description": "Helper under the album editor's read-only track count, explaining why there is no input."
+  },
   "musicAlbumEditorTracksMore": "{count, plural, =1{and 1 more} other{and {count} more}}",
   "@musicAlbumEditorTracksMore": {
     "description": "Line under a truncated track list.",

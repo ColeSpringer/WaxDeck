@@ -2,9 +2,14 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/metadata/artwork_manager.dart';
+import 'package:waxdeck/src/metadata/metadata_controller.dart';
+import 'package:waxdeck/src/metadata/metadata_form.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
@@ -53,6 +58,10 @@ ProviderContainer _container(FakeRepository repo, {FilePickerPort? picker}) {
     overrides: [
       repositoryProvider.overrideWithValue(repo),
       filePickerProvider.overrideWithValue(picker),
+      // The session gate: without a working store the auth probe never
+      // settles, and the admin-only reads (the genre vocabulary) gate
+      // on the role that probe reports.
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
     ],
   );
   addTearDown(container.dispose);
@@ -79,8 +88,20 @@ Future<void> _pump(WidgetTester tester, Widget host) async {
   await tester.pumpAndSettle();
 }
 
-FakeRepository _repo() {
-  final repo = FakeRepository(items: [testItem('tr-1', title: 'Old Title')]);
+FakeRepository _repo({bool admin = false}) {
+  final repo = FakeRepository(
+    sessionState: admin
+        ? const SessionState(
+            authenticated: true,
+            user: WaxDeckUser(
+              id: 'us-1',
+              username: 'admin',
+              roles: <String>['admin'],
+            ),
+          )
+        : null,
+    items: [testItem('tr-1', title: 'Old Title')],
+  );
   repo.itemFieldsByPid['tr-1'] = {
     'title': 'Old Title',
     'artist': 'The Bree Trio',
@@ -90,8 +111,32 @@ FakeRepository _repo() {
   return repo;
 }
 
+/// A music vocabulary of exactly [fields], for the typed-row tests the
+/// default six-field fake does not cover.
+MetadataFields _vocabulary(List<String> fields) => MetadataFields(
+  kinds: [
+    KindFields(
+      kind: MediaType.music,
+      fields: [
+        for (final field in fields) EditableField(name: field, writeBack: true),
+      ],
+      creditRoles: const [EditableField(name: 'composer', writeBack: true)],
+    ),
+  ],
+  entityTypes: const [],
+);
+
 Finder _field(String name) =>
     find.bySemanticsIdentifier(SemanticsIds.metadataField(name));
+
+/// Presses the save bar's button and settles.
+Future<void> _saveNow(WidgetTester tester) async {
+  final save = find.bySemanticsIdentifier(SemanticsIds.metadataSave);
+  await tester.ensureVisible(save);
+  await tester.pumpAndSettle();
+  await tester.tap(save);
+  await tester.pumpAndSettle();
+}
 
 void main() {
   testWidgets('the slot grid names every role and what fills it', (
@@ -477,7 +522,7 @@ void main() {
     expect(repo.lockedFieldsByPid['tr-1'], contains('album'));
   });
 
-  testWidgets('the unofficial switch calls setReleaseStatus', (tester) async {
+  testWidgets('the unofficial switch stages; the save commits', (tester) async {
     final repo = _repo();
     await _pump(tester, _host(_container(repo)));
 
@@ -487,6 +532,15 @@ void main() {
     await tester.ensureVisible(unofficial);
     await tester.pumpAndSettle();
     await tester.tap(unofficial);
+    await tester.pumpAndSettle();
+
+    // Staged, not sent: the save bar is the only thing that writes.
+    expect(repo.setReleaseStatusCalls, isEmpty);
+
+    final save = find.bySemanticsIdentifier(SemanticsIds.metadataSave);
+    await tester.ensureVisible(save);
+    await tester.pumpAndSettle();
+    await tester.tap(save);
     await tester.pumpAndSettle();
 
     expect(repo.setReleaseStatusCalls, hasLength(1));
@@ -668,5 +722,633 @@ void main() {
     expect(find.text('Album artist'), findsOneWidget);
     expect(find.text('album_artist'), findsNothing);
     expect(find.text('Track number'), findsOneWidget);
+  });
+
+  testWidgets('a count field refuses everything but digits', (tester) async {
+    await _pump(tester, _host(_container(_repo())));
+
+    await tester.enterText(_field('year'), '19x9');
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: _field('year'),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller
+          ?.text,
+      '199',
+    );
+  });
+
+  testWidgets('compilation is a switch and saves the wire word', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..metadataFields = _vocabulary(['title', 'compilation']);
+    await _pump(tester, _host(_container(repo)));
+
+    final toggle = _field('compilation');
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(repo.editItemMetadataCalls, isEmpty);
+    await _saveNow(tester);
+
+    expect(repo.editItemMetadataCalls.single.fields, {'compilation': 'true'});
+  });
+
+  testWidgets('genres are chips; removing one stages the shorter set', (
+    tester,
+  ) async {
+    final repo = _repo()..metadataFields = _vocabulary(['title', 'genre']);
+    repo.itemFieldsByPid['tr-1']!['genre'] = 'Rock; Jazz';
+    await _pump(tester, _host(_container(repo)));
+
+    final chip = find.bySemanticsIdentifier(
+      SemanticsIds.metadataGenreRemove('Jazz'),
+    );
+    await tester.ensureVisible(chip);
+    await tester.pumpAndSettle();
+    await tester.tap(chip);
+    await tester.pumpAndSettle();
+    await _saveNow(tester);
+
+    expect(repo.editItemMetadataCalls.single.fields, {'genre': 'Rock'});
+  });
+
+  testWidgets('an administrator picks genres over the canonical tree', (
+    tester,
+  ) async {
+    final repo = _repo(admin: true)
+      ..metadataFields = _vocabulary(['title', 'genre']);
+    repo.itemFieldsByPid['tr-1']!['genre'] = 'Rock';
+    repo.genreTree = const [
+      GenreNode(name: 'Electronic'),
+      GenreNode(name: 'House', parent: 'Electronic'),
+    ];
+    await _pump(tester, _host(_container(repo)));
+
+    final add = find.bySemanticsIdentifier(SemanticsIds.metadataGenreAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenrePicker),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenreOption('House')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenrePickerApply),
+    );
+    await tester.pumpAndSettle();
+
+    // Staged as a chip, then saved joined onto what was already there.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenreRemove('House')),
+      findsOneWidget,
+    );
+    await _saveNow(tester);
+    expect(repo.editItemMetadataCalls.single.fields, {'genre': 'Rock; House'});
+  });
+
+  testWidgets('without the tree the picker takes genres as typed', (
+    tester,
+  ) async {
+    // Not an administrator: the canonical vocabulary read is refused,
+    // so the sheet has no list - and typing still works, because typing
+    // is what every session may store.
+    final repo = _repo()..metadataFields = _vocabulary(['title', 'genre']);
+    repo.itemFieldsByPid['tr-1']!['genre'] = 'Rock';
+    await _pump(tester, _host(_container(repo)));
+
+    final add = find.bySemanticsIdentifier(SemanticsIds.metadataGenreAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenrePickerSearch),
+      'Zeuhl',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenrePickerCustom),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenrePickerApply),
+    );
+    await tester.pumpAndSettle();
+    await _saveNow(tester);
+
+    expect(repo.editItemMetadataCalls.single.fields, {'genre': 'Rock; Zeuhl'});
+  });
+
+  testWidgets('credits are chips per role; edits save the changed role', (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.creditsByPid['tr-1'] = const [
+      Credit(role: 'artist', names: ['The Bree Trio']),
+      Credit(role: 'composer', names: ['Ann Lee', 'Bob Ray']),
+    ];
+    await _pump(tester, _host(_container(repo)));
+
+    // The vocabulary's role is chips; the artist credit is not - its
+    // sanctioned edit path is the artist field that resolves it.
+    expect(
+      find.bySemanticsIdentifier(
+        SemanticsIds.creditRemove('composer', 'Bob Ray'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(
+        SemanticsIds.creditRemove('artist', 'The Bree Trio'),
+      ),
+      findsNothing,
+    );
+
+    final remove = find.bySemanticsIdentifier(
+      SemanticsIds.creditRemove('composer', 'Bob Ray'),
+    );
+    await tester.ensureVisible(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.creditsNames),
+      'Cara Dune',
+    );
+    final add = find.bySemanticsIdentifier(SemanticsIds.creditAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await _saveNow(tester);
+
+    final composer = repo.creditsByPid['tr-1']!
+        .where((c) => c.role == 'composer')
+        .single;
+    expect(composer.names, ['Ann Lee', 'Cara Dune']);
+    // The untouched role was not rewritten alongside it.
+    final artist = repo.creditsByPid['tr-1']!
+        .where((c) => c.role == 'artist')
+        .single;
+    expect(artist.names, ['The Bree Trio']);
+  });
+
+  testWidgets('tag edits stage, and one save commits them all', (tester) async {
+    final repo = _repo();
+    repo.tagsByPid['tr-1'] = {
+      'MOOD': ['calm'],
+    };
+    await _pump(tester, _host(_container(repo)));
+
+    final remove = find.bySemanticsIdentifier(SemanticsIds.tagRemove('MOOD'));
+    await tester.ensureVisible(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    // Staged, not deleted - and reversible before the save.
+    expect(repo.tagsByPid['tr-1'], containsPair('MOOD', ['calm']));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.tagRestore('MOOD')),
+      findsOneWidget,
+    );
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagKey),
+      'ENERGY',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagValues),
+      'high',
+    );
+    final add = find.bySemanticsIdentifier(SemanticsIds.tagAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    expect(repo.tagsByPid['tr-1'], isNot(contains('ENERGY')));
+
+    await tester.enterText(_field('title'), 'Neon Meridian');
+    await tester.pump();
+    await _saveNow(tester);
+
+    // One save, three write paths.
+    expect(repo.editItemMetadataCalls.single.fields, {
+      'title': 'Neon Meridian',
+    });
+    expect(repo.tagsByPid['tr-1'], isNot(contains('MOOD')));
+    expect(repo.tagsByPid['tr-1'], containsPair('ENERGY', ['high']));
+  });
+
+  testWidgets('a staged tag removal can be taken back', (tester) async {
+    final repo = _repo();
+    repo.tagsByPid['tr-1'] = {
+      'MOOD': ['calm'],
+    };
+    await _pump(tester, _host(_container(repo)));
+
+    final remove = find.bySemanticsIdentifier(SemanticsIds.tagRemove('MOOD'));
+    await tester.ensureVisible(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.tagRestore('MOOD')),
+    );
+    await tester.pumpAndSettle();
+
+    // Nothing staged: the save bar has nothing to do.
+    final save = tester.widget<WaxButton>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.metadataSave),
+        matching: find.byType(WaxButton),
+      ),
+    );
+    expect(save.onPressed, isNull);
+  });
+
+  testWidgets('emptying the lyrics stages their removal', (tester) async {
+    final repo = _repo();
+    repo.lyricsByPid['tr-1'] = const LyricsState(
+      synced: false,
+      source: 'user',
+      lrc: 'la la la',
+    );
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.lyricsField),
+      '',
+    );
+    await tester.pump();
+    expect(repo.lyricsByPid, contains('tr-1'));
+    await _saveNow(tester);
+
+    expect(repo.lyricsByPid, isNot(contains('tr-1')));
+  });
+
+  testWidgets('the save bar counts everything staged', (tester) async {
+    final repo = _repo();
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.enterText(_field('title'), 'Neon Meridian');
+    await tester.pump();
+    final unofficial = find.bySemanticsIdentifier(
+      SemanticsIds.unofficialSwitch,
+    );
+    await tester.ensureVisible(unofficial);
+    await tester.pumpAndSettle();
+    await tester.tap(unofficial);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Save 2 changes'), findsOneWidget);
+  });
+
+  testWidgets('a staged draft does not follow a go to another item', (
+    tester,
+  ) async {
+    // The player's Edit metadata rows `go` between /metadata/<pid>
+    // locations, and go_router keys the page by the route pattern - so
+    // without the pid key on the screen, the same State (and the whole
+    // staged draft) would carry from one item onto the next.
+    final repo = _repo();
+    repo.libraryItems.add(testItem('tr-2', title: 'Second Title'));
+    repo.itemFieldsByPid['tr-2'] = {'title': 'Second Title'};
+    await _pump(tester, _routed(_container(repo)));
+
+    final router = GoRouter.of(tester.element(find.byType(MetadataScreen)));
+    router.go(WaxRoute.metadata('tr-2'));
+    await tester.pumpAndSettle();
+    await tester.enterText(_field('title'), 'Staged On Two');
+    await tester.pump();
+    expect(find.text('Save 1 change'), findsOneWidget);
+
+    router.go(WaxRoute.metadata('tr-1'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: _field('title'),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller
+          ?.text,
+      'Old Title',
+    );
+    expect(find.text('Save 1 change'), findsNothing);
+  });
+
+  testWidgets('a stray space in the lyrics box does not delete a fetch', (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.onEnrich = () => repo.lyricsByPid['tr-1'] = const LyricsState(
+      synced: false,
+      source: 'enrichment',
+      lrc: 'la la la',
+    );
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.lyricsField),
+      ' ',
+    );
+    await tester.pump();
+    final enrich = find.bySemanticsIdentifier(SemanticsIds.metadataEnrich);
+    await tester.ensureVisible(enrich);
+    await tester.pumpAndSettle();
+    await tester.tap(enrich);
+    await tester.pumpAndSettle();
+
+    // The fetched lyrics land in the box - whitespace is not an edit
+    // that outranks them - and nothing offers to save their removal.
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.bySemanticsIdentifier(SemanticsIds.lyricsField),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller
+          ?.text,
+      'la la la',
+    );
+    final save = tester.widget<WaxButton>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.metadataSave),
+        matching: find.byType(WaxButton),
+      ),
+    );
+    expect(save.onPressed, isNull);
+  });
+
+  testWidgets('typed genres split on the separators the catalog splits on', (
+    tester,
+  ) async {
+    // `Singer/Songwriter` is two genres to the store; staged as one it
+    // would come back split and read as dirty for ever.
+    final repo = _repo()..metadataFields = _vocabulary(['title', 'genre']);
+    repo.itemFieldsByPid['tr-1']!['genre'] = 'Rock';
+    await _pump(tester, _host(_container(repo)));
+
+    final add = find.bySemanticsIdentifier(SemanticsIds.metadataGenreAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenrePickerSearch),
+      'Singer/Songwriter',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenrePickerCustom),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.metadataGenrePickerApply),
+    );
+    await tester.pumpAndSettle();
+    await _saveNow(tester);
+
+    expect(repo.editItemMetadataCalls.single.fields, {
+      'genre': 'Rock; Singer; Songwriter',
+    });
+    // And the echo reads as saved, not as one more change to make.
+    final save = tester.widget<WaxButton>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.metadataSave),
+        matching: find.byType(WaxButton),
+      ),
+    );
+    expect(save.onPressed, isNull);
+  });
+
+  testWidgets('a tag key stages canonical, so its echo reads as saved', (
+    tester,
+  ) async {
+    // The server uppercases tag keys on store; a key staged as typed
+    // would never match the row it comes back as, and the draft would
+    // offer the identical write for ever.
+    final repo = _repo();
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagKey),
+      'mood',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagValues),
+      'calm',
+    );
+    final add = find.bySemanticsIdentifier(SemanticsIds.tagAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await _saveNow(tester);
+
+    expect(repo.tagsByPid['tr-1'], containsPair('MOOD', ['calm']));
+    final save = tester.widget<WaxButton>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.metadataSave),
+        matching: find.byType(WaxButton),
+      ),
+    );
+    expect(save.onPressed, isNull);
+  });
+
+  testWidgets('a tag with no values does not stage', (tester) async {
+    // Staged, it would be a row the change count cannot see: an
+    // "Unsaved" chip over a save bar that stays off.
+    final repo = _repo();
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagKey),
+      'MOOD',
+    );
+    final add = find.bySemanticsIdentifier(SemanticsIds.tagAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.tagRemove('MOOD')),
+      findsNothing,
+    );
+    final save = tester.widget<WaxButton>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.metadataSave),
+        matching: find.byType(WaxButton),
+      ),
+    );
+    expect(save.onPressed, isNull);
+  });
+
+  testWidgets('a refusal keeps the later staged parts staged', (tester) async {
+    // The fields write refuses on a lock; the tag staged behind it must
+    // neither be written nor lost.
+    final repo = _repo();
+    repo.lockedFieldsByPid['tr-1'] = {'title'};
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.enterText(_field('title'), 'Neon Meridian');
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagKey),
+      'MOOD',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagValues),
+      'calm',
+    );
+    final add = find.bySemanticsIdentifier(SemanticsIds.tagAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await _saveNow(tester);
+
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'field locked. Check "Force" to overwrite locked fields.',
+    );
+    // Not written, still staged: the count and the chip both stand.
+    expect(repo.tagsByPid['tr-1'], isNot(contains('MOOD')));
+    expect(find.text('Save 2 changes'), findsOneWidget);
+  });
+
+  testWidgets('plain lyrics go to the server as plain text', (tester) async {
+    // The LRC parser drops unstamped lines and refuses the empty
+    // result, so text with no stamps must say what it is.
+    final repo = _repo();
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.lyricsField),
+      'just some words',
+    );
+    await tester.pump();
+    await _saveNow(tester);
+
+    final stored = repo.lyricsByPid['tr-1']!;
+    expect(stored.synced, isFalse);
+    expect(stored.lrc, 'just some words');
+  });
+
+  testWidgets('no save bar over the load error page', (tester) async {
+    final repo = _repo()
+      ..metadataError = const WaxDeckApiException(
+        code: 'internal',
+        message: 'boom',
+        statusCode: 500,
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('Could not load the metadata'), findsOneWidget);
+    expect(find.bySemanticsIdentifier(SemanticsIds.metadataSave), findsNothing);
+  });
+
+  testWidgets('episode type is a closed choice, not a text box', (
+    tester,
+  ) async {
+    // The server refuses anything outside full|trailer|bonus, and a
+    // typo there would take the whole unified save down with it.
+    final repo = FakeRepository(
+      items: [testItem('ep-1', mediaType: MediaType.podcast)],
+    );
+    repo.metadataFields = const MetadataFields(
+      kinds: [
+        KindFields(
+          kind: MediaType.podcast,
+          fields: [
+            EditableField(name: 'title', writeBack: false),
+            EditableField(name: 'episode_type', writeBack: false),
+          ],
+        ),
+      ],
+      entityTypes: [],
+    );
+    repo.itemFieldsByPid['ep-1'] = {'title': 'An Episode'};
+    final container = _container(repo);
+    addTearDown(container.dispose);
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: container,
+        child: localizedHost(const MetadataScreen(pid: 'ep-1')),
+      ),
+    );
+
+    final choice = _field('episode_type');
+    await tester.ensureVisible(choice);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: choice, matching: find.byType(TextField)),
+      findsNothing,
+    );
+    await tester.tap(choice);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Trailer').last);
+    await tester.pumpAndSettle();
+    await _saveNow(tester);
+
+    expect(repo.editItemMetadataCalls.single.fields, {
+      'episode_type': 'trailer',
+    });
+    // Episodes never write back, so the switch is not even offered.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.metadataWriteback),
+      findsNothing,
+    );
+  });
+
+  test('a saved value settles onto its normalized echo', () {
+    // The server trims what it stores: send `Neon `, get `Neon` back.
+    // Re-seeded to what was sent, the field counts as untouched and
+    // adopts the echo instead of offering the same write for ever.
+    final draft = MetadataDraft();
+    addTearDown(draft.dispose);
+    MetadataEditorState stateWith(String title) => MetadataEditorState(
+      metadata: ItemMetadata(
+        pid: 'tr-1',
+        mediaType: MediaType.music,
+        fields: {'title': title},
+      ),
+      kindFields: const KindFields(
+        kind: MediaType.music,
+        fields: [EditableField(name: 'title', writeBack: true)],
+      ),
+    );
+
+    draft.controllerFor('title', 'Old').text = 'Neon ';
+    final before = stateWith('Old');
+    expect(draft.changes(before).fields, {'title': 'Neon '});
+
+    draft.markSaved(draft.changes(before));
+    final after = stateWith('Neon');
+    draft.adopt(after);
+
+    expect(draft.controllerFor('title', 'Neon').text, 'Neon');
+    expect(draft.changes(after).isEmpty, isTrue);
   });
 }

@@ -3273,10 +3273,12 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = metadataError;
     if (error != null) throw error;
+    // The lrc field carries plain text too, exactly as the server's
+    // read does: unsynced lyrics fill the same box the editor edits.
     lyricsByPid[pid] = LyricsState(
       synced: lrc != null,
       source: 'user',
-      lrc: lrc,
+      lrc: lrc ?? plain,
     );
     return const MetadataEditResult(applied: true);
   }

@@ -14,6 +14,8 @@
   "musicAlbumEditorSaved": "Guardado",
   "musicAlbumEditorSectionOverline": "Qué es esta edición",
   "musicAlbumEditorSectionTitle": "Identidad de la edición",
+  "musicAlbumEditorTotalTracks": "Pistas en total",
+  "musicAlbumEditorTotalTracksHelp": "Se cuenta a partir de las pistas de este lanzamiento. Añade o quita pistas para cambiarlo; no es un campo que se guarde.",
   "musicAlbumEditorTracksMore": "{count, plural, =1{y 1 más} other{y {count} más}}",
   "musicAlbumEditorTracksOverline": "A qué llega una reescritura",
   "musicAlbumEditorTracksTitle": "En esta edición",

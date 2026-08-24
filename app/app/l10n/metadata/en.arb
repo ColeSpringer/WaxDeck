@@ -1,6 +1,14 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "metadataAddCredit": "Add credit",
+  "@metadataAddCredit": {
+    "description": "Button that stages the typed names under the chosen credit role; the save bar commits them."
+  },
+  "metadataAddGenre": "Add genre",
+  "@metadataAddGenre": {
+    "description": "Control that opens the genre picker to stage another genre on the item."
+  },
   "metadataAddTag": "Add tag",
   "@metadataAddTag": {
     "description": "Button that stores the typed custom tag."
@@ -14,10 +22,6 @@
         "example": "From the file"
       }
     }
-  },
-  "metadataClearLyrics": "Clear",
-  "@metadataClearLyrics": {
-    "description": "Button that removes the item's stored lyrics."
   },
   "metadataCreditNames": "Names, comma separated",
   "@metadataCreditNames": {
@@ -34,6 +38,10 @@
   "metadataCreditsTitle": "Credits",
   "@metadataCreditsTitle": {
     "description": "Heading over who else worked on the item."
+  },
+  "metadataDerivedChip": "Derived",
+  "@metadataDerivedChip": {
+    "description": "Chip on a read-only value the server computes rather than stores, such as an album's track count."
   },
   "metadataEnrichApplied": "Applied: {fields}",
   "@metadataEnrichApplied": {
@@ -54,6 +62,18 @@
         "example": "book"
       }
     }
+  },
+  "metadataEpisodeTypeBonus": "Bonus",
+  "@metadataEpisodeTypeBonus": {
+    "description": "One of the three episode types the server accepts for `episode_type`."
+  },
+  "metadataEpisodeTypeFull": "Full episode",
+  "@metadataEpisodeTypeFull": {
+    "description": "One of the three episode types the server accepts for `episode_type`; also what an unset value means."
+  },
+  "metadataEpisodeTypeTrailer": "Trailer",
+  "@metadataEpisodeTypeTrailer": {
+    "description": "One of the three episode types the server accepts for `episode_type`."
   },
   "metadataFetch": "Fetch metadata",
   "@metadataFetch": {
@@ -221,6 +241,24 @@
       }
     }
   },
+  "metadataGenreAddCustom": "Add \"{query}\"",
+  "@metadataGenreAddCustom": {
+    "description": "Genre picker row that stages exactly what was typed, for a genre the canonical tree does not carry. {query} is the typed text.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "Zeuhl"
+      }
+    }
+  },
+  "metadataGenrePickerTitle": "Genres",
+  "@metadataGenrePickerTitle": {
+    "description": "Title of the genre picker sheet."
+  },
+  "metadataGenreSearchHint": "Search or type a genre",
+  "@metadataGenreSearchHint": {
+    "description": "Hint in the genre picker's entry field, which both filters the canonical list and takes a genre as typed."
+  },
   "metadataIdentificationBlurb": "Rematch reopens identification and puts the result in the review queue. Fetching metadata applies what the providers already agree on, without asking.",
   "@metadataIdentificationBlurb": {
     "description": "Line under the Identification heading, telling the two buttons apart."
@@ -274,6 +312,10 @@
   "metadataLockTitle": "Lock edited fields",
   "@metadataLockTitle": {
     "description": "Switch that keeps later scans from overwriting what was typed."
+  },
+  "metadataLyricsEmptyClears": "Leave empty to remove the stored lyrics when you save.",
+  "@metadataLyricsEmptyClears": {
+    "description": "Helper line under the lyrics field now that clearing rides the unified save."
   },
   "metadataLyricsHint": "[00:12.00] First line",
   "@metadataLyricsHint": {
@@ -329,6 +371,10 @@
   "@metadataOpenReleaseGroup": {
     "description": "Door from the metadata editor to the release group this item belongs to: the album across its editions."
   },
+  "metadataPendingChip": "Unsaved",
+  "@metadataPendingChip": {
+    "description": "Chip on a staged change (a tag added to the form, say) that the save bar has not committed yet."
+  },
   "metadataQueuedForIdentification": "Queued for identification",
   "@metadataQueuedForIdentification": {
     "description": "Message after an item was sent back for matching."
@@ -341,6 +387,26 @@
   "@metadataRematch": {
     "description": "Button that reopens identification for the item."
   },
+  "metadataRemoveCredit": "Remove {name}",
+  "@metadataRemoveCredit": {
+    "description": "Accessible name of a credit chip; pressing it stages the removal of that person from the role. {name} is a person's name and is not translated.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Nina Simone"
+      }
+    }
+  },
+  "metadataRemoveGenre": "Remove {name}",
+  "@metadataRemoveGenre": {
+    "description": "Accessible name of a genre chip; pressing it stages the removal of that genre. {name} is the genre and is not translated here.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Jazz"
+      }
+    }
+  },
   "metadataRemoveTag": "Remove tag {key}",
   "@metadataRemoveTag": {
     "description": "Accessible name of the control that deletes one custom tag. {key} is the tag's own name and is not translated.",
@@ -351,6 +417,76 @@
       }
     }
   },
+  "metadataRestoreTag": "Keep {key}",
+  "@metadataRestoreTag": {
+    "description": "Accessible name of the control that un-stages a tag removal before it is saved. {key} is the tag's own name and is not translated.",
+    "placeholders": {
+      "key": {
+        "type": "String",
+        "example": "ITUNESADVISORY"
+      }
+    }
+  },
+  "metadataRoleArranger": "Arranger",
+  "@metadataRoleArranger": {
+    "description": "Display name of the credit role the server calls `arranger`."
+  },
+  "metadataRoleAuthor": "Author",
+  "@metadataRoleAuthor": {
+    "description": "Display name of the credit role the server calls `author`."
+  },
+  "metadataRoleComposer": "Composer",
+  "@metadataRoleComposer": {
+    "description": "Display name of the credit role the server calls `composer`."
+  },
+  "metadataRoleConductor": "Conductor",
+  "@metadataRoleConductor": {
+    "description": "Display name of the credit role the server calls `conductor`."
+  },
+  "metadataRoleDjmixer": "DJ mixer",
+  "@metadataRoleDjmixer": {
+    "description": "Display name of the credit role the server calls `djmixer`."
+  },
+  "metadataRoleEditor": "Editor",
+  "@metadataRoleEditor": {
+    "description": "Display name of the credit role the server calls `editor`."
+  },
+  "metadataRoleEngineer": "Engineer",
+  "@metadataRoleEngineer": {
+    "description": "Display name of the credit role the server calls `engineer`."
+  },
+  "metadataRoleLyricist": "Lyricist",
+  "@metadataRoleLyricist": {
+    "description": "Display name of the credit role the server calls `lyricist`."
+  },
+  "metadataRoleMixer": "Mixer",
+  "@metadataRoleMixer": {
+    "description": "Display name of the credit role the server calls `mixer`."
+  },
+  "metadataRoleNarrator": "Narrator",
+  "@metadataRoleNarrator": {
+    "description": "Display name of the credit role the server calls `narrator`."
+  },
+  "metadataRolePerformer": "Performer",
+  "@metadataRolePerformer": {
+    "description": "Display name of the credit role the server calls `performer`."
+  },
+  "metadataRoleProducer": "Producer",
+  "@metadataRoleProducer": {
+    "description": "Display name of the credit role the server calls `producer`."
+  },
+  "metadataRoleRemixer": "Remixer",
+  "@metadataRoleRemixer": {
+    "description": "Display name of the credit role the server calls `remixer`."
+  },
+  "metadataRoleTranslator": "Translator",
+  "@metadataRoleTranslator": {
+    "description": "Display name of the credit role the server calls `translator`."
+  },
+  "metadataRoleWriter": "Writer",
+  "@metadataRoleWriter": {
+    "description": "Display name of the credit role the server calls `writer`."
+  },
   "metadataSaveChanges": "{count, plural, =1{Save 1 change} other{Save {count} changes}}",
   "@metadataSaveChanges": {
     "description": "The save button once fields have been edited, counting them. With nothing edited it says only Save.",
@@ -360,14 +496,6 @@
         "example": "3"
       }
     }
-  },
-  "metadataSaveCredits": "Save credits",
-  "@metadataSaveCredits": {
-    "description": "Button that writes the credit being edited."
-  },
-  "metadataSaveLyrics": "Save lyrics",
-  "@metadataSaveLyrics": {
-    "description": "Button that writes the lyrics as typed."
   },
   "metadataSourceEnrichment": "a provider",
   "@metadataSourceEnrichment": {
@@ -414,6 +542,10 @@
   "metadataTagKey": "Key",
   "@metadataTagKey": {
     "description": "Field for a custom tag's name."
+  },
+  "metadataTagStagedRemove": "Removed when you save",
+  "@metadataTagStagedRemove": {
+    "description": "Marker on a custom tag whose removal is staged but not yet committed by the save bar."
   },
   "metadataTagValues": "Values, comma separated",
   "@metadataTagValues": {
@@ -467,7 +599,7 @@
       }
     }
   },
-  "metadataWriteBackHelp": "Also rewrite the tags embedded in the backing files",
+  "metadataWriteBackHelp": "Also rewrite the tags embedded in the backing files; saved lyrics also write their .lrc sidecar",
   "@metadataWriteBackHelp": {
     "description": "Line under the write-tags switch."
   },

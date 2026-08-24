@@ -5367,6 +5367,18 @@ abstract class AppLocalizations {
   /// **'Music, podcasts, and audiobooks.'**
   String get localeFontSample;
 
+  /// Button that stages the typed names under the chosen credit role; the save bar commits them.
+  ///
+  /// In en, this message translates to:
+  /// **'Add credit'**
+  String get metadataAddCredit;
+
+  /// Control that opens the genre picker to stage another genre on the item.
+  ///
+  /// In en, this message translates to:
+  /// **'Add genre'**
+  String get metadataAddGenre;
+
   /// Button that stores the typed custom tag.
   ///
   /// In en, this message translates to:
@@ -5378,12 +5390,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Artwork · {source}'**
   String metadataArtworkSource(String source);
-
-  /// Button that removes the item's stored lyrics.
-  ///
-  /// In en, this message translates to:
-  /// **'Clear'**
-  String get metadataClearLyrics;
 
   /// Field for the people in one credit role.
   ///
@@ -5409,6 +5415,12 @@ abstract class AppLocalizations {
   /// **'Credits'**
   String get metadataCreditsTitle;
 
+  /// Chip on a read-only value the server computes rather than stores, such as an album's track count.
+  ///
+  /// In en, this message translates to:
+  /// **'Derived'**
+  String get metadataDerivedChip;
+
   /// Half of the message after fetching metadata, listing what was taken. {fields} is a comma-separated run of field names from the server.
   ///
   /// In en, this message translates to:
@@ -5420,6 +5432,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Skipped: {fields}'**
   String metadataEnrichSkipped(String fields);
+
+  /// One of the three episode types the server accepts for `episode_type`.
+  ///
+  /// In en, this message translates to:
+  /// **'Bonus'**
+  String get metadataEpisodeTypeBonus;
+
+  /// One of the three episode types the server accepts for `episode_type`; also what an unset value means.
+  ///
+  /// In en, this message translates to:
+  /// **'Full episode'**
+  String get metadataEpisodeTypeFull;
+
+  /// One of the three episode types the server accepts for `episode_type`.
+  ///
+  /// In en, this message translates to:
+  /// **'Trailer'**
+  String get metadataEpisodeTypeTrailer;
 
   /// Button that applies what the metadata providers already agree on.
   ///
@@ -5655,6 +5685,24 @@ abstract class AppLocalizations {
   /// **'{count} from {source}'**
   String metadataFromSource(int count, String source);
 
+  /// Genre picker row that stages exactly what was typed, for a genre the canonical tree does not carry. {query} is the typed text.
+  ///
+  /// In en, this message translates to:
+  /// **'Add \"{query}\"'**
+  String metadataGenreAddCustom(String query);
+
+  /// Title of the genre picker sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Genres'**
+  String get metadataGenrePickerTitle;
+
+  /// Hint in the genre picker's entry field, which both filters the canonical list and takes a genre as typed.
+  ///
+  /// In en, this message translates to:
+  /// **'Search or type a genre'**
+  String get metadataGenreSearchHint;
+
   /// Line under the Identification heading, telling the two buttons apart.
   ///
   /// In en, this message translates to:
@@ -5702,6 +5750,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Lock edited fields'**
   String get metadataLockTitle;
+
+  /// Helper line under the lyrics field now that clearing rides the unified save.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to remove the stored lyrics when you save.'**
+  String get metadataLyricsEmptyClears;
 
   /// Hint in the lyrics field, showing one timed line. The bracketed stamp is the format's own and must not change shape.
   ///
@@ -5775,6 +5829,12 @@ abstract class AppLocalizations {
   /// **'Open release group'**
   String get metadataOpenReleaseGroup;
 
+  /// Chip on a staged change (a tag added to the form, say) that the save bar has not committed yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved'**
+  String get metadataPendingChip;
+
   /// Message after an item was sent back for matching.
   ///
   /// In en, this message translates to:
@@ -5793,29 +5853,125 @@ abstract class AppLocalizations {
   /// **'Rematch'**
   String get metadataRematch;
 
+  /// Accessible name of a credit chip; pressing it stages the removal of that person from the role. {name} is a person's name and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name}'**
+  String metadataRemoveCredit(String name);
+
+  /// Accessible name of a genre chip; pressing it stages the removal of that genre. {name} is the genre and is not translated here.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name}'**
+  String metadataRemoveGenre(String name);
+
   /// Accessible name of the control that deletes one custom tag. {key} is the tag's own name and is not translated.
   ///
   /// In en, this message translates to:
   /// **'Remove tag {key}'**
   String metadataRemoveTag(String key);
 
+  /// Accessible name of the control that un-stages a tag removal before it is saved. {key} is the tag's own name and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep {key}'**
+  String metadataRestoreTag(String key);
+
+  /// Display name of the credit role the server calls `arranger`.
+  ///
+  /// In en, this message translates to:
+  /// **'Arranger'**
+  String get metadataRoleArranger;
+
+  /// Display name of the credit role the server calls `author`.
+  ///
+  /// In en, this message translates to:
+  /// **'Author'**
+  String get metadataRoleAuthor;
+
+  /// Display name of the credit role the server calls `composer`.
+  ///
+  /// In en, this message translates to:
+  /// **'Composer'**
+  String get metadataRoleComposer;
+
+  /// Display name of the credit role the server calls `conductor`.
+  ///
+  /// In en, this message translates to:
+  /// **'Conductor'**
+  String get metadataRoleConductor;
+
+  /// Display name of the credit role the server calls `djmixer`.
+  ///
+  /// In en, this message translates to:
+  /// **'DJ mixer'**
+  String get metadataRoleDjmixer;
+
+  /// Display name of the credit role the server calls `editor`.
+  ///
+  /// In en, this message translates to:
+  /// **'Editor'**
+  String get metadataRoleEditor;
+
+  /// Display name of the credit role the server calls `engineer`.
+  ///
+  /// In en, this message translates to:
+  /// **'Engineer'**
+  String get metadataRoleEngineer;
+
+  /// Display name of the credit role the server calls `lyricist`.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyricist'**
+  String get metadataRoleLyricist;
+
+  /// Display name of the credit role the server calls `mixer`.
+  ///
+  /// In en, this message translates to:
+  /// **'Mixer'**
+  String get metadataRoleMixer;
+
+  /// Display name of the credit role the server calls `narrator`.
+  ///
+  /// In en, this message translates to:
+  /// **'Narrator'**
+  String get metadataRoleNarrator;
+
+  /// Display name of the credit role the server calls `performer`.
+  ///
+  /// In en, this message translates to:
+  /// **'Performer'**
+  String get metadataRolePerformer;
+
+  /// Display name of the credit role the server calls `producer`.
+  ///
+  /// In en, this message translates to:
+  /// **'Producer'**
+  String get metadataRoleProducer;
+
+  /// Display name of the credit role the server calls `remixer`.
+  ///
+  /// In en, this message translates to:
+  /// **'Remixer'**
+  String get metadataRoleRemixer;
+
+  /// Display name of the credit role the server calls `translator`.
+  ///
+  /// In en, this message translates to:
+  /// **'Translator'**
+  String get metadataRoleTranslator;
+
+  /// Display name of the credit role the server calls `writer`.
+  ///
+  /// In en, this message translates to:
+  /// **'Writer'**
+  String get metadataRoleWriter;
+
   /// The save button once fields have been edited, counting them. With nothing edited it says only Save.
   ///
   /// In en, this message translates to:
   /// **'{count, plural, =1{Save 1 change} other{Save {count} changes}}'**
   String metadataSaveChanges(int count);
-
-  /// Button that writes the credit being edited.
-  ///
-  /// In en, this message translates to:
-  /// **'Save credits'**
-  String get metadataSaveCredits;
-
-  /// Button that writes the lyrics as typed.
-  ///
-  /// In en, this message translates to:
-  /// **'Save lyrics'**
-  String get metadataSaveLyrics;
 
   /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
   ///
@@ -5870,6 +6026,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Key'**
   String get metadataTagKey;
+
+  /// Marker on a custom tag whose removal is staged but not yet committed by the save bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed when you save'**
+  String get metadataTagStagedRemove;
 
   /// Field for a custom tag's values.
   ///
@@ -5928,7 +6090,7 @@ abstract class AppLocalizations {
   /// Line under the write-tags switch.
   ///
   /// In en, this message translates to:
-  /// **'Also rewrite the tags embedded in the backing files'**
+  /// **'Also rewrite the tags embedded in the backing files; saved lyrics also write their .lrc sidecar'**
   String get metadataWriteBackHelp;
 
   /// Switch making a save rewrite the tags stored inside the audio files too.
@@ -6014,6 +6176,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Release identity'**
   String get musicAlbumEditorSectionTitle;
+
+  /// Label of the read-only track count in the album editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Total tracks'**
+  String get musicAlbumEditorTotalTracks;
+
+  /// Helper under the album editor's read-only track count, explaining why there is no input.
+  ///
+  /// In en, this message translates to:
+  /// **'Counted from the tracks on this release. Add or remove tracks to change it; it is not a field anything stores.'**
+  String get musicAlbumEditorTotalTracksHelp;
 
   /// Line under a truncated track list.
   ///

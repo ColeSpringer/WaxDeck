@@ -726,6 +726,25 @@ here waits on upstream.
   the next sync, and a hand-set one never being refetched.
 
 
+- `[in-repo]` **The editor's unified save is one press but many round
+  trips.** The save bar commits the staged draft as sequential calls:
+  one for the scalar fields, one per changed credit role, one per tag
+  set or remove, one for lyrics, one for release status. Against the
+  headline client - a phone on cellular reaching a home server through
+  a reverse proxy - that is N x 100-300ms felt as lag on a single Save,
+  and every gap between calls is a partial-failure window on a flaky
+  link. The fix shape is a WaxDeck-only compound endpoint (a spec
+  delta, not an upstream ask): one POST carrying the staged parts, run
+  server-side in the same order, answering with per-part outcomes in
+  the `bulkEditMetadata` edited/skipped/failures idiom plus the
+  accumulated write-back failures. Deliberately not a transaction:
+  write-back is best-effort by design, so end-to-end atomicity is
+  unattainable, and catalog-only atomicity would need a combined-edit
+  facade upstream that is not worth its weight - the client already
+  reports partial commits honestly (committed parts adopt clean,
+  refused parts stay staged with the refusal beside them), and that
+  model carries over. The client keeps the sequential path as the
+  fallback for older servers.
 - `[in-repo]` **Book and remaining metadata providers.** Hardcover
   (the ASIN to ISBN bridge), Google Books and Open Library fallbacks,
   and Discogs are not yet implemented as enrichment providers; Deezer,

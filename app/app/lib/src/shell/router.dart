@@ -668,9 +668,14 @@ List<RouteBase> shellRoutes() => <RouteBase>[
             path: '/metadata/:pid',
             builder: (context, state) {
               final pid = state.pathParameters['pid']!;
+              // Keyed by pid: go_router keys the page by the route
+              // pattern, so a `go` from one item's editor to another's
+              // (the player's Edit metadata does exactly this) reuses
+              // the page - and without the key, the State under it,
+              // carrying the first item's staged draft onto the second.
               return pid.startsWith('al-')
-                  ? AlbumEditorScreen(pid: pid)
-                  : MetadataScreen(pid: pid);
+                  ? AlbumEditorScreen(key: ValueKey(pid), pid: pid)
+                  : MetadataScreen(key: ValueKey(pid), pid: pid);
             },
           ),
           // The admin console. One nested shell around every `/admin`

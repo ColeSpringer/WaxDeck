@@ -12,52 +12,17 @@ import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'artwork_manager.dart';
 import 'metadata_controller.dart';
-
-/// What one editable field is called in the reader's language.
-///
-/// The vocabulary arrives from the server as wire keys - `album_artist`,
-/// `track_no` - which were only ever an accessible name until the field
-/// began drawing its label. A lookup rather than an enum because the
-/// server owns the list, and the key itself is the fallback: a field a
-/// later server adds draws its own name rather than nothing, and
-/// translating it is one line here.
-String metadataFieldLabel(AppLocalizations l10n, String name) => switch (name) {
-  'title' => l10n.metadataFieldTitle,
-  'artist' => l10n.metadataFieldArtist,
-  'album_artist' => l10n.metadataFieldAlbumArtist,
-  'album' => l10n.metadataFieldAlbum,
-  'composer' => l10n.metadataFieldComposer,
-  'composer_sort' => l10n.metadataFieldComposerSort,
-  'comment' => l10n.metadataFieldComment,
-  'genre' => l10n.metadataFieldGenre,
-  'year' => l10n.metadataFieldYear,
-  'track_no' => l10n.metadataFieldTrackNo,
-  'disc_no' => l10n.metadataFieldDiscNo,
-  'isrc' => l10n.metadataFieldIsrc,
-  'mbid' => l10n.metadataFieldMbid,
-  'compilation' => l10n.metadataFieldCompilation,
-  'author' => l10n.metadataFieldAuthor,
-  'author_sort' => l10n.metadataFieldAuthorSort,
-  'narrator' => l10n.metadataFieldNarrator,
-  'series' => l10n.metadataFieldSeries,
-  'subtitle' => l10n.metadataFieldSubtitle,
-  'asin' => l10n.metadataFieldAsin,
-  'isbn' => l10n.metadataFieldIsbn,
-  'publisher' => l10n.metadataFieldPublisher,
-  'edition' => l10n.metadataFieldEdition,
-  'description' => l10n.metadataFieldDescription,
-  'pinned' => l10n.metadataFieldPinned,
-  'season' => l10n.metadataFieldSeason,
-  'episode_no' => l10n.metadataFieldEpisodeNo,
-  'episode_type' => l10n.metadataFieldEpisodeType,
-  'explicit' => l10n.metadataFieldExplicit,
-  'link' => l10n.metadataFieldLink,
-  _ => name,
-};
+import 'metadata_form.dart';
 
 /// The per-item metadata editor, deep-linkable at `/metadata/<pid>`.
 /// Always pushed: a review row, a book, and the lyrics view all open it,
 /// so it has three ancestries and a location may declare one.
+///
+/// Everything on it stages into one [MetadataDraft]; the sticky save
+/// bar at the bottom is the only thing that writes. It replaced a form
+/// where fields, credits, tags, and lyrics each carried a save of their
+/// own, which meant four buttons and no one answer to "is anything
+/// unsaved".
 class MetadataScreen extends ConsumerStatefulWidget {
   const MetadataScreen({super.key, required this.pid});
 
@@ -68,13 +33,7 @@ class MetadataScreen extends ConsumerStatefulWidget {
 }
 
 class _MetadataScreenState extends ConsumerState<MetadataScreen> {
-  final _fieldControllers = <String, TextEditingController>{};
-  final _lyricsController = TextEditingController();
-  final _creditNamesController = TextEditingController();
-  final _tagKeyController = TextEditingController();
-  final _tagValuesController = TextEditingController();
-  String? _creditRole;
-  var _lyricsSeeded = false;
+  final _draft = MetadataDraft();
 
   var _writeBack = false;
   var _lock = true;
@@ -82,68 +41,26 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   var _busy = false;
 
   /// Write-back failures from the last save, rendered as a warning
-  /// list; a partial tag write is not an error.
+  /// list beside the save bar; a partial tag write is not an error.
   List<WriteBackFailure> _writeBackFailures = const [];
 
   @override
+  void initState() {
+    super.initState();
+    // Redraws dirty marks and the save bar as the user types.
+    _draft.addListener(_onDraftChanged);
+  }
+
+  void _onDraftChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
-    for (final controller in _fieldControllers.values) {
-      controller.dispose();
-    }
-    _lyricsController.dispose();
-    _creditNamesController.dispose();
-    _tagKeyController.dispose();
-    _tagValuesController.dispose();
+    _draft
+      ..removeListener(_onDraftChanged)
+      ..dispose();
     super.dispose();
-  }
-
-  /// What each field's controller was last seeded with from the server.
-  /// A controller still holding exactly this has not been typed in
-  /// since, which is what makes it safe to adopt a fresh value into.
-  final _seeded = <String, String>{};
-
-  TextEditingController _controllerFor(String field, String initial) {
-    return _fieldControllers.putIfAbsent(field, () {
-      _seeded[field] = initial;
-      final controller = TextEditingController(text: initial);
-      // Recompute dirtiness (and the Save button) as the user types.
-      controller.addListener(() => setState(() {}));
-      return controller;
-    });
-  }
-
-  /// Takes server-side changes into the fields nobody is editing.
-  /// Without it a fetched title is invisible and reads as a local edit,
-  /// so Save offers to write the stale text back over it.
-  void _adoptStored(MetadataEditorState state) {
-    for (final field in state.kindFields.fields) {
-      final controller = _fieldControllers[field.name];
-      if (controller == null) continue;
-      final stored = state.metadata.fields[field.name] ?? '';
-      // Already in agreement - the usual case after a save, which
-      // echoes back what was written. Re-seed so the next genuine
-      // change is still recognised as one.
-      if (controller.text == stored) {
-        _seeded[field.name] = stored;
-        continue;
-      }
-      // Typed in since it was seeded: that edit is the user's and
-      // outranks a refetch.
-      if (controller.text != _seeded[field.name]) continue;
-      _seeded[field.name] = stored;
-      controller.text = stored;
-    }
-  }
-
-  Map<String, String> _changedFields(MetadataEditorState state) {
-    final changed = <String, String>{};
-    for (final field in state.kindFields.fields) {
-      final controller = _fieldControllers[field.name];
-      if (controller == null) continue;
-      final stored = state.metadata.fields[field.name] ?? '';
-      if (controller.text != stored) changed[field.name] = controller.text;
-    }
-    return changed;
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -168,24 +85,53 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
     }
   }
 
-  void _showResult(MetadataEditResult result) {
-    if (!mounted) return;
-    setState(() => _writeBackFailures = result.writeBackFailures);
-    if (result.warnings.isNotEmpty) {
-      ref
-          .read(shellMessengerProvider.notifier)
-          .show(result.warnings.join('\n'));
-    }
-  }
+  /// Whether write-back is offered at all: episodes never write back to
+  /// files by upstream design, and a switch the server refuses wholesale
+  /// is worse than no switch.
+  static bool _canWriteBack(MetadataEditorState state) =>
+      state.metadata.mediaType != MediaType.podcast;
 
   Future<void> _save(MetadataEditorState state) => _run(() async {
-    final changed = _changedFields(state);
-    if (changed.isEmpty) return;
-    final result = await ref
+    final l10n = context.l10n;
+    final changes = _draft.changes(state);
+    if (changes.isEmpty) return;
+    final outcome = await ref
         .read(metadataControllerProvider(widget.pid).notifier)
-        .saveFields(changed, writeBack: _writeBack, lock: _lock, force: _force);
-    _showResult(result);
+        .saveAll(
+          changes,
+          writeBack: _canWriteBack(state) && _writeBack,
+          lock: _lock,
+          force: _force,
+        );
+    if (!mounted) return;
+    // Re-seed to what was sent only when everything landed: after a
+    // refusal the parts that did not land must stay the user's edits.
+    if (outcome.refusal == null) _draft.markSaved(changes);
+    setState(() => _writeBackFailures = outcome.writeBackFailures);
+    final messages = <String>[
+      ...outcome.warnings,
+      // A locked field keeps the server's sentence, which names the
+      // field, and gains the half the server cannot know: the switch on
+      // this page that overrides it.
+      if (outcome.refusal case final e?)
+        e.code == 'field-locked'
+            ? '${e.message}. ${l10n.metadataFieldLockedHint}'
+            : explainRefusal(l10n, e),
+    ];
+    if (messages.isNotEmpty) {
+      ref.read(shellMessengerProvider.notifier).show(messages.join('\n'));
+    }
   });
+
+  Future<void> _pickGenres(MetadataEditorState state) async {
+    final tree = ref.read(canonicalGenresProvider).value ?? const <GenreNode>[];
+    final picked = await showMetadataGenrePicker(
+      context,
+      tree: tree,
+      selected: _draft.genresValue(state.metadata.fields['genre']),
+    );
+    if (picked != null) _draft.setGenres(picked);
+  }
 
   Future<void> _rematch() => _run(() async {
     final l10n = context.l10n;
@@ -233,9 +179,11 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
     final editor = ref.watch(metadataControllerProvider(widget.pid));
+    // Kept warm for the picker: read at tap time, fetched once here.
+    ref.watch(canonicalGenresProvider);
     ref.listen(metadataControllerProvider(widget.pid), (previous, next) {
       final value = next.value;
-      if (value != null) _adoptStored(value);
+      if (value != null) _draft.adopt(value);
     });
     // On the screen, not only on the doors that open it. The album
     // editor refuses for the same reason - this location is shareable
@@ -261,17 +209,37 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         semanticsId: SemanticsIds.metadataForbidden,
       );
     }
+    // One walk of the draft per frame: the bar's count, the dirty
+    // marks, and the section rows all read this same summary.
+    final changes = switch (editor) {
+      AsyncData(:final value) => _draft.changes(value),
+      _ => null,
+    };
     return WaxScaffold(
       title: context.l10n.metadataTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.metadataEditor,
       onBack: () => context.leave(),
+      // Gated on the same pattern as the body: a bar offering Save over
+      // an error page (or a skeleton) would be saving against a state
+      // the page is not showing.
+      bottom: switch (editor) {
+        AsyncData(:final value) => MetadataSaveBar(
+          count: changes!.count,
+          busy: _busy,
+          onSave: () => _save(value),
+          writeBackFailures: _writeBackFailures,
+          onDismissFailures: () =>
+              setState(() => _writeBackFailures = const []),
+        ),
+        _ => null,
+      },
       body: Padding(
         padding: sizeClass.gutter.add(
           const EdgeInsets.only(bottom: WaxSpace.s32),
         ),
         child: switch (editor) {
-          AsyncData(:final value) => _body(context, value, sizeClass),
+          AsyncData(:final value) => _body(context, value, changes!, sizeClass),
           AsyncError(:final error) => ErrorState(
             title: context.l10n.metadataLoadError,
             message: context.explain(error),
@@ -287,16 +255,13 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   Widget _body(
     BuildContext context,
     MetadataEditorState state,
+    MetadataChanges changes,
     WaxSizeClass sizeClass,
   ) {
-    if (!_lyricsSeeded) {
-      _lyricsSeeded = true;
-      _lyricsController.text = state.metadata.lyrics?.lrc ?? '';
-    }
     final left = <Widget>[
-      _fieldsSection(context, state),
-      _creditsSection(context, state),
-      _tagsSection(context, state),
+      _fieldsSection(context, state, changes),
+      MetadataCreditsSection(state: state, draft: _draft, busy: _busy),
+      MetadataTagsSection(state: state, draft: _draft, busy: _busy),
     ];
     final right = <Widget>[
       ArtworkManager(
@@ -305,7 +270,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         hasArtwork: state.metadata.hasArtwork,
       ),
       const SizedBox(height: WaxSpace.s32),
-      _lyricsSection(context),
+      _lyricsSection(context, state),
       const SizedBox(height: WaxSpace.s32),
       _releaseSection(context, state),
       const SizedBox(height: WaxSpace.s32),
@@ -349,9 +314,14 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
     );
   }
 
-  /// The item, its cover, and where its values came from in one line.
-  Widget _fieldsSection(BuildContext context, MetadataEditorState state) {
-    final changed = _changedFields(state);
+  /// The fields, one typed row each, and the switches that shape the
+  /// save. No button: the save bar is the button.
+  Widget _fieldsSection(
+    BuildContext context,
+    MetadataEditorState state,
+    MetadataChanges changes,
+  ) {
+    final changed = changes.fields;
     final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,37 +330,38 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
           title: l10n.metadataFieldsTitle,
           overline: l10n.metadataFieldsOverline,
         ),
-        if (_writeBackFailures.isNotEmpty) _writeBackWarning(context),
         for (final field in state.kindFields.fields) ...<Widget>[
-          _FieldRow(
+          MetadataFieldRow(
             field: field,
-            controller: _controllerFor(
-              field.name,
-              state.metadata.fields[field.name] ?? '',
-            ),
-            locked: state.isLocked(field.name),
-            provenance: state.provenanceFor(field.name),
+            state: state,
+            draft: _draft,
             dirty: changed.containsKey(field.name),
+            busy: _busy,
             onToggleLock: () => _run(
               () => ref
                   .read(metadataControllerProvider(widget.pid).notifier)
                   .setLock(field.name, locked: !state.isLocked(field.name)),
             ),
+            onAddGenre: () => _pickGenres(state),
           ),
           const SizedBox(height: WaxSpace.s12),
         ],
         _EntityDoors(metadata: state.metadata),
         const SizedBox(height: WaxSpace.s8),
-        WaxSettingRow(
-          title: l10n.metadataWriteBackTitle,
-          help: l10n.metadataWriteBackHelp,
-          control: WaxSwitch(
-            label: l10n.metadataWriteBackTitle,
-            value: _writeBack,
-            semanticsId: SemanticsIds.metadataWriteback,
-            onChanged: (v) => setState(() => _writeBack = v),
+        // Absent for episodes rather than refused: they never write
+        // back by upstream design, and the server answers the whole
+        // save with that refusal when asked.
+        if (_canWriteBack(state))
+          WaxSettingRow(
+            title: l10n.metadataWriteBackTitle,
+            help: l10n.metadataWriteBackHelp,
+            control: WaxSwitch(
+              label: l10n.metadataWriteBackTitle,
+              value: _writeBack,
+              semanticsId: SemanticsIds.metadataWriteback,
+              onChanged: (v) => setState(() => _writeBack = v),
+            ),
           ),
-        ),
         WaxSettingRow(
           title: l10n.metadataLockTitle,
           help: l10n.metadataLockHelp,
@@ -411,209 +382,14 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
             onChanged: (v) => setState(() => _force = v),
           ),
         ),
-        const SizedBox(height: WaxSpace.s16),
-        WaxButton(
-          label: changed.isEmpty
-              ? l10n.commonSave
-              : l10n.metadataSaveChanges(changed.length),
-          icon: WaxIcons.check,
-          semanticsId: SemanticsIds.metadataSave,
-          onPressed: changed.isEmpty || _busy ? null : () => _save(state),
-        ),
         const SizedBox(height: WaxSpace.s32),
       ],
     );
   }
 
-  /// What the server kept from a write-back. A partial tag write is not
-  /// an error - the catalog holds the edit either way - so it stays on
-  /// screen as a caution rather than passing as a message.
-  Widget _writeBackWarning(BuildContext context) {
-    final colors = WaxColors.of(context);
+  Widget _lyricsSection(BuildContext context, MetadataEditorState state) {
     final l10n = context.l10n;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: WaxSpace.s12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          WaxBanner(
-            message: l10n.metadataWriteBackWarning,
-            tone: WaxBannerTone.caution,
-            semanticsId: SemanticsIds.metadataWritebackWarning,
-            onDismiss: () => setState(() => _writeBackFailures = const []),
-          ),
-          const SizedBox(height: WaxSpace.s8),
-          // Which file and why is the content of the warning, so it
-          // stays on screen rather than passing as a message.
-          for (final failure in _writeBackFailures)
-            Text(
-              l10n.metadataWriteBackFailure(
-                failure.path ?? failure.filePid,
-                failure.reason,
-              ),
-              style: WaxType.monoData.copyWith(color: colors.textSecondary),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _creditsSection(BuildContext context, MetadataEditorState state) {
-    final colors = WaxColors.of(context);
-    final l10n = context.l10n;
-    final roles = state.kindFields.creditRoles;
-    final role = _creditRole ?? (roles.isEmpty ? null : roles.first.name);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        SectionHeader(
-          title: l10n.metadataCreditsTitle,
-          overline: l10n.metadataCreditsOverline,
-        ),
-        for (final credit in state.metadata.credits)
-          Padding(
-            padding: const EdgeInsets.only(bottom: WaxSpace.s4),
-            child: MonoDetailRow(
-              label: credit.role,
-              value: credit.names.join(', '),
-            ),
-          ),
-        if (roles.isEmpty)
-          Text(
-            l10n.metadataNoCreditRoles,
-            style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
-          )
-        else ...<Widget>[
-          const SizedBox(height: WaxSpace.s8),
-          WaxChoice<String>(
-            label: l10n.metadataCreditRole,
-            value: role!,
-            semanticsId: SemanticsIds.creditsRole,
-            options: <String>[for (final r in roles) r.name],
-            labelFor: (name) => name,
-            onChanged: (v) => setState(() => _creditRole = v),
-          ),
-          const SizedBox(height: WaxSpace.s8),
-          WaxTextField(
-            label: l10n.metadataCreditNames,
-            controller: _creditNamesController,
-            semanticsId: SemanticsIds.creditsNames,
-          ),
-          const SizedBox(height: WaxSpace.s8),
-          WaxButton(
-            label: l10n.metadataSaveCredits,
-            kind: WaxButtonKind.tonal,
-            semanticsId: SemanticsIds.creditsSave,
-            onPressed: _busy
-                ? null
-                : () => _run(() async {
-                    final names = _creditNamesController.text
-                        .split(',')
-                        .map((n) => n.trim())
-                        .where((n) => n.isNotEmpty)
-                        .toList();
-                    final result = await ref
-                        .read(metadataControllerProvider(widget.pid).notifier)
-                        .saveCredits(role, names);
-                    _showResult(result);
-                  }),
-          ),
-        ],
-        const SizedBox(height: WaxSpace.s32),
-      ],
-    );
-  }
-
-  Widget _tagsSection(BuildContext context, MetadataEditorState state) {
-    final l10n = context.l10n;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        SectionHeader(
-          title: l10n.metadataTagsTitle,
-          overline: l10n.metadataTagsOverline,
-        ),
-        for (final tag in state.metadata.customTags)
-          Padding(
-            padding: const EdgeInsets.only(bottom: WaxSpace.s4),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: MonoDetailRow(
-                    label: tag.key,
-                    value: tag.values.join(', '),
-                  ),
-                ),
-                WaxIconButton(
-                  glyph: WaxIcons.close,
-                  label: l10n.metadataRemoveTag(tag.key),
-                  size: 16,
-                  semanticsId: SemanticsIds.tagRemove(tag.key),
-                  onPressed: _busy
-                      ? null
-                      : () => _run(
-                          () => ref
-                              .read(
-                                metadataControllerProvider(widget.pid).notifier,
-                              )
-                              .removeTag(tag.key),
-                        ),
-                ),
-              ],
-            ),
-          ),
-        const SizedBox(height: WaxSpace.s8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: <Widget>[
-            SizedBox(
-              width: 140,
-              child: WaxTextField(
-                label: l10n.metadataTagKey,
-                controller: _tagKeyController,
-                semanticsId: SemanticsIds.tagKey,
-              ),
-            ),
-            const SizedBox(width: WaxSpace.s8),
-            Expanded(
-              child: WaxTextField(
-                label: l10n.metadataTagValues,
-                controller: _tagValuesController,
-                semanticsId: SemanticsIds.tagValues,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: WaxSpace.s8),
-        WaxButton(
-          label: l10n.metadataAddTag,
-          kind: WaxButtonKind.tonal,
-          icon: WaxIcons.add,
-          semanticsId: SemanticsIds.tagAdd,
-          onPressed: _busy
-              ? null
-              : () => _run(() async {
-                  final key = _tagKeyController.text.trim();
-                  if (key.isEmpty) return;
-                  final values = _tagValuesController.text
-                      .split(',')
-                      .map((v) => v.trim())
-                      .where((v) => v.isNotEmpty)
-                      .toList();
-                  await ref
-                      .read(metadataControllerProvider(widget.pid).notifier)
-                      .setTag(key, values);
-                  _tagKeyController.clear();
-                  _tagValuesController.clear();
-                }),
-        ),
-        const SizedBox(height: WaxSpace.s32),
-      ],
-    );
-  }
-
-  Widget _lyricsSection(BuildContext context) {
-    final l10n = context.l10n;
+    _draft.lyricsValue(state.metadata.lyrics?.lrc ?? '');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -624,44 +400,13 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
         WaxTextField(
           label: l10n.metadataLyricsLabel,
           hint: l10n.metadataLyricsHint,
-          controller: _lyricsController,
+          helperText: l10n.metadataLyricsEmptyClears,
+          controller: _draft.lyrics,
           maxLines: 8,
           semanticsId: SemanticsIds.lyricsField,
         ),
         const SizedBox(height: WaxSpace.s8),
-        _LyricsPreview(controller: _lyricsController),
-        const SizedBox(height: WaxSpace.s8),
-        Row(
-          children: <Widget>[
-            WaxButton(
-              label: l10n.metadataSaveLyrics,
-              kind: WaxButtonKind.tonal,
-              semanticsId: SemanticsIds.lyricsSave,
-              onPressed: _busy
-                  ? null
-                  : () => _run(() async {
-                      final result = await ref
-                          .read(metadataControllerProvider(widget.pid).notifier)
-                          .saveLyrics(_lyricsController.text);
-                      _showResult(result);
-                    }),
-            ),
-            const SizedBox(width: WaxSpace.s8),
-            WaxButton(
-              label: l10n.metadataClearLyrics,
-              kind: WaxButtonKind.text,
-              semanticsId: SemanticsIds.lyricsClear,
-              onPressed: _busy
-                  ? null
-                  : () => _run(() async {
-                      await ref
-                          .read(metadataControllerProvider(widget.pid).notifier)
-                          .clearLyrics();
-                      _lyricsController.clear();
-                    }),
-            ),
-          ],
-        ),
+        _LyricsPreview(controller: _draft.lyrics),
       ],
     );
   }
@@ -677,15 +422,12 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
           help: l10n.metadataUnofficialHelp,
           control: WaxSwitch(
             label: l10n.metadataUnofficialTitle,
-            value: state.metadata.unofficial,
+            value: _draft.unofficialValue(stored: state.metadata.unofficial),
             semanticsId: SemanticsIds.unofficialSwitch,
-            onChanged: _busy
-                ? null
-                : (v) => _run(
-                    () => ref
-                        .read(metadataControllerProvider(widget.pid).notifier)
-                        .setUnofficial(unofficial: v),
-                  ),
+            // Disabled while a save is in flight: a flip back to the
+            // seeded value mid-save reads as untouched once the refetch
+            // lands, and the second decision would be discarded.
+            onChanged: _busy ? null : (v) => _draft.setUnofficial(value: v),
           ),
         ),
       ],
@@ -895,76 +637,6 @@ class _EntityDoors extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-class _FieldRow extends StatelessWidget {
-  const _FieldRow({
-    required this.field,
-    required this.controller,
-    required this.locked,
-    required this.provenance,
-    required this.dirty,
-    required this.onToggleLock,
-  });
-
-  final EditableField field;
-  final TextEditingController controller;
-  final bool locked;
-  final FieldProvenance? provenance;
-
-  /// Whether this field differs from what is stored. Marked on the
-  /// field rather than only counted on the Save button, so a long form
-  /// says which line is about to be written.
-  final bool dirty;
-
-  final VoidCallback onToggleLock;
-
-  String _provenanceText(AppLocalizations l10n) {
-    final p = provenance;
-    if (p == null) return l10n.metadataSourceUnknown;
-    final provider = p.provider;
-    return provider == null
-        ? p.source
-        : l10n.metadataSourceWithProvider(p.source, provider);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
-    final l10n = context.l10n;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: <Widget>[
-        Expanded(
-          child: WaxTextField(
-            label: metadataFieldLabel(l10n, field.name),
-            controller: controller,
-            semanticsId: SemanticsIds.metadataField(field.name),
-          ),
-        ),
-        const SizedBox(width: WaxSpace.s8),
-        Padding(
-          padding: const EdgeInsets.only(bottom: WaxSpace.s8),
-          child: Row(
-            children: <Widget>[
-              CodecChip(_provenanceText(l10n), emphasis: dirty),
-              WaxIconButton(
-                glyph: locked ? WaxIcons.bookmark : WaxIcons.edit,
-                label: locked
-                    ? l10n.metadataUnlockField(field.name)
-                    : l10n.metadataLockField(field.name),
-                active: locked,
-                size: 16,
-                color: locked ? colors.accent : null,
-                semanticsId: SemanticsIds.fieldLock(field.name),
-                onPressed: onToggleLock,
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

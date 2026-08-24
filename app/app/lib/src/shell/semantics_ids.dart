@@ -332,6 +332,7 @@ abstract final class SemanticsIds {
   static const String albumEditDetails = 'album-edit-details';
   static const String albumEditor = 'album-editor';
   static const String albumEditorNames = 'album-editor-names';
+  static const String albumEditorTotalTracks = 'album-editor-total-tracks';
   static const String albumEditorTracks = 'album-editor-tracks';
   static const String albumIdentity = 'album-identity';
   static const String artLock = 'art-lock';
@@ -339,19 +340,30 @@ abstract final class SemanticsIds {
   static String artSlotClear(Object role) => 'art-slot-clear-$role';
   static String artSlotDrop(Object role) => 'art-slot-drop-$role';
   static String artSlotSet(Object role) => 'art-slot-set-$role';
+  static const String creditAdd = 'credit-add';
+  static String creditRemove(Object role, Object name) =>
+      'credit-remove-$role-$name';
   static const String creditsNames = 'credits-names';
   static const String creditsRole = 'credits-role';
-  static const String creditsSave = 'credits-save';
   static String fieldLock(Object name) => 'field-lock-$name';
-  static const String lyricsClear = 'lyrics-clear';
   static const String lyricsField = 'lyrics-field';
   static const String lyricsPreview = 'lyrics-preview';
-  static const String lyricsSave = 'lyrics-save';
   static const String metadataEditor = 'metadata-editor';
   static const String metadataEnrich = 'metadata-enrich';
   static String metadataField(Object name) => 'metadata-field-$name';
   static const String metadataForbidden = 'metadata-forbidden';
   static const String metadataForce = 'metadata-force';
+  static const String metadataGenreAdd = 'metadata-genre-add';
+  static String metadataGenreOption(Object name) =>
+      'metadata-genre-option-$name';
+  static const String metadataGenrePicker = 'metadata-genre-picker';
+  static const String metadataGenrePickerApply = 'metadata-genre-picker-apply';
+  static const String metadataGenrePickerCustom =
+      'metadata-genre-picker-custom';
+  static const String metadataGenrePickerSearch =
+      'metadata-genre-picker-search';
+  static String metadataGenreRemove(Object name) =>
+      'metadata-genre-remove-$name';
   static const String metadataLock = 'metadata-lock';
   static const String metadataOpenAlbum = 'metadata-open-album';
   static const String metadataOpenArtist = 'metadata-open-artist';
@@ -359,11 +371,13 @@ abstract final class SemanticsIds {
   static const String metadataOpenReview = 'metadata-open-review';
   static const String metadataRematch = 'metadata-rematch';
   static const String metadataSave = 'metadata-save';
+  static const String metadataSaveBar = 'metadata-save-bar';
   static const String metadataWriteback = 'metadata-writeback';
   static const String metadataWritebackWarning = 'metadata-writeback-warning';
   static const String tagAdd = 'tag-add';
   static const String tagKey = 'tag-key';
   static String tagRemove(Object key) => 'tag-remove-$key';
+  static String tagRestore(Object key) => 'tag-restore-$key';
   static const String tagValues = 'tag-values';
   static const String unofficialSwitch = 'unofficial-switch';
 

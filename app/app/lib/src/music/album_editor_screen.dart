@@ -260,6 +260,7 @@ class _AlbumEditorScreenState extends ConsumerState<AlbumEditorScreen> {
                       curated: curation[field.wire],
                       dirty: changed.containsKey(field.wire),
                     ),
+                  _DerivedTotalTracks(pid: widget.pid, album: album),
                 ],
               ),
               const SizedBox(height: WaxSpace.s24),
@@ -454,6 +455,59 @@ class _AlbumSummary extends ConsumerWidget {
               ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// The one number the album bug asked to edit that is not a field:
+/// total tracks is the release's membership counted, nothing stores
+/// it, so the row says the number and why there is no input. Editing
+/// the tracks is what changes it.
+class _DerivedTotalTracks extends ConsumerWidget {
+  const _DerivedTotalTracks({required this.pid, required this.album});
+
+  final String pid;
+  final AlbumDetail album;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    // The same fallback the summary above uses: the detail's own count
+    // where the server sent one, the loaded member list otherwise.
+    final count =
+        album.itemCount ??
+        ref
+            .watch(
+              musicItemsProvider((
+                dimension: MusicDimension.albums,
+                segment: pid,
+              )),
+            )
+            .value
+            ?.items
+            .length ??
+        0;
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      identifier: SemanticsIds.albumEditorTotalTracks,
+      child: WaxSettingRow(
+        title: l10n.musicAlbumEditorTotalTracks,
+        help: l10n.musicAlbumEditorTotalTracksHelp,
+        control: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              '$count',
+              style: WaxType.monoData.copyWith(
+                color: WaxColors.of(context).textPrimary,
+              ),
+            ),
+            const SizedBox(width: WaxSpace.s8),
+            CodecChip(l10n.metadataDerivedChip),
+          ],
+        ),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../icons/wax_icon.dart';
 import '../l10n/wax_l10n.dart';
@@ -28,6 +29,7 @@ class WaxTextField extends StatefulWidget {
     this.textInputAction,
     this.keyboardType,
     this.obscureText = false,
+    this.digitsOnly = false,
     this.maxLines = 1,
     this.errorText,
     this.helperText,
@@ -84,6 +86,12 @@ class WaxTextField extends StatefulWidget {
   /// at and decide about, and the button would be a control whose only
   /// effect is invisible.
   final bool obscureText;
+
+  /// Refuses everything but digits and raises the number pad, for a
+  /// field that only ever holds a count or a year. The refusal happens
+  /// as typed rather than as a validation message afterwards, so the
+  /// field never holds a value it would have to complain about.
+  final bool digitsOnly;
 
   /// How tall the field grows before it scrolls. Above one it takes the
   /// card radius and drops its clear button, which a paragraph should
@@ -219,7 +227,14 @@ class _WaxTextFieldState extends State<WaxTextField> {
                   focusNode: _focus,
                   autofocus: widget.autofocus,
                   textInputAction: widget.textInputAction,
-                  keyboardType: widget.keyboardType,
+                  keyboardType: widget.digitsOnly
+                      ? TextInputType.number
+                      : widget.keyboardType,
+                  inputFormatters: widget.digitsOnly
+                      ? <TextInputFormatter>[
+                          FilteringTextInputFormatter.digitsOnly,
+                        ]
+                      : null,
                   obscureText: widget.obscureText,
                   maxLines: widget.maxLines,
                   onChanged: widget.onChanged,

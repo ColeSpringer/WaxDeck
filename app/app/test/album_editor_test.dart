@@ -259,6 +259,33 @@ void main() {
     expect(_byId(SemanticsIds.artLock), findsOneWidget);
   });
 
+  testWidgets('total tracks is a derived number, not a field', (tester) async {
+    // The album bug asked to edit it; nothing stores it. The row says
+    // the count and why there is no input, so the answer is on the
+    // screen rather than silently missing from the form.
+    final repo = _repo(
+      album: const AlbumDetail(
+        pid: _album,
+        title: 'Long Exposure',
+        itemCount: 9,
+      ),
+    );
+    await _pump(tester, repo);
+
+    final row = _byId(SemanticsIds.albumEditorTotalTracks);
+    expect(row, findsOneWidget);
+    expect(find.descendant(of: row, matching: find.text('9')), findsOneWidget);
+    expect(
+      find.descendant(of: row, matching: find.text('Derived')),
+      findsOneWidget,
+    );
+    // Read-only: no text box to type a different count into.
+    expect(
+      find.descendant(of: row, matching: find.byType(TextField)),
+      findsNothing,
+    );
+  });
+
   testWidgets('the sort name and MusicBrainz id are editable', (tester) async {
     // Two fields the endpoint has always taken and the screen never
     // offered, so the only way to set them was another client.

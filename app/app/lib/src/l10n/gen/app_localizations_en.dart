@@ -3276,15 +3276,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get localeFontSample => 'Music, podcasts, and audiobooks.';
 
   @override
+  String get metadataAddCredit => 'Add credit';
+
+  @override
+  String get metadataAddGenre => 'Add genre';
+
+  @override
   String get metadataAddTag => 'Add tag';
 
   @override
   String metadataArtworkSource(String source) {
     return 'Artwork · $source';
   }
-
-  @override
-  String get metadataClearLyrics => 'Clear';
 
   @override
   String get metadataCreditNames => 'Names, comma separated';
@@ -3299,6 +3302,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataCreditsTitle => 'Credits';
 
   @override
+  String get metadataDerivedChip => 'Derived';
+
+  @override
   String metadataEnrichApplied(String fields) {
     return 'Applied: $fields';
   }
@@ -3307,6 +3313,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String metadataEnrichSkipped(String fields) {
     return 'Skipped: $fields';
   }
+
+  @override
+  String get metadataEpisodeTypeBonus => 'Bonus';
+
+  @override
+  String get metadataEpisodeTypeFull => 'Full episode';
+
+  @override
+  String get metadataEpisodeTypeTrailer => 'Trailer';
 
   @override
   String get metadataFetch => 'Fetch metadata';
@@ -3430,6 +3445,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String metadataGenreAddCustom(String query) {
+    return 'Add \"$query\"';
+  }
+
+  @override
+  String get metadataGenrePickerTitle => 'Genres';
+
+  @override
+  String get metadataGenreSearchHint => 'Search or type a genre';
+
+  @override
   String get metadataIdentificationBlurb =>
       'Rematch reopens identification and puts the result in the review queue. Fetching metadata applies what the providers already agree on, without asking.';
 
@@ -3474,6 +3500,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataLockTitle => 'Lock edited fields';
 
   @override
+  String get metadataLyricsEmptyClears =>
+      'Leave empty to remove the stored lyrics when you save.';
+
+  @override
   String get metadataLyricsHint => '[00:12.00] First line';
 
   @override
@@ -3512,6 +3542,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataOpenReleaseGroup => 'Open release group';
 
   @override
+  String get metadataPendingChip => 'Unsaved';
+
+  @override
   String get metadataQueuedForIdentification => 'Queued for identification';
 
   @override
@@ -3521,9 +3554,69 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataRematch => 'Rematch';
 
   @override
+  String metadataRemoveCredit(String name) {
+    return 'Remove $name';
+  }
+
+  @override
+  String metadataRemoveGenre(String name) {
+    return 'Remove $name';
+  }
+
+  @override
   String metadataRemoveTag(String key) {
     return 'Remove tag $key';
   }
+
+  @override
+  String metadataRestoreTag(String key) {
+    return 'Keep $key';
+  }
+
+  @override
+  String get metadataRoleArranger => 'Arranger';
+
+  @override
+  String get metadataRoleAuthor => 'Author';
+
+  @override
+  String get metadataRoleComposer => 'Composer';
+
+  @override
+  String get metadataRoleConductor => 'Conductor';
+
+  @override
+  String get metadataRoleDjmixer => 'DJ mixer';
+
+  @override
+  String get metadataRoleEditor => 'Editor';
+
+  @override
+  String get metadataRoleEngineer => 'Engineer';
+
+  @override
+  String get metadataRoleLyricist => 'Lyricist';
+
+  @override
+  String get metadataRoleMixer => 'Mixer';
+
+  @override
+  String get metadataRoleNarrator => 'Narrator';
+
+  @override
+  String get metadataRolePerformer => 'Performer';
+
+  @override
+  String get metadataRoleProducer => 'Producer';
+
+  @override
+  String get metadataRoleRemixer => 'Remixer';
+
+  @override
+  String get metadataRoleTranslator => 'Translator';
+
+  @override
+  String get metadataRoleWriter => 'Writer';
 
   @override
   String metadataSaveChanges(int count) {
@@ -3535,12 +3628,6 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get metadataSaveCredits => 'Save credits';
-
-  @override
-  String get metadataSaveLyrics => 'Save lyrics';
 
   @override
   String get metadataSourceEnrichment => 'a provider';
@@ -3570,6 +3657,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataTagKey => 'Key';
+
+  @override
+  String get metadataTagStagedRemove => 'Removed when you save';
 
   @override
   String get metadataTagValues => 'Values, comma separated';
@@ -3605,7 +3695,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataWriteBackHelp =>
-      'Also rewrite the tags embedded in the backing files';
+      'Also rewrite the tags embedded in the backing files; saved lyrics also write their .lrc sidecar';
 
   @override
   String get metadataWriteBackTitle => 'Write tags to files';
@@ -3664,6 +3754,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicAlbumEditorSectionTitle => 'Release identity';
+
+  @override
+  String get musicAlbumEditorTotalTracks => 'Total tracks';
+
+  @override
+  String get musicAlbumEditorTotalTracksHelp =>
+      'Counted from the tracks on this release. Add or remove tracks to change it; it is not a field anything stores.';
 
   @override
   String musicAlbumEditorTracksMore(int count) {

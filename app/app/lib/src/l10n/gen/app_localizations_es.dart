@@ -3322,15 +3322,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get localeFontSample => 'Música, pódcast y audiolibros.';
 
   @override
+  String get metadataAddCredit => 'Añadir el crédito';
+
+  @override
+  String get metadataAddGenre => 'Añadir un género';
+
+  @override
   String get metadataAddTag => 'Añadir la etiqueta';
 
   @override
   String metadataArtworkSource(String source) {
     return 'Ilustración · $source';
   }
-
-  @override
-  String get metadataClearLyrics => 'Borrar';
 
   @override
   String get metadataCreditNames => 'Nombres, separados por comas';
@@ -3345,6 +3348,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataCreditsTitle => 'Créditos';
 
   @override
+  String get metadataDerivedChip => 'Derivado';
+
+  @override
   String metadataEnrichApplied(String fields) {
     return 'Aplicado: $fields';
   }
@@ -3353,6 +3359,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String metadataEnrichSkipped(String fields) {
     return 'Omitido: $fields';
   }
+
+  @override
+  String get metadataEpisodeTypeBonus => 'Extra';
+
+  @override
+  String get metadataEpisodeTypeFull => 'Episodio completo';
+
+  @override
+  String get metadataEpisodeTypeTrailer => 'Avance';
 
   @override
   String get metadataFetch => 'Obtener metadatos';
@@ -3477,6 +3492,17 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String metadataGenreAddCustom(String query) {
+    return 'Añadir «$query»';
+  }
+
+  @override
+  String get metadataGenrePickerTitle => 'Géneros';
+
+  @override
+  String get metadataGenreSearchHint => 'Busca o escribe un género';
+
+  @override
   String get metadataIdentificationBlurb =>
       'Volver a emparejar reabre la identificación y deja el resultado en la cola de revisión. Obtener metadatos aplica aquello en lo que los proveedores ya coinciden, sin preguntar.';
 
@@ -3521,6 +3547,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataLockTitle => 'Bloquear los campos editados';
 
   @override
+  String get metadataLyricsEmptyClears =>
+      'Déjalo vacío para quitar la letra guardada al guardar.';
+
+  @override
   String get metadataLyricsHint => '[00:12.00] Primera línea';
 
   @override
@@ -3559,6 +3589,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataOpenReleaseGroup => 'Abrir el grupo de lanzamiento';
 
   @override
+  String get metadataPendingChip => 'Sin guardar';
+
+  @override
   String get metadataQueuedForIdentification => 'En cola para identificar';
 
   @override
@@ -3568,9 +3601,69 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataRematch => 'Volver a emparejar';
 
   @override
+  String metadataRemoveCredit(String name) {
+    return 'Quitar a $name';
+  }
+
+  @override
+  String metadataRemoveGenre(String name) {
+    return 'Quitar $name';
+  }
+
+  @override
   String metadataRemoveTag(String key) {
     return 'Quitar la etiqueta $key';
   }
+
+  @override
+  String metadataRestoreTag(String key) {
+    return 'Conservar $key';
+  }
+
+  @override
+  String get metadataRoleArranger => 'Arreglista';
+
+  @override
+  String get metadataRoleAuthor => 'Autor';
+
+  @override
+  String get metadataRoleComposer => 'Compositor';
+
+  @override
+  String get metadataRoleConductor => 'Director';
+
+  @override
+  String get metadataRoleDjmixer => 'DJ de mezcla';
+
+  @override
+  String get metadataRoleEditor => 'Editor';
+
+  @override
+  String get metadataRoleEngineer => 'Ingeniero';
+
+  @override
+  String get metadataRoleLyricist => 'Letrista';
+
+  @override
+  String get metadataRoleMixer => 'Mezclador';
+
+  @override
+  String get metadataRoleNarrator => 'Narrador';
+
+  @override
+  String get metadataRolePerformer => 'Intérprete';
+
+  @override
+  String get metadataRoleProducer => 'Productor';
+
+  @override
+  String get metadataRoleRemixer => 'Remezclador';
+
+  @override
+  String get metadataRoleTranslator => 'Traductor';
+
+  @override
+  String get metadataRoleWriter => 'Escritor';
 
   @override
   String metadataSaveChanges(int count) {
@@ -3582,12 +3675,6 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get metadataSaveCredits => 'Guardar los créditos';
-
-  @override
-  String get metadataSaveLyrics => 'Guardar la letra';
 
   @override
   String get metadataSourceEnrichment => 'un proveedor';
@@ -3617,6 +3704,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataTagKey => 'Clave';
+
+  @override
+  String get metadataTagStagedRemove => 'Se quitará al guardar';
 
   @override
   String get metadataTagValues => 'Valores, separados por comas';
@@ -3653,7 +3743,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataWriteBackHelp =>
-      'Reescribe también las etiquetas incrustadas en los archivos de origen';
+      'Reescribe también las etiquetas incrustadas en los archivos; la letra guardada escribe además su archivo .lrc';
 
   @override
   String get metadataWriteBackTitle => 'Escribir las etiquetas en los archivos';
@@ -3712,6 +3802,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicAlbumEditorSectionTitle => 'Identidad de la edición';
+
+  @override
+  String get musicAlbumEditorTotalTracks => 'Pistas en total';
+
+  @override
+  String get musicAlbumEditorTotalTracksHelp =>
+      'Se cuenta a partir de las pistas de este lanzamiento. Añade o quita pistas para cambiarlo; no es un campo que se guarde.';
 
   @override
   String musicAlbumEditorTracksMore(int count) {
