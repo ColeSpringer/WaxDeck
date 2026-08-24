@@ -229,6 +229,31 @@ void main() {
     expect(repo.playlistMembers[created.pid], isEmpty);
   });
 
+  testWidgets('a member row opens the item menu from its kebab', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    final created = await repo.createPlaylist(
+      name: 'Menu me',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistEntryMore(0)),
+    );
+    await tester.pumpAndSettle();
+    // The track carries no entity handles, so the menu holds what a
+    // bare music pid supports.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuMix),
+      findsOneWidget,
+    );
+    expect(find.text('Go to album'), findsNothing);
+  });
+
   testWidgets('swiping a member away drops it', (tester) async {
     final repo = FakeRepository(items: const [_track, _second]);
     final created = await repo.createPlaylist(

@@ -17,5 +17,8 @@
   "libraryDeleteTitle": "¿Eliminar los archivos?",
   "libraryDeleteTrashDone": "{count, plural, =1{Se ha movido 1 archivo a la papelera} other{Se han movido {count} archivos a la papelera}}",
   "libraryKindAlbum": "álbum",
-  "libraryKindArtist": "artista"
+  "libraryKindArtist": "artista",
+  "libraryMenuGoToAlbum": "Ir al álbum",
+  "libraryMenuGoToArtist": "Ir al artista",
+  "libraryMenuShareAlbum": "Compartir el álbum"
 }

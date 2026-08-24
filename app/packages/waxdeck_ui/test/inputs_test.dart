@@ -622,6 +622,63 @@ void main() {
     });
   });
 
+  group('MediaCard overflow chip', () {
+    const tile = MediaTileData(title: 'Salt Harbour', subtitle: 'Nightjar');
+
+    testWidgets('appears under a pointer and opens the menu', (tester) async {
+      // A test binding starts in touch highlight mode, where a detector
+      // reports no hover at all; see the caption-hover test above.
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      var opened = 0;
+      await tester.pumpWidget(
+        _host(
+          Align(
+            alignment: Alignment.topLeft,
+            child: MediaCard(width: 120, data: tile, onMore: () => opened++),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Nothing is offered until a pointer is over the card: the chip
+      // is a hover affordance, so a touch device keeps the long press
+      // as its whole route in.
+      Finder chipGate() => find.ancestor(
+        of: find.byIcon(WaxIcons.more.regular),
+        matching: find.byType(IgnorePointer),
+      );
+      expect(tester.widget<IgnorePointer>(chipGate().first).ignoring, isTrue);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await tester.pump();
+      await mouse.moveTo(tester.getCenter(find.byType(MediaCard)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<IgnorePointer>(chipGate().first).ignoring, isFalse);
+
+      await tester.tap(find.byIcon(WaxIcons.more.regular));
+      expect(opened, 1);
+    });
+
+    testWidgets('a card with no menu draws no chip', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const Align(
+            alignment: Alignment.topLeft,
+            child: MediaCard(width: 120, data: tile),
+          ),
+        ),
+      );
+      expect(find.byIcon(WaxIcons.more.regular), findsNothing);
+    });
+  });
+
   group('fastScrollLetter', () {
     test('names the row a label belongs under', () {
       expect(fastScrollLetter('Nightjar'), 'N');

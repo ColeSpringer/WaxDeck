@@ -30,6 +30,7 @@
     "queueClear": "queue-clear",
     "queueEntry": "queue-entry-{queueId}",
     "queueEntryDrag": "queue-entry-drag-{id}",
+    "queueEntryMore": "queue-entry-more-{queueId}",
     "queueEntryRemove": "queue-entry-remove-{queueId}",
     "queueHistory": "queue-history",
     "queueHistoryEntry": "queue-history-{id}",

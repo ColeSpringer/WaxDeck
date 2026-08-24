@@ -170,8 +170,25 @@ func TestMetadataFieldsVocabulary(t *testing.T) {
 	for _, e := range vocab.EntityTypes {
 		entities[e.EntityType] = e.Fields
 	}
-	if len(entities["album"]) != 5 || len(entities["artist"]) != 2 || len(entities["release-group"]) != 3 {
+	if len(entities["album"]) != 7 || len(entities["artist"]) != 2 || len(entities["release-group"]) != 3 {
 		t.Fatalf("entity vocabulary = %+v", entities)
+	}
+	// The edition columns are advertised: country fans out to member
+	// files, media stays database-only (MEDIA is per-medium, so an
+	// album-level fan-out would stamp one value across mixed media).
+	albumField := func(name string) *EditableField {
+		for i := range entities["album"] {
+			if entities["album"][i].Name == name {
+				return &entities["album"][i]
+			}
+		}
+		return nil
+	}
+	if f := albumField("country"); f == nil || !f.WriteBack {
+		t.Fatalf("album country = %+v, want writeBack true", f)
+	}
+	if f := albumField("media"); f == nil || f.WriteBack {
+		t.Fatalf("album media = %+v, want writeBack false", f)
 	}
 }
 

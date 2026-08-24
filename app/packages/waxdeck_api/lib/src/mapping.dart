@@ -1453,6 +1453,9 @@ MetadataFields metadataFieldsFromGen(gen.MetadataFields fields) {
 Credit creditFromGen(gen.Credit c) =>
     Credit(role: c.role, names: c.names.toList());
 
+ItemPermissions itemPermissionsFromGen(gen.ItemPermissions p) =>
+    ItemPermissions(mayCurate: p.mayCurate);
+
 ItemMetadata itemMetadataFromGen(gen.ItemMetadata meta) {
   final lyrics = meta.lyrics;
   return ItemMetadata(

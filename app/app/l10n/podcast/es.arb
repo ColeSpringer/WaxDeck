@@ -100,7 +100,7 @@
   "podcastResume": "Reanudar en {stamp}",
   "podcastRetentionHelp": "Si se deja vacío se usa el valor predeterminado del servidor; 0 los conserva todos",
   "podcastRetentionLabel": "Episodios que conservar",
-  "podcastSearchDirectory": "Buscar en el directorio",
+  "podcastSearchDirectory": "Buscar en los directorios de podcasts",
   "podcastSearchFailedHint": "{reason} Suscríbete con la URL de un feed desde \"Añadir por URL\".",
   "podcastSearchShow": "Buscar en este programa",
   "podcastSeasonChip": "Temporada {season}",

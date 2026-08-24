@@ -9,8 +9,8 @@ works in any browser.
 
 `POST /api/v1/shares` creates a link for a track, album, book, or
 episode you can see, or a playlist you own. An album share opens the
-album's tracks in order; it is contract-only so far, with no share
-action on the album screen offering it. Playlists require ownership: the
+album's tracks in order; the album screen's overflow and the item menus
+on track rows offer it. Playlists require ownership: the
 public page serves the owner's member view for the link's whole life,
 so another user's shared playlist is theirs to publish, not yours.
 The URL is a signed capability: possession is the authorization,

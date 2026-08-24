@@ -5,6 +5,7 @@ import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/entity_facts.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
+import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
@@ -267,6 +268,61 @@ void main() {
       await tester.tap(_byId(SemanticsIds.entityOverflow));
       await tester.pumpAndSettle();
       expect(find.text('Unpin from Home'), findsOneWidget);
+    });
+
+    testWidgets('the overflow offers the release mix and share', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.entityInstantMix), findsOneWidget);
+      expect(_byId(SemanticsIds.entityShare), findsOneWidget);
+
+      await tester.tap(_byId(SemanticsIds.entityShare));
+      await tester.pumpAndSettle();
+      // The share dialog minted for the album's own pid.
+      expect(find.text('Share link'), findsOneWidget);
+    });
+
+    testWidgets('a track row menu edits and navigates, but never points '
+        'at the screen it is on', (tester) async {
+      final repository = FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-1',
+            username: 'admin',
+            roles: <String>['admin'],
+          ),
+        ),
+      )..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+
+      // The editor screen the menu opens at the end lays out cleanly at
+      // the size its own suite uses.
+      await _pump(
+        tester,
+        const AlbumScreen(pid: 'al-1'),
+        repository,
+        size: const Size(800, 3000),
+      );
+
+      await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
+      await tester.pumpAndSettle();
+      // Everything the row's pids support, except the album the screen
+      // already is.
+      expect(find.text('Go to album'), findsNothing);
+      expect(find.text('Go to artist'), findsOneWidget);
+      expect(_byId(SemanticsIds.itemMenuMix), findsOneWidget);
+      expect(_byId(SemanticsIds.itemMenuShare), findsOneWidget);
+
+      await tester.tap(_byId(SemanticsIds.editMetadata('tr-One')));
+      await tester.pumpAndSettle();
+      expect(find.byType(MetadataScreen), findsOneWidget);
     });
 
     testWidgets('a member is offered the pin and not the editor', (

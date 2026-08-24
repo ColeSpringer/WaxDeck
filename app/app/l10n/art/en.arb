@@ -41,21 +41,31 @@
   "@artSlotFrontInline": {
     "description": "The front cover named inside a sentence. English lower-cases it; a language needing an article or a different case writes that here, because the sentences around it cannot know the gender of the words in this list."
   },
-  "artSourceBorrowed": "Borrowed from a track",
-  "@artSourceBorrowed": {
-    "description": "Says a release is showing one of its tracks' covers because it holds none of its own. Drawn beside the source mark, which describes that track's picture rather than the release's choice."
-  },
-  "artSourceBorrowedFrom": "{source} · {borrow}",
-  "@artSourceBorrowedFrom": {
-    "description": "The mark under a release's cover: where the picture came from, plus a note that the release borrowed it from a track. Both halves are sentences, so a locale that orders them the other way round reorders the placeholders.",
+  "artSourceBorrowedProvider": "From {provider}, for a track",
+  "@artSourceBorrowedProvider": {
+    "description": "Source mark under a cover a release borrowed from a member track whose picture a named metadata provider fetched. One sentence: the borrowed marks replaced a two-sentence join that read as two captions glued together.",
     "placeholders": {
-      "source": {
-        "type": "String"
-      },
-      "borrow": {
-        "type": "String"
+      "provider": {
+        "type": "String",
+        "example": "Cover Art Archive"
       }
     }
+  },
+  "artSourceBorrowedProviderUnnamed": "From a metadata provider, for a track",
+  "@artSourceBorrowedProviderUnnamed": {
+    "description": "The borrowed provider mark for a fetched cover whose provider went unrecorded."
+  },
+  "artSourceBorrowedSidecar": "Art from an image beside a track",
+  "@artSourceBorrowedSidecar": {
+    "description": "Source mark under a cover a release borrowed from a member track's folder image."
+  },
+  "artSourceBorrowedTag": "Art from a track's file",
+  "@artSourceBorrowedTag": {
+    "description": "Source mark under a cover a release borrowed from a member track's embedded tags - the common borrowed case: the release holds no durable cover of its own, so the resolve answered with a track's."
+  },
+  "artSourceBorrowedUser": "Set by hand on a track",
+  "@artSourceBorrowedUser": {
+    "description": "Source mark under a cover a release borrowed from a member track somebody gave a cover by hand."
   },
   "artSourceFeed": "From the feed",
   "@artSourceFeed": {

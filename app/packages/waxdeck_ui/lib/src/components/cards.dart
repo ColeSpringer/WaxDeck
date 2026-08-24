@@ -103,8 +103,9 @@ class SectionHeader extends StatelessWidget {
 /// belong on artwork rather than in text.
 ///
 /// On pointer platforms, hovering reveals a play button over the artwork
-/// and an overflow button, so desktop browsing is never
-/// tap-to-navigate-only.
+/// and, where [onMore] is wired, an overflow chip, so desktop browsing
+/// is never tap-to-navigate-only. A right click and a touch long press
+/// open the same menu.
 class MediaCard extends StatefulWidget {
   const MediaCard({
     required this.data,
@@ -264,10 +265,46 @@ class _MediaCardState extends State<MediaCard> {
               ),
             ),
           ),
+        // The overflow control, revealed like the play affordance: a
+        // pointer gets a visible way into the menu instead of having to
+        // guess at a right click. Faded rather than created on hover,
+        // which pops; out of the focus tree while invisible, for the
+        // reason artwork.dart's hover play writes out. It draws over the
+        // unplayed dot while shown, which the card's label still
+        // announces. Touch keeps the long press, and assistive tech the
+        // card's own long-press action - this chip sits inside the
+        // card's excluded subtree.
+        if (widget.onMore != null)
+          Positioned(
+            right: WaxSpace.s8,
+            top: WaxSpace.s8,
+            child: ExcludeFocus(
+              excluding: !(_hovered || _focused),
+              child: IgnorePointer(
+                ignoring: !(_hovered || _focused),
+                child: AnimatedOpacity(
+                  opacity: (_hovered || _focused) ? 1 : 0,
+                  duration: motion.quick,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: colors.surface1,
+                      shape: BoxShape.circle,
+                    ),
+                    child: WaxIconButton(
+                      glyph: WaxIcons.more,
+                      label: l10n.cardsMoreForItem(data.title),
+                      size: 16,
+                      onPressed: widget.onMore,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
 
-    return Semantics(
+    final card = Semantics(
       identifier: data.semanticsId,
       button: widget.onTap != null,
       label: <String?>[
@@ -382,6 +419,19 @@ class _MediaCardState extends State<MediaCard> {
         ),
       ),
     );
+    final tooltip = data.tooltip;
+    if (tooltip == null) return card;
+    // Hover-only on purpose: a long press is the card's overflow
+    // gesture, and a tooltip that claimed it would shadow the menu. The
+    // full text is already in the semantics label above, so the tooltip
+    // adds nothing a screen reader needed.
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      triggerMode: TooltipTriggerMode.manual,
+      excludeFromSemantics: true,
+      child: card,
+    );
   }
 }
 
@@ -454,7 +504,9 @@ class MediaListRow extends StatelessWidget {
   /// the one so far. Kept apart from [onMore] because that one draws a
   /// control, and a button announcing "More for [title]" whose only
   /// action is to start selecting is a lie about what it opens.
-  /// [onMore] wins where a row wants both.
+  /// Where a row wants both, this wins the long press: a surface keeps
+  /// long-press-to-select while the kebab and a right click open the
+  /// menu.
   final VoidCallback? onLongPress;
 
   /// Set on rows that can join a multi-select. A checkbox takes the
@@ -571,7 +623,7 @@ class MediaListRow extends StatelessWidget {
       ].nonNulls.join(', '),
       excludeSemantics: true,
       onTap: onTap,
-      onLongPress: onMore ?? onLongPress,
+      onLongPress: onLongPress ?? onMore,
       child: Row(
         children: <Widget>[
           if (leading != null)
@@ -688,7 +740,7 @@ class MediaListRow extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           onSecondaryTap: onMore,
-          onLongPress: onMore ?? onLongPress,
+          onLongPress: onLongPress ?? onMore,
           child: Container(
             constraints: BoxConstraints(minHeight: layout.rowHeight),
             padding: const EdgeInsets.symmetric(
@@ -729,6 +781,34 @@ class MediaListRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The bottom sheet every row menu shares: the drag handle, the raised
+/// surface, and the safe-area padding, with the caller filling it with
+/// [WaxOptionRow]s. One frame rather than a copy per menu, so the pin
+/// sheet, the item menus, and whatever comes next cannot drift apart on
+/// their chrome.
+Future<void> showWaxOptionSheet(
+  BuildContext context, {
+  required WidgetBuilder builder,
+}) {
+  final colors = WaxColors.of(context);
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: colors.surface2,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          WaxSpace.s16,
+          0,
+          WaxSpace.s16,
+          WaxSpace.s24,
+        ),
+        child: builder(sheetContext),
+      ),
+    ),
+  );
 }
 
 /// A glyph, a name, a line under it, and something on the right.
@@ -976,10 +1056,10 @@ class ShelfRow extends StatefulWidget {
   final void Function(MediaTileData item)? onTapItem;
   final void Function(MediaTileData item)? onPlayItem;
 
-  /// The card's own overflow gesture: long press on touch, right-click
-  /// with a pointer. For the shelves whose cards are the surface a thing
-  /// is managed from - a pinned shelf is where somebody will try to
-  /// unpin - rather than for shelves that are only a view of a listing.
+  /// The card's own overflow: a hover chip over the artwork and a right
+  /// click with a pointer, a long press on touch. The gesture is the
+  /// whole affordance on touch, so a shelf that spends the long press on
+  /// something else cannot also take this.
   final void Function(MediaTileData item)? onMoreItem;
 
   final double? cardWidth;

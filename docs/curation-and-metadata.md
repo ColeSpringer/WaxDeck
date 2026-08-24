@@ -79,8 +79,9 @@ The limit caps what may sit in staging awaiting a decision, so
 importing an upload frees the room it held.
 
 Files reach the flow three ways: a file picker on every platform, a
-folder picker everywhere but Android (whose folder access means SAF
-tree URIs, which the picker port does not speak), and drag-and-drop
+folder picker on the web build and the Linux and Windows desktops
+(Android folder access means SAF tree URIs, which the picker port does
+not speak), and drag-and-drop
 onto the library or uploads screen on web and desktop. A picked folder
 is walked recursively and its shape rides along, so disc subfolders
 survive to the grouping step. Web transfers read the browser's file

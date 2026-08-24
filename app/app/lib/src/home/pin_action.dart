@@ -20,10 +20,28 @@ Future<void> togglePin(
   WidgetRef ref,
   String pid, {
   String? label,
+}) => togglePinCaptured(
+  messenger: ScaffoldMessenger.of(context),
+  l10n: context.l10n,
+  pinned: ref.read(pinnedEntitiesProvider.notifier),
+  pid: pid,
+  label: label,
+);
+
+/// [togglePin] for a caller that captured its dependencies before
+/// raising a sheet. A sheet outlives the row that opened it - a queue
+/// entry scrolls into collapsed history, a sync delta rewrites a
+/// playlist - and reaching back through that row's context or ref after
+/// the pop lands on an element that is no longer in the tree. The
+/// messenger, the copy table, and the controller all outlive the row,
+/// so what was tapped still happens.
+Future<void> togglePinCaptured({
+  required ScaffoldMessengerState messenger,
+  required AppLocalizations l10n,
+  required PinnedEntities pinned,
+  required String pid,
+  String? label,
 }) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final l10n = context.l10n;
-  final pinned = ref.read(pinnedEntitiesProvider.notifier);
   final wasPinned = pinned.contains(pid);
   final refusal = await pinned.toggle(pid);
   if (refusal != null) {
@@ -66,60 +84,69 @@ WaxMenuItem<T> pinMenuItem<T>(
 /// the kind. [name] is the thing's own name on the row under it.
 typedef PinTarget = ({String pid, String what, String name});
 
-/// The pin affordance for rows and tiles with no menu of their own: the
-/// music listings, the index buckets, the search hits. A sheet rather
-/// than a `WaxMenuButton`, because a
-/// listing row's overflow may hold more than one target - a track row
-/// pins its album or its artist, never itself - and each wants a line
-/// naming what it is.
+/// The pin row as every sheet draws it: the live pin state read through
+/// the sheet's own ref, the sentence for the kind, and the target's
+/// stable handle. One body for the pin sheet and both item menus, so
+/// the row cannot drift between them.
+Widget pinSheetRow(
+  BuildContext sheetContext,
+  WidgetRef sheetRef,
+  PinTarget target, {
+  required VoidCallback onTap,
+}) {
+  final pinned = sheetRef.watch(pinnedEntitiesProvider).contains(target.pid);
+  return WaxOptionRow(
+    title: pinned
+        ? sheetContext.l10n.homePinSheetUnpin(target.what)
+        : sheetContext.l10n.homePinSheetPin(target.what),
+    subtitle: target.name,
+    glyph: WaxIcons.home,
+    semanticsId: SemanticsIds.pinSheetTarget(target.pid),
+    onTap: onTap,
+  );
+}
+
+/// The pin affordance for rows and tiles whose menu holds nothing else:
+/// artist and book search hits, the artist index buckets. A listing
+/// row's overflow may hold more than one target - a track row pins its
+/// album or its artist, never itself - and each wants a line naming
+/// what it is.
 Future<void> showPinSheet(
   BuildContext context,
   WidgetRef ref, {
   required List<PinTarget> targets,
 }) async {
-  final colors = WaxColors.of(context);
-  await showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: colors.surface2,
-    showDragHandle: true,
-    builder: (sheetContext) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          WaxSpace.s16,
-          0,
-          WaxSpace.s16,
-          WaxSpace.s24,
-        ),
-        child: Consumer(
-          // Its own Consumer: the sheet outlives the row that opened it,
-          // and the pin state has to flip live under a tap. The caller's
-          // context stays unshadowed on purpose - the toggle reports
-          // into the screen's messenger, which must outlive the pop.
-          builder: (_, sheetRef, _) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              for (final target in targets)
-                WaxOptionRow(
-                  title:
-                      sheetRef
-                          .watch(pinnedEntitiesProvider)
-                          .contains(target.pid)
-                      ? sheetContext.l10n.homePinSheetUnpin(target.what)
-                      : sheetContext.l10n.homePinSheetPin(target.what),
-                  subtitle: target.name,
-                  glyph: WaxIcons.home,
-                  semanticsId: SemanticsIds.pinSheetTarget(target.pid),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    unawaited(
-                      togglePin(context, ref, target.pid, label: target.name),
-                    );
-                  },
-                ),
-            ],
-          ),
-        ),
+  // Captured before the sheet: it outlives the row that opened it.
+  final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
+  final pinned = ref.read(pinnedEntitiesProvider.notifier);
+  await showWaxOptionSheet(
+    context,
+    builder: (sheetContext) => Consumer(
+      // Its own Consumer: the pin state has to flip live under a tap.
+      builder: (_, sheetRef, _) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          for (final target in targets)
+            pinSheetRow(
+              sheetContext,
+              sheetRef,
+              target,
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(
+                  togglePinCaptured(
+                    messenger: messenger,
+                    l10n: l10n,
+                    pinned: pinned,
+                    pid: target.pid,
+                    label: target.name,
+                  ),
+                );
+              },
+            ),
+        ],
       ),
     ),
   );

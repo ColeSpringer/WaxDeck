@@ -12,6 +12,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../media_view.dart';
 import '../metadata/artwork_manager.dart';
 import '../player/now_playing_controller.dart';
@@ -659,6 +660,8 @@ class _EntryRow extends ConsumerWidget {
                 semanticsId: SemanticsIds.playlistEntry(index),
               ),
               onTap: onTap,
+              onMore: () => showItemMenuForSummary(context, ref, item),
+              moreSemanticsId: SemanticsIds.playlistEntryMore(index),
             ),
           ),
           if (onRemove != null)

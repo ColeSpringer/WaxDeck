@@ -5,6 +5,11 @@
     "itemDelete": "item-delete",
     "itemDeleteConfirm": "item-delete-confirm",
     "itemDeleteMode": "item-delete-mode-{mode}",
+    "itemMenuGoAlbum": "item-menu-go-album",
+    "itemMenuGoArtist": "item-menu-go-artist",
+    "itemMenuMix": "item-menu-mix",
+    "itemMenuShare": "item-menu-share-album",
+    "itemMenuShareItem": "item-menu-share",
     "offlineBanner": "offline-banner"
   }
 }

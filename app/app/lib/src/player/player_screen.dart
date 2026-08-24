@@ -901,7 +901,10 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
               ),
             ],
             onSelected: (choice) => unawaited(switch (choice) {
-              'mix' => showInstantMixSheet(context, _item),
+              'mix' => showInstantMixSheet(context, (
+                pid: _item.pid,
+                title: _item.title,
+              )),
               _ => openSimilarTracks(context, ref, _item),
             }),
           ),

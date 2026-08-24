@@ -476,6 +476,107 @@ void main() {
       expect(find.text('1 selected'), findsOneWidget);
     });
 
+    testWidgets('the kebab opens the row menu while long press selects', (
+      tester,
+    ) async {
+      // The two gestures coexist by design: the component gives a
+      // wired long press precedence over the menu, so selection keeps
+      // the hold and the menu answers the kebab and a right click. The
+      // kebab only draws once the row's pid resolves to an item.
+      final container = await _pump(
+        tester,
+        repository: FakeRepository(
+          items: <ItemSummary>[testItem('tr-1'), testItem('tr-2')],
+        ),
+      );
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      final upNext = idsAt(container, [1]).single;
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueEntryMore(upNext)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.itemMenuMix),
+        findsOneWidget,
+      );
+      // Opening the menu did not start a selection.
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.queueSelectionRemove),
+        findsNothing,
+      );
+      Navigator.of(
+        tester.element(find.bySemanticsIdentifier(SemanticsIds.itemMenuMix)),
+      ).pop();
+      await tester.pumpAndSettle();
+
+      await longPress(tester, upNext);
+      expect(find.text('1 selected'), findsOneWidget);
+
+      // Playing for real leaves a session with a checkpoint ticker on
+      // it, and the binding refuses to end a test holding a timer.
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a spoken-word entry menu shares itself and stays out '
+        'of the Music hub', (tester) async {
+      // An audiobook carries its author as artistPid, so an ungated
+      // "Go to artist" would route into the Music hub's artist bucket;
+      // and with no mix and no album share, the sheet held nothing at
+      // all for a session without the editor door. The item's own
+      // share link is the entry that is always there.
+      final container = await _pump(
+        tester,
+        repository: FakeRepository(
+          items: <ItemSummary>[
+            testItem('tr-1'),
+            const ItemSummary(
+              pid: 'bk-01JZX5N8QW3F4V9T2B7KDBOOKQ',
+              mediaType: MediaType.audiobook,
+              title: 'There And Back Again',
+              artist: 'B. Baggins',
+              artistPid: 'ar-01JZX5N8QW3F4V9T2B7KDBAGGN',
+              durationMs: 3600000,
+            ),
+          ],
+        ),
+      );
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'bk-01JZX5N8QW3F4V9T2B7KDBOOKQ',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      final upNext = idsAt(container, [1]).single;
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueEntryMore(upNext)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.itemMenuShareItem),
+        findsOneWidget,
+      );
+      expect(find.text('Go to artist'), findsNothing);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.itemMenuMix),
+        findsNothing,
+      );
+      Navigator.of(
+        tester.element(
+          find.bySemanticsIdentifier(SemanticsIds.itemMenuShareItem),
+        ),
+      ).pop();
+      await tester.pumpAndSettle();
+
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('the bar removes the set and moves it in one go', (
       tester,
     ) async {

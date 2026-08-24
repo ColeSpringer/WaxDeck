@@ -12,19 +12,11 @@
   "artSlotDiscInline": "el disco",
   "artSlotFront": "Portada",
   "artSlotFrontInline": "la portada",
-  "artSourceBorrowed": "Tomada de una pista",
-  "artSourceBorrowedFrom": "{source} · {borrow}",
-  "@artSourceBorrowedFrom": {
-    "description": "The mark under a release's cover: where the picture came from, plus a note that the release borrowed it from a track. Both halves are sentences, so a locale that orders them the other way round reorders the placeholders.",
-    "placeholders": {
-      "source": {
-        "type": "String"
-      },
-      "borrow": {
-        "type": "String"
-      }
-    }
-  },
+  "artSourceBorrowedProvider": "De {provider}, para una pista",
+  "artSourceBorrowedProviderUnnamed": "De un proveedor de metadatos, para una pista",
+  "artSourceBorrowedSidecar": "Portada de una imagen junto a una pista",
+  "artSourceBorrowedTag": "Portada del archivo de una pista",
+  "artSourceBorrowedUser": "Definida a mano en una pista",
   "artSourceFeed": "Del feed",
   "artSourceFromFile": "Del archivo",
   "artSourceGenerated": "Creada por el servidor",

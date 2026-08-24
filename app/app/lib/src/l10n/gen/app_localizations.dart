@@ -2703,17 +2703,35 @@ abstract class AppLocalizations {
   /// **'front cover'**
   String get artSlotFrontInline;
 
-  /// Says a release is showing one of its tracks' covers because it holds none of its own. Drawn beside the source mark, which describes that track's picture rather than the release's choice.
+  /// Source mark under a cover a release borrowed from a member track whose picture a named metadata provider fetched. One sentence: the borrowed marks replaced a two-sentence join that read as two captions glued together.
   ///
   /// In en, this message translates to:
-  /// **'Borrowed from a track'**
-  String get artSourceBorrowed;
+  /// **'From {provider}, for a track'**
+  String artSourceBorrowedProvider(String provider);
 
-  /// The mark under a release's cover: where the picture came from, plus a note that the release borrowed it from a track. Both halves are sentences, so a locale that orders them the other way round reorders the placeholders.
+  /// The borrowed provider mark for a fetched cover whose provider went unrecorded.
   ///
   /// In en, this message translates to:
-  /// **'{source} · {borrow}'**
-  String artSourceBorrowedFrom(String source, String borrow);
+  /// **'From a metadata provider, for a track'**
+  String get artSourceBorrowedProviderUnnamed;
+
+  /// Source mark under a cover a release borrowed from a member track's folder image.
+  ///
+  /// In en, this message translates to:
+  /// **'Art from an image beside a track'**
+  String get artSourceBorrowedSidecar;
+
+  /// Source mark under a cover a release borrowed from a member track's embedded tags - the common borrowed case: the release holds no durable cover of its own, so the resolve answered with a track's.
+  ///
+  /// In en, this message translates to:
+  /// **'Art from a track\'s file'**
+  String get artSourceBorrowedTag;
+
+  /// Source mark under a cover a release borrowed from a member track somebody gave a cover by hand.
+  ///
+  /// In en, this message translates to:
+  /// **'Set by hand on a track'**
+  String get artSourceBorrowedUser;
 
   /// Source mark under a cover a podcast feed supplied, or one a radio station announced in its own stream.
   ///
@@ -5043,6 +5061,12 @@ abstract class AppLocalizations {
   /// **'Nothing here yet'**
   String get homeEmptyTitle;
 
+  /// Episode-card menu row opening the episode's own screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Episode info'**
+  String get homeEpisodeInfo;
+
   /// Shelf of the newest episodes across the shows the listener follows.
   ///
   /// In en, this message translates to:
@@ -5318,6 +5342,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'artist'**
   String get libraryKindArtist;
+
+  /// Item-menu row opening the album the item belongs to.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to album'**
+  String get libraryMenuGoToAlbum;
+
+  /// Item-menu row opening the item's artist.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to artist'**
+  String get libraryMenuGoToArtist;
+
+  /// Item-menu row minting a public share link for the item's album.
+  ///
+  /// In en, this message translates to:
+  /// **'Share album'**
+  String get libraryMenuShareAlbum;
 
   /// Never displayed. Any natural sentence in this language, written the way the language actually is, accents and all: the app scans it for the scripts this locale needs and loads their fonts before the interface draws.
   ///
@@ -9170,10 +9212,10 @@ abstract class AppLocalizations {
   /// **'Episodes to keep'**
   String get podcastRetentionLabel;
 
-  /// Label of the podcast directory search box in the add dialog, and of the button that runs it.
+  /// Label of the podcast directory search box in the add dialog, and of the button that runs it. Names what is searched - the public podcast directories - because the bare "Search directory" read as looking through local folders.
   ///
   /// In en, this message translates to:
-  /// **'Search directory'**
+  /// **'Search podcast directories'**
   String get podcastSearchDirectory;
 
   /// Shown when the podcast directory could not be searched. {reason} is the sentence naming the failure; the rest points at the path that still works.

@@ -21,6 +21,10 @@
   "@homeEmptyTitle": {
     "description": "Empty state of home on a server whose library holds nothing."
   },
+  "homeEpisodeInfo": "Episode info",
+  "@homeEpisodeInfo": {
+    "description": "Episode-card menu row opening the episode's own screen."
+  },
   "homeEpisodesTitle": "New episodes",
   "@homeEpisodesTitle": {
     "description": "Shelf of the newest episodes across the shows the listener follows."

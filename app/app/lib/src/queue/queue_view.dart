@@ -10,6 +10,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../media_view.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
@@ -961,7 +962,18 @@ class QueueRow extends ConsumerWidget {
             data: data,
             onTap: onTap,
             onSelect: onSelect,
+            // The long press stays the way into multi-select on the
+            // rows that have one - the component gives it precedence -
+            // so the menu is the kebab and a right click here.
             onLongPress: onLongPress,
+            // The menu derives its navigation verb from which navigator
+            // this row sits in - the full-screen queue is an overlay on
+            // the root, the queue side panel is inside the shell, and
+            // this row renders in both.
+            onMore: item == null
+                ? null
+                : () => showItemMenuForSummary(context, ref, item),
+            moreSemanticsId: SemanticsIds.queueEntryMore(entry.queueId),
             selectSemanticsId: selectSemanticsId,
             selected: selected,
             playing: playing,

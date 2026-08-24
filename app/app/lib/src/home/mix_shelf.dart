@@ -50,6 +50,9 @@ class MixShelf extends ConsumerWidget {
         MediaTileData(
           title: cards[i].titleOf(l10n),
           subtitle: l10n.discoveryInstantMixTitle,
+          // The card clamps every line, so the full name lives on the
+          // hover tooltip, as on every other home shelf.
+          tooltip: cards[i].titleOf(l10n),
           artwork: waxArtwork(store, cards[i].artUrl),
           domain: WaxDomain.music,
           semanticsId: SemanticsIds.homeMix(i),

@@ -64,6 +64,7 @@ class MediaTileData {
     this.unplayed = false,
     this.unavailableOffline = false,
     this.semanticsId,
+    this.tooltip,
   });
 
   final String title;
@@ -115,6 +116,11 @@ class MediaTileData {
   /// component that can be an e2e touchpoint takes one and applies
   /// `Semantics(identifier:)` itself.
   final String? semanticsId;
+
+  /// The full text a hover reveals, for tiles whose lines truncate: a
+  /// card clamps its title to two lines and its caption to one, and the
+  /// tooltip is where the rest of a long name goes. Null shows none.
+  final String? tooltip;
 }
 
 /// What happens at the end of the queue, as the transport draws it.

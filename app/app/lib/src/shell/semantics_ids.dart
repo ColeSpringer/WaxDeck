@@ -230,6 +230,7 @@ abstract final class SemanticsIds {
   static const String queueClear = 'queue-clear';
   static String queueEntry(Object queueId) => 'queue-entry-$queueId';
   static String queueEntryDrag(Object id) => 'queue-entry-drag-$id';
+  static String queueEntryMore(Object queueId) => 'queue-entry-more-$queueId';
   static String queueEntryRemove(Object queueId) =>
       'queue-entry-remove-$queueId';
   static const String queueHistory = 'queue-history';
@@ -297,6 +298,8 @@ abstract final class SemanticsIds {
 
   // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   static const String homeAdd = 'home-add';
+  static const String homeEpisodeInfo = 'home-episode-info';
+  static const String homeEpisodePlay = 'home-episode-play';
   static String homeMix(Object index) => 'home-mix-$index';
   static const String homeReviewPending = 'home-review-pending';
   static const String homeReviewPendingOpen = 'home-review-pending-open';
@@ -318,6 +321,11 @@ abstract final class SemanticsIds {
   static const String itemDelete = 'item-delete';
   static const String itemDeleteConfirm = 'item-delete-confirm';
   static String itemDeleteMode(Object mode) => 'item-delete-mode-$mode';
+  static const String itemMenuGoAlbum = 'item-menu-go-album';
+  static const String itemMenuGoArtist = 'item-menu-go-artist';
+  static const String itemMenuMix = 'item-menu-mix';
+  static const String itemMenuShare = 'item-menu-share-album';
+  static const String itemMenuShareItem = 'item-menu-share';
   static const String offlineBanner = 'offline-banner';
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
@@ -360,11 +368,14 @@ abstract final class SemanticsIds {
   static const String unofficialSwitch = 'unofficial-switch';
 
   // music: The music hub, its indexes, and the buckets they drill.
+  static String albumTrackMore(Object index) => 'album-track-more-$index';
   static String entityAlbum(Object pid) => 'entity-album-$pid';
   static const String entityAllTracks = 'entity-all-tracks';
+  static const String entityInstantMix = 'entity-instant-mix';
   static const String entityOverflow = 'entity-overflow';
   static const String entityPin = 'entity-pin';
   static const String entityPlay = 'entity-play';
+  static const String entityShare = 'entity-share';
   static const String entityShuffle = 'entity-shuffle';
   static String indexBucket(Object index) => 'index-bucket-$index';
   static String indexBucketMore(Object index) => 'index-bucket-more-$index';
@@ -487,6 +498,7 @@ abstract final class SemanticsIds {
   static const String playlistEditRule = 'playlist-edit-rule';
   static String playlistEntry(Object index) => 'playlist-entry-$index';
   static String playlistEntryDrag(Object index) => 'playlist-entry-drag-$index';
+  static String playlistEntryMore(Object index) => 'playlist-entry-more-$index';
   static String playlistEntryRemove(Object index) =>
       'playlist-entry-remove-$index';
   static const String playlistExportCopy = 'playlist-export-copy';

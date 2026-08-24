@@ -229,6 +229,7 @@ export const SemanticsIds = {
   queueClear: 'queue-clear',
   queueEntry: (queueId: string | number) => `queue-entry-${queueId}`,
   queueEntryDrag: (id: string | number) => `queue-entry-drag-${id}`,
+  queueEntryMore: (queueId: string | number) => `queue-entry-more-${queueId}`,
   queueEntryRemove: (queueId: string | number) => `queue-entry-remove-${queueId}`,
   queueHistory: 'queue-history',
   queueHistoryEntry: (id: string | number) => `queue-history-${id}`,
@@ -294,6 +295,8 @@ export const SemanticsIds = {
 
   // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   homeAdd: 'home-add',
+  homeEpisodeInfo: 'home-episode-info',
+  homeEpisodePlay: 'home-episode-play',
   homeMix: (index: string | number) => `home-mix-${index}`,
   homeReviewPending: 'home-review-pending',
   homeReviewPendingOpen: 'home-review-pending-open',
@@ -313,6 +316,11 @@ export const SemanticsIds = {
   itemDelete: 'item-delete',
   itemDeleteConfirm: 'item-delete-confirm',
   itemDeleteMode: (mode: string | number) => `item-delete-mode-${mode}`,
+  itemMenuGoAlbum: 'item-menu-go-album',
+  itemMenuGoArtist: 'item-menu-go-artist',
+  itemMenuMix: 'item-menu-mix',
+  itemMenuShare: 'item-menu-share-album',
+  itemMenuShareItem: 'item-menu-share',
   offlineBanner: 'offline-banner',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
@@ -355,11 +363,14 @@ export const SemanticsIds = {
   unofficialSwitch: 'unofficial-switch',
 
   // music: The music hub, its indexes, and the buckets they drill.
+  albumTrackMore: (index: string | number) => `album-track-more-${index}`,
   entityAlbum: (pid: string | number) => `entity-album-${pid}`,
   entityAllTracks: 'entity-all-tracks',
+  entityInstantMix: 'entity-instant-mix',
   entityOverflow: 'entity-overflow',
   entityPin: 'entity-pin',
   entityPlay: 'entity-play',
+  entityShare: 'entity-share',
   entityShuffle: 'entity-shuffle',
   indexBucket: (index: string | number) => `index-bucket-${index}`,
   indexBucketMore: (index: string | number) => `index-bucket-more-${index}`,
@@ -480,6 +491,7 @@ export const SemanticsIds = {
   playlistEditRule: 'playlist-edit-rule',
   playlistEntry: (index: string | number) => `playlist-entry-${index}`,
   playlistEntryDrag: (index: string | number) => `playlist-entry-drag-${index}`,
+  playlistEntryMore: (index: string | number) => `playlist-entry-more-${index}`,
   playlistEntryRemove: (index: string | number) => `playlist-entry-remove-${index}`,
   playlistExportCopy: 'playlist-export-copy',
   playlistExportM3u: 'playlist-export-m3u',
@@ -833,6 +845,7 @@ export const SemanticsIdPrefixes = {
   // deck: The deck bar, the side panel it opens, and the shell's lifecycle banners.
   queueEntry: 'queue-entry-',
   queueEntryDrag: 'queue-entry-drag-',
+  queueEntryMore: 'queue-entry-more-',
   queueEntryRemove: 'queue-entry-remove-',
   queueHistoryEntry: 'queue-history-',
   queueEntrySelect: 'queue-entry-select-',
@@ -882,6 +895,7 @@ export const SemanticsIdPrefixes = {
   tagRemove: 'tag-remove-',
 
   // music: The music hub, its indexes, and the buckets they drill.
+  albumTrackMore: 'album-track-more-',
   entityAlbum: 'entity-album-',
   indexBucket: 'index-bucket-',
   indexBucketMore: 'index-bucket-more-',
@@ -912,6 +926,7 @@ export const SemanticsIdPrefixes = {
   playlistCreateKind: 'playlist-create-kind-',
   playlistEntry: 'playlist-entry-',
   playlistEntryDrag: 'playlist-entry-drag-',
+  playlistEntryMore: 'playlist-entry-more-',
   playlistEntryRemove: 'playlist-entry-remove-',
   playlistExportNspLossRow: 'playlist-export-nsp-loss-',
   playlistImportSource: 'playlist-import-source-',

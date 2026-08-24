@@ -6,6 +6,7 @@ import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
+import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -119,6 +120,104 @@ void main() {
     // this track is on Recently added and on Never played at once.
     expect(_byId(SemanticsIds.shelfCard('recent', _sealed)), findsOneWidget);
     expect(_byId(SemanticsIds.shelfCard('sealed', _sealed)), findsOneWidget);
+  });
+
+  testWidgets('a shelf card names its album and offers the item menu', (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.browseLists[DiscoveryList.recentlyAdded] = <ItemSummary>[
+      const ItemSummary(
+        pid: 'tr-01JZX5N8QW3F4V9T2B7KDMENU1',
+        mediaType: MediaType.music,
+        title: 'Wide Angle',
+        artist: 'Field Notes',
+        album: 'Long Exposure',
+        artistPid: 'ar-01JZX5N8QW3F4V9T2B7KDFIELD',
+        albumPid: 'al-01JZX5N8QW3F4V9T2B7KDEXPO1',
+        durationMs: 245000,
+      ),
+    ];
+    await _pumpHome(tester, repo);
+
+    // The caption line carries the release beside the artist.
+    expect(find.text('Field Notes · Long Exposure'), findsOneWidget);
+
+    // The card's overflow gesture (a long press; the hover chip and a
+    // right click with a pointer) opens the item menu with the row's
+    // handles - and, home being where the pinned shelf lives, the pin
+    // rows.
+    await tester.longPress(
+      _byId(SemanticsIds.shelfCard('recent', 'tr-01JZX5N8QW3F4V9T2B7KDMENU1')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Go to album'), findsOneWidget);
+    expect(find.text('Go to artist'), findsOneWidget);
+    expect(find.text('Pin album to Home'), findsOneWidget);
+    expect(find.text('Pin artist to Home'), findsOneWidget);
+  });
+
+  testWidgets('an episode on a generic shelf says its show once and '
+      'shares itself', (tester) async {
+    // The server names an episode's artist and album both after the
+    // show, so an undeduplicated caption read "The Show · The Show".
+    // Its handles are all itself: no entity navigation into the Music
+    // hub, and the share is the episode's own.
+    final repo = _repo();
+    repo.browseLists[DiscoveryList.recentlyAdded] = <ItemSummary>[
+      const ItemSummary(
+        pid: 'tr-01JZX5N8QW3F4V9T2B7KDEPMENU',
+        mediaType: MediaType.podcast,
+        title: 'Pipeweed Economics',
+        artist: 'The Prancing Pony Hour',
+        album: 'The Prancing Pony Hour',
+        durationMs: 1800000,
+      ),
+    ];
+    await _pumpHome(tester, repo);
+
+    expect(find.text('The Prancing Pony Hour'), findsOneWidget);
+    expect(
+      find.text('The Prancing Pony Hour · The Prancing Pony Hour'),
+      findsNothing,
+    );
+
+    await tester.longPress(
+      _byId(SemanticsIds.shelfCard('recent', 'tr-01JZX5N8QW3F4V9T2B7KDEPMENU')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.itemMenuShareItem), findsOneWidget);
+    expect(find.text('Go to artist'), findsNothing);
+    expect(_byId(SemanticsIds.itemMenuMix), findsNothing);
+  });
+
+  testWidgets('a new-episode card opens the episode; its menu plays and '
+      'informs', (tester) async {
+    const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
+    const episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
+    final repo = _repo()
+      ..addSubscription(testShow(showPid))
+      ..episodesByShow[showPid] = <EpisodeSummary>[testEpisode(episodePid)];
+    await _pumpHome(tester, repo);
+
+    // The card's menu names the episode's verbs.
+    await tester.longPress(
+      _byId(SemanticsIds.shelfCard('episodes', episodePid)),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.homeEpisodePlay), findsOneWidget);
+    expect(_byId(SemanticsIds.homeEpisodeInfo), findsOneWidget);
+    Navigator.of(tester.element(_byId(SemanticsIds.homeEpisodeInfo))).pop();
+    await tester.pumpAndSettle();
+
+    // A tap opens the episode's own screen, like every other shelf,
+    // rather than starting playback.
+    await tester.tap(_byId(SemanticsIds.shelfCard('episodes', episodePid)));
+    await tester.pumpAndSettle();
+    expect(find.byType(EpisodeScreen), findsOneWidget);
   });
 
   testWidgets('a finished item is not offered as something to continue', (

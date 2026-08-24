@@ -1525,6 +1525,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{pid}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the caller's permissions on an item
+         * @description Whether the caller may run the item-scoped metadata mutations on this item: administrators always, everyone else exactly for the items their own uploads brought in. This is the whole `mayCurate` answer from the metadata read without the cost of the full editor document, for surfaces that only need to decide whether to show an edit door. The read does not confirm the item exists: an unknown pid answers `mayCurate: false` for a non-administrator, and `true` for an administrator, whose edits on it would answer `not-found` anyway.
+         */
+        get: operations["getItemPermissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metadata/fields": {
         parameters: {
             query?: never;
@@ -6526,6 +6546,11 @@ export interface components {
             writeBackIssues: components["schemas"]["WriteBackIssue"][];
             /** @description Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. */
             mayCurate?: boolean;
+        };
+        /** @description The caller's permissions on one item. */
+        ItemPermissions: {
+            /** @description Whether the caller may run the item-scoped metadata mutations: administrators always, everyone else exactly for the items their own uploads brought in. */
+            mayCurate: boolean;
         };
         /**
          * @description Who set one field's current value.
@@ -12530,6 +12555,30 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    getItemPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's permissions on the item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemPermissions"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
         };
     };
     getMetadataFields: {

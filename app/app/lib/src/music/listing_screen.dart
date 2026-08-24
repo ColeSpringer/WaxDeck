@@ -6,8 +6,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
-import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
@@ -356,25 +356,16 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
               semanticsId: SemanticsIds.item(item.pid),
             ),
             onTap: () => _play(state, index),
-            // A track cannot be pinned - a kept set of tracks is a
-            // playlist - so the row's overflow offers what
-            // it belongs to. Both handles are optional on the wire, and
-            // a row with neither offers nothing.
-            onMore: item.albumPid != null || item.artistPid != null
-                ? () => showPinSheet(context, ref, targets: _pinTargets(item))
-                : null,
+            // The item menu, keeping the pin rows this overflow used
+            // to be: a track cannot be pinned itself - a kept set of
+            // tracks is a playlist - so pinning here still means the
+            // album or the artist it belongs to.
+            onMore: () =>
+                showItemMenuForSummary(context, ref, item, withPin: true),
             moreSemanticsId: SemanticsIds.listingRowMore(item.pid),
           ),
         );
       },
     );
   }
-
-  /// The pinnable handles a track row carries: its album, its artist.
-  static List<PinTarget> _pinTargets(ItemSummary item) => <PinTarget>[
-    if (item.albumPid != null)
-      (pid: item.albumPid!, what: 'album', name: item.album ?? item.title),
-    if (item.artistPid != null)
-      (pid: item.artistPid!, what: 'artist', name: item.artist ?? ''),
-  ];
 }

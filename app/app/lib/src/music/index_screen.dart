@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../search/search_chrome.dart';
@@ -459,23 +460,29 @@ class _BucketRow extends ConsumerWidget {
           semanticsId: SemanticsIds.indexBucket(index),
         ),
         onTap: onTap,
-        // Pinning without opening first.
-        // Only where the bucket stands for an entity: a genre or a year
-        // is a filter, not a thing, and the unknown bucket has nothing
-        // behind it.
-        onMore: entityPid != null
-            ? () => showPinSheet(
-                context,
-                ref,
-                targets: <PinTarget>[
-                  (
-                    pid: entityPid,
-                    what: dimension.wireName == 'album' ? 'album' : 'artist',
-                    name: bucket.label,
-                  ),
-                ],
-              )
-            : null,
+        // Acting without opening first. Only where the bucket stands
+        // for an entity: a genre or a year is a filter, not a thing,
+        // and the unknown bucket has nothing behind it. An album's
+        // menu adds what its pid supports from anywhere - a mix and a
+        // share link - beside the pin; an artist's pid supports only
+        // the pin, so its menu is the pin sheet.
+        onMore: switch (entityPid) {
+          null => null,
+          final entityPid when dimension.wireName == 'album' =>
+            () => showAlbumMenuSheet(
+              context,
+              ref,
+              pid: entityPid,
+              title: bucket.label,
+            ),
+          final entityPid => () => showPinSheet(
+            context,
+            ref,
+            targets: <PinTarget>[
+              (pid: entityPid, what: 'artist', name: bucket.label),
+            ],
+          ),
+        },
         moreSemanticsId: SemanticsIds.indexBucketMore(index),
       ),
     );

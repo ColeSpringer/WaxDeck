@@ -164,10 +164,8 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.text('Inherited'), findsOneWidget);
-    expect(
-      find.text('Art from the file · Borrowed from a track'),
-      findsOneWidget,
-    );
+    // One borrowed-form sentence, not two glued with a separator.
+    expect(find.text("Art from a track's file"), findsOneWidget);
   });
 
   testWidgets('a pinned empty cover is not an empty one', (tester) async {

@@ -2,6 +2,8 @@
   "doc": "Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.",
   "ids": {
     "homeAdd": "home-add",
+    "homeEpisodeInfo": "home-episode-info",
+    "homeEpisodePlay": "home-episode-play",
     "homeMix": "home-mix-{index}",
     "homeReviewPending": "home-review-pending",
     "homeReviewPendingOpen": "home-review-pending-open",

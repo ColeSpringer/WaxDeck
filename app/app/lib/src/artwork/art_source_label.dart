@@ -57,19 +57,36 @@ String? artSourceLabel(AppLocalizations l10n, ArtSource? source) {
   }
 }
 
-/// The label plus the borrowed note, for a caption that is a bare
-/// string rather than a widget. A release showing one of its tracks'
-/// covers is saying two things at once: where that track's picture came
-/// from, and that the release did not choose it. Both, or the mark
-/// reads as a choice the release never made.
+/// The label in its borrowed form, for the cover an entity shows
+/// without holding: a release with no durable cover of its own answers
+/// with a member track's. One sentence naming both facts - where the
+/// picture came from and that a track supplied it - because the old
+/// two-sentence join ("Art from the file · Borrowed from a track") read
+/// as two captions glued together. Which track stays unsaid: the wire
+/// carries no reference to it, only the mark.
 String? artSourceLabelWithBorrow(AppLocalizations l10n, ArtSource? source) {
-  final label = artSourceLabel(l10n, source);
-  if (label == null) return null;
-  if (!source!.derived) return label;
-  // One key rather than two glued with a separator: both halves are
-  // sentences, and a locale that wants them the other way round can
-  // only say so if it owns the order.
-  return l10n.artSourceBorrowedFrom(label, l10n.artSourceBorrowed);
+  if (source == null) return null;
+  if (!source.derived) return artSourceLabel(l10n, source);
+  switch (source.source) {
+    case 'tag':
+      return l10n.artSourceBorrowedTag;
+    case 'sidecar':
+      return l10n.artSourceBorrowedSidecar;
+    case 'user':
+      return l10n.artSourceBorrowedUser;
+    case 'enrichment':
+      final provider = source.provider;
+      if (provider == null || provider.isEmpty) {
+        return l10n.artSourceBorrowedProviderUnnamed;
+      }
+      return l10n.artSourceBorrowedProvider(
+        _providerNames[provider] ?? provider,
+      );
+    default:
+      // A source with no borrowed form - or one this build does not
+      // know - keeps its own sentence rather than inventing one.
+      return artSourceLabel(l10n, source);
+  }
 }
 
 /// A producer's name as it reads inside a tally ("3 from tags"), which

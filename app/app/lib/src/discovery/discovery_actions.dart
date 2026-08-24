@@ -31,9 +31,16 @@ final mixAdventurousnessProvider =
       MixAdventurousnessController.new,
     );
 
-/// Opens the instant-mix sheet for a seed track. Confirming builds the
-/// mix and starts playing it.
-Future<void> showInstantMixSheet(BuildContext context, ItemSummary seed) =>
+/// What an instant mix grows from: a track's pid or an album entity's
+/// (`POST /mixes/instant` accepts either as its seed), and the name the
+/// sheet shows for it. A record rather than an `ItemSummary` because an
+/// album row has no summary in hand, and the sheet never needed more
+/// than these two.
+typedef MixSeed = ({String pid, String title});
+
+/// Opens the instant-mix sheet for a seed. Confirming builds the mix
+/// and starts playing it.
+Future<void> showInstantMixSheet(BuildContext context, MixSeed seed) =>
     showModalBottomSheet<void>(
       context: context,
       builder: (_) => InstantMixSheet(seed: seed),
@@ -44,7 +51,7 @@ Future<void> showInstantMixSheet(BuildContext context, ItemSummary seed) =>
 class InstantMixSheet extends ConsumerStatefulWidget {
   const InstantMixSheet({super.key, required this.seed});
 
-  final ItemSummary seed;
+  final MixSeed seed;
 
   @override
   ConsumerState<InstantMixSheet> createState() => _InstantMixSheetState();

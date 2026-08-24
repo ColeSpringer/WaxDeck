@@ -83,6 +83,12 @@ class PinnedShelf extends ConsumerWidget {
         MediaTileData(
           title: card.title,
           subtitle: _caption(l10n, card),
+          // The card clamps every line, so the full name lives on the
+          // hover tooltip, as on every other home shelf.
+          tooltip: <String?>[
+            card.title,
+            _caption(l10n, card),
+          ].nonNulls.join('\n'),
           // A release group statically holds no artwork of its own, so it
           // draws a monogram rather than asking for a cover that 404s.
           artwork: card.kind == EntityCardKind.releaseGroup

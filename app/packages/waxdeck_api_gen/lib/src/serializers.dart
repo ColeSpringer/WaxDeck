@@ -124,6 +124,7 @@ import 'package:waxdeck_api_gen/src/model/invite_list.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
+import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
 import 'package:waxdeck_api_gen/src/model/item_summary.dart';
 import 'package:waxdeck_api_gen/src/model/job.dart';
 import 'package:waxdeck_api_gen/src/model/job_list.dart';
@@ -474,6 +475,7 @@ part 'serializers.g.dart';
   Item,
   ItemMetadata,
   ItemPage,
+  ItemPermissions,
   ItemSummary,$ItemSummary,
   Job,
   JobList,

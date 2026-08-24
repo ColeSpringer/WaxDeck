@@ -3075,6 +3075,17 @@ class ArtRoles {
   final ArtSource? artSource;
 }
 
+/// The caller's permissions on one item: the metadata read's
+/// `mayCurate` answer without the cost of the full editor document.
+class ItemPermissions {
+  const ItemPermissions({required this.mayCurate});
+
+  /// Whether the caller may run the item-scoped metadata mutations:
+  /// administrators always, everyone else exactly for the items their
+  /// own uploads brought in.
+  final bool mayCurate;
+}
+
 /// Everything the metadata editor shows for one item.
 class ItemMetadata {
   const ItemMetadata({

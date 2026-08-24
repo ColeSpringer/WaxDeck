@@ -658,6 +658,11 @@ class FakeRepository implements WaxDeckRepository {
       title: item.title,
       artist: item.artist,
       album: item.album,
+      // The real read carries the entity handles; the item menus are
+      // built from them, so a fake that dropped them would certify
+      // menus the app never draws.
+      artistPid: item.artistPid,
+      albumPid: item.albumPid,
       durationMs: item.durationMs,
       artUrl: item.artUrl,
     );
@@ -3143,6 +3148,24 @@ class FakeRepository implements WaxDeckRepository {
     ({String? artistPid, String? albumPid, String? releaseGroupPid})
   >
   metadataEntityPids = {};
+
+  @override
+  Future<ItemPermissions> getItemPermissions(String pid) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    // The null knob means "a server that does not say" - on the wire
+    // that is a server too old for this route, which answers 404, not
+    // a permissions document with the field missing.
+    final may = mayCurateItems;
+    if (may == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such route',
+        statusCode: 404,
+      );
+    }
+    return ItemPermissions(mayCurate: may);
+  }
 
   @override
   Future<ItemMetadata> getItemMetadata(String pid) async {

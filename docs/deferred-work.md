@@ -50,22 +50,24 @@ here waits on upstream.
   per provider and there is no default that is right for all of them.
   The rule for new code is in CLAUDE.md.
 
-- `[in-repo]` **Most content rows still have no menu to answer a
-  secondary tap with.** The right-click policy landed - the browser's
-  own menu is back everywhere the app has nothing of its own to show,
-  and `WaxSecondaryTapRegion` suppresses it only while the pointer is
-  over a surface that answers - but the surfaces that answer are the
-  ones that already had a menu: the four that pass `onMore` to
-  `MediaCard`/`ListRow`, the pinned shelf, the station tiles, and the
-  saved-radio rows. Album and playlist track rows, book, podcast and
-  playlist tiles, home's item and mix shelves, and the queue rows have
-  no per-row menu at all, so there was nothing to wire the gesture to -
-  and inventing one per surface is a design question rather than a
-  wiring change. Episode rows are a separate case: they spend their
-  long press on starting a multi-select, so a menu there has to decide
-  what the two gestures each mean first. Recorded because a reader of
-  the right-click fix will reasonably expect right-click to work on a
-  track row, and today it hands back the browser's menu.
+- `[in-repo]` **Some content rows and tiles still have no menu to
+  answer a secondary tap with.** Most item rows got theirs: album and
+  playlist track rows, queue rows, search track and episode hits, the
+  music listing rows, and home's item shelves open the shared item menu
+  (`library/item_menu.dart`); home's episode cards open their own sheet
+  (play, info, edit); search's album hits and the album index buckets
+  open the release sheet, and artist and book hits and artist buckets
+  keep the pin sheet. The door is a kebab or hover chip, a right click,
+  or - where the surface has not spent it on multi-select - a long
+  press (`MediaListRow` gives a wired `onLongPress` precedence over
+  `onMore`, which is what lets the queue keep hold-to-select beside the
+  menu). Still menu-less: book, podcast, and playlist tiles, home's mix
+  shelf, the artist screen's top-track rows, the computed track lists
+  (an instant mix's, similar-tracks'), and a show's episode rows, which
+  spend their long press on multi-select and would need the kebab
+  route. A right click on any of those hands back the browser's menu;
+  what each menu should hold is a design question per surface rather
+  than a wiring change.
 
   A second gap in the same policy, narrower: `WaxSecondaryTapRegion` is
   pointer-driven, and Flutter's mouse tracker raises enter and exit for
@@ -763,28 +765,6 @@ here waits on upstream.
   `<input webkitdirectory>` - so this is the last of the exclusion.
   Multi-select plus auto grouping covers the album case on Android
   meanwhile.
-- `[in-repo]` **Reading one permission bit costs a whole editor
-  document.** `mayCurate` is only carried by `GET /items/{pid}/metadata`,
-  which assembles provenance, credits, tags, lyrics, write-back issues,
-  book detail and artwork resolution before it answers - and the player
-  asks it per played track to decide whether one overflow row appears
-  (`mayCurateItemProvider`). Administrators short-circuit it already,
-  since `uc.Admin` is half the server's own predicate and the half a
-  client knows, so the cost falls only on a non-admin with upload
-  rights - the population the field exists for - and only while the
-  full-screen player is open. Fix shape when taken: carry the flag on
-  something the queue already holds (`ItemSummary`) or add a small
-  item-permission read, either of which is a spec change; the client
-  provider then loses its fetch and keeps its shape.
-- `[in-repo]` **A track in a listing has no door to the metadata editor.**
-  The player's overflow and its palette command open the editor for
-  whatever is playing, gated on the item's own `mayCurate`; a track row
-  in an album, a playlist, or a search result has no overflow menu at
-  all, so fixing a wrong title still means playing the track first.
-  Rows cannot answer `mayCurate` without a metadata read each, so the
-  shape when taken is an admin-gated row (a listing already knows the
-  session's roles) with the editor's own refusal catching the
-  uploader-curator - not a fetch per row for a menu entry.
 - `[in-repo]` **A single-track unit is scored like a mostly-missing album.**
   The distance model charges every release track no staged file matched
   (the `missing` component, weight 0.9 per track), which is right for an
@@ -898,8 +878,10 @@ here waits on upstream.
   the magic cookie rather than trusting the sample description, but
   nothing re-reads an already-scanned file: the incremental scan
   fast-paths anything whose size and mtime are unchanged, and WaxDeck
-  never sets `waxbin.ScanRequest.Force` (the field exists; all three
-  construction sites leave it zero), so existing rows never heal. The
+  never sets `waxbin.ScanRequest.Force` (the field exists; all four
+  construction sites - the two in `library.go`, `tools.go`, and the
+  watcher's scoped scan at `watch.go:272` - leave it zero), so existing
+  rows never heal. The
   essence digests did not change, so no rescan is forced either. It
   shows on the upgrades surface (`bitDepth`, `api/spec/health.yaml`),
   where a 24-bit ALAC reading 16 misranks upgrade candidates. Fix
@@ -917,24 +899,6 @@ here waits on upstream.
   question of what the stats screen should show alongside the total is
   a design one.
 
-- `[in-repo]` **The album pid is a seed and a share target the clients
-  never send.** Both surfaces take one server-side and neither app offers
-  the action. `POST /mixes/instant` accepts an album `seedPid` and
-  `albumMix` anchors the centroid on the album's own tracks
-  (`service/discovery.go`); `POST /shares` accepts an `al-` pid and an
-  album share serves its tracks in disc-then-track order
-  (`service/shares.go`, `api/spec/shares.yaml`). On the client,
-  `showInstantMixSheet` is wired only from the player's overflow with the
-  playing track, home's mix cards seed from artists and genres
-  (`home/home_shelves.dart`), and `showShareLinkDialog` is called from the
-  book, playlist, episode, player and deck-bar menus but from no album
-  screen. Both are one overflow action each over dialogs that already
-  exist, which is why they were never a slice of their own. Recorded
-  because the docs now say "contract-only" in two places
-  (`docs/discovery-and-stats.md`, `docs/sharing.md`) and that sentence
-  should have somewhere to be deleted from. They came in through the
-  entity-pid query fields, which retired the display-string matching that
-  used to make an album pid unresolvable.
 - `[in-repo]` **The web build has no downloads of its own to announce.**
   The bell now reports what this device finished transferring
   (`NotificationKind.download`), which the web build can never produce:

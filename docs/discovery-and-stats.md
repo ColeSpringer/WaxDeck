@@ -25,8 +25,8 @@ adventurousness knob gets real teeth, and sonic paths exist.
 artist pid, an album pid, or a genre name. An album seed anchors on its
 own tracks, addressed by entity identity rather than a display-string
 match. In the apps it is the "Instant mix" action on the playing track,
-and the artist and genre cards on home; the album seed is contract-only
-so far, with no action offering it.
+the item menus on track rows, the artist and genre cards on home, and
+the album screen's overflow and album rows, which seed by the album pid.
 
 The `adventurousness` knob (0 to 1) controls how far the mix wanders.
 At 0 a sonic mix hugs the seed's closest neighbors; at 1 it samples

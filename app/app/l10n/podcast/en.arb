@@ -567,9 +567,9 @@
   "@podcastRetentionLabel": {
     "description": "Field bounding how many of a show's downloads the server holds."
   },
-  "podcastSearchDirectory": "Search directory",
+  "podcastSearchDirectory": "Search podcast directories",
   "@podcastSearchDirectory": {
-    "description": "Label of the podcast directory search box in the add dialog, and of the button that runs it."
+    "description": "Label of the podcast directory search box in the add dialog, and of the button that runs it. Names what is searched - the public podcast directories - because the bare \"Search directory\" read as looking through local folders."
   },
   "podcastSearchFailedHint": "{reason} Subscribe with a feed URL instead, under \"Add by URL\".",
   "@podcastSearchFailedHint": {

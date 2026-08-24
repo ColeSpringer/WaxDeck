@@ -1004,6 +1004,15 @@ func TestAcquireFromURL(t *testing.T) {
 		t.Fatal("mayCurate = true for the bystander the edit refused")
 	}
 
+	// The permissions read is the same answer without the cost of the
+	// full editor document, for surfaces that only decide on a door.
+	perm := func(token string) bool {
+		return decode[ItemPermissions](t, get(t, h.ts, "/api/v1/items/"+trackPid+"/permissions", token)).MayCurate
+	}
+	if !perm(h.token) || !perm(digger) || perm(bystander) {
+		t.Fatal("the permissions read disagrees with the metadata read's mayCurate")
+	}
+
 	// A single video URL takes the non-playlist fallback.
 	resp = post(digger, "/api/v1/acquisitions", map[string]any{
 		"url": "https://tube.example/watch?v=lone", "mediaType": "music",

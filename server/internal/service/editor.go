@@ -221,13 +221,16 @@ var editorBookRoles = []EditableFieldDTO{
 }
 
 // editorEntityFields is the entity edit vocabulary. Only an album's
-// release identifiers and sort, and an artist's sort, fan out to member
-// files; entity MBIDs and release-group fields stay database-only.
+// release identifiers, country, and sort, and an artist's sort, fan out
+// to member files; entity MBIDs, release-group fields, and an album's
+// media stay database-only (MEDIA is a per-medium tag, so an
+// album-level fan-out would stamp one value across mixed media).
 var editorEntityFields = []EntityTypeFieldsDTO{
 	{EntityType: "artist", Fields: []EditableFieldDTO{{"sort", true}, {"mbid", false}}},
 	{EntityType: "release-group", Fields: []EditableFieldDTO{{"sort", false}, {"mbid", false}, {"type", false}}},
 	{EntityType: "album", Fields: []EditableFieldDTO{
 		{"sort", true}, {"mbid", false}, {"barcode", true}, {"label", true}, {"catalog_number", true},
+		{"media", false}, {"country", true},
 	}},
 }
 

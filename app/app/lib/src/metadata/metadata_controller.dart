@@ -140,24 +140,28 @@ final metadataControllerProvider =
 /// administrators may, and so does whoever's upload brought the item in,
 /// which is a fact about the item that nothing on the client can derive.
 ///
-/// The item read, not [metadataControllerProvider], which fetches the
-/// field vocabulary beside it - a door only needs the permission.
-/// Auto-disposing and per-pid, so the player asks once about the thing
-/// it is playing; a listing that asked per row would be a fetch per row
-/// for a menu entry, which is why rows are gated on being an
-/// administrator and the editor refuses the rest on arrival.
-final mayCurateItemProvider = FutureProvider.autoDispose.family<bool, String>((
-  ref,
-  pid,
-) async {
-  // Half the server's own predicate is `uc.Admin`, and that half a
-  // client already knows: short-circuiting it spares a full editor
-  // document per played track for the accounts that open this editor
-  // most. Being wrong about it costs nothing - the editor refetches on
-  // arrival and refuses there, which is what it is for.
-  if (ref.watch(isAdminProvider)) return true;
-  final metadata = await ref.watch(repositoryProvider).getItemMetadata(pid);
-  // A server that did not answer withholds the door, which is the safe
-  // side here: it would refuse the edit anyway.
-  return metadata.mayCurate ?? false;
-});
+/// The permissions read, not [metadataControllerProvider], which
+/// fetches the full editor document beside it - a door only needs the
+/// permission. Auto-disposing and per-pid, so the player asks once
+/// about the thing it is playing. Listings still do not ask per row -
+/// their menus are gated on the roles the session already knows and the
+/// editor refuses the rest on arrival.
+final mayCurateItemProvider = FutureProvider.autoDispose.family<bool, String>(
+  (ref, pid) async {
+    // Half the server's own predicate is `uc.Admin`, and that half a
+    // client already knows: short-circuiting it spares the fetch
+    // entirely for the accounts that open this editor most. Being
+    // wrong about it costs nothing - the editor refetches on arrival
+    // and refuses there, which is what it is for.
+    if (ref.watch(isAdminProvider)) return true;
+    final permissions = await ref
+        .watch(repositoryProvider)
+        .getItemPermissions(pid);
+    return permissions.mayCurate;
+  },
+  // Failure is final here: whatever the reason - offline, a server
+  // too old for the route, a failed lookup - the callers read the
+  // error as "withhold the door", so ten retried fetches per played
+  // track would buy nothing the first answer did not.
+  retry: (_, _) => null,
+);

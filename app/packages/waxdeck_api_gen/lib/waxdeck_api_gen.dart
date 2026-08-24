@@ -146,6 +146,7 @@ export 'package:waxdeck_api_gen/src/model/invite_list.dart';
 export 'package:waxdeck_api_gen/src/model/item.dart';
 export 'package:waxdeck_api_gen/src/model/item_metadata.dart';
 export 'package:waxdeck_api_gen/src/model/item_page.dart';
+export 'package:waxdeck_api_gen/src/model/item_permissions.dart';
 export 'package:waxdeck_api_gen/src/model/item_summary.dart';
 export 'package:waxdeck_api_gen/src/model/job.dart';
 export 'package:waxdeck_api_gen/src/model/job_list.dart';

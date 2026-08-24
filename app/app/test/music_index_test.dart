@@ -1176,11 +1176,20 @@ void main() {
       prefs: const Prefs(),
     );
 
-    // A row that carries no handles offers nothing.
-    expect(
+    // A row with no handles still has a menu - a mix needs no handle -
+    // but its sheet draws no pin or navigation rows.
+    await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.listingRowMore('tr-2')),
-      findsNothing,
     );
+    await tester.pumpAndSettle();
+    expect(find.text('Pin album to Home'), findsNothing);
+    expect(find.text('Go to album'), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuMix),
+      findsOneWidget,
+    );
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.listingRowMore('tr-1')),
@@ -1188,6 +1197,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Pin album to Home'), findsOneWidget);
     expect(find.text('Pin artist to Home'), findsOneWidget);
+    expect(find.text('Go to album'), findsOneWidget);
+    expect(find.text('Go to artist'), findsOneWidget);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.pinSheetTarget('ar-01JZXFIELD')),

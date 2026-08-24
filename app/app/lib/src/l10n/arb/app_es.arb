@@ -435,19 +435,11 @@
   "artSlotDiscInline": "el disco",
   "artSlotFront": "Portada",
   "artSlotFrontInline": "la portada",
-  "artSourceBorrowed": "Tomada de una pista",
-  "artSourceBorrowedFrom": "{source} · {borrow}",
-  "@artSourceBorrowedFrom": {
-    "description": "The mark under a release's cover: where the picture came from, plus a note that the release borrowed it from a track. Both halves are sentences, so a locale that orders them the other way round reorders the placeholders.",
-    "placeholders": {
-      "source": {
-        "type": "String"
-      },
-      "borrow": {
-        "type": "String"
-      }
-    }
-  },
+  "artSourceBorrowedProvider": "De {provider}, para una pista",
+  "artSourceBorrowedProviderUnnamed": "De un proveedor de metadatos, para una pista",
+  "artSourceBorrowedSidecar": "Portada de una imagen junto a una pista",
+  "artSourceBorrowedTag": "Portada del archivo de una pista",
+  "artSourceBorrowedUser": "Definida a mano en una pista",
   "artSourceFeed": "Del feed",
   "artSourceFromFile": "Del archivo",
   "artSourceGenerated": "Creada por el servidor",
@@ -839,6 +831,7 @@
   "homeDownloadedTitle": "En este dispositivo",
   "homeEmptyMessage": "Apunta una biblioteca a tu música, sigue un programa o suelta archivos aquí. Todo lo que añadas aparece en estos estantes.",
   "homeEmptyTitle": "Todavía no hay nada aquí",
+  "homeEpisodeInfo": "Información del episodio",
   "homeEpisodesTitle": "Episodios nuevos",
   "homeLibraryLoadError": "No se ha podido acceder a la biblioteca",
   "homeMixEmpty": "No hay ninguna mezcla disponible para {title}",
@@ -885,6 +878,9 @@
   "libraryDeleteTrashDone": "{count, plural, =1{Se ha movido 1 archivo a la papelera} other{Se han movido {count} archivos a la papelera}}",
   "libraryKindAlbum": "álbum",
   "libraryKindArtist": "artista",
+  "libraryMenuGoToAlbum": "Ir al álbum",
+  "libraryMenuGoToArtist": "Ir al artista",
+  "libraryMenuShareAlbum": "Compartir el álbum",
   "localeFontSample": "Música, pódcast y audiolibros.",
   "metadataAddTag": "Añadir la etiqueta",
   "metadataArtworkSource": "Ilustración · {source}",
@@ -1544,7 +1540,7 @@
   "podcastResume": "Reanudar en {stamp}",
   "podcastRetentionHelp": "Si se deja vacío se usa el valor predeterminado del servidor; 0 los conserva todos",
   "podcastRetentionLabel": "Episodios que conservar",
-  "podcastSearchDirectory": "Buscar en el directorio",
+  "podcastSearchDirectory": "Buscar en los directorios de podcasts",
   "podcastSearchFailedHint": "{reason} Suscríbete con la URL de un feed desde \"Añadir por URL\".",
   "podcastSearchShow": "Buscar en este programa",
   "podcastSeasonChip": "Temporada {season}",

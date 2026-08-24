@@ -435,6 +435,7 @@ Class | Method | HTTP request | Description
 [*MetadataApi*](doc/MetadataApi.md) | [**getEntityArtworkLock**](doc/MetadataApi.md#getentityartworklock) | **GET** /entities/{entityType}/{entityPid}/artwork/lock | Read an entity&#39;s artwork lock
 [*MetadataApi*](doc/MetadataApi.md) | [**getEntityCuration**](doc/MetadataApi.md#getentitycuration) | **GET** /entities/{entityType}/{entityPid}/curation | Read entity edit provenance
 [*MetadataApi*](doc/MetadataApi.md) | [**getItemMetadata**](doc/MetadataApi.md#getitemmetadata) | **GET** /items/{pid}/metadata | Read an item&#39;s full metadata
+[*MetadataApi*](doc/MetadataApi.md) | [**getItemPermissions**](doc/MetadataApi.md#getitempermissions) | **GET** /items/{pid}/permissions | Read the caller&#39;s permissions on an item
 [*MetadataApi*](doc/MetadataApi.md) | [**getMetadataFields**](doc/MetadataApi.md#getmetadatafields) | **GET** /metadata/fields | Discover the editable field vocabulary
 [*MetadataApi*](doc/MetadataApi.md) | [**rematchItem**](doc/MetadataApi.md#rematchitem) | **POST** /items/{pid}/rematch | Requeue an item for matching
 [*MetadataApi*](doc/MetadataApi.md) | [**setBookChapters**](doc/MetadataApi.md#setbookchapters) | **PUT** /books/{pid}/chapters | Replace a book&#39;s chapters
@@ -718,6 +719,7 @@ Class | Method | HTTP request | Description
  - [Item](doc/Item.md)
  - [ItemMetadata](doc/ItemMetadata.md)
  - [ItemPage](doc/ItemPage.md)
+ - [ItemPermissions](doc/ItemPermissions.md)
  - [ItemSummary](doc/ItemSummary.md)
  - [Job](doc/Job.md)
  - [JobList](doc/JobList.md)

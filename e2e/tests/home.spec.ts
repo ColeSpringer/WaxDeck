@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { SemanticsIds } from './semantics-ids';
 
 // The landing surface over the real stack: shelves drawn from the
 // discovery lists, the account menu in the top app bar rather than in the
@@ -107,4 +108,58 @@ test('an album pinned from its own screen turns up on home', async ({
   await app.music.togglePin(pid);
   await app.nav.enter('home');
   await expect(app.home.shelf('pinned')).toBeHidden();
+});
+
+test("a shelf card's menu reaches the album and the editor door", async ({
+  app,
+}) => {
+  // The continue shelf draws from this account's own play state, so its
+  // contents are owned pids alone - deterministic under parallel
+  // workers, where the library-wide shelves shuffle as other accounts
+  // upload. Recently-played is fed by real listens (a direct
+  // played-flag edit deliberately never stamps last_played_at), so a
+  // listen past the music threshold is reported and the track then
+  // left mid-way: heard before, in progress now, which is exactly what
+  // the shelf keeps.
+  const { pid } = await app.seed.item('Bravo Song');
+  await app.api.post('/listens', {
+    data: {
+      sessions: [
+        {
+          sessionId: `e2e-home-menu-${Date.now().toString(36)}`,
+          pid,
+          startedAt: new Date().toISOString(),
+          msPlayed: 2000,
+          finished: false,
+          source: 'live' as const,
+        },
+      ],
+    },
+  });
+  await app.seed.setPosition(pid, 1000);
+
+  await app.nav.enter('home');
+  await app.home.revealShelf('continue');
+  const card = app.home.card('continue', pid);
+  await expect(card).toBeVisible();
+
+  // A right click is the card's overflow gesture; the sheet's "Go to
+  // album" lands on the release the card belongs to. The album screen
+  // is pushed, and a push stays out of the reported URL by design, so
+  // arrival is the screen's own header controls rather than the
+  // address bar.
+  await card.click({ button: 'right' });
+  await app.home.control(SemanticsIds.itemMenuGoAlbum).click();
+  await expect(app.home.control(SemanticsIds.entityPlay)).toBeVisible();
+
+  // Back on home, the same menu again. This account holds neither the
+  // admin role nor the upload right, so the editor door is not drawn at
+  // all - the menu offers navigation and nothing it knows the server
+  // would refuse. The door itself, and the editor behind it, belong to
+  // the accounts that can use them.
+  await app.nav.enter('home');
+  await app.home.revealShelf('continue');
+  await card.click({ button: 'right' });
+  await expect(app.home.control(SemanticsIds.itemMenuGoArtist)).toBeVisible();
+  await expect(app.metadata.editEntry(pid)).toBeHidden();
 });

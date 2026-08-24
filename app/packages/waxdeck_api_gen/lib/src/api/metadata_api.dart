@@ -21,6 +21,7 @@ import 'package:waxdeck_api_gen/src/model/entity_curation.dart';
 import 'package:waxdeck_api_gen/src/model/entity_edit.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
+import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
 import 'package:waxdeck_api_gen/src/model/locks_edit.dart';
 import 'package:waxdeck_api_gen/src/model/locks_result.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics_edit.dart';
@@ -973,6 +974,92 @@ class MetadataApi {
     }
 
     return Response<ItemMetadata>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Read the caller&#39;s permissions on an item
+  /// Whether the caller may run the item-scoped metadata mutations on this item: administrators always, everyone else exactly for the items their own uploads brought in. This is the whole &#x60;mayCurate&#x60; answer from the metadata read without the cost of the full editor document, for surfaces that only need to decide whether to show an edit door. The read does not confirm the item exists: an unknown pid answers &#x60;mayCurate: false&#x60; for a non-administrator, and &#x60;true&#x60; for an administrator, whose edits on it would answer &#x60;not-found&#x60; anyway. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ItemPermissions] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ItemPermissions>> getItemPermissions({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/permissions'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ItemPermissions? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ItemPermissions),
+      ) as ItemPermissions;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ItemPermissions>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

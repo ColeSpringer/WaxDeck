@@ -997,6 +997,10 @@ abstract interface class WaxDeckRepository {
   /// shows for one item.
   Future<ItemMetadata> getItemMetadata(String pid);
 
+  /// `GET /items/{pid}/permissions`: whether this account may edit
+  /// the item, without the cost of the full editor document.
+  Future<ItemPermissions> getItemPermissions(String pid);
+
   /// `PATCH /items/{pid}/metadata`: edits item fields. [lock] pins
   /// the edited fields against later automatic updates; [force]
   /// overwrites locked fields; [writeBack] also rewrites file tags.
@@ -3486,6 +3490,12 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<ItemMetadata> getItemMetadata(String pid) => _guard(() async {
     final response = await _gen.getMetadataApi().getItemMetadata(pid: pid);
     return itemMetadataFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ItemPermissions> getItemPermissions(String pid) => _guard(() async {
+    final response = await _gen.getMetadataApi().getItemPermissions(pid: pid);
+    return itemPermissionsFromGen(_require(response.data));
   });
 
   @override

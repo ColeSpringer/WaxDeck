@@ -29,7 +29,8 @@ class _MixLauncher extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
     body: Center(
       child: TextButton(
-        onPressed: () => showInstantMixSheet(context, seed),
+        onPressed: () =>
+            showInstantMixSheet(context, (pid: seed.pid, title: seed.title)),
         child: const Text('Mix from here'),
       ),
     ),

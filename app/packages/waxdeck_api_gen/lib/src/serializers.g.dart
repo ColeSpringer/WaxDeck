@@ -127,6 +127,7 @@ Serializers _$serializers =
           ..add(Item.serializer)
           ..add(ItemMetadata.serializer)
           ..add(ItemPage.serializer)
+          ..add(ItemPermissions.serializer)
           ..add(Job.serializer)
           ..add(JobList.serializer)
           ..add(KindFields.serializer)

@@ -83,6 +83,33 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/permissions:
+    get:
+      operationId: getItemPermissions
+      summary: Read the caller's permissions on an item
+      description: >
+        Whether the caller may run the item-scoped metadata mutations
+        on this item: administrators always, everyone else exactly for
+        the items their own uploads brought in. This is the whole
+        `mayCurate` answer from the metadata read without the cost of
+        the full editor document, for surfaces that only need to
+        decide whether to show an edit door. The read does not confirm
+        the item exists: an unknown pid answers `mayCurate: false` for
+        a non-administrator, and `true` for an administrator, whose
+        edits on it would answer `not-found` anyway.
+      tags: [metadata]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The caller's permissions on the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemPermissions"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
   /metadata/fields:
     get:
       operationId: getMetadataFields
@@ -1084,6 +1111,18 @@ components:
             absent reads as unknown, and a client that treats it as
             false only withholds a door the server would have refused
             anyway.
+
+    ItemPermissions:
+      type: object
+      description: The caller's permissions on one item.
+      required: [mayCurate]
+      properties:
+        mayCurate:
+          type: boolean
+          description: >
+            Whether the caller may run the item-scoped metadata
+            mutations: administrators always, everyone else exactly
+            for the items their own uploads brought in.
 
     FieldProvenance:
       type: object

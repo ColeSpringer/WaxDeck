@@ -1535,12 +1535,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get artSlotFrontInline => 'front cover';
 
   @override
-  String get artSourceBorrowed => 'Borrowed from a track';
+  String artSourceBorrowedProvider(String provider) {
+    return 'From $provider, for a track';
+  }
 
   @override
-  String artSourceBorrowedFrom(String source, String borrow) {
-    return '$source · $borrow';
-  }
+  String get artSourceBorrowedProviderUnnamed =>
+      'From a metadata provider, for a track';
+
+  @override
+  String get artSourceBorrowedSidecar => 'Art from an image beside a track';
+
+  @override
+  String get artSourceBorrowedTag => 'Art from a track\'s file';
+
+  @override
+  String get artSourceBorrowedUser => 'Set by hand on a track';
 
   @override
   String get artSourceFeed => 'From the feed';
@@ -3052,6 +3062,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeEmptyTitle => 'Nothing here yet';
 
   @override
+  String get homeEpisodeInfo => 'Episode info';
+
+  @override
   String get homeEpisodesTitle => 'New episodes';
 
   @override
@@ -3249,6 +3262,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get libraryKindArtist => 'artist';
+
+  @override
+  String get libraryMenuGoToAlbum => 'Go to album';
+
+  @override
+  String get libraryMenuGoToArtist => 'Go to artist';
+
+  @override
+  String get libraryMenuShareAlbum => 'Share album';
 
   @override
   String get localeFontSample => 'Music, podcasts, and audiobooks.';
@@ -5845,7 +5867,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastRetentionLabel => 'Episodes to keep';
 
   @override
-  String get podcastSearchDirectory => 'Search directory';
+  String get podcastSearchDirectory => 'Search podcast directories';
 
   @override
   String podcastSearchFailedHint(String reason) {

@@ -24,6 +24,7 @@ import { Books } from './surfaces/books';
 import { Cast } from './surfaces/cast';
 import { Discovery } from './surfaces/discovery';
 import { Home } from './surfaces/home';
+import { Metadata } from './surfaces/metadata';
 import { Music } from './surfaces/music';
 import { Player } from './surfaces/player';
 import { Playlists } from './surfaces/playlists';
@@ -50,6 +51,7 @@ export class App {
   readonly cast: Cast;
   readonly home: Home;
   readonly discovery: Discovery;
+  readonly metadata: Metadata;
   readonly music: Music;
   readonly search: Search;
   readonly player: Player;
@@ -75,6 +77,7 @@ export class App {
     this.cast = new Cast(ctx);
     this.home = new Home(ctx);
     this.discovery = new Discovery(ctx);
+    this.metadata = new Metadata(ctx);
     this.music = new Music(ctx);
     this.search = new Search(ctx);
     this.player = new Player(ctx);

@@ -1,11 +1,14 @@
 {
   "doc": "The music hub, its indexes, and the buckets they drill.",
   "ids": {
+    "albumTrackMore": "album-track-more-{index}",
     "entityAlbum": "entity-album-{pid}",
     "entityAllTracks": "entity-all-tracks",
+    "entityInstantMix": "entity-instant-mix",
     "entityOverflow": "entity-overflow",
     "entityPin": "entity-pin",
     "entityPlay": "entity-play",
+    "entityShare": "entity-share",
     "entityShuffle": "entity-shuffle",
     "indexBucket": "index-bucket-{index}",
     "indexBucketMore": "index-bucket-more-{index}",

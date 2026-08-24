@@ -603,10 +603,11 @@ void main() {
   });
 
   testWidgets('a pinnable hit offers the pin from its overflow, a track '
-      'offers none', (tester) async {
+      'its own menu', (tester) async {
     // Artists, albums, and books pin; a track cannot (a kept set of
     // tracks is a playlist), and its hit carries no handle to a
-    // container the way a listing row does.
+    // container the way a listing row does - so its menu holds what a
+    // bare pid supports: the mix, and the editor door.
     final repository = FakeRepository()
       ..searchResults['night'] = _results(
         artists: <SearchHit>[
@@ -616,10 +617,20 @@ void main() {
       );
     await _pump(tester, repository, initialQuery: 'night');
 
-    expect(
+    await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.searchHitMore('tracks', 0)),
-      findsNothing,
     );
+    await tester.pumpAndSettle();
+    expect(find.text('Pin artist to Home'), findsNothing);
+    expect(find.text('Go to album'), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuMix),
+      findsOneWidget,
+    );
+    Navigator.of(
+      tester.element(find.bySemanticsIdentifier(SemanticsIds.itemMenuMix)),
+    ).pop();
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.searchHitMore('artists', 0)),

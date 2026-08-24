@@ -8,8 +8,11 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
+import '../discovery/discovery_actions.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
+import '../sharing/share_dialog.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
@@ -325,6 +328,18 @@ class _Header extends ConsumerWidget {
               value: 'pin',
               semanticsId: SemanticsIds.entityPin,
             ),
+            WaxMenuItem<String>(
+              value: 'mix',
+              label: context.l10n.playerInstantMix,
+              glyph: WaxIcons.waveform,
+              semanticsId: SemanticsIds.entityInstantMix,
+            ),
+            WaxMenuItem<String>(
+              value: 'share',
+              label: context.l10n.libraryMenuShareAlbum,
+              glyph: WaxIcons.share,
+              semanticsId: SemanticsIds.entityShare,
+            ),
             // Administrators only, like every other editing door: the
             // entity edit endpoint answers 403 to anyone else, and a row
             // that opens a form nobody can save is worse than no row.
@@ -336,11 +351,22 @@ class _Header extends ConsumerWidget {
                 semanticsId: SemanticsIds.albumEditDetails,
               ),
           ],
-          onSelected: (choice) => switch (choice) {
-            'pin' => unawaited(
-              togglePin(context, ref, pid, label: facts.title),
-            ),
-            _ => unawaited(context.push(WaxRoute.metadata(pid))),
+          // Every value named, none inferred: the last arm used to be
+          // "anything else opens the editor", which would hand the
+          // admin-gated door to whatever value drifts in next.
+          onSelected: (choice) {
+            switch (choice) {
+              case 'pin':
+                unawaited(togglePin(context, ref, pid, label: facts.title));
+              case 'mix':
+                unawaited(
+                  showInstantMixSheet(context, (pid: pid, title: facts.title)),
+                );
+              case 'share':
+                unawaited(showShareLinkDialog(context, pid: pid));
+              case 'edit':
+                unawaited(context.push(WaxRoute.metadata(pid)));
+            }
           },
         ),
       ],
@@ -409,6 +435,24 @@ class _TrackList extends ConsumerWidget {
               ),
               leadingIndex: track.trackNumber ?? index + 1,
               onTap: () => _play(context, ref, index),
+              // "Go to album" would open the screen the row is on, so
+              // the menu keeps only what leads somewhere else. The
+              // album handle is the list's own, not the row's, for the
+              // reason the class doc gives: a row with no handle of its
+              // own would lose the release the screen stands on.
+              onMore: () => showItemMenuSheet(
+                context,
+                ref,
+                pid: track.pid,
+                title: track.title,
+                mediaType: track.mediaType,
+                artist: track.artist,
+                artistPid: track.artistPid,
+                album: albumTitle,
+                albumPid: albumPid,
+                withGoToAlbum: false,
+              ),
+              moreSemanticsId: SemanticsIds.albumTrackMore(index),
             ),
           ),
         );

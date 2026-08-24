@@ -83,5 +83,17 @@
   "libraryKindArtist": "artist",
   "@libraryKindArtist": {
     "description": "The word for an artist where it stands inside a sentence, such as the star row's accessible names. Lower case."
+  },
+  "libraryMenuGoToAlbum": "Go to album",
+  "@libraryMenuGoToAlbum": {
+    "description": "Item-menu row opening the album the item belongs to."
+  },
+  "libraryMenuGoToArtist": "Go to artist",
+  "@libraryMenuGoToArtist": {
+    "description": "Item-menu row opening the item's artist."
+  },
+  "libraryMenuShareAlbum": "Share album",
+  "@libraryMenuShareAlbum": {
+    "description": "Item-menu row minting a public share link for the item's album."
   }
 }

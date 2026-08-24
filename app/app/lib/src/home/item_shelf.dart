@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
@@ -99,7 +100,17 @@ class ItemShelf extends ConsumerWidget {
       for (final item in items)
         MediaTileData(
           title: item.title,
-          subtitle: item.artist,
+          // The album joins the artist on the caption line: a shelf of
+          // singles from one artist is otherwise a row of identical
+          // captions saying nothing about which release each came from.
+          // Deduplicated, because an episode's artist and album are
+          // both the show's title, and empty stays null rather than
+          // becoming an empty caption line with a comma in the spoken
+          // label.
+          subtitle: _caption(item),
+          // The card clamps every line, so the full name lives on the
+          // hover tooltip.
+          tooltip: <String?>[item.title, _caption(item)].nonNulls.join('\n'),
           artwork: waxArtwork(store, item.artUrl),
           domain: waxDomainOf(item.mediaType),
           shape: waxShapeOf(item.mediaType),
@@ -155,10 +166,30 @@ class ItemShelf extends ConsumerWidget {
               if (at < 0) return;
               playHomeItem(ref, items[at], progress[items[at].pid]);
             },
+            onMoreItem: (tile) {
+              final at = tiles.indexOf(tile);
+              if (at < 0) return;
+              // Home is where the pinned shelf lives, so its cards pin
+              // from here the way a listing row does.
+              unawaited(
+                showItemMenuForSummary(context, ref, items[at], withPin: true),
+              );
+            },
           ),
         ),
       ),
     );
+  }
+
+  /// The caption under a card: the artist, and the album where it says
+  /// something the artist line does not. Null rather than empty when
+  /// the item carries neither.
+  static String? _caption(ItemSummary item) {
+    final parts = <String>[
+      ?item.artist,
+      if (item.album case final album? when album != item.artist) album,
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 
   /// "12 min left", and the spelled form a screen reader hears. Two

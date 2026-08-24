@@ -172,6 +172,18 @@ func (s *Server) GetMetadataFields(ctx context.Context, _ GetMetadataFieldsReque
 	return GetMetadataFields200JSONResponse(out), nil
 }
 
+func (s *Server) GetItemPermissions(ctx context.Context, req GetItemPermissionsRequestObject) (GetItemPermissionsResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	may, err := s.svc.MayCurateItem(ctx, uc, string(req.Pid))
+	if err != nil {
+		return nil, err
+	}
+	return GetItemPermissions200JSONResponse(ItemPermissions{MayCurate: may}), nil
+}
+
 func (s *Server) GetItemMetadata(ctx context.Context, req GetItemMetadataRequestObject) (GetItemMetadataResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {

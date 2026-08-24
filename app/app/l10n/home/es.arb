@@ -7,6 +7,7 @@
   "homeDownloadedTitle": "En este dispositivo",
   "homeEmptyMessage": "Apunta una biblioteca a tu música, sigue un programa o suelta archivos aquí. Todo lo que añadas aparece en estos estantes.",
   "homeEmptyTitle": "Todavía no hay nada aquí",
+  "homeEpisodeInfo": "Información del episodio",
   "homeEpisodesTitle": "Episodios nuevos",
   "homeLibraryLoadError": "No se ha podido acceder a la biblioteca",
   "homeMixEmpty": "No hay ninguna mezcla disponible para {title}",

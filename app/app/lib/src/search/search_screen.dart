@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../podcasts/add_podcast.dart';
 import '../radio/add_station.dart';
 import '../radio/radio_screen.dart';
@@ -558,12 +559,42 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           itemCount: shown.length,
           itemBuilder: (context, index) {
             final hit = shown[index];
-            // A hit that names a pinnable thing can be pinned from
-            // here; a track or an episode cannot, and the hit carries
-            // no handle to its container.
-            final pinnable = switch (hit.kind) {
-              'artist' || 'album' || 'book' => true,
-              _ => false,
+            // What the row's overflow holds follows the kind. An album
+            // gets the release menu (pin, mix, share); an artist or a
+            // book pins, which is all their pid supports from here; a
+            // track and an episode get the item menu, which always has
+            // something for a bare pid - a hit carries no handle to
+            // its container, so there is nowhere else for its row to
+            // go.
+            final VoidCallback? onMore = switch (hit.kind) {
+              'album' => () => showAlbumMenuSheet(
+                context,
+                ref,
+                pid: hit.pid,
+                title: hit.title,
+              ),
+              'artist' || 'book' => () => showPinSheet(
+                context,
+                ref,
+                targets: <PinTarget>[
+                  (pid: hit.pid, what: hit.kind, name: hit.title),
+                ],
+              ),
+              'track' => () => showItemMenuSheet(
+                context,
+                ref,
+                pid: hit.pid,
+                title: hit.title,
+                mediaType: MediaType.music,
+              ),
+              'episode' => () => showItemMenuSheet(
+                context,
+                ref,
+                pid: hit.pid,
+                title: hit.title,
+                mediaType: MediaType.podcast,
+              ),
+              _ => null,
             };
             return MediaListRow(
               data: MediaTileData(
@@ -580,15 +611,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 semanticsId: SemanticsIds.searchHit(kind.name, index),
               ),
               onTap: () => _open(hit),
-              onMore: pinnable
-                  ? () => showPinSheet(
-                      context,
-                      ref,
-                      targets: <PinTarget>[
-                        (pid: hit.pid, what: hit.kind, name: hit.title),
-                      ],
-                    )
-                  : null,
+              onMore: onMore,
               moreSemanticsId: SemanticsIds.searchHitMore(kind.name, index),
             );
           },

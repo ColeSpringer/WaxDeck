@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../downloads/downloads_controller.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../media_view.dart';
 import '../notifications/notifications_bell.dart';
 import '../player/play_progress.dart';
@@ -356,6 +357,12 @@ class _NewEpisodesShelf extends ConsumerWidget {
         MediaTileData(
           title: row.episode.title,
           subtitle: row.showTitle,
+          // The card clamps every line, so the full name lives on the
+          // hover tooltip, as the item shelves' cards do.
+          tooltip: <String?>[
+            row.episode.title,
+            row.showTitle,
+          ].nonNulls.join('\n'),
           artwork: waxArtwork(store, row.episode.artUrl),
           domain: WaxDomain.podcasts,
           unplayed: true,
@@ -378,7 +385,25 @@ class _NewEpisodesShelf extends ConsumerWidget {
             actionLabel: context.l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll('episodes'),
             onAction: () => context.go(WaxRoute.podcasts),
+            // A tap opens the episode's own screen, the way every other
+            // shelf's tap opens what the card is about; the hover play
+            // affordance is what plays it. The shelf used to play on
+            // tap, which made it the one shelf whose cards could not be
+            // looked at first. The canonical location, with the show in
+            // the path: this shelf holds the show pid, so it does not
+            // take the show-less route the generic shelves fall back to
+            // - one card, one location, whichever way it is opened.
             onTapItem: (tile) {
+              final at = tiles.indexOf(tile);
+              if (at < 0) return;
+              final row = rows[at];
+              unawaited(
+                context.push(
+                  WaxRoute.showEpisode(row.episode.showPid, row.episode.pid),
+                ),
+              );
+            },
+            onPlayItem: (tile) {
               final at = tiles.indexOf(tile);
               if (at < 0) return;
               final row = rows[at];
@@ -389,8 +414,83 @@ class _NewEpisodesShelf extends ConsumerWidget {
                 ).play(context, row.episode),
               );
             },
+            onMoreItem: (tile) {
+              final at = tiles.indexOf(tile);
+              if (at < 0) return;
+              unawaited(_showEpisodeMenu(context, ref, rows[at]));
+            },
           ),
         ),
+      ),
+    );
+  }
+
+  /// The episode card's overflow: play it, open it, edit it. This
+  /// shelf's own sheet rather than the shared item menu, because an
+  /// episode card with a show pid in hand has verbs the generic menu
+  /// cannot offer.
+  Future<void> _showEpisodeMenu(
+    BuildContext context,
+    WidgetRef ref,
+    ShelfEpisode row,
+  ) async {
+    final episode = row.episode;
+    // Captured before the sheet, which outlives what opened it; the
+    // shelf's own ref stays for EpisodeActions, which needs a live one
+    // and whose host - the screen, not a row - is what the modal sheet
+    // holds on screen.
+    final router = GoRouter.of(context);
+    await showWaxOptionSheet(
+      context,
+      builder: (sheetContext) => Consumer(
+        builder: (_, sheetRef, _) {
+          final l10n = sheetContext.l10n;
+          void close() => Navigator.of(sheetContext).pop();
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              WaxOptionRow(
+                title: l10n.playerPlay,
+                glyph: WaxIcons.play,
+                semanticsId: SemanticsIds.homeEpisodePlay,
+                onTap: () {
+                  close();
+                  unawaited(
+                    EpisodeActions(
+                      ref: ref,
+                      showPid: episode.showPid,
+                    ).play(context, episode),
+                  );
+                },
+              ),
+              WaxOptionRow(
+                title: l10n.homeEpisodeInfo,
+                subtitle: row.showTitle,
+                glyph: WaxIcons.podcasts,
+                semanticsId: SemanticsIds.homeEpisodeInfo,
+                onTap: () {
+                  close();
+                  unawaited(
+                    router.push(
+                      WaxRoute.showEpisode(episode.showPid, episode.pid),
+                    ),
+                  );
+                },
+              ),
+              if (mayOfferItemEdit(sheetRef))
+                WaxOptionRow(
+                  title: l10n.reviewEditMetadata,
+                  glyph: WaxIcons.edit,
+                  semanticsId: SemanticsIds.editMetadata(episode.pid),
+                  onTap: () {
+                    close();
+                    unawaited(router.push(WaxRoute.metadata(episode.pid)));
+                  },
+                ),
+            ],
+          );
+        },
       ),
     );
   }
