@@ -150,15 +150,15 @@ class _MatchingChoice extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mode = ref.watch(libraryMatchingProvider(library.pid));
+    final matching = ref.watch(libraryMatchingProvider(library.pid));
     final l10n = context.l10n;
     return WaxChoice<String>(
       label: l10n.adminLibraryMatchingLabel(library.name),
-      value: mode.value ?? 'auto',
+      value: matching.value?.mode ?? 'auto',
       semanticsId: SemanticsIds.libraryMatching(library.pid),
       options: const <String>['auto', 'review', 'off'],
       labelFor: (mode) => _matchingLabel(l10n, mode),
-      onChanged: mode.value == null
+      onChanged: matching.value == null
           ? null
           : (value) => _set(context, ref, value),
     );
@@ -177,7 +177,9 @@ class _MatchingChoice extends ConsumerWidget {
   Future<void> _set(BuildContext context, WidgetRef ref, String mode) async {
     final l10n = context.l10n;
     try {
-      await ref.read(libraryMatchingProvider(library.pid).notifier).set(mode);
+      await ref
+          .read(libraryMatchingProvider(library.pid).notifier)
+          .setMode(mode);
     } on WaxDeckApiException catch (error) {
       ref.read(shellMessengerProvider.notifier).show(explainError(l10n, error));
     }

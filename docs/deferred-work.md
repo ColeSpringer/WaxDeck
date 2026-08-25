@@ -761,27 +761,18 @@ here waits on upstream.
   not invoke it. The Dart half is pinned by host tests over a mocked
   channel. Automating the picker taps in CI (uiautomator against the
   emulator the conformance job already boots) is the fix shape.
-- `[in-repo]` **A single-track unit is scored like a mostly-missing album.**
-  The distance model charges every release track no staged file matched
-  (the `missing` component, weight 0.9 per track), which is right for an
-  album rip with gaps and wrong for a unit that only ever asked for one
-  track: a single acquired video matched perfectly onto a twelve-track
-  release still lands in the thirties, because the eleven tracks nobody
-  asked for dominate the sum. Decided: the queue keeps showing the whole
-  release (seeing the rest of the album is a feature, not a leak), and the
-  percentage should reflect what was asked for - the unit's own tracks for
-  a one-file unit (a single video, a single uploaded file), the full
-  release exactly as today for album-shaped units (multi-file uploads and
-  playlist acquisitions both arrive as multi-track units through the same
-  clustering, so no per-source flag is needed; unit size is the intent
-  signal). Two consequences to take deliberately rather than discover.
-  Without the missing penalty every release carrying the recording - the
-  album, each compilation, a single - scores nearly alike, so the top slot
-  needs a preference (header agreement with the file's tags, an album over
-  a compilation) to stay meaningful. And auto-apply becomes reachable for
-  singles, which today the missing penalty forecloses by construction;
-  whether a lone track should ever auto-pick among near-tied releases is a
-  wrong-release-risk decision to make explicitly, not inherit.
+- `[in-repo]` **Singles auto-apply cannot reach untargeted uploads on a
+  multi-music-library server.** An upload or URL acquisition carries no
+  library pid until import routing places it, so the per-library
+  singles switch resolves through a fallback: the one library that
+  could hold the entry's media. With several music libraries the
+  destination is ambiguous and the gate stays off - honoring any one
+  library's opt-in would auto-apply under a grant nobody made for the
+  actual destination. The app also offers no destination picker on
+  upload, though the API accepts `libraryPid`. Fix shape: let the
+  uploader choose a target library (the create call already carries the
+  field), or thread WaxBin's routing decision back to the entry before
+  the identify gate reads it.
 - `[in-repo]` **OpenSubsonic `explicitStatus` is not emitted for music.**
   Podcast episodes carry it now, mapped from the feed's own advisory
   flag. Music does not, and it is not the one-line addition it looks

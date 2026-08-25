@@ -3664,13 +3664,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read a library's matching mode
-         * @description The library's automatic matching behavior.
+         * Read a library's matching behavior
+         * @description The library's automatic matching behavior: the mode and the singles auto-apply switch.
          */
         get: operations["getLibraryMatching"];
         /**
-         * Set a library's matching mode
-         * @description `auto` lets confident matches apply themselves and queues the rest for review (the default), `review` queues everything (no auto-apply), and `off` never matches the library's content (as-is libraries: already-curated collections the engine must not touch). Administrators only.
+         * Set a library's matching behavior
+         * @description `auto` lets confident matches apply themselves and queues the rest for review (the default), `review` queues everything (no auto-apply), and `off` never matches the library's content (as-is libraries: already-curated collections the engine must not touch). Under `auto`, one-file units still queue unless `singlesAutoApply` is on. The body replaces the whole object. Administrators only.
          */
         put: operations["setLibraryMatching"];
         post?: never;
@@ -8773,7 +8773,7 @@ export interface components {
         ReviewEntryDetail: components["schemas"]["ReviewEntry"] & {
             /** @description The unit's files in disc and track order. */
             tracks: components["schemas"]["ReviewTrack"][];
-            /** @description Scored candidates, best first. */
+            /** @description Scored candidates, ranked best first. For a one-file unit, near-tied candidates are ordered by preference (header agreement, then a plain release over a compilation), so the list is not strictly sorted by `similarityPct` inside a tie band. */
             candidates: components["schemas"]["ReviewCandidate"][];
             /**
              * @description The submission asked not to be identified, so the entry never entered the match queue. Absent means it did. What it tells a reader is why `candidates` is empty: nothing was searched, rather than searched and found nothing.
@@ -8860,13 +8860,15 @@ export interface components {
             /** @description Auto-applied entries later reverted; with `autoApplied` this is the observed auto-apply revert rate, the trust signal the queue surfaces. */
             revertedAutoApplied: number;
         };
-        /** @description A library's automatic matching behavior. */
+        /** @description A library's automatic matching behavior. The PUT replaces the whole object, so writes carry every field. */
         LibraryMatching: {
             /**
              * @description The matching mode.
              * @enum {string}
              */
             mode: "auto" | "review" | "off";
+            /** @description Whether a confident match for a one-file unit may apply itself under mode `auto`. Off by default: a lone track picking among near-tied releases is a wrong-release risk, so singles always queue for review. When on, singles auto-apply only at a stricter confidence than albums. */
+            singlesAutoApply: boolean;
         };
         /** @description One outbound scrobbling connection slot. */
         Scrobbler: {
@@ -16295,7 +16297,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The mode. */
+            /** @description The stored behavior. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -16326,7 +16328,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The stored mode. */
+            /** @description The stored behavior. */
             200: {
                 headers: {
                     [name: string]: unknown;

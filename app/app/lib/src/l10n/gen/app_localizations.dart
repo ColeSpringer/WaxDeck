@@ -10843,6 +10843,12 @@ abstract class AppLocalizations {
   /// **'Missing locally'**
   String get reviewDiffMissing;
 
+  /// A candidate track a one-file unit never asked for: shown for orientation, costs the score nothing, so it must not read as a defect.
+  ///
+  /// In en, this message translates to:
+  /// **'On the release'**
+  String get reviewDiffOnRelease;
+
   /// Column heading over what the chosen candidate would make them say.
   ///
   /// In en, this message translates to:
@@ -10993,11 +10999,23 @@ abstract class AppLocalizations {
   /// **'Review everything'**
   String get reviewMatchingReview;
 
-  /// One row of the matching-mode menu: which library, then which mode.
+  /// One row of the matching menu: which library, then what that row sets for it - a mode, or the singles auto-apply toggle.
   ///
   /// In en, this message translates to:
   /// **'{library}: {mode}'**
   String reviewMatchingRow(String library, String mode);
+
+  /// Per-library toggle row in the matching menu: lets a confident match for a lone file apply itself. Off queues every single for review. A single here is one uploaded or acquired file, not the release format.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-apply confident singles'**
+  String get reviewMatchingSingles;
+
+  /// Second line under the singles toggle: the switch is inert under the review and off modes.
+  ///
+  /// In en, this message translates to:
+  /// **'Only applies while matching is automatic'**
+  String get reviewMatchingSinglesHelp;
 
   /// Empty state where the sources matched nothing.
   ///

@@ -299,7 +299,9 @@ matching mode on the Libraries screen - the intake flag for manual
 files: **automatic** opens album-unit review entries and applies
 confident matches itself, **ask me** holds every unit for review, and
 **leave alone** skips identification entirely, which is the right
-setting for a collection curated by beets or Picard.
+setting for a collection curated by beets or Picard. Under automatic,
+a one-file unit still queues unless the library's singles auto-apply
+switch - in the review queue's matching menu - is on.
 
 ## Transcoding limits
 

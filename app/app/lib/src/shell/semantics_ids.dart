@@ -694,6 +694,8 @@ abstract final class SemanticsIds {
   static const String matchingMenu = 'matching-menu';
   static String matchingOption(Object libraryPid, Object mode) =>
       'matching-$libraryPid-$mode';
+  static String matchingSingles(Object libraryPid) =>
+      'matching-singles-$libraryPid';
   static const String reviewApprove = 'review-approve';
   static const String reviewAsIs = 'review-as-is';
   static const String reviewBulkApprove = 'review-bulk-approve';

@@ -115,28 +115,55 @@ final libraryCountsProvider = FutureProvider<List<LibraryInfo>>(
   (ref) => ref.watch(repositoryProvider).listLibraries(counts: true),
 );
 
-/// One library's matching mode, keyed by pid.
-class LibraryMatchingController extends AsyncNotifier<String> {
+/// One library's matching behavior, keyed by pid.
+class LibraryMatchingController extends AsyncNotifier<LibraryMatching> {
   LibraryMatchingController(this.libraryPid);
 
   final String libraryPid;
 
+  /// The write in flight, so a second tap queues behind it instead of
+  /// both reading the same base and one replace erasing the other.
+  Future<void>? _pending;
+
   @override
-  Future<String> build() =>
+  Future<LibraryMatching> build() =>
       ref.watch(repositoryProvider).getLibraryMatching(libraryPid);
 
-  Future<void> set(String mode) async {
-    final stored = await ref
-        .read(repositoryProvider)
-        .setLibraryMatching(libraryPid, mode);
-    state = AsyncData(stored);
+  Future<void> setMode(String mode) => _update((m) => m.copyWith(mode: mode));
+
+  Future<void> setSinglesAutoApply(bool on) =>
+      _update((m) => m.copyWith(singlesAutoApply: on));
+
+  /// The PUT replaces the whole object, so every write re-reads the
+  /// stored document first: this cache is one admin's, and replacing
+  /// from it would silently undo what another admin stored since.
+  Future<void> _update(LibraryMatching Function(LibraryMatching) change) {
+    final ahead = _pending;
+    final run = () async {
+      if (ahead != null) {
+        try {
+          await ahead;
+        } on Object {
+          // A failure ahead in the queue is that caller's to report;
+          // this write still starts from what the server holds.
+        }
+      }
+      final repo = ref.read(repositoryProvider);
+      final current = await repo.getLibraryMatching(libraryPid);
+      final stored = await repo.setLibraryMatching(libraryPid, change(current));
+      state = AsyncData(stored);
+    }();
+    _pending = run;
+    return run;
   }
 }
 
 final libraryMatchingProvider =
-    AsyncNotifierProvider.family<LibraryMatchingController, String, String>(
-      LibraryMatchingController.new,
-    );
+    AsyncNotifierProvider.family<
+      LibraryMatchingController,
+      LibraryMatching,
+      String
+    >(LibraryMatchingController.new);
 
 /// The canonical genre vocabulary, with the edits the editor applies.
 class GenreTreeController extends AsyncNotifier<GenreTree> {

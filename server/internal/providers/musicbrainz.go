@@ -178,7 +178,11 @@ func (m *MusicBrainz) RecordingMBIDByISRC(ctx context.Context, isrc string) (str
 func (m *MusicBrainz) ReleasesByGroup(ctx context.Context, rgMBID string) ([]*match.Release, error) {
 	q := url.Values{}
 	q.Set("release-group", rgMBID)
-	q.Set("inc", "recordings artist-credits labels")
+	// release-groups included for the secondary types: without them an
+	// artist-credited compilation ("Greatest Hits") browses in as
+	// Compilation=false and the single-file ranking preference cannot
+	// see it for what it is.
+	q.Set("inc", "recordings artist-credits labels release-groups")
 	q.Set("fmt", "json")
 	q.Set("limit", "10")
 	u := m.base + "/release?" + q.Encode()

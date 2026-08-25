@@ -35,13 +35,13 @@ part 'review_entry_detail.g.dart';
 /// * [decidedAt] - When the entry was decided.
 /// * [decidedBy] - The deciding user's pid; absent on `auto-applied` entries. 
 /// * [tracks] - The unit's files in disc and track order.
-/// * [candidates] - Scored candidates, best first.
+/// * [candidates] - Scored candidates, ranked best first. For a one-file unit, near-tied candidates are ordered by preference (header agreement, then a plain release over a compilation), so the list is not strictly sorted by `similarityPct` inside a tie band. 
 /// * [identifyDeclined] - The submission asked not to be identified, so the entry never entered the match queue. Absent means it did. What it tells a reader is why `candidates` is empty: nothing was searched, rather than searched and found nothing.  Such an entry is normally already `as-is` - declining imports the files without stopping. Finding one still `pending` means the automatic import could not proceed and it is waiting for a person. 
 /// * [identifyOverride] - What the last re-identify searched for in place of the files' own tags. Absent when nothing was typed. The `tracks` below always report the tags the files carry, never this.  Not named `override`: the Dart generator emits a property name verbatim, and `override` there collides with the language's own annotation. 
 /// * [suggested] - What the matching parse read out of the source's own title, offered as a starting point for a search rather than as a claim about the files. Present only on acquisitions of a single loose file, where the title is a video title and the artist tag is a channel; an album-shaped unit carries real tags and needs no guess. Never an album, since a loose track has none. A stored `identifyOverride` supersedes it. 
 @BuiltValue()
 abstract class ReviewEntryDetail implements ReviewEntry, Built<ReviewEntryDetail, ReviewEntryDetailBuilder> {
-  /// Scored candidates, best first.
+  /// Scored candidates, ranked best first. For a one-file unit, near-tied candidates are ordered by preference (header agreement, then a plain release over a compilation), so the list is not strictly sorted by `similarityPct` inside a tie band. 
   @BuiltValueField(wireName: r'candidates')
   BuiltList<ReviewCandidate> get candidates;
 

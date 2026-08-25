@@ -791,6 +791,119 @@ func TestReviewDecisionsAndVisibility(t *testing.T) {
 	}
 }
 
+// TestSingleFileAutoApplyGate: a confident one-file unit queues by
+// default even under mode auto, applies itself once the library opts
+// in to singles auto-apply, and its percentage reflects the one track
+// it asked for rather than the album's gaps.
+func TestSingleFileAutoApplyGate(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: []*match.Release{nightfallRelease()}}
+		// Managed placement: the upload leg imports a staged file, which
+		// needs somewhere to put it.
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+	if _, err := fixtures.Generate(h.library, fixtures.Spec{
+		Name: "lone-harbor", Codec: fixtures.CodecFLAC, Duration: 3 * time.Second,
+		Tags: map[string]string{
+			"TITLE": "Harbor Lights", "ARTIST": "The Cardinal Waves",
+			"ALBUM": "Nightfall Circuit", "ALBUMARTIST": "The Cardinal Waves",
+			"TRACKNUMBER": "1", "DATE": "2014",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	var seedPid string
+	for _, it := range h.items(t, "?limit=100").Items {
+		if it.Title == "Harbor Lights" {
+			seedPid = it.Pid
+		}
+	}
+	if seedPid == "" {
+		t.Fatal("single fixture not scanned")
+	}
+
+	rematch := func() string {
+		t.Helper()
+		resp := h.postJSON(t, "/api/v1/items/"+seedPid+"/rematch", nil)
+		if resp.StatusCode != 202 {
+			t.Fatalf("rematch status = %d", resp.StatusCode)
+		}
+		id := decode[RematchResult](t, resp).ReviewEntryId
+		drainMatches(t, h)
+		return id
+	}
+
+	entry := getReview(t, h, rematch())
+	if entry.Status != "pending" {
+		t.Fatalf("confident single status = %q, want pending while singles auto-apply is off", entry.Status)
+	}
+	if entry.Best == nil || entry.Best.Mbid != "rel-nightfall" {
+		t.Fatalf("queued single lost its best candidate: %+v", entry.Best)
+	}
+	if entry.Best.SimilarityPct < 95 {
+		t.Fatalf("one-file percentage = %v, want the missing tracks uncharged", entry.Best.SimilarityPct)
+	}
+	if resp := h.postJSON(t, "/api/v1/review/queue/"+entry.Id+"/decide", map[string]any{"action": "skip"}); resp.StatusCode != 200 {
+		t.Fatalf("skip status = %d", resp.StatusCode)
+	}
+
+	// Opting in flips the gate for the next identification.
+	libs := decode[Libraries](t, get(t, h.ts, "/api/v1/libraries", h.token))
+	if len(libs.Libraries) == 0 {
+		t.Fatal("no libraries")
+	}
+	libPid := libs.Libraries[0].Pid
+	resp := h.putJSON(t, "/api/v1/libraries/"+libPid+"/matching",
+		map[string]any{"mode": "auto", "singlesAutoApply": true})
+	if resp.StatusCode != 200 {
+		t.Fatalf("enable singles status = %d", resp.StatusCode)
+	}
+	if stored := decode[LibraryMatching](t, resp); !stored.SinglesAutoApply {
+		t.Fatalf("stored matching = %+v, want singlesAutoApply on", stored)
+	}
+
+	if e := getReview(t, h, rematch()); e.Status != "auto-applied" {
+		t.Fatalf("opted-in single status = %q, want auto-applied (best %+v)", e.Status, e.Best)
+	}
+
+	// An upload names no target library until import routing places it;
+	// the switch still reaches it through the one library that could
+	// hold the music - the case the feature exists for.
+	paths, err := fixtures.Generate(t.TempDir(), fixtures.Spec{
+		Name: "lone-copper", Codec: fixtures.CodecFLAC, Duration: 4 * time.Second,
+		Tags: map[string]string{
+			"TITLE": "Copper Sky", "ARTIST": "The Cardinal Waves",
+			"ALBUM": "Nightfall Circuit", "ALBUMARTIST": "The Cardinal Waves",
+			"TRACKNUMBER": "2", "DATE": "2014",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := uploadFile(t, h, h.token, paths[0], "music", "")
+	if up.ReviewEntryId == nil {
+		t.Fatalf("upload minted no review entry: %+v", up)
+	}
+	drainMatches(t, h)
+	if e := getReview(t, h, *up.ReviewEntryId); e.Status != "auto-applied" {
+		t.Fatalf("untargeted upload status = %q, want auto-applied via the sole music library (best %+v)", e.Status, e.Best)
+	}
+
+	// The PUT replaces the whole object; a body without the flag (the
+	// contract requires it, but nothing old sends it) lands as false.
+	resp = h.putJSON(t, "/api/v1/libraries/"+libPid+"/matching", map[string]any{"mode": "auto"})
+	if resp.StatusCode != 200 {
+		t.Fatalf("reset matching status = %d", resp.StatusCode)
+	}
+	if got := decode[LibraryMatching](t, get(t, h.ts, "/api/v1/libraries/"+libPid+"/matching", h.token)); got.SinglesAutoApply {
+		t.Fatalf("matching after bare-mode PUT = %+v, want singlesAutoApply off", got)
+	}
+}
+
 // fakeAcquireSource is a canned acquisition provider: one playlist URL
 // enumerating fixture-backed entries, and direct fetch for any URL it
 // carries bytes for.

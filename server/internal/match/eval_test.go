@@ -210,6 +210,15 @@ func buildWorld() *corpusWorld {
 		"Signal Fires (Rework)", "Meridian (Club Edit)", "Undertow (Dub)", "Afterglow (Slowed)"))
 	w.add(mkRelease("rel-noise-2", "rg-noise-2", "Cardinal Sin", "Neon Nights", 1999,
 		"Neon Nights", "Velvet Rope", "City Limits", "Wasted Dawn"))
+	// A compilation carrying a standard-release recording: the shared
+	// print is what makes a lone acquired track's candidates near-tie
+	// across the album and the compilation.
+	anthems := mkRelease("rel-anthems", "rg-anthems", "Various Artists", "Big Hits of 2011", 2011,
+		"Signal Fires", "Motor Chrome", "Gold Winter")
+	anthems.Compilation = true
+	anthems.Tracks[0].RecordingMBID = "rel-neon-rec-1"
+	anthems.Tracks[0].Artist = "The Cardinal Waves"
+	w.add(anthems)
 	return w
 }
 
@@ -298,6 +307,18 @@ func dropTracks(idx ...int) mutator {
 			if !drop[i] {
 				out = append(out, t)
 			}
+		}
+		return out
+	}
+}
+
+// keepTracks keeps only the named indexes, so a case about unit shape
+// stays that shape when a release in the world gains a track.
+func keepTracks(idx ...int) mutator {
+	return func(ts []Track) []Track {
+		var out []Track
+		for _, i := range idx {
+			out = append(out, ts[i])
 		}
 		return out
 	}
@@ -453,6 +474,30 @@ func corpusCases(w *corpusWorld) []evalCase {
 			name:       "non latin exact tags",
 			files:      apply(ripRelease(tokyo, "/rip/tokyo"), dropFingerprints),
 			shouldAuto: true, wantTop: "rel-tokyo",
+		},
+		{
+			// One tagged file: no missing penalty for the eight tracks
+			// it never asked for, so the right release is reachable.
+			name:       "single file with clean tags",
+			files:      apply(ripRelease(hollow, "/rip/hollow"), dropFingerprints, keepTracks(1)),
+			shouldAuto: true, wantTop: "rel-hollow", wantUnits: 1,
+		},
+		{
+			// One untagged file whose print sits on the album, its
+			// deluxe, and a compilation: an exact three-way tie the
+			// preference must break toward the plain album.
+			name:       "single acquired file prefers the plain release",
+			files:      apply(ripRelease(neon, "/rip/loose"), untagged, keepTracks(0)),
+			shouldAuto: true, wantTop: "rel-neon", wantUnits: 1,
+		},
+		{
+			// The same lone file with one field arguing (a wrong year):
+			// close enough for an album, not for a single. Pins the
+			// stricter threshold inside the precision suite.
+			name: "single with a wrong year stays queued",
+			files: apply(ripRelease(hollow, "/rip/hollow"), dropFingerprints, keepTracks(1),
+				setTag("DATE", "2010")),
+			mustNotAuto: true, wantTop: "rel-hollow", wantUnits: 1,
 		},
 		{
 			name: "fingerprint consensus with junk tags",

@@ -12,6 +12,11 @@ type Config struct {
 	// candidate applies without review. Calibrated for precision first:
 	// a wrong auto apply is worse than any amount of queued review.
 	AutoApplyThreshold float64
+	// SinglesAutoApplyThreshold is the distance at or below which a
+	// one-track unit's best candidate may auto apply. Stricter than
+	// the album threshold because a lone track carries a fraction of
+	// an album's evidence; defaults to half AutoApplyThreshold.
+	SinglesAutoApplyThreshold float64
 	// MaxCandidates caps the ranked candidates a proposal keeps.
 	MaxCandidates int
 	// MaxFingerprintLookups caps AcoustID lookups per unit; consensus
@@ -26,6 +31,9 @@ type Config struct {
 func (c Config) withDefaults() Config {
 	if c.AutoApplyThreshold == 0 {
 		c.AutoApplyThreshold = 0.08
+	}
+	if c.SinglesAutoApplyThreshold == 0 {
+		c.SinglesAutoApplyThreshold = c.AutoApplyThreshold / 2
 	}
 	if c.MaxCandidates == 0 {
 		c.MaxCandidates = 5
@@ -151,19 +159,96 @@ func (e *Engine) Identify(ctx context.Context, unit Unit) (*Proposal, error) {
 		}
 		return a.Release.MBID < b.Release.MBID
 	})
+	minDist := 0.0
+	if len(proposal.Candidates) > 0 {
+		minDist = proposal.Candidates[0].Distance
+	}
+	if len(unit.Tracks) == 1 {
+		reorderNearTies(proposal.Candidates)
+	}
 	if len(proposal.Candidates) > e.cfg.MaxCandidates {
 		proposal.Candidates = proposal.Candidates[:e.cfg.MaxCandidates]
 	}
 
+	threshold := e.cfg.AutoApplyThreshold
+	if len(unit.Tracks) == 1 {
+		threshold = e.cfg.SinglesAutoApplyThreshold
+	}
 	switch {
 	case len(proposal.Candidates) == 0:
 		proposal.Decision = DecisionNoMatch
-	case proposal.Candidates[0].Distance <= e.cfg.AutoApplyThreshold:
+	case proposal.Candidates[0].Distance <= threshold && proposal.Candidates[0].Distance == minDist:
+		// The minDist term guards the reorder: a candidate promoted
+		// past a strictly closer one is a display preference, and
+		// applying it unseen would spend precision on a tiebreak. An
+		// exact tie still auto-applies - the promoted candidate is as
+		// close as any.
 		proposal.Decision = DecisionAutoApply
 	default:
 		proposal.Decision = DecisionReview
 	}
 	return proposal, nil
+}
+
+// Without the missing penalty a lone track scores nearly alike on
+// every release carrying its recording - the album, each compilation,
+// a single - so the top of a one-track ranking is decided by
+// preference, not noise. nearTieEpsilon bounds the distance band
+// treated as one tie (about a year component's worth of disagreement
+// at a single's total weight); headerAgreeMax is how far a header
+// component may sit from zero and still read as agreement.
+const (
+	nearTieEpsilon = 0.02
+	headerAgreeMax = 0.1
+)
+
+// reorderNearTies stable-sorts the candidates within epsilon of the
+// best by preference: header agreement with the file's tags first,
+// then a plain release over a compilation. Sorting the prefix keeps
+// the comparison transitive where epsilon-tolerant comparator keys
+// would not, and stability preserves the distance-then-MBID order
+// wherever the preferences do not separate two candidates.
+func reorderNearTies(cs []Match) {
+	n := 1
+	for n < len(cs) && cs[n].Distance <= cs[0].Distance+nearTieEpsilon {
+		n++
+	}
+	if n < 2 {
+		return
+	}
+	prefix := cs[:n]
+	sort.SliceStable(prefix, func(i, j int) bool {
+		if a, b := headerAgreement(prefix[i]), headerAgreement(prefix[j]); a != b {
+			return a > b
+		}
+		return !prefix[i].Release.Compilation && prefix[j].Release.Compilation
+	})
+}
+
+// headerAgreement counts the album header components (artist, album,
+// year) that were compared and agree. A skipped component counts for
+// nothing: absence of evidence is not agreement. A compilation's
+// artist zero never counts either - Score writes one for an
+// album-shaped unit with no album artist tag (differing per-track
+// artists are what a compilation looks like); one-track units no
+// longer earn it, but the exclusion stays so a fabricated agreement
+// can never beat the plain-release preference right below if this
+// reorder ever widens past singles.
+func headerAgreement(m Match) int {
+	agree := 0
+	for _, c := range m.Components {
+		switch c.Name {
+		case "artist":
+			if !m.Release.Compilation && c.Distance <= headerAgreeMax {
+				agree++
+			}
+		case "album", "year":
+			if c.Distance <= headerAgreeMax {
+				agree++
+			}
+		}
+	}
+	return agree
 }
 
 // fingerprintConsensus looks up member fingerprints until a release

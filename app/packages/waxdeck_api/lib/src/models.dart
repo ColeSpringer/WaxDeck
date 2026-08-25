@@ -2719,6 +2719,28 @@ class ReviewStats {
   final int revertedAutoApplied;
 }
 
+/// A library's automatic matching behavior. The PUT replaces the whole
+/// object, so writes always carry both fields.
+class LibraryMatching {
+  const LibraryMatching({required this.mode, this.singlesAutoApply = false});
+
+  /// `auto`, `review`, or `off`; open vocabulary (a mode a newer server
+  /// invents draws as itself, never sends back).
+  final String mode;
+
+  /// Whether a confident one-file unit may apply itself under `auto`.
+  final bool singlesAutoApply;
+
+  /// Field-wise replacement, the shape every setter goes through so a
+  /// third field cannot be forgotten by one of them: an omission on a
+  /// full-replace PUT silently resets that field on the server.
+  LibraryMatching copyWith({String? mode, bool? singlesAutoApply}) =>
+      LibraryMatching(
+        mode: mode ?? this.mode,
+        singlesAutoApply: singlesAutoApply ?? this.singlesAutoApply,
+      );
+}
+
 /// Outcome of deciding one review entry.
 class ReviewDecideResult {
   const ReviewDecideResult({required this.entry, this.warnings = const []});

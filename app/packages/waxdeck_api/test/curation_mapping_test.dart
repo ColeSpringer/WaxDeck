@@ -128,10 +128,15 @@ void main() {
 
     test('matching modes roundtrip, including off', () {
       for (final mode in ['auto', 'review', 'off']) {
-        expect(
-          libraryMatchingModeFromGen(libraryMatchingModeToGen(mode)),
-          mode,
-        );
+        for (final singles in [false, true]) {
+          final matching = LibraryMatching(
+            mode: mode,
+            singlesAutoApply: singles,
+          );
+          final round = libraryMatchingFromGen(libraryMatchingToGen(matching));
+          expect(round.mode, mode);
+          expect(round.singlesAutoApply, singles);
+        }
       }
     });
 

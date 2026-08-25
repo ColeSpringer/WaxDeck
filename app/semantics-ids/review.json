@@ -9,6 +9,7 @@
     "editMetadata": "edit-metadata-{pid}",
     "matchingMenu": "matching-menu",
     "matchingOption": "matching-{libraryPid}-{mode}",
+    "matchingSingles": "matching-singles-{libraryPid}",
     "reviewApprove": "review-approve",
     "reviewAsIs": "review-as-is",
     "reviewBulkApprove": "review-bulk-approve",

@@ -2483,8 +2483,9 @@ class FakeRepository implements WaxDeckRepository {
   decideReviewCalls = [];
   final List<String> revertedReviewEntryIds = [];
 
-  /// Matching modes by library pid; unset libraries answer `auto`.
-  final Map<String, String> matchingModes = {};
+  /// Matching behavior by library pid; unset libraries answer the
+  /// defaults (`auto`, singles off).
+  final Map<String, LibraryMatching> matchingModes = {};
 
   /// Catalog libraries the fake reports.
   final List<LibraryInfo> libraries = [];
@@ -2800,12 +2801,14 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<String> getLibraryMatching(String libraryPid) async =>
-      matchingModes[libraryPid] ?? 'auto';
+  Future<LibraryMatching> getLibraryMatching(String libraryPid) async =>
+      matchingModes[libraryPid] ?? const LibraryMatching(mode: 'auto');
 
   @override
-  Future<String> setLibraryMatching(String libraryPid, String mode) async =>
-      matchingModes[libraryPid] = mode;
+  Future<LibraryMatching> setLibraryMatching(
+    String libraryPid,
+    LibraryMatching matching,
+  ) async => matchingModes[libraryPid] = matching;
 
   /// Upload sessions by id.
   final Map<String, UploadSession> uploadsById = {};

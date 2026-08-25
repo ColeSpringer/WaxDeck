@@ -780,7 +780,14 @@ class _DiffTable extends StatelessWidget {
                     striped: i.isOdd,
                   ),
                 for (var i = 0; i < (candidate?.missingTitles.length ?? 0); i++)
-                  _MissingRow(index: i, title: candidate!.missingTitles[i]),
+                  _MissingRow(
+                    index: i,
+                    title: candidate!.missingTitles[i],
+                    // A one-file unit is not charged for these and the
+                    // rest of the release is context, not absence - so
+                    // the rows must not read as a wall of defects.
+                    contextOnly: detail.tracks.length == 1,
+                  ),
               ],
             ),
           ),
@@ -923,10 +930,19 @@ class _TrackDiffRow extends StatelessWidget {
 }
 
 class _MissingRow extends StatelessWidget {
-  const _MissingRow({required this.index, required this.title});
+  const _MissingRow({
+    required this.index,
+    required this.title,
+    this.contextOnly = false,
+  });
 
   final int index;
   final String title;
+
+  /// True for a one-file unit, where the rest of the release is shown
+  /// for orientation and costs the score nothing: a neutral caption
+  /// instead of an error-coloured "missing".
+  final bool contextOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -944,8 +960,12 @@ class _MissingRow extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: Text(
-                context.l10n.reviewDiffMissing,
-                style: WaxType.bodySmall.copyWith(color: colors.error),
+                contextOnly
+                    ? context.l10n.reviewDiffOnRelease
+                    : context.l10n.reviewDiffMissing,
+                style: WaxType.bodySmall.copyWith(
+                  color: contextOnly ? colors.textSecondary : colors.error,
+                ),
               ),
             ),
             const SizedBox(width: WaxSpace.s8),

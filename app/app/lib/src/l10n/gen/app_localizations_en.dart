@@ -6971,6 +6971,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewDiffMissing => 'Missing locally';
 
   @override
+  String get reviewDiffOnRelease => 'On the release';
+
+  @override
   String get reviewDiffProposed => 'Proposed';
 
   @override
@@ -7071,6 +7074,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String reviewMatchingRow(String library, String mode) {
     return '$library: $mode';
   }
+
+  @override
+  String get reviewMatchingSingles => 'Auto-apply confident singles';
+
+  @override
+  String get reviewMatchingSinglesHelp =>
+      'Only applies while matching is automatic';
 
   @override
   String get reviewNoCandidatesMessage =>

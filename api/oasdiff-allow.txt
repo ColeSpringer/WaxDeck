@@ -1,0 +1,14 @@
+# Deliberately accepted breaking changes, matched by `make oasdiff`.
+# Temporary by construction: this file rides the change that makes the
+# break and is deleted once the base ref contains it.
+#
+# `LibraryMatching` gains `singlesAutoApply` as a required field in the
+# same release that introduces it. The PUT is a full replace, so a body
+# without the flag has no honest reading - silently defaulting it would
+# let a client that never learned the field wipe another admin's opt-in
+# without ever expressing an opinion. Required also keeps the three
+# generated mirrors (Go, Dart, TypeScript) agreeing that the field is
+# always present, matching the sibling `LibraryReadOnly` schema.
+# WaxDeck's own app ships with the server pre-1.0, and no external
+# client has had a release to write to this admin-only endpoint.
+PUT /libraries/{pid}/matching added the new required request property 'singlesAutoApply'

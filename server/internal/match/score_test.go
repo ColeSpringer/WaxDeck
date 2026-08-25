@@ -90,6 +90,37 @@ func TestScoreMissingTrackPenalized(t *testing.T) {
 	}
 }
 
+func TestScoreSingleFileUnitSkipsMissing(t *testing.T) {
+	full := unitFor("Artist", "Album", "One", "Two", "Three")
+	single := Unit{Tracks: full.Tracks[:1]}
+	r := release("Artist", "Album", 0, "One", "Two", "Three")
+	m := Score(single, r, Weights{})
+	// The unmatched release tracks stay recorded so the queue can show
+	// the whole release; they just cost nothing.
+	if len(m.MissingIndexes) != 2 {
+		t.Fatalf("missing indexes = %v, want the two unmatched release tracks", m.MissingIndexes)
+	}
+	for _, c := range m.Components {
+		if c.Name == "missing" {
+			t.Fatalf("one-file unit charged the missing penalty: %+v", m.Components)
+		}
+	}
+	if m.Distance > 0.05 {
+		t.Fatalf("a clean single against its album should score close, got %v", m.Distance)
+	}
+	// Anything album-shaped, even two files, still pays for the gaps.
+	pair := Score(Unit{Tracks: full.Tracks[:2]}, r, Weights{})
+	found := false
+	for _, c := range pair.Components {
+		if c.Name == "missing" {
+			found = true
+		}
+	}
+	if !found || pair.Distance <= m.Distance {
+		t.Fatalf("album-shaped unit must keep the penalty: %+v at %v", pair.Components, pair.Distance)
+	}
+}
+
 func TestScoreExtraTrackPenalized(t *testing.T) {
 	u := unitFor("Artist", "Album", "One", "Two", "Three", "Bonus Demo")
 	r := release("Artist", "Album", 0, "One", "Two", "Three")

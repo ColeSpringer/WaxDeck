@@ -187,6 +187,9 @@ func TestMusicBrainzReleasesByGroup(t *testing.T) {
 		if got := r.URL.Query().Get("release-group"); got != "rg-1" {
 			t.Errorf("release-group = %q, want rg-1", got)
 		}
+		if inc := r.URL.Query().Get("inc"); !strings.Contains(inc, "release-groups") {
+			t.Errorf("inc = %q, want release-groups included (secondary types carry Compilation)", inc)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"releases": [` + mbHomeworkJSON + `]}`))
 	}))
@@ -204,6 +207,31 @@ func TestMusicBrainzReleasesByGroup(t *testing.T) {
 	}
 	if len(rels[0].Tracks) != 3 {
 		t.Fatalf("len(Tracks) = %d, want 3 (browse includes recordings)", len(rels[0].Tracks))
+	}
+}
+
+// TestMusicBrainzBrowseMarksTypedCompilation: an artist-credited
+// compilation carries no "Various Artists" credit, so only the release
+// group's secondary types can mark it.
+func TestMusicBrainzBrowseMarksTypedCompilation(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"releases": [{
+			"id": "rel-hits",
+			"title": "The Essential",
+			"artist-credit": [{"name": "Artist A"}],
+			"release-group": {"id": "rg-1", "secondary-types": ["Compilation"]},
+			"media": [{"tracks": [{"title": "One", "position": 1, "length": 180000, "recording": {"id": "rec-1"}}]}]
+		}]}`))
+	}))
+	defer srv.Close()
+
+	rels, err := testMB(srv, time.Nanosecond).ReleasesByGroup(context.Background(), "rg-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rels) != 1 || !rels[0].Compilation {
+		t.Fatalf("typed compilation must browse in marked, got %+v", rels)
 	}
 }
 

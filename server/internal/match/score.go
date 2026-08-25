@@ -83,8 +83,16 @@ func Score(unit Unit, release *Release, w Weights) Match {
 	if va {
 		// Differing per track artists are what a compilation looks
 		// like, so only an explicit album artist tag argues with one.
+		// One file cannot exhibit differing artists, so an untagged
+		// single earns no zero here: left in, the free component
+		// dilutes a compilation's distance below every plain release
+		// carrying the same recording (missing no longer masks it).
 		aa := majorityTag(unit, "ALBUMARTIST")
-		if aa == "" || normalize(aa) == "various artists" {
+		if aa == "" {
+			if n > 1 {
+				component("artist", 0, w.Artist)
+			}
+		} else if normalize(aa) == "various artists" {
 			component("artist", 0, w.Artist)
 		} else {
 			component("artist", titleDist(aa, release.Artist), w.Artist)
@@ -121,7 +129,11 @@ func Score(unit Unit, release *Release, w Weights) Match {
 			match.MissingIndexes = append(match.MissingIndexes, j)
 		}
 	}
-	if c := len(match.MissingIndexes); c > 0 {
+	// A one-file unit only ever asked for one track, so the rest of the
+	// release is context, not absence: the missing penalty is charged
+	// to album-shaped units alone. The indexes stay recorded either way
+	// so the queue can show the whole release.
+	if c := len(match.MissingIndexes); c > 0 && n > 1 {
 		component("missing", 1, float64(c)*w.Missing)
 	}
 	if c := len(match.ExtraIndexes); c > 0 {

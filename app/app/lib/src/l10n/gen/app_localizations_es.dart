@@ -7049,6 +7049,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reviewDiffMissing => 'Falta en local';
 
   @override
+  String get reviewDiffOnRelease => 'En el lanzamiento';
+
+  @override
   String get reviewDiffProposed => 'Propuesto';
 
   @override
@@ -7151,6 +7154,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String reviewMatchingRow(String library, String mode) {
     return '$library: $mode';
   }
+
+  @override
+  String get reviewMatchingSingles =>
+      'Aplicar automáticamente las coincidencias seguras de archivos sueltos';
+
+  @override
+  String get reviewMatchingSinglesHelp =>
+      'Solo se aplica mientras la coincidencia es automática';
 
   @override
   String get reviewNoCandidatesMessage =>

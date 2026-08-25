@@ -1347,12 +1347,18 @@ GenreTree genreTreeFromGen(gen.GenreTree t) => GenreTree(
 
 /// A mode this build predates arrives as the generator's sentinel name:
 /// fine to show, never to send back, since the server rejects its wire
-/// value. Writes pick from a fixed option list, so nothing does.
-String libraryMatchingModeFromGen(gen.LibraryMatching m) => m.mode.name;
+/// value (the enum cannot even recover the raw string). Mode writes
+/// pick from a fixed option list, and the singles toggle - a full
+/// replace that must echo the mode - is disabled in the UI for a mode
+/// outside that list.
+LibraryMatching libraryMatchingFromGen(gen.LibraryMatching m) =>
+    LibraryMatching(mode: m.mode.name, singlesAutoApply: m.singlesAutoApply);
 
-gen.LibraryMatching libraryMatchingModeToGen(String mode) {
+gen.LibraryMatching libraryMatchingToGen(LibraryMatching matching) {
   return gen.LibraryMatching(
-    (b) => b..mode = gen.LibraryMatchingModeEnum.valueOf(mode),
+    (b) => b
+      ..mode = gen.LibraryMatchingModeEnum.valueOf(matching.mode)
+      ..singlesAutoApply = matching.singlesAutoApply,
   );
 }
 

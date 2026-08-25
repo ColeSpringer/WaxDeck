@@ -9,16 +9,21 @@ import 'package:built_value/serializer.dart';
 
 part 'library_matching.g.dart';
 
-/// A library's automatic matching behavior.
+/// A library's automatic matching behavior. The PUT replaces the whole object, so writes carry every field. 
 ///
 /// Properties:
 /// * [mode] - The matching mode.
+/// * [singlesAutoApply] - Whether a confident match for a one-file unit may apply itself under mode `auto`. Off by default: a lone track picking among near-tied releases is a wrong-release risk, so singles always queue for review. When on, singles auto-apply only at a stricter confidence than albums. 
 @BuiltValue()
 abstract class LibraryMatching implements Built<LibraryMatching, LibraryMatchingBuilder> {
   /// The matching mode.
   @BuiltValueField(wireName: r'mode')
   LibraryMatchingModeEnum get mode;
   // enum modeEnum {  auto,  review,  off,  };
+
+  /// Whether a confident match for a one-file unit may apply itself under mode `auto`. Off by default: a lone track picking among near-tied releases is a wrong-release risk, so singles always queue for review. When on, singles auto-apply only at a stricter confidence than albums. 
+  @BuiltValueField(wireName: r'singlesAutoApply')
+  bool get singlesAutoApply;
 
   LibraryMatching._();
 
@@ -47,6 +52,11 @@ class _$LibraryMatchingSerializer implements PrimitiveSerializer<LibraryMatching
     yield serializers.serialize(
       object.mode,
       specifiedType: const FullType(LibraryMatchingModeEnum),
+    );
+    yield r'singlesAutoApply';
+    yield serializers.serialize(
+      object.singlesAutoApply,
+      specifiedType: const FullType(bool),
     );
   }
 
@@ -77,6 +87,13 @@ class _$LibraryMatchingSerializer implements PrimitiveSerializer<LibraryMatching
             specifiedType: const FullType(LibraryMatchingModeEnum),
           ) as LibraryMatchingModeEnum;
           result.mode = valueDes;
+          break;
+        case r'singlesAutoApply':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.singlesAutoApply = valueDes;
           break;
         default:
           unhandled.add(key);

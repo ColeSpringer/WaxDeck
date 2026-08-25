@@ -311,7 +311,7 @@ func TestDiscoveryRespectsMatchingOff(t *testing.T) {
 	if err != nil || len(libs) == 0 {
 		t.Fatalf("listing libraries: %v (%d)", err, len(libs))
 	}
-	if err := f.svc.SetLibraryMatchingMode(f.ctx, f.uc, libs[0].PID, matchingOff); err != nil {
+	if err := f.svc.SetLibraryMatching(f.ctx, f.uc, libs[0].PID, LibraryMatching{Mode: matchingOff}); err != nil {
 		t.Fatalf("setting matching mode: %v", err)
 	}
 

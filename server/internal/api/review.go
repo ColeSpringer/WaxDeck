@@ -352,7 +352,7 @@ func (s *Server) GetLibraryMatching(ctx context.Context, req GetLibraryMatchingR
 	if err != nil {
 		return nil, err
 	}
-	mode, err := s.svc.LibraryMatchingFor(ctx, uc, string(req.Pid))
+	matching, err := s.svc.LibraryMatchingFor(ctx, uc, string(req.Pid))
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindForbidden:
@@ -362,7 +362,10 @@ func (s *Server) GetLibraryMatching(ctx context.Context, req GetLibraryMatchingR
 		}
 		return nil, err
 	}
-	return GetLibraryMatching200JSONResponse(LibraryMatching{Mode: LibraryMatchingMode(mode)}), nil
+	return GetLibraryMatching200JSONResponse(LibraryMatching{
+		Mode:             LibraryMatchingMode(matching.Mode),
+		SinglesAutoApply: matching.SinglesAutoApply,
+	}), nil
 }
 
 func (s *Server) SetLibraryMatching(ctx context.Context, req SetLibraryMatchingRequestObject) (SetLibraryMatchingResponseObject, error) {
@@ -373,7 +376,11 @@ func (s *Server) SetLibraryMatching(ctx context.Context, req SetLibraryMatchingR
 	if req.Body == nil {
 		return SetLibraryMatching400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a mode body is required"))}, nil
 	}
-	if err := s.svc.SetLibraryMatchingMode(ctx, uc, string(req.Pid), string(req.Body.Mode)); err != nil {
+	matching := service.LibraryMatching{
+		Mode:             string(req.Body.Mode),
+		SinglesAutoApply: req.Body.SinglesAutoApply,
+	}
+	if err := s.svc.SetLibraryMatching(ctx, uc, string(req.Pid), matching); err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
 			return SetLibraryMatching400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -384,5 +391,8 @@ func (s *Server) SetLibraryMatching(ctx context.Context, req SetLibraryMatchingR
 		}
 		return nil, err
 	}
-	return SetLibraryMatching200JSONResponse(LibraryMatching{Mode: req.Body.Mode}), nil
+	return SetLibraryMatching200JSONResponse(LibraryMatching{
+		Mode:             req.Body.Mode,
+		SinglesAutoApply: matching.SinglesAutoApply,
+	}), nil
 }

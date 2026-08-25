@@ -32,7 +32,11 @@ Confident matches apply themselves and appear in the queue as
 auto-applied, with a revert button; everything else waits for review
 with ranked candidates, a match percentage, a per-field distance
 breakdown, and a side-by-side diff of current against proposed track
-metadata. Decisions:
+metadata. The percentage reflects what the unit asked for: an album
+rip is charged for every release track it is missing, while a single
+file (one acquired video, one uploaded track) is scored on its own
+evidence and the rest of the release is shown as context, not counted
+against it. Decisions:
 
 - **Approve** applies the chosen candidate (the ranked best by
   default) and locks the applied fields so a rescan cannot undo the
@@ -53,6 +57,16 @@ metadata. Decisions:
 
 Per-library matching modes: `auto` (the default), `review` (nothing
 applies itself), and `off` for libraries the engine must never touch.
+Under `auto`, one-file units still queue for review by default: a lone
+track picking among near-tied releases (the album, its deluxe, every
+compilation carrying the recording) is the kind of wrong-release risk
+a person should accept deliberately. A per-library "auto-apply
+confident singles" switch - beside the matching mode in the review
+queue's menu - opts in, and even then singles apply themselves only at
+a stricter confidence than albums. An upload or URL acquisition names
+no library until import places it; the switch reaches those through
+the one library that could hold the music, so on a server with several
+music libraries they always queue.
 
 Matching needs the network. MusicBrainz lookups are paced to their
 etiquette (one request per second) and cached; AcoustID fingerprint

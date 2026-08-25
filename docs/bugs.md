@@ -2,6 +2,20 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
+- [8-25-2026] on the homescreen, when there are items on off screen an arrow appears that you are supposed to be able to click and move the shelf view. However, currently when you go to click it you will instead click the track underneath it and start playing and the shelf won't move at all.
+
+- [8-25-2026] For the queue in fullscreen, the album artwork shows in the right. I like the idea but we should have it on the left where the song and artist are. im thinking a little bit to the right of the "Up Next" text would look good
+
+- [8-25-2026] the letters that appear on the right when looking at the albums page (for example) are somewhat hard to read given the background.
+
+- [8-25-2026] Whjen adding a podcast by url, the text hint states "Feed or channel url" when those are seperate depending on if you have RSS or youtube selected.
+
+- [8-25-2026] In the same screen shot mentioned in the metadata editor icon item in this doc, there is the "Music" identifier. This also seems like its out of place and not in a good location.
+
+- [8-25-2026] In the metadata editor you can't edit the source. Not sure what that limitation exists.
+
+- [8-25-2026] some metadata editor icons don't really make sense. You have a checkmark as a selection tool and a pencil as a lock mechanism. Also the checkmark is on the upper right completely away from anything useful. Seems out of place and would make more sense in a different location. (see screenshot)
+
 - [8-24-2026] Starting a track or podcast (haven't tried audiobooks) immediately go into the fullscreen page. Full screen should be an intentional choice. It should start playing minimized dock and if the user wants to have it in full screen they can do that themselves.
 
 - [8-24-2026] It doesn't seem like podcasts update listening stats?

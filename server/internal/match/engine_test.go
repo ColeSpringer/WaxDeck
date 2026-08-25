@@ -247,6 +247,148 @@ func TestIdentifyRecordingSearchGatedByAlbum(t *testing.T) {
 	}
 }
 
+// TestIdentifySingleAutoAppliesWhenConfident: with the missing penalty
+// gone, a clean single can reach auto-apply at the engine level (the
+// service still gates it behind the per-library switch).
+func TestIdentifySingleAutoAppliesWhenConfident(t *testing.T) {
+	r := release("Artist", "Album", 0, "One")
+	src := &fakeSource{searchHits: []*Release{r}}
+	p, err := NewEngine(src, Config{}).Identify(context.Background(), unitFor("Artist", "Album", "One"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Decision != DecisionAutoApply || p.Best().Release.MBID != r.MBID {
+		t.Fatalf("clean single should auto apply: %v %+v", p.Decision, p.Best())
+	}
+}
+
+// TestIdentifySingleStricterThreshold: a distance an album would auto
+// apply at queues a single for review, because a lone track carries a
+// fraction of the evidence.
+func TestIdentifySingleStricterThreshold(t *testing.T) {
+	cfg := Config{}.withDefaults()
+	r := release("Artist", "Album", 0, "One")
+	u := unitFor("Artist", "Album", "One")
+	// A 7s duration skew lands the distance between the two thresholds.
+	u.Tracks[0].DurationSec = r.Tracks[0].DurationSec + 7
+	src := &fakeSource{searchHits: []*Release{r}}
+	p, err := NewEngine(src, Config{}).Identify(context.Background(), u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := p.Best().Distance; d > cfg.AutoApplyThreshold || d <= cfg.SinglesAutoApplyThreshold {
+		t.Fatalf("fixture needs a distance between the singles (%v) and album (%v) thresholds, got %v",
+			cfg.SinglesAutoApplyThreshold, cfg.AutoApplyThreshold, d)
+	}
+	if p.Decision != DecisionReview {
+		t.Fatalf("single inside the album threshold must still review, got %v", p.Decision)
+	}
+}
+
+// TestIdentifySingleCompilationEarnsNoFreeArtist: an untagged single's
+// candidates must not tilt toward a compilation. Score fabricates a
+// zero-distance artist component for a VA release when no album artist
+// tag exists; charged to a one-file unit it dilutes the compilation's
+// distance below the album's for identical track evidence, far enough
+// to auto-apply the compilation while the album queues.
+func TestIdentifySingleCompilationEarnsNoFreeArtist(t *testing.T) {
+	cfg := Config{}.withDefaults()
+	album := release("Artist", "Album", 0, "One", "Two")
+	album.MBID = "rel-zzz"
+	comp := release("Various Artists", "Hits of the Year", 0, "One", "Zed")
+	comp.MBID = "rel-aaa"
+	comp.Compilation = true
+	comp.Tracks[0].Artist = "Artist"
+	u := Unit{Tracks: []Track{{
+		PID: "1", Path: "/x/One.flac",
+		Tags: map[string]string{"TITLE": "One"},
+		// A 4s skew: with the fabricated zero, the compilation scored
+		// 5/8 of the album's distance here - under the singles
+		// threshold while the album sat over it.
+		DurationSec: album.Tracks[0].DurationSec + 4,
+	}}}
+	src := &fakeSource{recordingHits: map[string][]*Release{"": {album, comp}}}
+	p, err := NewEngine(src, Config{}).Identify(context.Background(), u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Candidates) != 2 || p.Candidates[0].Distance != p.Candidates[1].Distance {
+		t.Fatalf("identical track evidence must tie, got %+v", p.Candidates)
+	}
+	if p.Best().Release.MBID != "rel-zzz" {
+		t.Fatalf("the tie must prefer the plain release, got %v", p.Best().Release.MBID)
+	}
+	if p.Decision == DecisionAutoApply {
+		t.Fatalf("distance %v is over the singles threshold %v and must review",
+			p.Best().Distance, cfg.SinglesAutoApplyThreshold)
+	}
+}
+
+// TestIdentifySingleNearTiePrefersHeaderAgreement: two editions within
+// the tie band; the one whose headers corroborate the file's tags must
+// win even when the other edges it on raw distance and MBID order.
+func TestIdentifySingleNearTiePrefersHeaderAgreement(t *testing.T) {
+	agreeing := release("Artist", "Album", 1994, "One")
+	agreeing.MBID = "rel-zzz"
+	closer := release("Artist", "Album", 1995, "One")
+	closer.MBID = "rel-aaa"
+	u := unitFor("Artist", "Album", "One")
+	u.Tracks[0].Tags["DATE"] = "1994"
+	// The file's duration sides with the wrong-year edition, so the
+	// year-agreeing one scores slightly worse - but within the band.
+	u.Tracks[0].DurationSec = 184
+	closer.Tracks[0].DurationSec = 184
+	src := &fakeSource{searchHits: []*Release{agreeing, closer}}
+	p, err := NewEngine(src, Config{}).Identify(context.Background(), u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Candidates) != 2 {
+		t.Fatalf("want both editions ranked, got %+v", p.Candidates)
+	}
+	if p.Candidates[0].Distance < p.Candidates[1].Distance {
+		t.Fatalf("case needs the agreeing edition distance-behind, got %v then %v",
+			p.Candidates[0].Distance, p.Candidates[1].Distance)
+	}
+	if p.Best().Release.MBID != "rel-zzz" {
+		t.Fatalf("header agreement should top a near-tie, got %v", p.Best().Release.MBID)
+	}
+	// The promotion moved a strictly farther candidate to the top, so
+	// even inside the threshold this is a person's call, not an apply.
+	if p.Decision == DecisionAutoApply {
+		t.Fatal("a preference-promoted candidate must not auto apply")
+	}
+}
+
+// TestIdentifySingleNearTiePrefersAlbumOverCompilation: an untagged
+// single ties exactly across a plain release and a compilation carrying
+// the same track; the plain release must win despite the compilation's
+// MBID sorting first and its fabricated zero-distance artist component.
+func TestIdentifySingleNearTiePrefersAlbumOverCompilation(t *testing.T) {
+	album := release("Artist", "Album", 0, "One", "Two")
+	album.MBID = "rel-zzz"
+	comp := release("Various Artists", "Hits of the Year", 0, "One", "Zed")
+	comp.MBID = "rel-aaa"
+	comp.Compilation = true
+	comp.Tracks[0].Artist = "Artist"
+	u := Unit{Tracks: []Track{{
+		PID: "1", Path: "/x/One.flac",
+		Tags:        map[string]string{"TITLE": "One"},
+		DurationSec: 180,
+	}}}
+	src := &fakeSource{recordingHits: map[string][]*Release{"": {album, comp}}}
+	p, err := NewEngine(src, Config{}).Identify(context.Background(), u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Candidates) != 2 || p.Candidates[0].Distance != p.Candidates[1].Distance {
+		t.Fatalf("case needs an exact tie, got %+v", p.Candidates)
+	}
+	if p.Best().Release.MBID != "rel-zzz" {
+		t.Fatalf("plain release should top a tied compilation, got %v", p.Best().Release.MBID)
+	}
+}
+
 func TestIdentifyDeterministicTieBreak(t *testing.T) {
 	a := release("Artist", "Album", 0, "One", "Two", "Three")
 	a.MBID = "rel-aaa"

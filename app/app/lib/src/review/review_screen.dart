@@ -586,6 +586,10 @@ class _MatchingModeMenu extends ConsumerWidget {
 
   static const _modes = ['auto', 'review', 'off'];
 
+  /// The singles toggle rides the mode rows: not a mode (it composes
+  /// with `auto`), so it carries its own action sentinel.
+  static const _singlesAction = 'singles';
+
   /// The client's word for a mode, with the wire value as the last
   /// resort - the shape every other open vocabulary here keeps, so a
   /// mode a newer server invents draws as itself.
@@ -616,21 +620,45 @@ class _MatchingModeMenu extends ConsumerWidget {
       label: l10n.reviewMatchingMenu,
       semanticsId: SemanticsIds.matchingMenu,
       items: <WaxMenuItem<(String, String)>>[
-        for (final library in libraries)
-          for (final mode in _modes)
-            WaxMenuItem<(String, String)>(
-              value: (library.pid, mode),
-              label: l10n.reviewMatchingRow(
-                library.name,
-                _modeLabel(l10n, mode),
-              ),
-              semanticsId: SemanticsIds.matchingOption(library.pid, mode),
-              selected:
-                  ref.watch(libraryMatchingProvider(library.pid)).value == mode,
-            ),
+        for (final library in libraries) ..._libraryRows(ref, l10n, library),
       ],
-      onSelected: (choice) => _set(l10n, ref, choice.$1, choice.$2),
+      onSelected: (choice) => choice.$2 == _singlesAction
+          ? _toggleSingles(l10n, ref, choice.$1)
+          : _set(l10n, ref, choice.$1, choice.$2),
     );
+  }
+
+  /// One library's rows: the three modes, then the singles toggle.
+  /// Rows disable until the stored value is here - every write is a
+  /// full replace, and a tap that cannot see the current state would
+  /// write a guess over it.
+  List<WaxMenuItem<(String, String)>> _libraryRows(
+    WidgetRef ref,
+    AppLocalizations l10n,
+    LibraryInfo library,
+  ) {
+    final matching = ref.watch(libraryMatchingProvider(library.pid)).value;
+    return <WaxMenuItem<(String, String)>>[
+      for (final mode in _modes)
+        WaxMenuItem<(String, String)>(
+          value: (library.pid, mode),
+          label: l10n.reviewMatchingRow(library.name, _modeLabel(l10n, mode)),
+          semanticsId: SemanticsIds.matchingOption(library.pid, mode),
+          selected: matching?.mode == mode,
+          enabled: matching != null,
+        ),
+      WaxMenuItem<(String, String)>(
+        value: (library.pid, _singlesAction),
+        label: l10n.reviewMatchingRow(library.name, l10n.reviewMatchingSingles),
+        help: l10n.reviewMatchingSinglesHelp,
+        semanticsId: SemanticsIds.matchingSingles(library.pid),
+        selected: matching?.singlesAutoApply ?? false,
+        // A mode outside the fixed list cannot be echoed back on the
+        // full-replace write, so the toggle waits for a build that
+        // knows the mode.
+        enabled: matching != null && _modes.contains(matching.mode),
+      ),
+    ];
   }
 
   Future<void> _set(
@@ -640,7 +668,26 @@ class _MatchingModeMenu extends ConsumerWidget {
     String mode,
   ) async {
     try {
-      await ref.read(libraryMatchingProvider(libraryPid).notifier).set(mode);
+      await ref
+          .read(libraryMatchingProvider(libraryPid).notifier)
+          .setMode(mode);
+    } on WaxDeckApiException catch (e) {
+      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, e));
+    }
+  }
+
+  Future<void> _toggleSingles(
+    AppLocalizations l10n,
+    WidgetRef ref,
+    String libraryPid,
+  ) async {
+    final on =
+        ref.read(libraryMatchingProvider(libraryPid)).value?.singlesAutoApply ??
+        false;
+    try {
+      await ref
+          .read(libraryMatchingProvider(libraryPid).notifier)
+          .setSinglesAutoApply(!on);
     } on WaxDeckApiException catch (e) {
       ref.read(shellMessengerProvider.notifier).show(explainError(l10n, e));
     }

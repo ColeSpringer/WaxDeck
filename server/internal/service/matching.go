@@ -594,30 +594,88 @@ func (l *Library) LibraryMatchingMode(ctx context.Context, libraryPID string) st
 	return mode
 }
 
-// LibraryMatchingFor reads a library's matching mode for the API,
+// LibrarySinglesAutoApply reads whether a library lets confident
+// one-file units apply themselves (default off: a lone track picking
+// among near-tied releases is a wrong-release risk a person accepts
+// deliberately). Stored as "true"/absent like the read-only flag; the
+// key normalization matches LibraryMatchingMode.
+func (l *Library) LibrarySinglesAutoApply(ctx context.Context, libraryPID string) bool {
+	if prefix, bare, ok := parseAPIPID(libraryPID); ok && prefix == PrefixLibrary {
+		libraryPID = string(bare)
+	}
+	v, err := l.db.SettingGet(ctx, "matching-singles:"+libraryPID)
+	return err == nil && v == "true"
+}
+
+// singlesAutoApplyFor resolves the singles switch for one entry. An
+// upload or acquisition carries no target library until import routing
+// places it, so an empty pid falls back to the one library that could
+// hold the entry's media - the unambiguous destination on the common
+// single-library server. More than one candidate stays off: guessing
+// which library's opt-in to honor would auto-apply under a grant
+// nobody made for that destination.
+func (l *Library) singlesAutoApplyFor(ctx context.Context, entry *wdb.ReviewEntry) bool {
+	if entry.LibraryPID != "" {
+		return l.LibrarySinglesAutoApply(ctx, entry.LibraryPID)
+	}
+	kind, ok := kindForMediaType(entry.MediaType)
+	if !ok {
+		return false
+	}
+	libs, err := l.lib.Libraries(ctx)
+	if err != nil {
+		return false
+	}
+	var only *model.Library
+	for _, lib := range libs {
+		if lib.Mode == model.ModePodcast {
+			continue
+		}
+		if lib.Media != "" && !lib.Media.Accepts(kind) {
+			continue
+		}
+		if only != nil {
+			return false
+		}
+		only = lib
+	}
+	return only != nil && l.LibrarySinglesAutoApply(ctx, string(only.PID))
+}
+
+// LibraryMatching is a library's matching behavior for the API.
+type LibraryMatching struct {
+	Mode             string
+	SinglesAutoApply bool
+}
+
+// LibraryMatchingFor reads a library's matching behavior for the API,
 // validating that the library exists first so an unknown or malformed
 // pid answers not-found rather than a fabricated default. The pipeline
 // reads the mode through LibraryMatchingMode, which never errors.
-func (l *Library) LibraryMatchingFor(ctx context.Context, uc *UserCtx, apiLibraryPID string) (string, error) {
+func (l *Library) LibraryMatchingFor(ctx context.Context, uc *UserCtx, apiLibraryPID string) (LibraryMatching, error) {
 	if !uc.Admin {
-		return "", &Error{Kind: KindForbidden, Msg: "administrators only"}
+		return LibraryMatching{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
 	prefix, pid, ok := parseAPIPID(apiLibraryPID)
 	if !ok || prefix != PrefixLibrary {
-		return "", errNotFound("no such library")
+		return LibraryMatching{}, errNotFound("no such library")
 	}
 	if _, err := l.libraryByPID(ctx, pid); err != nil {
-		return "", err
+		return LibraryMatching{}, err
 	}
-	return l.LibraryMatchingMode(ctx, string(pid)), nil
+	return LibraryMatching{
+		Mode:             l.LibraryMatchingMode(ctx, string(pid)),
+		SinglesAutoApply: l.LibrarySinglesAutoApply(ctx, string(pid)),
+	}, nil
 }
 
-// SetLibraryMatchingMode stores a library's matching mode.
-func (l *Library) SetLibraryMatchingMode(ctx context.Context, uc *UserCtx, apiLibraryPID, mode string) error {
+// SetLibraryMatching stores a library's matching behavior whole: the
+// PUT is a full replace, so both fields land on every write.
+func (l *Library) SetLibraryMatching(ctx context.Context, uc *UserCtx, apiLibraryPID string, matching LibraryMatching) error {
 	if !uc.Admin {
 		return &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	switch mode {
+	switch matching.Mode {
 	case matchingAuto, matchingReview, matchingOff:
 	default:
 		return errInvalid("unknown matching mode")
@@ -629,9 +687,23 @@ func (l *Library) SetLibraryMatchingMode(ctx context.Context, uc *UserCtx, apiLi
 	if _, err := l.libraryByPID(ctx, pid); err != nil {
 		return err
 	}
-	if err := l.db.SettingSet(ctx, "matching:"+string(pid), mode, time.Now().UnixNano()); err != nil {
+	// Singles first, deliberately: the flag is inert unless the mode is
+	// auto, so if the second write fails (or a drain lands between
+	// them) every intermediate state behaves like one the caller asked
+	// for. Mode-first could flip an as-is library to auto and stop.
+	if matching.SinglesAutoApply {
+		if err := l.db.SettingSet(ctx, "matching-singles:"+string(pid), "true", time.Now().UnixNano()); err != nil {
+			return &Error{Kind: KindInternal, Err: err}
+		}
+	} else if err := l.db.SettingDelete(ctx, "matching-singles:"+string(pid)); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
+	if err := l.db.SettingSet(ctx, "matching:"+string(pid), matching.Mode, time.Now().UnixNano()); err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	l.Audit(ctx, uc, "library.matching",
+		AuditTarget{Kind: "library", PID: apiLibraryPID},
+		map[string]any{"mode": matching.Mode, "singlesAutoApply": matching.SinglesAutoApply})
 	return nil
 }
 
@@ -809,7 +881,17 @@ func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) err
 	if payload.Override != nil && proposal.Decision == match.DecisionAutoApply {
 		l.log.Info("auto-apply withheld: the query was typed by a reviewer", "entry", entry.ID)
 	}
-	if payload.Override == nil && proposal.Decision == match.DecisionAutoApply && mode == matchingAuto {
+	autoApply := payload.Override == nil && proposal.Decision == match.DecisionAutoApply && mode == matchingAuto
+	// A one-file unit auto-applies only where the library opted in: a
+	// lone track picking among near-tied releases is a wrong-release
+	// risk, so the default queues every single for a person even when
+	// the engine is confident. Checked last so the setting is only read
+	// when it would decide anything.
+	if autoApply && len(unit.Tracks) == 1 && !l.singlesAutoApplyFor(ctx, entry) {
+		autoApply = false
+		l.log.Info("auto-apply withheld: singles auto-apply is off for the destination library", "entry", entry.ID)
+	}
+	if autoApply {
 		if _, err := l.applyEntry(ctx, entry, &payload, entry.BestMBID, "", true); err != nil {
 			// A failed apply leaves the entry pending for a person; the
 			// evidence is stored either way.

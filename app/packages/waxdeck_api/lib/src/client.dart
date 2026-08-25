@@ -912,13 +912,18 @@ abstract interface class WaxDeckRepository {
   /// writing (administrators).
   Future<ToolTask> normalizeGenres({bool dryRun = false});
 
-  /// `GET /libraries/{pid}/matching`: the library's matching mode
-  /// (`auto`, `review`, or `off`).
-  Future<String> getLibraryMatching(String libraryPid);
+  /// `GET /libraries/{pid}/matching`: the library's matching behavior
+  /// (mode `auto`, `review`, or `off`, plus the singles auto-apply
+  /// switch).
+  Future<LibraryMatching> getLibraryMatching(String libraryPid);
 
-  /// `PUT /libraries/{pid}/matching`: sets the library's matching
-  /// mode, returning the stored mode.
-  Future<String> setLibraryMatching(String libraryPid, String mode);
+  /// `PUT /libraries/{pid}/matching`: replaces the library's matching
+  /// behavior whole, returning what is stored. Send every field - an
+  /// omitted flag stores its default.
+  Future<LibraryMatching> setLibraryMatching(
+    String libraryPid,
+    LibraryMatching matching,
+  );
 
   /// `GET /uploads`: keyset-paginated upload sessions visible to the
   /// caller.
@@ -3363,22 +3368,25 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<String> getLibraryMatching(String libraryPid) => _guard(() async {
-    final response = await _gen.getReviewApi().getLibraryMatching(
-      pid: libraryPid,
-    );
-    return libraryMatchingModeFromGen(_require(response.data));
-  });
+  Future<LibraryMatching> getLibraryMatching(String libraryPid) =>
+      _guard(() async {
+        final response = await _gen.getReviewApi().getLibraryMatching(
+          pid: libraryPid,
+        );
+        return libraryMatchingFromGen(_require(response.data));
+      });
 
   @override
-  Future<String> setLibraryMatching(String libraryPid, String mode) =>
-      _guard(() async {
-        final response = await _gen.getReviewApi().setLibraryMatching(
-          pid: libraryPid,
-          libraryMatching: libraryMatchingModeToGen(mode),
-        );
-        return libraryMatchingModeFromGen(_require(response.data));
-      });
+  Future<LibraryMatching> setLibraryMatching(
+    String libraryPid,
+    LibraryMatching matching,
+  ) => _guard(() async {
+    final response = await _gen.getReviewApi().setLibraryMatching(
+      pid: libraryPid,
+      libraryMatching: libraryMatchingToGen(matching),
+    );
+    return libraryMatchingFromGen(_require(response.data));
+  });
 
   @override
   Future<UploadPage> listUploads({String? cursor, int? limit}) =>

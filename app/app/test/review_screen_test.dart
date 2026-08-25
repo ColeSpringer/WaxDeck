@@ -255,7 +255,12 @@ void main() {
       ),
     );
     repo.libraries.add(const LibraryInfo(pid: 'lb-1', name: 'Music'));
-    repo.matchingModes['lb-1'] = 'auto';
+    // Singles deliberately non-default, so the survival assert below
+    // can only pass if the write actually carried the stored value.
+    repo.matchingModes['lb-1'] = const LibraryMatching(
+      mode: 'auto',
+      singlesAutoApply: true,
+    );
     await _pump(tester, _host(_container(repo)));
     await tester.pumpAndSettle();
 
@@ -267,7 +272,51 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.matchingOption('lb-1', 'review')),
     );
     await tester.pumpAndSettle();
-    expect(repo.matchingModes['lb-1'], 'review');
+    expect(repo.matchingModes['lb-1']!.mode, 'review');
+    // A mode change is a full-replace write that must not flip the
+    // singles switch along the way.
+    expect(repo.matchingModes['lb-1']!.singlesAutoApply, isTrue);
+  });
+
+  testWidgets('an admin toggles singles auto-apply from the bar', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
+          username: 'admin',
+          roles: ['admin'],
+        ),
+      ),
+    );
+    repo.libraries.add(const LibraryInfo(pid: 'lb-1', name: 'Music'));
+    // A non-default mode, so the survival assert below can only pass
+    // if the toggle's full-replace write re-sent the stored mode.
+    repo.matchingModes['lb-1'] = const LibraryMatching(mode: 'review');
+    await _pump(tester, _host(_container(repo)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.matchingMenu));
+    await tester.pumpAndSettle();
+    expect(find.text('Music: Auto-apply confident singles'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.matchingSingles('lb-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.matchingModes['lb-1']!.singlesAutoApply, isTrue);
+    // The toggle rides the same full-replace write; the mode survives.
+    expect(repo.matchingModes['lb-1']!.mode, 'review');
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.matchingMenu));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.matchingSingles('lb-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.matchingModes['lb-1']!.singlesAutoApply, isFalse);
   });
 
   testWidgets('the matching control is hidden from non-admins', (tester) async {

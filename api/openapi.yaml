@@ -8581,12 +8581,14 @@ paths:
       - $ref: "#/components/parameters/Pid"
     get:
       operationId: getLibraryMatching
-      summary: Read a library's matching mode
-      description: The library's automatic matching behavior.
+      summary: Read a library's matching behavior
+      description: >
+        The library's automatic matching behavior: the mode and the
+        singles auto-apply switch.
       tags: [review]
       responses:
         "200":
-          description: The mode.
+          description: The stored behavior.
           content:
             application/json:
               schema:
@@ -8601,13 +8603,15 @@ paths:
           $ref: "#/components/responses/CatalogMaintenance"
     put:
       operationId: setLibraryMatching
-      summary: Set a library's matching mode
+      summary: Set a library's matching behavior
       description: >
         `auto` lets confident matches apply themselves and queues the
         rest for review (the default), `review` queues everything (no
         auto-apply), and `off` never matches the library's content
         (as-is libraries: already-curated collections the engine must
-        not touch). Administrators only.
+        not touch). Under `auto`, one-file units still queue unless
+        `singlesAutoApply` is on. The body replaces the whole object.
+        Administrators only.
       tags: [review]
       requestBody:
         required: true
@@ -8617,7 +8621,7 @@ paths:
               $ref: "#/components/schemas/LibraryMatching"
       responses:
         "200":
-          description: The stored mode.
+          description: The stored behavior.
           content:
             application/json:
               schema:
@@ -18339,7 +18343,12 @@ components:
                 $ref: "#/components/schemas/ReviewTrack"
             candidates:
               type: array
-              description: Scored candidates, best first.
+              description: >
+                Scored candidates, ranked best first. For a one-file
+                unit, near-tied candidates are ordered by preference
+                (header agreement, then a plain release over a
+                compilation), so the list is not strictly sorted by
+                `similarityPct` inside a tie band.
               items:
                 $ref: "#/components/schemas/ReviewCandidate"
             identifyDeclined:
@@ -18523,8 +18532,10 @@ components:
 
     LibraryMatching:
       type: object
-      description: A library's automatic matching behavior.
-      required: [mode]
+      description: >
+        A library's automatic matching behavior. The PUT replaces the
+        whole object, so writes carry every field.
+      required: [mode, singlesAutoApply]
       properties:
         mode:
           type: string
@@ -18533,6 +18544,14 @@ components:
           # which silently became a "false" wire value once already.
           enum: [auto, review, "off"]
           description: The matching mode.
+        singlesAutoApply:
+          type: boolean
+          description: >
+            Whether a confident match for a one-file unit may apply
+            itself under mode `auto`. Off by default: a lone track
+            picking among near-tied releases is a wrong-release risk,
+            so singles always queue for review. When on, singles
+            auto-apply only at a stricter confidence than albums.
 
     Scrobbler:
       type: object

@@ -81,11 +81,14 @@ class _$LibraryMatchingModeEnumSerializer
 class _$LibraryMatching extends LibraryMatching {
   @override
   final LibraryMatchingModeEnum mode;
+  @override
+  final bool singlesAutoApply;
 
   factory _$LibraryMatching([void Function(LibraryMatchingBuilder)? updates]) =>
       (LibraryMatchingBuilder()..update(updates))._build();
 
-  _$LibraryMatching._({required this.mode}) : super._();
+  _$LibraryMatching._({required this.mode, required this.singlesAutoApply})
+    : super._();
   @override
   LibraryMatching rebuild(void Function(LibraryMatchingBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -96,22 +99,26 @@ class _$LibraryMatching extends LibraryMatching {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is LibraryMatching && mode == other.mode;
+    return other is LibraryMatching &&
+        mode == other.mode &&
+        singlesAutoApply == other.singlesAutoApply;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, mode.hashCode);
+    _$hash = $jc(_$hash, singlesAutoApply.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'LibraryMatching',
-    )..add('mode', mode)).toString();
+    return (newBuiltValueToStringHelper(r'LibraryMatching')
+          ..add('mode', mode)
+          ..add('singlesAutoApply', singlesAutoApply))
+        .toString();
   }
 }
 
@@ -123,6 +130,11 @@ class LibraryMatchingBuilder
   LibraryMatchingModeEnum? get mode => _$this._mode;
   set mode(LibraryMatchingModeEnum? mode) => _$this._mode = mode;
 
+  bool? _singlesAutoApply;
+  bool? get singlesAutoApply => _$this._singlesAutoApply;
+  set singlesAutoApply(bool? singlesAutoApply) =>
+      _$this._singlesAutoApply = singlesAutoApply;
+
   LibraryMatchingBuilder() {
     LibraryMatching._defaults(this);
   }
@@ -131,6 +143,7 @@ class LibraryMatchingBuilder
     final $v = _$v;
     if ($v != null) {
       _mode = $v.mode;
+      _singlesAutoApply = $v.singlesAutoApply;
       _$v = null;
     }
     return this;
@@ -157,6 +170,11 @@ class LibraryMatchingBuilder
             mode,
             r'LibraryMatching',
             'mode',
+          ),
+          singlesAutoApply: BuiltValueNullFieldError.checkNotNull(
+            singlesAutoApply,
+            r'LibraryMatching',
+            'singlesAutoApply',
           ),
         );
     replace(_$result);
