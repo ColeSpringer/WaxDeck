@@ -1690,7 +1690,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];
@@ -1700,13 +1700,13 @@ export interface paths {
         get?: never;
         /**
          * Set entity artwork
-         * @description Stores the raw image bytes in one artwork slot (`role`, default `front`) of an album, artist, release group, genre, or playlist entity. Album front covers may additionally embed into member files with `writeBack=true`; other slots and entity types are catalog-only. An artist portrait lands under `background`, which has no separate portrait role. Catalog entities are administrators-only; a playlist cover is set by its owner, and replaces the cover the server generates from the members until it is cleared.
+         * @description Stores the raw image bytes in one artwork slot (`role`, default `front`) of an album, artist, release group, genre, playlist, or podcast entity. Album front covers may additionally embed into member files with `writeBack=true`; other slots and entity types are catalog-only. An artist portrait lands under `front` - the slot the artist screen and index tiles resolve, and the one the server's own portrait sweep fills; `background` is the scenic slot, which no surface draws yet. Catalog entities are administrators-only, with two exceptions: a playlist cover is set by its owner, and replaces the cover the server generates from the members until it is cleared, and a podcast show cover is set by `managePodcasts` holders as well, replacing the feed's image until it is cleared.
          */
         put: operations["setEntityArtwork"];
         post?: never;
         /**
          * Clear entity artwork
-         * @description Removes one artwork slot (`role`, default `front`) from an album, artist, release group, genre, or playlist entity. Files already carrying an embedded cover are untouched; this clears the catalog's copy. Clearing a playlist's uploaded cover hands the slot back to the mosaic the server builds from the members, so the playlist keeps a cover rather than going bare. Catalog entities are administrators-only; a playlist cover is cleared by its owner.
+         * @description Removes one artwork slot (`role`, default `front`) from an album, artist, release group, genre, playlist, or podcast entity. Files already carrying an embedded cover are untouched; this clears the catalog's copy. Clearing a playlist's uploaded cover hands the slot back to the mosaic the server builds from the members, so the playlist keeps a cover rather than going bare. Clearing a podcast show's cover hands the slot back to the feed, whose image refills on the next sync - provided no pin stands: setting a cover by hand pinned it, so resetting a hand-set show cover to the feed's image is two steps, unpin through the lock endpoint and then clear. Catalog entities are administrators-only; a playlist cover is cleared by its owner, and a podcast show cover by `managePodcasts` holders as well.
          */
         delete: operations["clearEntityArtwork"];
         options?: never;
@@ -1719,7 +1719,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];
@@ -1728,12 +1728,12 @@ export interface paths {
         };
         /**
          * Read an entity's artwork lock
-         * @description Whether an album, artist, release group, or genre's front cover is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says "do not refill this" rather than "this has no cover yet". Administrators only, like every other catalog-entity curation read.
+         * @description Whether an album, artist, release group, genre, or podcast's front cover is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says "do not refill this" rather than "this has no cover yet". Administrators only, like every other catalog-entity curation read, except the podcast pin, which `managePodcasts` holders read too.
          */
         get: operations["getEntityArtworkLock"];
         /**
          * Pin or unpin an entity's artwork
-         * @description Sets or clears the front-cover pin without touching the cover itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only.
+         * @description Sets or clears the front-cover pin without touching the cover itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only, except the podcast pin, which `managePodcasts` holders set too - the pin is what keeps a hand-set show cover from being refetched on the next feed sync, so it belongs to whoever may set the cover.
          *
          *     `playlist` is refused with `invalid-request`. A playlist's cover authority is its own custom/generated origin marker rather than this pin, and a pin left standing on one would make the mosaic the server builds from the members unwritable - which the read path retries on every read, forever.
          */
@@ -1802,7 +1802,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];
@@ -1829,7 +1829,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];
@@ -9700,6 +9700,8 @@ export interface components {
             roles: string[];
             /** @description Whether the account may upload audio. On self views (login, session) this is the *effective* value - administrators always may, whatever their stored flag says - and clients gate their upload affordances on it. On administrative account views (`UserAccount`) it is the stored per-account flag the account editor round-trips; an administrator's own stored flag may therefore read false while their effective right is true. Defined once here because the generators flatten `UserAccount`'s `allOf` over this schema; a duplicate declaration there would silently lose. */
             uploadEnabled: boolean;
+            /** @description Whether the account may curate podcasts. Self views carry the *effective* value (administrators always may), so clients gate their podcast-curation affordances - adding shows, setting a show's cover - on it without a second read. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. */
+            managePodcasts?: boolean;
         };
         /** @description An account as visible to administrators (and to its owner). */
         UserAccount: components["schemas"]["User"] & {
@@ -10212,8 +10214,8 @@ export interface components {
         DiagnosticSeverityFilter: "info" | "warn" | "error";
         /** @description Restrict to files under one library root. */
         DiagnosticLibraryFilter: string;
-        /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
-        EntityType: "album" | "artist" | "release-group" | "genre" | "playlist";
+        /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
+        EntityType: "album" | "artist" | "release-group" | "genre" | "playlist" | "podcast";
         /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         EntityPid: string;
         /** @description Notification target PID (e.g. `nt-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -12904,7 +12906,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];
@@ -12942,7 +12944,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];
@@ -12970,7 +12972,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];
@@ -13000,7 +13002,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];
@@ -13129,7 +13131,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];
@@ -13164,7 +13166,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. */
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
                 entityType: components["parameters"]["EntityType"];
                 /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
                 entityPid: components["parameters"]["EntityPid"];

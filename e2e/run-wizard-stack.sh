@@ -22,5 +22,6 @@ mkdir -p "$RUN_DIR"/{waxdeck-data,library-src}
 WAXDECK_ADDR=127.0.0.1:4430 \
 WAXDECK_DATA_DIR="$RUN_DIR_NATIVE/waxdeck-data" \
 WAXDECK_MATCHING=false \
+WAXDECK_ARTIST_ART=false \
 WAXDECK_PUBLIC_BASE=http://localhost:4430 \
 	exec "$E2E_DIR/../server/waxdeck"

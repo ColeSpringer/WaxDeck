@@ -123,6 +123,15 @@ func run() error {
 		acoustidKey  = flag.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")
 		fanartKey    = flag.String("fanarttv-key", envOr("WAXDECK_FANARTTV_KEY", ""), "fanart.tv API key; empty leaves that artwork provider unconfigured")
 
+		discogsToken   = flag.String("discogs-token", envOr("WAXDECK_DISCOGS_TOKEN", ""), "Discogs personal access token; empty leaves that artwork and genre provider unconfigured")
+		hardcoverKey   = flag.String("hardcover-key", envOr("WAXDECK_HARDCOVER_KEY", ""), "Hardcover API token; empty leaves that audiobook provider unconfigured")
+		googleBooksKey = flag.String("google-books-key", envOr("WAXDECK_GOOGLE_BOOKS_KEY", ""), "Google Books API key; optional - the provider works keyless and a key only raises the quota")
+
+		enrichURLs = flag.String("enrich-provider-urls", envOr("WAXDECK_ENRICH_PROVIDER_URLS", ""), "custom enrichment providers as name=url pairs, comma separated, each implementing the contract in docs/custom-provider-api/. Validated at startup (the capabilities document must answer and advertise a name) and registered ahead of every built-in provider")
+		enrichAuth = flag.String("enrich-provider-auth", envOr("WAXDECK_ENRICH_PROVIDER_AUTH", ""), "bearer tokens for custom enrichment providers as name=token pairs, comma separated; names must match -enrich-provider-urls")
+
+		artistArtOn = flag.Bool("artist-art", envOr("WAXDECK_ARTIST_ART", "true") == "true", "fill missing artist portraits in a daily background sweep, from fanart.tv when its key is set (keyed on the MBID) and from Deezer's name-matched artist search otherwise. On by default; set WAXDECK_ARTIST_ART=false and the server never asks either service for one")
+
 		enrichContact = flag.String("enrichment-contact", envOr("WAXDECK_ENRICHMENT_CONTACT", ""), "MusicBrainz contact (an email or a URL) the catalog's whole-library enrichment pass identifies itself with. MusicBrainz requires an identifying agent, so empty leaves that pass disabled and /admin/enrichment/run refuses")
 		enrichMatch   = flag.Bool("enrichment-match-releases", envOr("WAXDECK_ENRICHMENT_MATCH_RELEASES", "true") == "true", "during enrichment, resolve which pressing of a record the library holds from its barcode or catalog number, deciding ties on medium and country. On by default; needs -enrichment-contact to have any effect")
 
@@ -304,18 +313,99 @@ func run() error {
 			}),
 		}
 	}
-	// One Deezer client, shared: radio's artwork rung and enrichment both
-	// go at api.deezer.com, and two would be two unpaced callers.
+	// One Deezer client, shared: radio's artwork rung, enrichment, and
+	// the artist portrait sweep all go at api.deezer.com, and more
+	// would be that many unpaced callers.
 	deezer := waxproviders.NewDeezer(waxproviders.DeezerConfig{})
 	enrichProviders := []enrich.Provider{
 		deezer,
 		waxproviders.NewITunes(waxproviders.ITunesConfig{}),
-		waxproviders.NewAudnexus(waxproviders.AudnexusConfig{}),
 	}
+	if *discogsToken != "" {
+		enrichProviders = append(enrichProviders, waxproviders.NewDiscogs(waxproviders.DiscogsConfig{Token: *discogsToken}))
+	}
+	// The book ladder, identifier-anchored end first: Audnexus answers
+	// the ASIN outright, Hardcover bridges an ASIN to the ISBN the two
+	// fallbacks key on, and the fallbacks also take a name-gated title
+	// search for books carrying neither identifier's answer yet.
+	enrichProviders = append(enrichProviders, waxproviders.NewAudnexus(waxproviders.AudnexusConfig{}))
+	if *hardcoverKey != "" {
+		enrichProviders = append(enrichProviders, waxproviders.NewHardcover(waxproviders.HardcoverConfig{Token: *hardcoverKey}))
+	}
+	enrichProviders = append(enrichProviders,
+		waxproviders.NewGoogleBooks(waxproviders.GoogleBooksConfig{APIKey: *googleBooksKey}),
+		waxproviders.NewOpenLibrary(waxproviders.OpenLibraryConfig{}),
+	)
+	// The artist portrait chain: fanart.tv first when keyed (an MBID hit
+	// cannot be the wrong artist), Deezer's name match as the fallback.
+	// One fanart.tv client for the same pacing reason as Deezer's.
+	artistArt := waxproviders.ArtistArtChain{Deezer: deezer}
 	if *fanartKey != "" {
-		enrichProviders = append([]enrich.Provider{
-			waxproviders.NewFanartTV(waxproviders.FanartTVConfig{APIKey: *fanartKey}),
-		}, enrichProviders...)
+		fanart := waxproviders.NewFanartTV(waxproviders.FanartTVConfig{APIKey: *fanartKey})
+		enrichProviders = append([]enrich.Provider{fanart}, enrichProviders...)
+		artistArt.Fanart = fanart
+	}
+	// Custom providers ride ahead of everything: an operator who wired a
+	// regional service wants its answers to win. Each is validated at
+	// startup, so a typo'd URL or a downed sidecar is a refusal naming
+	// it rather than a provider that is silently absent.
+	bridgePairs, err := parsePairs(*enrichURLs, "enrich provider")
+	if err != nil {
+		return err
+	}
+	authPairs, err := parsePairs(*enrichAuth, "enrich provider auth")
+	if err != nil {
+		return err
+	}
+	authFor := make(map[string]string, len(authPairs))
+	bridgeNames := make(map[string]bool, len(bridgePairs))
+	for _, p := range bridgePairs {
+		bridgeNames[p[0]] = true
+	}
+	for _, p := range authPairs {
+		if !bridgeNames[p[0]] {
+			return fmt.Errorf("WAXDECK_ENRICH_PROVIDER_AUTH names %q, which is not a configured enrich provider", p[0])
+		}
+		authFor[p[0]] = p[1]
+	}
+	if len(bridgePairs) > 0 {
+		// The provenance mark must be unambiguous: a bridge advertising a
+		// name a registered provider (or the catalog's own built-ins)
+		// already stamps values with would make every conflict
+		// unattributable.
+		takenNames := map[string]bool{
+			"musicbrainz": true, "musicbrainz:edition": true,
+			"coverartarchive": true, "listenbrainz": true, "lrclib": true,
+		}
+		for _, p := range enrichProviders {
+			takenNames[p.Name()] = true
+		}
+		bridged := make([]enrich.Provider, 0, len(bridgePairs))
+		for _, p := range bridgePairs {
+			bridge, err := waxproviders.NewHTTPBridge(ctx, waxproviders.HTTPBridgeConfig{
+				Label: p[0], BaseURL: p[1], Token: authFor[p[0]],
+			})
+			if err != nil {
+				return err
+			}
+			// A remote advertising only capabilities this build does not
+			// understand is version skew, not misconfiguration: the URL
+			// answered and named itself. Skipping with a log line beats
+			// refusing to start over a provider that could never be
+			// called anyway.
+			if bridge.Capabilities() == 0 {
+				log.Warn("custom enrichment provider advertises no capability this build understands; skipping it",
+					"name", bridge.Name(), "label", p[0])
+				continue
+			}
+			if takenNames[bridge.Name()] {
+				return fmt.Errorf("enrich provider %q advertises the name %q, which another provider already stamps its values with", p[0], bridge.Name())
+			}
+			takenNames[bridge.Name()] = true
+			log.Info("custom enrichment provider connected", "name", bridge.Name(), "label", p[0])
+			bridged = append(bridged, bridge)
+		}
+		enrichProviders = append(bridged, enrichProviders...)
 	}
 
 	workerTokenList := splitNonEmpty(*workerTokens, ",")
@@ -370,6 +460,11 @@ func run() error {
 		})
 	}
 	svcCfg.RadioArtResolver = radioArt
+	// Nil when switched off, which is what disables the sweep at the
+	// service too: a build with nothing wired cannot reach out.
+	if *artistArtOn {
+		svcCfg.ArtistArtProvider = artistArt
+	}
 	svc, err := service.Open(ctx, svcCfg, store, group)
 	if err != nil {
 		return err
@@ -442,6 +537,36 @@ func run() error {
 			}
 		}
 	})
+
+	// Artist portraits: fill what the enrichment pass structurally
+	// cannot (its providers target release groups). Daily, because the
+	// set of artists without findable images is stable and every ask is
+	// a network call; the wake channel runs a pass alongside each
+	// admin-started enrichment run. The first pass waits out the
+	// startup scan's opening minutes so it walks a populated catalog.
+	// WAXDECK_ARTIST_ART=false spawns no worker at all.
+	if *artistArtOn {
+		group.Go(ctx, "artist-art-sweep", func(ctx context.Context) error {
+			first := time.NewTimer(2 * time.Minute)
+			defer first.Stop()
+			tick := time.NewTicker(24 * time.Hour)
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-first.C:
+				case <-tick.C:
+				case <-svc.ArtistArtWake():
+				}
+				if res, err := svc.ArtistArtSweep(ctx); err != nil {
+					log.Warn("artist art sweep", "err", err)
+				} else if res.Filled > 0 || res.Misses > 0 {
+					log.Info("artist art sweep", "scanned", res.Scanned, "filled", res.Filled, "misses", res.Misses)
+				}
+			}
+		})
+	}
 
 	// Trash retention: purge trashed files older than the configured
 	// window (0 disables it). Self-gates on the runtime admin setting so
@@ -1273,6 +1398,27 @@ func splitNonEmpty(s, sep string) []string {
 		}
 	}
 	return out
+}
+
+// parsePairs parses "name=value,name2=value2", order-preserving; what
+// names the flag for the error. The error never echoes a value: one of
+// these flags carries bearer tokens, and a malformed entry must not
+// write its secret to the log on its way out.
+func parsePairs(s, what string) ([][2]string, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
+	var out [][2]string
+	i := 0
+	for part := range strings.SplitSeq(s, ",") {
+		i++
+		name, val, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if !ok || name == "" || val == "" {
+			return nil, fmt.Errorf("bad %s entry %d: want name=value", what, i)
+		}
+		out = append(out, [2]string{name, val})
+	}
+	return out, nil
 }
 
 // flagWasSet reports whether the named flag appeared on the command

@@ -157,6 +157,7 @@ class WaxDeckUser {
     this.displayName,
     this.roles = const [],
     this.uploadEnabled = false,
+    this.managePodcasts = false,
   });
 
   final String id;
@@ -167,6 +168,10 @@ class WaxDeckUser {
   /// The *effective* upload right (administrators always hold it);
   /// upload affordances gate on this.
   final bool uploadEnabled;
+
+  /// The *effective* podcast-curation right (administrators always
+  /// hold it); podcast-curation affordances gate on this.
+  final bool managePodcasts;
 
   /// Name to show in UI chrome.
   String get label => displayName ?? username;

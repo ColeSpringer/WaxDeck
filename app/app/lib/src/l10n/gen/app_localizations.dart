@@ -9836,6 +9836,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 selected} other{{count} selected}}'**
   String podcastSelectedCount(int count);
 
+  /// Row in a show's overflow opening the artwork manager for the show's cover. Offered to accounts that may curate podcasts.
+  ///
+  /// In en, this message translates to:
+  /// **'Set cover'**
+  String get podcastSetCover;
+
   /// Overline above the per-show settings sheet.
   ///
   /// In en, this message translates to:

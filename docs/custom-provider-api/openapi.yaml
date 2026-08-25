@@ -1,0 +1,221 @@
+openapi: 3.0.3
+info:
+  title: WaxDeck custom enrichment provider
+  version: 1.0.0
+  description: >
+    The contract a self-hosted metadata service implements to plug into
+    WaxDeck's enrichment as a provider: a regional lyrics database, a
+    scene-specific cover source, a house genre taxonomy. WaxDeck is the
+    client; the service you write is the server. Two endpoints mirror
+    the in-process provider port: a capabilities read, answered once at
+    WaxDeck's startup, and one enrich call per lookup.
+
+
+    This document lives outside `api/spec/` deliberately: it is not part
+    of WaxDeck's own REST surface, it is the surface WaxDeck consumes.
+    Register an implementation with `WAXDECK_ENRICH_PROVIDER_URLS`
+    (`name=url` pairs, comma separated) and, if it wants auth,
+    `WAXDECK_ENRICH_PROVIDER_AUTH` (`name=token` pairs; the token rides
+    every request as `Authorization: Bearer <token>`). Custom providers
+    are asked ahead of every built-in one.
+paths:
+  /capabilities:
+    get:
+      operationId: getCapabilities
+      summary: What this provider is and supplies
+      description: >
+        Read once when WaxDeck starts (with a short retry ladder, so a
+        provider container that boots beside the server is not lost to
+        the race). The name is the provenance mark stamped on every
+        value this provider supplies (visible in the editor's per-field
+        chips), so it must be non-empty and should stay stable forever;
+        WaxDeck refuses to start on an empty one, which surfaces a
+        misconfiguration immediately instead of dropping the provider
+        with a log line. Capability tokens this contract version does
+        not define are ignored, so a newer provider still serves an
+        older WaxDeck; a provider advertising nothing the running
+        WaxDeck understands is skipped with a log line rather than
+        refused, since it could never have been called.
+      responses:
+        "200":
+          description: The provider's identity and capability set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capabilities"
+  /enrich:
+    post:
+      operationId: enrich
+      summary: Answer one candidate lookup
+      description: >
+        One lookup, one answer. WaxDeck fills the identity hints it has
+        for the target; use whichever your lookup needs and ignore the
+        rest. Answer `200` with a candidate carrying everything found -
+        WaxDeck applies it fill-when-empty and lock-respecting, so
+        returning more than was asked for costs nothing; an all-empty
+        `200` body counts as a no-match - or `204` for a clean no-match
+        (looked up, nothing there). A `404` is read as a no-match too,
+        defensively; `204` is the form that says it. Any other status
+        is treated as a transient failure: logged, skipped, retried on
+        a later pass.
+
+
+        Rate limiting toward whatever your service calls out to is the
+        service's own business; WaxDeck paces its calls toward you and
+        never invokes concurrently within one enrichment pass. WaxDeck
+        keeps no cache of enrich answers (a candidate can carry a whole
+        cover), so caching is yours to do - and requests with
+        `force: true` ask you to bypass whatever cache you keep.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrichRequest"
+      responses:
+        "200":
+          description: A candidate for the target.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Candidate"
+        "204":
+          description: A clean no-match.
+components:
+  schemas:
+    Capabilities:
+      type: object
+      required: [name, capabilities]
+      properties:
+        name:
+          type: string
+          description: >
+            Stable provenance id, lowercase by convention
+            (`musicbrainz`, `lrclib` are the built-ins' shape). Never
+            empty.
+          example: regionaldb
+        capabilities:
+          type: array
+          description: The enrichment kinds this provider supplies.
+          items:
+            type: string
+            enum: [identity, genres, cover, lyrics, book]
+
+    EnrichRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: >
+            Which entity the lookup concerns. `release_group` asks for
+            genres and cover art; `release` is one specific pressing
+            (answer nothing rather than the group's picture if you only
+            know groups); `recording` asks for lyrics; `book` for
+            audiobook metadata; `artist` is reserved for identity
+            resolution.
+          enum: [artist, release_group, release, recording, book]
+        force:
+          type: boolean
+          description: Bypass any cache the provider keeps.
+        title:
+          type: string
+          description: >
+            Artist name, release-group title, track title, or book
+            title, per `type`.
+        artist:
+          type: string
+          description: Disambiguating primary artist (or book author).
+        album:
+          type: string
+          description: Album title, for a recording lyrics lookup.
+        mbid:
+          type: string
+          description: Known MusicBrainz identity anchor for the target.
+        asin:
+          type: string
+          description: Known Audible/Amazon identifier (books).
+        isbn:
+          type: string
+          description: Known ISBN (books).
+        durationSec:
+          type: integer
+          description: >
+            Track duration in seconds, for a duration-disambiguated
+            lyrics match.
+
+    Candidate:
+      type: object
+      description: >
+        Everything the provider found for the target. All fields are
+        optional; WaxDeck decides what actually lands (fill-when-empty,
+        never over a locked field).
+      properties:
+        confidence:
+          type: number
+          description: Advisory 0..1; providers are ranked by registration order today.
+        mbid:
+          type: string
+          description: Resolved MusicBrainz id (identity capability).
+        asin:
+          type: string
+        isbn:
+          type: string
+        type:
+          type: string
+          description: Release-group primary type.
+          enum: [album, ep, single, compilation, audiobook]
+        genres:
+          type: array
+          description: Display names, highest confidence first.
+          items:
+            type: string
+        cover:
+          type: object
+          description: >
+            One front-cover image. WaxDeck refuses covers over 8 MiB
+            and bytes that are not a recognizable picture.
+          required: [data]
+          properties:
+            data:
+              type: string
+              format: byte
+              description: The image bytes, base64.
+            mediaType:
+              type: string
+              description: >
+                The transport's word for what the bytes are
+                (`image/jpeg`); consulted only when the bytes
+                themselves neither decode nor sniff.
+            sourceUrl:
+              type: string
+              description: Where the picture came from, cited in provenance.
+        publisher:
+          type: string
+          description: Audiobook publisher.
+        lyrics:
+          type: object
+          description: At least one of `synced` and `unsynced`.
+          properties:
+            synced:
+              type: array
+              description: Timed lines, ordered by `timeMs`.
+              items:
+                type: object
+                required: [timeMs, text]
+                properties:
+                  timeMs:
+                    type: integer
+                  text:
+                    type: string
+            unsynced:
+              type: string
+              description: Plain unsynchronized text.
+        fields:
+          type: object
+          description: >
+            Generic curated values keyed by WaxDeck's metadata
+            vocabulary (`narrator`, `description`, `year`, ...), for a
+            value with no dedicated slot above.
+          additionalProperties:
+            type: string

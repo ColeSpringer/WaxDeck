@@ -245,14 +245,21 @@ cover in the slot you just emptied, which is the difference between
 That state - pinned with nothing behind it - is visible rather than
 silent: the artwork manager draws it as a pinned empty slot instead of
 an ordinary empty one, and carries a **Pin this cover** switch
-wherever it is mounted, which is how the pin comes off. On a release
-or an artist the switch rides
+wherever it is mounted, which is how the pin comes off. On a release,
+an artist, or a podcast show the switch rides
 `PUT /entities/{entityType}/{entityPid}/artwork/lock`; on an item it
 rides the item's own `art` field lock, the same surface the scalar
 locks use. Playlists are refused the entity switch: a playlist's
 cover authority is its own uploaded-versus-generated marker, and
 clearing an uploaded playlist cover hands the slot back to the mosaic
 built from the members.
+
+A podcast show's cover is the one entity not administrators-only:
+accounts with the manage-podcasts permission set, clear, and pin it
+too, through **Set cover** in the show's own menu. A hand-set show
+cover is pinned, which is what keeps the next feed sync from fetching
+the feed's image over it; clearing it and lifting the pin hands the
+slot back to the feed, which refills on the next sync.
 
 That mosaic marks itself. It is stored with the source `generated`, so
 the source mark under it reads as the server's own composition rather
@@ -410,9 +417,28 @@ providers in priority order) fills artwork, genres, lyrics, and book
 metadata, respecting locks and never overwriting curated values.
 WaxDeck registers its own providers ahead of the catalog's built-ins:
 Deezer and iTunes artwork (key free), Audnexus audiobook metadata
-(key free, keyed on ASIN), and fanart.tv artwork when
-`WAXDECK_FANARTTV_KEY` is set. The editor's per-item fetch uses the
-same providers for one item at a time.
+(key free, keyed on ASIN), fanart.tv artwork when
+`WAXDECK_FANARTTV_KEY` is set, Discogs artwork and genres when
+`WAXDECK_DISCOGS_TOKEN` is set, and a book ladder past Audnexus:
+Hardcover bridges an ASIN to the ISBN (`WAXDECK_HARDCOVER_KEY`), and
+Google Books and Open Library answer by ISBN, or by a title-and-author
+search that must match both names (key free; a Google Books key only
+raises its quota). Ahead of all of them ride any custom providers the
+install wired through `WAXDECK_ENRICH_PROVIDER_URLS` - self-hosted
+services implementing the contract in `docs/custom-provider-api/`. The
+editor's per-item fetch uses the same providers for one item at a
+time.
+
+Artist portraits are WaxDeck's own sweep rather than the catalog
+pass's, because the enrichment providers target release groups: a
+daily background pass (also kicked by each admin-run enrichment) walks
+artists without a portrait and fills the slot from fanart.tv by MBID,
+falling back to Deezer under an exact-ish name match. It writes
+fill-when-empty and pin-respecting like every enrichment write,
+remembers artists with no findable image so they are not refetched
+every pass (a forced enrichment run drops that memory), skips
+compilation stand-ins like Various Artists, and turns off entirely
+with `WAXDECK_ARTIST_ART=false`.
 
 That fetch previews before it applies. The editor's Fetch button asks
 `POST /items/{pid}/enrich/preview` what the providers would change -

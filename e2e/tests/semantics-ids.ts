@@ -620,6 +620,7 @@ export const SemanticsIds = {
   showEpisodeSearch: 'show-episode-search',
   showOverflow: 'show-overflow',
   showPin: 'show-pin',
+  showSetCover: 'show-set-cover',
   transcriptCue: (index: string | number) => `transcript-cue-${index}`,
   transcriptOpen: 'transcript-open',
   unsubscribeKeepFiles: 'unsubscribe-keep-files',

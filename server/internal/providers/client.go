@@ -48,6 +48,10 @@ type core struct {
 	httpClient  *http.Client
 	userAgent   string
 	minInterval time.Duration
+	// authorization, when set, rides every request as the Authorization
+	// header (Hardcover's bearer token). Key-in-query providers leave it
+	// empty.
+	authorization string
 
 	mu   sync.Mutex
 	next map[string]time.Time
@@ -106,6 +110,12 @@ func (c *core) postForm(ctx context.Context, rawURL string, form url.Values, ttl
 	return c.do(ctx, http.MethodPost, rawURL, "application/x-www-form-urlencoded", []byte(form.Encode()), ttl)
 }
 
+// postJSON performs a paced, cached JSON POST (a GraphQL query). The
+// cache key includes a hash of the body.
+func (c *core) postJSON(ctx context.Context, rawURL string, body []byte, ttl time.Duration) ([]byte, int, error) {
+	return c.do(ctx, http.MethodPost, rawURL, "application/json", body, ttl)
+}
+
 func (c *core) do(ctx context.Context, method, rawURL, contentType string, reqBody []byte, ttl time.Duration) ([]byte, int, error) {
 	key := rawURL
 	if len(reqBody) > 0 {
@@ -115,9 +125,13 @@ func (c *core) do(ctx context.Context, method, rawURL, contentType string, reqBo
 	if body, ok := c.cached(key, ttl); ok {
 		return body, http.StatusOK, nil
 	}
+	// Every error below names the query-stripped URL rather than the raw
+	// one: some API keys still ride as query parameters, and a transport
+	// error string ends up in the server log.
+	safe := stripQuery(rawURL)
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, 0, fmt.Errorf("providers: parse url %q: %w", rawURL, err)
+		return nil, 0, fmt.Errorf("providers: parse url %q: %w", safe, err)
 	}
 	if err := c.pace(ctx, u.Host); err != nil {
 		return nil, 0, fmt.Errorf("providers: wait for %s: %w", u.Host, err)
@@ -128,15 +142,25 @@ func (c *core) do(ctx context.Context, method, rawURL, contentType string, reqBo
 	}
 	req, err := http.NewRequestWithContext(ctx, method, rawURL, rd)
 	if err != nil {
-		return nil, 0, fmt.Errorf("providers: build request for %s: %w", rawURL, err)
+		return nil, 0, fmt.Errorf("providers: build request for %s: %w", safe, err)
 	}
 	req.Header.Set("User-Agent", c.userAgent)
+	if c.authorization != "" {
+		req.Header.Set("Authorization", c.authorization)
+	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("providers: request %s: %w", rawURL, err)
+		// A transport failure is a *url.Error carrying the full URL
+		// inside its own message, so wrapping it verbatim would undo the
+		// stripping above; the inner cause is kept, the echo is not.
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			return nil, 0, fmt.Errorf("providers: request %s: %s: %w", safe, uerr.Op, uerr.Err)
+		}
+		return nil, 0, fmt.Errorf("providers: request %s: %w", safe, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
@@ -285,6 +309,17 @@ func fetchImage(ctx context.Context, c *core, rawURL string) ([]byte, string, er
 		return nil, "", fmt.Errorf("providers: read image %s: %w", rawURL, err)
 	}
 	return body, mediaType, nil
+}
+
+// stripQuery drops everything from the first "?" on, for URLs quoted in
+// error messages: query strings are where keyed providers carry their
+// credentials. Byte-level on purpose - it must work on the URLs that do
+// not parse.
+func stripQuery(rawURL string) string {
+	if i := strings.IndexByte(rawURL, '?'); i >= 0 {
+		return rawURL[:i]
+	}
+	return rawURL
 }
 
 // readCapped reads at most limit bytes and errors when the body is

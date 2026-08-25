@@ -441,16 +441,44 @@ func (s *Server) ClearItemArtwork(ctx context.Context, req ClearItemArtworkReque
 	return ClearItemArtwork204Response{}, nil
 }
 
+// entityArtworkPermitted is the API-side gate on the entity-artwork
+// surface, one answer for the set, clear, and pin endpoints. Catalog
+// entities are administrators-only, with two exceptions: a playlist
+// cover is its owner's (the service enforces ownership, and the pin
+// endpoints refuse the type outright with the documented
+// invalid-request, so nothing owner-pinnable leaks through the wider
+// gate), and a podcast show's cover belongs to whoever curates shows,
+// which is ManagePodcasts as well as administrators - pin included,
+// because the pin is what keeps a hand-set cover from being refetched
+// by the next feed sync.
+func entityArtworkPermitted(uc *service.UserCtx, entityType string) bool {
+	switch {
+	case uc.Admin:
+		return true
+	case service.EntityArtworkOwned(entityType):
+		return true
+	case entityType == "podcast":
+		return uc.ManagePodcasts
+	}
+	return false
+}
+
+// entityArtworkRefusal names who the entity-artwork gate admits for
+// the type, for the forbidden body.
+func entityArtworkRefusal(entityType string) string {
+	if entityType == "podcast" {
+		return "administrators, or an account that may manage podcasts"
+	}
+	return "administrators only"
+}
+
 func (s *Server) SetEntityArtwork(ctx context.Context, req SetEntityArtworkRequestObject) (SetEntityArtworkResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// A playlist cover is its owner's, not the catalog's, so it is the one
-	// entity type here that is not administrators-only; the service
-	// enforces ownership.
-	if !uc.Admin && !service.EntityArtworkOwned(string(req.EntityType)) {
-		return SetEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if !entityArtworkPermitted(uc, string(req.EntityType)) {
+		return SetEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
 	}
 	// Reject a bad role before buffering up to 16 MiB of image body.
 	if req.Params.Role != nil && !req.Params.Role.Valid() {
@@ -483,8 +511,8 @@ func (s *Server) ClearEntityArtwork(ctx context.Context, req ClearEntityArtworkR
 	if err != nil {
 		return nil, err
 	}
-	if !uc.Admin && !service.EntityArtworkOwned(string(req.EntityType)) {
-		return ClearEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if !entityArtworkPermitted(uc, string(req.EntityType)) {
+		return ClearEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
 	}
 	if req.Params.Role != nil && !req.Params.Role.Valid() {
 		return ClearEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown art role"))}, nil
@@ -503,18 +531,18 @@ func (s *Server) ClearEntityArtwork(ctx context.Context, req ClearEntityArtworkR
 	return ClearEntityArtwork204Response{}, nil
 }
 
-// GetEntityArtworkLock and SetEntityArtworkLock are administrators-only
-// with no owned-entity exemption: the one entity type whose artwork
-// belongs to a user is the playlist, and the service refuses that type
-// outright, so there is nobody but an administrator to let through.
+// GetEntityArtworkLock and SetEntityArtworkLock share the entity-
+// artwork gate deliberately: the podcast arm carries into the pin, and
+// the playlist exemption it also admits is refused outright by the
+// service (the documented invalid-request), so no owner ever pins.
 
 func (s *Server) GetEntityArtworkLock(ctx context.Context, req GetEntityArtworkLockRequestObject) (GetEntityArtworkLockResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if !uc.Admin {
-		return GetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if !entityArtworkPermitted(uc, string(req.EntityType)) {
+		return GetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
 	}
 	locked, err := s.svc.EntityArtworkLock(ctx, string(req.EntityType), req.EntityPid)
 	if err != nil {
@@ -534,8 +562,8 @@ func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkL
 	if err != nil {
 		return nil, err
 	}
-	if !uc.Admin {
-		return SetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if !entityArtworkPermitted(uc, string(req.EntityType)) {
+		return SetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
 	}
 	if req.Body == nil {
 		return SetEntityArtworkLock400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a locked body is required"))}, nil

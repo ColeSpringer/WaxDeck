@@ -18,6 +18,11 @@ table app_passwords
   autoindex pk|unique=1|(id)
   autoindex u|unique=1|(secret_hash)
   index app_passwords_by_user|unique=0|partial=0|(user_id,created_at_ns)
+table artist_art_misses
+  column artist_pid|TEXT|notnull=0|default=<none>|pk=1
+  column attempted_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column mbid|TEXT|notnull=1|default=''|pk=0
+  autoindex pk|unique=1|(artist_pid)
 table audit_log
   column action|TEXT|notnull=1|default=<none>|pk=0
   column actor_id|TEXT|notnull=1|default=''|pk=0

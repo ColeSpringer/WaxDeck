@@ -20,7 +20,21 @@ import (
 	waxlabel "github.com/colespringer/waxlabel"
 
 	"github.com/colespringer/waxdeck/server/internal/genre"
+	waxproviders "github.com/colespringer/waxdeck/server/internal/providers"
 )
+
+// enrichAsk dispatches one provider lookup, naming the capability the
+// caller will read when the provider can honor it (the ScopedEnricher
+// refinement) so a multi-capability provider stops fetching what will
+// be discarded. The port's own Request cannot carry the want; the
+// "capability-scoped provider calls" ask in upstream-requests.md is
+// what would let the catalog's whole-library pass say the same.
+func enrichAsk(ctx context.Context, p enrich.Provider, req enrich.Request, want enrich.Capability) (*enrich.Candidate, error) {
+	if s, ok := p.(waxproviders.ScopedEnricher); ok {
+		return s.EnrichScoped(ctx, req, want)
+	}
+	return p.Enrich(ctx, req)
+}
 
 // Per-item enrichment want names, shared by the API surface and the
 // health fixer.
@@ -243,6 +257,21 @@ func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool) (s
 			}
 		}
 		return "", classify(err)
+	}
+	// A forced run means "ask everything again", which for the portrait
+	// sweep is dropping its miss memory; an ordinary run leaves the
+	// 30-day holds standing.
+	if force && l.artistArt != nil {
+		if err := l.db.ClearArtistArtMisses(ctx); err != nil {
+			l.log.Warn("artist art: clearing miss memory for a forced run", "err", err)
+		}
+	}
+	// One-slot, non-blocking: the artist portrait sweep runs alongside
+	// the catalog pass this started, and a kick that finds the slot
+	// full is already answered.
+	select {
+	case l.artistArtWake <- struct{}{}:
+	default:
 	}
 	return apiPID(PrefixJob, pid), nil
 }
@@ -758,7 +787,7 @@ func (l *Library) proposeCover(ctx context.Context, it *model.ItemView, locked m
 		Artist: firstNonEmpty(it.AlbumArtist, it.Artist),
 	}
 	for _, p := range providers {
-		cand, err := p.Enrich(ctx, req)
+		cand, err := enrichAsk(ctx, p, req, enrich.CapCover)
 		if err != nil {
 			l.log.Warn("enrich: cover provider", "provider", p.Name(), "err", err)
 			continue
@@ -834,7 +863,7 @@ func (l *Library) proposeGenres(ctx context.Context, it *model.ItemView, locked 
 		Artist: firstNonEmpty(it.AlbumArtist, it.Artist),
 	}
 	for _, p := range providers {
-		cand, err := p.Enrich(ctx, req)
+		cand, err := enrichAsk(ctx, p, req, enrich.CapGenres)
 		if err != nil {
 			l.log.Warn("enrich: genre provider", "provider", p.Name(), "err", err)
 			continue
@@ -918,7 +947,7 @@ func (l *Library) proposeLyrics(ctx context.Context, it *model.ItemView, locked 
 		DurationSec: int(it.DurationMS / 1000),
 	}
 	for _, p := range providers {
-		cand, err := p.Enrich(ctx, req)
+		cand, err := enrichAsk(ctx, p, req, enrich.CapLyrics)
 		if err != nil {
 			l.log.Warn("enrich: lyrics provider", "provider", p.Name(), "err", err)
 			continue
@@ -974,15 +1003,14 @@ func (l *Library) commitLyrics(ctx context.Context, it *model.ItemView, proposal
 	return "lyrics: " + proposal.Provider, ""
 }
 
-// bookGuard is the book want's local preconditions, shared by the
-// propose and commit halves. Book providers key on the ASIN, so an
-// item without one is skipped with the reason.
+// bookGuard is the book want's kind precondition, shared by the
+// propose and commit halves. The identifier requirement lives with
+// each half's detail read, which is where the ISBN is known: the
+// providers key on an ASIN or an ISBN (Hardcover bridges the first to
+// the second, committed one pass and keyed the next).
 func bookGuard(it *model.ItemView) (skippedEntry string) {
 	if it.Kind != model.KindBook {
 		return "book: not an audiobook"
-	}
-	if it.ASIN == "" {
-		return "book: book metadata needs an ASIN"
 	}
 	return ""
 }
@@ -1004,14 +1032,19 @@ func (l *Library) proposeBook(ctx context.Context, it *model.ItemView, locked ma
 		l.log.Warn("enrich: reading book detail", "item", it.PID, "err", err)
 		return nil, "book: unreadable"
 	}
+	if it.ASIN == "" && detail.ISBN == "" {
+		return nil, "book: book metadata needs an ASIN or an ISBN"
+	}
 	req := enrich.Request{
 		Type:   enrich.TargetBook,
 		Title:  it.Title,
 		Artist: it.Artist,
 		ASIN:   it.ASIN,
+		ISBN:   detail.ISBN,
 	}
+	answered := false
 	for _, p := range providers {
-		cand, err := p.Enrich(ctx, req)
+		cand, err := enrichAsk(ctx, p, req, enrich.CapBookMeta)
 		if err != nil {
 			l.log.Warn("enrich: book provider", "provider", p.Name(), "err", err)
 			continue
@@ -1019,18 +1052,19 @@ func (l *Library) proposeBook(ctx context.Context, it *model.ItemView, locked ma
 		if cand == nil {
 			continue
 		}
+		answered = true
 		edits, skipped := bookEnrichEdits(cand, detail, it, locked)
 		for field, val := range skipped {
 			l.log.Debug("enrich: skipping malformed provider value", "provider", p.Name(), "item", it.PID, "field", field, "value", val)
 		}
 		if len(edits) == 0 {
-			if len(skipped) > 0 {
-				// This provider offered only values WaxBin would reject, so the
-				// item is unchanged; try the next provider instead of ending the
-				// pass here (the pre-skip code fell through via the edit error).
-				continue
-			}
-			return nil, "book: nothing new to fill"
+			// Nothing this provider offers is honestly fillable - its
+			// values are malformed, or name only fields the item already
+			// holds. The ladder's providers answer different fields, so
+			// the next one may still hold something new; ending the pass
+			// here (which the single-provider era did) would silence the
+			// rest of the ladder.
+			continue
 		}
 		names := make([]string, 0, len(edits))
 		for name := range edits {
@@ -1042,6 +1076,9 @@ func (l *Library) proposeBook(ctx context.Context, it *model.ItemView, locked ma
 			out = append(out, EnrichFieldProposalDTO{Name: name, Proposed: edits[name], Provider: p.Name()})
 		}
 		return out, ""
+	}
+	if answered {
+		return nil, "book: nothing new to fill"
 	}
 	return nil, "book: no provider hit"
 }
@@ -1058,6 +1095,13 @@ func (l *Library) commitBook(ctx context.Context, it *model.ItemView, proposals 
 	if err != nil {
 		l.log.Warn("enrich: reading book detail", "item", it.PID, "err", err)
 		return "", "book: unreadable"
+	}
+	// The same identifier precondition the propose half enforces. The
+	// commit writes client-supplied values, so without this an item no
+	// provider could ever have been asked about would still take a
+	// proposal stamped with that provider's provenance.
+	if it.ASIN == "" && detail.ISBN == "" {
+		return "", "book: book metadata needs an ASIN or an ISBN"
 	}
 	edits := map[string]string{}
 	for _, p := range proposals {

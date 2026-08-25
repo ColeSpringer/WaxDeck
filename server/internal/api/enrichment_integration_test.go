@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/colespringer/waxbin/enrich"
@@ -46,7 +47,8 @@ func TestEnrichBookFallsThroughMalformedProvider(t *testing.T) {
 	}
 	book := books.Items[0].Pid
 
-	// Book providers key on ASIN, so the item needs one before enrichBook runs.
+	// Book providers key on an identifier, so the item needs one before
+	// enrichBook runs.
 	resp := h.patchJSON(t, "/api/v1/items/"+book+"/metadata", map[string]any{
 		"fields": map[string]string{"asin": "B000002L5R"},
 	})
@@ -59,6 +61,161 @@ func TestEnrichBookFallsThroughMalformedProvider(t *testing.T) {
 	// provider's publisher lands only if the pass fell through instead of ending.
 	if got := h.itemMeta(t, book).Fields["publisher"]; got != "Beta House" {
 		t.Fatalf("publisher = %q, want Beta House - enrich did not fall through the malformed provider", got)
+	}
+}
+
+// captureBookProvider records the request it was asked and answers a
+// fixed candidate, for asserting what the enrich pass hands providers.
+type captureBookProvider struct {
+	seen chan enrich.Request
+	cand *enrich.Candidate
+}
+
+func (c captureBookProvider) Name() string                    { return "capture" }
+func (c captureBookProvider) Capabilities() enrich.Capability { return enrich.CapBookMeta }
+func (c captureBookProvider) Enrich(_ context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	select {
+	case c.seen <- req:
+	default:
+	}
+	return c.cand, nil
+}
+
+// An audiobook carrying an ISBN and no ASIN still reaches the book
+// providers, and the request hands them the stored ISBN - the seam the
+// ISBN-keyed fallbacks (Google Books, Open Library) key their lookups
+// on, and the reason the guard reads "ASIN or ISBN" rather than the
+// ASIN alone it required before those providers existed.
+func TestEnrichBookRunsOnAnISBNAlone(t *testing.T) {
+	t.Parallel()
+	p := captureBookProvider{
+		seen: make(chan enrich.Request, 1),
+		cand: &enrich.Candidate{Publisher: "Bridge House"},
+	}
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{p}
+	})
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) == 0 {
+		t.Fatal("no audiobook scanned")
+	}
+	book := books.Items[0].Pid
+
+	const isbn = "9780306406157"
+	resp := h.patchJSON(t, "/api/v1/items/"+book+"/metadata", map[string]any{
+		"fields": map[string]string{"isbn": isbn},
+	})
+	wantStatus(t, resp, 200, "set isbn")
+
+	resp = h.postJSON(t, "/api/v1/items/"+book+"/enrich", map[string]any{"want": []string{"book"}})
+	wantStatus(t, resp, 200, "enrich book")
+
+	select {
+	case req := <-p.seen:
+		if req.ISBN != isbn {
+			t.Errorf("provider request ISBN = %q, want the stored one", req.ISBN)
+		}
+		if req.ASIN != "" {
+			t.Errorf("provider request ASIN = %q, want empty", req.ASIN)
+		}
+	default:
+		t.Fatal("the book provider was never asked")
+	}
+	if got := h.itemMeta(t, book).Fields["publisher"]; got != "Bridge House" {
+		t.Errorf("publisher = %q, want the provider's fill", got)
+	}
+}
+
+// A proposal commit is client-supplied values, so it re-checks the
+// identifier precondition the propose half enforces: without this, an
+// audiobook no provider could ever have been asked about (no ASIN, no
+// ISBN) would still take hand-built fields stamped with a registered
+// provider's provenance mark.
+func TestEnrichCommitRefusesAnIdentifierlessBook(t *testing.T) {
+	t.Parallel()
+	p := fakeBookProvider{name: "capture", cand: &enrich.Candidate{Publisher: "Real House"}}
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{p}
+	})
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) == 0 {
+		t.Fatal("no audiobook scanned")
+	}
+	book := books.Items[0].Pid
+
+	resp := h.postJSON(t, "/api/v1/items/"+book+"/enrich", map[string]any{
+		"want": []string{"book"},
+		"proposal": map[string]any{
+			"fields": []map[string]any{
+				{"name": "publisher", "proposed": "Forged House", "provider": "capture"},
+			},
+		},
+	})
+	wantStatus(t, resp, 200, "commit on an identifier-less book")
+	if got := h.itemMeta(t, book).Fields["publisher"]; got != "" {
+		t.Errorf("publisher = %q, want the identifier-less commit refused", got)
+	}
+}
+
+// scopedGenreProvider records how it was asked, proving the propose
+// loops dispatch through the ScopedEnricher refinement rather than the
+// plain port call - the seam that keeps a multi-capability provider
+// (Discogs) from downloading a cover on every genre ask.
+type scopedGenreProvider struct {
+	mu    sync.Mutex
+	plain int
+	wants []enrich.Capability
+}
+
+func (s *scopedGenreProvider) Name() string { return "scopey" }
+func (s *scopedGenreProvider) Capabilities() enrich.Capability {
+	return enrich.CapGenres | enrich.CapCover
+}
+func (s *scopedGenreProvider) Enrich(context.Context, enrich.Request) (*enrich.Candidate, error) {
+	s.mu.Lock()
+	s.plain++
+	s.mu.Unlock()
+	return nil, nil
+}
+func (s *scopedGenreProvider) EnrichScoped(_ context.Context, _ enrich.Request, want enrich.Capability) (*enrich.Candidate, error) {
+	s.mu.Lock()
+	s.wants = append(s.wants, want)
+	s.mu.Unlock()
+	return &enrich.Candidate{Genres: []string{"House"}}, nil
+}
+
+func TestEnrichAsksScopedProvidersWithTheWant(t *testing.T) {
+	t.Parallel()
+	p := &scopedGenreProvider{}
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{p}
+	})
+	page := h.items(t, "")
+	if len(page.Items) == 0 {
+		t.Fatal("no items in the demo library")
+	}
+	pid := page.Items[0].Pid
+
+	resp := h.postJSON(t, "/api/v1/items/"+pid+"/enrich", map[string]any{"want": []string{"genres"}})
+	wantStatus(t, resp, 200, "enrich genres")
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.plain != 0 {
+		t.Errorf("the plain Enrich ran %d times; the scoped refinement was bypassed", p.plain)
+	}
+	if len(p.wants) != 1 || p.wants[0] != enrich.CapGenres {
+		t.Errorf("scoped wants = %v, want one CapGenres ask", p.wants)
 	}
 }
 

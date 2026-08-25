@@ -8,8 +8,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 - [8-24-2026] Starting a podcast episode is slow on initial play (not downloaded). That might just be a network issue that is not fixable but we should look into that.
 
-- [8-24-2026] we still need to source artist images. the artists tab under music has no images. This probably also applies to podcasts. we might want to save those as well? to not abuse apis. not sure if that would require an upstream request.
-
 - [8-24-2026] The double yellow underline that you see sometimes (the letters on the right when looking through library items like albums or in the admin console over the main headers such as "library" and "people") is ugly.
 
 - [8-24-2026] Undoing "mark finished" can swallow another device's real completion. The undo is two writes - the position back, then the flags beside it (book_screen.dart `_undo`) - and an end-of-book checkpoint from another device landing between them is refused its finished mark while `played` still stands (`spokenWordCrossing`, server/internal/service/playback.go around 316); the flags-clear then lands last, leaving the book at 100 percent, unfinished, play count 0. A tens-of-milliseconds window needing a concurrent cross-device write, and it heals on the next listen past the threshold. Not WaxBin's: every catalog write applies as asked - the fix is an atomic undo, one request restoring position and flags together. The audiobooks spec's seeder used to be the "other device" here (8-24 soak, pass 3) and now waits the whole undo out.

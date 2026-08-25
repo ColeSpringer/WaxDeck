@@ -33,6 +33,9 @@ Docker Compose stack and the fast single-binary path.
   episode with anyone, no account needed.
 - [The similarity worker](similarity-worker.md): the optional analysis
   container behind sonic discovery, and the worker contract.
+- [Custom enrichment providers](custom-provider-api/README.md): plug a
+  self-hosted metadata service into enrichment, and the provider
+  contract it implements.
 - [Connect and casting](connect-and-casting.md): multi-device control,
   handoff, Chromecast, DLNA, and the jukebox.
 - [Admin and ops](admin-and-ops.md): users and permissions, backups

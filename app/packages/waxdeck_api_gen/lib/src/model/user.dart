@@ -17,6 +17,7 @@ part 'user.g.dart';
 /// * [displayName] - Optional display name; falls back to `username`.
 /// * [roles] - Assigned roles (`admin`, `user`).
 /// * [uploadEnabled] - Whether the account may upload audio. On self views (login, session) this is the *effective* value - administrators always may, whatever their stored flag says - and clients gate their upload affordances on it. On administrative account views (`UserAccount`) it is the stored per-account flag the account editor round-trips; an administrator's own stored flag may therefore read false while their effective right is true. Defined once here because the generators flatten `UserAccount`'s `allOf` over this schema; a duplicate declaration there would silently lose. 
+/// * [managePodcasts] - Whether the account may curate podcasts. Self views carry the *effective* value (administrators always may), so clients gate their podcast-curation affordances - adding shows, setting a show's cover - on it without a second read. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
 @BuiltValue(instantiable: false)
 abstract class User  {
   /// Stable user identifier.
@@ -38,6 +39,10 @@ abstract class User  {
   /// Whether the account may upload audio. On self views (login, session) this is the *effective* value - administrators always may, whatever their stored flag says - and clients gate their upload affordances on it. On administrative account views (`UserAccount`) it is the stored per-account flag the account editor round-trips; an administrator's own stored flag may therefore read false while their effective right is true. Defined once here because the generators flatten `UserAccount`'s `allOf` over this schema; a duplicate declaration there would silently lose. 
   @BuiltValueField(wireName: r'uploadEnabled')
   bool get uploadEnabled;
+
+  /// Whether the account may curate podcasts. Self views carry the *effective* value (administrators always may), so clients gate their podcast-curation affordances - adding shows, setting a show's cover - on it without a second read. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
+  @BuiltValueField(wireName: r'managePodcasts')
+  bool? get managePodcasts;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<User> get serializer => _$UserSerializer();
@@ -82,6 +87,13 @@ class _$UserSerializer implements PrimitiveSerializer<User> {
       object.uploadEnabled,
       specifiedType: const FullType(bool),
     );
+    if (object.managePodcasts != null) {
+      yield r'managePodcasts';
+      yield serializers.serialize(
+        object.managePodcasts,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -179,6 +191,13 @@ class _$$UserSerializer implements PrimitiveSerializer<$User> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.uploadEnabled = valueDes;
+          break;
+        case r'managePodcasts':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.managePodcasts = valueDes;
           break;
         default:
           unhandled.add(key);

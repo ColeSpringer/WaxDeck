@@ -630,6 +630,10 @@
       }
     }
   },
+  "podcastSetCover": "Set cover",
+  "@podcastSetCover": {
+    "description": "Row in a show's overflow opening the artwork manager for the show's cover. Offered to accounts that may curate podcasts."
+  },
   "podcastSettingsOverline": "This show",
   "@podcastSettingsOverline": {
     "description": "Overline above the per-show settings sheet."

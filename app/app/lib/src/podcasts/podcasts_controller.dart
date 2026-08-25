@@ -1,8 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+
+/// Whether the signed-in account may curate podcasts.
+///
+/// The session's `managePodcasts` is the server's *effective* answer
+/// (administrators always hold it), so this is the whole gate for
+/// podcast-curation affordances - no admin check to compose in.
+final canManagePodcastsProvider = Provider<bool>((ref) {
+  final user = ref.watch(authControllerProvider).value?.user;
+  return user?.managePodcasts ?? false;
+});
 
 /// The caller's podcast subscriptions, first page. The subscription list
 /// is small (it is the user's own follows), so one generous page covers

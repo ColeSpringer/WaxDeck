@@ -1644,6 +1644,7 @@
   "podcastSectionNotes": "Notas",
   "podcastSectionPeople": "Personas",
   "podcastSelectedCount": "{count, plural, =1{1 seleccionado} other{{count} seleccionados}}",
+  "podcastSetCover": "Establecer la portada",
   "podcastSettingsOverline": "Este programa",
   "podcastSettingsSpeed": "Velocidad: {speed}",
   "podcastSettingsSpeedLabel": "Velocidad de reproducción",

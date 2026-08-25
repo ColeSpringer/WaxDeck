@@ -149,10 +149,10 @@ class MetadataApi {
   }
 
   /// Clear entity artwork
-  /// Removes one artwork slot (&#x60;role&#x60;, default &#x60;front&#x60;) from an album, artist, release group, genre, or playlist entity. Files already carrying an embedded cover are untouched; this clears the catalog&#39;s copy. Clearing a playlist&#39;s uploaded cover hands the slot back to the mosaic the server builds from the members, so the playlist keeps a cover rather than going bare. Catalog entities are administrators-only; a playlist cover is cleared by its owner. 
+  /// Removes one artwork slot (&#x60;role&#x60;, default &#x60;front&#x60;) from an album, artist, release group, genre, playlist, or podcast entity. Files already carrying an embedded cover are untouched; this clears the catalog&#39;s copy. Clearing a playlist&#39;s uploaded cover hands the slot back to the mosaic the server builds from the members, so the playlist keeps a cover rather than going bare. Clearing a podcast show&#39;s cover hands the slot back to the feed, whose image refills on the next sync - provided no pin stands: setting a cover by hand pinned it, so resetting a hand-set show cover to the feed&#39;s image is two steps, unpin through the lock endpoint and then clear. Catalog entities are administrators-only; a playlist cover is cleared by its owner, and a podcast show cover by &#x60;managePodcasts&#x60; holders as well. 
   ///
   /// Parameters:
-  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [role] - Which artwork slot to clear. Defaults to `front`.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -402,7 +402,7 @@ class MetadataApi {
   /// Edits an entity&#39;s own fields: &#x60;sort&#x60; and &#x60;mbid&#x60; for artists; &#x60;sort&#x60;, &#x60;mbid&#x60;, and &#x60;type&#x60; for release groups; &#x60;sort&#x60;, &#x60;mbid&#x60;, &#x60;barcode&#x60;, &#x60;label&#x60;, &#x60;catalog_number&#x60;, &#x60;media&#x60;, and &#x60;country&#x60; for albums. Entity edits carry their own provenance, readable below. &#x60;writeBack&#x60; pushes the values that have tag forms into member files.  &#x60;barcode&#x60; and &#x60;country&#x60; are normalized on the way in, where a scan stores the tag verbatim, so an edit refuses values &#x60;GET /albums/{pid}&#x60; will happily show (\&quot;US &amp;amp; Europe\&quot; is a country a scan can store and an edit cannot). &#x60;media&#x60; has no normalizer and is stored as typed. 
   ///
   /// Parameters:
-  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [entityEdit] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -725,10 +725,10 @@ class MetadataApi {
   }
 
   /// Read an entity&#39;s artwork lock
-  /// Whether an album, artist, release group, or genre&#39;s front cover is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says \&quot;do not refill this\&quot; rather than \&quot;this has no cover yet\&quot;. Administrators only, like every other catalog-entity curation read. 
+  /// Whether an album, artist, release group, genre, or podcast&#39;s front cover is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says \&quot;do not refill this\&quot; rather than \&quot;this has no cover yet\&quot;. Administrators only, like every other catalog-entity curation read, except the podcast pin, which &#x60;managePodcasts&#x60; holders read too. 
   ///
   /// Parameters:
-  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -816,7 +816,7 @@ class MetadataApi {
   /// The entity&#39;s curated fields with source and time.
   ///
   /// Parameters:
-  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -1459,10 +1459,10 @@ class MetadataApi {
   }
 
   /// Set entity artwork
-  /// Stores the raw image bytes in one artwork slot (&#x60;role&#x60;, default &#x60;front&#x60;) of an album, artist, release group, genre, or playlist entity. Album front covers may additionally embed into member files with &#x60;writeBack&#x3D;true&#x60;; other slots and entity types are catalog-only. An artist portrait lands under &#x60;background&#x60;, which has no separate portrait role. Catalog entities are administrators-only; a playlist cover is set by its owner, and replaces the cover the server generates from the members until it is cleared. 
+  /// Stores the raw image bytes in one artwork slot (&#x60;role&#x60;, default &#x60;front&#x60;) of an album, artist, release group, genre, playlist, or podcast entity. Album front covers may additionally embed into member files with &#x60;writeBack&#x3D;true&#x60;; other slots and entity types are catalog-only. An artist portrait lands under &#x60;front&#x60; - the slot the artist screen and index tiles resolve, and the one the server&#39;s own portrait sweep fills; &#x60;background&#x60; is the scenic slot, which no surface draws yet. Catalog entities are administrators-only, with two exceptions: a playlist cover is set by its owner, and replaces the cover the server generates from the members until it is cleared, and a podcast show cover is set by &#x60;managePodcasts&#x60; holders as well, replacing the feed&#39;s image until it is cleared. 
   ///
   /// Parameters:
-  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [body] 
   /// * [role] - Which artwork slot to set. Defaults to `front`.
@@ -1579,10 +1579,10 @@ class MetadataApi {
   }
 
   /// Pin or unpin an entity&#39;s artwork
-  /// Sets or clears the front-cover pin without touching the cover itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only.  &#x60;playlist&#x60; is refused with &#x60;invalid-request&#x60;. A playlist&#39;s cover authority is its own custom/generated origin marker rather than this pin, and a pin left standing on one would make the mosaic the server builds from the members unwritable - which the read path retries on every read, forever. 
+  /// Sets or clears the front-cover pin without touching the cover itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only, except the podcast pin, which &#x60;managePodcasts&#x60; holders set too - the pin is what keeps a hand-set show cover from being refetched on the next feed sync, so it belongs to whoever may set the cover.  &#x60;playlist&#x60; is refused with &#x60;invalid-request&#x60;. A playlist&#39;s cover authority is its own custom/generated origin marker rather than this pin, and a pin left standing on one would make the mosaic the server builds from the members unwritable - which the read path retries on every read, forever. 
   ///
   /// Parameters:
-  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [artworkLock] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation

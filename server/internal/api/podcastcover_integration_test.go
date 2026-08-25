@@ -143,15 +143,202 @@ func TestPodcastCoverSyncComparesTheStoredCover(t *testing.T) {
 		t.Errorf("show art sourceUrl = %q, want the feed's new image", got)
 	}
 
-	// What this cannot reach, and why. The two cases above both pass
-	// against a remembered URL on the show row as well, so neither
-	// discriminates the comparison that actually moved upstream. The
-	// two that would - a cleared cover refilling on the next sync, and
-	// a hand-set one never being refetched - both need the show's cover
-	// to be settable as an entity, and `artEntityForType` has no
-	// podcast case: the permission question behind adding one
-	// (ManagePodcasts or admin) is unsettled and is recorded in
-	// docs/deferred-work.md. When it settles, both belong here.
+	// The two cases that discriminate the moved comparison - a cleared
+	// cover refilling on the next sync, and a hand-set one never being
+	// refetched - live in the entity-surface tests below, which the
+	// podcast arm of `artEntityForType` made possible.
+}
+
+// TestPodcastCoverClearedRefillsOnNextSync pins the first upstream
+// behaviour the entity surface unlocked: clearing a feed-sourced show
+// cover leaves no pin standing, so the next sync reads the slot as
+// empty and fetches the feed's image again.
+func TestPodcastCoverClearedRefillsOnNextSync(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	fs := newCoverFeedServer(t)
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": fs.feedURL()})
+	if resp.StatusCode != 201 {
+		t.Fatalf("subscribe status = %d", resp.StatusCode)
+	}
+	show := decode[Subscription](t, resp).Show
+	if got := fs.fetches.Load(); got != 1 {
+		t.Fatalf("the first sync fetched the channel image %d times, want 1", got)
+	}
+
+	resp = reqAs(t, h, "DELETE", "/api/v1/entities/podcast/"+show.Pid+"/artwork", h.token, nil)
+	wantStatus(t, resp, 204, "clear the feed cover")
+
+	// The next sync sees an empty, unpinned slot and refills it from
+	// the feed; the rewrite advances Last-Modified so the enumeration
+	// runs rather than short-circuiting.
+	fs.write(t)
+	resubscribe(t, h, fs.feedURL())
+	if got := fs.fetches.Load(); got != 2 {
+		t.Fatalf("a cleared cover was fetched %d times in total, want 2 (the refill)", got)
+	}
+	detail := decode[PodcastDetail](t, get(t, h.ts, "/api/v1/podcasts/"+show.Pid, h.token)).Show
+	if detail.ArtSource == nil || detail.ArtSource.Source != "feed" {
+		t.Errorf("refilled art source = %+v, want feed", detail.ArtSource)
+	}
+}
+
+// TestPodcastCoverHandSetNeverRefetched pins the second upstream
+// behaviour, driven by a ManagePodcasts account rather than an
+// administrator: setting a cover by hand pins it, the pin
+// short-circuits the sync's comparison entirely, and the way back to
+// the feed's image is unpin plus clear - each step permitted to the
+// same account.
+func TestPodcastCoverHandSetNeverRefetched(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	fs := newCoverFeedServer(t)
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": fs.feedURL()})
+	if resp.StatusCode != 201 {
+		t.Fatalf("subscribe status = %d", resp.StatusCode)
+	}
+	show := decode[Subscription](t, resp).Show
+	manager := podcastAccount(t, h, "cover-manager", true)
+
+	resp = metadataPutBytes(t, h.ts, "/api/v1/entities/podcast/"+show.Pid+"/artwork", manager, tinyPNG(t))
+	wantStatus(t, resp, 200, "manager sets the show cover")
+	detail := decode[PodcastDetail](t, get(t, h.ts, "/api/v1/podcasts/"+show.Pid, h.token)).Show
+	if detail.ArtSource == nil || detail.ArtSource.Source != "user" {
+		t.Errorf("hand-set art source = %+v, want user", detail.ArtSource)
+	}
+
+	// The feed publishes a different image; the pinned cover costs no
+	// fetch and keeps standing.
+	before := fs.fetches.Load()
+	fs.imageRef.Store("/cover/b.png")
+	fs.write(t)
+	resubscribe(t, h, fs.feedURL())
+	if got := fs.fetches.Load(); got != before {
+		t.Fatalf("a hand-set cover was refetched (fetches %d -> %d)", before, got)
+	}
+
+	// The way back to the feed's image is unpin plus clear, both the
+	// manager's to do; the next sync then refills.
+	resp = reqAs(t, h, "PUT", "/api/v1/entities/podcast/"+show.Pid+"/artwork/lock", manager, map[string]any{"locked": false})
+	wantStatus(t, resp, 200, "manager unpins")
+	resp = reqAs(t, h, "DELETE", "/api/v1/entities/podcast/"+show.Pid+"/artwork", manager, nil)
+	wantStatus(t, resp, 204, "manager clears")
+	fs.write(t)
+	resubscribe(t, h, fs.feedURL())
+	if got := fs.fetches.Load(); got != before+1 {
+		t.Fatalf("an unpinned, cleared cover was fetched %d times, want %d (the refill)", got, before+1)
+	}
+	detail = decode[PodcastDetail](t, get(t, h.ts, "/api/v1/podcasts/"+show.Pid, h.token)).Show
+	if detail.ArtSource == nil || detail.ArtSource.Source != "feed" {
+		t.Errorf("refilled art source = %+v, want feed", detail.ArtSource)
+	}
+}
+
+// TestPodcastCoverPermissions draws the gate: ManagePodcasts (or admin)
+// may set, clear, and pin a show's cover; an account without it is
+// refused all four verbs; the podcast permission opens no other catalog
+// entity; and the pc- prefix is enforced on the pid.
+func TestPodcastCoverPermissions(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	fs := newCoverFeedServer(t)
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": fs.feedURL()})
+	if resp.StatusCode != 201 {
+		t.Fatalf("subscribe status = %d", resp.StatusCode)
+	}
+	show := decode[Subscription](t, resp).Show
+	bystander := podcastAccount(t, h, "cover-bystander", false)
+
+	base := "/api/v1/entities/podcast/" + show.Pid + "/artwork"
+	resp = metadataPutBytes(t, h.ts, base, bystander, tinyPNG(t))
+	wantStatus(t, resp, 403, "bystander set")
+	resp = reqAs(t, h, "DELETE", base, bystander, nil)
+	wantStatus(t, resp, 403, "bystander clear")
+	resp = reqAs(t, h, "GET", base+"/lock", bystander, nil)
+	wantStatus(t, resp, 403, "bystander pin read")
+	resp = reqAs(t, h, "PUT", base+"/lock", bystander, map[string]any{"locked": true})
+	wantStatus(t, resp, 403, "bystander pin write")
+
+	// A default account holds the grant: ManagePodcasts is on in
+	// DefaultPermissions, deliberately - the permission already carries
+	// catalog-wide acts (adding shows, triggering fetches), and the
+	// cover joins them. Pinned so a change to either side is a
+	// conscious one.
+	defaulted := podcastDefaultAccount(t, h, "cover-defaulted")
+	resp = metadataPutBytes(t, h.ts, base, defaulted, tinyPNG(t))
+	wantStatus(t, resp, 200, "default-permission account set")
+	resp = reqAs(t, h, "PUT", base+"/lock", defaulted, map[string]any{"locked": false})
+	wantStatus(t, resp, 200, "default-permission account unpin")
+	resp = reqAs(t, h, "DELETE", base, defaulted, nil)
+	wantStatus(t, resp, 204, "default-permission account clear")
+
+	// The podcast permission opens no other catalog entity: artist art
+	// stays administrators-only.
+	manager := podcastAccount(t, h, "cover-manager-scope", true)
+	resp = metadataPutBytes(t, h.ts, "/api/v1/entities/artist/ar-01JZX5N8QW3F4V9T2B7KD3M9R6/artwork", manager, tinyPNG(t))
+	wantStatus(t, resp, 403, "manager on an artist entity")
+
+	// A well-formed pid under the wrong prefix is not found, never a
+	// write.
+	resp = metadataPutBytes(t, h.ts, "/api/v1/entities/podcast/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/artwork", h.token, tinyPNG(t))
+	wantStatus(t, resp, 404, "podcast entity with a track pid")
+}
+
+// TestSessionCarriesEffectiveManagePodcasts pins the self view's field
+// the client gates its podcast-curation affordances on. Effective, so
+// an administrator reads true whatever their stored flag says.
+func TestSessionCarriesEffectiveManagePodcasts(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	sessionManage := func(token string) *bool {
+		resp := get(t, h.ts, "/api/v1/auth/session", token)
+		info := decode[SessionInfo](t, resp)
+		if info.User == nil {
+			t.Fatal("session reports no user")
+		}
+		return info.User.ManagePodcasts
+	}
+	holder := podcastAccount(t, h, "session-holder", true)
+	bystander := podcastAccount(t, h, "session-bystander", false)
+	if got := sessionManage(holder); got == nil || !*got {
+		t.Errorf("holder managePodcasts = %v, want true", got)
+	}
+	if got := sessionManage(bystander); got == nil || *got {
+		t.Errorf("bystander managePodcasts = %v, want false", got)
+	}
+	if got := sessionManage(h.token); got == nil || !*got {
+		t.Errorf("admin managePodcasts = %v, want true (effective)", got)
+	}
+}
+
+// podcastDefaultAccount creates a non-admin account with no explicit
+// permissions body, so it carries DefaultPermissions, and returns its
+// token.
+func podcastDefaultAccount(t *testing.T, h *harness, username string) string {
+	t.Helper()
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": username, "password": testPassword,
+	})
+	wantStatus(t, resp, 201, "create default account")
+	return loginAs(t, h.ts, username, testPassword).Token
+}
+
+// podcastAccount creates a non-admin account with managePodcasts set as
+// given and returns its token.
+func podcastAccount(t *testing.T, h *harness, username string, manage bool) string {
+	t.Helper()
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": username, "password": testPassword,
+		"permissions": map[string]any{
+			"download": true, "delete": false, "explicitContent": true,
+			"sharedOutputs": true, "managePodcasts": manage,
+		},
+	})
+	wantStatus(t, resp, 201, "create account")
+	return loginAs(t, h.ts, username, testPassword).Token
 }
 
 // resubscribe re-adds a show, which syncs it.

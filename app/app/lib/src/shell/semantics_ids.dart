@@ -641,6 +641,7 @@ abstract final class SemanticsIds {
   static const String showEpisodeSearch = 'show-episode-search';
   static const String showOverflow = 'show-overflow';
   static const String showPin = 'show-pin';
+  static const String showSetCover = 'show-set-cover';
   static String transcriptCue(Object index) => 'transcript-cue-$index';
   static const String transcriptOpen = 'transcript-open';
   static const String unsubscribeKeepFiles = 'unsubscribe-keep-files';

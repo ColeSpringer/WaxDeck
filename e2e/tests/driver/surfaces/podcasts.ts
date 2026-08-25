@@ -4,7 +4,7 @@ import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickInView, clickThrough, typeInto } from '../gestures';
+import { chooseFromMenu, clickInView, clickThrough, typeInto } from '../gestures';
 
 export class Podcasts extends Surface {
   add(): Locator {
@@ -64,6 +64,26 @@ export class Podcasts extends Surface {
   /// Open a show from the hub.
   async openShow(pid: string): Promise<void> {
     await clickThrough(this.show(pid), this.unsubscribe());
+  }
+
+  /// A show screen's shareable location.
+  showLocation(pid: string): string {
+    return `/podcasts/${pid}`;
+  }
+
+  /// The show screen's own menu.
+  overflow(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.showOverflow));
+  }
+
+  /// Open the show cover manager through the menu's curator-only Set
+  /// cover row; settled is a slot the manager draws.
+  async openCoverManager(settled: Locator): Promise<void> {
+    await chooseFromMenu(
+      this.overflow(),
+      this.ctx.page.locator(sem(SemanticsIds.showSetCover)),
+      settled,
+    );
   }
 
   /// Open an episode's own screen, as a retried unit.

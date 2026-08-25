@@ -307,9 +307,10 @@ here waits on upstream.
   real device to verify against. Blocked on hardware access.
 - `[in-repo]` **An artist screen has no biography.** "Appears on" landed
   on the `credit-artist` browse dimension. The biography still needs an
-  enrichment field nothing writes yet - the same provider gap that keeps
-  artist artwork from existing - so it stays sequenced behind that
-  rather than behind a query.
+  enrichment field nothing writes yet: the artist portrait sweep filled
+  the artwork half of that gap, but no provider supplies prose and no
+  catalog field holds it, so this stays sequenced behind that rather
+  than behind a query.
 - `[in-repo]` **A browse sort this client predates is erased by the
   next preference write.** `Prefs.browseSorts` values are a closed enum
   in the spec, so an order only a newer server knows deserializes to
@@ -712,20 +713,6 @@ here waits on upstream.
 
 ## Curation and metadata
 
-- `[in-repo]` **A podcast show's cover is not a settable entity.**
-  `artRef` resolves a `pc-` pid for reads, so a show's cover is served
-  and its provenance reported, but `artEntityForType` has no podcast
-  case: there is no way to set, clear, or pin one through
-  `/entities/{type}/{pid}/artwork`. The blocker is a permission
-  question rather than plumbing - a show is catalog-wide, so an
-  administrators-only rule matches the other catalog entities, while
-  `ManagePodcasts` matches who already curates shows - and it wants
-  deciding rather than guessing. Two behaviours upstream now guarantees
-  are untestable until it lands, and are noted where they would go in
-  `podcastcover_integration_test.go`: a cleared show cover refilling on
-  the next sync, and a hand-set one never being refetched.
-
-
 - `[in-repo]` **The editor's unified save is one press but many round
   trips.** The save bar commits the staged draft as sequential calls:
   one for the scalar fields, one per changed credit role, one per tag
@@ -745,15 +732,6 @@ here waits on upstream.
   refused parts stay staged with the refusal beside them), and that
   model carries over. The client keeps the sequential path as the
   fallback for older servers.
-- `[in-repo]` **Book and remaining metadata providers.** Hardcover
-  (the ASIN to ISBN bridge), Google Books and Open Library fallbacks,
-  and Discogs are not yet implemented as enrichment providers; Deezer,
-  iTunes, Audnexus, and fanart.tv shipped. Each is one self-contained
-  provider in the providers package.
-- `[in-repo]` **The custom-metadata-provider spec is unpublished.** The
-  documented OpenAPI contract that would let community regional
-  providers plug in (the Audiobookshelf pattern) still needs writing;
-  the in-process provider port it would bridge to is live.
 - `[upstream]` **The provider chain fills only the front artwork slot.**
   The art-role model (front, back, disc, booklet, background) ships on
   the read and write surfaces, but enrichment still fills the front
@@ -954,21 +932,16 @@ here waits on upstream.
 - `[in-repo]` **Time and mood mixes.** Daylist-style rotating mixes
   with scheduled auto-names are a scheduler and a naming table over
   the instant-mix engine that shipped; nothing else blocks them.
-- `[in-repo]` **A has-art signal on `FacetBucket`, once artist art
-  exists.** The repeated-404 half of this is fixed - `ArtworkStore`
-  keeps a negative cache, so a cover the server has answered 404 for is
-  asked about once and drawn as a monogram from then on, and the artist
-  dimension no longer asks at all - but the entry is kept because the
-  reasoning behind those two choices is what the next agent tempted by a
-  `hasArt` field needs, and because there is a real case left.
-
-  **The premise the entry was written on was wrong.** It said item rows
-  never 404 because the server omits `artUrl` when there is nothing
-  behind it. They do: `summaryJSON` sets `ArtUrl` unconditionally, and
-  `_shared.yaml` says so - "Always populated; the endpoint itself returns
-  404 for items with no artwork." So this was never a bucket-only
-  problem, which is why the fix is in the store, where it covers item
-  rows too.
+- `[in-repo]` **A has-art signal on `FacetBucket`.** Kept for the
+  reasoning, because the next agent tempted by a `hasArt` field needs
+  the probe rulings below. The situation it was sequenced on has
+  arrived: the artist portrait sweep writes artist-level art now, the
+  artists index asks per row like the album one, and the misses land in
+  `ArtworkStore`'s negative cache - asked once, drawn as a monogram
+  from then on. What a contract field would still buy is trimming the
+  first-session 404 per artless artist, which the negative cache
+  already bounds, so it stays not worth the spec surface unless facet
+  pages measurably suffer.
 
   **Two candidate probes were ruled out on evidence, and both would have
   shipped a regression.** A `hasArt` boolean computed from `ArtRoles`
@@ -982,19 +955,6 @@ here waits on upstream.
   escape either: the `size <= 0` early return does skip the thumbnail,
   but it fires *after* the full source blob is loaded, so a 100-bucket
   page becomes 100 whole-image reads.
-
-  **What is left.** Not asking for artist art is right because the answer
-  is statically known: all three art-bearing enrichment providers gate on
-  `enrich.TargetReleaseGroup`, and `SetEntityArtwork` is admin-only and
-  human-driven, so nothing automatic ever writes artist-level art. The
-  cost is that a hand-set artist cover stops appearing on the index row
-  (it still appears on the artist's own screen, which reads the entity's
-  art directly), and nothing in the UI explains the difference - the
-  person most likely to hit it is the admin who set the cover. A contract
-  field whose value is knowable statically is not worth the spec surface - so
-  `hasArt` on `FacetBucket` becomes worth building when artist art
-  starts existing, which is the provider chain filling auxiliary slots.
-  Sequence it there, and the index row's silence closes with it.
 
   **The negative cache's own limit, for whoever touches it next.** It is
   cleared by a catalog invalidation, by a cover editor's `evict`, and by

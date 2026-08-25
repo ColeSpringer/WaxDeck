@@ -50,6 +50,24 @@ note.
   roles (backgrounds, disc art), which sit empty unless a person fills
   them.
 
+- **Capability-scoped provider calls on the enrichment port.**
+  `enrich.Request` never says which capability the caller is
+  gathering, so a multi-capability provider must answer everything on
+  every call: the engine's separate `gatherCover` and `gatherGenres`
+  passes each invoke a Discogs-shaped provider (CapCover|CapGenres) in
+  full, and the genres pass downloads a cover image nobody reads -
+  once per genre-less release group, up to 8 MiB each, twice per group
+  when both passes run. Wanted: an additive want field on `Request`
+  (an `enrich.Capability`, zero meaning everything so existing
+  providers and embedders are untouched), set by the engine in each
+  gather pass, so a provider skips work whose result only other
+  capabilities would read. Shipped workaround: WaxDeck's own per-item
+  paths type-assert a `ScopedEnricher` refinement
+  (`EnrichScoped(ctx, req, want)`, implemented by Discogs and
+  Audnexus) and pass the want themselves; the catalog's whole-library
+  pass cannot, and keeps the wasted fetches until this lands. The
+  refinement retires into a plain `req.Want` read the day it does.
+
 ## WaxLabel
 
 - **Map the MP4 `rtng` advisory atom to a tag.** iTunes stores the

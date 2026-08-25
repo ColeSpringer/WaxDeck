@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/metadata/artwork_manager.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
@@ -662,4 +664,72 @@ void main() {
     // Once in the header's metadata line, once on the row that carries it.
     expect(find.textContaining('Explicit'), findsNWidgets(2));
   });
+
+  testWidgets('the overflow offers the cover manager to a podcast curator', (
+    tester,
+  ) async {
+    await _pumpAs(tester, _curatorRepo(managePodcasts: true));
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.showOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.showSetCover));
+    await tester.pumpAndSettle();
+
+    // The sheet hosts the artwork manager on the show's own pid, in its
+    // entity branch (set, clear, and pin ride the podcast entity
+    // endpoints).
+    expect(find.byType(ShowCoverSheet), findsOneWidget);
+    final manager = tester.widget<ArtworkManager>(find.byType(ArtworkManager));
+    expect(manager.pid, showPid);
+    expect(manager.entityType, 'podcast');
+  });
+
+  testWidgets('the overflow hides the cover entry without the permission', (
+    tester,
+  ) async {
+    await _pumpAs(tester, _curatorRepo(managePodcasts: false));
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.showOverflow));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier(SemanticsIds.showSetCover), findsNothing);
+  });
+}
+
+/// A signed-in non-admin session whose podcast-curation right is the
+/// server's effective answer, which is all the overflow gates on.
+FakeRepository _curatorRepo({required bool managePodcasts}) =>
+    FakeRepository(
+        sessionState: SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-1',
+            username: 'curator',
+            roles: const <String>['member'],
+            managePodcasts: managePodcasts,
+          ),
+        ),
+      )
+      ..addSubscription(testShow(showPid))
+      ..episodesByShow[showPid] = <EpisodeSummary>[
+        testEpisode(downloadedPid, title: 'Fetched Episode'),
+      ];
+
+/// _pump plus the credential store the auth controller reads on
+/// non-web, which the session-gated tests need.
+Future<void> _pumpAs(WidgetTester tester, FakeRepository repo) async {
+  tester.view.physicalSize = const Size(900, 1800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+      child: routedHost(const ShowScreen(pid: showPid)),
+    ),
+  );
+  await tester.pumpAndSettle();
 }

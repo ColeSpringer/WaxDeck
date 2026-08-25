@@ -95,3 +95,56 @@ test('a cover the standard library cannot sniff is set, measured, and served as 
     });
   }
 });
+
+// The shared podcast feed, the same one podcasts.spec subscribes to. A
+// show and its cover are catalog-wide; no other spec asserts the show's
+// artwork, and the teardown hands the slot back to the feed.
+const FEED_URL = 'http://127.0.0.1:4421/feed.xml';
+
+test('a show cover is set through the show menu, pinned, and handed back', async ({
+  app,
+}) => {
+  // Subscribing (idempotently for this account) is how the show's pid
+  // is learned; the artwork account is an admin, who holds the
+  // manage-podcasts right implicitly, which is what the menu gates on.
+  const showPid = await app.seed.subscribePodcast(FEED_URL);
+  try {
+    await app.nav.open(app.podcasts.showLocation(showPid), app.podcasts.overflow());
+
+    // The door: Set cover in the show's own menu, opening the artwork
+    // manager on the show's entity slots.
+    await app.podcasts.openCoverManager(app.artwork.slot('front'));
+    await app.artwork.setCoverFromFile('front', coverSrc);
+    await expect(app.artwork.slotNamed(/Front cover: tiff/)).toBeVisible();
+
+    // The read the header's caption rides: a hand-set cover reports
+    // itself as a person's choice, and the write pinned it - the pin is
+    // what keeps the next feed sync from fetching the feed's image over
+    // it.
+    const roles = await app.api.get('/items/{pid}/art-roles', {
+      path: { pid: showPid },
+    });
+    expect(roles.artSource?.source).toBe('user');
+    expect(roles.roles.find((r) => r.role === 'front')?.locked).toBe(true);
+  } finally {
+    // Unpin, then clear: the two steps that hand the slot back to the
+    // feed, whose image refills on the show's next sync. Guarded on a
+    // user cover actually standing: the show is shared catalog state,
+    // and a run that failed before the set must not strip the feed's
+    // own cover - the static e2e feed answers Not-Modified afterwards,
+    // which would leave the show coverless for the rest of the run.
+    const roles = await app.api.tryGet('/items/{pid}/art-roles', {
+      path: { pid: showPid },
+    });
+    if (roles?.artSource?.source === 'user') {
+      await app.api.put('/entities/{entityType}/{entityPid}/artwork/lock', {
+        path: { entityType: 'podcast', entityPid: showPid },
+        data: { locked: false },
+      });
+      await app.api.delete('/entities/{entityType}/{entityPid}/artwork', {
+        path: { entityType: 'podcast', entityPid: showPid },
+        query: { role: 'front' },
+      });
+    }
+  }
+});

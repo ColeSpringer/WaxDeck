@@ -33,6 +33,8 @@ class _$UserAccount extends UserAccount {
   final BuiltList<String> roles;
   @override
   final bool uploadEnabled;
+  @override
+  final bool? managePodcasts;
 
   factory _$UserAccount([void Function(UserAccountBuilder)? updates]) =>
       (UserAccountBuilder()..update(updates))._build();
@@ -51,6 +53,7 @@ class _$UserAccount extends UserAccount {
     this.displayName,
     required this.roles,
     required this.uploadEnabled,
+    this.managePodcasts,
   }) : super._();
   @override
   UserAccount rebuild(void Function(UserAccountBuilder) updates) =>
@@ -75,7 +78,8 @@ class _$UserAccount extends UserAccount {
         username == other.username &&
         displayName == other.displayName &&
         roles == other.roles &&
-        uploadEnabled == other.uploadEnabled;
+        uploadEnabled == other.uploadEnabled &&
+        managePodcasts == other.managePodcasts;
   }
 
   @override
@@ -94,6 +98,7 @@ class _$UserAccount extends UserAccount {
     _$hash = $jc(_$hash, displayName.hashCode);
     _$hash = $jc(_$hash, roles.hashCode);
     _$hash = $jc(_$hash, uploadEnabled.hashCode);
+    _$hash = $jc(_$hash, managePodcasts.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -113,7 +118,8 @@ class _$UserAccount extends UserAccount {
           ..add('username', username)
           ..add('displayName', displayName)
           ..add('roles', roles)
-          ..add('uploadEnabled', uploadEnabled))
+          ..add('uploadEnabled', uploadEnabled)
+          ..add('managePodcasts', managePodcasts))
         .toString();
   }
 }
@@ -184,6 +190,11 @@ class UserAccountBuilder
   set uploadEnabled(covariant bool? uploadEnabled) =>
       _$this._uploadEnabled = uploadEnabled;
 
+  bool? _managePodcasts;
+  bool? get managePodcasts => _$this._managePodcasts;
+  set managePodcasts(covariant bool? managePodcasts) =>
+      _$this._managePodcasts = managePodcasts;
+
   UserAccountBuilder() {
     UserAccount._defaults(this);
   }
@@ -204,6 +215,7 @@ class UserAccountBuilder
       _displayName = $v.displayName;
       _roles = $v.roles.toBuilder();
       _uploadEnabled = $v.uploadEnabled;
+      _managePodcasts = $v.managePodcasts;
       _$v = null;
     }
     return this;
@@ -261,6 +273,7 @@ class UserAccountBuilder
               r'UserAccount',
               'uploadEnabled',
             ),
+            managePodcasts: managePodcasts,
           );
     } catch (_) {
       late String _$failedField;

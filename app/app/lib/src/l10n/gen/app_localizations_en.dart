@@ -6268,6 +6268,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get podcastSetCover => 'Set cover';
+
+  @override
   String get podcastSettingsOverline => 'This show';
 
   @override

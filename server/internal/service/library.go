@@ -175,6 +175,10 @@ type Config struct {
 	// rung unavailable whatever the admin toggle says, so a build with
 	// no providers wired cannot reach out by accident.
 	RadioArtResolver RadioArtResolver
+	// ArtistArtProvider answers artist portraits for the artist-art
+	// sweep. Nil disables the sweep entirely, same rule as
+	// RadioArtResolver: a build with nothing wired cannot reach out.
+	ArtistArtProvider ArtistArtProvider
 	// SonicAnalysisDefault is the embedded analyzer's boot default
 	// (WAXDECK_SONIC_ANALYSIS); the runtime admin setting overrides it
 	// once saved.
@@ -408,6 +412,11 @@ type Library struct {
 	// radioArtCache holds what it has answered.
 	radioArtResolver RadioArtResolver
 	radioArtCache    radioArt
+	// artistArt mirrors Config.ArtistArtProvider; artistArtWake is the
+	// one-slot kick RunEnrichment gives the sweep loop, so admin-run
+	// enrichment and the portrait pass move together.
+	artistArt     ArtistArtProvider
+	artistArtWake chan struct{}
 	// radioWrites hands radio bookkeeping from the goroutine relaying a
 	// listener's audio to the writer Open starts. Everything the relay
 	// loop does that touches SQLite goes through here, and nothing else
@@ -567,6 +576,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		workerAPIConfigured:      cfg.WorkerAPIConfigured,
 		workers:                  group,
 		radioArtResolver:         cfg.RadioArtResolver,
+		artistArt:                cfg.ArtistArtProvider,
+		artistArtWake:            make(chan struct{}, 1),
 		watchQueue:               newWatchPending(cfg.WatchSettle),
 		watchScans:               make(chan []string, 1),
 		watchNudge:               make(chan struct{}, 1),

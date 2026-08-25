@@ -74,22 +74,17 @@ enum MusicDimension {
 
   /// The dimensions whose buckets have artwork worth fetching.
   ///
-  /// Albums, and only albums. Genres and years are not entities and have
-  /// no art endpoint to ask. Artists are entities and do have one, but
-  /// nothing automatic ever writes artist-level artwork: every
-  /// art-bearing enrichment provider targets the release group, and the
-  /// one way an artist gets a cover is an admin setting it by hand. So
-  /// an artist index asks once per row for an answer that is statically
-  /// known, and pays a round trip per row to draw the monogram it would
-  /// have drawn immediately. The cost of not asking is that a
-  /// hand-set artist cover stops appearing on the index row; it still
-  /// appears on the artist's own screen, which reads the entity's art
-  /// directly rather than through a bucket.
-  ///
-  /// When artist art starts existing - the provider chain filling
-  /// auxiliary slots is its own deferred item - this is where it
-  /// becomes a question worth asking the server again.
-  bool get hasArtwork => this == MusicDimension.albums;
+  /// Albums and artists. Artists earned their place when the server
+  /// grew its portrait sweep: artist-level artwork now exists without an
+  /// admin setting it by hand, so the index row's ask stopped being a
+  /// round trip for a statically known no. Genre and year buckets carry
+  /// no `entityPid` on this surface (the server deliberately mints none
+  /// for them), so their rows have nothing to ask with. Release groups
+  /// do carry one, but the item art endpoint's pid resolver has no
+  /// `rg-` arm, so asking would 404 on every row; if that arm ever
+  /// lands, this is where release groups join.
+  bool get hasArtwork =>
+      this == MusicDimension.albums || this == MusicDimension.artists;
 
   static MusicDimension? bySegment(String segment) =>
       MusicDimension.values.where((d) => d.segment == segment).firstOrNull;

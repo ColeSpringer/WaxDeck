@@ -434,13 +434,18 @@ paths:
       summary: Set entity artwork
       description: >
         Stores the raw image bytes in one artwork slot (`role`, default
-        `front`) of an album, artist, release group, genre, or playlist
-        entity. Album front covers may additionally embed into member files
-        with `writeBack=true`; other slots and entity types are
-        catalog-only. An artist portrait lands under `background`, which has
-        no separate portrait role. Catalog entities are administrators-only;
-        a playlist cover is set by its owner, and replaces the cover the
-        server generates from the members until it is cleared.
+        `front`) of an album, artist, release group, genre, playlist, or
+        podcast entity. Album front covers may additionally embed into
+        member files with `writeBack=true`; other slots and entity types
+        are catalog-only. An artist portrait lands under `front` - the
+        slot the artist screen and index tiles resolve, and the one the
+        server's own portrait sweep fills; `background` is the scenic
+        slot, which no surface draws yet. Catalog entities are
+        administrators-only, with two exceptions: a playlist cover is set
+        by its owner, and replaces the cover the server generates from the
+        members until it is cleared, and a podcast show cover is set by
+        `managePodcasts` holders as well, replacing the feed's image until
+        it is cleared.
       tags: [metadata]
       parameters:
         - name: role
@@ -487,12 +492,18 @@ paths:
       summary: Clear entity artwork
       description: >
         Removes one artwork slot (`role`, default `front`) from an album,
-        artist, release group, genre, or playlist entity. Files already
-        carrying an embedded cover are untouched; this clears the catalog's
-        copy. Clearing a playlist's uploaded cover hands the slot back to
-        the mosaic the server builds from the members, so the playlist keeps
-        a cover rather than going bare. Catalog entities are
-        administrators-only; a playlist cover is cleared by its owner.
+        artist, release group, genre, playlist, or podcast entity. Files
+        already carrying an embedded cover are untouched; this clears the
+        catalog's copy. Clearing a playlist's uploaded cover hands the slot
+        back to the mosaic the server builds from the members, so the
+        playlist keeps a cover rather than going bare. Clearing a podcast
+        show's cover hands the slot back to the feed, whose image refills
+        on the next sync - provided no pin stands: setting a cover by hand
+        pinned it, so resetting a hand-set show cover to the feed's image
+        is two steps, unpin through the lock endpoint and then clear.
+        Catalog entities are administrators-only; a playlist cover is
+        cleared by its owner, and a podcast show cover by `managePodcasts`
+        holders as well.
       tags: [metadata]
       parameters:
         - name: role
@@ -522,13 +533,14 @@ paths:
       operationId: getEntityArtworkLock
       summary: Read an entity's artwork lock
       description: >
-        Whether an album, artist, release group, or genre's front cover
-        is pinned against enrichment and scan re-derives. This is what
-        explains an entity that shows no cover and refuses every attempt
-        to give it one: the cover was cleared and the pin left standing,
-        which says "do not refill this" rather than "this has no cover
-        yet". Administrators only, like every other catalog-entity
-        curation read.
+        Whether an album, artist, release group, genre, or podcast's
+        front cover is pinned against enrichment and scan re-derives.
+        This is what explains an entity that shows no cover and refuses
+        every attempt to give it one: the cover was cleared and the pin
+        left standing, which says "do not refill this" rather than "this
+        has no cover yet". Administrators only, like every other
+        catalog-entity curation read, except the podcast pin, which
+        `managePodcasts` holders read too.
       tags: [metadata]
       responses:
         "200":
@@ -555,7 +567,10 @@ paths:
         itself, which setting artwork cannot express: that always writes
         the image slot too, so unpinning through it would mean supplying
         the picture again. Unpinning here is the way out of a cover that
-        was cleared and left pinned. Administrators only.
+        was cleared and left pinned. Administrators only, except the
+        podcast pin, which `managePodcasts` holders set too - the pin is
+        what keeps a hand-set show cover from being refetched on the
+        next feed sync, so it belongs to whoever may set the cover.
 
 
         `playlist` is refused with `invalid-request`. A playlist's cover
@@ -945,10 +960,12 @@ components:
         The entity kind an entity operation targets. `playlist` is a
         WaxDeck-side entity rather than a catalog one: it carries artwork
         and nothing else, and its operations are owner-gated instead of
-        administrators-only.
+        administrators-only. `podcast` is a show's channel cover, whose
+        operations accept the accounts that already curate shows:
+        `managePodcasts` holders as well as administrators.
       schema:
         type: string
-        enum: [album, artist, release-group, genre, playlist]
+        enum: [album, artist, release-group, genre, playlist, podcast]
 
     EntityPid:
       name: entityPid

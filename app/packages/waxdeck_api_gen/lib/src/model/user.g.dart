@@ -23,6 +23,9 @@ abstract mixin class UserBuilder {
 
   bool? get uploadEnabled;
   set uploadEnabled(bool? uploadEnabled);
+
+  bool? get managePodcasts;
+  set managePodcasts(bool? managePodcasts);
 }
 
 class _$$User extends $User {
@@ -36,6 +39,8 @@ class _$$User extends $User {
   final BuiltList<String> roles;
   @override
   final bool uploadEnabled;
+  @override
+  final bool? managePodcasts;
 
   factory _$$User([void Function($UserBuilder)? updates]) =>
       ($UserBuilder()..update(updates))._build();
@@ -46,6 +51,7 @@ class _$$User extends $User {
     this.displayName,
     required this.roles,
     required this.uploadEnabled,
+    this.managePodcasts,
   }) : super._();
   @override
   $User rebuild(void Function($UserBuilder) updates) =>
@@ -62,7 +68,8 @@ class _$$User extends $User {
         username == other.username &&
         displayName == other.displayName &&
         roles == other.roles &&
-        uploadEnabled == other.uploadEnabled;
+        uploadEnabled == other.uploadEnabled &&
+        managePodcasts == other.managePodcasts;
   }
 
   @override
@@ -73,6 +80,7 @@ class _$$User extends $User {
     _$hash = $jc(_$hash, displayName.hashCode);
     _$hash = $jc(_$hash, roles.hashCode);
     _$hash = $jc(_$hash, uploadEnabled.hashCode);
+    _$hash = $jc(_$hash, managePodcasts.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -84,7 +92,8 @@ class _$$User extends $User {
           ..add('username', username)
           ..add('displayName', displayName)
           ..add('roles', roles)
-          ..add('uploadEnabled', uploadEnabled))
+          ..add('uploadEnabled', uploadEnabled)
+          ..add('managePodcasts', managePodcasts))
         .toString();
   }
 }
@@ -114,6 +123,11 @@ class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
   set uploadEnabled(covariant bool? uploadEnabled) =>
       _$this._uploadEnabled = uploadEnabled;
 
+  bool? _managePodcasts;
+  bool? get managePodcasts => _$this._managePodcasts;
+  set managePodcasts(covariant bool? managePodcasts) =>
+      _$this._managePodcasts = managePodcasts;
+
   $UserBuilder() {
     $User._defaults(this);
   }
@@ -126,6 +140,7 @@ class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
       _displayName = $v.displayName;
       _roles = $v.roles.toBuilder();
       _uploadEnabled = $v.uploadEnabled;
+      _managePodcasts = $v.managePodcasts;
       _$v = null;
     }
     return this;
@@ -163,6 +178,7 @@ class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
               r'$User',
               'uploadEnabled',
             ),
+            managePodcasts: managePodcasts,
           );
     } catch (_) {
       late String _$failedField;

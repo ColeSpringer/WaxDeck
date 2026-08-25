@@ -974,6 +974,8 @@ func artEntityForType(entityType string) (model.ArtEntity, bool) {
 		return model.ArtGenre, true
 	case "playlist":
 		return model.ArtPlaylist, true
+	case "podcast":
+		return model.ArtPodcast, true
 	default:
 		return "", false
 	}
@@ -1002,12 +1004,13 @@ func mergeEntityForType(entityType string) (model.MergeEntity, bool) {
 	}
 }
 
-// editorEntityPID parses an entity's API pid. Albums and artists carry
-// established prefixes and are checked against them. Release groups
-// mint `rg-` on reads now, but this stays permissive for them and for
-// genres: both have accepted any well-formed prefix since before the
-// read existed, and tightening it would refuse pids clients already
-// hold.
+// editorEntityPID parses an entity's API pid. Albums, artists, and
+// podcasts carry established prefixes and are checked against them
+// (podcasts enforced from the start: the type is new, so no client
+// holds an unprefixed pid for one). Release groups mint `rg-` on reads
+// now, but this stays permissive for them and for genres: both have
+// accepted any well-formed prefix since before the read existed, and
+// tightening it would refuse pids clients already hold.
 func editorEntityPID(entityType, apiEntityPID string) (model.PID, error) {
 	prefix, pid, ok := parseAPIPID(apiEntityPID)
 	if !ok {
@@ -1021,6 +1024,10 @@ func editorEntityPID(entityType, apiEntityPID string) (model.PID, error) {
 	case "artist":
 		if prefix != PrefixArtist {
 			return "", errNotFound("no artist with pid " + apiEntityPID)
+		}
+	case "podcast":
+		if prefix != PrefixPodcast {
+			return "", errNotFound("no podcast with pid " + apiEntityPID)
 		}
 	}
 	return pid, nil

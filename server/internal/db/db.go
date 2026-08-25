@@ -630,6 +630,19 @@ const baselineSchema = `
 		UNIQUE (item_pid, rule)
 	);
 
+	-- The artist portrait sweep's miss memory: artists the providers
+	-- answered nothing for, keyed with the MBID the ask was made
+	-- under, so an artist with no findable image is not refetched
+	-- every pass while one that later gains an MBID is asked again
+	-- immediately. Misses only - a hit's own stored art is what gates
+	-- it, and remembering successes would block refilling a cover
+	-- somebody deliberately cleared.
+	CREATE TABLE artist_art_misses (
+		artist_pid      TEXT    PRIMARY KEY,
+		mbid            TEXT    NOT NULL DEFAULT '',
+		attempted_at_ns INTEGER NOT NULL
+	);
+
 	-- The administration surface. Invites store only a token hash (the
 	-- token itself is shown once, at creation) plus the account shape
 	-- they admit. audit_log is the admin-action record: actor and

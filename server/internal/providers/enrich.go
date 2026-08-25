@@ -1,13 +1,31 @@
 package providers
 
 import (
+	"context"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/colespringer/waxbin/art"
+	"github.com/colespringer/waxbin/enrich"
 	"github.com/colespringer/waxbin/model"
 )
+
+// ScopedEnricher is the optional refinement of enrich.Provider a
+// multi-capability provider implements so a caller can name the one
+// capability it will actually read. The port's Request cannot carry
+// that ("capability-scoped provider calls on the enrichment port" in
+// upstream-requests.md is the ask that would), so without this a
+// genres ask against Discogs downloads a cover nobody reads - once per
+// genre-less item. WaxDeck's own per-item paths type-assert and pass
+// the want; callers that cannot (the catalog's whole-library pass)
+// fall back to Enrich, which answers everything.
+type ScopedEnricher interface {
+	// EnrichScoped is Enrich restricted to want: work whose result only
+	// other capabilities would read is skipped, and a candidate empty
+	// for the asked want is a clean miss.
+	EnrichScoped(ctx context.Context, req enrich.Request, want enrich.Capability) (*enrich.Candidate, error)
+}
 
 // Defaults shared by the enrichment providers. The keyed and key-free
 // services here tolerate more than the spine services, but stay gentle:

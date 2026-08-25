@@ -35,6 +35,13 @@ settings and never interfere. Per subscription you can set:
 - a folder for organizing your subscription list
 - how many downloaded episodes to keep (see retention below)
 
+The show itself - unlike the settings above - is shared, and so is its
+cover: it comes from the feed, and accounts that may manage podcasts
+(administrators implicitly) can replace it through **Set cover** in the
+show's menu. A hand-set cover is pinned so a feed sync never fetches
+the feed's image over it; clearing it and lifting the pin hands the
+slot back to the feed.
+
 ## Episodes live on the server
 
 An episode streams once its audio is on the server. Fetch one on

@@ -44,6 +44,7 @@
     "showEpisodeSearch": "show-episode-search",
     "showOverflow": "show-overflow",
     "showPin": "show-pin",
+    "showSetCover": "show-set-cover",
     "transcriptCue": "transcript-cue-{index}",
     "transcriptOpen": "transcript-open",
     "unsubscribeKeepFiles": "unsubscribe-keep-files",

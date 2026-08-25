@@ -73,6 +73,7 @@ WaxDeckUser userFromGen(gen.User user) {
     displayName: user.displayName,
     roles: user.roles.toList(),
     uploadEnabled: user.uploadEnabled,
+    managePodcasts: user.managePodcasts ?? false,
   );
 }
 

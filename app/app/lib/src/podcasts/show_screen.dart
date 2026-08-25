@@ -11,6 +11,7 @@ import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../home/pin_action.dart';
 import '../home/pinned_controller.dart';
+import '../metadata/artwork_manager.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
@@ -578,6 +579,15 @@ class _ShowOverflow extends ConsumerWidget {
             glyph: WaxIcons.check,
             semanticsId: SemanticsIds.markOlderPlayed,
           ),
+        // The session's managePodcasts is the server's effective answer
+        // (administrators included), so it is the whole gate.
+        if (ref.watch(canManagePodcastsProvider))
+          WaxMenuItem<String>(
+            value: 'set-cover',
+            label: l10n.podcastSetCover,
+            glyph: WaxIcons.edit,
+            semanticsId: SemanticsIds.showSetCover,
+          ),
       ],
       onSelected: (choice) {
         switch (choice) {
@@ -593,6 +603,18 @@ class _ShowOverflow extends ConsumerWidget {
               showDialog<void>(
                 context: context,
                 builder: (_) => MarkOlderPlayedDialog(pid: pid),
+              ),
+            );
+          case 'set-cover':
+            unawaited(
+              showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => ShowCoverSheet(
+                  pid: pid,
+                  title: detail?.show.title ?? pid,
+                  initialHasArtwork: detail?.show.artSource != null,
+                ),
               ),
             );
         }
@@ -1114,6 +1136,55 @@ class _EpisodeRow extends ConsumerWidget {
           : unawaited(
               actions.play(context, episode, positionMs: progress.positionMs),
             ),
+    );
+  }
+}
+
+/// The show's cover, managed as the podcast entity: set, clear, and pin
+/// through the entity artwork endpoints, for the accounts that curate
+/// shows. A sheet rather than a route: the cover has no address of its
+/// own, it is one curation act on this screen's show.
+class ShowCoverSheet extends ConsumerWidget {
+  const ShowCoverSheet({
+    super.key,
+    required this.pid,
+    required this.title,
+    required this.initialHasArtwork,
+  });
+
+  final String pid;
+  final String title;
+
+  /// What the show detail already knew when the sheet opened, so the
+  /// first frame does not read "no cover" while the art-roles read
+  /// (which the manager watches anyway, and which takes over here the
+  /// moment it lands) is still in flight.
+  final bool initialHasArtwork;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The art-roles read answers show pids too, so the manager knows
+    // whether a cover stands before any write.
+    final roles = ref.watch(itemArtRolesProvider(pid));
+    final hasArtwork = roles.hasValue
+        ? roles.value?.artSource != null
+        : initialHasArtwork;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: WaxSpace.s16,
+        right: WaxSpace.s16,
+        top: WaxSpace.s16,
+        bottom: WaxSpace.s16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: ArtworkManager(
+          pid: pid,
+          title: title,
+          hasArtwork: hasArtwork,
+          entityType: 'podcast',
+          onChanged: () => ref.invalidate(podcastDetailProvider(pid)),
+        ),
+      ),
     );
   }
 }

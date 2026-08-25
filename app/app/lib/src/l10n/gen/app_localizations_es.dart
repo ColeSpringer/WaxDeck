@@ -6340,6 +6340,9 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get podcastSetCover => 'Establecer la portada';
+
+  @override
   String get podcastSettingsOverline => 'Este programa';
 
   @override

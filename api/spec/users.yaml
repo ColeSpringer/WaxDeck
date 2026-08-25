@@ -568,6 +568,16 @@ components:
             here because the generators flatten `UserAccount`'s
             `allOf` over this schema; a duplicate declaration there
             would silently lose.
+        managePodcasts:
+          type: boolean
+          description: >
+            Whether the account may curate podcasts. Self views carry
+            the *effective* value (administrators always may), so
+            clients gate their podcast-curation affordances - adding
+            shows, setting a show's cover - on it without a second
+            read. Absent on administrative account views: the stored
+            per-account flag lives in `permissions` there, and this
+            field would only shadow it.
 
     UserAccount:
       allOf:

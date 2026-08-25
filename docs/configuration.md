@@ -205,7 +205,29 @@ provider.
 - `WAXDECK_ACOUSTID_KEY`: AcoustID API key; empty disables fingerprint
   evidence in matching.
 - `WAXDECK_FANARTTV_KEY`: fanart.tv API key; empty leaves that artwork
-  provider unconfigured.
+  provider unconfigured. Also the first rung of the artist portrait
+  sweep, which fills missing artist images in the background (Deezer's
+  name match is the key-free fallback rung).
+- `WAXDECK_ARTIST_ART` (default `true`): fill missing artist portraits
+  in a daily background sweep, from fanart.tv when its key is set
+  (keyed on the MBID) and from Deezer's name-matched artist search
+  otherwise. Set `false` and the server never asks either service for
+  one.
+- `WAXDECK_DISCOGS_TOKEN`: Discogs personal access token; empty leaves
+  that artwork and genre provider unconfigured.
+- `WAXDECK_HARDCOVER_KEY`: Hardcover API token; empty leaves that
+  audiobook provider unconfigured.
+- `WAXDECK_GOOGLE_BOOKS_KEY`: Google Books API key; optional - the
+  provider works keyless and a key only raises the quota. Open Library
+  runs keyless alongside it.
+- `WAXDECK_ENRICH_PROVIDER_URLS`: custom enrichment providers as
+  `name=url` pairs, comma separated, each implementing the contract in
+  `docs/custom-provider-api/`. Validated at startup (the capabilities
+  document must answer and advertise a name) and registered ahead of
+  every built-in provider.
+- `WAXDECK_ENRICH_PROVIDER_AUTH`: bearer tokens for custom enrichment
+  providers as `name=token` pairs, comma separated; names must match
+  the URLs variable.
 - `WAXDECK_MUSICBRAINZ_BASE`: MusicBrainz API base override (a local
   mirror).
 - `WAXDECK_COVERART_BASE`: Cover Art Archive base override (a mirror);

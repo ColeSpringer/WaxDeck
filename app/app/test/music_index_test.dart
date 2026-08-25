@@ -118,17 +118,25 @@ void main() {
     ]);
   });
 
-  testWidgets('an artist row draws its monogram without asking, and an '
-      'album row still asks', (tester) async {
-    // Nothing automatic writes artist-level artwork - every art-bearing
-    // enrichment provider targets the release group, and the one way an
-    // artist gets a cover is an admin setting it by hand - so a
-    // five-hundred-artist index would fire five hundred requests for an
-    // answer that is statically known. Albums are the opposite case and
-    // must keep their covers.
+  testWidgets('artist and album rows ask for artwork, and a release-group '
+      'row does not', (tester) async {
+    // The server's portrait sweep writes artist-level artwork now, so
+    // the artist index asks like the album one does. The release-group
+    // leg is the meaningful negative: its bucket carries an entityPid
+    // (genre and year buckets carry none, so a leg over those would
+    // pass whatever hasArtwork said), but the item art endpoint has no
+    // rg- arm, so asking would 404 on every row.
     final repository = FakeRepository()
       ..facets['artist'] = <FacetBucket>[_artist('Nightjar')]
-      ..facets['album'] = <FacetBucket>[_album('Gullwing')];
+      ..facets['album'] = <FacetBucket>[_album('Gullwing')]
+      ..facets['release-group'] = <FacetBucket>[
+        const FacetBucket(
+          key: '01JZXGull',
+          label: 'Gullwing',
+          count: 9,
+          entityPid: 'rg-01JZXGull',
+        ),
+      ];
 
     await _pump(
       tester,
@@ -137,8 +145,8 @@ void main() {
     );
     expect(
       tester.widget<MediaListRow>(find.byType(MediaListRow)).data.artwork,
-      isNull,
-      reason: 'an artist bucket row asks for no artwork at all',
+      isNotNull,
+      reason: 'an artist bucket row asks for the swept portrait',
     );
 
     await _pump(
@@ -150,6 +158,17 @@ void main() {
       tester.widget<MediaListRow>(find.byType(MediaListRow)).data.artwork,
       isNotNull,
       reason: 'the album index keeps its covers',
+    );
+
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.releaseGroups),
+      repository,
+    );
+    expect(
+      tester.widget<MediaListRow>(find.byType(MediaListRow)).data.artwork,
+      isNull,
+      reason: 'a release-group row must not ask an endpoint with no rg- arm',
     );
   });
 
