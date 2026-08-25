@@ -754,14 +754,15 @@ here waits on upstream.
   documented OpenAPI contract that would let community regional
   providers plug in (the Audiobookshelf pattern) still needs writing;
   the in-process provider port it would bridge to is live.
-- `[in-repo]` **The provider chain fills only the front artwork slot.**
+- `[upstream]` **The provider chain fills only the front artwork slot.**
   The art-role model (front, back, disc, booklet, background) ships on
   the read and write surfaces, but enrichment still fills the front
   cover alone: a provider candidate carries a single cover image, so
   fanning providers out to the auxiliary slots (a fanart.tv artist
   background, disc art) needs the candidate/provider model extended to
-  carry per-role art first. The slots are readable and hand-settable
-  meanwhile.
+  carry per-role art first - the "per-role candidate art on the
+  enrichment port" ask in `upstream-requests.md` (WaxBin). The slots
+  are readable and hand-settable meanwhile.
 - `[in-repo]` **The client's accepted-format set is a hardcoded mirror
   that a custom `WAXDECK_UPLOAD_FORMATS` makes wrong.** Folder picks
   and drops filter against `kAcceptedAudioExtensions` (the default
@@ -817,7 +818,11 @@ here waits on upstream.
   what the episode half does not do either: the field is only ever
   emitted in the positive direction, because the advisory parses to a
   bool and "declared clean" and "the source said nothing" are the same
-  value, so claiming the former would be inventing an assertion.
+  value, so claiming the former would be inventing an assertion. A
+  separate ceiling rides above whatever this builds: MP4's own `rtng`
+  advisory atom never surfaces as a tag, so iTunes-tagged M4As stay
+  uncovered either way - the mapping ask is recorded in
+  `upstream-requests.md` (WaxLabel).
 - `[in-repo]` **Synced external playlists.** A YouTube playlist reaches
   the library two ways today and neither keeps a WaxDeck playlist in
   step with its source: "Add from URL" acquisition

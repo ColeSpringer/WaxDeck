@@ -186,6 +186,7 @@ class MetadataChanges {
     this.tagSets = const {},
     this.tagRemoves = const [],
     this.unofficial,
+    this.chapters,
   });
 
   /// Scalar fields, serialized for the wire (a toggle as `true`/`false`,
@@ -207,15 +208,106 @@ class MetadataChanges {
   /// The new release status, or null when it did not change.
   final bool? unofficial;
 
+  /// The replacement chapter list, or null when it did not change. An
+  /// empty list restores the file's own chapters - that is the
+  /// endpoint's contract, not a quirk of this form.
+  final List<ChapterEdit>? chapters;
+
   int get count =>
       fields.length +
       credits.length +
       (lyrics != null || clearLyrics ? 1 : 0) +
       tagSets.length +
       tagRemoves.length +
-      (unofficial != null ? 1 : 0);
+      (unofficial != null ? 1 : 0) +
+      (chapters != null ? 1 : 0);
 
   bool get isEmpty => count == 0;
+}
+
+/// One staged chapter row: a title and a start on the book timeline.
+///
+/// [storedStartMs] keeps the seeded value at full precision: the
+/// visible stamp is whole seconds, so re-parsing an untouched row
+/// would floor a millisecond start and read as an edit nobody made.
+/// [storedEndMs] rides along so an untouched row keeps its stored end -
+/// a gap between chapters, or a closed final chapter - instead of
+/// having the save re-derive it.
+class MetadataChapterRow {
+  MetadataChapterRow._({
+    required this.id,
+    required String title,
+    required this.storedStartMs,
+    required this.storedEndMs,
+  }) : _seededTitle = title,
+       _seededStartText = storedStartMs == null
+           ? ''
+           : formatTimecode(Duration(milliseconds: storedStartMs)),
+       titleController = TextEditingController(text: title) {
+    startController = TextEditingController(text: _seededStartText);
+  }
+
+  /// Stable identity across removes and rebuilds, for the row widgets'
+  /// keys.
+  final int id;
+
+  final TextEditingController titleController;
+  late final TextEditingController startController;
+  final int? storedStartMs;
+  final int? storedEndMs;
+  final String _seededTitle;
+  final String _seededStartText;
+
+  /// The row's start in milliseconds, or null while the typed stamp
+  /// does not parse.
+  int? get startMs {
+    if (storedStartMs != null && startController.text == _seededStartText) {
+      return storedStartMs;
+    }
+    return parseTimecodeMs(startController.text);
+  }
+
+  /// Whether the row still holds exactly what it was seeded with, which
+  /// is what lets a refetch reseed the list (the text fields' own
+  /// untouched rule).
+  bool get _untouched =>
+      titleController.text == _seededTitle &&
+      startController.text == _seededStartText;
+
+  void _dispose() {
+    titleController.dispose();
+    startController.dispose();
+  }
+}
+
+/// Hoisted like [metadataLrcStamp]: the parse runs per keystroke.
+final _timecodeStamp = RegExp(r'^(?:(\d+):)?(?:(\d+):)?(\d+(?:\.\d+)?)$');
+
+/// Parses a typed `h:mm:ss` / `m:ss` / plain-seconds stamp to
+/// milliseconds; null when it does not parse. The seconds may carry a
+/// fraction. Everything is tryParse-and-bounds: this runs from build,
+/// where a held key or a pasted numeric id must read as "does not
+/// parse", never throw (a 20-digit int overflows the parse, a 400-digit
+/// double parses to infinity and round() throws on it).
+int? parseTimecodeMs(String text) {
+  final match = _timecodeStamp.firstMatch(text.trim());
+  if (match == null) return null;
+  final first = match.group(1);
+  final second = match.group(2);
+  var seconds = double.tryParse(match.group(3)!);
+  if (seconds == null) return null;
+  if (first != null && second != null) {
+    final hours = int.tryParse(first);
+    final minutes = int.tryParse(second);
+    if (hours == null || minutes == null) return null;
+    seconds += hours * 3600 + minutes * 60;
+  } else if (first != null) {
+    final minutes = int.tryParse(first);
+    if (minutes == null) return null;
+    seconds += minutes * 60;
+  }
+  if (!seconds.isFinite || seconds >= 1e12) return null;
+  return (seconds * 1000).round();
 }
 
 /// The staged edits behind the form: what has been typed, toggled, and
@@ -246,6 +338,18 @@ class MetadataDraft extends ChangeNotifier {
   bool _seededUnofficial = false;
   final _tagSets = <String, List<String>>{};
   final _tagRemoves = <String>{};
+  List<MetadataChapterRow>? _chapterRows;
+
+  /// Rows taken out of the staged list whose controllers may still be
+  /// mounted this frame: disposing immediately would trip the field's
+  /// own detach. They are disposed with the draft instead.
+  final _retiredChapterRows = <MetadataChapterRow>[];
+  var _nextChapterRowId = 0;
+
+  /// Whether a row was added or removed since the rows seeded - the
+  /// structural half of the untouched rule, which the per-row text
+  /// comparison cannot see.
+  var _chapterStructureTouched = false;
 
   @override
   void dispose() {
@@ -253,6 +357,16 @@ class MetadataDraft extends ChangeNotifier {
       controller.dispose();
     }
     lyrics.dispose();
+    for (final row in <MetadataChapterRow>[
+      ..._chapterRows ?? const [],
+      ..._retiredChapterRows,
+    ]) {
+      row._dispose();
+    }
+    // Cleared so a drain still scheduled by _retireChapterRows finds
+    // nothing to dispose twice.
+    _retiredChapterRows.clear();
+    _chapterRows = null;
     super.dispose();
   }
 
@@ -384,6 +498,152 @@ class MetadataDraft extends ChangeNotifier {
     notifyListeners();
   }
 
+  MetadataChapterRow _newChapterRow({
+    String title = '',
+    int? startMs,
+    int? endMs,
+  }) {
+    final row = MetadataChapterRow._(
+      id: _nextChapterRowId++,
+      title: title,
+      storedStartMs: startMs,
+      storedEndMs: endMs,
+    );
+    row.titleController.addListener(notifyListeners);
+    row.startController.addListener(notifyListeners);
+    return row;
+  }
+
+  /// The staged chapter rows, seeded from what is stored on first
+  /// sight. Once touched they are the user's until a save commits them
+  /// ([markSaved] drops them so the refetched echo re-seeds).
+  List<MetadataChapterRow> chapterRows(List<ChapterMark> stored) =>
+      _chapterRows ??= [
+        for (final mark in stored)
+          _newChapterRow(
+            title: mark.title ?? '',
+            startMs: mark.startMs,
+            endMs: mark.endMs,
+          ),
+      ];
+
+  /// Hands retired rows to a post-frame drain: their controllers may
+  /// still be mounted this frame, so disposing immediately would trip
+  /// the fields' own detach - and never draining strands two
+  /// controllers per chapter for the screen's life.
+  void _retireChapterRows(Iterable<MetadataChapterRow> rows) {
+    _retiredChapterRows.addAll(rows);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final retired = List.of(_retiredChapterRows);
+      _retiredChapterRows.clear();
+      for (final row in retired) {
+        row._dispose();
+      }
+    });
+  }
+
+  void addChapterRow() {
+    (_chapterRows ??= []).add(_newChapterRow());
+    _chapterStructureTouched = true;
+    notifyListeners();
+  }
+
+  void removeChapterRow(MetadataChapterRow row) {
+    if (_chapterRows?.remove(row) ?? false) {
+      _retireChapterRows([row]);
+      _chapterStructureTouched = true;
+      notifyListeners();
+    }
+  }
+
+  /// Stages the empty list, which the endpoint reads as "restore the
+  /// file's own chapters".
+  void restoreEmbeddedChapters() {
+    _retireChapterRows(_chapterRows ?? const []);
+    _chapterRows = [];
+    _chapterStructureTouched = true;
+    notifyListeners();
+  }
+
+  /// The staged rows in playing order, which is the order the wire
+  /// model indexes: a chapter typed at the end with a mid-book start is
+  /// filed where it plays, not refused for the row it was typed in.
+  /// Null while any start does not parse.
+  List<MetadataChapterRow>? _orderedChapterRows() {
+    final rows = _chapterRows;
+    if (rows == null) return null;
+    for (final row in rows) {
+      final ms = row.startMs;
+      if (ms == null || ms < 0) return null;
+    }
+    return List.of(rows)..sort((a, b) => a.startMs!.compareTo(b.startMs!));
+  }
+
+  /// Whether the staged rows can be written: every start parses and no
+  /// two chapters start on the same instant. The section says so while
+  /// this is false; the save quietly leaves chapters out rather than
+  /// sending a list the server would refuse whole.
+  bool get chapterRowsValid {
+    if (_chapterRows == null) return true;
+    final ordered = _orderedChapterRows();
+    if (ordered == null) return false;
+    for (var i = 1; i < ordered.length; i++) {
+      if (ordered[i].startMs == ordered[i - 1].startMs) return false;
+    }
+    return true;
+  }
+
+  List<ChapterEdit>? _chapterChanges(List<ChapterMark> stored) {
+    if (_chapterRows == null || !chapterRowsValid) return null;
+    final rows = _orderedChapterRows()!;
+    final parsed = <({String title, int startMs})>[
+      for (final row in rows)
+        (title: row.titleController.text.trim(), startMs: row.startMs!),
+    ];
+    final current = <({String title, int startMs})>[
+      for (final mark in stored)
+        (title: (mark.title ?? '').trim(), startMs: mark.startMs),
+    ];
+    if (parsed.length == current.length) {
+      var same = true;
+      for (var i = 0; i < parsed.length; i++) {
+        if (parsed[i] != current[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return null;
+    }
+    // A row keeps its stored end while it still fits - a gap between
+    // chapters and a closed final chapter are real stored data - and
+    // only a new, moved, or no-longer-fitting row derives one: to the
+    // next chapter's start, or open-ended at the tail.
+    return <ChapterEdit>[
+      for (var i = 0; i < rows.length; i++)
+        ChapterEdit(
+          index: i,
+          title: parsed[i].title.isEmpty ? null : parsed[i].title,
+          startMs: parsed[i].startMs,
+          endMs: _chapterEndFor(rows, parsed, i),
+        ),
+    ];
+  }
+
+  static int? _chapterEndFor(
+    List<MetadataChapterRow> rows,
+    List<({String title, int startMs})> parsed,
+    int i,
+  ) {
+    final next = i + 1 < parsed.length ? parsed[i + 1].startMs : null;
+    final stored = rows[i].storedEndMs;
+    if (stored != null &&
+        stored > parsed[i].startMs &&
+        (next == null || stored <= next)) {
+      return stored;
+    }
+    return next;
+  }
+
   /// Takes server-side changes into the parts nobody is editing.
   /// Without it a fetched title is invisible and reads as a local edit,
   /// so Save offers to write the stale text back over it.
@@ -493,6 +753,36 @@ class MetadataDraft extends ChangeNotifier {
       (key, values) => _sameList(storedTags[key] ?? const <String>[], values),
     );
     _tagRemoves.removeWhere((key) => !storedTags.containsKey(key));
+
+    // Untouched chapter rows adopt like untouched fields: when nothing
+    // was typed, added, or removed and the stored marks moved (a
+    // rescan, an unrelated save's refetch), the rows reseed from the
+    // fresh marks instead of holding a stale list the next save would
+    // write back over them. Rows still matching their marks are left
+    // alone - reseeding them anyway would churn live controllers.
+    final rows = _chapterRows;
+    if (rows != null &&
+        !_chapterStructureTouched &&
+        rows.every((row) => row._untouched) &&
+        !_chapterRowsMatch(rows, state.metadata.chapters)) {
+      _retireChapterRows(rows);
+      _chapterRows = null;
+    }
+  }
+
+  static bool _chapterRowsMatch(
+    List<MetadataChapterRow> rows,
+    List<ChapterMark> stored,
+  ) {
+    if (rows.length != stored.length) return false;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i]._seededTitle != (stored[i].title ?? '') ||
+          rows[i].storedStartMs != stored[i].startMs ||
+          rows[i].storedEndMs != stored[i].endMs) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Everything staged that differs from what [state] holds.
@@ -575,6 +865,7 @@ class MetadataDraft extends ChangeNotifier {
       tagSets: tagSets,
       tagRemoves: tagRemoves,
       unofficial: unofficial,
+      chapters: _chapterChanges(state.metadata.chapters),
     );
   }
 
@@ -611,6 +902,15 @@ class MetadataDraft extends ChangeNotifier {
     }
     if (changes.unofficial case final sent?) {
       _seededUnofficial = sent;
+    }
+    if (changes.chapters != null) {
+      // Committed whole, so the staging is spent: dropping it lets the
+      // refetched echo re-seed the rows - which is also what makes a
+      // restore settle onto the file's own chapters instead of keeping
+      // an empty list staged against them for ever.
+      _retireChapterRows(_chapterRows ?? const []);
+      _chapterRows = null;
+      _chapterStructureTouched = false;
     }
     // Tags need nothing: they stage as deltas, and adopt drops every
     // entry the refetched store reflects.

@@ -4,6 +4,7 @@
     "albumTrackMore": "album-track-more-{index}",
     "entityAlbum": "entity-album-{pid}",
     "entityAllTracks": "entity-all-tracks",
+    "entityEditMetadata": "entity-edit-metadata",
     "entityInstantMix": "entity-instant-mix",
     "entityOverflow": "entity-overflow",
     "entityPin": "entity-pin",

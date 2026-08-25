@@ -12,7 +12,7 @@ import '../providers.dart';
 /// re-asks every few seconds for a pid that will never resolve is a
 /// background loop nobody can see. Anything that is not the server saying
 /// no keeps the default.
-Duration? _retryUnlessRefused(int attempt, Object error) {
+Duration? retryUnlessRefused(int attempt, Object error) {
   if (error case WaxDeckApiException(
     statusCode: final int status,
   ) when status >= 400 && status < 500) {
@@ -29,7 +29,7 @@ Duration? _retryUnlessRefused(int attempt, Object error) {
 final albumDetailProvider = FutureProvider.autoDispose
     .family<AlbumDetail, String>(
       (ref, pid) => ref.watch(repositoryProvider).getAlbum(pid),
-      retry: _retryUnlessRefused,
+      retry: retryUnlessRefused,
     );
 
 /// The curated overrides on one album entity, keyed by field name.
@@ -45,7 +45,7 @@ final albumCurationProvider = FutureProvider.autoDispose
       return <String, EntityCuratedField>{
         for (final row in rows) row.field: row,
       };
-    }, retry: _retryUnlessRefused);
+    }, retry: retryUnlessRefused);
 
 /// The five edition columns, in the order the editor and the header both
 /// present them. One enumeration, because a field drawn on the header

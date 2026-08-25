@@ -437,6 +437,7 @@ Class | Method | HTTP request | Description
 [*MetadataApi*](doc/MetadataApi.md) | [**getItemMetadata**](doc/MetadataApi.md#getitemmetadata) | **GET** /items/{pid}/metadata | Read an item&#39;s full metadata
 [*MetadataApi*](doc/MetadataApi.md) | [**getItemPermissions**](doc/MetadataApi.md#getitempermissions) | **GET** /items/{pid}/permissions | Read the caller&#39;s permissions on an item
 [*MetadataApi*](doc/MetadataApi.md) | [**getMetadataFields**](doc/MetadataApi.md#getmetadatafields) | **GET** /metadata/fields | Discover the editable field vocabulary
+[*MetadataApi*](doc/MetadataApi.md) | [**previewEnrichItem**](doc/MetadataApi.md#previewenrichitem) | **POST** /items/{pid}/enrich/preview | Preview a one-item enrichment
 [*MetadataApi*](doc/MetadataApi.md) | [**rematchItem**](doc/MetadataApi.md#rematchitem) | **POST** /items/{pid}/rematch | Requeue an item for matching
 [*MetadataApi*](doc/MetadataApi.md) | [**setBookChapters**](doc/MetadataApi.md#setbookchapters) | **PUT** /books/{pid}/chapters | Replace a book&#39;s chapters
 [*MetadataApi*](doc/MetadataApi.md) | [**setEntityArtwork**](doc/MetadataApi.md#setentityartwork) | **PUT** /entities/{entityType}/{entityPid}/artwork | Set entity artwork
@@ -670,8 +671,12 @@ Class | Method | HTTP request | Description
  - [EmbeddingIngestResult](doc/EmbeddingIngestResult.md)
  - [EmbeddingReport](doc/EmbeddingReport.md)
  - [EmbeddingUpload](doc/EmbeddingUpload.md)
+ - [EnrichCoverProposal](doc/EnrichCoverProposal.md)
+ - [EnrichFieldProposal](doc/EnrichFieldProposal.md)
  - [EnrichItemRequest](doc/EnrichItemRequest.md)
  - [EnrichItemResult](doc/EnrichItemResult.md)
+ - [EnrichPreview](doc/EnrichPreview.md)
+ - [EnrichProposal](doc/EnrichProposal.md)
  - [EnrichmentCoverage](doc/EnrichmentCoverage.md)
  - [EnrichmentLastRun](doc/EnrichmentLastRun.md)
  - [EnrichmentProvider](doc/EnrichmentProvider.md)

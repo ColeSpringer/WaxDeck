@@ -75,8 +75,12 @@ import 'package:waxdeck_api_gen/src/model/editable_field.dart';
 import 'package:waxdeck_api_gen/src/model/embedding_ingest_result.dart';
 import 'package:waxdeck_api_gen/src/model/embedding_report.dart';
 import 'package:waxdeck_api_gen/src/model/embedding_upload.dart';
+import 'package:waxdeck_api_gen/src/model/enrich_cover_proposal.dart';
+import 'package:waxdeck_api_gen/src/model/enrich_field_proposal.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_result.dart';
+import 'package:waxdeck_api_gen/src/model/enrich_preview.dart';
+import 'package:waxdeck_api_gen/src/model/enrich_proposal.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_coverage.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_last_run.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_provider.dart';
@@ -426,8 +430,12 @@ part 'serializers.g.dart';
   EmbeddingIngestResult,
   EmbeddingReport,
   EmbeddingUpload,
+  EnrichCoverProposal,
+  EnrichFieldProposal,
   EnrichItemRequest,
   EnrichItemResult,
+  EnrichPreview,
+  EnrichProposal,
   EnrichmentCoverage,
   EnrichmentLastRun,
   EnrichmentProvider,

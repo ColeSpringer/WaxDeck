@@ -3,6 +3,12 @@
   "ids": {
     "book": "book-{pid}",
     "bookAuthorFilter": "book-author-{key}",
+    "bookChapterEditor": "book-chapter-editor",
+    "bookChapterEditorAdd": "book-chapter-editor-add",
+    "bookChapterEditorRemove": "book-chapter-editor-remove-{index}",
+    "bookChapterEditorRestore": "book-chapter-editor-restore",
+    "bookChapterEditorStart": "book-chapter-editor-start-{index}",
+    "bookChapterEditorTitle": "book-chapter-editor-title-{index}",
     "bookContinue": "book-continue-{pid}",
     "bookDownload": "book-download",
     "bookEdition": "book-edition",

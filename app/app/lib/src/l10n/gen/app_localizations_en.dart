@@ -1893,6 +1893,29 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get bookChapterEditorAdd => 'Add a chapter';
+
+  @override
+  String get bookChapterEditorHelp =>
+      'Chapters file in playing order wherever they are typed. A new or moved chapter runs to the next one\'s start; the rest keep their stored lengths.';
+
+  @override
+  String get bookChapterEditorInvalid =>
+      'Chapter starts must be stamps like 1:02:03, each one distinct. Chapters stay out of the save until they are.';
+
+  @override
+  String get bookChapterEditorRemove => 'Remove this chapter';
+
+  @override
+  String get bookChapterEditorRestore => 'Restore the file\'s own chapters';
+
+  @override
+  String get bookChapterEditorStartLabel => 'Starts at';
+
+  @override
+  String get bookChapterEditorTitleLabel => 'Title';
+
+  @override
   String bookChapterFallback(int number) {
     return 'Chapter $number';
   }
@@ -3631,6 +3654,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataPendingChip => 'Unsaved';
 
   @override
+  String get metadataPreviewApply => 'Apply these changes';
+
+  @override
+  String get metadataPreviewBuiltinsNote =>
+      'The server\'s built-in sources cannot be previewed; applying may still fill remaining gaps from them.';
+
+  @override
+  String get metadataPreviewEmpty =>
+      'The providers have nothing new for this item.';
+
+  @override
+  String get metadataPreviewFetchAnyway => 'Fetch anyway';
+
+  @override
+  String metadataPreviewProvider(String provider) {
+    return 'From $provider';
+  }
+
+  @override
+  String get metadataPreviewTitle => 'Fetch preview';
+
+  @override
   String get metadataQueuedForIdentification => 'Queued for identification';
 
   @override
@@ -3826,6 +3871,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicAlbumEditDetails => 'Edit album details';
 
   @override
+  String get musicAlbumEditReleaseGroup => 'Edit release group';
+
+  @override
   String musicAlbumEditorFieldLocked(String field) {
     return '$field is locked';
   }
@@ -3977,6 +4025,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicArtistAudiobooksSection => 'Audiobooks';
 
   @override
+  String get musicArtistEditMetadata => 'Edit artist';
+
+  @override
   String get musicArtistEmptyMessage =>
       'The items that were here have moved or been removed.';
 
@@ -4088,6 +4139,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicEmptyTitle => 'No music yet';
 
   @override
+  String get musicFieldArtistMbid => 'MusicBrainz artist ID';
+
+  @override
+  String get musicFieldArtistMbidHelp =>
+      'The identifier this artist matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.';
+
+  @override
+  String get musicFieldArtistSortHelp =>
+      'How this artist files in an A-to-Z list. Empty files them under their name.';
+
+  @override
+  String get musicFieldArtistWriteBackHelp =>
+      'Also rewrite the matching sort tag in the files crediting this artist.';
+
+  @override
   String get musicFieldBarcode => 'Barcode';
 
   @override
@@ -4127,6 +4193,24 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get musicFieldMediaHelp =>
       'What it was pressed on - CD, 2xVinyl, Digital Media';
+
+  @override
+  String get musicFieldReleaseGroupMbid => 'MusicBrainz release-group ID';
+
+  @override
+  String get musicFieldReleaseGroupMbidHelp =>
+      'The group\'s identifier at MusicBrainz: the album across its editions.';
+
+  @override
+  String get musicFieldReleaseGroupSortHelp =>
+      'How this group files in an A-to-Z list. Empty files it under its title.';
+
+  @override
+  String get musicFieldReleaseGroupType => 'Type';
+
+  @override
+  String get musicFieldReleaseGroupTypeHelp =>
+      'What this group is. Not set hands the value back to what matching stored.';
 
   @override
   String get musicFieldSort => 'Sort name';
@@ -4320,6 +4404,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicPlay => 'Play';
+
+  @override
+  String get musicReleaseGroupTypeAlbum => 'Album';
+
+  @override
+  String get musicReleaseGroupTypeAudiobook => 'Audiobook';
+
+  @override
+  String get musicReleaseGroupTypeCompilation => 'Compilation';
+
+  @override
+  String get musicReleaseGroupTypeEp => 'EP';
+
+  @override
+  String get musicReleaseGroupTypeSingle => 'Single';
+
+  @override
+  String get musicReleaseGroupTypeUnset => 'Not set';
 
   @override
   String get musicShelfMostPlayedTitle => 'Most played';

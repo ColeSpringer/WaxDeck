@@ -82,6 +82,7 @@ class ArtworkManager extends ConsumerStatefulWidget {
     required this.hasArtwork,
     this.entityType,
     this.writeBack = false,
+    this.pinnable = true,
     this.onChanged,
   });
 
@@ -109,6 +110,13 @@ class ArtworkManager extends ConsumerStatefulWidget {
   /// Whether setting an entity's front cover also embeds it into the
   /// member files. Albums only, and ignored elsewhere by the endpoint.
   final bool writeBack;
+
+  /// Whether the item branch offers the front-cover pin. The `art`
+  /// lock only applies to tracks and books - an episode's picture is
+  /// the feed's, so the store refuses the lock row - and a switch the
+  /// server always refuses is worse than no switch. Ignored for
+  /// entities, whose pin rides its own endpoint.
+  final bool pinnable;
 
   /// Called after this grid changes what the entity's artwork is.
   ///
@@ -274,28 +282,41 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
     widget.onChanged?.call();
   }
 
-  /// Pins or unpins a catalog entity's front cover, which is the one
-  /// way out of a cover cleared and left pinned: setting artwork cannot
-  /// express "stop refusing", and clearing it again does nothing.
+  /// Pins or unpins the front cover, which is the one way out of a
+  /// cover cleared and left pinned: setting artwork cannot express
+  /// "stop refusing", and clearing it again does nothing. An entity's
+  /// pin is its own endpoint; an item's rides the field-lock surface
+  /// under the `art` name.
   Future<void> _setLock(bool locked) async {
     final entity = widget.entityType;
-    if (entity == null) return;
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     setState(() => _busyRole = ArtSlot.front.role);
     try {
-      await ref
-          .read(repositoryProvider)
-          .setEntityArtworkLock(entity, widget.pid, locked: locked);
+      final repository = ref.read(repositoryProvider);
+      if (entity == null) {
+        await repository.setItemLocks(
+          widget.pid,
+          fields: const ['art'],
+          locked: locked,
+        );
+      } else {
+        await repository.setEntityArtworkLock(
+          entity,
+          widget.pid,
+          locked: locked,
+        );
+      }
       // Guarded like _refresh beside it: the pin may have been written
       // while this screen was being left, and invalidating through a
       // disposed ref throws. It escapes rather than surfacing, because
       // the switch takes this as a void callback and discards the
       // future.
       if (!mounted) return;
-      ref
-        ..invalidate(entityArtLockProvider((type: entity, pid: widget.pid)))
-        ..invalidate(itemArtRolesProvider(widget.pid));
+      if (entity != null) {
+        ref.invalidate(entityArtLockProvider((type: entity, pid: widget.pid)));
+      }
+      ref.invalidate(itemArtRolesProvider(widget.pid));
       widget.onChanged?.call();
       messenger.show(
         locked ? l10n.artworkLockPinned : l10n.artworkLockUnpinned,
@@ -358,31 +379,41 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
               ),
           ],
         ),
-        if (widget.entityType != null) ...<Widget>[
+        if (widget.entityType != null || widget.pinnable) ...<Widget>[
           const SizedBox(height: WaxSpace.s12),
           Builder(
             builder: (context) {
-              final lock = ref.watch(
-                entityArtLockProvider((
-                  type: widget.entityType!,
-                  pid: widget.pid,
-                )),
-              );
+              // The pin state's read differs by branch: an entity's pin
+              // survives its cover being cleared, so it has an endpoint
+              // of its own, while an item's rides the front row of the
+              // slot listing this grid already holds (the catalog
+              // synthesizes that row for a pinned empty slot, so the
+              // state this switch exists for is never rowless).
+              final bool value;
+              final bool known;
+              if (widget.entityType case final entity?) {
+                final lock = ref.watch(
+                  entityArtLockProvider((type: entity, pid: widget.pid)),
+                );
+                value = lock.value ?? false;
+                known = lock.hasValue;
+              } else {
+                value = own[ArtSlot.front.role]?.locked ?? false;
+                known = roles.hasValue;
+              }
               return WaxSettingRow(
                 title: l10n.artworkLockTitle,
                 help: l10n.artworkLockHelp,
                 control: WaxSwitch(
                   label: l10n.artworkLockTitle,
-                  value: lock.value ?? false,
+                  value: value,
                   semanticsId: SemanticsIds.artLock,
                   // Dead until the pin is known. Off is what an unread
                   // lock draws as, so a pinned cover reads as unpinned
                   // while the read is in flight or after it failed -
                   // and a tap in that window would write the state the
                   // switch is only guessing at.
-                  onChanged: _busyRole != null || !lock.hasValue
-                      ? null
-                      : _setLock,
+                  onChanged: _busyRole != null || !known ? null : _setLock,
                 ),
               );
             },

@@ -11,6 +11,8 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'artwork_manager.dart';
+import 'chapter_section.dart';
+import 'enrich_preview_sheet.dart';
 import 'metadata_controller.dart';
 import 'metadata_form.dart';
 
@@ -258,12 +260,29 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
     MediaType.podcast => const ['cover'],
   };
 
+  /// Preview first, then commit what was approved: the sheet shows the
+  /// providers' exact answer, and applying passes it back so the server
+  /// writes those values rather than fetching fresh ones. An empty
+  /// preview still offers the fetch - the catalog's built-ins cannot be
+  /// previewed and may fill gaps the injected providers left.
   Future<void> _enrich(MetadataEditorState state) => _run(() async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    final result = await ref
-        .read(metadataControllerProvider(widget.pid).notifier)
-        .enrich(_wantsFor(state.metadata.mediaType));
+    final controller = ref.read(
+      metadataControllerProvider(widget.pid).notifier,
+    );
+    final wants = _wantsFor(state.metadata.mediaType);
+    final preview = await controller.previewEnrich(wants);
+    if (!mounted) return;
+    final approved = await showEnrichPreviewSheet(context, preview: preview);
+    if (!approved || !mounted) return;
+    // An empty preview applies with no proposal at all: "Fetch anyway"
+    // promises the blind one-shot, and an empty-but-present proposal
+    // would commit nothing and swallow the skip reasons instead.
+    final result = await controller.enrich(
+      wants,
+      proposal: preview.isEmpty ? null : preview.proposal,
+    );
     final parts = <String>[
       if (result.applied.isNotEmpty)
         l10n.metadataEnrichApplied(result.applied.join(', ')),
@@ -353,12 +372,27 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
       _fieldsSection(context, state, changes),
       MetadataCreditsSection(state: state, draft: _draft, busy: _busy),
       MetadataTagsSection(state: state, draft: _draft, busy: _busy),
+      if (state.metadata.mediaType == MediaType.audiobook)
+        MetadataChaptersSection(
+          pid: widget.pid,
+          state: state,
+          draft: _draft,
+          busy: _busy,
+          onToggleLock: () => _run(
+            () => ref
+                .read(metadataControllerProvider(widget.pid).notifier)
+                .setLock('chapters', locked: !state.isLocked('chapters')),
+          ),
+        ),
     ];
     final right = <Widget>[
       ArtworkManager(
         pid: widget.pid,
         title: state.metadata.fields['title'] ?? widget.pid,
         hasArtwork: state.metadata.hasArtwork,
+        // An episode's picture is the feed's: the item art lock only
+        // applies to tracks and books, and the store refuses it.
+        pinnable: state.metadata.mediaType != MediaType.podcast,
       ),
       const SizedBox(height: WaxSpace.s32),
       _lyricsSection(context, state),

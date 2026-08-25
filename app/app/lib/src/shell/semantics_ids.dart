@@ -154,6 +154,15 @@ abstract final class SemanticsIds {
   // books: Audiobooks: the hub, the book screen, its chapters, and its per-book settings.
   static String book(Object pid) => 'book-$pid';
   static String bookAuthorFilter(Object key) => 'book-author-$key';
+  static const String bookChapterEditor = 'book-chapter-editor';
+  static const String bookChapterEditorAdd = 'book-chapter-editor-add';
+  static String bookChapterEditorRemove(Object index) =>
+      'book-chapter-editor-remove-$index';
+  static const String bookChapterEditorRestore = 'book-chapter-editor-restore';
+  static String bookChapterEditorStart(Object index) =>
+      'book-chapter-editor-start-$index';
+  static String bookChapterEditorTitle(Object index) =>
+      'book-chapter-editor-title-$index';
   static String bookContinue(Object pid) => 'book-continue-$pid';
   static const String bookDownload = 'book-download';
   static const String bookEdition = 'book-edition';
@@ -330,6 +339,7 @@ abstract final class SemanticsIds {
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
   static const String albumEditDetails = 'album-edit-details';
+  static const String albumEditReleaseGroup = 'album-edit-release-group';
   static const String albumEditor = 'album-editor';
   static const String albumEditorNames = 'album-editor-names';
   static const String albumEditorTotalTracks = 'album-editor-total-tracks';
@@ -350,6 +360,12 @@ abstract final class SemanticsIds {
       'credit-remove-$role-$name';
   static const String creditsNames = 'credits-names';
   static const String creditsRole = 'credits-role';
+  static const String enrichPreview = 'enrich-preview';
+  static const String enrichPreviewApply = 'enrich-preview-apply';
+  static const String enrichPreviewCancel = 'enrich-preview-cancel';
+  static const String enrichPreviewCover = 'enrich-preview-cover';
+  static String enrichPreviewRow(Object name) => 'enrich-preview-row-$name';
+  static const String entityEditor = 'entity-editor';
   static String fieldLock(Object name) => 'field-lock-$name';
   static const String lyricsField = 'lyrics-field';
   static const String lyricsPreview = 'lyrics-preview';
@@ -405,6 +421,7 @@ abstract final class SemanticsIds {
   static String albumTrackMore(Object index) => 'album-track-more-$index';
   static String entityAlbum(Object pid) => 'entity-album-$pid';
   static const String entityAllTracks = 'entity-all-tracks';
+  static const String entityEditMetadata = 'entity-edit-metadata';
   static const String entityInstantMix = 'entity-instant-mix';
   static const String entityOverflow = 'entity-overflow';
   static const String entityPin = 'entity-pin';

@@ -466,6 +466,33 @@
   "@metadataPendingChip": {
     "description": "Chip on a staged change (a tag added to the form, say) that the save bar has not committed yet."
   },
+  "metadataPreviewApply": "Apply these changes",
+  "@metadataPreviewApply": {
+    "description": "Confirms the enrichment preview sheet: commits exactly the previewed values."
+  },
+  "metadataPreviewBuiltinsNote": "The server's built-in sources cannot be previewed; applying may still fill remaining gaps from them.",
+  "@metadataPreviewBuiltinsNote": {
+    "description": "Footnote on the enrichment preview sheet: the catalog's key-free sources fetch-and-write in one pass, so their answers only show up after an apply."
+  },
+  "metadataPreviewEmpty": "The providers have nothing new for this item.",
+  "@metadataPreviewEmpty": {
+    "description": "Empty state of the enrichment preview sheet, above the per-artifact reasons."
+  },
+  "metadataPreviewFetchAnyway": "Fetch anyway",
+  "@metadataPreviewFetchAnyway": {
+    "description": "Confirms an empty enrichment preview: nothing was proposed, but the un-previewable built-in sources may still fill gaps."
+  },
+  "metadataPreviewProvider": "From {provider}",
+  "@metadataPreviewProvider": {
+    "description": "Names the metadata provider that supplied one previewed value.",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "metadataPreviewTitle": "Fetch preview",
+  "@metadataPreviewTitle": {
+    "description": "Title of the sheet showing what an enrichment fetch would change before anything lands."
+  },
   "metadataQueuedForIdentification": "Queued for identification",
   "@metadataQueuedForIdentification": {
     "description": "Message after an item was sent back for matching."

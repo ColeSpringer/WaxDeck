@@ -3309,6 +3309,48 @@ abstract class AppLocalizations {
   /// **'By {names}'**
   String bookByAuthors(String names);
 
+  /// Button on the chapter editor appending an empty row.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a chapter'**
+  String get bookChapterEditorAdd;
+
+  /// Line under the chapter editor saying how the rows' starts become ranges.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters file in playing order wherever they are typed. A new or moved chapter runs to the next one\'s start; the rest keep their stored lengths.'**
+  String get bookChapterEditorHelp;
+
+  /// Caution on the chapter editor while a start does not parse or the rows are out of order.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter starts must be stamps like 1:02:03, each one distinct. Chapters stay out of the save until they are.'**
+  String get bookChapterEditorInvalid;
+
+  /// Per-row button on the chapter editor taking the row out of the staged list.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this chapter'**
+  String get bookChapterEditorRemove;
+
+  /// Button on the chapter editor staging the empty list, which the server reads as handing the marks back to what the file embeds.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore the file\'s own chapters'**
+  String get bookChapterEditorRestore;
+
+  /// Label on a chapter row's start-time stamp field.
+  ///
+  /// In en, this message translates to:
+  /// **'Starts at'**
+  String get bookChapterEditorStartLabel;
+
+  /// Label on a chapter row's title field.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get bookChapterEditorTitleLabel;
+
   /// Stands in for a chapter mark the file numbered but did not title.
   ///
   /// In en, this message translates to:
@@ -5949,6 +5991,42 @@ abstract class AppLocalizations {
   /// **'Unsaved'**
   String get metadataPendingChip;
 
+  /// Confirms the enrichment preview sheet: commits exactly the previewed values.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply these changes'**
+  String get metadataPreviewApply;
+
+  /// Footnote on the enrichment preview sheet: the catalog's key-free sources fetch-and-write in one pass, so their answers only show up after an apply.
+  ///
+  /// In en, this message translates to:
+  /// **'The server\'s built-in sources cannot be previewed; applying may still fill remaining gaps from them.'**
+  String get metadataPreviewBuiltinsNote;
+
+  /// Empty state of the enrichment preview sheet, above the per-artifact reasons.
+  ///
+  /// In en, this message translates to:
+  /// **'The providers have nothing new for this item.'**
+  String get metadataPreviewEmpty;
+
+  /// Confirms an empty enrichment preview: nothing was proposed, but the un-previewable built-in sources may still fill gaps.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch anyway'**
+  String get metadataPreviewFetchAnyway;
+
+  /// Names the metadata provider that supplied one previewed value.
+  ///
+  /// In en, this message translates to:
+  /// **'From {provider}'**
+  String metadataPreviewProvider(String provider);
+
+  /// Title of the sheet showing what an enrichment fetch would change before anything lands.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch preview'**
+  String get metadataPreviewTitle;
+
   /// Message after an item was sent back for matching.
   ///
   /// In en, this message translates to:
@@ -6267,6 +6345,12 @@ abstract class AppLocalizations {
   /// **'Edit album details'**
   String get musicAlbumEditDetails;
 
+  /// Door from the release workbench to the release-group editor: the album across its editions.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit release group'**
+  String get musicAlbumEditReleaseGroup;
+
   /// Accessible name of the lock mark beside an album-editor field. {field} is that field's label.
   ///
   /// In en, this message translates to:
@@ -6489,6 +6573,12 @@ abstract class AppLocalizations {
   /// **'Audiobooks'**
   String get musicArtistAudiobooksSection;
 
+  /// Entry in the artist screen's overflow opening the artist editor. Administrators only.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit artist'**
+  String get musicArtistEditMetadata;
+
   /// Message under the empty state of an artist's screen, saying why it is empty.
   ///
   /// In en, this message translates to:
@@ -6591,6 +6681,30 @@ abstract class AppLocalizations {
   /// **'No music yet'**
   String get musicEmptyTitle;
 
+  /// The artist's identifier at MusicBrainz, on the artist editor.
+  ///
+  /// In en, this message translates to:
+  /// **'MusicBrainz artist ID'**
+  String get musicFieldArtistMbid;
+
+  /// Help under the MusicBrainz artist ID field.
+  ///
+  /// In en, this message translates to:
+  /// **'The identifier this artist matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.'**
+  String get musicFieldArtistMbidHelp;
+
+  /// Help under the sort name field on the artist editor.
+  ///
+  /// In en, this message translates to:
+  /// **'How this artist files in an A-to-Z list. Empty files them under their name.'**
+  String get musicFieldArtistSortHelp;
+
+  /// Help under the write-back switch on the artist editor: the sort name is the one artist field that fans out to files.
+  ///
+  /// In en, this message translates to:
+  /// **'Also rewrite the matching sort tag in the files crediting this artist.'**
+  String get musicFieldArtistWriteBackHelp;
+
   /// An album's barcode, on the release editor and on the album screen.
   ///
   /// In en, this message translates to:
@@ -6662,6 +6776,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'What it was pressed on - CD, 2xVinyl, Digital Media'**
   String get musicFieldMediaHelp;
+
+  /// The release group's identifier at MusicBrainz, on the release-group editor.
+  ///
+  /// In en, this message translates to:
+  /// **'MusicBrainz release-group ID'**
+  String get musicFieldReleaseGroupMbid;
+
+  /// Help under the MusicBrainz release-group ID field.
+  ///
+  /// In en, this message translates to:
+  /// **'The group\'s identifier at MusicBrainz: the album across its editions.'**
+  String get musicFieldReleaseGroupMbidHelp;
+
+  /// Help under the sort name field on the release-group editor.
+  ///
+  /// In en, this message translates to:
+  /// **'How this group files in an A-to-Z list. Empty files it under its title.'**
+  String get musicFieldReleaseGroupSortHelp;
+
+  /// What a release group is - an album, an EP, a single, a compilation, an audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get musicFieldReleaseGroupType;
+
+  /// Help under the type choice on the release-group editor.
+  ///
+  /// In en, this message translates to:
+  /// **'What this group is. Not set hands the value back to what matching stored.'**
+  String get musicFieldReleaseGroupTypeHelp;
 
   /// The album's filing name, as against its title.
   ///
@@ -6752,6 +6896,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Play'**
   String get musicPlay;
+
+  /// Release-group type choice: a full-length release.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get musicReleaseGroupTypeAlbum;
+
+  /// Release-group type choice: an audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobook'**
+  String get musicReleaseGroupTypeAudiobook;
+
+  /// Release-group type choice: a various-artists or collected release.
+  ///
+  /// In en, this message translates to:
+  /// **'Compilation'**
+  String get musicReleaseGroupTypeCompilation;
+
+  /// Release-group type choice: an extended play.
+  ///
+  /// In en, this message translates to:
+  /// **'EP'**
+  String get musicReleaseGroupTypeEp;
+
+  /// Release-group type choice: a single.
+  ///
+  /// In en, this message translates to:
+  /// **'Single'**
+  String get musicReleaseGroupTypeSingle;
+
+  /// Release-group type choice that clears the override, handing the value back to what matching stored.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get musicReleaseGroupTypeUnset;
 
   /// Shelf on the music hub holding what has been played most.
   ///

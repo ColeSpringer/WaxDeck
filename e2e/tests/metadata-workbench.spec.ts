@@ -106,7 +106,7 @@ async function importOwnAlbum(
   return { albumPid, trackPids };
 }
 
-test('the workbench edits a member, bulk-writes the pair, and follows a regroup', async ({ app }) => {
+test('the workbench edits a member, bulk-writes the pair, and follows a regroup', async ({ app, page }) => {
   test.setTimeout(J.journey);
   const stamp = Date.now().toString(36);
   const { albumPid, trackPids } = await importOwnAlbum(app, stamp);
@@ -168,6 +168,42 @@ test('the workbench edits a member, bulk-writes the pair, and follows a regroup'
 
   // The album row leaves the selection and returns the release's own
   // form to the pane, in one move.
+  await clickThrough(app.metadata.albumRow(), app.metadata.albumEditor());
+
+  // The pane's fetch previews before it applies: on a server with no
+  // injected providers the sheet opens on its empty state, and
+  // cancelling it writes nothing. Driven on this spec's own member so
+  // no shared fixture is enriched. A taller viewport instead of a
+  // wheel: the lyrics box sits mid-pane and swallows wheel events that
+  // pass over it, so scrolling to the button under the default height
+  // stalls on exactly this editor.
+  await clickThrough(
+    app.metadata.trackRow(trackPids[1]),
+    app.metadata.itemField('title'),
+  );
+  const view = page.viewportSize();
+  await page.setViewportSize({ width: view!.width, height: 2400 });
+  await clickThrough(app.metadata.enrichButton(), app.metadata.previewSheet());
+  await clickToward(app.metadata.previewCancel(), {
+    gone: app.metadata.previewSheet(),
+  });
+  await page.setViewportSize(view!);
+
+  // The artist behind the release opens its own editor at the same
+  // metadata location. Render only: the artist entity is keyed by
+  // name, so a save here could cross another worker's assertions. The
+  // pid is asserted, not gated on - inside an if this whole block
+  // would silently no-op green.
+  const member = await app.api.get('/items/{pid}', {
+    path: { pid: trackPids[0] },
+  });
+  expect(member.artistPid, 'an imported member names its artist').toBeTruthy();
+  await app.metadata.openEntityEditor(member.artistPid!);
+  await app.metadata.itemField('sort').waitFor({ timeout: T.fetch });
+  await app.metadata.openWorkbench(albumPid);
+  // Back on the release's own form for the rename below, whichever
+  // branch ran: a reload lands there, and the row click is one move
+  // from the member's editor.
   await clickThrough(app.metadata.albumRow(), app.metadata.albumEditor());
 
   // Rename the release. The rewrite goes to the member tracks, which

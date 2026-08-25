@@ -585,6 +585,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(enrich);
     await tester.pumpAndSettle();
+    // The fetch previews first; applying the (empty) preview is what
+    // runs it.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.enrichPreviewApply),
+    );
+    await tester.pumpAndSettle();
 
     // The form shows what was fetched...
     expect(
@@ -1075,6 +1081,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(enrich);
     await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.enrichPreviewApply),
+    );
+    await tester.pumpAndSettle();
 
     // The fetched lyrics land in the box - whitespace is not an edit
     // that outranks them - and nothing offers to save their removal.
@@ -1315,11 +1325,14 @@ void main() {
     expect(repo.editItemMetadataCalls.single.fields, {
       'episode_type': 'trailer',
     });
-    // Episodes never write back, so the switch is not even offered.
+    // Episodes never write back, so the switch is not even offered -
+    // and the cover pin is not either: the art lock applies to tracks
+    // and books only, and the store refuses it for an episode.
     expect(
       find.bySemanticsIdentifier(SemanticsIds.metadataWriteback),
       findsNothing,
     );
+    expect(find.bySemanticsIdentifier(SemanticsIds.artLock), findsNothing);
   });
 
   test('a saved value settles onto its normalized echo', () {
@@ -1351,4 +1364,434 @@ void main() {
     expect(draft.controllerFor('title', 'Neon').text, 'Neon');
     expect(draft.changes(after).isEmpty, isTrue);
   });
+
+  testWidgets('the fetch previews first, and applying commits the proposal', (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.enrichPreview = EnrichPreview(
+      fields: const [
+        EnrichFieldProposal(
+          name: 'genre',
+          proposed: 'Jazz',
+          provider: 'listenfake',
+        ),
+      ],
+      cover: EnrichCoverProposal(provider: 'coverfake', data: _onePixelPng),
+      skipped: const ['lyrics: no provider'],
+    );
+    await _pump(tester, _host(_container(repo)));
+
+    final enrich = find.bySemanticsIdentifier(SemanticsIds.metadataEnrich);
+    await tester.ensureVisible(enrich);
+    await tester.pumpAndSettle();
+    await tester.tap(enrich);
+    await tester.pumpAndSettle();
+
+    // The sheet shows the diff before anything is written.
+    expect(repo.previewEnrichItemCalls, hasLength(1));
+    expect(repo.enrichItemCalls, isEmpty);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.enrichPreviewRow('genre')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.enrichPreviewCover),
+      findsOneWidget,
+    );
+    expect(find.textContaining('lyrics: no provider'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.enrichPreviewApply),
+    );
+    await tester.pumpAndSettle();
+
+    // What was approved is what was sent back, cover bytes included.
+    final call = repo.enrichItemCalls.single;
+    expect(call.proposal?.fields.single.proposed, 'Jazz');
+    expect(call.proposal?.cover?.provider, 'coverfake');
+    expect(call.proposal?.cover?.data, _onePixelPng);
+  });
+
+  testWidgets('cancelling the preview fetches nothing', (tester) async {
+    final repo = _repo();
+    await _pump(tester, _host(_container(repo)));
+
+    final enrich = find.bySemanticsIdentifier(SemanticsIds.metadataEnrich);
+    await tester.ensureVisible(enrich);
+    await tester.pumpAndSettle();
+    await tester.tap(enrich);
+    await tester.pumpAndSettle();
+
+    // The default preview is a server with no providers: nothing
+    // proposed, and the confirm reads as the blind fetch it would be.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.enrichPreview),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.enrichPreviewCancel),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.enrichItemCalls, isEmpty);
+  });
+
+  testWidgets('an item cover pin shows on the switch and comes off there', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..ownArtworkPids.add('tr-1')
+      ..artRoles.add(
+        const ArtRoleInfo(
+          role: 'front',
+          format: 'jpeg',
+          width: 600,
+          height: 600,
+          locked: true,
+        ),
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    final lock = find.bySemanticsIdentifier(SemanticsIds.artLock);
+    await tester.ensureVisible(lock);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<WaxSwitch>(
+            find.ancestor(of: lock, matching: find.byType(WaxSwitch)),
+          )
+          .value,
+      isTrue,
+    );
+
+    // Unpinning rides the field-lock surface under the `art` name -
+    // the one way out of a pinned empty front on an item.
+    await tester.tap(lock);
+    await tester.pumpAndSettle();
+    final call = repo.setItemLocksCalls.single;
+    expect(call.pid, 'tr-1');
+    expect(call.fields, ['art']);
+    expect(call.locked, isFalse);
+  });
+
+  testWidgets('a single-file book stages its chapters into the one save', (
+    tester,
+  ) async {
+    final repo = _bookRepo();
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.bookChapterEditor),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.bookChapterEditorTitle(0)),
+      'Prologue',
+    );
+    await tester.pump();
+    await _saveNow(tester);
+
+    // Ends derive contiguous: each chapter runs to the next one's
+    // start, and the last is open-ended.
+    final sent = repo.chapterEditsByPid['bk-1']!;
+    expect(sent, hasLength(2));
+    expect(sent[0].index, 0);
+    expect(sent[0].title, 'Prologue');
+    expect(sent[0].startMs, 0);
+    expect(sent[0].endMs, 61500);
+    expect(sent[1].startMs, 61500);
+    expect(sent[1].endMs, isNull);
+  });
+
+  testWidgets('restoring hands the marks back to the file', (tester) async {
+    final repo = _bookRepo();
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    final restore = find.bySemanticsIdentifier(
+      SemanticsIds.bookChapterEditorRestore,
+    );
+    await tester.ensureVisible(restore);
+    await tester.pumpAndSettle();
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+    await _saveNow(tester);
+
+    // The empty list is the endpoint's "restore the embedded chapters".
+    expect(repo.chapterEditsByPid['bk-1'], isEmpty);
+  });
+
+  testWidgets('a start that does not parse keeps chapters out of the save', (
+    tester,
+  ) async {
+    final repo = _bookRepo();
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.bookChapterEditorStart(1)),
+      'later',
+    );
+    await tester.pump();
+    expect(find.textContaining('in playing order'), findsOneWidget);
+
+    // Another staged part keeps the save alive; the chapters stay out.
+    await tester.enterText(_field('title'), 'A Better Title');
+    await tester.pump();
+    await _saveNow(tester);
+    expect(repo.chapterEditsByPid.containsKey('bk-1'), isFalse);
+    expect(repo.editItemMetadataCalls, hasLength(1));
+  });
+
+  testWidgets('a multi-file book shows no chapter editor', (tester) async {
+    final repo = _bookRepo(
+      parts: const [
+        BookPart(index: 0, startMs: 0, durationMs: 100000),
+        BookPart(index: 1, startMs: 100000, durationMs: 100000),
+      ],
+    );
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.bookChapterEditor),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an added chapter files where it plays, not where it was typed', (
+    tester,
+  ) async {
+    final repo = _bookRepo();
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    final add = find.bySemanticsIdentifier(SemanticsIds.bookChapterEditorAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pump();
+    // A mid-book start on the appended row: the save files it between
+    // the stored chapters rather than refusing the row order.
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.bookChapterEditorStart(2)),
+      '0:30',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.bookChapterEditorTitle(2)),
+      'Interlude',
+    );
+    await tester.pump();
+    await _saveNow(tester);
+
+    final sent = repo.chapterEditsByPid['bk-1']!;
+    expect(sent.map((c) => c.title).toList(), ['One', 'Interlude', 'Two']);
+    expect(sent.map((c) => c.startMs).toList(), [0, 30000, 61500]);
+    // The first chapter's stored end (61500) no longer fits before the
+    // insert, so it re-derives; the tail stays open-ended.
+    expect(sent.map((c) => c.endMs).toList(), [30000, 61500, null]);
+  });
+
+  testWidgets('removing a chapter drops it from the save', (tester) async {
+    final repo = _bookRepo();
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    final remove = find.bySemanticsIdentifier(
+      SemanticsIds.bookChapterEditorRemove(0),
+    );
+    await tester.ensureVisible(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(remove);
+    await tester.pump();
+    await _saveNow(tester);
+
+    final sent = repo.chapterEditsByPid['bk-1']!;
+    expect(sent.single.title, 'Two');
+    expect(sent.single.index, 0);
+  });
+
+  testWidgets('the chapters lock has its own toggle', (tester) async {
+    // Saved chapters lock by default, so without this the second edit's
+    // only door is the global Force switch.
+    final repo = _bookRepo();
+    repo.lockedFieldsByPid['bk-1'] = {'chapters'};
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    final lock = find.bySemanticsIdentifier(SemanticsIds.fieldLock('chapters'));
+    await tester.ensureVisible(lock);
+    await tester.pumpAndSettle();
+    await tester.tap(lock);
+    await tester.pumpAndSettle();
+
+    final call = repo.setItemLocksCalls.single;
+    expect(call.fields, ['chapters']);
+    expect(call.locked, isFalse);
+  });
+
+  testWidgets('an empty preview applies as the blind fetch', (tester) async {
+    // "Fetch anyway" promises the one-shot: an empty-but-present
+    // proposal would commit nothing and swallow the skip reasons.
+    final repo = _repo();
+    await _pump(tester, _host(_container(repo)));
+
+    final enrich = find.bySemanticsIdentifier(SemanticsIds.metadataEnrich);
+    await tester.ensureVisible(enrich);
+    await tester.pumpAndSettle();
+    await tester.tap(enrich);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.enrichPreviewApply),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.enrichItemCalls.single.proposal, isNull);
+  });
+
+  test('parseTimecodeMs reads garbage as unparsed, never throws', () {
+    // Both shapes threw before they were tryParsed: a 400-digit number
+    // parses to infinity and round() throws on it, and a 20-digit
+    // minute overflows the int parse.
+    expect(parseTimecodeMs('9' * 400), isNull);
+    expect(parseTimecodeMs('${'9' * 20}:00'), isNull);
+    expect(parseTimecodeMs('1:02:03'), 3723000);
+    expect(parseTimecodeMs('90'), 90000);
+  });
+
+  test('untouched chapter rows adopt refetched marks', () {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final draft = MetadataDraft();
+    addTearDown(draft.dispose);
+    ItemMetadata metadataWith(List<ChapterMark> chapters) => ItemMetadata(
+      pid: 'bk-1',
+      mediaType: MediaType.audiobook,
+      fields: const {},
+      chapters: chapters,
+    );
+    MetadataEditorState stateWith(List<ChapterMark> chapters) =>
+        MetadataEditorState(
+          metadata: metadataWith(chapters),
+          kindFields: const KindFields(kind: MediaType.audiobook, fields: []),
+        );
+
+    const before = [ChapterMark(index: 0, title: 'One', startMs: 0)];
+    const after = [ChapterMark(index: 0, title: 'Renamed', startMs: 0)];
+    draft.chapterRows(before);
+
+    // Untouched rows reseed from the moved marks: without this the next
+    // save would write the stale list back over them.
+    draft.adopt(stateWith(after));
+    expect(draft.chapterRows(after).single.titleController.text, 'Renamed');
+    expect(draft.changes(stateWith(after)).chapters, isNull);
+
+    // A typed row is the user's and outranks the refetch.
+    draft.chapterRows(after).single.titleController.text = 'Mine';
+    draft.adopt(stateWith(before));
+    expect(draft.chapterRows(before).single.titleController.text, 'Mine');
+  });
+
+  test('a millisecond start survives an untouched round trip', () {
+    // The visible stamp is whole seconds, so an untouched row must
+    // answer its stored precision rather than the floor of its text.
+    final draft = MetadataDraft();
+    addTearDown(draft.dispose);
+    final rows = draft.chapterRows(const [
+      ChapterMark(index: 0, title: 'One', startMs: 12500),
+      ChapterMark(index: 1, title: 'Two', startMs: 61500),
+    ]);
+    expect(rows[0].startMs, 12500);
+
+    // A typed stamp is the user's, at the second granularity they see.
+    rows[0].startController.text = '0:11';
+    expect(rows[0].startMs, 11000);
+  });
 }
+
+/// A one-file audiobook with two stored chapters, for the chapter
+/// editor tests. The second start is deliberately not a whole second,
+/// and the default is one part - the server synthesizes a part for a
+/// partless book, so zero is a shape it can never return and a fixture
+/// holding it would green-light a parts.isNotEmpty guard that hides
+/// the editor from every real book.
+FakeRepository _bookRepo({
+  List<BookPart> parts = const [
+    BookPart(index: 0, startMs: 0, durationMs: 200000),
+  ],
+}) {
+  final repo = FakeRepository(
+    items: [
+      testItem('bk-1', mediaType: MediaType.audiobook, title: 'The Long Walk'),
+    ],
+  );
+  repo.metadataFields = const MetadataFields(
+    kinds: [
+      KindFields(
+        kind: MediaType.audiobook,
+        fields: [EditableField(name: 'title', writeBack: true)],
+      ),
+    ],
+    entityTypes: [],
+  );
+  repo.itemFieldsByPid['bk-1'] = {'title': 'The Long Walk'};
+  repo.chaptersByPid['bk-1'] = const [
+    ChapterMark(index: 0, title: 'One', startMs: 0, endMs: 61500),
+    ChapterMark(index: 1, title: 'Two', startMs: 61500),
+  ];
+  repo.books['bk-1'] = BookDetail(
+    pid: 'bk-1',
+    title: 'The Long Walk',
+    durationMs: 200000,
+    chapters: repo.chaptersByPid['bk-1']!,
+    parts: parts,
+  );
+  return repo;
+}
+
+/// The canonical 1x1 transparent PNG, so the preview's cover thumbnail
+/// decodes rather than exercising the error builder.
+final _onePixelPng = Uint8List.fromList(const [
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, //
+  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, //
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, //
+  0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00, //
+  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, //
+  0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82, //
+]);

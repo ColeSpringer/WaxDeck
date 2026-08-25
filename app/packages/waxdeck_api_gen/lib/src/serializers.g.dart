@@ -77,9 +77,13 @@ Serializers _$serializers =
           ..add(EmbeddingIngestResult.serializer)
           ..add(EmbeddingReport.serializer)
           ..add(EmbeddingUpload.serializer)
+          ..add(EnrichCoverProposal.serializer)
+          ..add(EnrichFieldProposal.serializer)
           ..add(EnrichItemRequest.serializer)
           ..add(EnrichItemRequestWantEnum.serializer)
           ..add(EnrichItemResult.serializer)
+          ..add(EnrichPreview.serializer)
+          ..add(EnrichProposal.serializer)
           ..add(EnrichmentCoverage.serializer)
           ..add(EnrichmentLastRun.serializer)
           ..add(EnrichmentProvider.serializer)
@@ -470,6 +474,22 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EmbeddingUpload)]),
             () => ListBuilder<EmbeddingUpload>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(EnrichFieldProposal),
+            ]),
+            () => ListBuilder<EnrichFieldProposal>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(EnrichFieldProposal),
+            ]),
+            () => ListBuilder<EnrichFieldProposal>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [

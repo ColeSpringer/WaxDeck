@@ -4,6 +4,8 @@
 /// no built_value, no generator idioms, easy to construct in tests.
 library;
 
+import 'dart:typed_data';
+
 /// Server liveness/version snapshot (`GET /health`).
 class ServerHealth {
   const ServerHealth({
@@ -3252,6 +3254,70 @@ class EnrichItemResult {
 
   final List<String> applied;
   final List<String> skipped;
+}
+
+/// One field an enrichment provider would fill: a diff row, and the
+/// commit's instruction when passed back inside an [EnrichProposal].
+class EnrichFieldProposal {
+  const EnrichFieldProposal({
+    required this.name,
+    this.current = '',
+    required this.proposed,
+    required this.provider,
+  });
+
+  final String name;
+
+  /// Empty today by construction - enrichment only fills empty fields -
+  /// but carried so the diff never has to trust that rule.
+  final String current;
+  final String proposed;
+  final String provider;
+}
+
+/// One cover image an enrichment provider would store, bytes included
+/// so the commit stores exactly the picture the preview showed.
+class EnrichCoverProposal {
+  const EnrichCoverProposal({
+    required this.provider,
+    required this.data,
+    this.format,
+    this.sourceUrl,
+  });
+
+  final String provider;
+  final Uint8List data;
+  final String? format;
+  final String? sourceUrl;
+}
+
+/// A previewed enrichment handed back to commit as approved.
+class EnrichProposal {
+  const EnrichProposal({this.fields = const [], this.cover});
+
+  final List<EnrichFieldProposal> fields;
+  final EnrichCoverProposal? cover;
+}
+
+/// What a one-item enrichment would change, without having changed it.
+class EnrichPreview {
+  const EnrichPreview({
+    this.fields = const [],
+    this.cover,
+    this.skipped = const [],
+  });
+
+  final List<EnrichFieldProposal> fields;
+  final EnrichCoverProposal? cover;
+
+  /// Wants nothing is proposed for, each naming why - the same reasons
+  /// the blind fetch reports.
+  final List<String> skipped;
+
+  bool get isEmpty => fields.isEmpty && cover == null;
+
+  /// The half to pass back on apply.
+  EnrichProposal get proposal => EnrichProposal(fields: fields, cover: cover);
 }
 
 /// Failure count for one library health rule.

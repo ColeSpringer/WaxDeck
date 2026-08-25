@@ -89,12 +89,14 @@ class _$EnrichItemRequestWantEnumSerializer
 class _$EnrichItemRequest extends EnrichItemRequest {
   @override
   final BuiltList<EnrichItemRequestWantEnum> want;
+  @override
+  final EnrichProposal? proposal;
 
   factory _$EnrichItemRequest([
     void Function(EnrichItemRequestBuilder)? updates,
   ]) => (EnrichItemRequestBuilder()..update(updates))._build();
 
-  _$EnrichItemRequest._({required this.want}) : super._();
+  _$EnrichItemRequest._({required this.want, this.proposal}) : super._();
   @override
   EnrichItemRequest rebuild(void Function(EnrichItemRequestBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -106,22 +108,26 @@ class _$EnrichItemRequest extends EnrichItemRequest {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is EnrichItemRequest && want == other.want;
+    return other is EnrichItemRequest &&
+        want == other.want &&
+        proposal == other.proposal;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, want.hashCode);
+    _$hash = $jc(_$hash, proposal.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'EnrichItemRequest',
-    )..add('want', want)).toString();
+    return (newBuiltValueToStringHelper(r'EnrichItemRequest')
+          ..add('want', want)
+          ..add('proposal', proposal))
+        .toString();
   }
 }
 
@@ -134,6 +140,11 @@ class EnrichItemRequestBuilder
       _$this._want ??= ListBuilder<EnrichItemRequestWantEnum>();
   set want(ListBuilder<EnrichItemRequestWantEnum>? want) => _$this._want = want;
 
+  EnrichProposalBuilder? _proposal;
+  EnrichProposalBuilder get proposal =>
+      _$this._proposal ??= EnrichProposalBuilder();
+  set proposal(EnrichProposalBuilder? proposal) => _$this._proposal = proposal;
+
   EnrichItemRequestBuilder() {
     EnrichItemRequest._defaults(this);
   }
@@ -142,6 +153,7 @@ class EnrichItemRequestBuilder
     final $v = _$v;
     if ($v != null) {
       _want = $v.want.toBuilder();
+      _proposal = $v.proposal?.toBuilder();
       _$v = null;
     }
     return this;
@@ -163,12 +175,19 @@ class EnrichItemRequestBuilder
   _$EnrichItemRequest _build() {
     _$EnrichItemRequest _$result;
     try {
-      _$result = _$v ?? _$EnrichItemRequest._(want: want.build());
+      _$result =
+          _$v ??
+          _$EnrichItemRequest._(
+            want: want.build(),
+            proposal: _proposal?.build(),
+          );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'want';
         want.build();
+        _$failedField = 'proposal';
+        _proposal?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'EnrichItemRequest',

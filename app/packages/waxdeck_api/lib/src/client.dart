@@ -1163,8 +1163,22 @@ abstract interface class WaxDeckRepository {
   Future<String> rematchItem(String pid);
 
   /// `POST /items/{pid}/enrich`: fetches the wanted artifacts
-  /// (`cover`, `lyrics`, `genres`, `book`) for one item now.
-  Future<EnrichItemResult> enrichItem(String pid, {required List<String> want});
+  /// (`cover`, `lyrics`, `genres`, `book`) for one item now. With a
+  /// [proposal] nothing is fetched: the server commits exactly what
+  /// the preview answered, so what was approved is what lands (the
+  /// catalog's un-previewable built-ins still backfill after it).
+  Future<EnrichItemResult> enrichItem(
+    String pid, {
+    required List<String> want,
+    EnrichProposal? proposal,
+  });
+
+  /// `POST /items/{pid}/enrich/preview`: what the providers would
+  /// change for the wanted artifacts, without writing anything.
+  Future<EnrichPreview> previewEnrichItem(
+    String pid, {
+    required List<String> want,
+  });
 
   /// `GET /library/health`: the library health scoreboard.
   Future<HealthSummary> getLibraryHealth();
@@ -3804,8 +3818,29 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<EnrichItemResult> enrichItem(
     String pid, {
     required List<String> want,
+    EnrichProposal? proposal,
   }) => _guard(() async {
     final response = await _gen.getMetadataApi().enrichItem(
+      pid: pid,
+      enrichItemRequest: gen.EnrichItemRequest(
+        (b) => b
+          ..want = ListBuilder<gen.EnrichItemRequestWantEnum>(
+            want.map(gen.EnrichItemRequestWantEnum.valueOf),
+          )
+          ..proposal = proposal == null
+              ? null
+              : enrichProposalToGen(proposal).toBuilder(),
+      ),
+    );
+    return enrichItemResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<EnrichPreview> previewEnrichItem(
+    String pid, {
+    required List<String> want,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().previewEnrichItem(
       pid: pid,
       enrichItemRequest: gen.EnrichItemRequest(
         (b) => b
@@ -3814,7 +3849,7 @@ class WaxDeckClient implements WaxDeckRepository {
           ),
       ),
     );
-    return enrichItemResultFromGen(_require(response.data));
+    return enrichPreviewFromGen(_require(response.data));
   });
 
   @override

@@ -17,6 +17,7 @@ import 'package:waxdeck_api_gen/src/model/chapters_edit.dart';
 import 'package:waxdeck_api_gen/src/model/credits_edit.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_result.dart';
+import 'package:waxdeck_api_gen/src/model/enrich_preview.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curation.dart';
 import 'package:waxdeck_api_gen/src/model/entity_edit.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
@@ -616,7 +617,7 @@ class MetadataApi {
   }
 
   /// Enrich one item now
-  /// Runs the registered enrichment providers for the wanted artifacts (cover art, lyrics, genres, book metadata) against this one item synchronously and applies what they return, respecting locks and never overwriting a non-empty curated value. This is the editor&#39;s \&quot;fetch for me\&quot; button; the whole-library pass lives under &#x60;/library/enrichment&#x60;. 
+  /// Runs the registered enrichment providers for the wanted artifacts (cover art, lyrics, genres, book metadata) against this one item synchronously and applies what they return, respecting locks and never overwriting a non-empty curated value. This is the editor&#39;s \&quot;fetch for me\&quot; button; the whole-library pass lives under &#x60;/library/enrichment&#x60;.  With a &#x60;proposal&#x60; in the body, nothing is fetched: the call commits exactly the proposal a preview returned, so what was approved is what lands - a fresh fetch could answer with a different value than the one the user saw. The proposal is validated whole before anything writes: its parts must answer the requested wants, its providers must be registered on this server, and a cover must be a storable image (decodable, at most 16 MiB) - a proposal that fails any of it is refused with nothing committed. The local guards still run at commit (a field locked or filled since the preview is skipped with the reason, never overwritten). The catalog&#39;s own key-free built-ins run fill-when-empty after the commit either way, as they do on a blind fetch: they live inside the catalog&#39;s engine and cannot propose without writing, so they are the un-previewable remainder. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -1144,6 +1145,114 @@ class MetadataApi {
     }
 
     return Response<MetadataFields>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Preview a one-item enrichment
+  /// Runs the registered enrichment providers for the wanted artifacts against this one item and reports what they would change without writing anything. The answer is a proposal: pass it back on &#x60;enrichItem&#x60; to commit exactly these values. Skipped wants carry the same reasons the blind fetch reports (locked, already present, no provider, no provider hit). The catalog&#39;s key-free built-ins are absent here - they cannot be previewed - so a want this preview reports empty may still be filled by them when the apply runs. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [enrichItemRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [EnrichPreview] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<EnrichPreview>> previewEnrichItem({ 
+    required String pid,
+    required EnrichItemRequest enrichItemRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/enrich/preview'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(EnrichItemRequest);
+      _bodyData = _serializers.serialize(enrichItemRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    EnrichPreview? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(EnrichPreview),
+      ) as EnrichPreview;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<EnrichPreview>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

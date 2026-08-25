@@ -3055,6 +3055,7 @@ class FakeRepository implements WaxDeckRepository {
   final Map<String, LyricsState> lyricsByPid = {};
   final Map<String, Map<String, List<String>>> tagsByPid = {};
   final Map<String, List<ChapterEdit>> chapterEditsByPid = {};
+  final Map<String, List<ChapterMark>> chaptersByPid = {};
   final Set<String> artworkPids = {};
   final Set<String> ownArtworkPids = {};
   final Set<String> unofficialPids = {};
@@ -3092,7 +3093,9 @@ class FakeRepository implements WaxDeckRepository {
   final List<({String entityType, String entityPid})> clearEntityArtworkCalls =
       [];
   final List<String> rematchCalls = [];
-  final List<({String pid, List<String> want})> enrichItemCalls = [];
+  final List<({String pid, List<String> want, EnrichProposal? proposal})>
+  enrichItemCalls = [];
+  final List<({String pid, List<String> want})> previewEnrichItemCalls = [];
   final List<({String pid, List<String> fields, bool locked})>
   setItemLocksCalls = [];
   final List<({String pid, bool unofficial})> setReleaseStatusCalls = [];
@@ -3182,6 +3185,7 @@ class FakeRepository implements WaxDeckRepository {
       provenance: itemProvenance[pid] ?? const [],
       credits: creditsByPid[pid] ?? const [],
       lyrics: lyricsByPid[pid],
+      chapters: chaptersByPid[pid] ?? const [],
       customTags: [
         for (final entry in (tagsByPid[pid] ?? const {}).entries)
           CustomTag(key: entry.key, values: entry.value),
@@ -3569,12 +3573,30 @@ class FakeRepository implements WaxDeckRepository {
   Future<EnrichItemResult> enrichItem(
     String pid, {
     required List<String> want,
+    EnrichProposal? proposal,
   }) async {
     final error = metadataError;
     if (error != null) throw error;
-    enrichItemCalls.add((pid: pid, want: List.of(want)));
+    enrichItemCalls.add((pid: pid, want: List.of(want), proposal: proposal));
     onEnrich?.call();
     return EnrichItemResult(applied: List.of(want));
+  }
+
+  /// Served by [previewEnrichItem]; empty by default, the way a server
+  /// with no injected providers answers.
+  EnrichPreview enrichPreview = const EnrichPreview(
+    skipped: ['cover: no provider'],
+  );
+
+  @override
+  Future<EnrichPreview> previewEnrichItem(
+    String pid, {
+    required List<String> want,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    previewEnrichItemCalls.add((pid: pid, want: List.of(want)));
+    return enrichPreview;
   }
 
   /// Health state served by the health endpoints.

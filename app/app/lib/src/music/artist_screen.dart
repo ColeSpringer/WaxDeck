@@ -15,6 +15,7 @@ import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
+import '../settings/settings_registry.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'music_controllers.dart';
@@ -199,9 +200,21 @@ class _Header extends ConsumerWidget {
               value: 'pin',
               semanticsId: SemanticsIds.entityPin,
             ),
+            // The entity editor's door, only for who its every save
+            // answers: sort, identifier, and picture are shared by
+            // everyone who can see the artist.
+            if (ref.watch(isAdminProvider))
+              WaxMenuItem<String>(
+                value: 'edit',
+                label: l10n.musicArtistEditMetadata,
+                glyph: WaxIcons.edit,
+                semanticsId: SemanticsIds.entityEditMetadata,
+              ),
           ],
-          onSelected: (_) =>
-              unawaited(togglePin(context, ref, pid, label: name)),
+          onSelected: (value) => switch (value) {
+            'edit' => context.push(WaxRoute.metadata(pid)),
+            _ => unawaited(togglePin(context, ref, pid, label: name)),
+          },
         ),
       ],
     );

@@ -38,6 +38,7 @@ import '../health/diagnostics_screen.dart';
 import '../health/health_screen.dart';
 import '../home/home_screen.dart';
 import '../l10n/l10n.dart';
+import '../metadata/entity_editor_screen.dart';
 import '../metadata/metadata_screen.dart';
 import '../metadata/release_workbench.dart';
 import '../music/album_screen.dart';
@@ -650,15 +651,14 @@ List<RouteBase> shellRoutes() => <RouteBase>[
             redirect: (context, state) =>
                 WaxRoute.reviewEntry(state.pathParameters['entryId']!),
           ),
-          // One location, two editors, chosen by what the pid names. An
-          // album opens the release workbench - its identity is
-          // entity-scoped and its members are what a bulk edit reaches -
-          // while an item opens its own editor; sharing the location
-          // keeps "edit this" one link rather than two a caller has to
-          // know how to pick between. Any other prefix is nothing this
-          // location can edit: an artist or release-group pid used to
-          // fall into the item editor and fail its read, which read as
-          // a broken editor rather than a wrong link.
+          // One location, one editor per pid kind. An album opens the
+          // release workbench - its identity is entity-scoped and its
+          // members are what a bulk edit reaches - an artist or
+          // release-group pid opens its entity editor, and an item
+          // opens its own; sharing the location keeps "edit this" one
+          // link rather than four a caller has to know how to pick
+          // between. Any other prefix is nothing this location can
+          // edit.
           GoRoute(
             path: '/metadata/:pid',
             builder: (context, state) {
@@ -671,6 +671,20 @@ List<RouteBase> shellRoutes() => <RouteBase>[
               // carrying the first item's staged draft onto the second.
               if (pid.startsWith('al-')) {
                 return ReleaseWorkbench(key: ValueKey(pid), pid: pid);
+              }
+              if (pid.startsWith('ar-')) {
+                return EntityEditorScreen(
+                  key: ValueKey(pid),
+                  entity: EditableEntity.artist,
+                  pid: pid,
+                );
+              }
+              if (pid.startsWith('rg-')) {
+                return EntityEditorScreen(
+                  key: ValueKey(pid),
+                  entity: EditableEntity.releaseGroup,
+                  pid: pid,
+                );
               }
               if (itemPrefixes.any(pid.startsWith)) {
                 return MetadataScreen(key: ValueKey(pid), pid: pid);

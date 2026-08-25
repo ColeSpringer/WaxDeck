@@ -15,6 +15,34 @@
       }
     }
   },
+  "bookChapterEditorAdd": "Add a chapter",
+  "@bookChapterEditorAdd": {
+    "description": "Button on the chapter editor appending an empty row."
+  },
+  "bookChapterEditorHelp": "Chapters file in playing order wherever they are typed. A new or moved chapter runs to the next one's start; the rest keep their stored lengths.",
+  "@bookChapterEditorHelp": {
+    "description": "Line under the chapter editor saying how the rows' starts become ranges."
+  },
+  "bookChapterEditorInvalid": "Chapter starts must be stamps like 1:02:03, each one distinct. Chapters stay out of the save until they are.",
+  "@bookChapterEditorInvalid": {
+    "description": "Caution on the chapter editor while a start does not parse or the rows are out of order."
+  },
+  "bookChapterEditorRemove": "Remove this chapter",
+  "@bookChapterEditorRemove": {
+    "description": "Per-row button on the chapter editor taking the row out of the staged list."
+  },
+  "bookChapterEditorRestore": "Restore the file's own chapters",
+  "@bookChapterEditorRestore": {
+    "description": "Button on the chapter editor staging the empty list, which the server reads as handing the marks back to what the file embeds."
+  },
+  "bookChapterEditorStartLabel": "Starts at",
+  "@bookChapterEditorStartLabel": {
+    "description": "Label on a chapter row's start-time stamp field."
+  },
+  "bookChapterEditorTitleLabel": "Title",
+  "@bookChapterEditorTitleLabel": {
+    "description": "Label on a chapter row's title field."
+  },
   "bookChapterFallback": "Chapter {number}",
   "@bookChapterFallback": {
     "description": "Stands in for a chapter mark the file numbered but did not title.",

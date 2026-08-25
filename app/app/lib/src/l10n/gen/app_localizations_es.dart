@@ -1927,6 +1927,30 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get bookChapterEditorAdd => 'Añadir un capítulo';
+
+  @override
+  String get bookChapterEditorHelp =>
+      'Los capítulos se ordenan por reproducción, se escriban donde se escriban. Un capítulo nuevo o movido llega hasta el inicio del siguiente; el resto conserva su duración guardada.';
+
+  @override
+  String get bookChapterEditorInvalid =>
+      'Los inicios de capítulo deben ser marcas como 1:02:03, cada una distinta. Los capítulos quedan fuera del guardado hasta que lo sean.';
+
+  @override
+  String get bookChapterEditorRemove => 'Quitar este capítulo';
+
+  @override
+  String get bookChapterEditorRestore =>
+      'Restaurar los capítulos del propio archivo';
+
+  @override
+  String get bookChapterEditorStartLabel => 'Empieza en';
+
+  @override
+  String get bookChapterEditorTitleLabel => 'Título';
+
+  @override
   String bookChapterFallback(int number) {
     return 'Capítulo $number';
   }
@@ -3678,6 +3702,28 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataPendingChip => 'Sin guardar';
 
   @override
+  String get metadataPreviewApply => 'Aplicar estos cambios';
+
+  @override
+  String get metadataPreviewBuiltinsNote =>
+      'Las fuentes integradas del servidor no se pueden previsualizar; al aplicar aún pueden rellenar los huecos restantes.';
+
+  @override
+  String get metadataPreviewEmpty =>
+      'Los proveedores no tienen nada nuevo para este elemento.';
+
+  @override
+  String get metadataPreviewFetchAnyway => 'Buscar de todos modos';
+
+  @override
+  String metadataPreviewProvider(String provider) {
+    return 'De $provider';
+  }
+
+  @override
+  String get metadataPreviewTitle => 'Vista previa de la búsqueda';
+
+  @override
   String get metadataQueuedForIdentification => 'En cola para identificar';
 
   @override
@@ -3874,6 +3920,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get musicAlbumEditDetails => 'Editar los detalles del álbum';
 
   @override
+  String get musicAlbumEditReleaseGroup => 'Editar el grupo de lanzamiento';
+
+  @override
   String musicAlbumEditorFieldLocked(String field) {
     return '$field está bloqueado';
   }
@@ -4025,6 +4074,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get musicArtistAudiobooksSection => 'Audiolibros';
 
   @override
+  String get musicArtistEditMetadata => 'Editar el artista';
+
+  @override
   String get musicArtistEmptyMessage =>
       'Los elementos que había aquí se han movido o se han eliminado.';
 
@@ -4136,6 +4188,21 @@ class AppLocalizationsEs extends AppLocalizations {
   String get musicEmptyTitle => 'Todavía no hay música';
 
   @override
+  String get musicFieldArtistMbid => 'ID de artista de MusicBrainz';
+
+  @override
+  String get musicFieldArtistMbidHelp =>
+      'El identificador con el que este artista coincidió en MusicBrainz. El enriquecimiento lo rellena; fijarlo aquí ancla la coincidencia a mano.';
+
+  @override
+  String get musicFieldArtistSortHelp =>
+      'Cómo se ordena este artista en una lista de la A a la Z. Vacío lo ordena por su nombre.';
+
+  @override
+  String get musicFieldArtistWriteBackHelp =>
+      'Reescribe también la etiqueta de ordenación en los archivos que acreditan a este artista.';
+
+  @override
   String get musicFieldBarcode => 'Código de barras';
 
   @override
@@ -4175,6 +4242,25 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get musicFieldMediaHelp =>
       'En qué se editó: CD, 2xVinyl, Digital Media';
+
+  @override
+  String get musicFieldReleaseGroupMbid =>
+      'ID de grupo de lanzamiento de MusicBrainz';
+
+  @override
+  String get musicFieldReleaseGroupMbidHelp =>
+      'El identificador del grupo en MusicBrainz: el álbum a través de sus ediciones.';
+
+  @override
+  String get musicFieldReleaseGroupSortHelp =>
+      'Cómo se ordena este grupo en una lista de la A a la Z. Vacío lo ordena por su título.';
+
+  @override
+  String get musicFieldReleaseGroupType => 'Tipo';
+
+  @override
+  String get musicFieldReleaseGroupTypeHelp =>
+      'Qué es este grupo. Sin definir devuelve el valor a lo que el emparejamiento guardó.';
 
   @override
   String get musicFieldSort => 'Nombre de ordenación';
@@ -4368,6 +4454,24 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicPlay => 'Reproducir';
+
+  @override
+  String get musicReleaseGroupTypeAlbum => 'Álbum';
+
+  @override
+  String get musicReleaseGroupTypeAudiobook => 'Audiolibro';
+
+  @override
+  String get musicReleaseGroupTypeCompilation => 'Recopilatorio';
+
+  @override
+  String get musicReleaseGroupTypeEp => 'EP';
+
+  @override
+  String get musicReleaseGroupTypeSingle => 'Sencillo';
+
+  @override
+  String get musicReleaseGroupTypeUnset => 'Sin definir';
 
   @override
   String get musicShelfMostPlayedTitle => 'Lo más reproducido';

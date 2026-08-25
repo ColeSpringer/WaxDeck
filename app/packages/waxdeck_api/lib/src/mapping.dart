@@ -5,6 +5,8 @@
 /// directly to pin the mapping behavior.
 library;
 
+import 'dart:convert';
+
 import 'package:built_collection/built_collection.dart';
 import 'package:waxdeck_api_gen/waxdeck_api_gen.dart' as gen;
 
@@ -1560,6 +1562,64 @@ EnrichItemResult enrichItemResultFromGen(gen.EnrichItemResult result) {
   return EnrichItemResult(
     applied: result.applied.toList(),
     skipped: result.skipped.toList(),
+  );
+}
+
+EnrichFieldProposal enrichFieldProposalFromGen(gen.EnrichFieldProposal f) {
+  return EnrichFieldProposal(
+    name: f.name,
+    current: f.current ?? '',
+    proposed: f.proposed,
+    provider: f.provider,
+  );
+}
+
+gen.EnrichFieldProposal enrichFieldProposalToGen(EnrichFieldProposal f) {
+  return gen.EnrichFieldProposal(
+    (b) => b
+      ..name = f.name
+      ..current = f.current
+      ..proposed = f.proposed
+      ..provider = f.provider,
+  );
+}
+
+EnrichCoverProposal enrichCoverProposalFromGen(gen.EnrichCoverProposal c) {
+  return EnrichCoverProposal(
+    provider: c.provider,
+    data: base64Decode(c.data),
+    format: c.format,
+    sourceUrl: c.sourceUrl,
+  );
+}
+
+gen.EnrichCoverProposal enrichCoverProposalToGen(EnrichCoverProposal c) {
+  return gen.EnrichCoverProposal(
+    (b) => b
+      ..provider = c.provider
+      ..data = base64Encode(c.data)
+      ..format = c.format
+      ..sourceUrl = c.sourceUrl,
+  );
+}
+
+gen.EnrichProposal enrichProposalToGen(EnrichProposal p) {
+  return gen.EnrichProposal(
+    (b) => b
+      ..fields = ListBuilder<gen.EnrichFieldProposal>(
+        p.fields.map(enrichFieldProposalToGen),
+      )
+      ..cover = p.cover == null
+          ? null
+          : enrichCoverProposalToGen(p.cover!).toBuilder(),
+  );
+}
+
+EnrichPreview enrichPreviewFromGen(gen.EnrichPreview p) {
+  return EnrichPreview(
+    fields: p.fields.map(enrichFieldProposalFromGen).toList(),
+    cover: p.cover == null ? null : enrichCoverProposalFromGen(p.cover!),
+    skipped: p.skipped.toList(),
   );
 }
 

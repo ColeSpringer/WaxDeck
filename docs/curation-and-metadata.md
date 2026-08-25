@@ -182,10 +182,17 @@ resolves it.
 
 Everything on the screen stages into one draft, and the sticky save
 bar at the bottom is the only thing that writes: fields, credits,
-tags, lyrics (emptying the lyrics field removes them on save), and
-the release status go in one press, with the bar counting what is
-unsaved. Write-back failures are reported beside that bar, where the
-next save is decided.
+tags, lyrics (emptying the lyrics field removes them on save),
+chapters, and the release status go in one press, with the bar
+counting what is unsaved. Write-back failures are reported beside
+that bar, where the next save is decided.
+
+On a single-file audiobook the chapter list is part of that draft: a
+row per chapter with its start stamp and title, each chapter running
+to the next one's start and the last to the end of the book, plus a
+restore that hands the marks back to what the file embeds. A
+multi-file book keeps its part-boundary marks - they are the merge
+tool's contract, not the editor's to redraw.
 
 The catalog database is the working copy: edits land there first and
 touch files only when the request opts into write-back. Edits lock
@@ -237,10 +244,12 @@ cover in the slot you just emptied, which is the difference between
 
 That state - pinned with nothing behind it - is visible rather than
 silent: the artwork manager draws it as a pinned empty slot instead of
-an ordinary empty one, and the album editor carries a **Pin this
-cover** switch over
-`PUT /entities/{entityType}/{entityPid}/artwork/lock`, which is how an
-administrator lets go of it. Playlists are refused there: a playlist's
+an ordinary empty one, and carries a **Pin this cover** switch
+wherever it is mounted, which is how the pin comes off. On a release
+or an artist the switch rides
+`PUT /entities/{entityType}/{entityPid}/artwork/lock`; on an item it
+rides the item's own `art` field lock, the same surface the scalar
+locks use. Playlists are refused the entity switch: a playlist's
 cover authority is its own uploaded-versus-generated marker, and
 clearing an uploaded playlist cover hands the slot back to the mosaic
 built from the members.
@@ -293,6 +302,22 @@ edited, what it skipped for locks (a choice on the form: refuse the
 batch, skip locked tracks, or override the locks), and any files
 whose tags could not be rewritten. A bulk save locks every field it
 writes, and one batch takes at most 1,000 items - the form says both.
+
+### Artists and release groups
+
+The other two catalog entities edit at the same location, by their
+own pids. An artist's editor holds the artwork grid with the pin
+(the picture is the artist's own), the sort name - the one artist
+field that fans out to the crediting files' tags, behind the same
+write-back switch - and the MusicBrainz artist ID. A release group's
+holds its sort name, its MusicBrainz ID, and its type (album, EP,
+single, compilation, audiobook), all database-only overrides; its
+picture is its releases' and is not managed here. Both are
+administrators-only, like every entity edit, and both seed from the
+curation rows: a field nobody has set opens honestly empty rather
+than echoing a derived value it would then offer to write back. The
+doors are the artist screen's overflow and, for the release group,
+the workbench's album pane; only the fields that changed are sent.
 
 ## The genre vocabulary
 
@@ -388,3 +413,18 @@ Deezer and iTunes artwork (key free), Audnexus audiobook metadata
 (key free, keyed on ASIN), and fanart.tv artwork when
 `WAXDECK_FANARTTV_KEY` is set. The editor's per-item fetch uses the
 same providers for one item at a time.
+
+That fetch previews before it applies. The editor's Fetch button asks
+`POST /items/{pid}/enrich/preview` what the providers would change -
+field diffs and the cover image, each naming its provider, plus the
+reasons for what was skipped - and shows the answer as a sheet.
+Applying passes the previewed proposal back, and the server commits
+exactly those values rather than fetching fresh ones a moment later:
+what was approved is what lands, with the local guards re-run so a
+field locked or filled since the preview is skipped, never
+overwritten. The catalog's key-free built-ins (Cover Art Archive,
+ListenBrainz, LRCLIB) cannot be previewed - their fetch and write are
+one engine pass - so they still run fill-when-empty when the apply
+lands, and the sheet says so; an empty preview offers the fetch for
+exactly that reason. The bodyless `enrichItem` stays as the blind
+one-shot for older clients.

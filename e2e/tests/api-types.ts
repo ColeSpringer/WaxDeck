@@ -1910,8 +1910,33 @@ export interface paths {
         /**
          * Enrich one item now
          * @description Runs the registered enrichment providers for the wanted artifacts (cover art, lyrics, genres, book metadata) against this one item synchronously and applies what they return, respecting locks and never overwriting a non-empty curated value. This is the editor's "fetch for me" button; the whole-library pass lives under `/library/enrichment`.
+         *
+         *     With a `proposal` in the body, nothing is fetched: the call commits exactly the proposal a preview returned, so what was approved is what lands - a fresh fetch could answer with a different value than the one the user saw. The proposal is validated whole before anything writes: its parts must answer the requested wants, its providers must be registered on this server, and a cover must be a storable image (decodable, at most 16 MiB) - a proposal that fails any of it is refused with nothing committed. The local guards still run at commit (a field locked or filled since the preview is skipped with the reason, never overwritten). The catalog's own key-free built-ins run fill-when-empty after the commit either way, as they do on a blind fetch: they live inside the catalog's engine and cannot propose without writing, so they are the un-previewable remainder.
          */
         post: operations["enrichItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{pid}/enrich/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview a one-item enrichment
+         * @description Runs the registered enrichment providers for the wanted artifacts against this one item and reports what they would change without writing anything. The answer is a proposal: pass it back on `enrichItem` to commit exactly these values. Skipped wants carry the same reasons the blind fetch reports (locked, already present, no provider, no provider hit). The catalog's key-free built-ins are absent here - they cannot be previewed - so a want this preview reports empty may still be filled by them when the apply runs.
+         */
+        post: operations["previewEnrichItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6855,6 +6880,46 @@ export interface components {
         EnrichItemRequest: {
             /** @description The artifacts to fetch. */
             want: ("cover" | "lyrics" | "genres" | "book")[];
+            proposal?: components["schemas"]["EnrichProposal"];
+        };
+        /** @description A previewed enrichment to commit as approved. Both halves are the preview's own, passed back verbatim; the server writes these values rather than fetching fresh ones. `proposal` on `previewEnrichItem` has no effect. */
+        EnrichProposal: {
+            /** @description The approved field proposals. */
+            fields?: components["schemas"]["EnrichFieldProposal"][];
+            cover?: components["schemas"]["EnrichCoverProposal"];
+        };
+        /** @description One field an enrichment provider would fill. `lyrics` carries the full text (LRC when the provider answered timed lines); `genre` the joined, normalized genre scalar; a book want proposes each scalar it can fill as its own row. */
+        EnrichFieldProposal: {
+            /** @description The metadata field the proposal targets. */
+            name: string;
+            /** @description The stored value the proposal would replace. Empty today by construction - enrichment only fills empty fields - but reported so a diff never has to trust that rule. */
+            current?: string;
+            /** @description The value the provider answered with. */
+            proposed: string;
+            /** @description The provider that supplied the value. */
+            provider: string;
+        };
+        /** @description One cover image an enrichment provider would store. */
+        EnrichCoverProposal: {
+            /** @description The provider that supplied the image. */
+            provider: string;
+            /**
+             * Format: byte
+             * @description The image bytes, base64.
+             */
+            data: string;
+            /** @description The image format as the provider read it off the transport; a fallback the bytes beat, kept so the commit stores what the preview held. */
+            format?: string;
+            /** @description Where the provider fetched the image from. */
+            sourceUrl?: string;
+        };
+        /** @description What a one-item enrichment would change, without having changed it. `fields` and `cover` together are the proposal to pass back on `enrichItem`. */
+        EnrichPreview: {
+            /** @description The field values providers would fill. */
+            fields: components["schemas"]["EnrichFieldProposal"][];
+            cover?: components["schemas"]["EnrichCoverProposal"];
+            /** @description Wants nothing is proposed for, each naming why - the same reasons the blind fetch reports. */
+            skipped: string[];
         };
         /** @description What a one-item enrichment fetched. */
         EnrichItemResult: {
@@ -13206,6 +13271,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EnrichItemResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    previewEnrichItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrichItemRequest"];
+            };
+        };
+        responses: {
+            /** @description What the providers would change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichPreview"];
                 };
             };
             400: components["responses"]["InvalidRequest"];

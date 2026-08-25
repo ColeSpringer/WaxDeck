@@ -2636,6 +2636,34 @@
       }
     }
   },
+  "bookChapterEditorAdd": "Add a chapter",
+  "@bookChapterEditorAdd": {
+    "description": "Button on the chapter editor appending an empty row."
+  },
+  "bookChapterEditorHelp": "Chapters file in playing order wherever they are typed. A new or moved chapter runs to the next one's start; the rest keep their stored lengths.",
+  "@bookChapterEditorHelp": {
+    "description": "Line under the chapter editor saying how the rows' starts become ranges."
+  },
+  "bookChapterEditorInvalid": "Chapter starts must be stamps like 1:02:03, each one distinct. Chapters stay out of the save until they are.",
+  "@bookChapterEditorInvalid": {
+    "description": "Caution on the chapter editor while a start does not parse or the rows are out of order."
+  },
+  "bookChapterEditorRemove": "Remove this chapter",
+  "@bookChapterEditorRemove": {
+    "description": "Per-row button on the chapter editor taking the row out of the staged list."
+  },
+  "bookChapterEditorRestore": "Restore the file's own chapters",
+  "@bookChapterEditorRestore": {
+    "description": "Button on the chapter editor staging the empty list, which the server reads as handing the marks back to what the file embeds."
+  },
+  "bookChapterEditorStartLabel": "Starts at",
+  "@bookChapterEditorStartLabel": {
+    "description": "Label on a chapter row's start-time stamp field."
+  },
+  "bookChapterEditorTitleLabel": "Title",
+  "@bookChapterEditorTitleLabel": {
+    "description": "Label on a chapter row's title field."
+  },
   "bookChapterFallback": "Chapter {number}",
   "@bookChapterFallback": {
     "description": "Stands in for a chapter mark the file numbered but did not title.",
@@ -4931,6 +4959,35 @@
   "@metadataPendingChip": {
     "description": "Chip on a staged change (a tag added to the form, say) that the save bar has not committed yet."
   },
+  "metadataPreviewApply": "Apply these changes",
+  "@metadataPreviewApply": {
+    "description": "Confirms the enrichment preview sheet: commits exactly the previewed values."
+  },
+  "metadataPreviewBuiltinsNote": "The server's built-in sources cannot be previewed; applying may still fill remaining gaps from them.",
+  "@metadataPreviewBuiltinsNote": {
+    "description": "Footnote on the enrichment preview sheet: the catalog's key-free sources fetch-and-write in one pass, so their answers only show up after an apply."
+  },
+  "metadataPreviewEmpty": "The providers have nothing new for this item.",
+  "@metadataPreviewEmpty": {
+    "description": "Empty state of the enrichment preview sheet, above the per-artifact reasons."
+  },
+  "metadataPreviewFetchAnyway": "Fetch anyway",
+  "@metadataPreviewFetchAnyway": {
+    "description": "Confirms an empty enrichment preview: nothing was proposed, but the un-previewable built-in sources may still fill gaps."
+  },
+  "metadataPreviewProvider": "From {provider}",
+  "@metadataPreviewProvider": {
+    "description": "Names the metadata provider that supplied one previewed value.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "metadataPreviewTitle": "Fetch preview",
+  "@metadataPreviewTitle": {
+    "description": "Title of the sheet showing what an enrichment fetch would change before anything lands."
+  },
   "metadataQueuedForIdentification": "Queued for identification",
   "@metadataQueuedForIdentification": {
     "description": "Message after an item was sent back for matching."
@@ -5209,6 +5266,10 @@
   "@musicAlbumEditDetails": {
     "description": "Row in an album's overflow menu that opens the release editor. Administrators only."
   },
+  "musicAlbumEditReleaseGroup": "Edit release group",
+  "@musicAlbumEditReleaseGroup": {
+    "description": "Door from the release workbench to the release-group editor: the album across its editions."
+  },
   "musicAlbumEditorFieldLocked": "{field} is locked",
   "@musicAlbumEditorFieldLocked": {
     "description": "Accessible name of the lock mark beside an album-editor field. {field} is that field's label.",
@@ -5383,6 +5444,10 @@
   "@musicArtistAudiobooksSection": {
     "description": "Heading over an author's books, drawn instead of the tracks heading where a bucket holds no tracks at all."
   },
+  "musicArtistEditMetadata": "Edit artist",
+  "@musicArtistEditMetadata": {
+    "description": "Entry in the artist screen's overflow opening the artist editor. Administrators only."
+  },
   "musicArtistEmptyMessage": "The items that were here have moved or been removed.",
   "@musicArtistEmptyMessage": {
     "description": "Message under the empty state of an artist's screen, saying why it is empty."
@@ -5496,6 +5561,22 @@
   "@musicEmptyTitle": {
     "description": "Empty state of the music library, on the hub and on the tracks listing."
   },
+  "musicFieldArtistMbid": "MusicBrainz artist ID",
+  "@musicFieldArtistMbid": {
+    "description": "The artist's identifier at MusicBrainz, on the artist editor."
+  },
+  "musicFieldArtistMbidHelp": "The identifier this artist matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.",
+  "@musicFieldArtistMbidHelp": {
+    "description": "Help under the MusicBrainz artist ID field."
+  },
+  "musicFieldArtistSortHelp": "How this artist files in an A-to-Z list. Empty files them under their name.",
+  "@musicFieldArtistSortHelp": {
+    "description": "Help under the sort name field on the artist editor."
+  },
+  "musicFieldArtistWriteBackHelp": "Also rewrite the matching sort tag in the files crediting this artist.",
+  "@musicFieldArtistWriteBackHelp": {
+    "description": "Help under the write-back switch on the artist editor: the sort name is the one artist field that fans out to files."
+  },
   "musicFieldBarcode": "Barcode",
   "@musicFieldBarcode": {
     "description": "An album's barcode, on the release editor and on the album screen."
@@ -5543,6 +5624,26 @@
   "musicFieldMediaHelp": "What it was pressed on - CD, 2xVinyl, Digital Media",
   "@musicFieldMediaHelp": {
     "description": "Hint under the media field in the release editor. The three examples are the values MusicBrainz uses and stay as they are."
+  },
+  "musicFieldReleaseGroupMbid": "MusicBrainz release-group ID",
+  "@musicFieldReleaseGroupMbid": {
+    "description": "The release group's identifier at MusicBrainz, on the release-group editor."
+  },
+  "musicFieldReleaseGroupMbidHelp": "The group's identifier at MusicBrainz: the album across its editions.",
+  "@musicFieldReleaseGroupMbidHelp": {
+    "description": "Help under the MusicBrainz release-group ID field."
+  },
+  "musicFieldReleaseGroupSortHelp": "How this group files in an A-to-Z list. Empty files it under its title.",
+  "@musicFieldReleaseGroupSortHelp": {
+    "description": "Help under the sort name field on the release-group editor."
+  },
+  "musicFieldReleaseGroupType": "Type",
+  "@musicFieldReleaseGroupType": {
+    "description": "What a release group is - an album, an EP, a single, a compilation, an audiobook."
+  },
+  "musicFieldReleaseGroupTypeHelp": "What this group is. Not set hands the value back to what matching stored.",
+  "@musicFieldReleaseGroupTypeHelp": {
+    "description": "Help under the type choice on the release-group editor."
   },
   "musicFieldSort": "Sort name",
   "@musicFieldSort": {
@@ -5661,6 +5762,30 @@
   "musicPlay": "Play",
   "@musicPlay": {
     "description": "Button on an album's or an artist's header that plays it from the start."
+  },
+  "musicReleaseGroupTypeAlbum": "Album",
+  "@musicReleaseGroupTypeAlbum": {
+    "description": "Release-group type choice: a full-length release."
+  },
+  "musicReleaseGroupTypeAudiobook": "Audiobook",
+  "@musicReleaseGroupTypeAudiobook": {
+    "description": "Release-group type choice: an audiobook."
+  },
+  "musicReleaseGroupTypeCompilation": "Compilation",
+  "@musicReleaseGroupTypeCompilation": {
+    "description": "Release-group type choice: a various-artists or collected release."
+  },
+  "musicReleaseGroupTypeEp": "EP",
+  "@musicReleaseGroupTypeEp": {
+    "description": "Release-group type choice: an extended play."
+  },
+  "musicReleaseGroupTypeSingle": "Single",
+  "@musicReleaseGroupTypeSingle": {
+    "description": "Release-group type choice: a single."
+  },
+  "musicReleaseGroupTypeUnset": "Not set",
+  "@musicReleaseGroupTypeUnset": {
+    "description": "Release-group type choice that clears the override, handing the value back to what matching stored."
   },
   "musicShelfMostPlayedTitle": "Most played",
   "@musicShelfMostPlayedTitle": {

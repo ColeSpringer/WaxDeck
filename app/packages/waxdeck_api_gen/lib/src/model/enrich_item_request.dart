@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/enrich_proposal.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -13,12 +14,16 @@ part 'enrich_item_request.g.dart';
 ///
 /// Properties:
 /// * [want] - The artifacts to fetch.
+/// * [proposal] 
 @BuiltValue()
 abstract class EnrichItemRequest implements Built<EnrichItemRequest, EnrichItemRequestBuilder> {
   /// The artifacts to fetch.
   @BuiltValueField(wireName: r'want')
   BuiltList<EnrichItemRequestWantEnum> get want;
   // enum wantEnum {  cover,  lyrics,  genres,  book,  };
+
+  @BuiltValueField(wireName: r'proposal')
+  EnrichProposal? get proposal;
 
   EnrichItemRequest._();
 
@@ -48,6 +53,13 @@ class _$EnrichItemRequestSerializer implements PrimitiveSerializer<EnrichItemReq
       object.want,
       specifiedType: const FullType(BuiltList, [FullType(EnrichItemRequestWantEnum)]),
     );
+    if (object.proposal != null) {
+      yield r'proposal';
+      yield serializers.serialize(
+        object.proposal,
+        specifiedType: const FullType(EnrichProposal),
+      );
+    }
   }
 
   @override
@@ -77,6 +89,13 @@ class _$EnrichItemRequestSerializer implements PrimitiveSerializer<EnrichItemReq
             specifiedType: const FullType(BuiltList, [FullType(EnrichItemRequestWantEnum)]),
           ) as BuiltList<EnrichItemRequestWantEnum>;
           result.want.replace(valueDes);
+          break;
+        case r'proposal':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(EnrichProposal),
+          ) as EnrichProposal;
+          result.proposal.replace(valueDes);
           break;
         default:
           unhandled.add(key);

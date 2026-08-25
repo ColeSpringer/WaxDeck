@@ -43,6 +43,36 @@ export class Metadata extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.metadataField(name)));
   }
 
+  /// The editor's fetch button, which previews before anything lands.
+  enrichButton(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.metadataEnrich));
+  }
+
+  /// The enrichment preview sheet and its two answers.
+  previewSheet(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.enrichPreview));
+  }
+
+  previewApply(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.enrichPreviewApply));
+  }
+
+  previewCancel(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.enrichPreviewCancel));
+  }
+
+  /// The artist / release-group editor, served at /metadata/<ar-...>
+  /// and /metadata/<rg-...>.
+  entityEditor(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.entityEditor));
+  }
+
+  /// Cold-load the artist / release-group editor on one entity pid.
+  async openEntityEditor(pid: string): Promise<void> {
+    await this.ctx.page.goto(`/metadata/${pid}`);
+    await this.entityEditor().waitFor({ timeout: T.nav });
+  }
+
   /// Type into one of this surface's fields; the page-holding half of
   /// the gesture lives here so a spec never needs the raw page.
   async type(field: Locator, text: string): Promise<void> {

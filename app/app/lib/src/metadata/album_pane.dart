@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -8,6 +11,7 @@ import '../music/album_detail.dart';
 import '../music/entity_facts.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'artwork_manager.dart';
@@ -251,6 +255,27 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             _AlbumSummary(pid: widget.pid, album: album),
+            // The release group's own editor, one hop up: sort, MBID,
+            // and type live on the group rather than this edition, and
+            // this pane is already administrators-only.
+            if (album.releaseGroupPid case final rgPid?) ...<Widget>[
+              const SizedBox(height: WaxSpace.s8),
+              WaxPill(
+                label: context.l10n.musicAlbumEditReleaseGroup,
+                semanticsId: SemanticsIds.albumEditReleaseGroup,
+                onPressed: () {
+                  // On the compact workbench this pane is a bottom
+                  // sheet; it closes before the push, or Back from the
+                  // editor lands on the still-open sheet. The router is
+                  // taken first because the pop unmounts this context.
+                  final router = GoRouter.of(context);
+                  if (ModalRoute.of(context) is PopupRoute) {
+                    Navigator.of(context).pop();
+                  }
+                  unawaited(router.push<void>(WaxRoute.metadata(rgPid)));
+                },
+              ),
+            ],
             const SizedBox(height: WaxSpace.s24),
             // The cover, through the same grid the item editor uses -
             // set, clear, the provenance mark, and the pin that
