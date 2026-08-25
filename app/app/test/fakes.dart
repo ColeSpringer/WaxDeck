@@ -3217,6 +3217,22 @@ class FakeRepository implements WaxDeckRepository {
     return const MetadataEditResult(applied: true);
   }
 
+  final List<
+    ({
+      List<String> itemPids,
+      Map<String, String> fields,
+      bool writeBack,
+      bool skipLocked,
+      bool force,
+    })
+  >
+  bulkEditCalls = [];
+
+  /// What a bulk edit of a release-keying field answers as
+  /// `resultingAlbumPid` - the fake's stand-in for the regroup the real
+  /// server performs. Null means the response carries none.
+  String? bulkEditRegroupsTo;
+
   @override
   Future<BulkEditResult> bulkEditMetadata({
     required List<String> itemPids,
@@ -3227,6 +3243,13 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = metadataError;
     if (error != null) throw error;
+    bulkEditCalls.add((
+      itemPids: List.of(itemPids),
+      fields: Map.of(fields),
+      writeBack: writeBack,
+      skipLocked: skipLocked,
+      force: force,
+    ));
     final edited = <String>[];
     final skipped = <String>[];
     for (final pid in itemPids) {
@@ -3237,9 +3260,21 @@ class FakeRepository implements WaxDeckRepository {
       }
       _requireUnlocked(pid, fields.keys, force);
       (itemFieldsByPid[pid] ??= {}).addAll(fields);
+      // The real endpoint always locks what it writes (Lock: LockOn);
+      // the fake keeps that so a repeat edit refuses the same way.
+      (lockedFieldsByPid[pid] ??= {}).addAll(fields.keys);
       edited.add(pid);
     }
-    return BulkEditResult(edited: edited, skipped: skipped);
+    final keyed = const [
+      'album',
+      'album_artist',
+      'year',
+    ].any(fields.containsKey);
+    return BulkEditResult(
+      edited: edited,
+      skipped: skipped,
+      resultingAlbumPid: keyed && edited.isNotEmpty ? bulkEditRegroupsTo : null,
+    );
   }
 
   @override

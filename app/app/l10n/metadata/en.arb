@@ -23,6 +23,85 @@
       }
     }
   },
+  "metadataBulkEdited": "{count, plural, =1{Edited 1 track} other{Edited {count} tracks}}",
+  "@metadataBulkEdited": {
+    "description": "Message part after a bulk save: how many catalog rows took the edit.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "metadataBulkLeaveAsIs": "Leave as is",
+  "@metadataBulkLeaveAsIs": {
+    "description": "The default choice for a boolean field in the bulk form: the batch does not touch it."
+  },
+  "metadataBulkLockNote": "Saving locks every edited field on each selected track. One batch takes at most 1,000 items.",
+  "@metadataBulkLockNote": {
+    "description": "Caption under the bulk form stating what the endpoint always does: it locks what it writes, and it caps the batch."
+  },
+  "metadataBulkLockedFail": "Refuse the batch",
+  "@metadataBulkLockedFail": {
+    "description": "Locked-fields choice: a locked track fails the whole batch."
+  },
+  "metadataBulkLockedForce": "Override locks",
+  "@metadataBulkLockedForce": {
+    "description": "Locked-fields choice: the batch writes over existing locks."
+  },
+  "metadataBulkLockedHint": "Pick \"Skip those tracks\" or \"Override locks\" to get past them.",
+  "@metadataBulkLockedHint": {
+    "description": "Appended to the server's field-locked refusal after a bulk save: names the choice on this form that gets past the locks, which the server cannot know about."
+  },
+  "metadataBulkLockedPolicy": "Locked fields",
+  "@metadataBulkLockedPolicy": {
+    "description": "Accessible name of the choice deciding what a bulk edit does when a target field is already locked on a track."
+  },
+  "metadataBulkLockedPolicyHelp": "What to do when a field this batch writes is already locked on a track",
+  "@metadataBulkLockedPolicyHelp": {
+    "description": "Line under the locked-fields choice."
+  },
+  "metadataBulkLockedSkip": "Skip those tracks",
+  "@metadataBulkLockedSkip": {
+    "description": "Locked-fields choice: locked tracks are skipped and reported."
+  },
+  "metadataBulkMixedChip": "Mixed",
+  "@metadataBulkMixedChip": {
+    "description": "Chip on a bulk field whose value differs across the selected tracks. Typing a value there sets it on all of them."
+  },
+  "metadataBulkOff": "Off",
+  "@metadataBulkOff": {
+    "description": "Bulk choice clearing a boolean field on every selected track."
+  },
+  "metadataBulkOn": "On",
+  "@metadataBulkOn": {
+    "description": "Bulk choice setting a boolean field on every selected track."
+  },
+  "metadataBulkOpenNewAlbum": "Open it",
+  "@metadataBulkOpenNewAlbum": {
+    "description": "Action on the regroup message; opens the workbench on the album the tracks moved to."
+  },
+  "metadataBulkRegrouped": "The edited tracks moved to a new album entry.",
+  "@metadataBulkRegrouped": {
+    "description": "Message after a bulk edit rewrote a release-keying field on part of a release: those tracks now group under a different album."
+  },
+  "metadataBulkSkipped": "{count, plural, =1{skipped 1 locked track} other{skipped {count} locked tracks}}",
+  "@metadataBulkSkipped": {
+    "description": "Message part after a bulk save that skipped locked tracks; follows the edited count in one sentence.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "metadataBulkTitle": "{count, plural, =1{Edit 1 track} other{Edit {count} tracks}}",
+  "@metadataBulkTitle": {
+    "description": "Heading over the bulk form for the checked tracks.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "metadataCreditNames": "Names, comma separated",
   "@metadataCreditNames": {
     "description": "Field for the people in one credit role."
@@ -42,6 +121,18 @@
   "metadataDerivedChip": "Derived",
   "@metadataDerivedChip": {
     "description": "Chip on a read-only value the server computes rather than stores, such as an album's track count."
+  },
+  "metadataDiscardBody": "This selection has edits its save bar has not written; switching away drops them.",
+  "@metadataDiscardBody": {
+    "description": "Body of the confirmation the workbench asks before replacing a pane that holds unsaved edits."
+  },
+  "metadataDiscardConfirm": "Discard",
+  "@metadataDiscardConfirm": {
+    "description": "The confirming button on that dialog; Cancel keeps the pane and the typing."
+  },
+  "metadataDiscardTitle": "Discard unsaved edits?",
+  "@metadataDiscardTitle": {
+    "description": "Title of the confirmation the workbench asks before replacing a pane that holds unsaved edits."
   },
   "metadataEnrichApplied": "Applied: {fields}",
   "@metadataEnrichApplied": {
@@ -584,6 +675,35 @@
   "metadataUntitled": "Untitled",
   "@metadataUntitled": {
     "description": "Stands in for an item's name when it has none."
+  },
+  "metadataWorkbenchEditSelection": "Edit selection",
+  "@metadataWorkbenchEditSelection": {
+    "description": "Bulk-bar button opening the bulk form for the checked tracks."
+  },
+  "metadataWorkbenchSelectEmptyMessage": "Check tracks in the list to edit them together.",
+  "@metadataWorkbenchSelectEmptyMessage": {
+    "description": "Body of that empty state."
+  },
+  "metadataWorkbenchSelectEmptyTitle": "Nothing selected",
+  "@metadataWorkbenchSelectEmptyTitle": {
+    "description": "Title of the pane's empty state while selecting with nothing checked."
+  },
+  "metadataWorkbenchSelectEnter": "Select tracks",
+  "@metadataWorkbenchSelectEnter": {
+    "description": "Toolbar button entering multi-select on the workbench's track list."
+  },
+  "metadataWorkbenchSelectLeave": "Leave selection",
+  "@metadataWorkbenchSelectLeave": {
+    "description": "The same button while selecting; leaves and clears the checks."
+  },
+  "metadataWorkbenchSelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@metadataWorkbenchSelectedCount": {
+    "description": "Count on the bulk bar while tracks are checked.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "metadataWriteBackFailure": "{file}: {reason}",
   "@metadataWriteBackFailure": {

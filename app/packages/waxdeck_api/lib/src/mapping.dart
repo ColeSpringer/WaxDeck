@@ -1529,6 +1529,7 @@ BulkEditResult bulkEditResultFromGen(gen.BulkEditResult result) {
     writeBackFailures:
         result.writeBackFailures?.map(writeBackFailureFromGen).toList() ??
         const [],
+    resultingAlbumPid: result.resultingAlbumPid,
   );
 }
 

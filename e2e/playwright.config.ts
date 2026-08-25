@@ -111,7 +111,6 @@ export default defineConfig({
         /uploads\.spec\.ts/,
         /admin-ops\.spec\.ts/,
         /admin-readonly\.spec\.ts/,
-        /editing-prototype\.spec\.ts/,
         /a11y-audit\.spec\.ts/,
         /feishin\.spec\.ts/,
         /identity-dex\.spec\.ts/,
@@ -172,12 +171,6 @@ export default defineConfig({
       name: 'focus-a11y',
       testMatch: /a11y-audit\.spec\.ts/,
       dependencies: ['motion-smoke'],
-      ...motion('reduce'),
-    },
-    {
-      name: 'focus-editing',
-      testMatch: /editing-prototype\.spec\.ts/,
-      dependencies: ['focus-a11y'],
       ...motion('reduce'),
     },
     // The real third-party client; present only when FEISHIN_BASE_URL

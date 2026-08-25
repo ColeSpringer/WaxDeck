@@ -219,7 +219,12 @@ paths:
         fields and reports them instead of failing the batch;
         without it a locked item fails the whole batch with
         `field-locked`. Write-back failures are reported per item and
-        never undo the catalog batch.
+        never undo the catalog batch. Every edited field is locked on
+        every edited item, so a repeat edit of the same field needs
+        `force` or `skipLocked`. Editing a release-keying field
+        (`album`, `album_artist`, `year`) regroups the edited tracks
+        onto a fresh album entity rather than renaming the release in
+        place; `resultingAlbumPid` reports where they landed.
       tags: [metadata]
       requestBody:
         required: true
@@ -1404,6 +1409,18 @@ components:
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
+        resultingAlbumPid:
+          type: string
+          description: >
+            The album entity the edited items now sit on, reported
+            when the edit rewrote a release-keying field (`album`,
+            `album_artist`, `year`) and every edited item landed on
+            one album. Rewriting those fields regroups the members
+            onto a fresh album pid instead of renaming the release
+            in place, so a caller showing the old album follows this
+            to the new one. Absent when no keying field was edited,
+            nothing was edited, or the edited items split across
+            releases.
 
     CreditsEdit:
       type: object

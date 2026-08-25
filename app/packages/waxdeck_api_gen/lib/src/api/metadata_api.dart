@@ -42,7 +42,7 @@ class MetadataApi {
   const MetadataApi(this._dio, this._serializers);
 
   /// Edit fields on many items
-  /// Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). &#x60;skipLocked&#x60; skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with &#x60;field-locked&#x60;. Write-back failures are reported per item and never undo the catalog batch. 
+  /// Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). &#x60;skipLocked&#x60; skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with &#x60;field-locked&#x60;. Write-back failures are reported per item and never undo the catalog batch. Every edited field is locked on every edited item, so a repeat edit of the same field needs &#x60;force&#x60; or &#x60;skipLocked&#x60;. Editing a release-keying field (&#x60;album&#x60;, &#x60;album_artist&#x60;, &#x60;year&#x60;) regroups the edited tracks onto a fresh album entity rather than renaming the release in place; &#x60;resultingAlbumPid&#x60; reports where they landed. 
   ///
   /// Parameters:
   /// * [bulkEdit] 

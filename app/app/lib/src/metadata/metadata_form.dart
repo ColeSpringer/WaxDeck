@@ -78,6 +78,11 @@ String metadataRoleLabel(AppLocalizations l10n, String role) => switch (role) {
   _ => role,
 };
 
+/// The most items one `bulkEditMetadata` batch takes, mirroring the
+/// server's own refusal; the copy that states it lives in
+/// `metadataBulkLockNote` and `musicAlbumRewriteTooLarge`.
+const metadataBulkEditCap = 1000;
+
 /// How one field is edited. The wire carries every value as a string;
 /// the type says what control stands in front of that string.
 enum MetadataFieldType { text, count, toggle, genres, choice }
@@ -1459,6 +1464,7 @@ class MetadataSaveBar extends StatelessWidget {
     required this.onSave,
     this.writeBackFailures = const [],
     this.onDismissFailures,
+    this.saveSemanticsId = SemanticsIds.metadataSave,
   });
 
   final int count;
@@ -1466,6 +1472,10 @@ class MetadataSaveBar extends StatelessWidget {
   final VoidCallback onSave;
   final List<WriteBackFailure> writeBackFailures;
   final VoidCallback? onDismissFailures;
+
+  /// The save button's e2e handle. The item editor's by default; the
+  /// bulk pane passes its own so a spec can say which save it means.
+  final String saveSemanticsId;
 
   @override
   Widget build(BuildContext context) {
@@ -1535,7 +1545,7 @@ class MetadataSaveBar extends StatelessWidget {
                         ? l10n.commonSave
                         : l10n.metadataSaveChanges(count),
                     icon: WaxIcons.check,
-                    semanticsId: SemanticsIds.metadataSave,
+                    semanticsId: saveSemanticsId,
                     onPressed: count == 0 || busy ? null : onSave,
                   ),
                 ),

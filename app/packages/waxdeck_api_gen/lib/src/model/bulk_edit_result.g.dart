@@ -13,6 +13,8 @@ class _$BulkEditResult extends BulkEditResult {
   final BuiltList<String> skipped;
   @override
   final BuiltList<WriteBackFailure>? writeBackFailures;
+  @override
+  final String? resultingAlbumPid;
 
   factory _$BulkEditResult([void Function(BulkEditResultBuilder)? updates]) =>
       (BulkEditResultBuilder()..update(updates))._build();
@@ -21,6 +23,7 @@ class _$BulkEditResult extends BulkEditResult {
     required this.edited,
     required this.skipped,
     this.writeBackFailures,
+    this.resultingAlbumPid,
   }) : super._();
   @override
   BulkEditResult rebuild(void Function(BulkEditResultBuilder) updates) =>
@@ -35,7 +38,8 @@ class _$BulkEditResult extends BulkEditResult {
     return other is BulkEditResult &&
         edited == other.edited &&
         skipped == other.skipped &&
-        writeBackFailures == other.writeBackFailures;
+        writeBackFailures == other.writeBackFailures &&
+        resultingAlbumPid == other.resultingAlbumPid;
   }
 
   @override
@@ -44,6 +48,7 @@ class _$BulkEditResult extends BulkEditResult {
     _$hash = $jc(_$hash, edited.hashCode);
     _$hash = $jc(_$hash, skipped.hashCode);
     _$hash = $jc(_$hash, writeBackFailures.hashCode);
+    _$hash = $jc(_$hash, resultingAlbumPid.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -53,7 +58,8 @@ class _$BulkEditResult extends BulkEditResult {
     return (newBuiltValueToStringHelper(r'BulkEditResult')
           ..add('edited', edited)
           ..add('skipped', skipped)
-          ..add('writeBackFailures', writeBackFailures))
+          ..add('writeBackFailures', writeBackFailures)
+          ..add('resultingAlbumPid', resultingAlbumPid))
         .toString();
   }
 }
@@ -76,6 +82,11 @@ class BulkEditResultBuilder
   set writeBackFailures(ListBuilder<WriteBackFailure>? writeBackFailures) =>
       _$this._writeBackFailures = writeBackFailures;
 
+  String? _resultingAlbumPid;
+  String? get resultingAlbumPid => _$this._resultingAlbumPid;
+  set resultingAlbumPid(String? resultingAlbumPid) =>
+      _$this._resultingAlbumPid = resultingAlbumPid;
+
   BulkEditResultBuilder() {
     BulkEditResult._defaults(this);
   }
@@ -86,6 +97,7 @@ class BulkEditResultBuilder
       _edited = $v.edited.toBuilder();
       _skipped = $v.skipped.toBuilder();
       _writeBackFailures = $v.writeBackFailures?.toBuilder();
+      _resultingAlbumPid = $v.resultingAlbumPid;
       _$v = null;
     }
     return this;
@@ -113,6 +125,7 @@ class BulkEditResultBuilder
             edited: edited.build(),
             skipped: skipped.build(),
             writeBackFailures: _writeBackFailures?.build(),
+            resultingAlbumPid: resultingAlbumPid,
           );
     } catch (_) {
       late String _$failedField;

@@ -471,8 +471,9 @@ components:
         pid:
           type: string
           description: >
-            The catalog item pid; absent for staged files that have
-            not entered the library yet.
+            The catalog item pid, type-prefixed like every pid on this
+            API; absent for staged files that have not entered the
+            library yet.
         path:
           type: string
           description: >

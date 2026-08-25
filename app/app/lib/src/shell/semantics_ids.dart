@@ -335,6 +335,11 @@ abstract final class SemanticsIds {
   static const String albumEditorTotalTracks = 'album-editor-total-tracks';
   static const String albumEditorTracks = 'album-editor-tracks';
   static const String albumIdentity = 'album-identity';
+  static const String albumRewrite = 'album-rewrite';
+  static const String albumRewriteApply = 'album-rewrite-apply';
+  static const String albumRewriteConfirm = 'album-rewrite-confirm';
+  static String albumRewriteField(Object name) => 'album-rewrite-field-$name';
+  static const String albumRewriteWriteBack = 'album-rewrite-writeback';
   static const String artLock = 'art-lock';
   static String artSlot(Object role) => 'art-slot-$role';
   static String artSlotClear(Object role) => 'art-slot-clear-$role';
@@ -372,6 +377,7 @@ abstract final class SemanticsIds {
   static const String metadataRematch = 'metadata-rematch';
   static const String metadataSave = 'metadata-save';
   static const String metadataSaveBar = 'metadata-save-bar';
+  static const String metadataWorkbench = 'metadata-workbench';
   static const String metadataWriteback = 'metadata-writeback';
   static const String metadataWritebackWarning = 'metadata-writeback-warning';
   static const String tagAdd = 'tag-add';
@@ -380,6 +386,20 @@ abstract final class SemanticsIds {
   static String tagRestore(Object key) => 'tag-restore-$key';
   static const String tagValues = 'tag-values';
   static const String unofficialSwitch = 'unofficial-switch';
+  static const String workbenchAlbumRow = 'workbench-album-row';
+  static const String workbenchBulkBar = 'workbench-bulk-bar';
+  static const String workbenchBulkEdit = 'workbench-bulk-edit';
+  static String workbenchBulkField(Object name) => 'workbench-bulk-field-$name';
+  static const String workbenchBulkLockedPolicy =
+      'workbench-bulk-locked-policy';
+  static const String workbenchBulkPane = 'workbench-bulk-pane';
+  static const String workbenchBulkSave = 'workbench-bulk-save';
+  static const String workbenchDiscardConfirm = 'workbench-discard-confirm';
+  static const String workbenchList = 'workbench-list';
+  static const String workbenchPane = 'workbench-pane';
+  static String workbenchRow(Object pid) => 'workbench-row-$pid';
+  static const String workbenchSelectToggle = 'workbench-select-toggle';
+  static const String workbenchSplitter = 'workbench-splitter';
 
   // music: The music hub, its indexes, and the buckets they drill.
   static String albumTrackMore(Object index) => 'album-track-more-$index';
@@ -608,16 +628,6 @@ abstract final class SemanticsIds {
   static const String transcriptOpen = 'transcript-open';
   static const String unsubscribeKeepFiles = 'unsubscribe-keep-files';
   static const String unsubscribeRemoveFiles = 'unsubscribe-remove-files';
-
-  // prototype: The editing prototype kept behind its own route for the e2e keyboard contract.
-  static String protoCellArtist(Object index) => 'proto-cell-$index-artist';
-  static String protoCellCurrent(Object index) => 'proto-cell-$index-current';
-  static String protoEdit(Object index) => 'proto-edit-$index';
-  static String protoKebab(Object index) => 'proto-kebab-$index';
-  static const String protoMenuApply = 'proto-menu-apply';
-  static const String protoMenuCopy = 'proto-menu-copy';
-  static String protoRow(Object index) => 'proto-row-$index';
-  static const String protoTable = 'proto-table';
 
   // radio: The radio hub: the favorites dial, the station grid, and the add-station flow.
   static String radio(Object pid) => 'radio-$pid';

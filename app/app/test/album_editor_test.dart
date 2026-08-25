@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/music/album_editor_screen.dart';
+import 'package:waxdeck/src/metadata/release_workbench.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -45,6 +45,8 @@ FakeRepository _repo({
   return repo;
 }
 
+/// Wide enough for two panes, so the album pane the tests are about is
+/// on screen from the first frame.
 Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
   tester.view.physicalSize = const Size(1200, 2000);
   tester.view.devicePixelRatio = 1;
@@ -56,7 +58,7 @@ Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
         audioEngineProvider.overrideWithValue(FakeEngine()),
         credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
       ],
-      child: routedHost(const AlbumEditorScreen(pid: _album)),
+      child: routedHost(const ReleaseWorkbench(pid: _album)),
     ),
   );
   await tester.pumpAndSettle();
@@ -249,10 +251,22 @@ void main() {
     await _pump(tester, repo);
 
     expect(find.text('Long Exposure'), findsWidgets);
-    expect(find.textContaining('1975'), findsOneWidget);
-    expect(_byId(SemanticsIds.albumEditorTracks), findsOneWidget);
-    expect(find.text('Salt Harbour'), findsOneWidget);
-    expect(find.text('Nightjar'), findsOneWidget);
+    final summary = _byId(SemanticsIds.albumEditorTracks);
+    expect(summary, findsOneWidget);
+    // Scoped to the pane's summary: the workbench list beside it draws
+    // the year and the track titles too.
+    expect(
+      find.descendant(of: summary, matching: find.textContaining('1975')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: summary, matching: find.text('Salt Harbour')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: summary, matching: find.text('Nightjar')),
+      findsOneWidget,
+    );
     // The cover grid, in entity mode: the front slot is what an album
     // holds, and the pin is what explains one refusing every cover.
     expect(_byId(SemanticsIds.artSlot('front')), findsOneWidget);

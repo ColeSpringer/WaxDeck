@@ -39,7 +39,7 @@ import '../health/health_screen.dart';
 import '../home/home_screen.dart';
 import '../l10n/l10n.dart';
 import '../metadata/metadata_screen.dart';
-import '../music/album_editor_screen.dart';
+import '../metadata/release_workbench.dart';
 import '../music/album_screen.dart';
 import '../music/artist_screen.dart';
 import '../music/index_screen.dart';
@@ -63,7 +63,6 @@ import '../playlists/rule_editor_screen.dart';
 import '../podcasts/episode_screen.dart';
 import '../podcasts/podcasts_screen.dart';
 import '../podcasts/show_screen.dart';
-import '../prototype/editing_prototype_screen.dart';
 import '../queue/queue_continuation.dart';
 import '../queue/queue_persistence.dart';
 import '../queue/queue_refiller.dart';
@@ -187,9 +186,6 @@ bool _isInAppLocation(String location) =>
 /// in, the auth screens are unreachable.
 String? _redirect(Ref ref, GoRouterState state) {
   final location = state.matchedLocation;
-  // The prototype harness carries no session and is opened cold.
-  if (location == WaxRoute.editingPrototype) return null;
-
   // Before the session is even asked about: a native build with no
   // adopted server address has nothing to probe, so everything lands on
   // the connect screen. The web build talks to its own origin and can
@@ -357,8 +353,7 @@ Widget _userEdit(BuildContext context, GoRouterState state) {
   return UserEditScreen(user: args.user, approve: args.approve);
 }
 
-/// Locations that do not need a session: the auth surfaces themselves,
-/// and the prototype harness.
+/// Locations that do not need a session: the auth surfaces themselves.
 final publicRoutes = <RouteBase>[
   GoRoute(
     path: WaxRoute.serverConnect,
@@ -375,10 +370,6 @@ final publicRoutes = <RouteBase>[
   GoRoute(
     path: WaxRoute.signup,
     builder: (context, state) => const SignupScreen(),
-  ),
-  GoRoute(
-    path: WaxRoute.editingPrototype,
-    builder: (context, state) => const EditingPrototypeScreen(),
   ),
 ];
 
@@ -660,22 +651,31 @@ List<RouteBase> shellRoutes() => <RouteBase>[
                 WaxRoute.reviewEntry(state.pathParameters['entryId']!),
           ),
           // One location, two editors, chosen by what the pid names. An
-          // album's identity is entity-scoped and writes through a
-          // different endpoint than an item's fields, so it is its own
-          // screen; sharing the location keeps "edit this" one link
-          // rather than two a caller has to know how to pick between.
+          // album opens the release workbench - its identity is
+          // entity-scoped and its members are what a bulk edit reaches -
+          // while an item opens its own editor; sharing the location
+          // keeps "edit this" one link rather than two a caller has to
+          // know how to pick between. Any other prefix is nothing this
+          // location can edit: an artist or release-group pid used to
+          // fall into the item editor and fail its read, which read as
+          // a broken editor rather than a wrong link.
           GoRoute(
             path: '/metadata/:pid',
             builder: (context, state) {
               final pid = state.pathParameters['pid']!;
+              const itemPrefixes = ['tr-', 'ep-', 'bk-'];
               // Keyed by pid: go_router keys the page by the route
               // pattern, so a `go` from one item's editor to another's
               // (the player's Edit metadata does exactly this) reuses
               // the page - and without the key, the State under it,
               // carrying the first item's staged draft onto the second.
-              return pid.startsWith('al-')
-                  ? AlbumEditorScreen(key: ValueKey(pid), pid: pid)
-                  : MetadataScreen(key: ValueKey(pid), pid: pid);
+              if (pid.startsWith('al-')) {
+                return ReleaseWorkbench(key: ValueKey(pid), pid: pid);
+              }
+              if (itemPrefixes.any(pid.startsWith)) {
+                return MetadataScreen(key: ValueKey(pid), pid: pid);
+              }
+              return const _NotFoundScreen();
             },
           ),
           // The admin console. One nested shell around every `/admin`

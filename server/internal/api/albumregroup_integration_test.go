@@ -58,6 +58,15 @@ func TestBulkEditAlbumFieldsRegroupsTheRelease(t *testing.T) {
 		if len(out.Edited) != 4 || len(out.Skipped) != 0 {
 			t.Fatalf("%s bulk edit outcome = %+v", field, out)
 		}
+		// The response names the album the members landed on: the caller
+		// who asked for the rename is looking at a pid that no longer
+		// holds them.
+		if out.ResultingAlbumPid == nil {
+			t.Fatalf("%s bulk edit reported no resultingAlbumPid", field)
+		}
+		if *out.ResultingAlbumPid == oldAlbum {
+			t.Fatalf("%s: resultingAlbumPid = %s, the pre-edit album", field, oldAlbum)
+		}
 		after := h.items(t, "")
 		surviving := map[string]bool{}
 		newAlbum := ""
@@ -80,12 +89,49 @@ func TestBulkEditAlbumFieldsRegroupsTheRelease(t *testing.T) {
 		if newAlbum == oldAlbum {
 			t.Fatalf("%s: members kept album %s; expected a regroup", field, oldAlbum)
 		}
+		if *out.ResultingAlbumPid != newAlbum {
+			t.Fatalf("%s: resultingAlbumPid = %s, members landed on %s",
+				field, *out.ResultingAlbumPid, newAlbum)
+		}
 		return newAlbum
 	}
 
 	renamed := probe("album", "Renamed Fixture Album", album)
 	reartisted := probe("album_artist", "Renamed Fixture Artist", renamed)
 	reyeared := probe("year", "1999", reartisted)
+
+	// A field outside the release key regroups nothing, and the response
+	// says nothing about albums: reporting the unchanged pid would read
+	// as "your release moved" to a caller that only checks presence.
+	resp = h.postJSON(t, "/api/v1/items/bulk-edit", map[string]any{
+		"itemPids": pids, "fields": map[string]string{"comment": "still here"},
+	})
+	if resp.StatusCode != 200 {
+		t.Fatalf("comment bulk edit status = %d", resp.StatusCode)
+	}
+	flat := decode[BulkEditResult](t, resp)
+	if len(flat.Edited) != 4 {
+		t.Fatalf("comment bulk edit outcome = %+v", flat)
+	}
+	if flat.ResultingAlbumPid != nil {
+		t.Fatalf("comment bulk edit reported resultingAlbumPid = %q", *flat.ResultingAlbumPid)
+	}
+
+	// A keying edit that changes nothing still reports where the members
+	// sit - the same pid, deliberately. The response answers "where is
+	// the release now", not "did it move"; callers compare pids rather
+	// than checking presence, and the field's presence marks the edit as
+	// release-keying either way.
+	resp = h.postJSON(t, "/api/v1/items/bulk-edit", map[string]any{
+		"itemPids": pids, "fields": map[string]string{"year": "1999"}, "force": true,
+	})
+	if resp.StatusCode != 200 {
+		t.Fatalf("noop year bulk edit status = %d", resp.StatusCode)
+	}
+	noop := decode[BulkEditResult](t, resp)
+	if noop.ResultingAlbumPid == nil || *noop.ResultingAlbumPid != reyeared {
+		t.Fatalf("noop keying edit resultingAlbumPid = %v, want %s", noop.ResultingAlbumPid, reyeared)
+	}
 
 	// The abandoned entity is a ghost, not a dangling pointer: until the
 	// orphan GC sweeps it, its pid still answers reads under its old

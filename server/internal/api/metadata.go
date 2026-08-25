@@ -257,6 +257,9 @@ func (s *Server) BulkEditMetadata(ctx context.Context, req BulkEditMetadataReque
 		fs := writeBackFailuresJSON(out.Failures)
 		result.WriteBackFailures = &fs
 	}
+	if out.ResultingAlbumPID != "" {
+		result.ResultingAlbumPid = &out.ResultingAlbumPID
+	}
 	return BulkEditMetadata200JSONResponse(result), nil
 }
 

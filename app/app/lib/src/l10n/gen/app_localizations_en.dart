@@ -3290,6 +3290,82 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String metadataBulkEdited(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Edited $count tracks',
+      one: 'Edited 1 track',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get metadataBulkLeaveAsIs => 'Leave as is';
+
+  @override
+  String get metadataBulkLockNote =>
+      'Saving locks every edited field on each selected track. One batch takes at most 1,000 items.';
+
+  @override
+  String get metadataBulkLockedFail => 'Refuse the batch';
+
+  @override
+  String get metadataBulkLockedForce => 'Override locks';
+
+  @override
+  String get metadataBulkLockedHint =>
+      'Pick \"Skip those tracks\" or \"Override locks\" to get past them.';
+
+  @override
+  String get metadataBulkLockedPolicy => 'Locked fields';
+
+  @override
+  String get metadataBulkLockedPolicyHelp =>
+      'What to do when a field this batch writes is already locked on a track';
+
+  @override
+  String get metadataBulkLockedSkip => 'Skip those tracks';
+
+  @override
+  String get metadataBulkMixedChip => 'Mixed';
+
+  @override
+  String get metadataBulkOff => 'Off';
+
+  @override
+  String get metadataBulkOn => 'On';
+
+  @override
+  String get metadataBulkOpenNewAlbum => 'Open it';
+
+  @override
+  String get metadataBulkRegrouped =>
+      'The edited tracks moved to a new album entry.';
+
+  @override
+  String metadataBulkSkipped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'skipped $count locked tracks',
+      one: 'skipped 1 locked track',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String metadataBulkTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Edit $count tracks',
+      one: 'Edit 1 track',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get metadataCreditNames => 'Names, comma separated';
 
   @override
@@ -3303,6 +3379,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataDerivedChip => 'Derived';
+
+  @override
+  String get metadataDiscardBody =>
+      'This selection has edits its save bar has not written; switching away drops them.';
+
+  @override
+  String get metadataDiscardConfirm => 'Discard';
+
+  @override
+  String get metadataDiscardTitle => 'Discard unsaved edits?';
 
   @override
   String metadataEnrichApplied(String fields) {
@@ -3689,6 +3775,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataUntitled => 'Untitled';
 
   @override
+  String get metadataWorkbenchEditSelection => 'Edit selection';
+
+  @override
+  String get metadataWorkbenchSelectEmptyMessage =>
+      'Check tracks in the list to edit them together.';
+
+  @override
+  String get metadataWorkbenchSelectEmptyTitle => 'Nothing selected';
+
+  @override
+  String get metadataWorkbenchSelectEnter => 'Select tracks';
+
+  @override
+  String get metadataWorkbenchSelectLeave => 'Leave selection';
+
+  @override
+  String metadataWorkbenchSelectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count selected',
+      one: '1 selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String metadataWriteBackFailure(String file, String reason) {
     return '$file: $reason';
   }
@@ -3805,6 +3918,51 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicAlbumReleaseTitle => 'Release';
+
+  @override
+  String musicAlbumRewriteApply(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Rewrite $count tracks',
+      one: 'Rewrite 1 track',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicAlbumRewriteConfirmBody =>
+      'The edited fields are rewritten on every track, and the release regroups under a new album entry. Locks on those fields are overridden, then set again by the rewrite.';
+
+  @override
+  String get musicAlbumRewriteConfirmTitle => 'Regroup this release?';
+
+  @override
+  String get musicAlbumRewriteHelp =>
+      'These live on the tracks rather than the release. Saving rewrites them on every member and regroups the release under a new entry; this page follows it there.';
+
+  @override
+  String get musicAlbumRewriteIncomplete =>
+      'Could not load every track on this release, so nothing was rewritten.';
+
+  @override
+  String get musicAlbumRewriteMoved =>
+      'The release regrouped onto a new entry.';
+
+  @override
+  String get musicAlbumRewriteOverline => 'On the tracks';
+
+  @override
+  String get musicAlbumRewriteTitle => 'Album, artist, and year';
+
+  @override
+  String musicAlbumRewriteTooLarge(int count) {
+    return 'One rewrite takes at most 1,000 tracks; this release has $count.';
+  }
+
+  @override
+  String get musicAlbumRewriteWriteBackHelp =>
+      'Also rewrite these tags inside each track\'s file';
 
   @override
   String get musicAlbumTitle => 'Album';
@@ -6142,30 +6300,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get podcastsTitle => 'Podcasts';
-
-  @override
-  String get prototypeApply => 'Apply proposal';
-
-  @override
-  String get prototypeColumnArtist => 'Artist';
-
-  @override
-  String get prototypeColumnCurrent => 'Current title';
-
-  @override
-  String get prototypeColumnMatch => 'Match';
-
-  @override
-  String get prototypeColumnProposed => 'Proposed title';
-
-  @override
-  String get prototypeCopyProposed => 'Copy proposed title';
-
-  @override
-  String get prototypeRowActions => 'Row actions';
-
-  @override
-  String get prototypeTitle => 'Editing prototype';
 
   @override
   String queueAddedMany(int count) {

@@ -17,22 +17,101 @@ import 'metadata_form.dart';
 /// The per-item metadata editor, deep-linkable at `/metadata/<pid>`.
 /// Always pushed: a review row, a book, and the lyrics view all open it,
 /// so it has three ancestries and a location may declare one.
-///
-/// Everything on it stages into one [MetadataDraft]; the sticky save
-/// bar at the bottom is the only thing that writes. It replaced a form
-/// where fields, credits, tags, and lyrics each carried a save of their
-/// own, which meant four buttons and no one answer to "is anything
-/// unsaved".
-class MetadataScreen extends ConsumerStatefulWidget {
+class MetadataScreen extends ConsumerWidget {
   const MetadataScreen({super.key, required this.pid});
 
   final String pid;
 
   @override
-  ConsumerState<MetadataScreen> createState() => _MetadataScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final editor = ref.watch(metadataControllerProvider(pid));
+    // On the screen, not only on the doors that open it. The workbench
+    // refuses for the same reason - this location is shareable and the
+    // web build puts it in the path - but it refuses before it loads,
+    // because being an administrator is something the session already
+    // knows. Here the answer is a property of the item and arrives with
+    // the read, so the refusal waits for it: the account whose upload
+    // brought the track in may curate it, and nothing on the client can
+    // work that out on its own.
+    //
+    // On an explicit no, never on a silence. A server too old to carry
+    // the field, or one whose ownership lookup failed, says nothing -
+    // and refusing on that would hand an administrator a "not yours"
+    // page for an item that server would save. Unanswered, the editor
+    // opens exactly as it did before this field existed and the save is
+    // what refuses.
+    if (editor.value case final state? when state.metadata.mayCurate == false) {
+      return ForbiddenPage(
+        pageTitle: context.l10n.metadataTitle,
+        heading: context.l10n.metadataForbiddenTitle,
+        message: context.l10n.metadataForbiddenMessage,
+        glyph: WaxIcons.edit,
+        semanticsId: SemanticsIds.metadataForbidden,
+      );
+    }
+    return WaxScaffold(
+      title: context.l10n.metadataTitle,
+      largeTitle: false,
+      semanticsId: SemanticsIds.metadataEditor,
+      onBack: () => context.leave(),
+      // A filling sliver rather than a body, so the pane can keep its
+      // save bar under its own scroll the same way it does when it is
+      // mounted beside the workbench's list.
+      slivers: <Widget>[
+        SliverFillRemaining(hasScrollBody: true, child: MetadataPane(pid: pid)),
+      ],
+    );
+  }
 }
 
-class _MetadataScreenState extends ConsumerState<MetadataScreen> {
+/// The editor itself, without a page around it: the header, the typed
+/// sections, and the sticky save bar that is the only thing that
+/// writes. [MetadataScreen] mounts it as the whole page; the release
+/// workbench mounts it beside its track list for whichever member is
+/// selected.
+///
+/// Everything on it stages into one [MetadataDraft]. It replaced a form
+/// where fields, credits, tags, and lyrics each carried a save of their
+/// own, which meant four buttons and no one answer to "is anything
+/// unsaved".
+class MetadataPane extends ConsumerStatefulWidget {
+  const MetadataPane({
+    super.key,
+    required this.pid,
+    this.embedded = false,
+    this.onSaved,
+    this.onDirtyChanged,
+  });
+
+  /// The narrowest the pane works at before its field rows start
+  /// wrapping badly. Stated here, where the form lives, so a host
+  /// splitting a screen derives its floor from what the pane needs
+  /// rather than guessing one.
+  static const double minWidth = 360;
+
+  final String pid;
+
+  /// Whether the pane sits beside something else rather than being the
+  /// page. Embedded it keeps one column whatever its width - the room
+  /// belongs to the list beside it - and takes pane gutters rather than
+  /// the page's.
+  final bool embedded;
+
+  /// Fired after a save committed, for a host whose other panes read
+  /// the same item: the controller refetches only itself, so a list
+  /// beside this pane would keep the old title without it.
+  final VoidCallback? onSaved;
+
+  /// Reports whether the draft holds anything unsaved, so a host that
+  /// replaces this pane on a selection change can ask before it
+  /// discards typing. Fired on the edges only.
+  final ValueChanged<bool>? onDirtyChanged;
+
+  @override
+  ConsumerState<MetadataPane> createState() => _MetadataPaneState();
+}
+
+class _MetadataPaneState extends ConsumerState<MetadataPane> {
   final _draft = MetadataDraft();
 
   var _writeBack = false;
@@ -51,8 +130,25 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
     _draft.addListener(_onDraftChanged);
   }
 
+  /// The dirtiness last reported, so [MetadataPane.onDirtyChanged]
+  /// fires on the edges rather than on every keystroke.
+  var _reportedDirty = false;
+
   void _onDraftChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    _reportDirty();
+  }
+
+  void _reportDirty() {
+    final onDirty = widget.onDirtyChanged;
+    if (onDirty == null) return;
+    final state = ref.read(metadataControllerProvider(widget.pid)).value;
+    final dirty = state != null && !_draft.changes(state).isEmpty;
+    if (dirty != _reportedDirty) {
+      _reportedDirty = dirty;
+      onDirty(dirty);
+    }
   }
 
   @override
@@ -108,6 +204,10 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
     // refusal the parts that did not land must stay the user's edits.
     if (outcome.refusal == null) _draft.markSaved(changes);
     setState(() => _writeBackFailures = outcome.writeBackFailures);
+    _reportDirty();
+    // Even a refused save committed the calls before the refusal, so
+    // the host's other readers of this item are stale either way.
+    widget.onSaved?.call();
     final messages = <String>[
       ...outcome.warnings,
       // A locked field keeps the server's sentence, which names the
@@ -185,28 +285,16 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
       final value = next.value;
       if (value != null) _draft.adopt(value);
     });
-    // On the screen, not only on the doors that open it. The album
-    // editor refuses for the same reason - this location is shareable
-    // and the web build puts it in the path - but it refuses before it
-    // loads, because being an administrator is something the session
-    // already knows. Here the answer is a property of the item and
-    // arrives with the read, so the refusal waits for it: the account
-    // whose upload brought the track in may curate it, and nothing on
-    // the client can work that out on its own.
-    //
-    // On an explicit no, never on a silence. A server too old to carry
-    // the field, or one whose ownership lookup failed, says nothing -
-    // and refusing on that would hand an administrator a "not yours"
-    // page for an item that server would save. Unanswered, the editor
-    // opens exactly as it did before this field existed and the save is
-    // what refuses.
+    // The screen answers this with a full [ForbiddenPage] before the
+    // pane ever builds; this inline refusal is for a host that mounted
+    // the pane beside something else.
     if (editor.value case final state? when state.metadata.mayCurate == false) {
-      return ForbiddenPage(
-        pageTitle: context.l10n.metadataTitle,
-        heading: context.l10n.metadataForbiddenTitle,
-        message: context.l10n.metadataForbiddenMessage,
-        glyph: WaxIcons.edit,
-        semanticsId: SemanticsIds.metadataForbidden,
+      return Center(
+        child: EmptyState(
+          glyph: WaxIcons.edit,
+          title: context.l10n.metadataForbiddenTitle,
+          message: context.l10n.metadataForbiddenMessage,
+        ),
       );
     }
     // One walk of the draft per frame: the bar's count, the dirty
@@ -215,40 +303,43 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
       AsyncData(:final value) => _draft.changes(value),
       _ => null,
     };
-    return WaxScaffold(
-      title: context.l10n.metadataTitle,
-      largeTitle: false,
-      semanticsId: SemanticsIds.metadataEditor,
-      onBack: () => context.leave(),
-      // Gated on the same pattern as the body: a bar offering Save over
-      // an error page (or a skeleton) would be saving against a state
-      // the page is not showing.
-      bottom: switch (editor) {
-        AsyncData(:final value) => MetadataSaveBar(
-          count: changes!.count,
-          busy: _busy,
-          onSave: () => _save(value),
-          writeBackFailures: _writeBackFailures,
-          onDismissFailures: () =>
-              setState(() => _writeBackFailures = const []),
+    final padding = widget.embedded
+        ? const EdgeInsets.all(WaxSpace.s16)
+        : sizeClass.gutter.add(const EdgeInsets.only(bottom: WaxSpace.s32));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(
+          child: switch (editor) {
+            AsyncData(:final value) => SingleChildScrollView(
+              padding: padding,
+              child: _body(context, value, changes!, sizeClass),
+            ),
+            AsyncError(:final error) => Padding(
+              padding: padding,
+              child: ErrorState(
+                title: context.l10n.metadataLoadError,
+                message: context.explain(error),
+                onRetry: () =>
+                    ref.invalidate(metadataControllerProvider(widget.pid)),
+              ),
+            ),
+            _ => const SkeletonShapes(shape: SkeletonShape.detail),
+          },
         ),
-        _ => null,
-      },
-      body: Padding(
-        padding: sizeClass.gutter.add(
-          const EdgeInsets.only(bottom: WaxSpace.s32),
-        ),
-        child: switch (editor) {
-          AsyncData(:final value) => _body(context, value, changes!, sizeClass),
-          AsyncError(:final error) => ErrorState(
-            title: context.l10n.metadataLoadError,
-            message: context.explain(error),
-            onRetry: () =>
-                ref.invalidate(metadataControllerProvider(widget.pid)),
+        // Gated on the same pattern as the body: a bar offering Save
+        // over an error state (or a skeleton) would be saving against a
+        // state the pane is not showing.
+        if (editor case AsyncData(:final value))
+          MetadataSaveBar(
+            count: changes!.count,
+            busy: _busy,
+            onSave: () => _save(value),
+            writeBackFailures: _writeBackFailures,
+            onDismissFailures: () =>
+                setState(() => _writeBackFailures = const []),
           ),
-          _ => const SkeletonShapes(shape: SkeletonShape.detail),
-        },
-      ),
+      ],
     );
   }
 
@@ -281,7 +372,10 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
       children: <Widget>[
         _Header(state: state),
         const SizedBox(height: WaxSpace.s24),
-        if (sizeClass.hasSidebar)
+        // Embedded keeps one column whatever the window says: the pane
+        // is the narrow half of a split, and the size class describes
+        // the window around it.
+        if (!widget.embedded && sizeClass.hasSidebar)
           // No IntrinsicHeight: each column takes the height it needs
           // and the page scrolls. The form is the wider half because
           // the fields are what somebody came to change.

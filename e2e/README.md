@@ -138,18 +138,17 @@ as loud as a new violation - so the file stays as the seam for the next
 rule rather than as a tolerance. `--write-baseline` re-seeds it, and is
 only for the commit that adds a rule.
 
-Four spec files are exempt, each with its reason stated in
-`lint/conformance.mjs`, and they are exactly the four that ask for
+Three spec files are exempt, each with its reason stated in
+`lint/conformance.mjs`, and they are exactly the three that ask for
 `rawPage`: the accessibility walk (roles and names only, by contract),
-the perf specs, the desktop loopback (it drives the IdP's own HTML form),
-and the editing prototype (raw canvas gestures are its subject). If you
-need the real `Page`, the question to answer first is whether your
-subject is really the app.
+the perf specs, and the desktop loopback (it drives the IdP's own HTML
+form). If you need the real `Page`, the question to answer first is
+whether your subject is really the app.
 
 ## Projects
 
 ```
-setup → wave → mutators-uploads → mutators-admin → mutators-readonly → motion-smoke → focus-a11y → focus-editing
+setup → wave → mutators-uploads → mutators-admin → mutators-readonly → motion-smoke → focus-a11y
 ```
 
 `wave` is everything that owns its own state, four workers wide. The

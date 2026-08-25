@@ -171,10 +171,21 @@ func (l *Library) GetReviewEntry(ctx context.Context, uc *UserCtx, id string) (R
 			Artist: s.Artist, Album: s.Album, Title: s.Title,
 		}
 	}
-	// Staged paths are private server layout; show the base name.
+	// Staged paths are private server layout; show the base name. The
+	// payload stores bare catalog pids - its internal consumers cast
+	// them straight to model.PID - while the wire carries type-prefixed
+	// pids everywhere, so a cataloged track's pid is prefixed on the way
+	// out; served bare, the review screen's own edit door pushed a
+	// location nothing could resolve. An entry whose media type maps to
+	// no kind keeps its pid bare rather than guessing a prefix: the
+	// kind fallback is tr-, and tr-<book pid> is the same broken door.
+	kind, kindKnown := kindForMediaType(e.MediaType)
+	prefix := prefixForKind(kind)
 	for i := range detail.Tracks {
 		if detail.Tracks[i].PID == "" {
 			detail.Tracks[i].Path = filepath.Base(detail.Tracks[i].Path)
+		} else if _, _, ok := parseAPIPID(detail.Tracks[i].PID); !ok && kindKnown {
+			detail.Tracks[i].PID = apiPID(prefix, model.PID(detail.Tracks[i].PID))
 		}
 		detail.Tracks[i].Tags = nil
 		detail.Tracks[i].Fingerprint = ""

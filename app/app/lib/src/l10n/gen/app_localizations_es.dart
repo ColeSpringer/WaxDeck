@@ -3336,6 +3336,82 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String metadataBulkEdited(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se han editado $count pistas',
+      one: 'Se ha editado 1 pista',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get metadataBulkLeaveAsIs => 'Dejar como está';
+
+  @override
+  String get metadataBulkLockNote =>
+      'Guardar bloquea cada campo editado en cada pista seleccionada. Un lote admite como máximo 1.000 elementos.';
+
+  @override
+  String get metadataBulkLockedFail => 'Rechazar el lote';
+
+  @override
+  String get metadataBulkLockedForce => 'Ignorar los bloqueos';
+
+  @override
+  String get metadataBulkLockedHint =>
+      'Elige \"Omitir esas pistas\" o \"Ignorar los bloqueos\" para superarlos.';
+
+  @override
+  String get metadataBulkLockedPolicy => 'Campos bloqueados';
+
+  @override
+  String get metadataBulkLockedPolicyHelp =>
+      'Qué hacer cuando un campo que este lote escribe ya está bloqueado en una pista';
+
+  @override
+  String get metadataBulkLockedSkip => 'Omitir esas pistas';
+
+  @override
+  String get metadataBulkMixedChip => 'Valores distintos';
+
+  @override
+  String get metadataBulkOff => 'No';
+
+  @override
+  String get metadataBulkOn => 'Sí';
+
+  @override
+  String get metadataBulkOpenNewAlbum => 'Abrirla';
+
+  @override
+  String get metadataBulkRegrouped =>
+      'Las pistas editadas se han movido a una nueva entrada de álbum.';
+
+  @override
+  String metadataBulkSkipped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'se han omitido $count pistas bloqueadas',
+      one: 'se ha omitido 1 pista bloqueada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String metadataBulkTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Editar $count pistas',
+      one: 'Editar 1 pista',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get metadataCreditNames => 'Nombres, separados por comas';
 
   @override
@@ -3349,6 +3425,16 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataDerivedChip => 'Derivado';
+
+  @override
+  String get metadataDiscardBody =>
+      'Esta selección tiene cambios que su barra de guardado no ha escrito; al cambiar se perderán.';
+
+  @override
+  String get metadataDiscardConfirm => 'Descartar';
+
+  @override
+  String get metadataDiscardTitle => '¿Descartar los cambios sin guardar?';
 
   @override
   String metadataEnrichApplied(String fields) {
@@ -3737,6 +3823,33 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataUntitled => 'Sin título';
 
   @override
+  String get metadataWorkbenchEditSelection => 'Editar la selección';
+
+  @override
+  String get metadataWorkbenchSelectEmptyMessage =>
+      'Marca pistas en la lista para editarlas juntas.';
+
+  @override
+  String get metadataWorkbenchSelectEmptyTitle => 'Nada seleccionado';
+
+  @override
+  String get metadataWorkbenchSelectEnter => 'Seleccionar pistas';
+
+  @override
+  String get metadataWorkbenchSelectLeave => 'Salir de la selección';
+
+  @override
+  String metadataWorkbenchSelectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count seleccionadas',
+      one: '1 seleccionada',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String metadataWriteBackFailure(String file, String reason) {
     return '$file: $reason';
   }
@@ -3853,6 +3966,51 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicAlbumReleaseTitle => 'Edición';
+
+  @override
+  String musicAlbumRewriteApply(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Reescribir $count pistas',
+      one: 'Reescribir 1 pista',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicAlbumRewriteConfirmBody =>
+      'Los campos editados se reescriben en todas las pistas y el lanzamiento se reagrupa bajo una nueva entrada de álbum. Los bloqueos de esos campos se ignoran y la reescritura los vuelve a establecer.';
+
+  @override
+  String get musicAlbumRewriteConfirmTitle => '¿Reagrupar este lanzamiento?';
+
+  @override
+  String get musicAlbumRewriteHelp =>
+      'Estos datos viven en las pistas, no en el lanzamiento. Guardar los reescribe en cada miembro y reagrupa el lanzamiento bajo una entrada nueva; esta página lo sigue hasta allí.';
+
+  @override
+  String get musicAlbumRewriteIncomplete =>
+      'No se han podido cargar todas las pistas de este lanzamiento, así que no se ha reescrito nada.';
+
+  @override
+  String get musicAlbumRewriteMoved =>
+      'El lanzamiento se ha reagrupado en una entrada nueva.';
+
+  @override
+  String get musicAlbumRewriteOverline => 'En las pistas';
+
+  @override
+  String get musicAlbumRewriteTitle => 'Álbum, artista y año';
+
+  @override
+  String musicAlbumRewriteTooLarge(int count) {
+    return 'Una reescritura admite como máximo 1.000 pistas; este lanzamiento tiene $count.';
+  }
+
+  @override
+  String get musicAlbumRewriteWriteBackHelp =>
+      'Reescribe también estas etiquetas dentro del archivo de cada pista';
 
   @override
   String get musicAlbumTitle => 'Álbum';
@@ -6214,30 +6372,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get podcastsTitle => 'Pódcast';
-
-  @override
-  String get prototypeApply => 'Aplicar la propuesta';
-
-  @override
-  String get prototypeColumnArtist => 'Artista';
-
-  @override
-  String get prototypeColumnCurrent => 'Título actual';
-
-  @override
-  String get prototypeColumnMatch => 'Coincidencia';
-
-  @override
-  String get prototypeColumnProposed => 'Título propuesto';
-
-  @override
-  String get prototypeCopyProposed => 'Copiar el título propuesto';
-
-  @override
-  String get prototypeRowActions => 'Acciones de la fila';
-
-  @override
-  String get prototypeTitle => 'Prototipo de edición';
 
   @override
   String queueAddedMany(int count) {

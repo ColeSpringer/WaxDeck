@@ -11,7 +11,7 @@ part 'review_track.g.dart';
 /// One file in a review unit with its current metadata.
 ///
 /// Properties:
-/// * [pid] - The catalog item pid; absent for staged files that have not entered the library yet. 
+/// * [pid] - The catalog item pid, type-prefixed like every pid on this API; absent for staged files that have not entered the library yet. 
 /// * [path] - The file's path (library-relative for cataloged items, staging-relative for uploads). 
 /// * [title] - Current title (tag, or cleaned filename).
 /// * [artist] - Current artist.
@@ -20,7 +20,7 @@ part 'review_track.g.dart';
 /// * [durationMs] - Audio length in milliseconds.
 @BuiltValue()
 abstract class ReviewTrack implements Built<ReviewTrack, ReviewTrackBuilder> {
-  /// The catalog item pid; absent for staged files that have not entered the library yet. 
+  /// The catalog item pid, type-prefixed like every pid on this API; absent for staged files that have not entered the library yet. 
   @BuiltValueField(wireName: r'pid')
   String? get pid;
 

@@ -8,6 +8,7 @@ import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
+import { longPressOn, typeInto, wheelIntoViewport } from '../gestures';
 
 export class Metadata extends Surface {
   /// The editor screen, whichever surface opened it.
@@ -34,5 +35,91 @@ export class Metadata extends Surface {
       .or(this.forbidden())
       .first()
       .waitFor({ timeout: T.nav });
+  }
+
+  /// One typed field on the item editor, wherever it is mounted - the
+  /// standalone screen or the workbench's pane.
+  itemField(name: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.metadataField(name)));
+  }
+
+  /// Type into one of this surface's fields; the page-holding half of
+  /// the gesture lives here so a spec never needs the raw page.
+  async type(field: Locator, text: string): Promise<void> {
+    await typeInto(this.ctx.page, field, text);
+  }
+
+  /// Wheel a control of this surface into the viewport, over the pane
+  /// (or another scroller) that owns it.
+  async intoView(target: Locator, over?: Locator): Promise<void> {
+    await wheelIntoViewport(this.ctx.page, target, { over });
+  }
+
+  /// Press-and-hold a row, which is how the workbench's multi-select
+  /// starts on touch and on canvas.
+  async hold(target: Locator): Promise<void> {
+    await longPressOn(this.ctx.page, target);
+  }
+
+  // --- the release workbench, served at /metadata/<al-...> ---------------
+
+  workbench(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.metadataWorkbench));
+  }
+
+  /// The album entity form - the workbench's own pane for the release.
+  albumEditor(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.albumEditor));
+  }
+
+  /// Cold-load the workbench on one release and wait for its list.
+  async openWorkbench(albumPid: string): Promise<void> {
+    await this.ctx.page.goto(`/metadata/${albumPid}`);
+    await this.workbench().waitFor({ timeout: T.nav });
+    await this.ctx.page
+      .locator(sem(SemanticsIds.workbenchList))
+      .waitFor({ timeout: T.fetch });
+  }
+
+  albumRow(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.workbenchAlbumRow));
+  }
+
+  trackRow(pid: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.workbenchRow(pid)));
+  }
+
+  /// The editor pane beside the list; holds the album form, one
+  /// member's editor, or the bulk form depending on the selection.
+  pane(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.workbenchPane));
+  }
+
+  selectToggle(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.workbenchSelectToggle));
+  }
+
+  bulkPane(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.workbenchBulkPane));
+  }
+
+  bulkField(name: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.workbenchBulkField(name)));
+  }
+
+  bulkSave(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.workbenchBulkSave));
+  }
+
+  rewriteField(name: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.albumRewriteField(name)));
+  }
+
+  rewriteApply(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.albumRewriteApply));
+  }
+
+  rewriteConfirm(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.albumRewriteConfirm));
   }
 }

@@ -236,11 +236,6 @@ abstract final class WaxRoute {
   static const metadataPrefix = '/metadata/';
   static String metadata(String pid) => '$metadataPrefix$pid';
 
-  /// Preserved deep link to the editing prototype. Deliberately outside
-  /// the signed-in shell: it is a self-contained rendering harness with
-  /// no session of its own, and the e2e suite opens it cold.
-  static const editingPrototype = '/prototype/editing';
-
   /// Administration: the admin console, and one location per section.
   /// Still no role redirect on these paths - a redirect would answer a
   /// pasted link by silently landing somebody somewhere else, which

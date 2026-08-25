@@ -122,6 +122,56 @@
   "@musicAlbumReleaseTitle": {
     "description": "Heading over the block naming what edition an album is: its barcode, label, catalog number."
   },
+  "musicAlbumRewriteApply": "{count, plural, =1{Rewrite 1 track} other{Rewrite {count} tracks}}",
+  "@musicAlbumRewriteApply": {
+    "description": "Button applying the staged album/artist/year values to every member.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicAlbumRewriteConfirmBody": "The edited fields are rewritten on every track, and the release regroups under a new album entry. Locks on those fields are overridden, then set again by the rewrite.",
+  "@musicAlbumRewriteConfirmBody": {
+    "description": "Body of that confirmation: the regroup and the lock behavior, both pinned by the server's own semantics."
+  },
+  "musicAlbumRewriteConfirmTitle": "Regroup this release?",
+  "@musicAlbumRewriteConfirmTitle": {
+    "description": "Title of the confirmation the rewrite asks before writing."
+  },
+  "musicAlbumRewriteHelp": "These live on the tracks rather than the release. Saving rewrites them on every member and regroups the release under a new entry; this page follows it there.",
+  "@musicAlbumRewriteHelp": {
+    "description": "Blurb under the rewrite heading, stating the regroup up front: the album pid changes, it is not renamed in place."
+  },
+  "musicAlbumRewriteIncomplete": "Could not load every track on this release, so nothing was rewritten.",
+  "@musicAlbumRewriteIncomplete": {
+    "description": "Refusal when the member list would not finish loading: rewriting only the loaded part would regroup those tracks and strand the rest, splitting the release."
+  },
+  "musicAlbumRewriteMoved": "The release regrouped onto a new entry.",
+  "@musicAlbumRewriteMoved": {
+    "description": "Message after a rewrite, shown as the workbench moves to the album the tracks landed on."
+  },
+  "musicAlbumRewriteOverline": "On the tracks",
+  "@musicAlbumRewriteOverline": {
+    "description": "Line above that heading: these fields live on the members, not the release entity."
+  },
+  "musicAlbumRewriteTitle": "Album, artist, and year",
+  "@musicAlbumRewriteTitle": {
+    "description": "Heading over the workbench section that rewrites the release-keying fields on every member track."
+  },
+  "musicAlbumRewriteTooLarge": "One rewrite takes at most 1,000 tracks; this release has {count}.",
+  "@musicAlbumRewriteTooLarge": {
+    "description": "Refusal when the release holds more members than the bulk endpoint's batch cap.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicAlbumRewriteWriteBackHelp": "Also rewrite these tags inside each track's file",
+  "@musicAlbumRewriteWriteBackHelp": {
+    "description": "Line under the rewrite section's write-tags switch."
+  },
   "musicAlbumTitle": "Album",
   "@musicAlbumTitle": {
     "description": "Title of the album editor before the album it edits has loaded."

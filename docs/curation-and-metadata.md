@@ -250,28 +250,49 @@ the source mark under it reads as the server's own composition rather
 than as a picture somebody chose - which is what it read as before the
 vocabulary had a word for it.
 
-### Editing a release
+### Editing a release: the workbench
 
-An album's own fields are edited on their own screen, reached from the
-album's overflow (administrators only, because barcodes and labels are
-shared by everyone who can see the release). It opens on the album
-itself - the cover, the title, the year, the running time, and the
-tracks a write-back would reach - because "also rewrite the matching
-tags in every track on this release" is a sentence about files nobody
-can see from the form.
+An album opens the release workbench, reached from the album's
+overflow (administrators only, because barcodes and labels are shared
+by everyone who can see the release). Where there is room it is two
+panes with a draggable seam the client remembers: the release and its
+member tracks on the left, and an editor for whatever is selected on
+the right. The album row opens the release's own form; a track row
+opens that track's full item editor - the same typed form, staged
+draft, and save bar it has at its own location; checking several
+tracks opens a bulk form over the selection. On a phone the workbench
+is the track list: a track pushes its own editor, and the album and
+bulk forms open as sheets. The list drives from the keyboard - j/k and
+the arrows move, space checks, e opens, Escape backs out -
+and never while a text field has focus.
 
-The cover sits in the same artwork grid the item editor uses: set,
-clear, the source mark, and the pin above. Below it are the release's
-own name and handle (**Sort name** and the **MusicBrainz release ID**)
-and its edition columns (barcode, label, catalog number, media,
+The album form holds the cover in the same artwork grid the item
+editor uses (set, clear, the source mark, and the pin), the release's
+own name and handle (**Sort name** and the **MusicBrainz release
+ID**), and its edition columns (barcode, label, catalog number, media,
 country), each showing where its current value came from and whether
 it is locked. Only the fields that changed are sent, so a one-word
-correction does not lock the other six.
+correction does not lock the other six. Total tracks appears among
+them as a derived number, not a field: nothing stores it - it is the
+release's membership counted - so the row shows the count, marks it
+derived, and says that editing the tracks is what changes it.
 
-Total tracks appears among them as a derived number, not a field:
-nothing stores it - it is the release's membership counted - so the
-row shows the count, marks it derived, and says that editing the
-tracks is what changes it.
+The album title, album artist, and year live on the tracks rather
+than the release, so the album form ends with a rewrite section that
+applies them to every member in one batch. Rewriting any of them
+regroups the members onto a fresh album entry rather than renaming
+the release in place - the workbench says so, asks first, and then
+follows the tracks to their new entry; the old one keeps answering
+reads, empty, until cleanup sweeps it.
+
+The bulk form works over any checked set of tracks. A field the
+selection agrees on opens on that value; one it disagrees on opens
+empty under a **Mixed** chip, and typing there sets it on every
+track. Only edited fields ride the batch, which reports what it
+edited, what it skipped for locks (a choice on the form: refuse the
+batch, skip locked tracks, or override the locks), and any files
+whose tags could not be rewritten. A bulk save locks every field it
+writes, and one batch takes at most 1,000 items - the form says both.
 
 ## The genre vocabulary
 

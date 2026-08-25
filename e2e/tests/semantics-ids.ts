@@ -330,6 +330,11 @@ export const SemanticsIds = {
   albumEditorTotalTracks: 'album-editor-total-tracks',
   albumEditorTracks: 'album-editor-tracks',
   albumIdentity: 'album-identity',
+  albumRewrite: 'album-rewrite',
+  albumRewriteApply: 'album-rewrite-apply',
+  albumRewriteConfirm: 'album-rewrite-confirm',
+  albumRewriteField: (name: string | number) => `album-rewrite-field-${name}`,
+  albumRewriteWriteBack: 'album-rewrite-writeback',
   artLock: 'art-lock',
   artSlot: (role: string | number) => `art-slot-${role}`,
   artSlotClear: (role: string | number) => `art-slot-clear-${role}`,
@@ -362,6 +367,7 @@ export const SemanticsIds = {
   metadataRematch: 'metadata-rematch',
   metadataSave: 'metadata-save',
   metadataSaveBar: 'metadata-save-bar',
+  metadataWorkbench: 'metadata-workbench',
   metadataWriteback: 'metadata-writeback',
   metadataWritebackWarning: 'metadata-writeback-warning',
   tagAdd: 'tag-add',
@@ -370,6 +376,19 @@ export const SemanticsIds = {
   tagRestore: (key: string | number) => `tag-restore-${key}`,
   tagValues: 'tag-values',
   unofficialSwitch: 'unofficial-switch',
+  workbenchAlbumRow: 'workbench-album-row',
+  workbenchBulkBar: 'workbench-bulk-bar',
+  workbenchBulkEdit: 'workbench-bulk-edit',
+  workbenchBulkField: (name: string | number) => `workbench-bulk-field-${name}`,
+  workbenchBulkLockedPolicy: 'workbench-bulk-locked-policy',
+  workbenchBulkPane: 'workbench-bulk-pane',
+  workbenchBulkSave: 'workbench-bulk-save',
+  workbenchDiscardConfirm: 'workbench-discard-confirm',
+  workbenchList: 'workbench-list',
+  workbenchPane: 'workbench-pane',
+  workbenchRow: (pid: string | number) => `workbench-row-${pid}`,
+  workbenchSelectToggle: 'workbench-select-toggle',
+  workbenchSplitter: 'workbench-splitter',
 
   // music: The music hub, its indexes, and the buckets they drill.
   albumTrackMore: (index: string | number) => `album-track-more-${index}`,
@@ -591,16 +610,6 @@ export const SemanticsIds = {
   transcriptOpen: 'transcript-open',
   unsubscribeKeepFiles: 'unsubscribe-keep-files',
   unsubscribeRemoveFiles: 'unsubscribe-remove-files',
-
-  // prototype: The editing prototype kept behind its own route for the e2e keyboard contract.
-  protoCellArtist: (index: string | number) => `proto-cell-${index}-artist`,
-  protoCellCurrent: (index: string | number) => `proto-cell-${index}-current`,
-  protoEdit: (index: string | number) => `proto-edit-${index}`,
-  protoKebab: (index: string | number) => `proto-kebab-${index}`,
-  protoMenuApply: 'proto-menu-apply',
-  protoMenuCopy: 'proto-menu-copy',
-  protoRow: (index: string | number) => `proto-row-${index}`,
-  protoTable: 'proto-table',
 
   // radio: The radio hub: the favorites dial, the station grid, and the add-station flow.
   radio: (pid: string | number) => `radio-${pid}`,
@@ -895,6 +904,7 @@ export const SemanticsIdPrefixes = {
   itemDeleteMode: 'item-delete-mode-',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
+  albumRewriteField: 'album-rewrite-field-',
   artSlot: 'art-slot-',
   artSlotClear: 'art-slot-clear-',
   artSlotDrop: 'art-slot-drop-',
@@ -906,6 +916,8 @@ export const SemanticsIdPrefixes = {
   metadataGenreRemove: 'metadata-genre-remove-',
   tagRemove: 'tag-remove-',
   tagRestore: 'tag-restore-',
+  workbenchBulkField: 'workbench-bulk-field-',
+  workbenchRow: 'workbench-row-',
 
   // music: The music hub, its indexes, and the buckets they drill.
   albumTrackMore: 'album-track-more-',
@@ -970,13 +982,6 @@ export const SemanticsIdPrefixes = {
   podcastSort: 'podcast-sort-',
   showEpisodeFilter: 'show-episode-filter-',
   transcriptCue: 'transcript-cue-',
-
-  // prototype: The editing prototype kept behind its own route for the e2e keyboard contract.
-  protoCellArtist: 'proto-cell-',
-  protoCellCurrent: 'proto-cell-',
-  protoEdit: 'proto-edit-',
-  protoKebab: 'proto-kebab-',
-  protoRow: 'proto-row-',
 
   // radio: The radio hub: the favorites dial, the station grid, and the add-station flow.
   radio: 'radio-',

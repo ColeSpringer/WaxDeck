@@ -147,18 +147,6 @@ void main() {
     expect(find.byKey(const Key('login-username')), findsOneWidget);
   });
 
-  testWidgets('the editing prototype opens without a session', (tester) async {
-    final container = _container(FakeRepository());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
-
-    container.read(routerProvider).go(WaxRoute.editingPrototype);
-    await tester.pumpAndSettle();
-
-    expect(_location(container), WaxRoute.editingPrototype);
-  });
-
   testWidgets('the player route stands on its own with nothing playing', (
     tester,
   ) async {

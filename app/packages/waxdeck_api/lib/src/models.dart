@@ -3182,6 +3182,7 @@ class BulkEditResult {
     required this.edited,
     this.skipped = const [],
     this.writeBackFailures = const [],
+    this.resultingAlbumPid,
   });
 
   /// Pids that took the edit.
@@ -3190,6 +3191,14 @@ class BulkEditResult {
   /// Pids skipped over locks.
   final List<String> skipped;
   final List<WriteBackFailure> writeBackFailures;
+
+  /// The album the edited items now sit on, reported when the edit
+  /// rewrote a release-keying field (album, album artist, year) and
+  /// every edited item landed on one album. Rewriting those regroups
+  /// the members onto a fresh pid rather than renaming the release in
+  /// place, so a caller showing the old album follows this to the new
+  /// one. Null when no keying field was edited or the items split.
+  final String? resultingAlbumPid;
 }
 
 /// Outcome of a custom tag edit.

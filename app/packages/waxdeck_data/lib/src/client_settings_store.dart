@@ -48,6 +48,11 @@ abstract final class ClientSettingKeys {
   /// re-clamped there.
   static const reviewListWidth = 'waxdeck.review.listWidth';
 
+  /// How wide the release workbench's track list is beside the form,
+  /// in whole pixels; zero means the layout's own answer. Per device,
+  /// for the same reason [reviewListWidth] is.
+  static const metadataListWidth = 'waxdeck.metadata.listWidth';
+
   /// The recent search queries, newest first, as a JSON string list.
   static const recentSearches = 'waxdeck.search.recent';
 

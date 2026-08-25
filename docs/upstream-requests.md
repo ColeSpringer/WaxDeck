@@ -21,11 +21,12 @@ note.
   a release in place (rewrite the members' keying fields and the entity's
   identity together, keeping the pid and moving curation/art), or an
   album-key recompute that reuses an existing entity row when every member
-  moves at once. Shipped workaround: none is needed yet - no client UI
-  edits a release-keying field on an album's members today (the bulk-edit
-  endpoint is the only path, admin-only and API-only), and
-  `TestBulkEditAlbumFieldsRegroupsTheRelease` pins the regroup so the
-  album editing that is coming is built to it rather than surprised by
-  it.
+  moves at once. Shipped workaround: the release workbench is built to the
+  regroup - the bulk-edit response reports the album the edited members
+  landed on (`resultingAlbumPid`), the rewrite section warns before it
+  writes, and the workbench follows the tracks to the new entry -
+  and `TestBulkEditAlbumFieldsRegroupsTheRelease` pins the behavior it is
+  built to. Entity curation, artwork and pins on the old entity are still
+  orphaned by the move, which is what rename-in-place would keep.
 
 ## WaxLabel

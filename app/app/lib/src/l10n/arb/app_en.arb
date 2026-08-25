@@ -4488,6 +4488,85 @@
       }
     }
   },
+  "metadataBulkEdited": "{count, plural, =1{Edited 1 track} other{Edited {count} tracks}}",
+  "@metadataBulkEdited": {
+    "description": "Message part after a bulk save: how many catalog rows took the edit.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "metadataBulkLeaveAsIs": "Leave as is",
+  "@metadataBulkLeaveAsIs": {
+    "description": "The default choice for a boolean field in the bulk form: the batch does not touch it."
+  },
+  "metadataBulkLockNote": "Saving locks every edited field on each selected track. One batch takes at most 1,000 items.",
+  "@metadataBulkLockNote": {
+    "description": "Caption under the bulk form stating what the endpoint always does: it locks what it writes, and it caps the batch."
+  },
+  "metadataBulkLockedFail": "Refuse the batch",
+  "@metadataBulkLockedFail": {
+    "description": "Locked-fields choice: a locked track fails the whole batch."
+  },
+  "metadataBulkLockedForce": "Override locks",
+  "@metadataBulkLockedForce": {
+    "description": "Locked-fields choice: the batch writes over existing locks."
+  },
+  "metadataBulkLockedHint": "Pick \"Skip those tracks\" or \"Override locks\" to get past them.",
+  "@metadataBulkLockedHint": {
+    "description": "Appended to the server's field-locked refusal after a bulk save: names the choice on this form that gets past the locks, which the server cannot know about."
+  },
+  "metadataBulkLockedPolicy": "Locked fields",
+  "@metadataBulkLockedPolicy": {
+    "description": "Accessible name of the choice deciding what a bulk edit does when a target field is already locked on a track."
+  },
+  "metadataBulkLockedPolicyHelp": "What to do when a field this batch writes is already locked on a track",
+  "@metadataBulkLockedPolicyHelp": {
+    "description": "Line under the locked-fields choice."
+  },
+  "metadataBulkLockedSkip": "Skip those tracks",
+  "@metadataBulkLockedSkip": {
+    "description": "Locked-fields choice: locked tracks are skipped and reported."
+  },
+  "metadataBulkMixedChip": "Mixed",
+  "@metadataBulkMixedChip": {
+    "description": "Chip on a bulk field whose value differs across the selected tracks. Typing a value there sets it on all of them."
+  },
+  "metadataBulkOff": "Off",
+  "@metadataBulkOff": {
+    "description": "Bulk choice clearing a boolean field on every selected track."
+  },
+  "metadataBulkOn": "On",
+  "@metadataBulkOn": {
+    "description": "Bulk choice setting a boolean field on every selected track."
+  },
+  "metadataBulkOpenNewAlbum": "Open it",
+  "@metadataBulkOpenNewAlbum": {
+    "description": "Action on the regroup message; opens the workbench on the album the tracks moved to."
+  },
+  "metadataBulkRegrouped": "The edited tracks moved to a new album entry.",
+  "@metadataBulkRegrouped": {
+    "description": "Message after a bulk edit rewrote a release-keying field on part of a release: those tracks now group under a different album."
+  },
+  "metadataBulkSkipped": "{count, plural, =1{skipped 1 locked track} other{skipped {count} locked tracks}}",
+  "@metadataBulkSkipped": {
+    "description": "Message part after a bulk save that skipped locked tracks; follows the edited count in one sentence.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "metadataBulkTitle": "{count, plural, =1{Edit 1 track} other{Edit {count} tracks}}",
+  "@metadataBulkTitle": {
+    "description": "Heading over the bulk form for the checked tracks.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "metadataCreditNames": "Names, comma separated",
   "@metadataCreditNames": {
     "description": "Field for the people in one credit role."
@@ -4507,6 +4586,18 @@
   "metadataDerivedChip": "Derived",
   "@metadataDerivedChip": {
     "description": "Chip on a read-only value the server computes rather than stores, such as an album's track count."
+  },
+  "metadataDiscardBody": "This selection has edits its save bar has not written; switching away drops them.",
+  "@metadataDiscardBody": {
+    "description": "Body of the confirmation the workbench asks before replacing a pane that holds unsaved edits."
+  },
+  "metadataDiscardConfirm": "Discard",
+  "@metadataDiscardConfirm": {
+    "description": "The confirming button on that dialog; Cancel keeps the pane and the typing."
+  },
+  "metadataDiscardTitle": "Discard unsaved edits?",
+  "@metadataDiscardTitle": {
+    "description": "Title of the confirmation the workbench asks before replacing a pane that holds unsaved edits."
   },
   "metadataEnrichApplied": "Applied: {fields}",
   "@metadataEnrichApplied": {
@@ -5050,6 +5141,35 @@
   "@metadataUntitled": {
     "description": "Stands in for an item's name when it has none."
   },
+  "metadataWorkbenchEditSelection": "Edit selection",
+  "@metadataWorkbenchEditSelection": {
+    "description": "Bulk-bar button opening the bulk form for the checked tracks."
+  },
+  "metadataWorkbenchSelectEmptyMessage": "Check tracks in the list to edit them together.",
+  "@metadataWorkbenchSelectEmptyMessage": {
+    "description": "Body of that empty state."
+  },
+  "metadataWorkbenchSelectEmptyTitle": "Nothing selected",
+  "@metadataWorkbenchSelectEmptyTitle": {
+    "description": "Title of the pane's empty state while selecting with nothing checked."
+  },
+  "metadataWorkbenchSelectEnter": "Select tracks",
+  "@metadataWorkbenchSelectEnter": {
+    "description": "Toolbar button entering multi-select on the workbench's track list."
+  },
+  "metadataWorkbenchSelectLeave": "Leave selection",
+  "@metadataWorkbenchSelectLeave": {
+    "description": "The same button while selecting; leaves and clears the checks."
+  },
+  "metadataWorkbenchSelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@metadataWorkbenchSelectedCount": {
+    "description": "Count on the bulk bar while tracks are checked.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "metadataWriteBackFailure": "{file}: {reason}",
   "@metadataWriteBackFailure": {
     "description": "One file a write-back could not reach, and why. Both halves come from the server and are not translated.",
@@ -5196,6 +5316,56 @@
   "musicAlbumReleaseTitle": "Release",
   "@musicAlbumReleaseTitle": {
     "description": "Heading over the block naming what edition an album is: its barcode, label, catalog number."
+  },
+  "musicAlbumRewriteApply": "{count, plural, =1{Rewrite 1 track} other{Rewrite {count} tracks}}",
+  "@musicAlbumRewriteApply": {
+    "description": "Button applying the staged album/artist/year values to every member.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicAlbumRewriteConfirmBody": "The edited fields are rewritten on every track, and the release regroups under a new album entry. Locks on those fields are overridden, then set again by the rewrite.",
+  "@musicAlbumRewriteConfirmBody": {
+    "description": "Body of that confirmation: the regroup and the lock behavior, both pinned by the server's own semantics."
+  },
+  "musicAlbumRewriteConfirmTitle": "Regroup this release?",
+  "@musicAlbumRewriteConfirmTitle": {
+    "description": "Title of the confirmation the rewrite asks before writing."
+  },
+  "musicAlbumRewriteHelp": "These live on the tracks rather than the release. Saving rewrites them on every member and regroups the release under a new entry; this page follows it there.",
+  "@musicAlbumRewriteHelp": {
+    "description": "Blurb under the rewrite heading, stating the regroup up front: the album pid changes, it is not renamed in place."
+  },
+  "musicAlbumRewriteIncomplete": "Could not load every track on this release, so nothing was rewritten.",
+  "@musicAlbumRewriteIncomplete": {
+    "description": "Refusal when the member list would not finish loading: rewriting only the loaded part would regroup those tracks and strand the rest, splitting the release."
+  },
+  "musicAlbumRewriteMoved": "The release regrouped onto a new entry.",
+  "@musicAlbumRewriteMoved": {
+    "description": "Message after a rewrite, shown as the workbench moves to the album the tracks landed on."
+  },
+  "musicAlbumRewriteOverline": "On the tracks",
+  "@musicAlbumRewriteOverline": {
+    "description": "Line above that heading: these fields live on the members, not the release entity."
+  },
+  "musicAlbumRewriteTitle": "Album, artist, and year",
+  "@musicAlbumRewriteTitle": {
+    "description": "Heading over the workbench section that rewrites the release-keying fields on every member track."
+  },
+  "musicAlbumRewriteTooLarge": "One rewrite takes at most 1,000 tracks; this release has {count}.",
+  "@musicAlbumRewriteTooLarge": {
+    "description": "Refusal when the release holds more members than the bulk endpoint's batch cap.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicAlbumRewriteWriteBackHelp": "Also rewrite these tags inside each track's file",
+  "@musicAlbumRewriteWriteBackHelp": {
+    "description": "Line under the rewrite section's write-tags switch."
   },
   "musicAlbumTitle": "Album",
   "@musicAlbumTitle": {
@@ -8223,38 +8393,6 @@
   "podcastsTitle": "Podcasts",
   "@podcastsTitle": {
     "description": "The podcast domain's front door, named on its own title."
-  },
-  "prototypeApply": "Apply proposal",
-  "@prototypeApply": {
-    "description": "Context-menu row on the editing prototype."
-  },
-  "prototypeColumnArtist": "Artist",
-  "@prototypeColumnArtist": {
-    "description": "Column heading on the editing prototype."
-  },
-  "prototypeColumnCurrent": "Current title",
-  "@prototypeColumnCurrent": {
-    "description": "Column heading on the editing prototype."
-  },
-  "prototypeColumnMatch": "Match",
-  "@prototypeColumnMatch": {
-    "description": "Column heading on the editing prototype, over a similarity percentage."
-  },
-  "prototypeColumnProposed": "Proposed title",
-  "@prototypeColumnProposed": {
-    "description": "Column heading on the editing prototype."
-  },
-  "prototypeCopyProposed": "Copy proposed title",
-  "@prototypeCopyProposed": {
-    "description": "Context-menu row on the editing prototype."
-  },
-  "prototypeRowActions": "Row actions",
-  "@prototypeRowActions": {
-    "description": "Tooltip of the per-row menu on the editing prototype."
-  },
-  "prototypeTitle": "Editing prototype",
-  "@prototypeTitle": {
-    "description": "Title of the evidence screen that exercises text selection, context menus and live fields. Reachable at a fixed location; not a product surface."
   },
   "queueAddedMany": "Added {count} tracks to the queue",
   "@queueAddedMany": {

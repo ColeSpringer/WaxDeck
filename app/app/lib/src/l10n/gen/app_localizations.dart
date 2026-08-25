@@ -5391,6 +5391,102 @@ abstract class AppLocalizations {
   /// **'Artwork · {source}'**
   String metadataArtworkSource(String source);
 
+  /// Message part after a bulk save: how many catalog rows took the edit.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Edited 1 track} other{Edited {count} tracks}}'**
+  String metadataBulkEdited(int count);
+
+  /// The default choice for a boolean field in the bulk form: the batch does not touch it.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave as is'**
+  String get metadataBulkLeaveAsIs;
+
+  /// Caption under the bulk form stating what the endpoint always does: it locks what it writes, and it caps the batch.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving locks every edited field on each selected track. One batch takes at most 1,000 items.'**
+  String get metadataBulkLockNote;
+
+  /// Locked-fields choice: a locked track fails the whole batch.
+  ///
+  /// In en, this message translates to:
+  /// **'Refuse the batch'**
+  String get metadataBulkLockedFail;
+
+  /// Locked-fields choice: the batch writes over existing locks.
+  ///
+  /// In en, this message translates to:
+  /// **'Override locks'**
+  String get metadataBulkLockedForce;
+
+  /// Appended to the server's field-locked refusal after a bulk save: names the choice on this form that gets past the locks, which the server cannot know about.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick \"Skip those tracks\" or \"Override locks\" to get past them.'**
+  String get metadataBulkLockedHint;
+
+  /// Accessible name of the choice deciding what a bulk edit does when a target field is already locked on a track.
+  ///
+  /// In en, this message translates to:
+  /// **'Locked fields'**
+  String get metadataBulkLockedPolicy;
+
+  /// Line under the locked-fields choice.
+  ///
+  /// In en, this message translates to:
+  /// **'What to do when a field this batch writes is already locked on a track'**
+  String get metadataBulkLockedPolicyHelp;
+
+  /// Locked-fields choice: locked tracks are skipped and reported.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip those tracks'**
+  String get metadataBulkLockedSkip;
+
+  /// Chip on a bulk field whose value differs across the selected tracks. Typing a value there sets it on all of them.
+  ///
+  /// In en, this message translates to:
+  /// **'Mixed'**
+  String get metadataBulkMixedChip;
+
+  /// Bulk choice clearing a boolean field on every selected track.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get metadataBulkOff;
+
+  /// Bulk choice setting a boolean field on every selected track.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get metadataBulkOn;
+
+  /// Action on the regroup message; opens the workbench on the album the tracks moved to.
+  ///
+  /// In en, this message translates to:
+  /// **'Open it'**
+  String get metadataBulkOpenNewAlbum;
+
+  /// Message after a bulk edit rewrote a release-keying field on part of a release: those tracks now group under a different album.
+  ///
+  /// In en, this message translates to:
+  /// **'The edited tracks moved to a new album entry.'**
+  String get metadataBulkRegrouped;
+
+  /// Message part after a bulk save that skipped locked tracks; follows the edited count in one sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{skipped 1 locked track} other{skipped {count} locked tracks}}'**
+  String metadataBulkSkipped(int count);
+
+  /// Heading over the bulk form for the checked tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Edit 1 track} other{Edit {count} tracks}}'**
+  String metadataBulkTitle(int count);
+
   /// Field for the people in one credit role.
   ///
   /// In en, this message translates to:
@@ -5420,6 +5516,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Derived'**
   String get metadataDerivedChip;
+
+  /// Body of the confirmation the workbench asks before replacing a pane that holds unsaved edits.
+  ///
+  /// In en, this message translates to:
+  /// **'This selection has edits its save bar has not written; switching away drops them.'**
+  String get metadataDiscardBody;
+
+  /// The confirming button on that dialog; Cancel keeps the pane and the typing.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get metadataDiscardConfirm;
+
+  /// Title of the confirmation the workbench asks before replacing a pane that holds unsaved edits.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard unsaved edits?'**
+  String get metadataDiscardTitle;
 
   /// Half of the message after fetching metadata, listing what was taken. {fields} is a comma-separated run of field names from the server.
   ///
@@ -6081,6 +6195,42 @@ abstract class AppLocalizations {
   /// **'Untitled'**
   String get metadataUntitled;
 
+  /// Bulk-bar button opening the bulk form for the checked tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit selection'**
+  String get metadataWorkbenchEditSelection;
+
+  /// Body of that empty state.
+  ///
+  /// In en, this message translates to:
+  /// **'Check tracks in the list to edit them together.'**
+  String get metadataWorkbenchSelectEmptyMessage;
+
+  /// Title of the pane's empty state while selecting with nothing checked.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing selected'**
+  String get metadataWorkbenchSelectEmptyTitle;
+
+  /// Toolbar button entering multi-select on the workbench's track list.
+  ///
+  /// In en, this message translates to:
+  /// **'Select tracks'**
+  String get metadataWorkbenchSelectEnter;
+
+  /// The same button while selecting; leaves and clears the checks.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave selection'**
+  String get metadataWorkbenchSelectLeave;
+
+  /// Count on the bulk bar while tracks are checked.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 selected} other{{count} selected}}'**
+  String metadataWorkbenchSelectedCount(int count);
+
   /// One file a write-back could not reach, and why. Both halves come from the server and are not translated.
   ///
   /// In en, this message translates to:
@@ -6254,6 +6404,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Release'**
   String get musicAlbumReleaseTitle;
+
+  /// Button applying the staged album/artist/year values to every member.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Rewrite 1 track} other{Rewrite {count} tracks}}'**
+  String musicAlbumRewriteApply(int count);
+
+  /// Body of that confirmation: the regroup and the lock behavior, both pinned by the server's own semantics.
+  ///
+  /// In en, this message translates to:
+  /// **'The edited fields are rewritten on every track, and the release regroups under a new album entry. Locks on those fields are overridden, then set again by the rewrite.'**
+  String get musicAlbumRewriteConfirmBody;
+
+  /// Title of the confirmation the rewrite asks before writing.
+  ///
+  /// In en, this message translates to:
+  /// **'Regroup this release?'**
+  String get musicAlbumRewriteConfirmTitle;
+
+  /// Blurb under the rewrite heading, stating the regroup up front: the album pid changes, it is not renamed in place.
+  ///
+  /// In en, this message translates to:
+  /// **'These live on the tracks rather than the release. Saving rewrites them on every member and regroups the release under a new entry; this page follows it there.'**
+  String get musicAlbumRewriteHelp;
+
+  /// Refusal when the member list would not finish loading: rewriting only the loaded part would regroup those tracks and strand the rest, splitting the release.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load every track on this release, so nothing was rewritten.'**
+  String get musicAlbumRewriteIncomplete;
+
+  /// Message after a rewrite, shown as the workbench moves to the album the tracks landed on.
+  ///
+  /// In en, this message translates to:
+  /// **'The release regrouped onto a new entry.'**
+  String get musicAlbumRewriteMoved;
+
+  /// Line above that heading: these fields live on the members, not the release entity.
+  ///
+  /// In en, this message translates to:
+  /// **'On the tracks'**
+  String get musicAlbumRewriteOverline;
+
+  /// Heading over the workbench section that rewrites the release-keying fields on every member track.
+  ///
+  /// In en, this message translates to:
+  /// **'Album, artist, and year'**
+  String get musicAlbumRewriteTitle;
+
+  /// Refusal when the release holds more members than the bulk endpoint's batch cap.
+  ///
+  /// In en, this message translates to:
+  /// **'One rewrite takes at most 1,000 tracks; this release has {count}.'**
+  String musicAlbumRewriteTooLarge(int count);
+
+  /// Line under the rewrite section's write-tags switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Also rewrite these tags inside each track\'s file'**
+  String get musicAlbumRewriteWriteBackHelp;
 
   /// Title of the album editor before the album it edits has loaded.
   ///
@@ -9667,54 +9877,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Podcasts'**
   String get podcastsTitle;
-
-  /// Context-menu row on the editing prototype.
-  ///
-  /// In en, this message translates to:
-  /// **'Apply proposal'**
-  String get prototypeApply;
-
-  /// Column heading on the editing prototype.
-  ///
-  /// In en, this message translates to:
-  /// **'Artist'**
-  String get prototypeColumnArtist;
-
-  /// Column heading on the editing prototype.
-  ///
-  /// In en, this message translates to:
-  /// **'Current title'**
-  String get prototypeColumnCurrent;
-
-  /// Column heading on the editing prototype, over a similarity percentage.
-  ///
-  /// In en, this message translates to:
-  /// **'Match'**
-  String get prototypeColumnMatch;
-
-  /// Column heading on the editing prototype.
-  ///
-  /// In en, this message translates to:
-  /// **'Proposed title'**
-  String get prototypeColumnProposed;
-
-  /// Context-menu row on the editing prototype.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy proposed title'**
-  String get prototypeCopyProposed;
-
-  /// Tooltip of the per-row menu on the editing prototype.
-  ///
-  /// In en, this message translates to:
-  /// **'Row actions'**
-  String get prototypeRowActions;
-
-  /// Title of the evidence screen that exercises text selection, context menus and live fields. Reachable at a fixed location; not a product surface.
-  ///
-  /// In en, this message translates to:
-  /// **'Editing prototype'**
-  String get prototypeTitle;
 
   /// Message after several tracks were dropped onto the queue at once. Never drawn for one, which names the track instead.
   ///

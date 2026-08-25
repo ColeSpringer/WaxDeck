@@ -166,6 +166,15 @@ func TestLooseAlbumMatchesAndAutoApplies(t *testing.T) {
 	if len(entry.Candidates) == 0 || len(entry.Candidates[0].Pairings) != 3 {
 		t.Fatalf("candidate evidence missing: %+v", entry.Candidates)
 	}
+	// The unit's tracks are cataloged items, and their pids carry the
+	// item prefix like every pid on this API. The stored payload keeps
+	// them bare for its internal consumers; served that way, the entry's
+	// own edit door pushed a location nothing could resolve.
+	for _, tr := range entry.Tracks {
+		if tr.Pid == nil || !strings.HasPrefix(*tr.Pid, "tr-") {
+			t.Fatalf("review track pid = %v, want tr- prefixed", tr.Pid)
+		}
+	}
 
 	// The catalog now carries the corrected fields.
 	assertApplied := func() {

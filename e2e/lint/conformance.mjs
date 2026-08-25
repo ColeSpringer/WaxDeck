@@ -40,6 +40,7 @@ const ADMIN_SHAPES = [
   'admin-readonly',
   'artwork',
   'driver-smoke',
+  'metadata-workbench',
   'notifications',
   'review-queue',
   'signup-ui',
@@ -49,8 +50,8 @@ const ADMIN_SHAPES = [
 // Each exemption states its reason, so that the set is auditable and
 // nothing is quietly unaccounted for.
 //
-// The four spec exemptions are the four files that ask for `rawPage` by
-// name. That is the whole set, and it is meant to stay that way: a
+// The three spec exemptions are the three files that ask for `rawPage`
+// by name. That is the whole set, and it is meant to stay that way: a
 // migrated spec drives the app through the driver, and a file that needs
 // the real `Page` is one whose subject is not the app - somebody else's
 // HTML form, the canvas itself, the accessibility tree the driver is
@@ -85,11 +86,6 @@ const EXEMPT = [
     'tests/desktop-loopback.spec.ts',
     ['numeric-timeout', 'api-path', 'raw-sleep'],
     "drives the test IdP's plain HTML form and a child probe's stdout, not the app",
-  ],
-  [
-    'tests/editing-prototype.spec.ts',
-    ['force-click', 'numeric-timeout'],
-    'canvas go/no-go probes: raw gestures are the subject',
   ],
 ];
 

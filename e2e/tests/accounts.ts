@@ -110,6 +110,9 @@ export const accountShapes: Record<string, AccountShape> = {
   // The metadata editor is administrators and the uploader; the cover
   // this sets belongs to a scanned track nobody uploaded.
   artwork: { role: 'admin' },
+  // The release workbench is an administrator surface: entity edits
+  // and the bulk edit are both admin endpoints.
+  'metadata-workbench': { role: 'admin' },
 };
 
 /// The bootstrap administrator's token. The first caller opens the

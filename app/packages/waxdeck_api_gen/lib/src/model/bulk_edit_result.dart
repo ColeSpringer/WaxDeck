@@ -16,6 +16,7 @@ part 'bulk_edit_result.g.dart';
 /// * [edited] - Items whose catalog rows updated.
 /// * [skipped] - Items skipped for locks.
 /// * [writeBackFailures] - Files whose tags could not be updated.
+/// * [resultingAlbumPid] - The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. Rewriting those fields regroups the members onto a fresh album pid instead of renaming the release in place, so a caller showing the old album follows this to the new one. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. 
 @BuiltValue()
 abstract class BulkEditResult implements Built<BulkEditResult, BulkEditResultBuilder> {
   /// Items whose catalog rows updated.
@@ -29,6 +30,10 @@ abstract class BulkEditResult implements Built<BulkEditResult, BulkEditResultBui
   /// Files whose tags could not be updated.
   @BuiltValueField(wireName: r'writeBackFailures')
   BuiltList<WriteBackFailure>? get writeBackFailures;
+
+  /// The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. Rewriting those fields regroups the members onto a fresh album pid instead of renaming the release in place, so a caller showing the old album follows this to the new one. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. 
+  @BuiltValueField(wireName: r'resultingAlbumPid')
+  String? get resultingAlbumPid;
 
   BulkEditResult._();
 
@@ -68,6 +73,13 @@ class _$BulkEditResultSerializer implements PrimitiveSerializer<BulkEditResult> 
       yield serializers.serialize(
         object.writeBackFailures,
         specifiedType: const FullType(BuiltList, [FullType(WriteBackFailure)]),
+      );
+    }
+    if (object.resultingAlbumPid != null) {
+      yield r'resultingAlbumPid';
+      yield serializers.serialize(
+        object.resultingAlbumPid,
+        specifiedType: const FullType(String),
       );
     }
   }
@@ -113,6 +125,13 @@ class _$BulkEditResultSerializer implements PrimitiveSerializer<BulkEditResult> 
             specifiedType: const FullType(BuiltList, [FullType(WriteBackFailure)]),
           ) as BuiltList<WriteBackFailure>;
           result.writeBackFailures.replace(valueDes);
+          break;
+        case r'resultingAlbumPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.resultingAlbumPid = valueDes;
           break;
         default:
           unhandled.add(key);

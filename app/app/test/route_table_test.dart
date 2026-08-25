@@ -28,6 +28,7 @@ import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/music/music_hub_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
+import 'package:waxdeck/src/metadata/release_workbench.dart';
 import 'package:waxdeck/src/notifications/notifications_screen.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/player/car_mode_screen.dart';
@@ -163,6 +164,9 @@ final _locations = <String, Type>{
   // is room for one and the page itself where there is not.
   WaxRoute.reviewEntry('re-1'): ReviewSurface,
   WaxRoute.metadata('tr-1'): MetadataScreen,
+  // The same location, branched by the pid: an album opens the release
+  // workbench rather than the item editor.
+  WaxRoute.metadata('al-1'): ReleaseWorkbench,
   // The admin console. Every section is a location a stranger can open,
   // which is what makes "it is under Backups" a link rather than a set
   // of directions; the console frame wraps them all.
@@ -302,6 +306,23 @@ void main() {
         reason: '${entry.key} should redirect',
       );
       expect(find.byType(ReviewSurface), findsOneWidget);
+    }
+  });
+
+  testWidgets('a pid the editor location cannot edit lands on not-found', (
+    tester,
+  ) async {
+    // An artist or release-group pid used to fall into the item editor
+    // and fail its read, which read as a broken editor rather than a
+    // wrong link.
+    final router = await _pumpApp(tester);
+    for (final pid in <String>['ar-1', 'rg-1', 'pl-1']) {
+      router.go(WaxRoute.metadata(pid));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MetadataScreen), findsNothing, reason: pid);
+      expect(find.byType(ReleaseWorkbench), findsNothing, reason: pid);
+      expect(find.text('Not found'), findsOneWidget, reason: pid);
     }
   });
 

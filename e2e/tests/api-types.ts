@@ -1603,7 +1603,7 @@ export interface paths {
         put?: never;
         /**
          * Edit fields on many items
-         * @description Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). `skipLocked` skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with `field-locked`. Write-back failures are reported per item and never undo the catalog batch.
+         * @description Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). `skipLocked` skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with `field-locked`. Write-back failures are reported per item and never undo the catalog batch. Every edited field is locked on every edited item, so a repeat edit of the same field needs `force` or `skipLocked`. Editing a release-keying field (`album`, `album_artist`, `year`) regroups the edited tracks onto a fresh album entity rather than renaming the release in place; `resultingAlbumPid` reports where they landed.
          */
         post: operations["bulkEditMetadata"];
         delete?: never;
@@ -6699,6 +6699,8 @@ export interface components {
             skipped: string[];
             /** @description Files whose tags could not be updated. */
             writeBackFailures?: components["schemas"]["WriteBackFailure"][];
+            /** @description The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. Rewriting those fields regroups the members onto a fresh album pid instead of renaming the release in place, so a caller showing the old album follows this to the new one. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. */
+            resultingAlbumPid?: string;
         };
         /** @description Replacement people for one credit role. */
         CreditsEdit: {
@@ -8598,7 +8600,7 @@ export interface components {
         };
         /** @description One file in a review unit with its current metadata. */
         ReviewTrack: {
-            /** @description The catalog item pid; absent for staged files that have not entered the library yet. */
+            /** @description The catalog item pid, type-prefixed like every pid on this API; absent for staged files that have not entered the library yet. */
             pid?: string;
             /** @description The file's path (library-relative for cataloged items, staging-relative for uploads). */
             path: string;

@@ -72,6 +72,11 @@ type BulkEditOutcomeDTO struct {
 	Edited   []string
 	Skipped  []string
 	Failures []WriteBackFailureDTO
+
+	// ResultingAlbumPID is where the edited items' release landed when
+	// the edit rewrote a release-keying field and every edited item now
+	// sits on one album; empty otherwise.
+	ResultingAlbumPID string
 }
 
 // TagEditOutcomeDTO reports a custom-tag edit.
@@ -498,7 +503,55 @@ func (l *Library) BulkEditMetadata(ctx context.Context, uc *UserCtx, apiPIDs []s
 	for _, wbe := range res.WriteBackErrors {
 		out.Failures = append(out.Failures, writeBackFailures(wbe)...)
 	}
+	out.ResultingAlbumPID = l.resultingAlbum(ctx, fields, res.Edited)
 	return out, nil
+}
+
+// resultingAlbum reports the one album the edited items landed on after
+// an edit that rewrote a release-keying field. WaxBin re-resolves
+// entities inside the edit transaction and the album key is built from
+// the normalized album/album-artist names, the year, and the folder, so
+// rewriting any of the three moves the members onto a fresh al- pid
+// rather than renaming the release in place
+// (TestBulkEditAlbumFieldsRegroupsTheRelease pins this); the caller who
+// asked for the rename needs to know where its tracks went. Empty when
+// no keying field was edited, when nothing was edited, or when the
+// edited items split across releases (folder is part of the key, so a
+// batch spanning directories can).
+func (l *Library) resultingAlbum(ctx context.Context, fields map[string]string, edited []model.PID) string {
+	keyed := false
+	for _, field := range []string{"album", "album_artist", "year"} {
+		if _, ok := fields[field]; ok {
+			keyed = true
+			break
+		}
+	}
+	if !keyed || len(edited) == 0 {
+		return ""
+	}
+	// One batch read, not a point read per item: this runs on the
+	// request path after the edit already read every item once.
+	views, err := l.lib.GetMany(ctx, edited)
+	if err != nil || len(views) != len(edited) {
+		// Absent reads as "no regroup" to the caller, so a failed
+		// resolve is at least on record.
+		l.log.Warn("bulk edit could not resolve the resulting album", "err", err)
+		return ""
+	}
+	album := model.PID("")
+	for i, it := range views {
+		if it.AlbumPID == "" {
+			return ""
+		}
+		if i == 0 {
+			album = it.AlbumPID
+			continue
+		}
+		if it.AlbumPID != album {
+			return ""
+		}
+	}
+	return entityAPIPID(PrefixAlbum, album)
 }
 
 // --- credits ----------------------------------------------------------------------
