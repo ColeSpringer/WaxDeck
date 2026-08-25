@@ -629,7 +629,23 @@
   },
   "adminLibraryRescan": "Rescan libraries",
   "@adminLibraryRescan": {
-    "description": "Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural."
+    "description": "Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural. Also titles the confirm dialog the button opens."
+  },
+  "adminLibraryRescanBody": "Scans every library root, not just this one. Files that haven't changed are skipped.",
+  "@adminLibraryRescanBody": {
+    "description": "Body of the rescan confirm dialog, honest that the button on one row scans everything."
+  },
+  "adminLibraryRescanForce": "Re-read unchanged files",
+  "@adminLibraryRescanForce": {
+    "description": "Label of the force switch in the rescan confirm dialog."
+  },
+  "adminLibraryRescanForceHelp": "The repair pass: every file is read again even where nothing changed, which takes much longer. Edits you made are kept.",
+  "@adminLibraryRescanForceHelp": {
+    "description": "Line under the force switch. Names the cost and that curated fields survive."
+  },
+  "adminLibraryRescanStart": "Rescan",
+  "@adminLibraryRescanStart": {
+    "description": "Confirm button of the rescan dialog."
   },
   "adminLibraryScanning": "Scanning every library root",
   "@adminLibraryScanning": {

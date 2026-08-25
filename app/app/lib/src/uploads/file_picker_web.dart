@@ -15,7 +15,7 @@ Future<bool> droppedPathIsDirectory(String path) async => false;
 /// paths; nothing to expand here.
 Future<FolderPick> expandDroppedDirectory(
   String path,
-  Set<String> extensions,
+  UploadFormatSets formats,
 ) async => const FolderPick();
 
 /// Converts one picker or drop XFile: a lazy browser-file reference
@@ -34,8 +34,8 @@ Future<PickedAudioFile> pickedFromXFile(
 }
 
 class _WebFilePickerPort implements FilePickerPort {
-  static XTypeGroup _audioGroup(String label) =>
-      XTypeGroup(label: label, extensions: kAcceptedAudioExtensions.toList());
+  static XTypeGroup _audioGroup(String label, Set<String> accepted) =>
+      XTypeGroup(label: label, extensions: accepted.toList());
 
   @override
   bool get canPickFolders => true;
@@ -47,16 +47,18 @@ class _WebFilePickerPort implements FilePickerPort {
   Future<List<PickedAudioFile>> pickAudioFiles({
     required String audioLabel,
     required String anyLabel,
+    required UploadFormatSets formats,
   }) async {
     final files = await openFiles(
-      acceptedTypeGroups: [_audioGroup(audioLabel)],
+      acceptedTypeGroups: [_audioGroup(audioLabel, formats.accepted)],
     );
     return [for (final f in files) await pickedFromXFile(f)];
   }
 
   @override
-  Future<FolderPick> pickAudioFolder() async =>
-      pickedFromDirectory(await _pickDirectory(), kAcceptedAudioExtensions);
+  Future<FolderPick> pickAudioFolder({
+    required UploadFormatSets formats,
+  }) async => pickedFromDirectory(await _pickDirectory(), formats);
 
   @override
   Future<PickedAudioFile?> pickFile({
@@ -74,30 +76,25 @@ class _WebFilePickerPort implements FilePickerPort {
   }
 }
 
-/// The folder pick's conversion step: files whose extension is in
-/// [extensions], each a lazy window over its browser file, ordered the
-/// way the desktop walk orders what it lists - plus a count of what
-/// the filter dropped, DRM apart.
+/// The folder pick's conversion step: files [formats] accepts, each a
+/// lazy window over its browser file, ordered the way the desktop walk
+/// orders what it lists - plus a count of what the filter dropped, DRM
+/// apart.
 ///
 /// Split out from the dialog because only the browser can mint a real
 /// `webkitRelativePath`, so this is the seam a test drives.
 FolderPick pickedFromDirectory(
   List<DirectoryEntry> entries,
-  Set<String> extensions,
+  UploadFormatSets formats,
 ) {
-  final out = <PickedAudioFile>[];
-  var skippedUnsupported = 0;
-  var skippedDrm = 0;
+  final builder = FolderPickBuilder(formats);
   for (final entry in entries) {
     final file = entry.file;
     // A directory pick cannot be filtered by the dialog - `accept` is
     // ignored once `webkitdirectory` is set - so the tree is filtered
     // here, the way the desktop walk filters what it lists.
-    if (!hasAcceptedExtension(file.name, extensions)) {
-      hasRejectedExtension(file.name) ? skippedDrm++ : skippedUnsupported++;
-      continue;
-    }
-    out.add(
+    if (!builder.keep(file.name)) continue;
+    builder.files.add(
       PickedAudioFile(
         name: file.name,
         size: file.size,
@@ -106,17 +103,7 @@ FolderPick pickedFromDirectory(
       ),
     );
   }
-  // The browser's own order is unspecified; a stable one keeps
-  // transfers and tests deterministic, as on desktop.
-  out.sort((a, b) {
-    final byDir = a.relativeDir.compareTo(b.relativeDir);
-    return byDir != 0 ? byDir : a.name.compareTo(b.name);
-  });
-  return FolderPick(
-    files: out,
-    skippedUnsupported: skippedUnsupported,
-    skippedDrm: skippedDrm,
-  );
+  return builder.build();
 }
 
 /// One file of a folder pick: the browser's handle and the path it was

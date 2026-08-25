@@ -24,6 +24,7 @@ import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import '../uploads/add_to_library.dart';
 import '../uploads/audio_drop_area.dart';
+import '../uploads/uploads_controller.dart';
 import 'home_shelves.dart';
 import 'item_shelf.dart';
 import 'mix_shelf.dart';
@@ -54,6 +55,7 @@ class HomeScreen extends ConsumerWidget {
 
     return AudioDropArea(
       enabled: canAdd,
+      formats: dropFormats(ref),
       hint: l10n.uploadsDropHint,
       onDropped: (files) => uploadPickedFiles(context, ref, files),
       onSkipped: ({required unsupported, required drm, required nothingKept}) =>

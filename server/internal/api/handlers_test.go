@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -153,6 +154,17 @@ func TestHealth(t *testing.T) {
 	h := decode[Health](t, resp)
 	if h.Status != "ok" || h.Version != "test" || h.ApiVersion != 1 {
 		t.Fatalf("health = %+v", h)
+	}
+	// The effective upload-format sets ride the payload so pickers can
+	// filter against what this server takes rather than a mirror.
+	if h.UploadFormats == nil || !slices.Contains(*h.UploadFormats, "flac") {
+		t.Fatalf("uploadFormats = %v, want the default set", h.UploadFormats)
+	}
+	if !slices.IsSorted(*h.UploadFormats) {
+		t.Fatalf("uploadFormats not sorted: %v", *h.UploadFormats)
+	}
+	if h.RejectedFormats == nil || !slices.Equal(*h.RejectedFormats, []string{"aax", "aaxc"}) {
+		t.Fatalf("rejectedFormats = %v, want [aax aaxc]", h.RejectedFormats)
 	}
 }
 

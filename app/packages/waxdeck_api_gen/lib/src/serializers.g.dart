@@ -263,6 +263,7 @@ Serializers _$serializers =
           ..add(RejectedListen.serializer)
           ..add(ReleaseStatusEdit.serializer)
           ..add(RematchResult.serializer)
+          ..add(RescanOptions.serializer)
           ..add(ResolveRungCounts.serializer)
           ..add(RestorePlan.serializer)
           ..add(ReviewBulkDecision.serializer)
@@ -906,6 +907,14 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

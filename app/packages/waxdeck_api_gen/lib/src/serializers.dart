@@ -248,6 +248,7 @@ import 'package:waxdeck_api_gen/src/model/rejected_embedding.dart';
 import 'package:waxdeck_api_gen/src/model/rejected_listen.dart';
 import 'package:waxdeck_api_gen/src/model/release_status_edit.dart';
 import 'package:waxdeck_api_gen/src/model/rematch_result.dart';
+import 'package:waxdeck_api_gen/src/model/rescan_options.dart';
 import 'package:waxdeck_api_gen/src/model/resolve_rung_counts.dart';
 import 'package:waxdeck_api_gen/src/model/restore_plan.dart';
 import 'package:waxdeck_api_gen/src/model/review_bulk_decision.dart';
@@ -603,6 +604,7 @@ part 'serializers.g.dart';
   RejectedListen,
   ReleaseStatusEdit,
   RematchResult,
+  RescanOptions,
   ResolveRungCounts,
   RestorePlan,
   ReviewBulkDecision,

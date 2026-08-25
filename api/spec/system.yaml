@@ -36,3 +36,28 @@ components:
           type: integer
           description: Major API version served under `/api/v1`.
           example: 1
+        uploadFormats:
+          type: array
+          description: >
+            File extensions uploads accept (lowercase, no dot) - the
+            effective set, so an operator's `WAXDECK_UPLOAD_FORMATS`
+            replacement is what appears here, with `rejectedFormats`
+            subtracted (the deny-list wins at the gate whatever the
+            operator listed). Clients filter pickers and drop zones
+            against it; the format check at upload-session create
+            remains the authoritative gate. Absent on servers older
+            than the field.
+          items:
+            type: string
+          example: [flac, mp3, m4a]
+        rejectedFormats:
+          type: array
+          description: >
+            File extensions refused outright whatever `uploadFormats`
+            says (DRM containers, encrypted by construction). Clients
+            use it to tell "can never play" apart from "not in the
+            accepted set" when reporting what a filter dropped. Absent
+            on servers older than the field.
+          items:
+            type: string
+          example: [aax, aaxc]

@@ -30,7 +30,7 @@ void main() {
         file('loose.mp3'),
       ];
 
-      final drop = await normalizeDrop(items, kAcceptedAudioExtensions);
+      final drop = await normalizeDrop(items, const UploadFormatSets());
       final picked = drop.files;
       expect(picked, hasLength(3));
       final byName = {for (final p in picked) p.name: p};
@@ -58,7 +58,7 @@ void main() {
     // Linux and Windows deliver a dropped folder as a plain path item.
     final drop = await normalizeDrop([
       DropItemFile(root.path),
-    ], kAcceptedAudioExtensions);
+    ], const UploadFormatSets());
     final picked = drop.files;
     expect(picked, hasLength(2));
     expect(drop.skippedUnsupported, 1, reason: 'notes.txt was counted');
@@ -82,7 +82,7 @@ void main() {
       data('drop.pdf'),
       data('extensionless'),
       data('book.aax'),
-    ], kAcceptedAudioExtensions);
+    ], const UploadFormatSets());
     expect(drop.files.map((p) => p.name), ['keep.OPUS']);
     // The Audible file counts apart: its report is a refusal with a
     // reason, not a filter.
@@ -97,10 +97,10 @@ void main() {
       length: 2,
       path: '/drop-fake/$name',
     );
-    final drop = await normalizeDrop(
-      [data('backup.zip'), data('song.mp3')],
-      {'zip'},
-    );
+    final drop = await normalizeDrop([
+      data('backup.zip'),
+      data('song.mp3'),
+    ], const UploadFormatSets.only({'zip'}));
     expect(drop.files.map((p) => p.name), ['backup.zip']);
   });
 }

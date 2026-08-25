@@ -105,7 +105,7 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 	// already in flight was snapshotted before this root existed and will not
 	// cover it, so on a conflict the root waits for the next scan; log that so
 	// the gap is visible rather than silently swallowed.
-	if _, err := l.Rescan(ctx); err != nil {
+	if _, err := l.Rescan(ctx, false); err != nil {
 		if KindOf(err) == KindConflict {
 			l.log.Warn("library created while a catalog job is running; its root will index on the next scan, or rescan manually",
 				"library", name)

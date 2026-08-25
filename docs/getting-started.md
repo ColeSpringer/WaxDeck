@@ -243,7 +243,7 @@ contract):
 | `PUT /items/{pid}/star` | Star or unstar an item |
 | `PUT /items/{pid}/rating` | Rate an item (0 to 100, null clears) |
 | `POST /listens` | Report listen sessions |
-| `POST /library/rescan` | Start a scan; poll `GET /jobs/{pid}` (admin) |
+| `POST /library/rescan` | Start a scan; `{"force": true}` re-reads unchanged files; poll `GET /jobs/{pid}` (admin) |
 | `POST /uploads` | Open a resumable upload session |
 | `POST /acquisitions` | Acquire audio from a URL (YouTube; on by default) |
 | `GET /review/queue` | The metadata review queue |

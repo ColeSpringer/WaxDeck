@@ -1,10 +1,19 @@
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 
 import 'file_picker_port.dart';
+import 'saf_folder_picker.dart';
 
-FilePickerPort? createFilePickerPort() => _IoFilePickerPort();
+/// Android resolves at the factory, like the share-intake port: no
+/// port method carries an OS branch, and the platform read is the
+/// overridable [defaultTargetPlatform] so a host test can exercise the
+/// dispatch.
+FilePickerPort? createFilePickerPort() =>
+    defaultTargetPlatform == TargetPlatform.android
+    ? _AndroidFilePickerPort()
+    : _IoFilePickerPort();
 
 /// Whether a dropped path is a directory on disk (Linux and Windows
 /// deliver folder drops as plain path items).
@@ -12,17 +21,17 @@ Future<bool> droppedPathIsDirectory(String path) =>
     FileSystemEntity.isDirectory(path);
 
 /// Recursively lists a dropped or picked directory's files matching
-/// [extensions] as path-backed references, relativeDir rooted at the
+/// [formats] as path-backed references, relativeDir rooted at the
 /// directory's own name, with what the filter dropped counted. A path
 /// that vanished between drop and expansion reads as empty rather than
 /// blowing up the drop handler.
 Future<FolderPick> expandDroppedDirectory(
   String path,
-  Set<String> extensions,
+  UploadFormatSets formats,
 ) async {
   final dir = Directory(path);
   if (!await dir.exists()) return const FolderPick();
-  return _filesUnder(dir, extensions);
+  return _filesUnder(dir, formats);
 }
 
 /// Converts one picker or drop XFile: path-backed, streaming from
@@ -41,12 +50,13 @@ Future<PickedAudioFile> pickedFromXFile(
 }
 
 class _IoFilePickerPort implements FilePickerPort {
-  static XTypeGroup _audioGroup(String label) =>
-      XTypeGroup(label: label, extensions: kAcceptedAudioExtensions.toList());
+  static XTypeGroup _audioGroup(String label, Set<String> accepted) =>
+      XTypeGroup(label: label, extensions: accepted.toList());
 
-  // Keeps files in a custom WAXDECK_UPLOAD_FORMATS set reachable.
-  // Named, because the Linux and Windows plugins hand a missing label
-  // to the toolkit as an empty string rather than substituting one.
+  // Keeps files outside the accepted set reachable (a set the health
+  // read has not landed yet, or a server older than the field). Named,
+  // because the Linux and Windows plugins hand a missing label to the
+  // toolkit as an empty string rather than substituting one.
   static XTypeGroup _anyGroup(String label) => XTypeGroup(label: label);
 
   @override
@@ -56,19 +66,25 @@ class _IoFilePickerPort implements FilePickerPort {
   Future<List<PickedAudioFile>> pickAudioFiles({
     required String audioLabel,
     required String anyLabel,
+    required UploadFormatSets formats,
   }) async {
     final files = await openFiles(
-      acceptedTypeGroups: [_audioGroup(audioLabel), _anyGroup(anyLabel)],
+      acceptedTypeGroups: [
+        _audioGroup(audioLabel, formats.accepted),
+        _anyGroup(anyLabel),
+      ],
     );
     return [for (final f in files) await pickedFromXFile(f)];
   }
 
   @override
-  Future<FolderPick> pickAudioFolder() async {
+  Future<FolderPick> pickAudioFolder({
+    required UploadFormatSets formats,
+  }) async {
     if (!canPickFolders) return const FolderPick();
     final dir = await getDirectoryPath();
     if (dir == null) return const FolderPick();
-    return expandDroppedDirectory(dir, kAcceptedAudioExtensions);
+    return expandDroppedDirectory(dir, formats);
   }
 
   @override
@@ -88,20 +104,26 @@ class _IoFilePickerPort implements FilePickerPort {
   }
 }
 
-Future<FolderPick> _filesUnder(Directory root, Set<String> extensions) async {
+// The Android arm: file picks stay with the shared dialogs, folder
+// access means SAF tree URIs and goes over the platform channel.
+class _AndroidFilePickerPort extends _IoFilePickerPort {
+  @override
+  bool get canPickFolders => true;
+
+  @override
+  Future<FolderPick> pickAudioFolder({required UploadFormatSets formats}) =>
+      pickSafAudioFolder(formats);
+}
+
+Future<FolderPick> _filesUnder(Directory root, UploadFormatSets formats) async {
   final rootPath = root.path;
   final rootName = _baseName(rootPath);
-  final out = <PickedAudioFile>[];
-  var skippedUnsupported = 0;
-  var skippedDrm = 0;
+  final builder = FolderPickBuilder(formats);
   await for (final entity in root.list(recursive: true, followLinks: false)) {
     if (entity is! File) continue;
     final name = _baseName(entity.path);
-    if (!hasAcceptedExtension(name, extensions)) {
-      hasRejectedExtension(name) ? skippedDrm++ : skippedUnsupported++;
-      continue;
-    }
-    out.add(
+    if (!builder.keep(name)) continue;
+    builder.files.add(
       PickedAudioFile(
         name: name,
         size: await entity.length(),
@@ -111,17 +133,7 @@ Future<FolderPick> _filesUnder(Directory root, Set<String> extensions) async {
       ),
     );
   }
-  // Directory.list order is platform-dependent; a stable order keeps
-  // transfers and tests deterministic.
-  out.sort((a, b) {
-    final byDir = a.relativeDir.compareTo(b.relativeDir);
-    return byDir != 0 ? byDir : a.name.compareTo(b.name);
-  });
-  return FolderPick(
-    files: out,
-    skippedUnsupported: skippedUnsupported,
-    skippedDrm: skippedDrm,
-  );
+  return builder.build();
 }
 
 /// The last separator position. On Windows both `\` and `/` count -

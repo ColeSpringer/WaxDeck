@@ -97,7 +97,7 @@ class BackupsScreen extends ConsumerWidget {
       slivers: <Widget>[
         SliverFillRemaining(
           child: AudioDropArea(
-            extensions: const {'zip'},
+            formats: () async => const UploadFormatSets.only({'zip'}),
             hint: l10n.adminBackupDropHint,
             onDropped: (files) async {
               for (final file in files) {

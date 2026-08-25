@@ -94,7 +94,7 @@ func run(library string, runs int) error {
 		return err
 	}
 
-	job, err := svc.Rescan(ctx)
+	job, err := svc.Rescan(ctx, false)
 	if err != nil {
 		return err
 	}

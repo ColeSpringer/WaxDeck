@@ -205,6 +205,29 @@ function scan(file, text) {
     return null;
   };
 
+  // The pointer gestures whose options carry Playwright's `force`.
+  const gestureMembers = new Set([
+    'click', 'dblclick', 'tap', 'check', 'uncheck', 'setChecked',
+    'hover', 'dragTo', 'fill', 'press', 'selectText',
+  ]);
+
+  // Whether a property sits directly in the options argument of one of
+  // those calls. `data: { force: true }` (a request body) shares the
+  // property shape but not the call, and must not match: firing on it
+  // teaches authors to launder the field through a shorthand, which
+  // silences the rule where it matters.
+  const isGestureOption = (property) => {
+    const options = property.parent;
+    if (!options || !ts.isObjectLiteralExpression(options)) return false;
+    const call = options.parent;
+    if (!call || !ts.isCallExpression(call)) return false;
+    if (!call.arguments.includes(options)) return false;
+    return (
+      ts.isPropertyAccessExpression(call.expression) &&
+      gestureMembers.has(call.expression.name.text)
+    );
+  };
+
   const visit = (node) => {
     const text_ = literalText(node);
     if (text_ !== null) {
@@ -242,7 +265,15 @@ function scan(file, text) {
     }
 
     if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name)) {
-      if (node.name.text === 'force' && node.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+      // Only inside a gesture call's options: `force` is also an
+      // honest JSON body field (the forced-rescan request), and firing
+      // on that teaches authors to launder the property through a
+      // shorthand, which silences the rule where it matters.
+      if (
+        node.name.text === 'force' &&
+        node.initializer.kind === ts.SyntaxKind.TrueKeyword &&
+        isGestureOption(node)
+      ) {
         hit('force-click');
       }
       // `timeout` and `within` alike. `within` is what this rule's own

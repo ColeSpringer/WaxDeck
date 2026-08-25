@@ -10,7 +10,7 @@ Future<bool> droppedPathIsDirectory(String path) async => false;
 
 Future<FolderPick> expandDroppedDirectory(
   String path,
-  Set<String> extensions,
+  UploadFormatSets formats,
 ) async => const FolderPick();
 
 Future<PickedAudioFile> pickedFromXFile(

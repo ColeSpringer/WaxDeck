@@ -89,8 +89,15 @@ paths:
         Starts an asynchronous scan of every library root and returns the job
         tracking it. Poll the job to observe progress and completion. Scans
         serialize with other catalog jobs; starting one while another runs
-        returns the conflict error. Administrators only.
+        returns the conflict error. The body is optional; absent, the scan is
+        the plain incremental one. Administrators only.
       tags: [admin]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RescanOptions"
       responses:
         "202":
           description: Scan started.
@@ -2062,6 +2069,20 @@ components:
           description: >
             In-progress positions (Subsonic bookmarks, Audiobookshelf
             media progress) onto matched items' resume state.
+
+    RescanOptions:
+      type: object
+      description: What kind of scan to run.
+      properties:
+        force:
+          type: boolean
+          default: false
+          description: >
+            Re-read every file even when its size and mtime are
+            unchanged, re-hashing and re-parsing tags - the repair pass
+            for rows written before a parser fix, priced at a full
+            library read. Curated fields stay preserved: a forced scan
+            never overrides locked edits.
 
     JobList:
       type: object

@@ -704,7 +704,23 @@
   },
   "adminLibraryRescan": "Rescan libraries",
   "@adminLibraryRescan": {
-    "description": "Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural."
+    "description": "Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural. Also titles the confirm dialog the button opens."
+  },
+  "adminLibraryRescanBody": "Scans every library root, not just this one. Files that haven't changed are skipped.",
+  "@adminLibraryRescanBody": {
+    "description": "Body of the rescan confirm dialog, honest that the button on one row scans everything."
+  },
+  "adminLibraryRescanForce": "Re-read unchanged files",
+  "@adminLibraryRescanForce": {
+    "description": "Label of the force switch in the rescan confirm dialog."
+  },
+  "adminLibraryRescanForceHelp": "The repair pass: every file is read again even where nothing changed, which takes much longer. Edits you made are kept.",
+  "@adminLibraryRescanForceHelp": {
+    "description": "Line under the force switch. Names the cost and that curated fields survive."
+  },
+  "adminLibraryRescanStart": "Rescan",
+  "@adminLibraryRescanStart": {
+    "description": "Confirm button of the rescan dialog."
   },
   "adminLibraryScanning": "Scanning every library root",
   "@adminLibraryScanning": {
@@ -12440,6 +12456,10 @@
   "@uploadsFileTypeAudio": {
     "description": "What the file picker calls the group of audio formats it accepts."
   },
+  "uploadsFileUnreadable": "The file could not be read",
+  "@uploadsFileUnreadable": {
+    "description": "The reason slot of uploadsFileFailed when the picked file itself stopped answering (moved, unmounted, or shrunk between pick and transfer) rather than the server refusing it."
+  },
   "uploadsFormat": "Download format",
   "@uploadsFormat": {
     "description": "Accessible name of the picker choosing what a URL download is converted to."
@@ -12541,6 +12561,10 @@
   "uploadsPickFolder": "Upload a folder",
   "@uploadsPickFolder": {
     "description": "Opens the folder picker, whose hierarchy rides along as a grouping hint."
+  },
+  "uploadsPickFolderFailed": "The folder could not be read",
+  "@uploadsPickFolderFailed": {
+    "description": "Shown when the folder pick itself failed - the device has no documents picker, or the storage provider errored while listing - as opposed to a folder that merely held nothing usable."
   },
   "uploadsPickFolderSubtitle": "Keeps your folder grouping, disc subfolders and all",
   "@uploadsPickFolderSubtitle": {

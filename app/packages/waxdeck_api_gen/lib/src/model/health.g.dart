@@ -13,6 +13,10 @@ class _$Health extends Health {
   final String version;
   @override
   final int apiVersion;
+  @override
+  final BuiltList<String>? uploadFormats;
+  @override
+  final BuiltList<String>? rejectedFormats;
 
   factory _$Health([void Function(HealthBuilder)? updates]) =>
       (HealthBuilder()..update(updates))._build();
@@ -21,6 +25,8 @@ class _$Health extends Health {
     required this.status,
     required this.version,
     required this.apiVersion,
+    this.uploadFormats,
+    this.rejectedFormats,
   }) : super._();
   @override
   Health rebuild(void Function(HealthBuilder) updates) =>
@@ -35,7 +41,9 @@ class _$Health extends Health {
     return other is Health &&
         status == other.status &&
         version == other.version &&
-        apiVersion == other.apiVersion;
+        apiVersion == other.apiVersion &&
+        uploadFormats == other.uploadFormats &&
+        rejectedFormats == other.rejectedFormats;
   }
 
   @override
@@ -44,6 +52,8 @@ class _$Health extends Health {
     _$hash = $jc(_$hash, status.hashCode);
     _$hash = $jc(_$hash, version.hashCode);
     _$hash = $jc(_$hash, apiVersion.hashCode);
+    _$hash = $jc(_$hash, uploadFormats.hashCode);
+    _$hash = $jc(_$hash, rejectedFormats.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -53,7 +63,9 @@ class _$Health extends Health {
     return (newBuiltValueToStringHelper(r'Health')
           ..add('status', status)
           ..add('version', version)
-          ..add('apiVersion', apiVersion))
+          ..add('apiVersion', apiVersion)
+          ..add('uploadFormats', uploadFormats)
+          ..add('rejectedFormats', rejectedFormats))
         .toString();
   }
 }
@@ -73,6 +85,18 @@ class HealthBuilder implements Builder<Health, HealthBuilder> {
   int? get apiVersion => _$this._apiVersion;
   set apiVersion(int? apiVersion) => _$this._apiVersion = apiVersion;
 
+  ListBuilder<String>? _uploadFormats;
+  ListBuilder<String> get uploadFormats =>
+      _$this._uploadFormats ??= ListBuilder<String>();
+  set uploadFormats(ListBuilder<String>? uploadFormats) =>
+      _$this._uploadFormats = uploadFormats;
+
+  ListBuilder<String>? _rejectedFormats;
+  ListBuilder<String> get rejectedFormats =>
+      _$this._rejectedFormats ??= ListBuilder<String>();
+  set rejectedFormats(ListBuilder<String>? rejectedFormats) =>
+      _$this._rejectedFormats = rejectedFormats;
+
   HealthBuilder() {
     Health._defaults(this);
   }
@@ -83,6 +107,8 @@ class HealthBuilder implements Builder<Health, HealthBuilder> {
       _status = $v.status;
       _version = $v.version;
       _apiVersion = $v.apiVersion;
+      _uploadFormats = $v.uploadFormats?.toBuilder();
+      _rejectedFormats = $v.rejectedFormats?.toBuilder();
       _$v = null;
     }
     return this;
@@ -102,25 +128,45 @@ class HealthBuilder implements Builder<Health, HealthBuilder> {
   Health build() => _build();
 
   _$Health _build() {
-    final _$result =
-        _$v ??
-        _$Health._(
-          status: BuiltValueNullFieldError.checkNotNull(
-            status,
-            r'Health',
-            'status',
-          ),
-          version: BuiltValueNullFieldError.checkNotNull(
-            version,
-            r'Health',
-            'version',
-          ),
-          apiVersion: BuiltValueNullFieldError.checkNotNull(
-            apiVersion,
-            r'Health',
-            'apiVersion',
-          ),
+    _$Health _$result;
+    try {
+      _$result =
+          _$v ??
+          _$Health._(
+            status: BuiltValueNullFieldError.checkNotNull(
+              status,
+              r'Health',
+              'status',
+            ),
+            version: BuiltValueNullFieldError.checkNotNull(
+              version,
+              r'Health',
+              'version',
+            ),
+            apiVersion: BuiltValueNullFieldError.checkNotNull(
+              apiVersion,
+              r'Health',
+              'apiVersion',
+            ),
+            uploadFormats: _uploadFormats?.build(),
+            rejectedFormats: _rejectedFormats?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'uploadFormats';
+        _uploadFormats?.build();
+        _$failedField = 'rejectedFormats';
+        _rejectedFormats?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'Health',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

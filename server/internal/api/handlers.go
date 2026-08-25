@@ -156,9 +156,11 @@ func (discardLogger) Warn(string, ...any) {}
 
 func (s *Server) GetHealth(ctx context.Context, _ GetHealthRequestObject) (GetHealthResponseObject, error) {
 	return GetHealth200JSONResponse{
-		Status:     "ok",
-		Version:    s.Version,
-		ApiVersion: 1,
+		Status:          "ok",
+		Version:         s.Version,
+		ApiVersion:      1,
+		UploadFormats:   ptr(s.svc.UploadFormats()),
+		RejectedFormats: ptr(s.svc.RejectedFormats()),
 	}, nil
 }
 
@@ -827,11 +829,12 @@ func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObje
 
 // --- admin -----------------------------------------------------------------------
 
-func (s *Server) RescanLibrary(ctx context.Context, _ RescanLibraryRequestObject) (RescanLibraryResponseObject, error) {
+func (s *Server) RescanLibrary(ctx context.Context, req RescanLibraryRequestObject) (RescanLibraryResponseObject, error) {
 	if p, ok := principalFromContext(ctx); !ok || !p.IsAdmin() {
 		return RescanLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
-	job, err := s.svc.Rescan(ctx)
+	force := req.Body != nil && req.Body.Force != nil && *req.Body.Force
+	job, err := s.svc.Rescan(ctx, force)
 	if err != nil {
 		if service.KindOf(err) == service.KindConflict {
 			return RescanLibrary409JSONResponse{ConflictJSONResponse(errObj("conflict", "a conflicting catalog job is already running"))}, nil

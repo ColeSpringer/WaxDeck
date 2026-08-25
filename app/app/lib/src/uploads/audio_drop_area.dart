@@ -6,24 +6,15 @@ import 'file_picker_impl.dart' as impl;
 import 'file_picker_port.dart';
 
 /// Flattens a drop into lazy picked-file references, filtered to
-/// [extensions], with what the filter dropped counted the way a folder
+/// [formats], with what the filter dropped counted the way a folder
 /// pick counts it. Two shapes arrive today - recursive children (web)
 /// and a plain path (Linux, Windows) - and a childless directory item
 /// is kept as the defensive third.
 Future<FolderPick> normalizeDrop(
   List<DropItem> items,
-  Set<String> extensions,
+  UploadFormatSets formats,
 ) async {
-  final out = <PickedAudioFile>[];
-  var skippedUnsupported = 0;
-  var skippedDrm = 0;
-  void count(String name) =>
-      hasRejectedExtension(name) ? skippedDrm++ : skippedUnsupported++;
-  void merge(FolderPick expanded) {
-    out.addAll(expanded.files);
-    skippedUnsupported += expanded.skippedUnsupported;
-    skippedDrm += expanded.skippedDrm;
-  }
+  final builder = FolderPickBuilder(formats);
 
   Future<void> walk(DropItem item, String parentDir) async {
     if (item is DropItemDirectory) {
@@ -34,28 +25,21 @@ Future<FolderPick> normalizeDrop(
         }
         return;
       }
-      merge(await impl.expandDroppedDirectory(item.path, extensions));
+      builder.merge(await impl.expandDroppedDirectory(item.path, formats));
       return;
     }
     if (await impl.droppedPathIsDirectory(item.path)) {
-      merge(await impl.expandDroppedDirectory(item.path, extensions));
+      builder.merge(await impl.expandDroppedDirectory(item.path, formats));
       return;
     }
-    if (!hasAcceptedExtension(item.name, extensions)) {
-      count(item.name);
-      return;
-    }
-    out.add(await impl.pickedFromXFile(item, relativeDir: parentDir));
+    if (!builder.keep(item.name)) return;
+    builder.files.add(await impl.pickedFromXFile(item, relativeDir: parentDir));
   }
 
   for (final item in items) {
     await walk(item, '');
   }
-  return FolderPick(
-    files: out,
-    skippedUnsupported: skippedUnsupported,
-    skippedDrm: skippedDrm,
-  );
+  return builder.build();
 }
 
 /// A drop zone for audio, or with another extension set for archives and
@@ -66,9 +50,9 @@ class AudioDropArea extends StatefulWidget {
     required this.child,
     required this.onDropped,
     required this.hint,
+    required this.formats,
     this.onSkipped,
     this.enabled = true,
-    this.extensions = kAcceptedAudioExtensions,
     this.semanticsId = SemanticsIds.uploadDropTarget,
   });
 
@@ -91,7 +75,13 @@ class AudioDropArea extends StatefulWidget {
   /// just its child.
   final bool enabled;
 
-  final Set<String> extensions;
+  /// The sets the drop filters against, resolved when a drop lands
+  /// rather than at build: audio zones hand the format provider's
+  /// future through here, and nothing rebuilds when it completes.
+  /// Required, because a defaulted mirror would let a new zone silently
+  /// ignore a server's custom set - the bug this parameter exists to
+  /// end.
+  final Future<UploadFormatSets> Function() formats;
 
   /// Overlay caption while hovering, and the zone's spoken name.
   /// Required, because a defaulted sentence is one language every
@@ -112,7 +102,7 @@ class _AudioDropAreaState extends State<AudioDropArea> {
 
   Future<void> _dropped(DropDoneDetails details) async {
     setState(() => _hovering = false);
-    final drop = await normalizeDrop(details.files, widget.extensions);
+    final drop = await normalizeDrop(details.files, await widget.formats());
     if (!mounted) return;
     if (drop.skippedUnsupported + drop.skippedDrm > 0) {
       widget.onSkipped?.call(

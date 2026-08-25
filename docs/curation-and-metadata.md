@@ -79,14 +79,14 @@ The limit caps what may sit in staging awaiting a decision, so
 importing an upload frees the room it held.
 
 Files reach the flow three ways: a file picker on every platform, a
-folder picker on the web build and the Linux and Windows desktops
-(Android folder access means SAF tree URIs, which the picker port does
-not speak), and drag-and-drop
-onto the library or uploads screen on web and desktop. A picked folder
-is walked recursively and its shape rides along, so disc subfolders
-survive to the grouping step. Web transfers read the browser's file
-handles in windows, so picking a multi-hundred-megabyte album never
-loads it into memory.
+folder picker on every platform WaxDeck builds for - the web build,
+the Linux and Windows desktops, and Android, where folder access is
+the system tree picker (SAF) - and drag-and-drop onto the library or
+uploads screen on web and desktop. A picked folder is walked
+recursively and its shape rides along, so disc subfolders survive to
+the grouping step. Web and Android transfers read their file handles
+in windows, so picking a multi-hundred-megabyte album never loads it
+into memory.
 
 Uploading several files at once asks a grouping question so an album
 folder does not flood the review queue with per-file entries:
@@ -105,15 +105,17 @@ aiff, mka, and webm by default; `WAXDECK_UPLOAD_FORMATS` swaps in an
 operator's own list (replacing that set, not extending it). Audible's
 DRM containers (aax, aaxc) are refused by name whatever the set says -
 the files are encrypted, so no format list can make them playable -
-and the refusal says so instead of implying a codec gap. The client's
-pick dialogs filter to the default accepted-format set (a hardcoded
-mirror of the server's list); a server running a custom format set
-still accepts its formats through the dialogs' "All files" group, and
-the server-side format check at session create is the real gate either
-way. A folder pick or a drop reports DRM files it filtered out by
-name, and explains itself when nothing survived the filter at all;
-the cover images and logs an album folder is expected to shed are
-left behind without commentary.
+and the refusal says so instead of implying a codec gap. The health
+payload reports the effective sets, and the client's pick dialogs,
+folder walks, and drop zones filter against what it says, so a custom
+format set filters correctly rather than being second-guessed by a
+client-side mirror; the mirror remains only as the fallback for
+servers older than the field, whose custom formats stay reachable
+through the dialogs' "All files" group. The server-side format check
+at session create is the real gate either way. A folder pick or a
+drop reports DRM files it filtered out by name, and explains itself
+when nothing survived the filter at all; the cover images and logs an
+album folder is expected to shed are left behind without commentary.
 
 Three ceilings sit on a session before a byte moves, alongside the
 per-account pending-upload limit: one file may declare at most 16 GiB,

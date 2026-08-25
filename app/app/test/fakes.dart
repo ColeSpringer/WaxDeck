@@ -87,6 +87,12 @@ class FakeRepository implements WaxDeckRepository {
   String serverVersion = 'test';
   int apiVersion = 1;
 
+  /// What [health] reports as the server's upload-format sets. Null is
+  /// a server older than the fields, which is what most tests want:
+  /// pickers then fall back to the hardcoded mirror.
+  List<String>? serverUploadFormats;
+  List<String>? serverRejectedFormats;
+
   /// Thrown by [health] when set. Deliberately an [Object] rather than
   /// the structured API error: the client maps only transport failures
   /// into that type, and a response a generated deserializer cannot
@@ -244,6 +250,8 @@ class FakeRepository implements WaxDeckRepository {
       status: 'ok',
       version: serverVersion,
       apiVersion: apiVersion,
+      uploadFormats: serverUploadFormats,
+      rejectedFormats: serverRejectedFormats,
     );
   }
 
@@ -2745,14 +2753,18 @@ class FakeRepository implements WaxDeckRepository {
   /// Scans this fake has been asked to start.
   int rescans = 0;
 
+  /// The force flag each [rescanLibrary] call carried, in order.
+  final List<bool> rescanForces = [];
+
   /// Thrown by [rescanLibrary] instead of starting one. The real server
   /// refuses while a catalog job is running, which is the answer a
   /// client that thinks nothing is running has to handle.
   WaxDeckApiException? rescanError;
 
   @override
-  Future<Job> rescanLibrary() async {
+  Future<Job> rescanLibrary({bool force = false}) async {
     rescans++;
+    rescanForces.add(force);
     final error = rescanError;
     if (error != null) throw error;
     return Job(pid: 'jb-scan-$rescans', kind: 'scan', state: 'running');

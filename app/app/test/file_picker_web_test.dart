@@ -34,7 +34,7 @@ void main() {
       entry('The Wall/top.mp3'),
       entry('The Wall/CD1/a.mp3'),
       entry('The Wall/notes.txt'),
-    ], kAcceptedAudioExtensions);
+    ], const UploadFormatSets());
 
     expect(pick.files.map((f) => f.name).toList(), <String>[
       'top.mp3',
@@ -57,7 +57,7 @@ void main() {
       entry('Book/part1.aax'),
       entry('Book/part2.AAXC'),
       entry('Book/cover.jpg'),
-    ], kAcceptedAudioExtensions);
+    ], const UploadFormatSets());
     expect(pick.files, isEmpty);
     expect(pick.skippedDrm, 2);
     expect(pick.skippedUnsupported, 1);
@@ -66,14 +66,14 @@ void main() {
   test('a browser that fills no relative path lands the file at the top', () {
     final pick = pickedFromDirectory(<DirectoryEntry>[
       entry('lonely.mp3'),
-    ], kAcceptedAudioExtensions);
+    ], const UploadFormatSets());
     expect(pick.files.single.relativeDir, isEmpty);
   });
 
   test('a picked file is a window over its handle, not its bytes', () async {
     final picked = pickedFromDirectory(<DirectoryEntry>[
       entry('Album/a.mp3', <int>[0, 1, 2, 3, 4, 5, 6, 7]),
-    ], kAcceptedAudioExtensions).files.single;
+    ], const UploadFormatSets()).files.single;
 
     expect(picked.size, 8);
     // Web picks carry no filesystem path; the transfer dispatches on

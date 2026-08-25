@@ -173,12 +173,43 @@ void main() {
     expect(repo.libraryReadOnlyByPid['lb-1'], isTrue);
 
     // Rescanning covers every root: the contract has one scan verb, and
-    // the row's button is where somebody looks for it.
+    // the row's button is where somebody looks for it - which is why a
+    // confirm dialog now says so before anything starts.
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-1')),
       warnIfMissed: false,
     );
     await tester.pumpAndSettle();
+    expect(repo.rescans, 0, reason: 'nothing starts before the confirm');
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRescanConfirm),
+    );
+    await tester.pumpAndSettle();
     expect(repo.rescans, 1);
+    expect(repo.rescanForces, [false]);
+  });
+
+  testWidgets('the rescan dialog carries the repair pass', (tester) async {
+    final repo = FakeRepository();
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-1')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRescanForce),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRescanConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.rescanForces, [true]);
   });
 }

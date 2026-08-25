@@ -844,6 +844,7 @@ Class | Method | HTTP request | Description
  - [RejectedListen](doc/RejectedListen.md)
  - [ReleaseStatusEdit](doc/ReleaseStatusEdit.md)
  - [RematchResult](doc/RematchResult.md)
+ - [RescanOptions](doc/RescanOptions.md)
  - [ResolveRungCounts](doc/ResolveRungCounts.md)
  - [RestorePlan](doc/RestorePlan.md)
  - [ReviewBulkDecision](doc/ReviewBulkDecision.md)

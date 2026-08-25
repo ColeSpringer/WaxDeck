@@ -53,6 +53,8 @@
     "libraryPath": "library-path",
     "libraryReadOnly": "library-read-only-{id}",
     "libraryRescan": "library-rescan-{id}",
+    "libraryRescanConfirm": "library-rescan-confirm",
+    "libraryRescanForce": "library-rescan-force",
     "libraryRow": "library-row-{id}",
     "librarySubmit": "library-submit",
     "libraryWarning": "library-warning",

@@ -741,28 +741,26 @@ here waits on upstream.
   carry per-role art first - the "per-role candidate art on the
   enrichment port" ask in `upstream-requests.md` (WaxBin). The slots
   are readable and hand-settable meanwhile.
-- `[in-repo]` **The client's accepted-format set is a hardcoded mirror
-  that a custom `WAXDECK_UPLOAD_FORMATS` makes wrong.** Folder picks
-  and drops filter against `kAcceptedAudioExtensions` (the default
-  13-format set) before anything reaches the server, so an operator
-  who configures extra formats (`wv`, `ape`) sees them dropped
-  client-side - and, when nothing else survives, announced as
-  unsupported. File picks escape through the native dialogs'
-  "All files" group; a `webkitdirectory` or `getDirectoryPath` pick
-  has no such group. The real fix is the server exposing its accepted
-  set (a field on an existing read, or the health payload) and the
-  pickers filtering against that; until then the mirror and the docs
-  both say the server-side check at session create is the actual gate.
-- `[in-repo]` **Android folder picking is excluded from the upload
-  surface.** File picking works on every platform (the endorsed
-  `file_selector_android` implementation covers in-app file picks),
-  but Android folder access means SAF tree URIs, which the
-  `FilePickerPort` deliberately does not speak; the "Upload a folder"
-  tile hides there (`canPickFolders`). It is now the only platform it
-  hides on - the web build picks folders through an
-  `<input webkitdirectory>` - so this is the last of the exclusion.
-  Multi-select plus auto grouping covers the album case on Android
-  meanwhile.
+- `[in-repo]` **An Android folder pick ships the whole tree as one
+  channel envelope.** `pickTree` enumerates every file under the
+  chosen tree Kotlin-side and answers a single list - name, size,
+  relativeDir, and a 150-plus-character document URI per entry -
+  which the messenger encodes on the main thread and the Dart side
+  holds whole while filtering and sorting. Picking one album folder
+  is nothing; picking "Internal storage" over tens of thousands of
+  files peaks all three copies at once and can jank or ANR before the
+  filter drops a single file. Fix shapes when taken: stream the walk
+  in batches over the channel, or pass the accepted set into
+  `pickTree` and filter Kotlin-side (which moves policy across the
+  channel - the reason it was not done in the first pass).
+- `[in-repo]` **The waxdeck/saf Kotlin half has no automated
+  coverage.** `saf_channel_test.dart` proves grant, traversal, and
+  windowed reads end-to-end on a real device, but the system picker
+  needs a human (or a scripted uiautomator driver) to tap through, so
+  the test is run by hand and the android-conformance workflow does
+  not invoke it. The Dart half is pinned by host tests over a mocked
+  channel. Automating the picker taps in CI (uiautomator against the
+  emulator the conformance job already boots) is the fix shape.
 - `[in-repo]` **A single-track unit is scored like a mostly-missing album.**
   The distance model charges every release track no staged file matched
   (the `missing` component, weight 0.9 per track), which is right for an
@@ -875,20 +873,6 @@ here waits on upstream.
   action enum with the cover verbs grouped, so the settings sheet
   (source binding, sync mode, interval, sync-now with the dry run) is
   one more case in it.
-- `[in-repo]` **Stored ALAC bit depth is wrong (16) for files scanned
-  before waxlabel v1.4.2.** The parser now reads the real depth from
-  the magic cookie rather than trusting the sample description, but
-  nothing re-reads an already-scanned file: the incremental scan
-  fast-paths anything whose size and mtime are unchanged, and WaxDeck
-  never sets `waxbin.ScanRequest.Force` (the field exists; all four
-  construction sites - the two in `library.go`, `tools.go`, and the
-  watcher's scoped scan at `watch.go:272` - leave it zero), so existing
-  rows never heal. The
-  essence digests did not change, so no rescan is forced either. It
-  shows on the upgrades surface (`bitDepth`, `api/spec/health.yaml`),
-  where a 24-bit ALAC reading 16 misranks upgrade candidates. Fix
-  shape when taken: expose a forced rescan - an admin action or a
-  one-time sweep - rather than special-casing ALAC.
 
 ## Discovery and stats
 

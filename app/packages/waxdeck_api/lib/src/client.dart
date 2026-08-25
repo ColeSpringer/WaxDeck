@@ -893,8 +893,10 @@ abstract interface class WaxDeckRepository {
   });
 
   /// `POST /library/rescan`: starts a scan of every library root,
-  /// returning the job tracking it. Administrators only.
-  Future<Job> rescanLibrary();
+  /// returning the job tracking it. [force] re-reads files whose size
+  /// and mtime are unchanged (the repair pass; curated fields stay
+  /// preserved). Administrators only.
+  Future<Job> rescanLibrary({bool force = false});
 
   /// `GET /admin/genre-tree`: the canonical genre vocabulary in force
   /// (administrators).
@@ -1715,6 +1717,8 @@ class WaxDeckClient implements WaxDeckRepository {
       status: body.status,
       version: body.version,
       apiVersion: body.apiVersion,
+      uploadFormats: body.uploadFormats?.toList(),
+      rejectedFormats: body.rejectedFormats?.toList(),
     );
   });
 
@@ -3322,8 +3326,12 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<Job> rescanLibrary() => _guard(() async {
-    final response = await _gen.getAdminApi().rescanLibrary();
+  Future<Job> rescanLibrary({bool force = false}) => _guard(() async {
+    // The body is optional on the wire; a plain rescan keeps posting
+    // none, which is what pre-options servers accept.
+    final response = await _gen.getAdminApi().rescanLibrary(
+      rescanOptions: force ? gen.RescanOptions((b) => b..force = true) : null,
+    );
     return jobFromGen(_require(response.data));
   });
 

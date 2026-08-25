@@ -1017,11 +1017,35 @@ abstract class AppLocalizations {
   /// **'Read-only: {name}'**
   String adminLibraryReadOnlyLabel(String name);
 
-  /// Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural.
+  /// Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural. Also titles the confirm dialog the button opens.
   ///
   /// In en, this message translates to:
   /// **'Rescan libraries'**
   String get adminLibraryRescan;
+
+  /// Body of the rescan confirm dialog, honest that the button on one row scans everything.
+  ///
+  /// In en, this message translates to:
+  /// **'Scans every library root, not just this one. Files that haven\'t changed are skipped.'**
+  String get adminLibraryRescanBody;
+
+  /// Label of the force switch in the rescan confirm dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-read unchanged files'**
+  String get adminLibraryRescanForce;
+
+  /// Line under the force switch. Names the cost and that curated fields survive.
+  ///
+  /// In en, this message translates to:
+  /// **'The repair pass: every file is read again even where nothing changed, which takes much longer. Edits you made are kept.'**
+  String get adminLibraryRescanForceHelp;
+
+  /// Confirm button of the rescan dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan'**
+  String get adminLibraryRescanStart;
 
   /// Message after a rescan started, saying that it covers every root rather than the row it was pressed on.
   ///
@@ -14744,6 +14768,12 @@ abstract class AppLocalizations {
   /// **'Audio'**
   String get uploadsFileTypeAudio;
 
+  /// The reason slot of uploadsFileFailed when the picked file itself stopped answering (moved, unmounted, or shrunk between pick and transfer) rather than the server refusing it.
+  ///
+  /// In en, this message translates to:
+  /// **'The file could not be read'**
+  String get uploadsFileUnreadable;
+
   /// Accessible name of the picker choosing what a URL download is converted to.
   ///
   /// In en, this message translates to:
@@ -14887,6 +14917,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Upload a folder'**
   String get uploadsPickFolder;
+
+  /// Shown when the folder pick itself failed - the device has no documents picker, or the storage provider errored while listing - as opposed to a folder that merely held nothing usable.
+  ///
+  /// In en, this message translates to:
+  /// **'The folder could not be read'**
+  String get uploadsPickFolderFailed;
 
   /// Second line of the upload-folder row. Names what the folder pick does that the file pick does not - the hierarchy rides along as the grouping hint - because the two rows otherwise read as the same thing.
   ///

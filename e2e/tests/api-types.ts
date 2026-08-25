@@ -40,7 +40,7 @@ export interface paths {
         put?: never;
         /**
          * Start a library rescan
-         * @description Starts an asynchronous scan of every library root and returns the job tracking it. Poll the job to observe progress and completion. Scans serialize with other catalog jobs; starting one while another runs returns the conflict error. Administrators only.
+         * @description Starts an asynchronous scan of every library root and returns the job tracking it. Poll the job to observe progress and completion. Scans serialize with other catalog jobs; starting one while another runs returns the conflict error. The body is optional; absent, the scan is the plain incremental one. Administrators only.
          */
         post: operations["rescanLibrary"];
         delete?: never;
@@ -5296,6 +5296,14 @@ export interface components {
              */
             progress: boolean;
         };
+        /** @description What kind of scan to run. */
+        RescanOptions: {
+            /**
+             * @description Re-read every file even when its size and mtime are unchanged, re-hashing and re-parsing tags - the repair pass for rows written before a parser fix, priced at a full library read. Curated fields stay preserved: a forced scan never overrides locked edits.
+             * @default false
+             */
+            force: boolean;
+        };
         /** @description Recent catalog jobs. */
         JobList: {
             /** @description Jobs, newest first. */
@@ -9430,6 +9438,23 @@ export interface components {
              * @example 1
              */
             apiVersion: number;
+            /**
+             * @description File extensions uploads accept (lowercase, no dot) - the effective set, so an operator's `WAXDECK_UPLOAD_FORMATS` replacement is what appears here, with `rejectedFormats` subtracted (the deny-list wins at the gate whatever the operator listed). Clients filter pickers and drop zones against it; the format check at upload-session create remains the authoritative gate. Absent on servers older than the field.
+             * @example [
+             *       "flac",
+             *       "mp3",
+             *       "m4a"
+             *     ]
+             */
+            uploadFormats?: string[];
+            /**
+             * @description File extensions refused outright whatever `uploadFormats` says (DRM containers, encrypted by construction). Clients use it to tell "can never play" apart from "not in the accepted set" when reporting what a filter dropped. Absent on servers older than the field.
+             * @example [
+             *       "aax",
+             *       "aaxc"
+             *     ]
+             */
+            rejectedFormats?: string[];
         };
         /** @description One background tool task. */
         ToolTask: {
@@ -10307,7 +10332,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RescanOptions"];
+            };
+        };
         responses: {
             /** @description Scan started. */
             202: {

@@ -718,7 +718,7 @@ func run() error {
 					ran("prune", now)
 				}
 				if due("scan", now) {
-					_, err := svc.Rescan(ctx)
+					_, err := svc.Rescan(ctx, false)
 					svc.MarkScheduleRun(ctx, "scan", err)
 					ran("scan", now)
 				}

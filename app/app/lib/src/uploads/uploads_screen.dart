@@ -64,6 +64,7 @@ class UploadsScreen extends ConsumerWidget {
     // a zone inside the scroll would refuse a drop over the bar.
     return AudioDropArea(
       enabled: canUpload,
+      formats: dropFormats(ref),
       hint: l10n.uploadsDropHint,
       onDropped: (files) => uploadPickedFiles(context, ref, files),
       onSkipped: ({required unsupported, required drm, required nothingKept}) =>

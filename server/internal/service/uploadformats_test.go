@@ -1,6 +1,7 @@
 package service
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -53,5 +54,32 @@ func TestDRMDenyListWinsOverAWidenedFormatSet(t *testing.T) {
 	// which is the property that makes the deny-list necessary at all.
 	if e := openSessionErr(ctx, svc, uc, "single.mp3", 4096); KindOf(e) != KindFormat {
 		t.Fatalf("an unlisted format errored %v (kind %q), want unsupported-format", e, KindOf(e))
+	}
+}
+
+// The health payload's format sets come from these accessors, so what
+// they report is what pickers filter with: the operator's replacement
+// set when one is configured, normalized and sorted; the DRM deny-list
+// regardless - and subtracted from the accepted set, because the gate
+// refuses those files whatever the operator listed.
+func TestUploadFormatsReporting(t *testing.T) {
+	t.Parallel()
+	custom := &Library{}
+	custom.setUploadFormats([]string{" .WV", "Ape"})
+	if got := custom.UploadFormats(); !slices.Equal(got, []string{"ape", "wv"}) {
+		t.Fatalf("custom UploadFormats() = %v", got)
+	}
+	if got := custom.RejectedFormats(); !slices.Equal(got, []string{"aax", "aaxc"}) {
+		t.Fatalf("RejectedFormats() = %v", got)
+	}
+	widened := &Library{}
+	widened.setUploadFormats([]string{"aax", "flac"})
+	if got := widened.UploadFormats(); !slices.Equal(got, []string{"flac"}) {
+		t.Fatalf("a widened set must not report deny-listed formats as accepted; got %v", got)
+	}
+	def := &Library{}
+	def.setUploadFormats(nil)
+	if got := def.UploadFormats(); len(got) != 13 || !slices.Contains(got, "flac") || !slices.IsSorted(got) {
+		t.Fatalf("default UploadFormats() = %v", got)
 	}
 }

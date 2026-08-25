@@ -100,6 +100,39 @@ test('two picked files group as one album and import through review', async ({ a
     .toEqual(['Paper Lanterns', 'River Static']);
 });
 
+test('health reports the format sets and rescan takes the repair pass', async ({
+  app,
+}) => {
+  // The sets the pickers filter with come from the health payload -
+  // the effective accepted set (this stack runs the default) and the
+  // DRM deny-list, both sorted.
+  const health = await app.api.get('/health');
+  expect(health.uploadFormats).toContain('flac');
+  expect(health.uploadFormats).toEqual([...health.uploadFormats!].sort());
+  expect(health.rejectedFormats).toEqual(['aax', 'aaxc']);
+
+  // The forced rescan is a body on the same verb. On the shared server
+  // a sibling worker may hold the catalog lease (409, nothing started);
+  // a started scan is waited to done, because a forced re-read holds
+  // the lease for the whole library and a fire-and-forget window would
+  // fail sibling workers' imports instead of this test. The ALAC-heal
+  // effect itself is pinned server-side.
+  const forced = await app.api.raw.post('/library/rescan', {
+    data: { force: true },
+  });
+  expect([202, 409]).toContain(forced.status());
+  if (forced.status() === 202) {
+    const job = (await forced.json()) as { pid: string };
+    await expect
+      .poll(
+        async () =>
+          (await app.api.get('/jobs/{pid}', { path: { pid: job.pid } })).state,
+        { timeout: T.fetch, message: 'the forced scan should run to done' },
+      )
+      .toBe('done');
+  }
+});
+
 test('a picked folder uploads its audio and leaves the rest', async ({ app }) => {
   test.setTimeout(J.journey);
 

@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -45,10 +44,13 @@ class _FolderPicker implements FilePickerPort {
   Future<List<PickedAudioFile>> pickAudioFiles({
     String audioLabel = '',
     String anyLabel = '',
+    UploadFormatSets formats = const UploadFormatSets(),
   }) async => const [];
 
   @override
-  Future<FolderPick> pickAudioFolder() async => pick;
+  Future<FolderPick> pickAudioFolder({
+    UploadFormatSets formats = const UploadFormatSets(),
+  }) async => pick;
 
   @override
   Future<PickedAudioFile?> pickFile({
@@ -56,6 +58,15 @@ class _FolderPicker implements FilePickerPort {
     required String label,
     String anyLabel = '',
   }) async => null;
+}
+
+class _ThrowingFolderPicker extends _FolderPicker {
+  _ThrowingFolderPicker() : super(const FolderPick());
+
+  @override
+  Future<FolderPick> pickAudioFolder({
+    UploadFormatSets formats = const UploadFormatSets(),
+  }) async => throw PlatformException(code: 'no-picker');
 }
 
 (Widget, ProviderContainer Function()) _host(
@@ -111,6 +122,31 @@ void main() {
     expect(message?.resolve(_l10n), contains('DRM'));
     // Nothing survived the filter, so the media-type question never
     // opens over an upload of nothing.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaType),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a pick that itself failed is said, not swallowed', (
+    tester,
+  ) async {
+    // A ROM without a documents picker, or a provider that errored
+    // mid-walk: the exception must reach a sentence, or the folder
+    // tile just does nothing.
+    final (host, containerOf) = _host(
+      _repo(),
+      _ThrowingFolderPicker(),
+      pickFolderAndUpload,
+    );
+    await tester.pumpWidget(host);
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(
+      containerOf().read(shellMessengerProvider)?.resolve(_l10n),
+      _l10n.uploadsPickFolderFailed,
+    );
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadMediaType),
       findsNothing,

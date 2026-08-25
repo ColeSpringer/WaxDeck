@@ -352,10 +352,13 @@ type Library struct {
 	// source is configured (review entries then hold no candidates).
 	engine *match.Engine
 	// stagingDir holds upload staging; uploadFormats is the accepted
-	// extension set; uploadRetention bounds staged-byte lifetime.
-	stagingDir      string
-	uploadFormats   map[string]bool
-	uploadRetention time.Duration
+	// extension set (uploadFormatsList the sorted health-payload form,
+	// deny-list subtracted); uploadRetention bounds staged-byte
+	// lifetime.
+	stagingDir        string
+	uploadFormats     map[string]bool
+	uploadFormatsList []string
+	uploadRetention   time.Duration
 	// stagingFree answers how much room the staging volume has left,
 	// for the check a new session runs. A field rather than a direct
 	// call so a test can hand it a full disk; nothing configures it.
@@ -623,7 +626,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		return nil, fmt.Errorf("service: staging directory: %w", err)
 	}
 	l.stagingFree = diskspace.Free
-	l.uploadFormats = uploadFormatSet(cfg.UploadFormats)
+	l.setUploadFormats(cfg.UploadFormats)
 	l.uploadRetention = cfg.UploadRetention
 	if l.uploadRetention == 0 {
 		l.uploadRetention = 7 * 24 * time.Hour
@@ -730,9 +733,11 @@ func (l *Library) Close() error {
 
 // Rescan starts an asynchronous scan of every root and returns the
 // job. The scan runs on the process context, not the request's: it
-// must survive the response that reported it started.
-func (l *Library) Rescan(ctx context.Context) (Job, error) {
-	pid, err := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{})
+// must survive the response that reported it started. Force bypasses
+// the incremental fast-path so unchanged files are re-read (the repair
+// pass); locks are never ignored, so curated fields survive either way.
+func (l *Library) Rescan(ctx context.Context, force bool) (Job, error) {
+	pid, err := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{Force: force})
 	if err != nil {
 		return Job{}, classify(err)
 	}

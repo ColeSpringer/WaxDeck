@@ -60,6 +60,8 @@ export const SemanticsIds = {
   libraryPath: 'library-path',
   libraryReadOnly: (id: string | number) => `library-read-only-${id}`,
   libraryRescan: (id: string | number) => `library-rescan-${id}`,
+  libraryRescanConfirm: 'library-rescan-confirm',
+  libraryRescanForce: 'library-rescan-force',
   libraryRow: (id: string | number) => `library-row-${id}`,
   librarySubmit: 'library-submit',
   libraryWarning: 'library-warning',

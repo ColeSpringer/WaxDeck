@@ -235,8 +235,17 @@ class _RescanButton extends ConsumerWidget {
   Future<void> _rescan(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
+    // Confirmed first, because the button sits on one row and the scan
+    // covers everything; the dialog is also where the repair pass
+    // lives. The dashboard's quick action stays plain - it never
+    // pretended to be about one library.
+    final force = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _RescanDialog(),
+    );
+    if (force == null || !context.mounted) return;
     try {
-      await ref.read(repositoryProvider).rescanLibrary();
+      await ref.read(repositoryProvider).rescanLibrary(force: force);
       ref
         ..invalidate(adminJobsProvider)
         ..invalidate(librariesProvider)
@@ -245,6 +254,59 @@ class _RescanButton extends ConsumerWidget {
     } on WaxDeckApiException catch (error) {
       messenger.show(explainError(l10n, error));
     }
+  }
+}
+
+/// The rescan confirm: says the scan covers every root, and carries
+/// the force option. Pops the chosen force flag, or null on cancel.
+class _RescanDialog extends StatefulWidget {
+  const _RescanDialog();
+
+  @override
+  State<_RescanDialog> createState() => _RescanDialogState();
+}
+
+class _RescanDialogState extends State<_RescanDialog> {
+  var _force = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    return AlertDialog(
+      backgroundColor: colors.surface2,
+      title: Text(l10n.adminLibraryRescan),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(l10n.adminLibraryRescanBody),
+          const SizedBox(height: WaxSpace.s12),
+          WaxSettingRow(
+            title: l10n.adminLibraryRescanForce,
+            help: l10n.adminLibraryRescanForceHelp,
+            control: WaxSwitch(
+              value: _force,
+              label: l10n.adminLibraryRescanForce,
+              semanticsId: SemanticsIds.libraryRescanForce,
+              onChanged: (value) => setState(() => _force = value),
+            ),
+          ),
+        ],
+      ),
+      actions: <Widget>[
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        WaxButton(
+          label: l10n.adminLibraryRescanStart,
+          semanticsId: SemanticsIds.libraryRescanConfirm,
+          onPressed: () => Navigator.of(context).pop(_force),
+        ),
+      ],
+    );
   }
 }
 

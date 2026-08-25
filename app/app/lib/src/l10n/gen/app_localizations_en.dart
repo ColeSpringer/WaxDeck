@@ -529,6 +529,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminLibraryRescan => 'Rescan libraries';
 
   @override
+  String get adminLibraryRescanBody =>
+      'Scans every library root, not just this one. Files that haven\'t changed are skipped.';
+
+  @override
+  String get adminLibraryRescanForce => 'Re-read unchanged files';
+
+  @override
+  String get adminLibraryRescanForceHelp =>
+      'The repair pass: every file is read again even where nothing changed, which takes much longer. Edits you made are kept.';
+
+  @override
+  String get adminLibraryRescanStart => 'Rescan';
+
+  @override
   String get adminLibraryScanning => 'Scanning every library root';
 
   @override
@@ -9357,6 +9371,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadsFileTypeAudio => 'Audio';
 
   @override
+  String get uploadsFileUnreadable => 'The file could not be read';
+
+  @override
   String get uploadsFormat => 'Download format';
 
   @override
@@ -9440,6 +9457,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsPickFolder => 'Upload a folder';
+
+  @override
+  String get uploadsPickFolderFailed => 'The folder could not be read';
 
   @override
   String get uploadsPickFolderSubtitle =>

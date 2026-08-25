@@ -25,6 +25,7 @@ import 'package:waxdeck_api_gen/src/model/library_create.dart';
 import 'package:waxdeck_api_gen/src/model/library_created.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/migration_create.dart';
+import 'package:waxdeck_api_gen/src/model/rescan_options.dart';
 import 'package:waxdeck_api_gen/src/model/restore_plan.dart';
 import 'package:waxdeck_api_gen/src/model/schedule.dart';
 import 'package:waxdeck_api_gen/src/model/schedule_kind.dart';
@@ -3041,9 +3042,10 @@ class AdminApi {
   }
 
   /// Start a library rescan
-  /// Starts an asynchronous scan of every library root and returns the job tracking it. Poll the job to observe progress and completion. Scans serialize with other catalog jobs; starting one while another runs returns the conflict error. Administrators only. 
+  /// Starts an asynchronous scan of every library root and returns the job tracking it. Poll the job to observe progress and completion. Scans serialize with other catalog jobs; starting one while another runs returns the conflict error. The body is optional; absent, the scan is the plain incremental one. Administrators only. 
   ///
   /// Parameters:
+  /// * [rescanOptions] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -3054,6 +3056,7 @@ class AdminApi {
   /// Returns a [Future] containing a [Response] with a [Job] as data
   /// Throws [DioException] if API call or serialization fails
   Future<Response<Job>> rescanLibrary({ 
+    RescanOptions? rescanOptions,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -3082,11 +3085,31 @@ class AdminApi {
         ],
         ...?extra,
       },
+      contentType: 'application/json',
       validateStatus: validateStatus,
     );
 
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(RescanOptions);
+      _bodyData = rescanOptions == null ? null : _serializers.serialize(rescanOptions, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
     final _response = await _dio.request<Object>(
       _path,
+      data: _bodyData,
       options: _options,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,

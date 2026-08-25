@@ -16,7 +16,10 @@ import { clickThrough, clickToward } from './driver/gestures';
 const uploadSrc = (name: string) =>
   path.join(__dirname, '..', '.run', 'upload-src', name);
 
-/// Upload the lantern pair as one album batch and import it as-is,
+/// Upload the meridian pair (this journey's own fixture album - the
+/// lantern pair belongs to the manual-upload journey, whose import
+/// would find this one already holding the destination) as one album
+/// batch and import it as-is,
 /// answering the member pids and the album entity they grouped onto.
 /// The file names are stamped per run so a reused stack's earlier
 /// copies never collide with this run's accounting.
@@ -27,7 +30,7 @@ async function importOwnAlbum(
   const batch = await app.api.post('/uploads/batches', {
     data: { grouping: 'album', mediaType: 'music' },
   });
-  for (const src of ['lantern-one.mp3', 'lantern-two.mp3']) {
+  for (const src of ['meridian-one.mp3', 'meridian-two.mp3']) {
     const bytes = fs.readFileSync(uploadSrc(src));
     const up = await app.api.post('/uploads', {
       data: {

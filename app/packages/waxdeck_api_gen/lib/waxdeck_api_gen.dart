@@ -270,6 +270,7 @@ export 'package:waxdeck_api_gen/src/model/rejected_embedding.dart';
 export 'package:waxdeck_api_gen/src/model/rejected_listen.dart';
 export 'package:waxdeck_api_gen/src/model/release_status_edit.dart';
 export 'package:waxdeck_api_gen/src/model/rematch_result.dart';
+export 'package:waxdeck_api_gen/src/model/rescan_options.dart';
 export 'package:waxdeck_api_gen/src/model/resolve_rung_counts.dart';
 export 'package:waxdeck_api_gen/src/model/restore_plan.dart';
 export 'package:waxdeck_api_gen/src/model/review_bulk_decision.dart';

@@ -60,6 +60,8 @@ abstract final class SemanticsIds {
   static const String libraryPath = 'library-path';
   static String libraryReadOnly(Object id) => 'library-read-only-$id';
   static String libraryRescan(Object id) => 'library-rescan-$id';
+  static const String libraryRescanConfirm = 'library-rescan-confirm';
+  static const String libraryRescanForce = 'library-rescan-force';
   static String libraryRow(Object id) => 'library-row-$id';
   static const String librarySubmit = 'library-submit';
   static const String libraryWarning = 'library-warning';

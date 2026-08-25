@@ -39,11 +39,50 @@ export class Uploads extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.uploadIdentify));
   }
 
+  /// What the identification switch currently reads, or undefined when
+  /// the engine exposes no state to read. Flutter web puts the toggled
+  /// state on the semantics node's aria-checked (or an input child,
+  /// depending on engine version).
+  private async identifyState(): Promise<boolean | undefined> {
+    const own = await this.identify().getAttribute('aria-checked');
+    if (own !== null) return own === 'true';
+    const input = this.identify().locator('input').first();
+    if ((await input.count()) > 0) return input.isChecked();
+    return undefined;
+  }
+
   /// Confirm one picked file with identification turned off, so the
   /// entry it opens is never searched.
   async confirmWithoutIdentifying(): Promise<void> {
     await this.identify().waitFor({ timeout: T.nav });
-    await this.identify().click({ force: true });
+    if ((await this.identifyState()) === undefined) {
+      // No readable state on this engine: the blind toggle it always
+      // was.
+      await this.identify().click({ force: true });
+    } else {
+      // Toggled and read back rather than fired blind: under a loaded
+      // run the tap can land while the dialog is still settling and
+      // leave the switch on, which quietly turns "goes straight in"
+      // into a queued entry. The poll retries the assertion, and the
+      // click fires only on a read that confirmed the switch is still
+      // on - an undefined read (the node re-creating mid-settle) just
+      // polls again rather than counting as "already off".
+      await expect
+        .poll(
+          async () => {
+            const state = await this.identifyState();
+            if (state === true) {
+              await this.identify().click({ force: true });
+            }
+            return state;
+          },
+          {
+            timeout: T.nav,
+            message: 'the identification switch should read off',
+          },
+        )
+        .toBe(false);
+    }
     await this.mediaConfirm().click({ force: true });
   }
 

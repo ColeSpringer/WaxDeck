@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,61 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../providers.dart';
 import 'file_picker_port.dart';
 import 'local_file_reader.dart';
+
+/// The upload-format sets in force: the server-reported ones where the
+/// health payload carries them, the hardcoded mirrors where a server
+/// predates the fields. A failed read throws through - consumers go
+/// through [resolveUploadFormats], which answers the mirror for that
+/// one ask and retires the failure so the next ask fetches fresh,
+/// rather than memoizing a network blip as the mirror for the rest of
+/// the session. retry: null because the resolver's invalidate is the
+/// retry: the ladder would hold `.future` unsettled for seconds while
+/// every ask times out against it.
+final uploadFormatSetsProvider = FutureProvider<UploadFormatSets>(
+  retry: (_, _) => null,
+  (ref) async {
+    final health = await ref.watch(repositoryProvider).health();
+    return UploadFormatSets(
+      accepted: switch (health.uploadFormats) {
+        final formats? when formats.isNotEmpty => formats.toSet(),
+        _ => kAcceptedAudioExtensions,
+      },
+      rejected: switch (health.rejectedFormats) {
+        final formats? when formats.isNotEmpty => formats.toSet(),
+        _ => kRejectedAudioExtensions,
+      },
+    );
+  },
+);
+
+/// How long a pick or drop waits on the health read before filtering
+/// with the mirror. Short on purpose: on the web the picker dialog
+/// must open inside the tap's transient user activation, and a wait
+/// longer than that budget produces no dialog at all.
+const _formatsWait = Duration(seconds: 2);
+
+/// The sets for one pick or drop, bounded. Still loading past the
+/// budget answers the mirror and leaves the fetch to finish for the
+/// next ask; a settled failure answers the mirror and invalidates, so
+/// the next ask retries instead of reading the memoized miss.
+Future<UploadFormatSets> resolveUploadFormats(WidgetRef ref) async {
+  try {
+    return await ref
+        .read(uploadFormatSetsProvider.future)
+        .timeout(_formatsWait);
+  } on TimeoutException {
+    return const UploadFormatSets();
+  } on Object {
+    ref.invalidate(uploadFormatSetsProvider);
+    return const UploadFormatSets();
+  }
+}
+
+/// The sets for a drop zone, resolved when a drop lands rather than at
+/// build - the zone never rebuilds for the health read, and a drop on
+/// a cold start waits the read out instead of filtering with a guess.
+Future<UploadFormatSets> Function() dropFormats(WidgetRef ref) =>
+    () => resolveUploadFormats(ref);
 
 /// Local file paths retained for resuming a failed path-backed
 /// transfer, keyed by upload id. Container-scoped so an event
@@ -318,7 +374,13 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       onSealed();
       _upsert(sealed);
       _markFailed(uploadId, failed: false);
-    } on WaxDeckApiException {
+    } catch (_) {
+      // Marked failed whatever threw - a server refusal, but also a
+      // source that stopped answering (a SAF document moved
+      // mid-transfer arrives as a PlatformException, a deleted local
+      // file as a FileSystemException, a shrunk one as the StateError
+      // above). Without the mark the row sits in "uploading" forever
+      // with no Retry.
       _markFailed(uploadId, failed: true);
       rethrow;
     }

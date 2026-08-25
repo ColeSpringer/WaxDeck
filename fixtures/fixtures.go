@@ -411,6 +411,32 @@ func UploadFolderSources() []Spec {
 	}
 }
 
+// UploadWorkbenchSources is the release-workbench journey's own album,
+// its own for the UploadFolderSources reason: that journey imports and
+// then renames a release, and had it reused the lantern album its
+// import would hold the destination the manual-upload journey's own
+// import needs (the rename regroups the catalog but moves no files).
+// Distinct durations, same fingerprint-dedup reason as everywhere.
+func UploadWorkbenchSources() []Spec {
+	track := func(name, title, trackNo string, d time.Duration) Spec {
+		return Spec{
+			Name:     name,
+			Codec:    CodecMP3,
+			Duration: d,
+			Tags: map[string]string{
+				"TITLE":       title,
+				"ARTIST":      "Meridian Delay",
+				"ALBUM":       "Tin Meridian",
+				"TRACKNUMBER": trackNo,
+			},
+		}
+	}
+	return []Spec{
+		track("meridian-one", "Tin Meridian", "1", 7100*time.Millisecond),
+		track("meridian-two", "Ledger Lines", "2", 7600*time.Millisecond),
+	}
+}
+
 // ConformanceMedia returns the single tone the audio-engine conformance
 // suite plays against real engines: long enough that mid-file seek
 // targets are meaningfully far apart, still under the duration cap.

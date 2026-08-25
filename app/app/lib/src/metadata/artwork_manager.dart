@@ -517,7 +517,7 @@ class _SlotTile extends ConsumerWidget {
       container: true,
       child: AudioDropArea(
         enabled: !busy,
-        extensions: kArtworkExtensions,
+        formats: () async => const UploadFormatSets.only(kArtworkExtensions),
         hint: l10n.artworkDropHint(slot.inlineOf(l10n)),
         semanticsId: SemanticsIds.artSlotDrop(slot.role),
         onDropped: onDropped,

@@ -537,6 +537,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminLibraryRescan => 'Volver a escanear las bibliotecas';
 
   @override
+  String get adminLibraryRescanBody =>
+      'Escanea todas las carpetas raíz de las bibliotecas, no solo esta. Los archivos sin cambios se omiten.';
+
+  @override
+  String get adminLibraryRescanForce => 'Releer los archivos sin cambios';
+
+  @override
+  String get adminLibraryRescanForceHelp =>
+      'La pasada de reparación: vuelve a leer cada archivo aunque nada haya cambiado, lo que tarda mucho más. Tus ediciones se conservan.';
+
+  @override
+  String get adminLibraryRescanStart => 'Volver a escanear';
+
+  @override
   String get adminLibraryScanning =>
       'Escaneando todas las carpetas raíz de las bibliotecas';
 
@@ -9488,6 +9502,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get uploadsFileTypeAudio => 'Audio';
 
   @override
+  String get uploadsFileUnreadable => 'No se ha podido leer el archivo';
+
+  @override
   String get uploadsFormat => 'Formato de descarga';
 
   @override
@@ -9573,6 +9590,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get uploadsPickFolder => 'Subir una carpeta';
+
+  @override
+  String get uploadsPickFolderFailed => 'No se ha podido leer la carpeta';
 
   @override
   String get uploadsPickFolderSubtitle =>

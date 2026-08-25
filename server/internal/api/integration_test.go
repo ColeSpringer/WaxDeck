@@ -362,7 +362,21 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 // rescanAndWait runs a scan through the API and polls the job to done.
 func (h *harness) rescanAndWait(t *testing.T) {
 	t.Helper()
-	req, _ := http.NewRequest("POST", h.ts.URL+"/api/v1/library/rescan", nil)
+	h.rescanAndWaitWith(t, "")
+}
+
+// rescanAndWaitWith is rescanAndWait with an options body (empty posts
+// none, the pre-options wire shape).
+func (h *harness) rescanAndWaitWith(t *testing.T, body string) {
+	t.Helper()
+	var rd io.Reader
+	if body != "" {
+		rd = strings.NewReader(body)
+	}
+	req, _ := http.NewRequest("POST", h.ts.URL+"/api/v1/library/rescan", rd)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("Authorization", "Bearer "+h.token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

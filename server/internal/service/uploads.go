@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -77,6 +79,8 @@ const stagingReservationWindow = time.Hour
 // quietly admit them.
 var drmFormats = map[string]bool{"aax": true, "aaxc": true}
 
+var drmFormatsList = slices.Sorted(maps.Keys(drmFormats))
+
 // uploadFormatSet builds the accepted-extension set (lowercase, no
 // dot). The default is every format the catalog scans and the decode
 // stack reads.
@@ -92,6 +96,31 @@ func uploadFormatSet(formats []string) map[string]bool {
 		out[strings.ToLower(strings.TrimPrefix(strings.TrimSpace(f), "."))] = true
 	}
 	return out
+}
+
+// setUploadFormats installs the accepted-format set plus the sorted
+// list the health payload reports: both are fixed for the process, so
+// the list is computed here rather than per request. The deny-list is
+// subtracted - an operator listing aax has every aax refused at
+// session create regardless, so reporting it as accepted would have
+// pickers admitting files the server then refuses one by one.
+func (l *Library) setUploadFormats(formats []string) {
+	l.uploadFormats = uploadFormatSet(formats)
+	list := slices.Sorted(maps.Keys(l.uploadFormats))
+	l.uploadFormatsList = slices.DeleteFunc(list, func(f string) bool { return drmFormats[f] })
+}
+
+// UploadFormats reports the effective accepted-extension set, sorted,
+// DRM deny-list subtracted. The health payload serves it so pickers
+// filter against what this server actually takes rather than a
+// client-side mirror.
+func (l *Library) UploadFormats() []string {
+	return slices.Clone(l.uploadFormatsList)
+}
+
+// RejectedFormats reports the DRM deny-list, sorted.
+func (l *Library) RejectedFormats() []string {
+	return slices.Clone(drmFormatsList)
 }
 
 // UploadDTO is the API-facing session shape.

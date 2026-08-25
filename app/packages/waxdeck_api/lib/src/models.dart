@@ -12,11 +12,23 @@ class ServerHealth {
     required this.status,
     required this.version,
     required this.apiVersion,
+    this.uploadFormats,
+    this.rejectedFormats,
   });
 
   final String status;
   final String version;
   final int apiVersion;
+
+  /// File extensions uploads accept (lowercase, no dot) - the server's
+  /// effective set, so an operator's replacement is what appears here.
+  /// Null on servers older than the field; callers fall back to their
+  /// own mirror of the default set.
+  final List<String>? uploadFormats;
+
+  /// Extensions refused outright whatever [uploadFormats] says (DRM
+  /// containers). Null on servers older than the field.
+  final List<String>? rejectedFormats;
 
   bool get ok => status == 'ok';
 }

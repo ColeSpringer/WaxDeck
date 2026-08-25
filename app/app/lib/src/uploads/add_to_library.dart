@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -192,9 +193,11 @@ Future<void> pickAndUpload(
   FilePickerPort picker, {
   MediaType? initial,
 }) async {
+  final l10n = context.l10n;
   final files = await picker.pickAudioFiles(
-    audioLabel: context.l10n.uploadsFileTypeAudio,
-    anyLabel: context.l10n.uploadsFileTypeAny,
+    audioLabel: l10n.uploadsFileTypeAudio,
+    anyLabel: l10n.uploadsFileTypeAny,
+    formats: await resolveUploadFormats(ref),
   );
   if (files.isEmpty || !context.mounted) return;
   await uploadPickedFiles(context, ref, files, initial: initial);
@@ -234,7 +237,19 @@ Future<void> pickFolderAndUpload(
 }) async {
   final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
-  final pick = await picker.pickAudioFolder();
+  final FolderPick pick;
+  try {
+    pick = await picker.pickAudioFolder(
+      formats: await resolveUploadFormats(ref),
+    );
+  } on PlatformException {
+    // The pick itself failed - a ROM without a documents picker, a
+    // provider that errored mid-walk. Said out loud: swallowed, the
+    // folder tile just does nothing, and this caller is the surface's
+    // only chance to word it.
+    messenger.show(l10n.uploadsPickFolderFailed);
+    return;
+  }
   if (pick.files.isEmpty) {
     reportSkippedFiles(
       messenger,
@@ -327,6 +342,14 @@ Future<void> uploadPickedFiles(
       // allowance can ever admit.
       messenger.show(
         l10n.uploadsFileFailed(file.name, explainRefusal(l10n, e)),
+      );
+    } catch (_) {
+      // The source stopped answering (a file moved or shrank between
+      // pick and transfer). Named per file and the loop continues:
+      // this failure sinking the siblings and the finalize would keep
+      // everything that did arrive out of review.
+      messenger.show(
+        l10n.uploadsFileFailed(file.name, l10n.uploadsFileUnreadable),
       );
     }
   }

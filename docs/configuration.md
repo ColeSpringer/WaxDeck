@@ -101,7 +101,13 @@ Read by compose itself, not the server.
   set it empty to keep the library strictly scan-only, or point it at
   a separate root if your main library is managed by beets or Picard.
 - `WAXDECK_SCAN_ON_START` (default `true`): launch a library scan at
-  startup.
+  startup. A scan is incremental - files whose size and mtime are
+  unchanged are skipped. The rescan action (the admin libraries
+  screen, or `POST /library/rescan` with `{"force": true}`) can
+  instead re-read every file: the repair pass for rows written before
+  a tag-parser fix (ALAC files scanned before waxlabel 1.4.2 store a
+  wrong bit depth, and only a forced rescan heals them). Curated
+  edits survive it.
 - `WAXDECK_LIBRARY_WATCH` (default `true`): watch the library roots
   and catalog files placed there by hand without waiting for a rescan.
   Network mounts (NFS, SMB, 9p) rarely deliver change events; disable
@@ -110,6 +116,8 @@ Read by compose itself, not the server.
   separated. Replaces the default set (see
   [uploads](curation-and-metadata.md)) rather than extending it; empty
   keeps the default. DRM containers (aax, aaxc) are refused regardless.
+  The effective set rides the `/health` payload, so clients filter
+  their pickers and drop zones against what is configured here.
 - `WAXDECK_RESET_CATALOG` (default `false`): when the catalog was
   built from a different schema baseline (which pre-1.0 is edited in
   place rather than migrated), move it aside and start on a fresh one
