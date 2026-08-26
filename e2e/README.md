@@ -131,8 +131,9 @@ npx playwright test
 `make e2e` runs all three; `make lint` runs `conform`.
 
 `lint/allowlist.json` is **empty**, and every rule is a hard zero
-suite-wide: hand-typed identifiers, `force: true`, numeric timeouts, bare
-sleeps, `/api/v1/` literals, and any use of the bootstrap administrator.
+suite-wide: hand-typed identifiers, `force: true`, hand-aimed secondary
+taps (`button: 'right'`), numeric timeouts, bare sleeps, `/api/v1/`
+literals, and any use of the bootstrap administrator.
 It fails when a count goes **up or down** - "ratchet: lower it to N" is
 as loud as a new violation - so the file stays as the seam for the next
 rule rather than as a tolerance. `--write-baseline` re-seeds it, and is

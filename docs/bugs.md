@@ -2,11 +2,11 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
-- [8-25-2026] on the homescreen, when there are items on off screen an arrow appears that you are supposed to be able to click and move the shelf view. However, currently when you go to click it you will instead click the track underneath it and start playing and the shelf won't move at all.
+- [8-25-2026] on the homescreen, when there are items on off screen an arrow appears that you are supposed to be able to click and move the shelf view. However, currently when you go to click it you will instead click the track underneath it and start playing and the shelf won't move at all. Also, its not overly obvious that there is flowover as the button doesnt show until you hover over it.
 
 - [8-25-2026] For the queue in fullscreen, the album artwork shows in the right. I like the idea but we should have it on the left where the song and artist are. im thinking a little bit to the right of the "Up Next" text would look good
 
-- [8-25-2026] the letters that appear on the right when looking at the albums page (for example) are somewhat hard to read given the background.
+- [8-25-2026] the letters that appear on the right when looking at the albums page (for example) are somewhat hard to read given the background. Might just be worthwhile to do a whole audit of both dark and light mode to make sure contrast meets ally standards and also just to make sure that we have enough subtle variety to make things interesting to look at and informative.
 
 - [8-25-2026] Whjen adding a podcast by url, the text hint states "Feed or channel url" when those are seperate depending on if you have RSS or youtube selected.
 

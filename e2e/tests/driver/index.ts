@@ -132,8 +132,8 @@ export {
   clickThrough,
   chooseFromMenu,
   typeInto,
+  wheelIntoReach,
   wheelIntoView,
-  wheelIntoViewport,
 } from './gestures';
 export { DEST } from './nav';
 export type { Ctx } from './context';

@@ -10,6 +10,7 @@
     "itemMenuMix": "item-menu-mix",
     "itemMenuShare": "item-menu-share-album",
     "itemMenuShareItem": "item-menu-share",
+    "itemMenuSheet": "item-menu-sheet-{pid}",
     "offlineBanner": "offline-banner"
   }
 }

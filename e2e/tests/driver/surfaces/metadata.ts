@@ -8,7 +8,7 @@ import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { longPressOn, typeInto, wheelIntoViewport } from '../gestures';
+import { longPressOn, typeInto, wheelIntoReach } from '../gestures';
 
 export class Metadata extends Surface {
   /// The editor screen, whichever surface opened it.
@@ -79,10 +79,10 @@ export class Metadata extends Surface {
     await typeInto(this.ctx.page, field, text);
   }
 
-  /// Wheel a control of this surface into the viewport, over the pane
-  /// (or another scroller) that owns it.
+  /// Wheel a control of this surface to where a click lands on it, over
+  /// the pane (or another scroller) that owns it.
   async intoView(target: Locator, over?: Locator): Promise<void> {
-    await wheelIntoViewport(this.ctx.page, target, { over });
+    await wheelIntoReach(this.ctx.page, target, { over });
   }
 
   /// Press-and-hold a row, which is how the workbench's multi-select

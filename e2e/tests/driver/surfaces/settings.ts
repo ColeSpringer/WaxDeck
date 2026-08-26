@@ -5,7 +5,7 @@ import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough, typeInto, wheelIntoViewport } from '../gestures';
+import { chooseFromMenu, clickThrough, typeInto, wheelIntoReach } from '../gestures';
 
 export class Settings extends Surface {
   search(): Locator {
@@ -57,11 +57,11 @@ export class Settings extends Surface {
   /// the gesture: near a screen edge a popup is repositioned as it grows,
   /// and a click at a rect read a frame earlier lands one row off.
   ///
-  /// Wheeled into the viewport first: a section is longer than the
+  /// Wheeled to where a click lands first: a section is longer than the
   /// window, and a row below the fold still reports visible.
   async choose(name: string, option: Locator, settled?: Locator): Promise<void> {
     const trigger = this.setting(name);
-    await wheelIntoViewport(this.ctx.page, trigger);
+    await wheelIntoReach(this.ctx.page, trigger);
     await chooseFromMenu(trigger, option, settled);
   }
 

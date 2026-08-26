@@ -140,17 +140,23 @@ test("a shelf card's menu reaches the album and the editor door", async ({
 
   await app.nav.enter('home');
   await app.home.revealShelf('continue');
-  const card = app.home.card('continue', pid);
-  await expect(card).toBeVisible();
+  await expect(app.home.card('continue', pid)).toBeVisible();
 
   // A right click is the card's overflow gesture; the sheet's "Go to
   // album" lands on the release the card belongs to. The album screen
   // is pushed, and a push stays out of the reported URL by design, so
-  // arrival is the screen's own header controls rather than the
-  // address bar.
-  await card.click({ button: 'right' });
-  await app.home.control(SemanticsIds.itemMenuGoAlbum).click();
-  await expect(app.home.control(SemanticsIds.entityPlay)).toBeVisible();
+  // arrival is the screen's own track rows - not `entityPlay`, which
+  // the artist and playlist screens draw too, so a pick landing one
+  // row off on "Go to artist" would satisfy it; and not the identity
+  // strip, which the screen omits for an album carrying no identity
+  // fields, as the fixture album does.
+  await app.home.chooseFromCardMenu(
+    'continue',
+    pid,
+    app.home.control(SemanticsIds.itemMenuGoAlbum),
+    app.home.control(SemanticsIds.albumTrackMore(0)),
+  );
+  await expect(app.home.control(SemanticsIds.albumTrackMore(0))).toBeVisible();
 
   // Back on home, the same menu again. This account holds neither the
   // admin role nor the upload right, so the editor door is not drawn at
@@ -159,7 +165,7 @@ test("a shelf card's menu reaches the album and the editor door", async ({
   // the accounts that can use them.
   await app.nav.enter('home');
   await app.home.revealShelf('continue');
-  await card.click({ button: 'right' });
+  await app.home.openCardMenu('continue', pid);
   await expect(app.home.control(SemanticsIds.itemMenuGoArtist)).toBeVisible();
   await expect(app.metadata.editEntry(pid)).toBeHidden();
 });

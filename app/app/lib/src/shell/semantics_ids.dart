@@ -337,6 +337,7 @@ abstract final class SemanticsIds {
   static const String itemMenuMix = 'item-menu-mix';
   static const String itemMenuShare = 'item-menu-share-album';
   static const String itemMenuShareItem = 'item-menu-share';
+  static String itemMenuSheet(Object pid) => 'item-menu-sheet-$pid';
   static const String offlineBanner = 'offline-banner';
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.

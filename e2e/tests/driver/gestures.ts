@@ -68,6 +68,15 @@ export async function submitThrough(
   }).toPass({ timeout: T.nav });
 }
 
+/// Which button a gesture presses. The default is the primary one; a
+/// surface that raises its menu from a secondary tap - a card, a listing
+/// row - says so, and the option rides down to every gesture built on
+/// [clickToward]. Getting this wrong is not a missed menu but a
+/// different verb: a primary tap on a card plays it.
+export interface Press {
+  readonly button?: 'left' | 'right';
+}
+
 // The retried-click attempt everything below shares: unless the goal is
 // already met, fire a bounded forced click and hold to the goal.
 //
@@ -78,15 +87,17 @@ export async function submitThrough(
 export async function clickToward(
   trigger: Locator,
   goal: { shows: Locator } | { gone: Locator },
+  press: Press = {},
 ) {
+  const { button = 'left' } = press;
   if ('shows' in goal) {
     if (!(await goal.shows.isVisible())) {
-      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
+      await trigger.click({ timeout: 2_000, force: true, button }).catch(() => {});
     }
     await goal.shows.waitFor({ timeout: T.step });
   } else {
     if (await goal.gone.first().isVisible()) {
-      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
+      await trigger.click({ timeout: 2_000, force: true, button }).catch(() => {});
     }
     await expect(goal.gone).toHaveCount(0, { timeout: T.step });
   }
@@ -153,6 +164,24 @@ export async function clickInView(
 // semantics node at all, so there is nothing to scroll to and only a
 // wheel over the canvas moves the list. `over` places the cursor for a
 // scroll view that is not the one under the middle of the window.
+// Parks the cursor where a wheel should land: over the given scroller's
+// centre clamped into the window - a pane partly off-screen otherwise
+// parks it outside, where every wheel is a silent no-op - or the
+// window's middle.
+async function aimWheel(
+  page: Page,
+  over: Locator | undefined,
+  width: number,
+  height: number,
+) {
+  const box = over === undefined ? null : await over.boundingBox();
+  const clamp = (v: number, edge: number) => Math.min(Math.max(v, 2), edge - 2);
+  await page.mouse.move(
+    box === null ? width / 2 : clamp(box.x + box.width / 2, width),
+    box === null ? height / 2 : clamp(box.y + box.height / 2, height),
+  );
+}
+
 export async function wheelIntoView(
   page: Page,
   target: Locator,
@@ -162,25 +191,45 @@ export async function wheelIntoView(
   const view = page.viewportSize();
   const width = view?.width ?? (await page.evaluate(() => window.innerWidth));
   const height = view?.height ?? (await page.evaluate(() => window.innerHeight));
-  const box = over === undefined ? null : await over.boundingBox();
-  await page.mouse.move(
-    box === null ? width / 2 : box.x + box.width / 2,
-    box === null ? height / 2 : Math.min(box.y + box.height / 2, height - 2),
-  );
+  await aimWheel(page, over, width, height);
   await expect(async () => {
     await page.mouse.wheel(0, by);
     await expect(target).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: T.nav });
 }
 
-// Wheel a canvas surface until `target`'s rect is inside the viewport.
+// Wheel a canvas surface until a click aimed at `target` lands on it:
+// the rect at rest, fully inside the window, and its centre inside the
+// window's middle half - or the best position its scroll can offer.
 //
-// `wheelIntoView` answers "does it exist yet"; this answers "can a click
-// land on it". A semantics node below the fold still reports visible
-// with a real box, and Playwright's own scroll moves the overlay while
-// the canvas stays put - which is how choosing a crossfade value opened
-// the rewind row's menu instead.
-export async function wheelIntoViewport(
+// `wheelIntoView` answers "does it exist yet"; this answers "can a
+// click land on it". Two refusals hide behind a node that looks fine.
+// A node below the fold still reports a box, and Playwright's own
+// scroll moves the semantics overlay while the canvas stays put -
+// which is how choosing a crossfade value opened the rewind row's menu
+// instead; fully-inside is what keeps that scroll a no-op at click
+// time. And flutter clips a part-scrolled node's rect to what it
+// paints, so a shelf card sliding under the app bar keeps publishing a
+// box - a shorter one, pinned to the clip edge - which passes every
+// inside-the-window test while a click at its centre stops reaching
+// the card. Measured on the continue shelf: a right click at the
+// reported centre raises the card's menu at 264, 236 and 176 px of
+// reported height, and raises nothing at 116. In CI that click landed
+// on the first Never played card two shelves down and opened its menu
+// instead.
+//
+// The middle half rather than an inset: the band is wider than the
+// wheel notch, so a rect just outside it cannot be stepped over and
+// back forever. When a wheel moves nothing - confirmed through a rest,
+// so a scroll frame landing late does not read as a spent scroll - the
+// band is let go and fully-inside is enough. That cannot re-admit the
+// clipped rect: the wheel fires toward the middle, which is the
+// direction that uncovers a scroll-clipped target, so a wheel that
+// moves nothing means the scroll holds nothing over it on that side.
+// Horizontal reach is checked but not driven - no caller aims past a
+// row's own width - so a sideways-clipped target fails loudly instead
+// of taking a click that would miss it.
+export async function wheelIntoReach(
   page: Page,
   target: Locator,
   options: { over?: Locator } = {},
@@ -189,23 +238,60 @@ export async function wheelIntoViewport(
   const view = page.viewportSize();
   const width = view?.width ?? (await page.evaluate(() => window.innerWidth));
   const height = view?.height ?? (await page.evaluate(() => window.innerHeight));
-  const inside = (box: { y: number; height: number } | null) =>
-    box !== null && box.y >= 0 && box.y + box.height <= height;
+  type Box = { x: number; y: number; width: number; height: number };
+  const middleOf = (box: Box) => box.y + box.height / 2;
+  const inBand = (box: Box) =>
+    middleOf(box) >= height / 4 && middleOf(box) <= (height * 3) / 4;
+  const inWindow = (box: Box) =>
+    box.x >= 0 &&
+    box.x + box.width <= width &&
+    box.y >= 0 &&
+    box.y + box.height <= height;
   await target.waitFor({ timeout: T.nav });
-  if (inside(await target.boundingBox())) return;
-  const anchor = over === undefined ? null : await over.boundingBox();
-  await page.mouse.move(
-    anchor === null ? width / 2 : anchor.x + anchor.width / 2,
-    anchor === null ? height / 2 : Math.min(anchor.y + anchor.height / 2, height - 2),
-  );
+  // The box the last wheel was fired from, kept across attempts: a
+  // fresh read matching it means that wheel moved nothing.
+  let spent: Box | null = null;
+  let aimed = false;
   await expect(async () => {
-    const box = await target.boundingBox();
-    expect(box, 'the target reports a box to scroll toward').toBeTruthy();
-    if (!inside(box)) {
-      // Short of the gap, so a row just past the fold cannot oscillate.
-      await page.mouse.wheel(0, box!.y < 0 ? -120 : 120);
+    const seen = await target.boundingBox();
+    expect(seen, 'the target reports a box to scroll toward').toBeTruthy();
+    const same = (box: Box) =>
+      spent !== null &&
+      box.x === spent.x &&
+      box.y === spent.y &&
+      box.width === spent.width &&
+      box.height === spent.height;
+    let box = seen!;
+    if ((inBand(box) && inWindow(box)) || same(box)) {
+      // At rest before the rect is handed to a click: content arriving
+      // above the target moves it after this gesture returns, and a
+      // stall read mid-glide is a scroll that has not landed yet, not
+      // one that is spent.
+      await rectAtRest(target);
+      const rested = await target.boundingBox();
+      expect(rested, 'the target still reports a box at rest').toBeTruthy();
+      box = rested!;
+      if (inBand(box) && inWindow(box)) return;
+      if (same(box)) {
+        expect(
+          inWindow(box),
+          'the target is as reachable as its scroll allows',
+        ).toBe(true);
+        return;
+      }
+      // The rest surfaced late movement; wheel again from where it is.
     }
-    expect(inside(await target.boundingBox()), 'the target is inside the viewport').toBe(true);
+    if (!aimed) {
+      aimed = true;
+      await aimWheel(page, over, width, height);
+    }
+    spent = box;
+    await page.mouse.wheel(0, middleOf(box) < height / 2 ? -120 : 120);
+    const moved = await target.boundingBox();
+    expect(
+      moved !== null && inBand(moved) && inWindow(moved),
+      'the target is where a click reaches it',
+    ).toBe(true);
   }).toPass({ timeout: T.action });
 }
 
@@ -238,10 +324,28 @@ export async function dragOnto(page: Page, handle: Locator, onto: Locator) {
   await page.mouse.up();
 }
 
+// Two matching reads, 120 ms apart, are a rect at rest. A forced click
+// dispatches at a rect read a frame earlier, so a surface that moves
+// its controls while they stand - a menu repositioned as it grows, a
+// wizard card rebuilt as the scan behind it advances - gets the press
+// wherever the control used to be. Reduced motion shortens the moving
+// window without closing it.
+export async function rectAtRest(target: Locator) {
+  await expect(async () => {
+    const before = await target.boundingBox();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const after = await target.boundingBox();
+    expect(before).toBeTruthy();
+    expect(after).toEqual(before);
+  }).toPass({ timeout: 4_000 });
+}
+
 // Above the action tier because a menu may be re-opened from scratch
 // several times over, each round paying the open again. One gesture's
-// quirk rather than a kind of wait, so it is not in `T`.
-const MENU_UNIT = 45_000;
+// quirk rather than a kind of wait, so it is not in `T`; exported for
+// the surfaces that build the same open-and-pick shape around their own
+// trigger.
+export const MENU_UNIT = 45_000;
 
 // Open a menu and choose a row from it, as one retried unit.
 //
@@ -257,22 +361,15 @@ export async function chooseFromMenu(
   trigger: Locator,
   item: Locator,
   settled?: Locator,
+  press: Press = {},
 ) {
   await expect(async () => {
     if (settled && (await settled.isVisible())) return;
-    await clickToward(trigger, { shows: item });
-    // The menu is repositioned as it grows near a screen edge, while a
-    // forced click dispatches at the rect a frame earlier - which is how
-    // choosing "Off" once stored the row beneath it. Two matching reads
-    // are the menu at rest; reduced motion shortens that window without
-    // closing it.
-    await expect(async () => {
-      const before = await item.boundingBox();
-      await new Promise((resolve) => setTimeout(resolve, 120));
-      const after = await item.boundingBox();
-      expect(before).toBeTruthy();
-      expect(after).toEqual(before);
-    }).toPass({ timeout: 4_000 });
+    await clickToward(trigger, { shows: item }, press);
+    // At rest before the pick: near a screen edge the menu is
+    // repositioned as it grows, which is how choosing "Off" once stored
+    // the row beneath it.
+    await rectAtRest(item);
     await item.click({ force: true });
     if (settled) {
       await settled.waitFor({ timeout: T.step });
@@ -286,8 +383,12 @@ export async function chooseFromMenu(
 // else pick from it. Behaviourally `clickThrough` today; the separate
 // name stays because "open the menu" is what the call sites mean, and a
 // menu's trigger sits behind the barrier once it opens.
-export async function openMenu(trigger: Locator, shows: Locator) {
+export async function openMenu(
+  trigger: Locator,
+  shows: Locator,
+  press: Press = {},
+) {
   await expect(async () => {
-    await clickToward(trigger, { shows });
+    await clickToward(trigger, { shows }, press);
   }).toPass({ timeout: T.nav });
 }

@@ -129,6 +129,17 @@ const RULES = [
     fix: 'drive the control through a driver gesture, which owns the forced click',
   },
   {
+    name: 'secondary-tap',
+    // A right click over canvas is a gesture and not a click. The card
+    // it aims at has to be wheeled where a click can land on it first,
+    // because flutter clips a part-scrolled node's rect and keeps
+    // publishing it - which is how a spec's own `click({ button:
+    // 'right' })` on the continue shelf opened the first Never played
+    // card's menu two shelves down.
+    applies: isSpec,
+    fix: 'raise it through a driver gesture; home.openCardMenu and its kind own the secondary tap',
+  },
+  {
     name: 'numeric-timeout',
     applies: isSpec,
     fix: 'let the driver budget it, or pass { within: T.<tier> } - a tier, not a number',
@@ -210,6 +221,9 @@ function scan(file, text) {
   const gestureMembers = new Set([
     'click', 'dblclick', 'tap', 'check', 'uncheck', 'setChecked',
     'hover', 'dragTo', 'fill', 'press', 'selectText',
+    // mouse.down/up: the raw-pointer spelling of the same gestures,
+    // which is where a hand-rolled right click would otherwise hide.
+    'down', 'up',
   ]);
 
   // Whether a property sits directly in the options argument of one of
@@ -276,6 +290,17 @@ function scan(file, text) {
         isGestureOption(node)
       ) {
         hit('force-click');
+      }
+      // Same call shape, same reason: `button: 'right'` is a request
+      // body's field elsewhere, and only the one inside a gesture's
+      // options is aiming a pointer at the canvas.
+      if (
+        node.name.text === 'button' &&
+        ts.isStringLiteralLike(node.initializer) &&
+        node.initializer.text === 'right' &&
+        isGestureOption(node)
+      ) {
+        hit('secondary-tap');
       }
       // `timeout` and `within` alike. `within` is what this rule's own
       // fix text points authors at, so leaving it unchecked would hand

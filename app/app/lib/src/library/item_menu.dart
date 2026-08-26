@@ -112,97 +112,113 @@ Future<void> showItemMenuSheet(
           }
         }
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            if (mayOfferItemEdit(sheetRef))
-              WaxOptionRow(
-                title: l10n.reviewEditMetadata,
-                glyph: WaxIcons.edit,
-                semanticsId: SemanticsIds.editMetadata(pid),
-                onTap: () => open(WaxRoute.metadata(pid)),
-              ),
-            if (music && withGoToAlbum && albumPid != null)
-              WaxOptionRow(
-                title: l10n.libraryMenuGoToAlbum,
-                subtitle: album,
-                glyph: WaxIcons.albums,
-                semanticsId: SemanticsIds.itemMenuGoAlbum,
-                onTap: () =>
-                    open(WaxRoute.musicBucket(MusicDimension.albums, albumPid)),
-              ),
-            if (music && artistPid != null)
-              WaxOptionRow(
-                title: l10n.libraryMenuGoToArtist,
-                subtitle: artist,
-                glyph: WaxIcons.artists,
-                semanticsId: SemanticsIds.itemMenuGoArtist,
-                onTap: () => open(
-                  WaxRoute.musicBucket(MusicDimension.artists, artistPid),
+        // The sheet names the item it was raised for. The rows are
+        // shared ids on every surface, so without this a menu on the
+        // wrong row is indistinguishable from the right one to a test -
+        // which is how a misaimed right click on a home card once
+        // passed for the card beside it. `container` keeps the handle
+        // its own node and `explicitChildNodes` leaves the rows theirs,
+        // as the shelf's region does.
+        return Semantics(
+          container: true,
+          explicitChildNodes: true,
+          identifier: SemanticsIds.itemMenuSheet(pid),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              if (mayOfferItemEdit(sheetRef))
+                WaxOptionRow(
+                  title: l10n.reviewEditMetadata,
+                  glyph: WaxIcons.edit,
+                  semanticsId: SemanticsIds.editMetadata(pid),
+                  onTap: () => open(WaxRoute.metadata(pid)),
                 ),
-              ),
-            if (music && withPin)
-              for (final target in <PinTarget>[
-                if (albumPid != null)
-                  (pid: albumPid, what: 'album', name: album ?? title),
-                if (artistPid != null)
-                  (pid: artistPid, what: 'artist', name: artist ?? ''),
-              ])
-                pinSheetRow(
-                  sheetContext,
-                  sheetRef,
-                  target,
+              if (music && withGoToAlbum && albumPid != null)
+                WaxOptionRow(
+                  title: l10n.libraryMenuGoToAlbum,
+                  subtitle: album,
+                  glyph: WaxIcons.albums,
+                  semanticsId: SemanticsIds.itemMenuGoAlbum,
+                  onTap: () => open(
+                    WaxRoute.musicBucket(MusicDimension.albums, albumPid),
+                  ),
+                ),
+              if (music && artistPid != null)
+                WaxOptionRow(
+                  title: l10n.libraryMenuGoToArtist,
+                  subtitle: artist,
+                  glyph: WaxIcons.artists,
+                  semanticsId: SemanticsIds.itemMenuGoArtist,
+                  onTap: () => open(
+                    WaxRoute.musicBucket(MusicDimension.artists, artistPid),
+                  ),
+                ),
+              if (music && withPin)
+                for (final target in <PinTarget>[
+                  if (albumPid != null)
+                    (pid: albumPid, what: 'album', name: album ?? title),
+                  if (artistPid != null)
+                    (pid: artistPid, what: 'artist', name: artist ?? ''),
+                ])
+                  pinSheetRow(
+                    sheetContext,
+                    sheetRef,
+                    target,
+                    onTap: () {
+                      close();
+                      unawaited(
+                        togglePinCaptured(
+                          messenger: messenger,
+                          l10n: l10n,
+                          pinned: pinnedController,
+                          pid: target.pid,
+                          label: target.name,
+                        ),
+                      );
+                    },
+                  ),
+              if (music)
+                WaxOptionRow(
+                  title: l10n.playerInstantMix,
+                  glyph: WaxIcons.waveform,
+                  semanticsId: SemanticsIds.itemMenuMix,
                   onTap: () {
                     close();
                     unawaited(
-                      togglePinCaptured(
-                        messenger: messenger,
-                        l10n: l10n,
-                        pinned: pinnedController,
-                        pid: target.pid,
-                        label: target.name,
-                      ),
+                      showInstantMixSheet(rootContext, (
+                        pid: pid,
+                        title: title,
+                      )),
                     );
                   },
                 ),
-            if (music)
-              WaxOptionRow(
-                title: l10n.playerInstantMix,
-                glyph: WaxIcons.waveform,
-                semanticsId: SemanticsIds.itemMenuMix,
-                onTap: () {
-                  close();
-                  unawaited(
-                    showInstantMixSheet(rootContext, (pid: pid, title: title)),
-                  );
-                },
-              ),
-            if (music && albumPid != null)
-              WaxOptionRow(
-                title: l10n.libraryMenuShareAlbum,
-                subtitle: album,
-                glyph: WaxIcons.share,
-                semanticsId: SemanticsIds.itemMenuShare,
-                onTap: () {
-                  close();
-                  unawaited(showShareLinkDialog(rootContext, pid: albumPid));
-                },
-              ),
-            // A track's share rides its album, above; an episode or a
-            // book shares itself, the way its own screen and the player
-            // do.
-            if (!music)
-              WaxOptionRow(
-                title: l10n.playerShareLink,
-                glyph: WaxIcons.share,
-                semanticsId: SemanticsIds.itemMenuShareItem,
-                onTap: () {
-                  close();
-                  unawaited(showShareLinkDialog(rootContext, pid: pid));
-                },
-              ),
-          ],
+              if (music && albumPid != null)
+                WaxOptionRow(
+                  title: l10n.libraryMenuShareAlbum,
+                  subtitle: album,
+                  glyph: WaxIcons.share,
+                  semanticsId: SemanticsIds.itemMenuShare,
+                  onTap: () {
+                    close();
+                    unawaited(showShareLinkDialog(rootContext, pid: albumPid));
+                  },
+                ),
+              // A track's share rides its album, above; an episode or a
+              // book shares itself, the way its own screen and the player
+              // do.
+              if (!music)
+                WaxOptionRow(
+                  title: l10n.playerShareLink,
+                  glyph: WaxIcons.share,
+                  semanticsId: SemanticsIds.itemMenuShareItem,
+                  onTap: () {
+                    close();
+                    unawaited(showShareLinkDialog(rootContext, pid: pid));
+                  },
+                ),
+            ],
+          ),
         );
       },
     ),
@@ -231,48 +247,54 @@ Future<void> showAlbumMenuSheet(
     builder: (sheetContext) => Consumer(
       builder: (_, sheetRef, _) {
         void close() => Navigator.of(sheetContext).pop();
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            pinSheetRow(
-              sheetContext,
-              sheetRef,
-              target,
-              onTap: () {
-                close();
-                unawaited(
-                  togglePinCaptured(
-                    messenger: messenger,
-                    l10n: l10n,
-                    pinned: pinnedController,
-                    pid: pid,
-                    label: title,
-                  ),
-                );
-              },
-            ),
-            WaxOptionRow(
-              title: l10n.playerInstantMix,
-              glyph: WaxIcons.waveform,
-              semanticsId: SemanticsIds.itemMenuMix,
-              onTap: () {
-                close();
-                unawaited(
-                  showInstantMixSheet(rootContext, (pid: pid, title: title)),
-                );
-              },
-            ),
-            WaxOptionRow(
-              title: l10n.libraryMenuShareAlbum,
-              glyph: WaxIcons.share,
-              semanticsId: SemanticsIds.itemMenuShare,
-              onTap: () {
-                close();
-                unawaited(showShareLinkDialog(rootContext, pid: pid));
-              },
-            ),
-          ],
+        // Named for its entity, for the reason the item sheet's is.
+        return Semantics(
+          container: true,
+          explicitChildNodes: true,
+          identifier: SemanticsIds.itemMenuSheet(pid),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              pinSheetRow(
+                sheetContext,
+                sheetRef,
+                target,
+                onTap: () {
+                  close();
+                  unawaited(
+                    togglePinCaptured(
+                      messenger: messenger,
+                      l10n: l10n,
+                      pinned: pinnedController,
+                      pid: pid,
+                      label: title,
+                    ),
+                  );
+                },
+              ),
+              WaxOptionRow(
+                title: l10n.playerInstantMix,
+                glyph: WaxIcons.waveform,
+                semanticsId: SemanticsIds.itemMenuMix,
+                onTap: () {
+                  close();
+                  unawaited(
+                    showInstantMixSheet(rootContext, (pid: pid, title: title)),
+                  );
+                },
+              ),
+              WaxOptionRow(
+                title: l10n.libraryMenuShareAlbum,
+                glyph: WaxIcons.share,
+                semanticsId: SemanticsIds.itemMenuShare,
+                onTap: () {
+                  close();
+                  unawaited(showShareLinkDialog(rootContext, pid: pid));
+                },
+              ),
+            ],
+          ),
         );
       },
     ),

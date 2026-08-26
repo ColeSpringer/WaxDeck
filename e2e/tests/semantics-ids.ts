@@ -329,6 +329,7 @@ export const SemanticsIds = {
   itemMenuMix: 'item-menu-mix',
   itemMenuShare: 'item-menu-share-album',
   itemMenuShareItem: 'item-menu-share',
+  itemMenuSheet: (pid: string | number) => `item-menu-sheet-${pid}`,
   offlineBanner: 'offline-banner',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
@@ -936,6 +937,7 @@ export const SemanticsIdPrefixes = {
   // library: The complete item listings and the per-item rows the sync specs drive.
   item: 'item-',
   itemDeleteMode: 'item-delete-mode-',
+  itemMenuSheet: 'item-menu-sheet-',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
   albumRewriteField: 'album-rewrite-field-',

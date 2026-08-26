@@ -71,8 +71,10 @@ test('the wizard walks an empty server to its first scanned library', async ({
 
   // The way out, and the half a reload used to undo: skipping is a
   // decision this device keeps, so the console comes back a console.
-  await app.admin.control(SemanticsIds.adminWizardSkip).click();
-  await expect(app.admin.control(SemanticsIds.adminTile('health'))).toBeVisible();
+  await app.admin.skipWizard();
+  // The distinct half: the driver waited the console tiles in, and gone
+  // with them is the card itself.
+  await expect(app.admin.control(SemanticsIds.adminWizard)).toBeHidden();
 
   await app.nav.enter('admin');
   await expect(app.admin.control(SemanticsIds.adminWizard)).toBeHidden();
