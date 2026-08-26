@@ -572,6 +572,50 @@ abstract interface class WaxDeckRepository {
   /// for re-importing on another WaxDeck server.
   Future<PortablePlaylist> exportPlaylistPortable(String pid);
 
+  /// `GET /playlists/{pid}/source`: the playlist's external source
+  /// binding with its sync settings and health. Owner only; a 404
+  /// means the playlist has no binding, which is the normal unbound
+  /// state rather than a failure.
+  Future<PlaylistSource> getPlaylistSource(String pid);
+
+  /// `PUT /playlists/{pid}/source`: bind the playlist to an external
+  /// source, replacing any previous binding whole - always send the
+  /// complete settings. [url] names a live source; [source] plus
+  /// [payload] or [refs] records a matched export. [intervalHours] is
+  /// required for a live source (1, 3, 6, 12, or 24) and absent for a
+  /// matched one; selecting `mirror-trash` needs the delete right.
+  Future<PlaylistSource> setPlaylistSource(
+    String pid, {
+    required String mode,
+    String? url,
+    String? source,
+    String? payload,
+    List<PortableRef>? refs,
+    int? intervalHours,
+  });
+
+  /// `DELETE /playlists/{pid}/source`: remove the binding. The
+  /// playlist and its members stay as they are.
+  Future<void> unbindPlaylistSource(String pid);
+
+  /// `POST /playlists/{pid}/source/preview`: what a sync would do
+  /// right now, computed without writing anything. With arguments it
+  /// previews those prospective settings; without, the stored binding.
+  Future<PlaylistSyncPreview> previewPlaylistSync(
+    String pid, {
+    String? mode,
+    String? url,
+    String? source,
+    String? payload,
+    List<PortableRef>? refs,
+    int? intervalHours,
+  });
+
+  /// `POST /playlists/{pid}/source/sync`: queue a sync run now,
+  /// answering the tool task to follow. A run already in flight is
+  /// answered with that task rather than a second one.
+  Future<ToolTask> syncPlaylistSource(String pid);
+
   /// `GET /playlists/{pid}/nsp/report`: what exporting this smart
   /// playlist's rule as a Navidrome document would drop, without
   /// exporting it. Refuses only for a playlist with no rule.
@@ -2723,6 +2767,108 @@ class WaxDeckClient implements WaxDeckRepository {
         );
         return portablePlaylistFromGen(_require(response.data));
       });
+
+  @override
+  Future<PlaylistSource> getPlaylistSource(String pid) => _guard(() async {
+    final response = await _gen.getPlaylistsApi().getPlaylistSource(pid: pid);
+    return playlistSourceFromGen(_require(response.data));
+  });
+
+  @override
+  Future<PlaylistSource> setPlaylistSource(
+    String pid, {
+    required String mode,
+    String? url,
+    String? source,
+    String? payload,
+    List<PortableRef>? refs,
+    int? intervalHours,
+  }) => _guard(() async {
+    final response = await _gen.getPlaylistsApi().setPlaylistSource(
+      pid: pid,
+      playlistSourceUpdate: _playlistSourceUpdateToGen(
+        mode: mode,
+        url: url,
+        source: source,
+        payload: payload,
+        refs: refs,
+        intervalHours: intervalHours,
+      ),
+    );
+    return playlistSourceFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> unbindPlaylistSource(String pid) => _guard(() async {
+    await _gen.getPlaylistsApi().unbindPlaylistSource(pid: pid);
+  });
+
+  @override
+  Future<PlaylistSyncPreview> previewPlaylistSync(
+    String pid, {
+    String? mode,
+    String? url,
+    String? source,
+    String? payload,
+    List<PortableRef>? refs,
+    int? intervalHours,
+  }) => _guard(() async {
+    final response = await _gen.getPlaylistsApi().previewPlaylistSync(
+      pid: pid,
+      playlistSourceUpdate: mode == null
+          ? null
+          : _playlistSourceUpdateToGen(
+              mode: mode,
+              url: url,
+              source: source,
+              payload: payload,
+              refs: refs,
+              intervalHours: intervalHours,
+            ),
+    );
+    return playlistSyncPreviewFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ToolTask> syncPlaylistSource(String pid) => _guard(() async {
+    final response = await _gen.getPlaylistsApi().syncPlaylistSource(pid: pid);
+    return toolTaskFromGen(_require(response.data));
+  });
+
+  static gen.PlaylistSourceUpdate _playlistSourceUpdateToGen({
+    required String mode,
+    String? url,
+    String? source,
+    String? payload,
+    List<PortableRef>? refs,
+    int? intervalHours,
+  }) => gen.PlaylistSourceUpdate(
+    (b) => b
+      ..mode = _playlistSourceModeToGen(mode)
+      ..url = url
+      ..source_ = source == null
+          ? null
+          : gen.PlaylistSourceUpdateSource_Enum.valueOf(source)
+      ..payload = payload
+      ..refs = refs == null
+          ? null
+          : ListBuilder<gen.PortableRef>(refs.map(portableRefToGen))
+      ..intervalHours = intervalHours,
+  );
+
+  /// An explicit switch rather than `valueOf`: built_value's lookup
+  /// takes Dart identifiers, so the wire's `mirror-trash` would fall
+  /// to the unknown-default constant and serialize as garbage the
+  /// server refuses. `append`/`mirror` only work by the accident of
+  /// their Dart names equalling their wire values.
+  static gen.PlaylistSourceUpdateModeEnum _playlistSourceModeToGen(
+    String mode,
+  ) => switch (mode) {
+    'append' => gen.PlaylistSourceUpdateModeEnum.append,
+    'mirror' => gen.PlaylistSourceUpdateModeEnum.mirror,
+    'mirror-trash' => gen.PlaylistSourceUpdateModeEnum.mirrorTrash,
+    _ => gen.PlaylistSourceUpdateModeEnum.valueOf(mode),
+  };
 
   @override
   Future<NspReport> reportPlaylistNspExport(String pid) => _guard(() async {

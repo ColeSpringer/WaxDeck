@@ -500,17 +500,22 @@ Class | Method | HTTP request | Description
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**exportPlaylistNsp**](doc/PlaylistsApi.md#exportplaylistnsp) | **GET** /playlists/{pid}/nsp | Export a smart playlist as NSP
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**exportPlaylistPortable**](doc/PlaylistsApi.md#exportplaylistportable) | **GET** /playlists/{pid}/portable | Export a playlist as portable refs
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**getPlaylist**](doc/PlaylistsApi.md#getplaylist) | **GET** /playlists/{pid} | Get one playlist
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**getPlaylistSource**](doc/PlaylistsApi.md#getplaylistsource) | **GET** /playlists/{pid}/source | Read a playlist&#39;s source binding
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**getRuleFields**](doc/PlaylistsApi.md#getrulefields) | **GET** /playlists/rule-fields | Discover smart rule fields
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**importPlaylist**](doc/PlaylistsApi.md#importplaylist) | **POST** /playlists/import | Import a streaming-service playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**importPlaylistM3u**](doc/PlaylistsApi.md#importplaylistm3u) | **POST** /playlists/m3u | Import an M3U8 playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**importPlaylistNsp**](doc/PlaylistsApi.md#importplaylistnsp) | **POST** /playlists/nsp | Import a Navidrome smart playlist (NSP)
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**listPlaylistItems**](doc/PlaylistsApi.md#listplaylistitems) | **GET** /playlists/{pid}/items | List a playlist&#39;s items
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**listPlaylists**](doc/PlaylistsApi.md#listplaylists) | **GET** /playlists | List playlists visible to the caller
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**previewPlaylistSync**](doc/PlaylistsApi.md#previewplaylistsync) | **POST** /playlists/{pid}/source/preview | Preview a playlist sync
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**previewSmartRule**](doc/PlaylistsApi.md#previewsmartrule) | **POST** /playlists/preview | Preview a smart rule
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**removePlaylistItemAt**](doc/PlaylistsApi.md#removeplaylistitemat) | **DELETE** /playlists/{pid}/items/{position} | Remove one member by position
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**replacePlaylistItems**](doc/PlaylistsApi.md#replaceplaylistitems) | **PUT** /playlists/{pid}/items | Replace a static playlist&#39;s members
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**reportPlaylistNspExport**](doc/PlaylistsApi.md#reportplaylistnspexport) | **GET** /playlists/{pid}/nsp/report | Report what an NSP export would lose
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**reportPlaylistNspImport**](doc/PlaylistsApi.md#reportplaylistnspimport) | **POST** /playlists/nsp/report | Report what an NSP import would lose
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**setPlaylistSource**](doc/PlaylistsApi.md#setplaylistsource) | **PUT** /playlists/{pid}/source | Bind a playlist to an external source
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**syncPlaylistSource**](doc/PlaylistsApi.md#syncplaylistsource) | **POST** /playlists/{pid}/source/sync | Sync a playlist from its source now
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**unbindPlaylistSource**](doc/PlaylistsApi.md#unbindplaylistsource) | **DELETE** /playlists/{pid}/source | Unbind a playlist from its source
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**updatePlaylist**](doc/PlaylistsApi.md#updateplaylist) | **PATCH** /playlists/{pid} | Update a playlist
 [*PodcastsApi*](doc/PodcastsApi.md) | [**captureEpisodeTranscript**](doc/PodcastsApi.md#captureepisodetranscript) | **POST** /episodes/{pid}/transcript | Capture an episode&#39;s transcript for search
 [*PodcastsApi*](doc/PodcastsApi.md) | [**exportOpml**](doc/PodcastsApi.md#exportopml) | **GET** /podcasts/opml | Export the caller&#39;s subscriptions as OPML
@@ -817,6 +822,10 @@ Class | Method | HTTP request | Description
  - [PlaylistItemsUpdate](doc/PlaylistItemsUpdate.md)
  - [PlaylistPage](doc/PlaylistPage.md)
  - [PlaylistPreview](doc/PlaylistPreview.md)
+ - [PlaylistSource](doc/PlaylistSource.md)
+ - [PlaylistSourceUpdate](doc/PlaylistSourceUpdate.md)
+ - [PlaylistSyncCounts](doc/PlaylistSyncCounts.md)
+ - [PlaylistSyncPreview](doc/PlaylistSyncPreview.md)
  - [PlaylistUpdate](doc/PlaylistUpdate.md)
  - [PodcastDetail](doc/PodcastDetail.md)
  - [PodcastDirectoryEntry](doc/PodcastDirectoryEntry.md)

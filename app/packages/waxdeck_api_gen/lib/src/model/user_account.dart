@@ -22,6 +22,7 @@ part 'user_account.g.dart';
 /// * [roles] - Assigned roles (`admin`, `user`).
 /// * [uploadEnabled] - Whether the account may upload audio. On self views (login, session) this is the *effective* value - administrators always may, whatever their stored flag says - and clients gate their upload affordances on it. On administrative account views (`UserAccount`) it is the stored per-account flag the account editor round-trips; an administrator's own stored flag may therefore read false while their effective right is true. Defined once here because the generators flatten `UserAccount`'s `allOf` over this schema; a duplicate declaration there would silently lose. 
 /// * [managePodcasts] - Whether the account may curate podcasts. Self views carry the *effective* value (administrators always may), so clients gate their podcast-curation affordances - adding shows, setting a show's cover - on it without a second read. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
+/// * [delete] - Whether the account may move visible library items to the recoverable trash. Self views carry the *effective* value (administrators always may), so clients gate destructive affordances - deleting items, a synced playlist's `mirror-trash` mode - on it without a second read. Permanent deletion stays admin-only regardless. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
 /// * [disabled] - Disabled accounts cannot log in and their live sessions are revoked on disable. 
 /// * [pending] - True for a self-serve registration still awaiting an administrator's decision. Pending accounts cannot log in; approve or reject them through the signup request endpoints. 
 /// * [libraryAccess] 
@@ -118,6 +119,13 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
       yield r'hasPassword';
       yield serializers.serialize(
         object.hasPassword,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.delete != null) {
+      yield r'delete';
+      yield serializers.serialize(
+        object.delete,
         specifiedType: const FullType(bool),
       );
     }
@@ -229,6 +237,13 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.hasPassword = valueDes;
+          break;
+        case r'delete':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.delete = valueDes;
           break;
         case r'createdAt':
           final valueDes = serializers.deserialize(

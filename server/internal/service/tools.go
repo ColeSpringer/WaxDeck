@@ -99,6 +99,8 @@ type toolTaskParams struct {
 	// the review entries the download opens. Stored as the decline so a
 	// task queued before the field existed decodes as "identify".
 	IdentifyDeclined bool `json:"identifyDeclined,omitempty"`
+	// Playlist-sync field: the API pid of the bound playlist to sync.
+	PlaylistPID string `json:"playlistPid,omitempty"`
 }
 
 // StartBookMerge queues a merge of a multi-file audiobook into one
@@ -403,6 +405,8 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 		results, err = l.runCueSplit(ctx, t, p)
 	case t.Type == taskTypeAcquire:
 		results, err = l.runAcquire(ctx, t, p)
+	case t.Type == taskTypePlaylistSync:
+		results, err = l.runPlaylistSync(ctx, t, p)
 	case t.Type == taskTypeGenreNormalize:
 		err = l.runGenreNormalize(ctx, t)
 	case strings.HasPrefix(t.Type, taskTypeMigratePrefix):

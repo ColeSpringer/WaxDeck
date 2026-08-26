@@ -578,6 +578,18 @@ components:
             read. Absent on administrative account views: the stored
             per-account flag lives in `permissions` there, and this
             field would only shadow it.
+        delete:
+          type: boolean
+          description: >
+            Whether the account may move visible library items to the
+            recoverable trash. Self views carry the *effective* value
+            (administrators always may), so clients gate destructive
+            affordances - deleting items, a synced playlist's
+            `mirror-trash` mode - on it without a second read.
+            Permanent deletion stays admin-only regardless. Absent on
+            administrative account views: the stored per-account flag
+            lives in `permissions` there, and this field would only
+            shadow it.
 
     UserAccount:
       allOf:

@@ -262,24 +262,28 @@ func (s *Server) expiredSessionCookie() string {
 	}).String()
 }
 
-// userJSON renders the self view of an account. uploadEnabled and
-// managePodcasts are the effective rights (administrators always hold
-// them), so every client surface gates its affordances off these
-// fields.
+// userJSON renders the self view of an account. uploadEnabled,
+// managePodcasts, and delete are the effective rights (administrators
+// always hold them), so every client surface gates its affordances off
+// these fields.
 func userJSON(u *wdb.User) User {
 	out := User{Id: u.ID, Username: u.Username, Roles: u.Roles}
 	if u.DisplayName != "" {
 		out.DisplayName = ptr(u.DisplayName)
 	}
 	out.UploadEnabled = u.UploadEnabled
-	manage := service.PermissionsOf(u).ManagePodcasts
+	perms := service.PermissionsOf(u)
+	manage := perms.ManagePodcasts
+	del := perms.Delete
 	for _, r := range u.Roles {
 		if r == "admin" {
 			out.UploadEnabled = true
 			manage = true
+			del = true
 		}
 	}
 	out.ManagePodcasts = ptr(manage)
+	out.Delete = ptr(del)
 	return out
 }
 

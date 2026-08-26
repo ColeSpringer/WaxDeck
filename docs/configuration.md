@@ -270,6 +270,11 @@ root).
   compose: start it with `--profile youtube`, set
   `WAXDECK_SEAL_URL=http://waxseal:4416`, and put the key in both
   `WAXDECK_SEAL_API_KEY` and `WAXSEAL_API_KEYS`.
+- `WAXDECK_SOURCE_STUB_URL`: base URL of a `sourceserv` fixture host to
+  use as the acquisition source. Test stacks only - the end-to-end
+  suite drives acquisition and playlist syncing against it - and never
+  a production bridge: no auth, no pacing, canned audio. Leave it
+  unset.
 
 ## Casting and jukebox
 

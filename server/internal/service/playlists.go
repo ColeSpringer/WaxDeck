@@ -1276,6 +1276,11 @@ func (l *Library) DeletePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 	if err := l.db.DeletePlaylistCover(ctx, string(pl.PID)); err != nil {
 		l.log.Warn("clearing playlist cover state", "playlist", pl.PID, "err", err)
 	}
+	// A source binding without its playlist is an orphan the sweeper
+	// would trip over forever.
+	if err := l.db.DeletePlaylistSource(ctx, string(pl.PID)); err != nil {
+		l.log.Warn("clearing playlist source binding", "playlist", pl.PID, "err", err)
+	}
 	l.emitPlaylistEvent(ctx, uc, wasShared, string(pl.PID))
 	l.Audit(ctx, uc, "playlist.delete",
 		AuditTarget{Kind: "playlist", PID: apiPID(PrefixPlaylist, pl.PID), Name: pl.Name},

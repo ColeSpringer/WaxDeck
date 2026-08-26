@@ -113,6 +113,9 @@ export const accountShapes: Record<string, AccountShape> = {
   // The release workbench is an administrator surface: entity edits
   // and the bulk edit are both admin endpoints.
   'metadata-workbench': { role: 'admin' },
+  // Playlist syncing downloads through the acquisition path, which
+  // needs the upload right a minted plain user does not hold.
+  'playlist-sync': { role: 'admin' },
 };
 
 /// The bootstrap administrator's token. The first caller opens the

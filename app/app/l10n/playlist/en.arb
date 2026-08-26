@@ -1078,6 +1078,294 @@
   "@playlistSmartEmptyTitle": {
     "description": "Empty state of a smart playlist whose rules match nothing."
   },
+  "playlistSyncChipFailing": "Sync failing",
+  "@playlistSyncChipFailing": {
+    "description": "Status chip on a synced playlist whose last sync run failed."
+  },
+  "playlistSyncChipOff": "Sync suspended",
+  "@playlistSyncChipOff": {
+    "description": "Status chip on a synced playlist whose schedule was suspended after repeated failures."
+  },
+  "playlistSyncChipPending": "Sync scheduled",
+  "@playlistSyncChipPending": {
+    "description": "Status chip on a playlist bound to a source whose first successful sync has not happened yet."
+  },
+  "playlistSyncChipSynced": "Synced",
+  "@playlistSyncChipSynced": {
+    "description": "Status chip on a playlist bound to an external source and syncing normally."
+  },
+  "playlistSyncCountAdded": "{count} added",
+  "@playlistSyncCountAdded": {
+    "description": "One part of the last-run line: members the run attached.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "playlistSyncCountMissing": "{count} unmatched",
+  "@playlistSyncCountMissing": {
+    "description": "One part of the last-run line: matched-export refs with no library match.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "playlistSyncCountQueued": "{count} downloading",
+  "@playlistSyncCountQueued": {
+    "description": "One part of the last-run line: downloads the run queued.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "playlistSyncCountRemoved": "{count} removed",
+  "@playlistSyncCountRemoved": {
+    "description": "One part of the last-run line: members the run removed.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "playlistSyncCountTrashed": "{count} trashed",
+  "@playlistSyncCountTrashed": {
+    "description": "One part of the last-run line: files the run moved to the recoverable trash.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "playlistSyncCountUnavailable": "{count} unavailable",
+  "@playlistSyncCountUnavailable": {
+    "description": "One part of the last-run line: entries the source could not deliver.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "playlistSyncFailingBanner": "The last sync failed: {error}",
+  "@playlistSyncFailingBanner": {
+    "description": "Banner in the sync sheet framing the server's own failure sentence, which arrives untranslated.",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "enumerating the source: the playlist is private"
+      }
+    }
+  },
+  "playlistSyncIntervalHours": "{hours, plural, =1{Every hour} other{Every {hours} hours}}",
+  "@playlistSyncIntervalHours": {
+    "description": "One option of the sync-interval choice.",
+    "placeholders": {
+      "hours": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "playlistSyncIntervalLabel": "Check the source",
+  "@playlistSyncIntervalLabel": {
+    "description": "Label of the choice picking how often a scheduled sync runs."
+  },
+  "playlistSyncLastRunLabel": "Last sync: {summary}",
+  "@playlistSyncLastRunLabel": {
+    "description": "Line in the sync sheet under the settings, summarizing the last completed run. {summary} is the joined non-zero counts, e.g. \"3 added, 1 removed\".",
+    "placeholders": {
+      "summary": {
+        "type": "String",
+        "example": "3 added, 1 removed"
+      }
+    }
+  },
+  "playlistSyncLastRunNothing": "The last sync changed nothing.",
+  "@playlistSyncLastRunNothing": {
+    "description": "The last-run line when the run completed with every count at zero."
+  },
+  "playlistSyncMatchedNote": "A {source} export re-matches against the library on demand and downloads nothing. Bind a fresh export to change what it holds.",
+  "@playlistSyncMatchedNote": {
+    "description": "Note in the sync sheet for a binding recorded from a streaming export rather than a live URL. {source} is the export format's label, e.g. spotify.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "spotify"
+      }
+    }
+  },
+  "playlistSyncModeAppend": "Append",
+  "@playlistSyncModeAppend": {
+    "description": "Sync mode that only adds new source entries and never touches manual edits."
+  },
+  "playlistSyncModeHelpAppend": "New source entries join the end; your own edits are never touched.",
+  "@playlistSyncModeHelpAppend": {
+    "description": "Help line under the mode choice while append is selected."
+  },
+  "playlistSyncModeHelpMirror": "Membership and order follow the source. A removed entry leaves the list but its file stays in the library.",
+  "@playlistSyncModeHelpMirror": {
+    "description": "Help line under the mode choice while mirror is selected."
+  },
+  "playlistSyncModeHelpMirrorTrash": "Membership and order follow the source, and a removed entry's file goes to the recoverable trash.",
+  "@playlistSyncModeHelpMirrorTrash": {
+    "description": "Help line under the mode choice while mirror-and-trash is selected."
+  },
+  "playlistSyncModeLabel": "Sync mode",
+  "@playlistSyncModeLabel": {
+    "description": "Label of the choice picking how a sync reconciles the playlist."
+  },
+  "playlistSyncModeMirror": "Mirror",
+  "@playlistSyncModeMirror": {
+    "description": "Sync mode where membership and order follow the source, keeping removed entries' files."
+  },
+  "playlistSyncModeMirrorTrash": "Mirror and trash",
+  "@playlistSyncModeMirrorTrash": {
+    "description": "Sync mode where membership follows the source and a removed entry's file goes to the recoverable trash."
+  },
+  "playlistSyncNow": "Sync now",
+  "@playlistSyncNow": {
+    "description": "Button that queues a sync run immediately."
+  },
+  "playlistSyncPreviewAdd": "{count, plural, =1{1 track would join the list} other{{count} tracks would join the list}}",
+  "@playlistSyncPreviewAdd": {
+    "description": "Preview line: members a sync would attach now.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "playlistSyncPreviewButton": "Preview",
+  "@playlistSyncPreviewButton": {
+    "description": "Button that dry-runs a sync and shows what it would do without changing anything."
+  },
+  "playlistSyncPreviewDownload": "{count, plural, =1{1 new entry would be downloaded} other{{count} new entries would be downloaded}}",
+  "@playlistSyncPreviewDownload": {
+    "description": "Preview line: downloads a sync would queue; they join once reviewed.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "playlistSyncPreviewMissing": "{count, plural, =1{1 entry has no library match} other{{count} entries have no library match}}",
+  "@playlistSyncPreviewMissing": {
+    "description": "Preview line: matched-export refs the resolve ladder found nothing for.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "playlistSyncPreviewNothing": "A sync would change nothing right now.",
+  "@playlistSyncPreviewNothing": {
+    "description": "Preview dialog body when the dry run reports no work at all."
+  },
+  "playlistSyncPreviewPending": "{count, plural, =1{1 download is still on its way} other{{count} downloads are still on their way}}",
+  "@playlistSyncPreviewPending": {
+    "description": "Preview line: entries already downloading or waiting in the review queue.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "playlistSyncPreviewRemove": "{count, plural, =1{1 member would leave the list} other{{count} members would leave the list}}",
+  "@playlistSyncPreviewRemove": {
+    "description": "Preview line: members a sync would remove.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "playlistSyncPreviewTitle": "What a sync would do",
+  "@playlistSyncPreviewTitle": {
+    "description": "Title of the dry-run preview dialog."
+  },
+  "playlistSyncPreviewTrash": "{count, plural, =1{1 file would go to the trash} other{{count} files would go to the trash}}",
+  "@playlistSyncPreviewTrash": {
+    "description": "Preview line: files a mirror-and-trash sync would move to the recoverable trash.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "playlistSyncPreviewUnavailable": "{count, plural, =1{1 entry is unavailable at the source} other{{count} entries are unavailable at the source}}",
+  "@playlistSyncPreviewUnavailable": {
+    "description": "Preview line: entries the source reports it cannot deliver.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "playlistSyncQueued": "Sync started",
+  "@playlistSyncQueued": {
+    "description": "Snackbar after queuing a sync run."
+  },
+  "playlistSyncRefCount": "{count, plural, =1{1 entry stored from the export} other{{count} entries stored from the export}}",
+  "@playlistSyncRefCount": {
+    "description": "How many entries a matched-export binding holds.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "40"
+      }
+    }
+  },
+  "playlistSyncSave": "Save",
+  "@playlistSyncSave": {
+    "description": "Button storing the sync settings, replacing the binding whole."
+  },
+  "playlistSyncSaved": "Sync settings saved",
+  "@playlistSyncSaved": {
+    "description": "Snackbar after the binding stored."
+  },
+  "playlistSyncSettings": "Sync from source",
+  "@playlistSyncSettings": {
+    "description": "Overflow entry opening the synced-playlist settings sheet."
+  },
+  "playlistSyncSheetTitle": "Sync from source",
+  "@playlistSyncSheetTitle": {
+    "description": "Title of the synced-playlist settings sheet."
+  },
+  "playlistSyncSuspended": "Syncing is suspended after repeated failures. A successful sync turns it back on.",
+  "@playlistSyncSuspended": {
+    "description": "Note in the sync sheet while the schedule is auto-disabled."
+  },
+  "playlistSyncUnbind": "Stop syncing",
+  "@playlistSyncUnbind": {
+    "description": "Button removing the binding; the playlist and its members stay."
+  },
+  "playlistSyncUnbound": "Stopped syncing. The playlist keeps everything it holds.",
+  "@playlistSyncUnbound": {
+    "description": "Snackbar after removing the binding."
+  },
+  "playlistSyncUrlHint": "https://www.youtube.com/playlist?list=...",
+  "@playlistSyncUrlHint": {
+    "description": "Hint in the source-URL field."
+  },
+  "playlistSyncUrlLabel": "Source playlist URL",
+  "@playlistSyncUrlLabel": {
+    "description": "Label of the field naming the live source playlist to follow."
+  },
   "playlistsEmptyMessage": "Make one, or add a track to a new list from anywhere it is playing. A smart playlist writes itself from rules and keeps up as the library grows.",
   "@playlistsEmptyMessage": {
     "description": "Message under the empty state of the playlists screen, saying the two ways to fill it."

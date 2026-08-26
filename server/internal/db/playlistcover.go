@@ -8,16 +8,21 @@ import (
 	"strconv"
 )
 
-// Cover origins. The catalog stores both kinds identically -- a
+// Cover origins. The catalog stores every kind identically -- a
 // front-role art row on the playlist entity -- so this is the only
 // place that knows which one a playlist is showing.
 const (
-	// CoverCustom is an image a user uploaded. It wins over the mosaic
+	// CoverCustom is an image a user uploaded. It wins over everything
 	// and is never regenerated; clearing it drops back to CoverGenerated.
 	CoverCustom = "custom"
 	// CoverGenerated is a mosaic (or single member cover) WaxDeck built
 	// from the playlist's members, refreshed when the membership moves.
 	CoverGenerated = "generated"
+	// CoverSource is a synced playlist's own source thumbnail, fetched
+	// and re-checked by the playlist-sync reconciler. It outranks the
+	// mosaic (the read path must not regenerate over it) and yields to
+	// a user's upload.
+	CoverSource = "source"
 )
 
 // artEpochKey is the sync_state row counting artwork writes anywhere in

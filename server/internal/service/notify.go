@@ -47,6 +47,8 @@ var notifyEventCatalog = []NotifyEvent{
 		Description: "An upload or acquisition finished identification and waits in the review queue."},
 	{Name: "import-completed", Scope: NotifyScopeUser,
 		Description: "An upload or acquisition identified confidently enough to file itself, with no review."},
+	{Name: "playlist-synced", Scope: NotifyScopeUser,
+		Description: "A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended."},
 }
 
 // NotifyEvents returns the event catalog.

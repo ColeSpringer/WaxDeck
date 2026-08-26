@@ -577,6 +577,22 @@ abstract final class SemanticsIds {
   static const String playlistRuleSummary = 'playlist-rule-summary';
   static const String playlistSetCover = 'playlist-set-cover';
   static const String playlistShareLink = 'playlist-share-link';
+  static const String playlistSyncChip = 'playlist-sync-chip';
+  static const String playlistSyncInterval = 'playlist-sync-interval';
+  static String playlistSyncIntervalOption(Object hours) =>
+      'playlist-sync-interval-$hours';
+  static const String playlistSyncMode = 'playlist-sync-mode';
+  static String playlistSyncModeOption(Object mode) =>
+      'playlist-sync-mode-$mode';
+  static const String playlistSyncNow = 'playlist-sync-now';
+  static const String playlistSyncPreview = 'playlist-sync-preview';
+  static const String playlistSyncPreviewDialog =
+      'playlist-sync-preview-dialog';
+  static const String playlistSyncSave = 'playlist-sync-save';
+  static const String playlistSyncSettings = 'playlist-sync-settings';
+  static const String playlistSyncSheet = 'playlist-sync-sheet';
+  static const String playlistSyncUnbind = 'playlist-sync-unbind';
+  static const String playlistSyncUrl = 'playlist-sync-url';
   static const String playlistVisibility = 'playlist-visibility';
   static const String ruleAddCondition = 'rule-add-condition';
   static const String ruleAddGroup = 'rule-add-group';

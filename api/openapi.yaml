@@ -6920,6 +6920,197 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /playlists/{pid}/source:
+    get:
+      operationId: getPlaylistSource
+      summary: Read a playlist's source binding
+      description: >
+        The external source a manual playlist is bound to, with its
+        sync settings and health: mode, interval, the last completed
+        run's counts, and the failure state that decides whether
+        scheduled syncs still run. Owner only; `not-found` when the
+        playlist has no binding.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The binding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistSource"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: setPlaylistSource
+      summary: Bind a playlist to an external source
+      description: >
+        Binds a manual playlist to an external source and stores its
+        sync settings, replacing any previous binding whole - every
+        field is written from this body, so always send the complete
+        settings. A `url` names a live source (a YouTube playlist)
+        that the server re-enumerates on the stored interval and on
+        demand, downloading new entries through the normal review
+        queue; `source` plus `payload` or `refs` records a matched
+        source (a streaming export), which reconciles match-only and
+        on demand, downloading nothing. Exactly one of the two forms
+        must be set.
+
+
+        Modes: `append` adds new source entries and never touches
+        manual edits; `mirror` makes membership and order follow the
+        source, keeping a removed entry's file in the library;
+        `mirror-trash` additionally moves a removed entry's file to
+        the recoverable trash, and selecting it needs the delete
+        right (administrators implicitly). Matched sources take
+        `append` or `mirror` only, and no interval - a static export
+        never changes by itself. Owner only; static playlists only (a
+        smart playlist's membership is its rule). Live sources need a
+        running acquisition bridge (`source-unavailable` without
+        one). Binding does not sync by itself: the first scheduled
+        run comes one interval after the bind, and the sync endpoint
+        runs one now.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistSourceUpdate"
+      responses:
+        "200":
+          description: The stored binding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistSource"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          $ref: "#/components/responses/SourceUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: unbindPlaylistSource
+      summary: Unbind a playlist from its source
+      description: >
+        Removes the binding and its per-playlist sync bookkeeping.
+        The playlist and its members stay exactly as they are;
+        nothing is downloaded, removed, or trashed again. Owner only;
+        `not-found` when the playlist has no binding.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: Unbound.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/source/preview:
+    post:
+      operationId: previewPlaylistSync
+      summary: Preview a playlist sync
+      description: >
+        Runs the same reconciler a sync runs, computing what it would
+        do without writing anything: members it would attach now,
+        downloads it would queue, members it would remove, files it
+        would trash, entries still riding the review queue, and
+        entries the source reports unavailable. With a body, previews
+        those prospective settings - the settings sheet's dry run
+        before a bind commits; without one, previews the stored
+        binding (`not-found` when there is none). Availability is
+        best-effort: enumeration inspects a bounded prefix of the
+        source, so a long playlist's later entries count as unknown
+        until a download is attempted.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistSourceUpdate"
+      responses:
+        "200":
+          description: The dry-run report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistSyncPreview"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          $ref: "#/components/responses/SourceUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/source/sync:
+    post:
+      operationId: syncPlaylistSource
+      summary: Sync a playlist from its source now
+      description: >
+        Queues a sync run for the stored binding and answers
+        immediately with the tool task to follow (type
+        `playlist-sync`). The run enumerates the source, queues
+        downloads for new entries - they ride the normal review queue
+        and join the playlist once their review entries resolve -
+        reconciles membership by the stored mode, and updates the
+        binding's health; a successful run re-enables a binding that
+        repeated failures had suspended. A run already queued or
+        running for this playlist is answered with that task rather
+        than a second one. Owner only.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "202":
+          description: The queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
+        "501":
+          $ref: "#/components/responses/SourceUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /podcasts:
     get:
       operationId: listSubscriptions
@@ -16554,6 +16745,199 @@ components:
           items:
             $ref: "#/components/schemas/PortableRef"
 
+    PlaylistSource:
+      type: object
+      description: >
+        A playlist's external source binding: what it follows, how,
+        and how the syncing has been going.
+      required: [source, live, mode, disabled, consecutiveFailures]
+      properties:
+        source:
+          type: string
+          description: >
+            Where the members come from: `youtube` for a live URL
+            binding, else the import source the binding was recorded
+            from (`spotify`, `applemusic`, `ytmusic`, `csv`, `text`,
+            `portable`). A string, not a closed enum; clients must
+            treat unknown sources as opaque labels.
+          example: youtube
+        url:
+          type: string
+          description: The source playlist's URL. Live bindings only.
+        title:
+          type: string
+          description: >
+            The source playlist's own title, as last enumerated. Live
+            bindings only.
+        live:
+          type: boolean
+          description: >
+            True when the server can re-fetch the source itself: the
+            binding syncs on the stored interval and downloads new
+            entries. False for a matched source, which reconciles
+            match-only and on demand.
+        mode:
+          type: string
+          description: >
+            `append` (add new entries, manual edits preserved),
+            `mirror` (membership and order follow the source, a
+            removed entry's file stays in the library), or
+            `mirror-trash` (mirror, and a removed entry's file goes
+            to the recoverable trash).
+          example: mirror
+        intervalHours:
+          type: integer
+          description: Hours between scheduled runs. Live bindings only.
+          example: 6
+        refCount:
+          type: integer
+          description: >
+            Portable refs the binding stores. Matched bindings only.
+        disabled:
+          type: boolean
+          description: >
+            True when scheduled syncing was suspended after repeated
+            failures. A successful manual sync re-enables it.
+        consecutiveFailures:
+          type: integer
+          description: Failed runs since the last success.
+        lastError:
+          type: string
+          description: Why the last failing run failed.
+        lastAttemptAt:
+          type: string
+          format: date-time
+          description: When a run last started, successful or not.
+        lastSyncedAt:
+          type: string
+          format: date-time
+          description: When a run last completed successfully.
+        lastRun:
+          $ref: "#/components/schemas/PlaylistSyncCounts"
+
+    PlaylistSourceUpdate:
+      type: object
+      description: >
+        A source binding to store, replacing any previous one whole.
+        Exactly one of `url` (a live source) or `source` with
+        `payload` or `refs` (a matched source, the import request's
+        own fields) must be set. `intervalHours` is required for a
+        live source and must be absent for a matched one.
+      required: [mode]
+      properties:
+        url:
+          type: string
+          maxLength: 2000
+          description: A live source's playlist URL (a YouTube playlist).
+        source:
+          type: string
+          description: >
+            A matched source's export format, as on the playlist
+            import endpoint: `spotify`, `applemusic`, `ytmusic`,
+            `csv`, `text`, or `portable`.
+          enum: [spotify, applemusic, ytmusic, csv, text, portable]
+        payload:
+          type: string
+          maxLength: 4000000
+          description: The export file's text content (text sources).
+        refs:
+          type: array
+          maxItems: 10000
+          description: Portable refs (the `portable` source).
+          items:
+            $ref: "#/components/schemas/PortableRef"
+        mode:
+          type: string
+          description: >
+            How a sync reconciles: `append`, `mirror`, or
+            `mirror-trash`. Selecting `mirror-trash` needs the delete
+            right (administrators implicitly), and a matched source
+            takes `append` or `mirror` only.
+          enum: [append, mirror, mirror-trash]
+        intervalHours:
+          type: integer
+          description: >
+            Hours between scheduled runs (live sources): 1, 3, 6, 12,
+            or 24. Deliberately not a schema enum - the closed set is
+            enforced by the server, where it can grow without a
+            breaking change.
+
+    PlaylistSyncCounts:
+      type: object
+      description: One completed sync run's counts.
+      required: [added, removed, trashed, queued, unavailable, missing]
+      properties:
+        added:
+          type: integer
+          description: Members the run attached.
+        removed:
+          type: integer
+          description: Members the run removed.
+        trashed:
+          type: integer
+          description: Files the run moved to the trash.
+        queued:
+          type: integer
+          description: Downloads the run queued.
+        unavailable:
+          type: integer
+          description: Entries the source reported unavailable.
+        missing:
+          type: integer
+          description: >
+            Matched-source refs with no library match.
+
+    PlaylistSyncPreview:
+      type: object
+      description: >
+        What a sync would do right now, computed by the same
+        reconciler without writing anything.
+      required:
+        [entries, wouldAdd, wouldDownload, wouldRemove, wouldTrash,
+         pending, unavailable, missing]
+      properties:
+        entries:
+          type: integer
+          description: >
+            Entries enumerated from the source, or refs a matched
+            binding holds.
+        wouldAdd:
+          type: integer
+          description: Members a sync would attach now.
+        wouldDownload:
+          type: integer
+          description: >
+            New entries a sync would queue downloads for; they join
+            the playlist once their review entries resolve.
+        wouldRemove:
+          type: integer
+          description: Members a sync would remove.
+        wouldTrash:
+          type: integer
+          description: >
+            Files a sync would move to the recoverable trash
+            (`mirror-trash` only, always at most `wouldRemove`).
+        pending:
+          type: integer
+          description: >
+            Entries already downloading or waiting in the review
+            queue.
+        unavailable:
+          type: integer
+          description: >
+            Entries the source reports unavailable, best-effort from
+            what enumeration inspected.
+        missing:
+          type: integer
+          description: Matched-source refs with no library match.
+        misses:
+          type: array
+          description: >
+            The unmatched refs themselves, in source order. Matched
+            bindings only.
+          items:
+            $ref: "#/components/schemas/PlaylistImportMiss"
+
     Playlist:
       type: object
       description: >
@@ -19451,11 +19835,16 @@ components:
             reads, not mirrored state.
 
 
-            Two further markers are announcements rather than refetch
+            Further markers are announcements rather than refetch
             hints, carrying the same news as the notification-target
             event of the same name: `feed-disabled` (`pid` is the show
-            whose scheduled refresh was suspended) and `import-completed`
-            (`pid` is the review entry that filed itself).
+            whose scheduled refresh was suspended), `import-completed`
+            (`pid` is the review entry that filed itself),
+            `episode-downloaded` (`pid` is the episode whose enclosure
+            the server finished fetching), and `playlist-synced`
+            (`pid` is the playlist whose sync run changed its
+            membership, or whose scheduled syncing was suspended
+            after repeated failures).
           example: play-state
         pid:
           type: string
@@ -19549,7 +19938,8 @@ components:
           type: string
           description: >
             The operation: `book-merge`, `book-split`, `cue-split`,
-            or `acquire`. A string, not a closed enum.
+            `acquire`, or `playlist-sync`. A string, not a closed
+            enum.
         state:
           type: string
           description: >
@@ -19557,7 +19947,8 @@ components:
             a closed enum.
         itemPid:
           type: string
-          description: The book or track the task was started from.
+          description: >
+            The book, track, or playlist the task was started from.
         progressPct:
           type: number
           format: double
@@ -19570,7 +19961,7 @@ components:
           description: >
             What the task produced once `done`: the merged book or
             the split pieces (item pids), or the review entries an
-            acquisition opened (entry pids).
+            acquisition or playlist sync opened (entry pids).
           items:
             type: string
         createdAt:
@@ -20034,6 +20425,18 @@ components:
             read. Absent on administrative account views: the stored
             per-account flag lives in `permissions` there, and this
             field would only shadow it.
+        delete:
+          type: boolean
+          description: >
+            Whether the account may move visible library items to the
+            recoverable trash. Self views carry the *effective* value
+            (administrators always may), so clients gate destructive
+            affordances - deleting items, a synced playlist's
+            `mirror-trash` mode - on it without a second read.
+            Permanent deletion stays admin-only regardless. Absent on
+            administrative account views: the stored per-account flag
+            lives in `permissions` there, and this field would only
+            shadow it.
 
     UserAccount:
       allOf:

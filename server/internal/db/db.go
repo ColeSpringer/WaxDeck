@@ -764,6 +764,77 @@ const baselineSchema = `
 		updated_at_ns INTEGER NOT NULL DEFAULT 0
 	);
 
+	-- Synced external playlists. playlist_source binds a manual playlist
+	-- to an external source and carries the sync settings the owner
+	-- stored, the source identity the bind resolved, the last stored
+	-- source thumbnail, and the same health record feed_state keeps for
+	-- podcast feeds: attempts, failures, and the auto-disable that stops
+	-- a scheduled sync from failing forever. live says whether the
+	-- server can re-fetch the source itself (a YouTube URL) or only
+	-- re-match a stored export (refs_json, normalized portable refs).
+	CREATE TABLE playlist_source (
+		playlist_pid         TEXT    PRIMARY KEY,
+		source               TEXT    NOT NULL,
+		live                 INTEGER NOT NULL DEFAULT 0,
+		url                  TEXT    NOT NULL DEFAULT '',
+		identity_key         TEXT    NOT NULL DEFAULT '',
+		source_id            TEXT    NOT NULL DEFAULT '',
+		title                TEXT    NOT NULL DEFAULT '',
+		refs_json            TEXT    NOT NULL DEFAULT '',
+		mode                 TEXT    NOT NULL,
+		interval_hours       INTEGER NOT NULL DEFAULT 0,
+		cover_url            TEXT    NOT NULL DEFAULT '',
+		consecutive_failures INTEGER NOT NULL DEFAULT 0,
+		disabled             INTEGER NOT NULL DEFAULT 0,
+		last_error           TEXT    NOT NULL DEFAULT '',
+		last_attempt_ns      INTEGER NOT NULL DEFAULT 0,
+		last_synced_ns       INTEGER NOT NULL DEFAULT 0,
+		last_added           INTEGER NOT NULL DEFAULT 0,
+		last_removed         INTEGER NOT NULL DEFAULT 0,
+		last_trashed         INTEGER NOT NULL DEFAULT 0,
+		last_queued          INTEGER NOT NULL DEFAULT 0,
+		last_unavailable     INTEGER NOT NULL DEFAULT 0,
+		last_missing         INTEGER NOT NULL DEFAULT 0,
+		created_at_ns        INTEGER NOT NULL,
+		updated_at_ns        INTEGER NOT NULL
+	);
+
+	-- What a source entry became in the library, keyed by the source's
+	-- own entry id (a video id) and shared across playlists so two
+	-- bindings over overlapping sources download a video once. Rows are
+	-- written when an acquisition downloads an entry (upload_id, item_pid
+	-- still empty) and completed when the settle path resolves the item;
+	-- the provenance tag in the file is a reserved key the catalog never
+	-- lifts into a queryable column, so this map is the reverse lookup.
+	-- essence is the item's audio-essence hash, kept so a pid that
+	-- vanishes in a merge re-resolves through the portable-ref ladder
+	-- instead of re-downloading.
+	CREATE TABLE playlist_source_map (
+		source        TEXT    NOT NULL,
+		entry_id      TEXT    NOT NULL,
+		upload_id     TEXT    NOT NULL DEFAULT '',
+		item_pid      TEXT    NOT NULL DEFAULT '',
+		essence       TEXT    NOT NULL DEFAULT '',
+		updated_at_ns INTEGER NOT NULL,
+		PRIMARY KEY (source, entry_id)
+	);
+	CREATE INDEX playlist_source_map_upload ON playlist_source_map (upload_id);
+
+	-- Per-playlist sync bookkeeping the reconciler cannot infer from
+	-- membership alone: attached records that a sync added the entry, so
+	-- its later absence reads as the owner removing it by hand (append
+	-- mode tombstones it instead of re-adding; mirror-trash trashes only
+	-- files it attached itself), while an entry with no row is one whose
+	-- download has not settled yet. tombstoned rows are append mode's
+	-- do-not-re-add memory; mirror re-adds by design and ignores them.
+	CREATE TABLE playlist_source_entries (
+		playlist_pid TEXT    NOT NULL,
+		entry_id     TEXT    NOT NULL,
+		state        TEXT    NOT NULL,
+		at_ns        INTEGER NOT NULL,
+		PRIMARY KEY (playlist_pid, entry_id)
+	);
+
 	-- The canonical genre vocabulary, when this instance replaced the
 	-- shipped default. Empty is the normal state and means "use the
 	-- embedded tree", so a default that improves keeps reaching

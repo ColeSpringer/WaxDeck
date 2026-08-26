@@ -149,6 +149,10 @@
       }
     }
   },
+  "toolsTaskPlaylistSync": "Playlist sync",
+  "@toolsTaskPlaylistSync": {
+    "description": "Name of the task that reconciles a playlist bound to an external source: enumerate, download what is new, and update membership."
+  },
   "toolsTasksCleared": "{count, plural, =1{Cleared 1 task} other{Cleared {count} tasks}}",
   "@toolsTasksCleared": {
     "description": "Message after finished tasks were swept, saying how many went.",

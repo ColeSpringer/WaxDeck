@@ -41,6 +41,14 @@
   "@notifImportCompletedTitle": {
     "description": "Switch label for the `import-completed` notification."
   },
+  "notifPlaylistSyncedHelp": "A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended.",
+  "@notifPlaylistSyncedHelp": {
+    "description": "Help under the playlist-synced row in the notification-events checklist."
+  },
+  "notifPlaylistSyncedTitle": "Playlist synced",
+  "@notifPlaylistSyncedTitle": {
+    "description": "Title of the playlist-synced row in the notification-events checklist."
+  },
   "notifReviewReadyHelp": "An upload or acquisition finished identification and waits in the review queue.",
   "@notifReviewReadyHelp": {
     "description": "What the `review-ready` notification is about, drawn under its switch."

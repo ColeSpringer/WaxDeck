@@ -19,6 +19,7 @@ enum NotificationKind {
   feedDisabled('feed-disabled', WaxIcons.warning, WaxRoute.podcasts),
   episodeDownloaded('episode-downloaded', WaxIcons.podcasts, WaxRoute.podcasts),
   importCompleted('import-completed', WaxIcons.success, WaxRoute.uploads),
+  playlistSynced('playlist-synced', WaxIcons.refresh, WaxRoute.playlists),
   download('download', WaxIcons.downloads, WaxRoute.downloads);
 
   const NotificationKind(this.token, this.glyph, this.location);
@@ -38,7 +39,8 @@ enum NotificationKind {
   /// [locationFor] opens, and what keeps two broken feeds two rows.
   bool get namesEntity =>
       this == NotificationKind.feedDisabled ||
-      this == NotificationKind.episodeDownloaded;
+      this == NotificationKind.episodeDownloaded ||
+      this == NotificationKind.playlistSynced;
 
   /// The kind one server event means, or null where it means nothing
   /// worth telling anybody about. Matched on [token], so the vocabulary
@@ -61,6 +63,7 @@ enum NotificationKind {
     NotificationKind.feedDisabled ||
     NotificationKind.episodeDownloaded => l10n.bellSurfacePodcasts,
     NotificationKind.importCompleted => l10n.bellSurfaceImports,
+    NotificationKind.playlistSynced => l10n.bellSurfacePlaylists,
     NotificationKind.download => l10n.bellSurfaceDownloads,
   };
 
@@ -74,6 +77,7 @@ enum NotificationKind {
     NotificationKind.feedDisabled => l10n.bellFeedDisabled,
     NotificationKind.episodeDownloaded => l10n.bellEpisodeDownloaded,
     NotificationKind.importCompleted => l10n.bellImportCompleted,
+    NotificationKind.playlistSynced => l10n.bellPlaylistSynced,
     NotificationKind.download => l10n.bellDownloadFinished,
   };
 
@@ -85,6 +89,7 @@ enum NotificationKind {
     NotificationKind.episodeDownloaded when pid != null => WaxRoute.episode(
       pid,
     ),
+    NotificationKind.playlistSynced when pid != null => WaxRoute.playlist(pid),
     _ => location,
   };
 }

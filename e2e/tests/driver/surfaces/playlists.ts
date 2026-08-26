@@ -149,4 +149,62 @@ export class Playlists extends Surface {
   async fromOverflow(verb: Locator, showing: Locator): Promise<void> {
     await chooseFromMenu(this.overflow(), verb, showing);
   }
+
+  /// The synced-playlist settings sheet and its controls.
+  syncSettings(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncSettings));
+  }
+
+  syncSheet(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncSheet));
+  }
+
+  syncUrl(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncUrl));
+  }
+
+  syncSave(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncSave));
+  }
+
+  syncNow(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncNow));
+  }
+
+  syncPreviewButton(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncPreview));
+  }
+
+  syncPreviewDialog(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncPreviewDialog));
+  }
+
+  syncChip(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncChip));
+  }
+
+  async openSyncSheet(): Promise<void> {
+    await this.fromOverflow(this.syncSettings(), this.syncSheet());
+  }
+
+  /// Type a source URL into the open sheet and save; the sheet answers
+  /// with the bound-state verbs, which is what "saved" looks like.
+  async bindSource(url: string): Promise<void> {
+    await typeInto(this.ctx.page, this.syncUrl(), url);
+    await this.syncSave().click();
+    await this.syncNow().waitFor({ timeout: T.action });
+  }
+
+  /// Dismiss the topmost modal (the sheet, or a dialog above it)
+  /// through its barrier's own Dismiss control, which is what the
+  /// scrim exposes to assistive tech - steadier than Escape, which not
+  /// every modal route binds. A retried unit around what dismissal
+  /// should reveal, like every other dismissal in the driver: a click
+  /// over the canvas landing during a rebuild is silently swallowed.
+  async dismissSheet(showing: Locator): Promise<void> {
+    await clickThrough(
+      this.ctx.page.getByRole('button', { name: 'Dismiss' }).first(),
+      showing,
+    );
+  }
 }

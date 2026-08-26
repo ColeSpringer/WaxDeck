@@ -101,6 +101,11 @@ String explainRefusal(AppLocalizations l10n, Object error) {
   if (error.code == 'feature-unavailable' && error.params?['feature'] == null) {
     return error.message;
   }
+  // `source-unavailable` is the same shape: the sentence names which
+  // bridge is missing and how to start it, which no umbrella copy can.
+  if (error.code == 'source-unavailable') {
+    return error.message;
+  }
   return explainError(l10n, error);
 }
 

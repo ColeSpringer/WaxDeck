@@ -293,7 +293,8 @@ components:
           type: string
           description: >
             The operation: `book-merge`, `book-split`, `cue-split`,
-            or `acquire`. A string, not a closed enum.
+            `acquire`, or `playlist-sync`. A string, not a closed
+            enum.
         state:
           type: string
           description: >
@@ -301,7 +302,8 @@ components:
             a closed enum.
         itemPid:
           type: string
-          description: The book or track the task was started from.
+          description: >
+            The book, track, or playlist the task was started from.
         progressPct:
           type: number
           format: double
@@ -314,7 +316,7 @@ components:
           description: >
             What the task produced once `done`: the merged book or
             the split pieces (item pids), or the review entries an
-            acquisition opened (entry pids).
+            acquisition or playlist sync opened (entry pids).
           items:
             type: string
         createdAt:

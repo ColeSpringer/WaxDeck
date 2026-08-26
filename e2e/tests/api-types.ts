@@ -3028,6 +3028,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/playlists/{pid}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a playlist's source binding
+         * @description The external source a manual playlist is bound to, with its sync settings and health: mode, interval, the last completed run's counts, and the failure state that decides whether scheduled syncs still run. Owner only; `not-found` when the playlist has no binding.
+         */
+        get: operations["getPlaylistSource"];
+        /**
+         * Bind a playlist to an external source
+         * @description Binds a manual playlist to an external source and stores its sync settings, replacing any previous binding whole - every field is written from this body, so always send the complete settings. A `url` names a live source (a YouTube playlist) that the server re-enumerates on the stored interval and on demand, downloading new entries through the normal review queue; `source` plus `payload` or `refs` records a matched source (a streaming export), which reconciles match-only and on demand, downloading nothing. Exactly one of the two forms must be set.
+         *
+         *     Modes: `append` adds new source entries and never touches manual edits; `mirror` makes membership and order follow the source, keeping a removed entry's file in the library; `mirror-trash` additionally moves a removed entry's file to the recoverable trash, and selecting it needs the delete right (administrators implicitly). Matched sources take `append` or `mirror` only, and no interval - a static export never changes by itself. Owner only; static playlists only (a smart playlist's membership is its rule). Live sources need a running acquisition bridge (`source-unavailable` without one). Binding does not sync by itself: the first scheduled run comes one interval after the bind, and the sync endpoint runs one now.
+         */
+        put: operations["setPlaylistSource"];
+        post?: never;
+        /**
+         * Unbind a playlist from its source
+         * @description Removes the binding and its per-playlist sync bookkeeping. The playlist and its members stay exactly as they are; nothing is downloaded, removed, or trashed again. Owner only; `not-found` when the playlist has no binding.
+         */
+        delete: operations["unbindPlaylistSource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/playlists/{pid}/source/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview a playlist sync
+         * @description Runs the same reconciler a sync runs, computing what it would do without writing anything: members it would attach now, downloads it would queue, members it would remove, files it would trash, entries still riding the review queue, and entries the source reports unavailable. With a body, previews those prospective settings - the settings sheet's dry run before a bind commits; without one, previews the stored binding (`not-found` when there is none). Availability is best-effort: enumeration inspects a bounded prefix of the source, so a long playlist's later entries count as unknown until a download is attempted.
+         */
+        post: operations["previewPlaylistSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/playlists/{pid}/source/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync a playlist from its source now
+         * @description Queues a sync run for the stored binding and answers immediately with the tool task to follow (type `playlist-sync`). The run enumerates the source, queues downloads for new entries - they ride the normal review queue and join the playlist once their review entries resolve - reconciles membership by the stored mode, and updates the binding's health; a successful run re-enables a binding that repeated failures had suspended. A run already queued or running for this playlist is answered with that task rather than a second one. Owner only.
+         */
+        post: operations["syncPlaylistSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/podcasts": {
         parameters: {
             query?: never;
@@ -7851,6 +7921,106 @@ export interface components {
             name: string;
             refs: components["schemas"]["PortableRef"][];
         };
+        /** @description A playlist's external source binding: what it follows, how, and how the syncing has been going. */
+        PlaylistSource: {
+            /**
+             * @description Where the members come from: `youtube` for a live URL binding, else the import source the binding was recorded from (`spotify`, `applemusic`, `ytmusic`, `csv`, `text`, `portable`). A string, not a closed enum; clients must treat unknown sources as opaque labels.
+             * @example youtube
+             */
+            source: string;
+            /** @description The source playlist's URL. Live bindings only. */
+            url?: string;
+            /** @description The source playlist's own title, as last enumerated. Live bindings only. */
+            title?: string;
+            /** @description True when the server can re-fetch the source itself: the binding syncs on the stored interval and downloads new entries. False for a matched source, which reconciles match-only and on demand. */
+            live: boolean;
+            /**
+             * @description `append` (add new entries, manual edits preserved), `mirror` (membership and order follow the source, a removed entry's file stays in the library), or `mirror-trash` (mirror, and a removed entry's file goes to the recoverable trash).
+             * @example mirror
+             */
+            mode: string;
+            /**
+             * @description Hours between scheduled runs. Live bindings only.
+             * @example 6
+             */
+            intervalHours?: number;
+            /** @description Portable refs the binding stores. Matched bindings only. */
+            refCount?: number;
+            /** @description True when scheduled syncing was suspended after repeated failures. A successful manual sync re-enables it. */
+            disabled: boolean;
+            /** @description Failed runs since the last success. */
+            consecutiveFailures: number;
+            /** @description Why the last failing run failed. */
+            lastError?: string;
+            /**
+             * Format: date-time
+             * @description When a run last started, successful or not.
+             */
+            lastAttemptAt?: string;
+            /**
+             * Format: date-time
+             * @description When a run last completed successfully.
+             */
+            lastSyncedAt?: string;
+            lastRun?: components["schemas"]["PlaylistSyncCounts"];
+        };
+        /** @description A source binding to store, replacing any previous one whole. Exactly one of `url` (a live source) or `source` with `payload` or `refs` (a matched source, the import request's own fields) must be set. `intervalHours` is required for a live source and must be absent for a matched one. */
+        PlaylistSourceUpdate: {
+            /** @description A live source's playlist URL (a YouTube playlist). */
+            url?: string;
+            /**
+             * @description A matched source's export format, as on the playlist import endpoint: `spotify`, `applemusic`, `ytmusic`, `csv`, `text`, or `portable`.
+             * @enum {string}
+             */
+            source?: "spotify" | "applemusic" | "ytmusic" | "csv" | "text" | "portable";
+            /** @description The export file's text content (text sources). */
+            payload?: string;
+            /** @description Portable refs (the `portable` source). */
+            refs?: components["schemas"]["PortableRef"][];
+            /**
+             * @description How a sync reconciles: `append`, `mirror`, or `mirror-trash`. Selecting `mirror-trash` needs the delete right (administrators implicitly), and a matched source takes `append` or `mirror` only.
+             * @enum {string}
+             */
+            mode: "append" | "mirror" | "mirror-trash";
+            /** @description Hours between scheduled runs (live sources): 1, 3, 6, 12, or 24. Deliberately not a schema enum - the closed set is enforced by the server, where it can grow without a breaking change. */
+            intervalHours?: number;
+        };
+        /** @description One completed sync run's counts. */
+        PlaylistSyncCounts: {
+            /** @description Members the run attached. */
+            added: number;
+            /** @description Members the run removed. */
+            removed: number;
+            /** @description Files the run moved to the trash. */
+            trashed: number;
+            /** @description Downloads the run queued. */
+            queued: number;
+            /** @description Entries the source reported unavailable. */
+            unavailable: number;
+            /** @description Matched-source refs with no library match. */
+            missing: number;
+        };
+        /** @description What a sync would do right now, computed by the same reconciler without writing anything. */
+        PlaylistSyncPreview: {
+            /** @description Entries enumerated from the source, or refs a matched binding holds. */
+            entries: number;
+            /** @description Members a sync would attach now. */
+            wouldAdd: number;
+            /** @description New entries a sync would queue downloads for; they join the playlist once their review entries resolve. */
+            wouldDownload: number;
+            /** @description Members a sync would remove. */
+            wouldRemove: number;
+            /** @description Files a sync would move to the recoverable trash (`mirror-trash` only, always at most `wouldRemove`). */
+            wouldTrash: number;
+            /** @description Entries already downloading or waiting in the review queue. */
+            pending: number;
+            /** @description Entries the source reports unavailable, best-effort from what enumeration inspected. */
+            unavailable: number;
+            /** @description Matched-source refs with no library match. */
+            missing: number;
+            /** @description The unmatched refs themselves, in source order. Matched bindings only. */
+            misses?: components["schemas"]["PlaylistImportMiss"][];
+        };
         /** @description A playlist: a manual ordered list (`static`) or a rule evaluated per user on read (`smart`). `rule` is present only for smart playlists. `itemCount` is always the caller's own view of the membership: present and live for a static playlist, computed on detail reads and omitted from list pages for a smart one. */
         Playlist: {
             /**
@@ -9399,7 +9569,7 @@ export interface components {
             /**
              * @description What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). Curation surfaces emit marker kinds carrying only `pid`: `review` (a review entry changed; refetch the review endpoints), `upload` (an upload session changed), `task` (a tool task changed), and `entity-state` (an artist or album was starred or rated). Markers hydrate nothing because those surfaces are live reads, not mirrored state.
              *
-             *     Two further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended) and `import-completed` (`pid` is the review entry that filed itself).
+             *     Further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended), `import-completed` (`pid` is the review entry that filed itself), `episode-downloaded` (`pid` is the episode whose enclosure the server finished fetching), and `playlist-synced` (`pid` is the playlist whose sync run changed its membership, or whose scheduled syncing was suspended after repeated failures).
              * @example play-state
              */
             kind: string;
@@ -9465,11 +9635,11 @@ export interface components {
              * @example tk-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             id: string;
-            /** @description The operation: `book-merge`, `book-split`, `cue-split`, or `acquire`. A string, not a closed enum. */
+            /** @description The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, or `playlist-sync`. A string, not a closed enum. */
             type: string;
             /** @description `queued`, `running`, `done`, or `failed`. A string, not a closed enum. */
             state: string;
-            /** @description The book or track the task was started from. */
+            /** @description The book, track, or playlist the task was started from. */
             itemPid?: string;
             /**
              * Format: double
@@ -9478,7 +9648,7 @@ export interface components {
             progressPct?: number;
             /** @description Why the task failed, when `failed`. */
             error?: string;
-            /** @description What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition opened (entry pids). */
+            /** @description What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition or playlist sync opened (entry pids). */
             resultPids?: string[];
             /**
              * Format: date-time
@@ -9729,6 +9899,8 @@ export interface components {
             uploadEnabled: boolean;
             /** @description Whether the account may curate podcasts. Self views carry the *effective* value (administrators always may), so clients gate their podcast-curation affordances - adding shows, setting a show's cover - on it without a second read. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. */
             managePodcasts?: boolean;
+            /** @description Whether the account may move visible library items to the recoverable trash. Self views carry the *effective* value (administrators always may), so clients gate destructive affordances - deleting items, a synced playlist's `mirror-trash` mode - on it without a second read. Permanent deletion stays admin-only regardless. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. */
+            delete?: boolean;
         };
         /** @description An account as visible to administrators (and to its owner). */
         UserAccount: components["schemas"]["User"] & {
@@ -15121,6 +15293,153 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    getPlaylistSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The binding. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistSource"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    setPlaylistSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaylistSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description The stored binding. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistSource"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            501: components["responses"]["SourceUnavailable"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    unbindPlaylistSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unbound. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    previewPlaylistSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PlaylistSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description The dry-run report. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistSyncPreview"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            501: components["responses"]["SourceUnavailable"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    syncPlaylistSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The queued task. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolTask"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["ReadOnly"];
+            501: components["responses"]["SourceUnavailable"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };

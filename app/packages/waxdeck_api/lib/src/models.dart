@@ -170,6 +170,7 @@ class WaxDeckUser {
     this.roles = const [],
     this.uploadEnabled = false,
     this.managePodcasts = false,
+    this.canDelete = false,
   });
 
   final String id;
@@ -184,6 +185,12 @@ class WaxDeckUser {
   /// The *effective* podcast-curation right (administrators always
   /// hold it); podcast-curation affordances gate on this.
   final bool managePodcasts;
+
+  /// The *effective* right to move library items to the trash
+  /// (administrators always hold it); destructive affordances gate on
+  /// this. False from a server too old to report it, where the admin
+  /// role is the fallback gate.
+  final bool canDelete;
 
   /// Name to show in UI chrome.
   String get label => displayName ?? username;
@@ -1876,6 +1883,108 @@ class PlaylistItemsPage {
   final String? nextCursor;
 
   bool get hasMore => nextCursor != null;
+}
+
+/// A playlist's external source binding: what it follows, how, and how
+/// the syncing has been going.
+class PlaylistSource {
+  const PlaylistSource({
+    required this.source,
+    this.url,
+    this.title,
+    required this.live,
+    required this.mode,
+    this.intervalHours,
+    this.refCount,
+    required this.disabled,
+    required this.consecutiveFailures,
+    this.lastError,
+    this.lastAttemptAt,
+    this.lastSyncedAt,
+    this.lastRun,
+  });
+
+  /// `youtube` for a live URL binding, else the import source label.
+  /// An open string; unknown sources render as opaque labels.
+  final String source;
+
+  /// The source playlist's URL (live bindings only).
+  final String? url;
+
+  /// The source playlist's own title, as last enumerated (live only).
+  final String? title;
+
+  /// True when the server re-fetches the source on the stored interval
+  /// and downloads new entries; false for a matched export, which
+  /// reconciles match-only and on demand.
+  final bool live;
+
+  /// `append`, `mirror`, or `mirror-trash`.
+  final String mode;
+
+  /// Hours between scheduled runs (live bindings only).
+  final int? intervalHours;
+
+  /// Portable refs the binding stores (matched bindings only).
+  final int? refCount;
+
+  /// True when repeated failures suspended the schedule; a successful
+  /// manual sync re-enables it.
+  final bool disabled;
+  final int consecutiveFailures;
+  final String? lastError;
+  final DateTime? lastAttemptAt;
+  final DateTime? lastSyncedAt;
+
+  /// The last completed run's counts; null before the first success.
+  final PlaylistSyncCounts? lastRun;
+}
+
+/// One completed sync run's counts.
+class PlaylistSyncCounts {
+  const PlaylistSyncCounts({
+    required this.added,
+    required this.removed,
+    required this.trashed,
+    required this.queued,
+    required this.unavailable,
+    required this.missing,
+  });
+
+  final int added;
+  final int removed;
+  final int trashed;
+  final int queued;
+  final int unavailable;
+  final int missing;
+}
+
+/// What a sync would do right now, computed by the same reconciler
+/// without writing anything.
+class PlaylistSyncPreview {
+  const PlaylistSyncPreview({
+    required this.entries,
+    required this.wouldAdd,
+    required this.wouldDownload,
+    required this.wouldRemove,
+    required this.wouldTrash,
+    required this.pending,
+    required this.unavailable,
+    required this.missing,
+    this.misses = const [],
+  });
+
+  final int entries;
+  final int wouldAdd;
+  final int wouldDownload;
+  final int wouldRemove;
+  final int wouldTrash;
+  final int pending;
+  final int unavailable;
+  final int missing;
+
+  /// The unmatched refs themselves, matched bindings only.
+  final List<PlaylistImportMiss> misses;
 }
 
 /// A stateless rule evaluation: the first matching items plus the total

@@ -790,80 +790,18 @@ here waits on upstream.
   advisory atom never surfaces as a tag, so iTunes-tagged M4As stay
   uncovered either way - the mapping ask is recorded in
   `upstream-requests.md` (WaxLabel).
-- `[in-repo]` **Synced external playlists.** A YouTube playlist reaches
-  the library two ways today and neither keeps a WaxDeck playlist in
-  step with its source: "Add from URL" acquisition
-  (`service/acquire.go`) downloads a playlist's videos once, clusters
-  them into album review entries, and records no link back to the
-  playlist; subscribing that same playlist as a show does sync on a
-  schedule (the `feed-refresh` worker over the `feed_state` cursor) but
-  models it as podcast episodes, not music tracks. The wanted feature
-  binds a WaxDeck static playlist to an external source and reconciles
-  its membership on a schedule. Most of the machinery exists: WaxTap
-  enumerates a playlist in playlist order with a per-entry index,
-  `waxtapsource` wraps that enumeration, the download path stamps
-  `SOURCE_URL`/`SOURCE_ID`/`ACQUISITION_DATE` into every file,
-  `feed_state` is the durable last-run/last-error/consecutive-failure
-  record to copy, and `ReplacePlaylistItems` is the ordered-membership
-  reconcile primitive (optimistic `baseUpdatedAt`). Net-new, all
-  WaxDeck-side (a binding table in `waxdeck.db` keyed by playlist pid,
-  keyed by playlist pid): (1) the binding row (source type, source ref,
-  per-playlist sync mode, refresh interval, enumeration cursor); (2) a
-  video-id-to-item map kept current as acquisitions resolve, since the
-  provenance tag is never lifted into a queryable column and
-  match/dedup/merge can move an item; (3) an eventually-consistent
-  attach, because new tracks ride the normal review queue (chosen over
-  auto-import) and join the playlist only once their review entry
-  resolves into an item, in source order; (4) a raw ordered-entry
-  accessor on `waxtapsource` (its current `Enumerate` is podcast-shaped:
-  it drops currently-unavailable entries and carries an append-only
-  newest-first cursor, neither of which suits a mutable playlist whose
-  mirror must retain an already-downloaded track after its source video
-  goes private). Decisions recorded so they are not re-litigated. Sync
-  mode is per-playlist, not a global switch (one field on an
-  already-per-playlist binding, one dropdown beside the interval; a
-  faithful mirror and a seed-then-curate list are different intents),
-  with three values: `append` (add new only, manual edits preserved),
-  `mirror` (contents and order follow the source, manual edits
-  overwritten, a removed video detaches but its file stays), and
-  `mirror+trash` (mirror, and a removed video's file goes to the
-  recoverable trash); default `mirror`, keeping files. Intervals are
-  1/3/6/12/24 hours plus a manual sync-now; the scheduler
-  and its failure accounting are WaxDeck's, so no new worker primitive
-  is needed (extend the `feed-refresh` sweep or add a sibling that reads
-  a per-binding due time). The binding is source-agnostic by design
-  (chosen over YouTube-only): YouTube is the live re-fetchable source
-  that auto-syncs, while matched sources (Spotify/Apple/CSV, already a
-  one-shot import through `ImportStreamingPlaylist`'s portable-ref
-  ladder) reconcile match-only and on demand until a live connector for
-  them exists, downloading nothing and reporting misses rather than
-  fetching. Refinements to fold in when this is built: a dry-run
-  preview beside the manual sync-now (report would-add, would-remove,
-  and unavailable counts before committing, mirroring the migration
-  dry run and the rule preview); a sync-health surface reusing
-  `feed_state`'s last-run, last-error, consecutive-failure, and
-  auto-disable fields plus per-run add/remove/unavailable counts (the
-  delivery-health shape the scrobble and notification rows already
-  show); provenance dedup that reuses an in-library item matched by
-  `SOURCE_ID` instead of re-downloading, with an append-mode tombstone
-  so a track the user hand-removed is not re-added (mirror mode re-adds
-  by design); and a sync notification event (added N, or failed) on the
-  existing event catalog, beside the `import-completed` event an
-  auto-applied upload already emits. The
-  worker gating is worth noting: the `feed-refresh` sweep only spawns
-  when a podcast directory is configured, so a music-only instance
-  wants a sibling sweeper (WaxDeck-owned composition-root wiring, no
-  upstream), not an extension of that one. One cover rung rides this
-  feature rather than the shipped playlist artwork: a synced list
-  should prefer its source playlist's own thumbnail (the enumeration
-  already surfaces one) over the mosaic built from members, which means
-  fetching and storing it on bind and re-checking it on sync. The client
-  slots this needs are in place as of the playlists rebuild:
-  the detail header already draws a chip row under it, so a sync-status
-  chip is a chip rather than a layout, and the overflow is a declared
-  action enum with the cover verbs grouped, so the settings sheet
-  (source binding, sync mode, interval, sync-now with the dry run) is
-  one more case in it.
+- `[in-repo]` **Matched-source bindings have no client door.** The
+  server accepts a streaming export (Spotify, Apple Music, YouTube
+  Music, CSV, text) as a playlist source binding - stored as portable
+  refs, re-matched on demand, misses reported - and the settings sheet
+  renders, previews, syncs, and unbinds one, but nothing in the client
+  creates one: the sheet's bind form takes a live URL only, so a
+  matched binding is minted over the API. The natural door is the
+  existing import flow, which holds the parsed export in hand at
+  exactly the moment the created playlist's pid comes back - a
+  "keep it re-matching" switch there is one repository call. Not built
+  with the sync feature because it lives on a screen the feature
+  otherwise never touched.
 
 ## Discovery and stats
 

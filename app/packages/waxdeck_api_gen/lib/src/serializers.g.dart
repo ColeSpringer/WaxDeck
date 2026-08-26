@@ -233,6 +233,12 @@ Serializers _$serializers =
           ..add(PlaylistItemsUpdate.serializer)
           ..add(PlaylistPage.serializer)
           ..add(PlaylistPreview.serializer)
+          ..add(PlaylistSource.serializer)
+          ..add(PlaylistSourceUpdate.serializer)
+          ..add(PlaylistSourceUpdateModeEnum.serializer)
+          ..add(PlaylistSourceUpdateSource_Enum.serializer)
+          ..add(PlaylistSyncCounts.serializer)
+          ..add(PlaylistSyncPreview.serializer)
           ..add(PlaylistUpdate.serializer)
           ..add(PodcastDetail.serializer)
           ..add(PodcastDirectoryEntry.serializer)
@@ -732,9 +738,19 @@ Serializers _$serializers =
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [
+              const FullType(PlaylistImportMiss),
+            ]),
+            () => ListBuilder<PlaylistImportMiss>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
               const FullType(PodcastDirectoryEntry),
             ]),
             () => ListBuilder<PodcastDirectoryEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(PortableRef)]),
+            () => ListBuilder<PortableRef>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(PortableRef)]),

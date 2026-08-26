@@ -5071,6 +5071,135 @@ class FakeRepository implements WaxDeckRepository {
     return portableExport;
   }
 
+  /// Stored source bindings by playlist pid; absent means unbound, the
+  /// 404 the real endpoint answers.
+  final Map<String, PlaylistSource> playlistSources = {};
+
+  /// What [previewPlaylistSync] answers.
+  PlaylistSyncPreview playlistSyncPreview = const PlaylistSyncPreview(
+    entries: 0,
+    wouldAdd: 0,
+    wouldDownload: 0,
+    wouldRemove: 0,
+    wouldTrash: 0,
+    pending: 0,
+    unavailable: 0,
+    missing: 0,
+  );
+
+  /// What [syncPlaylistSource] answers.
+  ToolTask playlistSyncTask = ToolTask(
+    id: 'tk-sync',
+    type: 'playlist-sync',
+    state: 'queued',
+    createdAt: DateTime.utc(2026),
+  );
+
+  final List<
+    ({String pid, String mode, String? url, String? source, int? intervalHours})
+  >
+  setPlaylistSourceCalls = [];
+  final List<String> unbindPlaylistSourceCalls = [];
+  final List<({String pid, String? mode})> previewPlaylistSyncCalls = [];
+  final List<String> syncPlaylistSourceCalls = [];
+
+  /// Raised by [setPlaylistSource] when set, for the refusal path.
+  WaxDeckApiException? playlistSourceError;
+
+  @override
+  Future<PlaylistSource> getPlaylistSource(String pid) async {
+    final src = playlistSources[pid];
+    if (src == null) {
+      throw WaxDeckApiException(
+        statusCode: 404,
+        code: 'not-found',
+        message: 'the playlist has no source binding',
+      );
+    }
+    return src;
+  }
+
+  @override
+  Future<PlaylistSource> setPlaylistSource(
+    String pid, {
+    required String mode,
+    String? url,
+    String? source,
+    String? payload,
+    List<PortableRef>? refs,
+    int? intervalHours,
+  }) async {
+    setPlaylistSourceCalls.add((
+      pid: pid,
+      mode: mode,
+      url: url,
+      source: source,
+      intervalHours: intervalHours,
+    ));
+    final err = playlistSourceError;
+    if (err != null) {
+      throw err;
+    }
+    // The server's own shape checks, so a widget test that saves an
+    // empty form sees the refusal production shows rather than a bound
+    // state the real endpoint would never answer.
+    final live = url != null && url.trim().isNotEmpty;
+    if (!live && source == null) {
+      throw WaxDeckApiException(
+        statusCode: 400,
+        code: 'invalid-request',
+        message: 'bind a url or a source export',
+      );
+    }
+    final stored = PlaylistSource(
+      source: live ? 'youtube' : (source ?? 'portable'),
+      url: url,
+      title: live ? 'Source Playlist' : null,
+      live: live,
+      mode: mode,
+      intervalHours: live ? intervalHours : null,
+      refCount: live ? null : (refs?.length ?? 1),
+      disabled: false,
+      consecutiveFailures: 0,
+    );
+    playlistSources[pid] = stored;
+    return stored;
+  }
+
+  @override
+  Future<void> unbindPlaylistSource(String pid) async {
+    unbindPlaylistSourceCalls.add(pid);
+    playlistSources.remove(pid);
+  }
+
+  @override
+  Future<PlaylistSyncPreview> previewPlaylistSync(
+    String pid, {
+    String? mode,
+    String? url,
+    String? source,
+    String? payload,
+    List<PortableRef>? refs,
+    int? intervalHours,
+  }) async {
+    previewPlaylistSyncCalls.add((pid: pid, mode: mode));
+    return playlistSyncPreview;
+  }
+
+  /// Raised by [syncPlaylistSource] when set, for the refusal paths
+  /// (no binding, no bridge, read-only server).
+  WaxDeckApiException? playlistSyncError;
+
+  @override
+  Future<ToolTask> syncPlaylistSource(String pid) async {
+    syncPlaylistSourceCalls.add(pid);
+    final err = playlistSyncError;
+    if (err != null) {
+      throw err;
+    }
+    return playlistSyncTask;
+  }
+
   /// What [reportPlaylistNspExport] answers, and the NSP document
   /// [exportPlaylistNsp] hands back.
   NspReport nspReport = const NspReport(direction: 'export');

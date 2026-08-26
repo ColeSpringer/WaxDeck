@@ -42,6 +42,7 @@ const ADMIN_SHAPES = [
   'driver-smoke',
   'metadata-workbench',
   'notifications',
+  'playlist-sync',
   'review-queue',
   'signup-ui',
   'uploads',

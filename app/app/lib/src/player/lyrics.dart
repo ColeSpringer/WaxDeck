@@ -7,8 +7,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
-import '../library/item_delete.dart';
 import '../providers.dart';
+import '../settings/settings_registry.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/side_panel.dart';
@@ -129,7 +129,7 @@ class _Absent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final admin = canDeleteItems(ref);
+    final admin = ref.watch(isAdminProvider);
     final l10n = context.l10n;
     return EmptyState(
       glyph: WaxIcons.lyrics,

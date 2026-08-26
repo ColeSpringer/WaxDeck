@@ -26,6 +26,9 @@ abstract mixin class UserBuilder {
 
   bool? get managePodcasts;
   set managePodcasts(bool? managePodcasts);
+
+  bool? get delete;
+  set delete(bool? delete);
 }
 
 class _$$User extends $User {
@@ -41,6 +44,8 @@ class _$$User extends $User {
   final bool uploadEnabled;
   @override
   final bool? managePodcasts;
+  @override
+  final bool? delete;
 
   factory _$$User([void Function($UserBuilder)? updates]) =>
       ($UserBuilder()..update(updates))._build();
@@ -52,6 +57,7 @@ class _$$User extends $User {
     required this.roles,
     required this.uploadEnabled,
     this.managePodcasts,
+    this.delete,
   }) : super._();
   @override
   $User rebuild(void Function($UserBuilder) updates) =>
@@ -69,7 +75,8 @@ class _$$User extends $User {
         displayName == other.displayName &&
         roles == other.roles &&
         uploadEnabled == other.uploadEnabled &&
-        managePodcasts == other.managePodcasts;
+        managePodcasts == other.managePodcasts &&
+        delete == other.delete;
   }
 
   @override
@@ -81,6 +88,7 @@ class _$$User extends $User {
     _$hash = $jc(_$hash, roles.hashCode);
     _$hash = $jc(_$hash, uploadEnabled.hashCode);
     _$hash = $jc(_$hash, managePodcasts.hashCode);
+    _$hash = $jc(_$hash, delete.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -93,7 +101,8 @@ class _$$User extends $User {
           ..add('displayName', displayName)
           ..add('roles', roles)
           ..add('uploadEnabled', uploadEnabled)
-          ..add('managePodcasts', managePodcasts))
+          ..add('managePodcasts', managePodcasts)
+          ..add('delete', delete))
         .toString();
   }
 }
@@ -128,6 +137,10 @@ class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
   set managePodcasts(covariant bool? managePodcasts) =>
       _$this._managePodcasts = managePodcasts;
 
+  bool? _delete;
+  bool? get delete => _$this._delete;
+  set delete(covariant bool? delete) => _$this._delete = delete;
+
   $UserBuilder() {
     $User._defaults(this);
   }
@@ -141,6 +154,7 @@ class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
       _roles = $v.roles.toBuilder();
       _uploadEnabled = $v.uploadEnabled;
       _managePodcasts = $v.managePodcasts;
+      _delete = $v.delete;
       _$v = null;
     }
     return this;
@@ -179,6 +193,7 @@ class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
               'uploadEnabled',
             ),
             managePodcasts: managePodcasts,
+            delete: delete,
           );
     } catch (_) {
       late String _$failedField;

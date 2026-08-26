@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../playlists/playlist_sync_controller.dart';
+import '../playlists/playlists_controller.dart';
 import '../providers.dart';
 import '../sync/sync_providers.dart';
 import 'notifications_controller.dart';
@@ -82,6 +84,18 @@ class UserEventPuller {
 final notificationsBinderProvider = Provider.autoDispose<void>((ref) {
   final notifications = ref.read(notificationsProvider.notifier);
 
+  // The bell row plus the one refetch the marker calls for: the sync
+  // chip and sheet watch the binding, and nothing else would tell an
+  // open playlist screen that a background run just moved it.
+  void onServerEvent(ServerSyncEvent event) {
+    notifications.recordServerEvent(event);
+    final pid = event.pid;
+    if (event.kind == 'playlist-synced' && pid != null) {
+      ref.invalidate(playlistSyncProvider(pid));
+      ref.invalidate(playlistDetailProvider(pid));
+    }
+  }
+
   // This device's own transfers, which no server event describes. Null
   // on web, which has no local download manager.
   final downloads = ref.watch(downloadManagerProvider);
@@ -94,9 +108,7 @@ final notificationsBinderProvider = Provider.autoDispose<void>((ref) {
 
   final engine = ref.watch(syncEngineProvider);
   if (engine != null) {
-    final subscription = engine.serverEvents.listen(
-      notifications.recordServerEvent,
-    );
+    final subscription = engine.serverEvents.listen(onServerEvent);
     // Nothing to clear on the way out: the controller empties the list
     // on an account change, and a disposal callback may not touch it.
     ref.onDispose(subscription.cancel);
@@ -105,7 +117,7 @@ final notificationsBinderProvider = Provider.autoDispose<void>((ref) {
   if (!kIsWeb) return;
   final puller = UserEventPuller(
     repository: ref.watch(repositoryProvider),
-    onEvent: notifications.recordServerEvent,
+    onEvent: onServerEvent,
   );
   // Minted immediately, so the first change after a launch is reported
   // rather than swallowed by the mint it would have paid for.

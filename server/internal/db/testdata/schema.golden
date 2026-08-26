@@ -294,6 +294,47 @@ table playlist_cover
   column playlist_pid|TEXT|notnull=0|default=<none>|pk=1
   column updated_at_ns|INTEGER|notnull=1|default=0|pk=0
   autoindex pk|unique=1|(playlist_pid)
+table playlist_source
+  column consecutive_failures|INTEGER|notnull=1|default=0|pk=0
+  column cover_url|TEXT|notnull=1|default=''|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column disabled|INTEGER|notnull=1|default=0|pk=0
+  column identity_key|TEXT|notnull=1|default=''|pk=0
+  column interval_hours|INTEGER|notnull=1|default=0|pk=0
+  column last_added|INTEGER|notnull=1|default=0|pk=0
+  column last_attempt_ns|INTEGER|notnull=1|default=0|pk=0
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column last_missing|INTEGER|notnull=1|default=0|pk=0
+  column last_queued|INTEGER|notnull=1|default=0|pk=0
+  column last_removed|INTEGER|notnull=1|default=0|pk=0
+  column last_synced_ns|INTEGER|notnull=1|default=0|pk=0
+  column last_trashed|INTEGER|notnull=1|default=0|pk=0
+  column last_unavailable|INTEGER|notnull=1|default=0|pk=0
+  column live|INTEGER|notnull=1|default=0|pk=0
+  column mode|TEXT|notnull=1|default=<none>|pk=0
+  column playlist_pid|TEXT|notnull=0|default=<none>|pk=1
+  column refs_json|TEXT|notnull=1|default=''|pk=0
+  column source_id|TEXT|notnull=1|default=''|pk=0
+  column source|TEXT|notnull=1|default=<none>|pk=0
+  column title|TEXT|notnull=1|default=''|pk=0
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column url|TEXT|notnull=1|default=''|pk=0
+  autoindex pk|unique=1|(playlist_pid)
+table playlist_source_entries
+  column at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column entry_id|TEXT|notnull=1|default=<none>|pk=2
+  column playlist_pid|TEXT|notnull=1|default=<none>|pk=1
+  column state|TEXT|notnull=1|default=<none>|pk=0
+  autoindex pk|unique=1|(playlist_pid,entry_id)
+table playlist_source_map
+  column entry_id|TEXT|notnull=1|default=<none>|pk=2
+  column essence|TEXT|notnull=1|default=''|pk=0
+  column item_pid|TEXT|notnull=1|default=''|pk=0
+  column source|TEXT|notnull=1|default=<none>|pk=1
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column upload_id|TEXT|notnull=1|default=''|pk=0
+  autoindex pk|unique=1|(source,entry_id)
+  index playlist_source_map_upload|unique=0|partial=0|(upload_id)
 table podcast_subscriptions
   column auto_dl_exclude|TEXT|notnull=0|default=<none>|pk=0
   column auto_dl_include|TEXT|notnull=0|default=<none>|pk=0

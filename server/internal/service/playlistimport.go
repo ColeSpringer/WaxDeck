@@ -89,40 +89,72 @@ const (
 	isrcLookupWindow = 20 * time.Second
 )
 
-// ImportStreamingPlaylist parses an export, resolves it against the
-// library, and creates a playlist from what matched.
-func (l *Library) ImportStreamingPlaylist(ctx context.Context, uc *UserCtx, in PlaylistImportInput) (PlaylistImportOutcome, error) {
+// parsePlaylistExport parses one export into portable refs plus any
+// playlist name the export itself carries. It is shared by the one-shot
+// import and the matched-source playlist binding, which stores the
+// parsed refs and re-resolves them on demand.
+func parsePlaylistExport(src, payload string, portableRefs []PortableRefDTO) ([]PortableRefDTO, string, error) {
 	var (
 		refs     []PortableRefDTO
 		listName string
 		err      error
 	)
-	switch in.Source {
+	switch src {
 	case "portable":
-		if len(in.Refs) == 0 {
-			return PlaylistImportOutcome{}, errInvalid("the portable source needs refs")
+		if len(portableRefs) == 0 {
+			return nil, "", errInvalid("the portable source needs refs")
 		}
-		if in.Payload != "" {
-			return PlaylistImportOutcome{}, errInvalid("the portable source takes refs, not payload")
+		if payload != "" {
+			return nil, "", errInvalid("the portable source takes refs, not payload")
 		}
-		refs = in.Refs
+		refs = portableRefs
 	case "spotify", "ytmusic", "csv":
-		refs, listName, err = parseDelimitedExport(in.Payload, ',')
+		refs, listName, err = parseDelimitedExport(payload, ',')
 	case "applemusic":
-		refs, listName, err = parseDelimitedExport(in.Payload, '\t')
+		refs, listName, err = parseDelimitedExport(payload, '\t')
 	case "text":
-		refs, err = parseTextExport(in.Payload)
+		refs, err = parseTextExport(payload)
 	default:
-		return PlaylistImportOutcome{}, errInvalid("unknown source " + in.Source)
+		return nil, "", errInvalid("unknown source " + src)
 	}
 	if err != nil {
-		return PlaylistImportOutcome{}, err
+		return nil, "", err
 	}
 	if len(refs) == 0 {
-		return PlaylistImportOutcome{}, errInvalid("the export carries no entries")
+		return nil, "", errInvalid("the export carries no entries")
 	}
 	if len(refs) > importEntryCap {
 		refs = refs[:importEntryCap]
+	}
+	return refs, listName, nil
+}
+
+// resolvePlaylistImportRefs runs the resolve ladder plus its two
+// upgrade passes over parsed refs, one resolution per ref in order.
+func (l *Library) resolvePlaylistImportRefs(ctx context.Context, refs []PortableRefDTO) ([]model.RefResolution, error) {
+	modelRefs := make([]model.PortableRef, len(refs))
+	for i, r := range refs {
+		modelRefs[i] = toModelRef(r)
+	}
+	res, err := l.lib.ResolvePlaylistRefs(ctx, modelRefs)
+	if err != nil {
+		return nil, classify(err)
+	}
+	// The local trim retry runs before the network-paced ISRC upgrade
+	// so the bounded lookup budget goes to entries nothing local fixes.
+	if err := l.retryMissesWithTrimmedArtist(ctx, refs, modelRefs, res); err != nil {
+		return nil, err
+	}
+	l.upgradeMissesByISRC(ctx, refs, modelRefs, res)
+	return res, nil
+}
+
+// ImportStreamingPlaylist parses an export, resolves it against the
+// library, and creates a playlist from what matched.
+func (l *Library) ImportStreamingPlaylist(ctx context.Context, uc *UserCtx, in PlaylistImportInput) (PlaylistImportOutcome, error) {
+	refs, listName, err := parsePlaylistExport(in.Source, in.Payload, in.Refs)
+	if err != nil {
+		return PlaylistImportOutcome{}, err
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
@@ -131,20 +163,10 @@ func (l *Library) ImportStreamingPlaylist(ctx context.Context, uc *UserCtx, in P
 	if name == "" {
 		name = "Imported playlist"
 	}
-	modelRefs := make([]model.PortableRef, len(refs))
-	for i, r := range refs {
-		modelRefs[i] = toModelRef(r)
-	}
-	res, err := l.lib.ResolvePlaylistRefs(ctx, modelRefs)
+	res, err := l.resolvePlaylistImportRefs(ctx, refs)
 	if err != nil {
-		return PlaylistImportOutcome{}, classify(err)
-	}
-	// The local trim retry runs before the network-paced ISRC upgrade
-	// so the bounded lookup budget goes to entries nothing local fixes.
-	if err := l.retryMissesWithTrimmedArtist(ctx, refs, modelRefs, res); err != nil {
 		return PlaylistImportOutcome{}, err
 	}
-	l.upgradeMissesByISRC(ctx, refs, modelRefs, res)
 	out := PlaylistImportOutcome{Name: name, Requested: len(refs)}
 	var members []model.PID
 	for i, r := range res {

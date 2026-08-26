@@ -99,6 +99,58 @@ carries back: the export's body is the document *another server reads*,
 and a report key beside `all` and `sort` would either be rejected over
 there or change what the document means.
 
+### Synced from a source
+
+A manual playlist can be bound to an external source and kept in step
+with it. The owner opens **Sync from source** in the playlist menu,
+pastes a YouTube playlist URL, and picks a mode and an interval (1, 3,
+6, 12, or 24 hours). From then on the server re-enumerates the source
+on that schedule and whenever **Sync now** is pressed; new entries are
+downloaded through the same acquisition path as "Add from URL", ride
+the normal review queue, and join the playlist in source order once
+their review entries resolve into items. A video the library already
+holds from an earlier download - this playlist's, another synced
+playlist's, or a manual acquisition's - is recognized and attached
+without downloading again.
+
+The mode is the intent. **Append** only adds: new source entries join
+the end, your own edits are never touched, and a member you remove by
+hand stays removed. **Mirror** makes membership and order follow the
+source; a removed entry leaves the list but its file stays in the
+library. **Mirror and trash** additionally moves a removed entry's
+file to the recoverable trash - only files the sync itself brought in,
+never something you added by hand - and selecting it needs the delete
+right (administrators always hold it).
+
+**Preview** dry-runs the same reconciler a sync runs and reports what
+it would do - tracks that would join, downloads it would queue,
+members that would leave, files that would go to the trash - without
+changing anything, including before the binding is saved. Availability
+is best-effort: enumeration inspects a bounded prefix of the source,
+so a long playlist's later entries count as unknown until a download
+is attempted.
+
+A streaming export (Spotify, Apple Music, YouTube Music, CSV, text)
+can be recorded as a binding too. It reconciles match-only and on
+demand: a sync re-runs the import resolve ladder against the library,
+attaches what matched, and reports the misses, downloading nothing -
+there is no live connector to re-fetch the export from, so there is no
+schedule either.
+
+Sync health rides the binding. The playlist header wears a chip
+(Synced, Sync failing, Sync suspended - and Sync scheduled before the
+first run completes), the settings sheet shows the last run's counts
+and the last error, and a binding that keeps failing is suspended
+after ten consecutive misses - a successful manual sync turns it back
+on. A sync never overwrites an edit you are making: a run that
+collides with a concurrent change backs off whole and retries at the
+next interval. The mirror modes also refuse a listing they cannot
+trust - one cut short by the enumeration cap, or a clean empty answer
+from a source that has synced before - rather than removing what a
+partial page merely failed to show. **Stop syncing** removes the
+binding and touches nothing else; the playlist keeps everything it
+holds, and the source's thumbnail hands the cover back to the mosaic.
+
 ### Covers
 
 Every playlist gets a cover without being given one. The server tiles
@@ -109,9 +161,16 @@ distinct covers it shows the first member's. The cover refreshes when
 the membership moves or when a member's own artwork changes, which for a
 smart playlist means the next time anyone opens it.
 
+A synced playlist prefers its source's own thumbnail over the mosaic:
+the sync fetches it when the playlist is bound and re-checks it on
+every run, and an upstream source without a playlist-level image
+contributes its first available entry's thumbnail, which is what the
+platform itself shows for a playlist nobody gave a cover.
+
 An owner can upload a cover instead (playlist menu, Set cover). It
-replaces the generated one everywhere at once, and Reset cover hands
-the slot back rather than leaving the playlist bare. Covers serve at
+replaces the generated one - and a synced list's source thumbnail -
+everywhere at once, and Reset cover hands the slot back rather than
+leaving the playlist bare. Covers serve at
 the same artwork endpoint as everything else, under the playlist's own
 id, so third-party Subsonic clients pick them up through `coverArt`
 with no extra work; a private playlist's cover is as private as the

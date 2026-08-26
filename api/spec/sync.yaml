@@ -276,11 +276,16 @@ components:
             reads, not mirrored state.
 
 
-            Two further markers are announcements rather than refetch
+            Further markers are announcements rather than refetch
             hints, carrying the same news as the notification-target
             event of the same name: `feed-disabled` (`pid` is the show
-            whose scheduled refresh was suspended) and `import-completed`
-            (`pid` is the review entry that filed itself).
+            whose scheduled refresh was suspended), `import-completed`
+            (`pid` is the review entry that filed itself),
+            `episode-downloaded` (`pid` is the episode whose enclosure
+            the server finished fetching), and `playlist-synced`
+            (`pid` is the playlist whose sync run changed its
+            membership, or whose scheduled syncing was suspended
+            after repeated failures).
           example: play-state
         pid:
           type: string

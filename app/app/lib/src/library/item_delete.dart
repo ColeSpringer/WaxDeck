@@ -13,10 +13,15 @@ import '../shell/semantics_ids.dart';
 ///
 /// The server enforces the permission either way; this is what decides
 /// whether the affordance is drawn at all, which is the house rule for
-/// permission-gated actions - hidden, never disabled.
-bool canDeleteItems(WidgetRef ref) =>
-    ref.watch(authControllerProvider).value?.user?.roles.contains('admin') ??
-    false;
+/// permission-gated actions - hidden, never disabled. The session's
+/// `delete` is the server's *effective* answer (administrators always
+/// hold it); the role check is the fallback for a server too old to
+/// report the field, where only administrators could delete anyway.
+bool canDeleteItems(WidgetRef ref) {
+  final user = ref.watch(authControllerProvider).value?.user;
+  if (user == null) return false;
+  return user.canDelete || user.roles.contains('admin');
+}
 
 /// Previews a deletion with a dry run, then performs the mode the
 /// listener picked.
@@ -44,12 +49,24 @@ Future<void> confirmDeleteItem(
   // listings showing what just went have to be told regardless.
   final container = ProviderScope.containerOf(context, listen: false);
   final repo = container.read(repositoryProvider);
+  // Permanent deletion is admin-only on the server whatever the delete
+  // right says, so the radio for it is drawn only where it can succeed
+  // - hidden, never disabled, and never a 403 for the option offered.
+  final allowPermanent =
+      container
+          .read(authControllerProvider)
+          .value
+          ?.user
+          ?.roles
+          .contains('admin') ??
+      false;
   try {
     final plan = await repo.deleteLibraryItems(pids: [pid], dryRun: true);
     if (!context.mounted) return;
     final mode = await showDialog<String>(
       context: context,
-      builder: (_) => _DeleteItemsDialog(plan: plan),
+      builder: (_) =>
+          _DeleteItemsDialog(plan: plan, allowPermanent: allowPermanent),
     );
     if (mode == null) return;
     final result = await repo.deleteLibraryItems(pids: [pid], mode: mode);
@@ -80,8 +97,9 @@ Future<void> confirmDeleteItem(
 }
 
 /// The "Delete files..." overflow on an item screen. Rendered for
-/// administrators; the server enforces the permission either way. The
-/// dialog previews the deletion with a dry run before anything moves.
+/// accounts holding the delete right; the server enforces the
+/// permission either way. The dialog previews the deletion with a dry
+/// run before anything moves.
 class ItemDeleteAction extends ConsumerWidget {
   const ItemDeleteAction({super.key, required this.pid, this.onDeleted});
 
@@ -118,9 +136,13 @@ class ItemDeleteAction extends ConsumerWidget {
 
 /// Preview from the dry run plus the trash-or-permanent choice.
 class _DeleteItemsDialog extends StatefulWidget {
-  const _DeleteItemsDialog({required this.plan});
+  const _DeleteItemsDialog({required this.plan, required this.allowPermanent});
 
   final DeleteItemsResult plan;
+
+  /// Whether the permanent mode is offered at all; the server refuses
+  /// it to everyone but administrators.
+  final bool allowPermanent;
 
   @override
   State<_DeleteItemsDialog> createState() => _DeleteItemsDialogState();
@@ -158,12 +180,13 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
                 help: l10n.libraryDeleteModeTrashHelp,
                 semanticsId: SemanticsIds.itemDeleteMode('trash'),
               ),
-              WaxRadioOption<String>(
-                value: 'permanent',
-                label: l10n.libraryDeleteModePermanent,
-                help: l10n.libraryDeleteModePermanentHelp,
-                semanticsId: SemanticsIds.itemDeleteMode('permanent'),
-              ),
+              if (widget.allowPermanent)
+                WaxRadioOption<String>(
+                  value: 'permanent',
+                  label: l10n.libraryDeleteModePermanent,
+                  help: l10n.libraryDeleteModePermanentHelp,
+                  semanticsId: SemanticsIds.itemDeleteMode('permanent'),
+                ),
             ],
           ),
         ],

@@ -101,4 +101,47 @@ void main() {
 
     expect(find.byKey(const Key('item-delete')), findsNothing);
   });
+
+  testWidgets('a delete-right holder sees the verb but never Permanent', (
+    tester,
+  ) async {
+    // The effective delete right draws the affordance; the permanent
+    // mode stays admin-only on the server, so offering its radio here
+    // would be a 403 dressed as a choice.
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-3',
+          username: 'kim',
+          roles: ['user'],
+          canDelete: true,
+        ),
+      ),
+      items: [testItem('tr-1')],
+    );
+    repo.deletePlansByPid['tr-1'] = const DeletePlanEntry(
+      pid: 'tr-1',
+      name: 'Prancing Pony Blues',
+      files: 1,
+      bytes: 1024,
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('item-delete')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete files...'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteMode('trash')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteMode('permanent')),
+      findsNothing,
+      reason: 'permanent deletion is admin-only on the server',
+    );
+  });
 }

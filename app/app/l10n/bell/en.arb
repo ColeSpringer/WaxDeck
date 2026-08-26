@@ -37,6 +37,10 @@
   "@bellImportCompleted": {
     "description": "What a bell row says when an upload was filed. Deliberately not identified: the same marker covers the path where nothing was matched."
   },
+  "bellPlaylistSynced": "A synced playlist changed, or its syncing was suspended",
+  "@bellPlaylistSynced": {
+    "description": "Bell row for the playlist-synced marker: a background sync run changed the playlist, or repeated failures suspended its schedule. The row opens the playlist."
+  },
   "bellReviewChanged": "The review queue changed.",
   "@bellReviewChanged": {
     "description": "What a bell row says. Generic because the marker it comes from carries no detail; the surface it opens has it."
@@ -76,6 +80,10 @@
   "bellSurfaceImports": "Imports",
   "@bellSurfaceImports": {
     "description": "Which surface a bell row is about."
+  },
+  "bellSurfacePlaylists": "Playlists",
+  "@bellSurfacePlaylists": {
+    "description": "Overline on bell rows about playlists."
   },
   "bellSurfacePodcasts": "Podcasts",
   "@bellSurfacePodcasts": {

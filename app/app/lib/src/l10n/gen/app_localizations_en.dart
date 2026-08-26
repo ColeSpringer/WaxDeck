@@ -1848,6 +1848,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bellImportCompleted => 'An upload was added to the library.';
 
   @override
+  String get bellPlaylistSynced =>
+      'A synced playlist changed, or its syncing was suspended';
+
+  @override
   String get bellReviewChanged => 'The review queue changed.';
 
   @override
@@ -1865,6 +1869,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bellSurfaceImports => 'Imports';
+
+  @override
+  String get bellSurfacePlaylists => 'Playlists';
 
   @override
   String get bellSurfacePodcasts => 'Podcasts';
@@ -4514,6 +4521,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notifImportCompletedTitle => 'Filed without review';
 
   @override
+  String get notifPlaylistSyncedHelp =>
+      'A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended.';
+
+  @override
+  String get notifPlaylistSyncedTitle => 'Playlist synced';
+
+  @override
   String get notifReviewReadyHelp =>
       'An upload or acquisition finished identification and waits in the review queue.';
 
@@ -5770,6 +5784,237 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistSmartEmptyTitle => 'Nothing matches yet';
+
+  @override
+  String get playlistSyncChipFailing => 'Sync failing';
+
+  @override
+  String get playlistSyncChipOff => 'Sync suspended';
+
+  @override
+  String get playlistSyncChipPending => 'Sync scheduled';
+
+  @override
+  String get playlistSyncChipSynced => 'Synced';
+
+  @override
+  String playlistSyncCountAdded(int count) {
+    return '$count added';
+  }
+
+  @override
+  String playlistSyncCountMissing(int count) {
+    return '$count unmatched';
+  }
+
+  @override
+  String playlistSyncCountQueued(int count) {
+    return '$count downloading';
+  }
+
+  @override
+  String playlistSyncCountRemoved(int count) {
+    return '$count removed';
+  }
+
+  @override
+  String playlistSyncCountTrashed(int count) {
+    return '$count trashed';
+  }
+
+  @override
+  String playlistSyncCountUnavailable(int count) {
+    return '$count unavailable';
+  }
+
+  @override
+  String playlistSyncFailingBanner(String error) {
+    return 'The last sync failed: $error';
+  }
+
+  @override
+  String playlistSyncIntervalHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Every $hours hours',
+      one: 'Every hour',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistSyncIntervalLabel => 'Check the source';
+
+  @override
+  String playlistSyncLastRunLabel(String summary) {
+    return 'Last sync: $summary';
+  }
+
+  @override
+  String get playlistSyncLastRunNothing => 'The last sync changed nothing.';
+
+  @override
+  String playlistSyncMatchedNote(String source) {
+    return 'A $source export re-matches against the library on demand and downloads nothing. Bind a fresh export to change what it holds.';
+  }
+
+  @override
+  String get playlistSyncModeAppend => 'Append';
+
+  @override
+  String get playlistSyncModeHelpAppend =>
+      'New source entries join the end; your own edits are never touched.';
+
+  @override
+  String get playlistSyncModeHelpMirror =>
+      'Membership and order follow the source. A removed entry leaves the list but its file stays in the library.';
+
+  @override
+  String get playlistSyncModeHelpMirrorTrash =>
+      'Membership and order follow the source, and a removed entry\'s file goes to the recoverable trash.';
+
+  @override
+  String get playlistSyncModeLabel => 'Sync mode';
+
+  @override
+  String get playlistSyncModeMirror => 'Mirror';
+
+  @override
+  String get playlistSyncModeMirrorTrash => 'Mirror and trash';
+
+  @override
+  String get playlistSyncNow => 'Sync now';
+
+  @override
+  String playlistSyncPreviewAdd(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tracks would join the list',
+      one: '1 track would join the list',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistSyncPreviewButton => 'Preview';
+
+  @override
+  String playlistSyncPreviewDownload(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count new entries would be downloaded',
+      one: '1 new entry would be downloaded',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playlistSyncPreviewMissing(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count entries have no library match',
+      one: '1 entry has no library match',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistSyncPreviewNothing =>
+      'A sync would change nothing right now.';
+
+  @override
+  String playlistSyncPreviewPending(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count downloads are still on their way',
+      one: '1 download is still on its way',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playlistSyncPreviewRemove(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count members would leave the list',
+      one: '1 member would leave the list',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistSyncPreviewTitle => 'What a sync would do';
+
+  @override
+  String playlistSyncPreviewTrash(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files would go to the trash',
+      one: '1 file would go to the trash',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playlistSyncPreviewUnavailable(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count entries are unavailable at the source',
+      one: '1 entry is unavailable at the source',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistSyncQueued => 'Sync started';
+
+  @override
+  String playlistSyncRefCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count entries stored from the export',
+      one: '1 entry stored from the export',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistSyncSave => 'Save';
+
+  @override
+  String get playlistSyncSaved => 'Sync settings saved';
+
+  @override
+  String get playlistSyncSettings => 'Sync from source';
+
+  @override
+  String get playlistSyncSheetTitle => 'Sync from source';
+
+  @override
+  String get playlistSyncSuspended =>
+      'Syncing is suspended after repeated failures. A successful sync turns it back on.';
+
+  @override
+  String get playlistSyncUnbind => 'Stop syncing';
+
+  @override
+  String get playlistSyncUnbound =>
+      'Stopped syncing. The playlist keeps everything it holds.';
+
+  @override
+  String get playlistSyncUrlHint => 'https://www.youtube.com/playlist?list=...';
+
+  @override
+  String get playlistSyncUrlLabel => 'Source playlist URL';
 
   @override
   String get playlistsEmptyMessage =>
@@ -9277,6 +9522,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String toolsTaskImportFrom(String source) {
     return 'Import from $source';
   }
+
+  @override
+  String get toolsTaskPlaylistSync => 'Playlist sync';
 
   @override
   String toolsTasksCleared(int count) {

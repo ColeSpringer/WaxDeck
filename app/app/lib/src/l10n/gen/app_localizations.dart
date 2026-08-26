@@ -3243,6 +3243,12 @@ abstract class AppLocalizations {
   /// **'An upload was added to the library.'**
   String get bellImportCompleted;
 
+  /// Bell row for the playlist-synced marker: a background sync run changed the playlist, or repeated failures suspended its schedule. The row opens the playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'A synced playlist changed, or its syncing was suspended'**
+  String get bellPlaylistSynced;
+
   /// What a bell row says. Generic because the marker it comes from carries no detail; the surface it opens has it.
   ///
   /// In en, this message translates to:
@@ -3272,6 +3278,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Imports'**
   String get bellSurfaceImports;
+
+  /// Overline on bell rows about playlists.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlists'**
+  String get bellSurfacePlaylists;
 
   /// Which surface a bell row is about.
   ///
@@ -7083,6 +7095,18 @@ abstract class AppLocalizations {
   /// **'Filed without review'**
   String get notifImportCompletedTitle;
 
+  /// Help under the playlist-synced row in the notification-events checklist.
+  ///
+  /// In en, this message translates to:
+  /// **'A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended.'**
+  String get notifPlaylistSyncedHelp;
+
+  /// Title of the playlist-synced row in the notification-events checklist.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist synced'**
+  String get notifPlaylistSyncedTitle;
+
   /// What the `review-ready` notification is about, drawn under its switch.
   ///
   /// In en, this message translates to:
@@ -9163,6 +9187,276 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing matches yet'**
   String get playlistSmartEmptyTitle;
+
+  /// Status chip on a synced playlist whose last sync run failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync failing'**
+  String get playlistSyncChipFailing;
+
+  /// Status chip on a synced playlist whose schedule was suspended after repeated failures.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync suspended'**
+  String get playlistSyncChipOff;
+
+  /// Status chip on a playlist bound to a source whose first successful sync has not happened yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync scheduled'**
+  String get playlistSyncChipPending;
+
+  /// Status chip on a playlist bound to an external source and syncing normally.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced'**
+  String get playlistSyncChipSynced;
+
+  /// One part of the last-run line: members the run attached.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} added'**
+  String playlistSyncCountAdded(int count);
+
+  /// One part of the last-run line: matched-export refs with no library match.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} unmatched'**
+  String playlistSyncCountMissing(int count);
+
+  /// One part of the last-run line: downloads the run queued.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} downloading'**
+  String playlistSyncCountQueued(int count);
+
+  /// One part of the last-run line: members the run removed.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} removed'**
+  String playlistSyncCountRemoved(int count);
+
+  /// One part of the last-run line: files the run moved to the recoverable trash.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} trashed'**
+  String playlistSyncCountTrashed(int count);
+
+  /// One part of the last-run line: entries the source could not deliver.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} unavailable'**
+  String playlistSyncCountUnavailable(int count);
+
+  /// Banner in the sync sheet framing the server's own failure sentence, which arrives untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'The last sync failed: {error}'**
+  String playlistSyncFailingBanner(String error);
+
+  /// One option of the sync-interval choice.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{Every hour} other{Every {hours} hours}}'**
+  String playlistSyncIntervalHours(int hours);
+
+  /// Label of the choice picking how often a scheduled sync runs.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the source'**
+  String get playlistSyncIntervalLabel;
+
+  /// Line in the sync sheet under the settings, summarizing the last completed run. {summary} is the joined non-zero counts, e.g. "3 added, 1 removed".
+  ///
+  /// In en, this message translates to:
+  /// **'Last sync: {summary}'**
+  String playlistSyncLastRunLabel(String summary);
+
+  /// The last-run line when the run completed with every count at zero.
+  ///
+  /// In en, this message translates to:
+  /// **'The last sync changed nothing.'**
+  String get playlistSyncLastRunNothing;
+
+  /// Note in the sync sheet for a binding recorded from a streaming export rather than a live URL. {source} is the export format's label, e.g. spotify.
+  ///
+  /// In en, this message translates to:
+  /// **'A {source} export re-matches against the library on demand and downloads nothing. Bind a fresh export to change what it holds.'**
+  String playlistSyncMatchedNote(String source);
+
+  /// Sync mode that only adds new source entries and never touches manual edits.
+  ///
+  /// In en, this message translates to:
+  /// **'Append'**
+  String get playlistSyncModeAppend;
+
+  /// Help line under the mode choice while append is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'New source entries join the end; your own edits are never touched.'**
+  String get playlistSyncModeHelpAppend;
+
+  /// Help line under the mode choice while mirror is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'Membership and order follow the source. A removed entry leaves the list but its file stays in the library.'**
+  String get playlistSyncModeHelpMirror;
+
+  /// Help line under the mode choice while mirror-and-trash is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'Membership and order follow the source, and a removed entry\'s file goes to the recoverable trash.'**
+  String get playlistSyncModeHelpMirrorTrash;
+
+  /// Label of the choice picking how a sync reconciles the playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync mode'**
+  String get playlistSyncModeLabel;
+
+  /// Sync mode where membership and order follow the source, keeping removed entries' files.
+  ///
+  /// In en, this message translates to:
+  /// **'Mirror'**
+  String get playlistSyncModeMirror;
+
+  /// Sync mode where membership follows the source and a removed entry's file goes to the recoverable trash.
+  ///
+  /// In en, this message translates to:
+  /// **'Mirror and trash'**
+  String get playlistSyncModeMirrorTrash;
+
+  /// Button that queues a sync run immediately.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync now'**
+  String get playlistSyncNow;
+
+  /// Preview line: members a sync would attach now.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 track would join the list} other{{count} tracks would join the list}}'**
+  String playlistSyncPreviewAdd(int count);
+
+  /// Button that dry-runs a sync and shows what it would do without changing anything.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get playlistSyncPreviewButton;
+
+  /// Preview line: downloads a sync would queue; they join once reviewed.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 new entry would be downloaded} other{{count} new entries would be downloaded}}'**
+  String playlistSyncPreviewDownload(int count);
+
+  /// Preview line: matched-export refs the resolve ladder found nothing for.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 entry has no library match} other{{count} entries have no library match}}'**
+  String playlistSyncPreviewMissing(int count);
+
+  /// Preview dialog body when the dry run reports no work at all.
+  ///
+  /// In en, this message translates to:
+  /// **'A sync would change nothing right now.'**
+  String get playlistSyncPreviewNothing;
+
+  /// Preview line: entries already downloading or waiting in the review queue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 download is still on its way} other{{count} downloads are still on their way}}'**
+  String playlistSyncPreviewPending(int count);
+
+  /// Preview line: members a sync would remove.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 member would leave the list} other{{count} members would leave the list}}'**
+  String playlistSyncPreviewRemove(int count);
+
+  /// Title of the dry-run preview dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'What a sync would do'**
+  String get playlistSyncPreviewTitle;
+
+  /// Preview line: files a mirror-and-trash sync would move to the recoverable trash.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file would go to the trash} other{{count} files would go to the trash}}'**
+  String playlistSyncPreviewTrash(int count);
+
+  /// Preview line: entries the source reports it cannot deliver.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 entry is unavailable at the source} other{{count} entries are unavailable at the source}}'**
+  String playlistSyncPreviewUnavailable(int count);
+
+  /// Snackbar after queuing a sync run.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync started'**
+  String get playlistSyncQueued;
+
+  /// How many entries a matched-export binding holds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 entry stored from the export} other{{count} entries stored from the export}}'**
+  String playlistSyncRefCount(int count);
+
+  /// Button storing the sync settings, replacing the binding whole.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get playlistSyncSave;
+
+  /// Snackbar after the binding stored.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync settings saved'**
+  String get playlistSyncSaved;
+
+  /// Overflow entry opening the synced-playlist settings sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync from source'**
+  String get playlistSyncSettings;
+
+  /// Title of the synced-playlist settings sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync from source'**
+  String get playlistSyncSheetTitle;
+
+  /// Note in the sync sheet while the schedule is auto-disabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing is suspended after repeated failures. A successful sync turns it back on.'**
+  String get playlistSyncSuspended;
+
+  /// Button removing the binding; the playlist and its members stay.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop syncing'**
+  String get playlistSyncUnbind;
+
+  /// Snackbar after removing the binding.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped syncing. The playlist keeps everything it holds.'**
+  String get playlistSyncUnbound;
+
+  /// Hint in the source-URL field.
+  ///
+  /// In en, this message translates to:
+  /// **'https://www.youtube.com/playlist?list=...'**
+  String get playlistSyncUrlHint;
+
+  /// Label of the field naming the live source playlist to follow.
+  ///
+  /// In en, this message translates to:
+  /// **'Source playlist URL'**
+  String get playlistSyncUrlLabel;
 
   /// Message under the empty state of the playlists screen, saying the two ways to fill it.
   ///
@@ -14635,6 +14929,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Import from {source}'**
   String toolsTaskImportFrom(String source);
+
+  /// Name of the task that reconciles a playlist bound to an external source: enumerate, download what is new, and update membership.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist sync'**
+  String get toolsTaskPlaylistSync;
 
   /// Message after finished tasks were swept, saying how many went.
   ///

@@ -221,6 +221,10 @@ import 'package:waxdeck_api_gen/src/model/playlist_items_page.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_items_update.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_page.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_preview.dart';
+import 'package:waxdeck_api_gen/src/model/playlist_source.dart';
+import 'package:waxdeck_api_gen/src/model/playlist_source_update.dart';
+import 'package:waxdeck_api_gen/src/model/playlist_sync_counts.dart';
+import 'package:waxdeck_api_gen/src/model/playlist_sync_preview.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_update.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_detail.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_directory_entry.dart';
@@ -577,6 +581,10 @@ part 'serializers.g.dart';
   PlaylistItemsUpdate,
   PlaylistPage,
   PlaylistPreview,
+  PlaylistSource,
+  PlaylistSourceUpdate,
+  PlaylistSyncCounts,
+  PlaylistSyncPreview,
   PlaylistUpdate,
   PodcastDetail,
   PodcastDirectoryEntry,

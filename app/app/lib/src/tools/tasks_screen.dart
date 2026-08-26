@@ -138,6 +138,7 @@ String _typeLabel(AppLocalizations l10n, String type) => switch (type) {
   'book-split' => l10n.toolsTaskBookSplit,
   'cue-split' => l10n.toolsTaskCueSplit,
   'acquire' => l10n.toolsTaskAcquire,
+  'playlist-sync' => l10n.toolsTaskPlaylistSync,
   'import-navidrome' => l10n.toolsTaskImportFrom('Navidrome'),
   'import-subsonic' => l10n.toolsTaskImportFrom('Subsonic'),
   'import-audiobookshelf' => l10n.toolsTaskImportFrom('Audiobookshelf'),
@@ -250,6 +251,7 @@ class _TaskRow extends ConsumerWidget {
   WaxGlyph get _glyph => switch (task.type) {
     'book-merge' || 'book-split' => WaxIcons.audiobooks,
     'cue-split' => WaxIcons.music,
+    'playlist-sync' => WaxIcons.refresh,
     _ => WaxIcons.downloads,
   };
 

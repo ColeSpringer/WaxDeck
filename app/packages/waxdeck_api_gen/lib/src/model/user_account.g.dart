@@ -35,6 +35,8 @@ class _$UserAccount extends UserAccount {
   final bool uploadEnabled;
   @override
   final bool? managePodcasts;
+  @override
+  final bool? delete;
 
   factory _$UserAccount([void Function(UserAccountBuilder)? updates]) =>
       (UserAccountBuilder()..update(updates))._build();
@@ -54,6 +56,7 @@ class _$UserAccount extends UserAccount {
     required this.roles,
     required this.uploadEnabled,
     this.managePodcasts,
+    this.delete,
   }) : super._();
   @override
   UserAccount rebuild(void Function(UserAccountBuilder) updates) =>
@@ -79,7 +82,8 @@ class _$UserAccount extends UserAccount {
         displayName == other.displayName &&
         roles == other.roles &&
         uploadEnabled == other.uploadEnabled &&
-        managePodcasts == other.managePodcasts;
+        managePodcasts == other.managePodcasts &&
+        delete == other.delete;
   }
 
   @override
@@ -99,6 +103,7 @@ class _$UserAccount extends UserAccount {
     _$hash = $jc(_$hash, roles.hashCode);
     _$hash = $jc(_$hash, uploadEnabled.hashCode);
     _$hash = $jc(_$hash, managePodcasts.hashCode);
+    _$hash = $jc(_$hash, delete.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -119,7 +124,8 @@ class _$UserAccount extends UserAccount {
           ..add('displayName', displayName)
           ..add('roles', roles)
           ..add('uploadEnabled', uploadEnabled)
-          ..add('managePodcasts', managePodcasts))
+          ..add('managePodcasts', managePodcasts)
+          ..add('delete', delete))
         .toString();
   }
 }
@@ -195,6 +201,10 @@ class UserAccountBuilder
   set managePodcasts(covariant bool? managePodcasts) =>
       _$this._managePodcasts = managePodcasts;
 
+  bool? _delete;
+  bool? get delete => _$this._delete;
+  set delete(covariant bool? delete) => _$this._delete = delete;
+
   UserAccountBuilder() {
     UserAccount._defaults(this);
   }
@@ -216,6 +226,7 @@ class UserAccountBuilder
       _roles = $v.roles.toBuilder();
       _uploadEnabled = $v.uploadEnabled;
       _managePodcasts = $v.managePodcasts;
+      _delete = $v.delete;
       _$v = null;
     }
     return this;
@@ -274,6 +285,7 @@ class UserAccountBuilder
               'uploadEnabled',
             ),
             managePodcasts: managePodcasts,
+            delete: delete,
           );
     } catch (_) {
       late String _$failedField;

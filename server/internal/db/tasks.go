@@ -51,6 +51,23 @@ func (d *DB) InsertToolTask(ctx context.Context, t ToolTask) error {
 	return nil
 }
 
+// ActiveToolTask finds a queued or running task of one type over one
+// item; ErrNotFound when none is in flight. It is the dedupe read that
+// keeps a sync-now and the sweeper from queuing the same run twice.
+func (d *DB) ActiveToolTask(ctx context.Context, typ, itemPID string) (ToolTask, error) {
+	t, err := scanTask(d.r.QueryRowContext(ctx, `
+		SELECT `+taskCols+` FROM tool_tasks
+		WHERE type = ? AND item_pid = ? AND state IN ('queued', 'running')
+		ORDER BY created_at_ns LIMIT 1`, typ, itemPID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return ToolTask{}, ErrNotFound
+	}
+	if err != nil {
+		return ToolTask{}, fmt.Errorf("db: reading active tool task: %w", err)
+	}
+	return t, nil
+}
+
 // ToolTaskByID fetches one task.
 func (d *DB) ToolTaskByID(ctx context.Context, id string) (ToolTask, error) {
 	t, err := scanTask(d.r.QueryRowContext(ctx,

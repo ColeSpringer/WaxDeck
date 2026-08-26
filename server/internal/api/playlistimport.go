@@ -57,17 +57,7 @@ func (s *Server) ImportPlaylist(ctx context.Context, req ImportPlaylistRequestOb
 		out.PlaylistPid = ptr(res.PlaylistPID)
 	}
 	for _, m := range res.Missing {
-		miss := PlaylistImportMiss{Title: m.Title}
-		if m.Artist != "" {
-			miss.Artist = ptr(m.Artist)
-		}
-		if m.Album != "" {
-			miss.Album = ptr(m.Album)
-		}
-		if m.DurationMs > 0 {
-			miss.DurationMs = ptr(m.DurationMs)
-		}
-		out.Missing = append(out.Missing, miss)
+		out.Missing = append(out.Missing, importMissJSON(m))
 	}
 	return ImportPlaylist200JSONResponse(out), nil
 }
@@ -90,6 +80,23 @@ func (s *Server) ExportPlaylistPortable(ctx context.Context, req ExportPlaylistP
 		out.Refs = append(out.Refs, refDTOToWire(r))
 	}
 	return ExportPlaylistPortable200JSONResponse(out), nil
+}
+
+// importMissJSON renders one unmatched entry for the wire, shared by
+// the import report and the sync preview so a field added to the miss
+// lands on both.
+func importMissJSON(m service.ImportMiss) PlaylistImportMiss {
+	miss := PlaylistImportMiss{Title: m.Title}
+	if m.Artist != "" {
+		miss.Artist = ptr(m.Artist)
+	}
+	if m.Album != "" {
+		miss.Album = ptr(m.Album)
+	}
+	if m.DurationMs > 0 {
+		miss.DurationMs = ptr(m.DurationMs)
+	}
+	return miss
 }
 
 func refDTOFromWire(r PortableRef) service.PortableRefDTO {

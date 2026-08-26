@@ -18,6 +18,7 @@ part 'user.g.dart';
 /// * [roles] - Assigned roles (`admin`, `user`).
 /// * [uploadEnabled] - Whether the account may upload audio. On self views (login, session) this is the *effective* value - administrators always may, whatever their stored flag says - and clients gate their upload affordances on it. On administrative account views (`UserAccount`) it is the stored per-account flag the account editor round-trips; an administrator's own stored flag may therefore read false while their effective right is true. Defined once here because the generators flatten `UserAccount`'s `allOf` over this schema; a duplicate declaration there would silently lose. 
 /// * [managePodcasts] - Whether the account may curate podcasts. Self views carry the *effective* value (administrators always may), so clients gate their podcast-curation affordances - adding shows, setting a show's cover - on it without a second read. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
+/// * [delete] - Whether the account may move visible library items to the recoverable trash. Self views carry the *effective* value (administrators always may), so clients gate destructive affordances - deleting items, a synced playlist's `mirror-trash` mode - on it without a second read. Permanent deletion stays admin-only regardless. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
 @BuiltValue(instantiable: false)
 abstract class User  {
   /// Stable user identifier.
@@ -43,6 +44,10 @@ abstract class User  {
   /// Whether the account may curate podcasts. Self views carry the *effective* value (administrators always may), so clients gate their podcast-curation affordances - adding shows, setting a show's cover - on it without a second read. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
   @BuiltValueField(wireName: r'managePodcasts')
   bool? get managePodcasts;
+
+  /// Whether the account may move visible library items to the recoverable trash. Self views carry the *effective* value (administrators always may), so clients gate destructive affordances - deleting items, a synced playlist's `mirror-trash` mode - on it without a second read. Permanent deletion stays admin-only regardless. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
+  @BuiltValueField(wireName: r'delete')
+  bool? get delete;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<User> get serializer => _$UserSerializer();
@@ -91,6 +96,13 @@ class _$UserSerializer implements PrimitiveSerializer<User> {
       yield r'managePodcasts';
       yield serializers.serialize(
         object.managePodcasts,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.delete != null) {
+      yield r'delete';
+      yield serializers.serialize(
+        object.delete,
         specifiedType: const FullType(bool),
       );
     }
@@ -198,6 +210,13 @@ class _$$UserSerializer implements PrimitiveSerializer<$User> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.managePodcasts = valueDes;
+          break;
+        case r'delete':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.delete = valueDes;
           break;
         default:
           unhandled.add(key);

@@ -14,12 +14,12 @@ part 'tool_task.g.dart';
 ///
 /// Properties:
 /// * [id] - Task pid.
-/// * [type] - The operation: `book-merge`, `book-split`, `cue-split`, or `acquire`. A string, not a closed enum. 
+/// * [type] - The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, or `playlist-sync`. A string, not a closed enum. 
 /// * [state] - `queued`, `running`, `done`, or `failed`. A string, not a closed enum. 
-/// * [itemPid] - The book or track the task was started from.
+/// * [itemPid] - The book, track, or playlist the task was started from. 
 /// * [progressPct] - Progress in percent when the engine reports it.
 /// * [error] - Why the task failed, when `failed`.
-/// * [resultPids] - What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition opened (entry pids). 
+/// * [resultPids] - What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition or playlist sync opened (entry pids). 
 /// * [createdAt] - When the task was queued.
 /// * [finishedAt] - When it reached a terminal state.
 /// * [summary] - Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. 
@@ -29,7 +29,7 @@ abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   @BuiltValueField(wireName: r'id')
   String get id;
 
-  /// The operation: `book-merge`, `book-split`, `cue-split`, or `acquire`. A string, not a closed enum. 
+  /// The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, or `playlist-sync`. A string, not a closed enum. 
   @BuiltValueField(wireName: r'type')
   String get type;
 
@@ -37,7 +37,7 @@ abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   @BuiltValueField(wireName: r'state')
   String get state;
 
-  /// The book or track the task was started from.
+  /// The book, track, or playlist the task was started from. 
   @BuiltValueField(wireName: r'itemPid')
   String? get itemPid;
 
@@ -49,7 +49,7 @@ abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   @BuiltValueField(wireName: r'error')
   String? get error;
 
-  /// What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition opened (entry pids). 
+  /// What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition or playlist sync opened (entry pids). 
   @BuiltValueField(wireName: r'resultPids')
   BuiltList<String>? get resultPids;
 

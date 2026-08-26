@@ -37,6 +37,7 @@ echo "not really encrypted" >"$RUN_DIR/upload-src/Harbour Lights/memoir.aax"
 (cd "$E2E_DIR/../server" && go build -o "$RUN_DIR_NATIVE/waxflow-catalog" ./cmd/waxflow-catalog)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/testidp" ./cmd/testidp)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/feedserv" ./cmd/feedserv)
+(cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/sourceserv" ./cmd/sourceserv)
 
 # A station logo for the radio journey's logo proxy: what is under test
 # is the fetch, sniffed type, and validator, so a 1x1 PNG is enough.
@@ -67,6 +68,10 @@ SIDECAR=$!
 "$RUN_DIR/feedserv" -addr 127.0.0.1:4421 -dir "$RUN_DIR_NATIVE/feed" -generate &
 FEEDSERV=$!
 
+# The stubbed acquisition source the playlist-sync scenarios bind to.
+"$RUN_DIR/sourceserv" -addr 127.0.0.1:4422 -dir "$RUN_DIR_NATIVE/source" -generate &
+SOURCESERV=$!
+
 # The test IdP for the SSO scenario; waxdeck discovers the issuer at
 # startup and fails fast, so wait for it. Launched even when the OIDC
 # vars point at a real dex - cheaper than a second code path here.
@@ -82,6 +87,8 @@ WAXDECK_LIBRARY_ROOTS="lib=$RUN_DIR_NATIVE/library" \
 WAXDECK_MANAGED_ROOTS="lib" \
 WAXDECK_MATCHING=false \
 WAXDECK_ARTIST_ART=false \
+WAXDECK_YOUTUBE=false \
+WAXDECK_SOURCE_STUB_URL=http://127.0.0.1:4422 \
 WAXDECK_PODCAST_DIR="$RUN_DIR_NATIVE/podcasts" \
 WAXDECK_ALLOW_PRIVATE_FEED_HOSTS=true \
 WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS=true \
@@ -100,6 +107,6 @@ SERVER=$!
 
 # Not exec: the script stays alive to forward its death to the children,
 # so killing it cannot orphan the sidecar, the IdP, or the server.
-cleanup() { kill "$SERVER" "$SIDECAR" "$IDP" "$FEEDSERV" 2>/dev/null || true; }
+cleanup() { kill "$SERVER" "$SIDECAR" "$IDP" "$FEEDSERV" "$SOURCESERV" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM HUP
 wait "$SERVER"

@@ -74,6 +74,7 @@ WaxDeckUser userFromGen(gen.User user) {
     roles: user.roles.toList(),
     uploadEnabled: user.uploadEnabled,
     managePodcasts: user.managePodcasts ?? false,
+    canDelete: user.delete ?? false,
   );
 }
 
@@ -2453,22 +2454,70 @@ PlaylistImportResult playlistImportResultFromGen(gen.PlaylistImportResult res) {
     name: res.name,
     requested: res.requested,
     resolved: res.resolved,
-    missing: res.missing
-        .map(
-          (m) => PlaylistImportMiss(
-            artist: m.artist,
-            title: m.title,
-            album: m.album,
-            durationMs: m.durationMs,
-          ),
-        )
-        .toList(growable: false),
+    missing: res.missing.map(_importMissFromGen).toList(growable: false),
     rungs: ResolveRungCounts(
       essence: res.rungs.essence,
       strongId: res.rungs.strongId,
       fingerprint: res.rungs.fingerprint,
       descriptive: res.rungs.descriptive,
     ),
+  );
+}
+
+/// One unmatched entry, shared by the import report and the sync
+/// preview so a field added to the miss lands on both.
+PlaylistImportMiss _importMissFromGen(gen.PlaylistImportMiss m) =>
+    PlaylistImportMiss(
+      artist: m.artist,
+      title: m.title,
+      album: m.album,
+      durationMs: m.durationMs,
+    );
+
+PlaylistSource playlistSourceFromGen(gen.PlaylistSource src) {
+  return PlaylistSource(
+    source: src.source_,
+    url: src.url,
+    title: src.title,
+    live: src.live,
+    mode: src.mode,
+    intervalHours: src.intervalHours,
+    refCount: src.refCount,
+    disabled: src.disabled,
+    consecutiveFailures: src.consecutiveFailures,
+    lastError: src.lastError,
+    lastAttemptAt: src.lastAttemptAt,
+    lastSyncedAt: src.lastSyncedAt,
+    lastRun: src.lastRun == null
+        ? null
+        : playlistSyncCountsFromGen(src.lastRun!),
+  );
+}
+
+PlaylistSyncCounts playlistSyncCountsFromGen(gen.PlaylistSyncCounts c) {
+  return PlaylistSyncCounts(
+    added: c.added,
+    removed: c.removed,
+    trashed: c.trashed,
+    queued: c.queued,
+    unavailable: c.unavailable,
+    missing: c.missing,
+  );
+}
+
+PlaylistSyncPreview playlistSyncPreviewFromGen(gen.PlaylistSyncPreview p) {
+  return PlaylistSyncPreview(
+    entries: p.entries,
+    wouldAdd: p.wouldAdd,
+    wouldDownload: p.wouldDownload,
+    wouldRemove: p.wouldRemove,
+    wouldTrash: p.wouldTrash,
+    pending: p.pending,
+    unavailable: p.unavailable,
+    missing: p.missing,
+    misses: (p.misses ?? BuiltList<gen.PlaylistImportMiss>())
+        .map(_importMissFromGen)
+        .toList(growable: false),
   );
 }
 

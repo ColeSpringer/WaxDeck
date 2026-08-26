@@ -108,6 +108,7 @@ export default defineConfig({
       testIgnore: [
         /first-run\.spec\.ts/,
         /admin-wizard\.spec\.ts/,
+        /playlist-sync\.spec\.ts/,
         /uploads\.spec\.ts/,
         /admin-ops\.spec\.ts/,
         /admin-readonly\.spec\.ts/,
@@ -132,10 +133,19 @@ export default defineConfig({
     // Catalog mutators, which per-test accounts cannot divide. Uploads
     // before admin-ops on purpose: admin-ops flips server-wide read-only,
     // and the chain keeps that window from overlapping an upload.
+    // Playlist sync heads the chain: its downloads land tracks, albums,
+    // an artist, and review entries in the shared catalog, which a
+    // concurrent wave spec would watch appear mid-assertion.
+    {
+      name: 'mutators-playlist-sync',
+      testMatch: /playlist-sync\.spec\.ts/,
+      dependencies: ['wave'],
+      ...motion('reduce'),
+    },
     {
       name: 'mutators-uploads',
       testMatch: /uploads\.spec\.ts/,
-      dependencies: ['wave'],
+      dependencies: ['mutators-playlist-sync'],
       ...motion('reduce'),
     },
     // The admin console's global surfaces; parallel with itself, with one

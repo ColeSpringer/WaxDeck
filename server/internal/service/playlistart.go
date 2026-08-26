@@ -89,8 +89,10 @@ func (l *Library) syncPlaylistCover(ctx context.Context, pl *model.Playlist, ite
 		return
 	}
 	// A user's upload wins and is never regenerated. Clearing it is what
-	// hands the slot back (ClearEntityArtwork flips the origin).
-	if rec.Origin == wdb.CoverCustom {
+	// hands the slot back (ClearEntityArtwork flips the origin). A
+	// synced playlist's source thumbnail holds the slot the same way,
+	// except the sync reconciler is what refreshes it.
+	if rec.Origin == wdb.CoverCustom || rec.Origin == wdb.CoverSource {
 		return
 	}
 	generated := rec.Origin == wdb.CoverGenerated

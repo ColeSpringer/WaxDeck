@@ -44,10 +44,14 @@ type formatFetcher interface {
 // a subscription's job, not one task's.
 const acquireMaxItems = 200
 
-// acquireItem is one pending download within an acquisition.
+// acquireItem is one pending download within an acquisition. GUID is
+// the source's own entry id (a video id) when the item came from an
+// enumeration; it keys the playlist-sync map row, so a synced playlist
+// can recognize the entry once its download settles.
 type acquireItem struct {
 	Title string
 	URL   string
+	GUID  string
 }
 
 // StartAcquisition queues an acquire task. Upload rights gate it, and
@@ -160,10 +164,50 @@ func (l *Library) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 		items = items[:acquireMaxItems]
 	}
 
+	entryIDs, staged, _, fetchErr, entriesErr := l.fetchAcquireBatch(ctx, t, p, provider, items, user, 90, false)
+	if entriesErr != nil {
+		// The files staged; opening their review entries did not. Plain
+		// rather than wrapped permanent, matching the pre-extraction
+		// shape: a database that would not answer clears without the
+		// caller changing anything, and the already-landed guard keeps
+		// a retry from re-importing what staged.
+		return nil, entriesErr
+	}
+	if staged == 0 {
+		if fetchErr != nil {
+			if errors.Is(fetchErr, errToolPermanent) || kindIsPermanent(KindOf(classify(fetchErr))) {
+				return nil, fmt.Errorf("%w: %v", errToolPermanent, fetchErr)
+			}
+			return nil, fetchErr
+		}
+		return nil, fmt.Errorf("%w: nothing was downloaded", errToolPermanent)
+	}
+	if fetchErr != nil {
+		// Some files arrived and their entries are open; the task still
+		// fails loudly so the truncation is visible, and a retry will
+		// not re-download what already staged.
+		return nil, fmt.Errorf("%w: %d of %d items staged before: %v",
+			errToolPermanent, staged, len(items), fetchErr)
+	}
+	return entryIDs, nil
+}
+
+// fetchAcquireBatch stages each item with the per-item quota and room
+// checks, reporting task progress up to progressCap percent, and opens
+// review entries for whatever arrived - even when a fetch failed, so a
+// retry never downloads the same bytes twice. skipItemErrors is the
+// playlist-sync posture: one entry's failed fetch is skipped and
+// counted rather than cutting the batch, so an undeliverable video
+// never starves the entries behind it; the systemic checks (context,
+// quota, staging room) still stop the batch either way. Returns the
+// opened entry ids, how many files staged, how many items were skipped
+// over their own errors, the batch-stopping fetch error, and the
+// entry-opening error - separately, because the two mean different
+// things to the caller's retry policy.
+func (l *Library) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p toolTaskParams, provider source.Provider, items []acquireItem, user *wdb.User, progressCap float64, skipItemErrors bool) (entryIDs []string, staged, skipped int, fetchErr, entriesErr error) {
 	var (
 		docs      []reviewTrackDoc
 		rowByPath = map[string]string{}
-		fetchErr  error
 	)
 	for i, item := range items {
 		if ctx.Err() != nil {
@@ -190,39 +234,30 @@ func (l *Library) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 		}
 		doc, uploadID, err := l.fetchAcquireItem(ctx, provider, t, p, item, i)
 		if err != nil {
+			if skipItemErrors {
+				skipped++
+				l.log.Warn("skipping undeliverable acquisition item", "item", item.URL, "err", err)
+				continue
+			}
 			fetchErr = err
 			break
 		}
 		docs = append(docs, doc)
 		rowByPath[doc.Path] = uploadID
-		t.ProgressPct = float64(i+1) / float64(len(items)) * 90
+		t.ProgressPct = float64(i+1) / float64(len(items)) * progressCap
 		if uerr := l.db.UpdateToolTask(ctx, *t); uerr == nil {
 			l.notifyToolTask(ctx, t.ID)
 		}
 	}
-
 	if len(docs) == 0 {
-		if fetchErr != nil {
-			if errors.Is(fetchErr, errToolPermanent) || kindIsPermanent(KindOf(classify(fetchErr))) {
-				return nil, fmt.Errorf("%w: %v", errToolPermanent, fetchErr)
-			}
-			return nil, fetchErr
-		}
-		return nil, fmt.Errorf("%w: nothing was downloaded", errToolPermanent)
+		return nil, 0, skipped, fetchErr, nil
 	}
-
-	entryIDs, err := l.openAcquireEntries(ctx, t, p, docs, rowByPath)
-	if err != nil {
-		return nil, err
+	entryIDs, entriesErr = l.openAcquireEntries(ctx, t, p, docs, rowByPath)
+	if entriesErr != nil && fetchErr != nil {
+		// Both halves failed; neither may vanish into the other.
+		l.log.Warn("acquisition batch failed twice over", "fetch", fetchErr, "entries", entriesErr)
 	}
-	if fetchErr != nil {
-		// Some files arrived and their entries are open; the task still
-		// fails loudly so the truncation is visible, and a retry will
-		// not re-download what already staged.
-		return nil, fmt.Errorf("%w: %d of %d items staged before: %v",
-			errToolPermanent, len(docs), len(items), fetchErr)
-	}
-	return entryIDs, nil
+	return entryIDs, len(docs), skipped, fetchErr, entriesErr
 }
 
 // guardAcquireHost refuses source URLs pointing at private, loopback,
@@ -324,7 +359,7 @@ func (l *Library) acquireList(ctx context.Context, rawURL string) (source.Provid
 			if ep.EnclosureURL == "" {
 				continue
 			}
-			items = append(items, acquireItem{Title: ep.Title, URL: ep.EnclosureURL})
+			items = append(items, acquireItem{Title: ep.Title, URL: ep.EnclosureURL, GUID: ep.GUID})
 		}
 		return p, items, nil
 	}
@@ -426,6 +461,15 @@ func (l *Library) fetchAcquireItem(ctx context.Context, provider source.Provider
 	if err := l.db.InsertUpload(ctx, row); err != nil {
 		_ = os.RemoveAll(dir)
 		return reviewTrackDoc{}, "", err
+	}
+	// Every enumerated download feeds the playlist-sync map, manual
+	// acquisitions included: what a video became in the library is a
+	// fact about the library, and a later binding over the same source
+	// dedups against it instead of downloading the video again.
+	if item.GUID != "" {
+		if err := l.db.PutPlaylistSourceMapPending(ctx, string(provider.SourceType()), item.GUID, uploadID, time.Now().UnixNano()); err != nil {
+			l.log.Warn("recording source map row", "entry", item.GUID, "err", err)
+		}
 	}
 	l.emitUserEvent(ctx, t.UserID, eventUpload, uploadID)
 	return doc, uploadID, nil

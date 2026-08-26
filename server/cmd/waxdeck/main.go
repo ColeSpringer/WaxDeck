@@ -49,6 +49,7 @@ import (
 	waxproviders "github.com/colespringer/waxdeck/server/internal/providers"
 	"github.com/colespringer/waxdeck/server/internal/restore"
 	"github.com/colespringer/waxdeck/server/internal/service"
+	"github.com/colespringer/waxdeck/server/internal/stubsource"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 	"github.com/colespringer/waxdeck/server/internal/waxtapsource"
 	"github.com/colespringer/waxdeck/server/internal/web"
@@ -101,6 +102,7 @@ func run() error {
 		sealKey      = flag.String("seal-api-key", envOr("WAXDECK_SEAL_API_KEY", ""), "API key for the WaxSeal sidecar")
 		sponsorBlock = flag.String("youtube-sponsorblock", envOr("WAXDECK_YOUTUBE_SPONSORBLOCK", ""), "SponsorBlock categories to cut from acquired audio, comma separated (empty disables)")
 		ytThumbnail  = flag.Bool("youtube-thumbnail", envOr("WAXDECK_YOUTUBE_THUMBNAIL", "true") == "true", "embed the source thumbnail as cover art on acquired audio, cropped to its square where the source is letterboxed release art, until enrichment finds official artwork. On by default; set WAXDECK_YOUTUBE_THUMBNAIL=false to disable")
+		sourceStub   = flag.String("source-stub-url", envOr("WAXDECK_SOURCE_STUB_URL", ""), "base URL of a sourceserv fixture host to use as the acquisition source (test stacks only; never production)")
 
 		advertiseBase = flag.String("advertise-base", envOr("WAXDECK_ADVERTISE_BASE", ""), "plain-HTTP LAN base URL cast devices fetch media from (empty auto-detects the LAN address)")
 		castDiscovery = flag.Bool("cast-discovery", envOr("WAXDECK_CAST_DISCOVERY", "true") == "true", "discover Chromecast and DLNA devices on the LAN (mDNS and SSDP)")
@@ -299,6 +301,10 @@ func run() error {
 		if *podcastDir == "" {
 			log.Warn("youtube podcast subscriptions are unavailable without a podcast library; URL acquisition to music and audiobook libraries still works")
 		}
+	}
+	if *sourceStub != "" {
+		providers = append(providers, stubsource.New(*sourceStub))
+		log.Warn("stub acquisition source enabled; this is a test bridge, never production", "url", *sourceStub)
 	}
 
 	// The matching engine's candidate source and the server's own
@@ -823,6 +829,24 @@ func run() error {
 			}
 		})
 	}
+
+	// Playlist-sync scheduler: queues a sync task for every live source
+	// binding whose interval elapsed. Deliberately outside the podcast
+	// block - a music-only instance syncs playlists too - and the
+	// service self-gates on a snapshot-capable source provider, so a
+	// bridge-less instance just idles here.
+	group.Go(ctx, "playlist-sync", func(ctx context.Context) error {
+		tick := time.NewTicker(time.Minute)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				svc.SyncDuePlaylistSources(ctx)
+			}
+		}
+	})
 
 	// The silence and loudness analysis worker serves audiobooks as
 	// much as podcasts (skip maps and voice-boost leveling), so it runs

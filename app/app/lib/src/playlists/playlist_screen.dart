@@ -24,6 +24,8 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/file_picker_port.dart';
 import 'playlist_create.dart';
+import 'playlist_sync_controller.dart';
+import 'playlist_sync_sheet.dart';
 import 'playlists_controller.dart';
 import 'rule_vocabulary.dart';
 
@@ -36,6 +38,7 @@ enum _PlaylistAction {
   shareLink,
   setCover,
   resetCover,
+  syncSettings,
   exportM3u,
   exportNsp,
   exportPortable,
@@ -235,10 +238,51 @@ class _StatusChips extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rule = view.playlist.rule;
-    if (rule == null) return const SizedBox.shrink();
+    // Owner-only, like the endpoint behind it: only the owner has sync
+    // settings to be told about, and nobody else may read the binding.
+    final ownedManual = view.playlist.isOwner && !view.playlist.isSmart;
+    final binding = ownedManual
+        ? ref.watch(playlistSyncProvider(view.playlist.pid)).value
+        : null;
+    if (rule == null && binding == null) return const SizedBox.shrink();
     final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
     final l10n = context.l10n;
+    final syncChip = binding == null
+        ? null
+        : Semantics(
+            identifier: SemanticsIds.playlistSyncChip,
+            container: true,
+            child: CodecChip(
+              binding.disabled
+                  ? l10n.playlistSyncChipOff
+                  : (binding.lastError ?? '').isNotEmpty
+                  ? l10n.playlistSyncChipFailing
+                  // "Synced" is a claim about the past, so a binding
+                  // that has never completed a run says "scheduled"
+                  // rather than asserting a sync that never happened.
+                  : binding.lastSyncedAt == null
+                  ? l10n.playlistSyncChipPending
+                  : l10n.playlistSyncChipSynced,
+              emphasis:
+                  binding.disabled || (binding.lastError ?? '').isNotEmpty,
+            ),
+          );
+    if (rule == null) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          sizeClass.gutter.horizontal / 2,
+          WaxSpace.s16,
+          sizeClass.gutter.horizontal / 2,
+          WaxSpace.s8,
+        ),
+        child: Wrap(
+          spacing: WaxSpace.s8,
+          runSpacing: WaxSpace.s8,
+          children: <Widget>[syncChip!],
+        ),
+      );
+    }
     // A rule naming another playlist reads as that list's name; the
     // provider is already loaded here, and a pid the caller cannot
     // resolve falls back to itself.
@@ -814,6 +858,15 @@ class _Overflow extends ConsumerWidget {
             glyph: WaxIcons.refresh,
             semanticsId: SemanticsIds.playlistResetCover,
           ),
+        // Manual lists only: a smart playlist's membership is its rule,
+        // so there is nothing for a source to reconcile.
+        if (isOwner && !playlist.isSmart)
+          WaxMenuItem<_PlaylistAction>(
+            value: _PlaylistAction.syncSettings,
+            label: l10n.playlistSyncSettings,
+            glyph: WaxIcons.refresh,
+            semanticsId: SemanticsIds.playlistSyncSettings,
+          ),
         WaxMenuItem<_PlaylistAction>(
           value: _PlaylistAction.exportM3u,
           label: l10n.playlistExportM3u,
@@ -868,6 +921,8 @@ class _Overflow extends ConsumerWidget {
         await _setCover(context, ref);
       case _PlaylistAction.resetCover:
         await _resetCover(context, ref);
+      case _PlaylistAction.syncSettings:
+        await showPlaylistSyncSheet(context, pid);
       case _PlaylistAction.exportM3u:
         await _exportM3u(context, ref);
       case _PlaylistAction.exportNsp:

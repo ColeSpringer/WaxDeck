@@ -27,6 +27,7 @@
   "toolsTaskBookSplit": "División de libro",
   "toolsTaskCueSplit": "División por CUE",
   "toolsTaskImportFrom": "Importación desde {source}",
+  "toolsTaskPlaylistSync": "Sincronización de lista",
   "toolsTasksCleared": "{count, plural, =1{Se ha borrado 1 tarea} other{Se han borrado {count} tareas}}",
   "toolsTitle": "Tareas de herramientas"
 }

@@ -68,6 +68,34 @@ note.
   pass cannot, and keeps the wasted fetches until this lands. The
   refinement retires into a plain `req.Want` read the day it does.
 
+- **An empty acquisition event clobbers tag-derived provenance.** The
+  import path stamps origin provenance twice: `ScanFileAs` records the
+  file's own `SOURCE_URL`/`SOURCE_ID` tags via
+  `insertAcquisitionIfAbsentTx` (DO NOTHING, deliberately, so a rescan
+  cannot degrade a real origin), and `inbox.importOne` then calls
+  `PutAcquisitionForFile` with the caller's `AcquiredMeta`, whose
+  upsert DO UPDATEs `source_type`, `source_url`, and `source_id`
+  unconditionally. The store's contract says "evidence from an event
+  always wins over evidence from a tag" - sound when the event carries
+  evidence, but a host that passes a bare meta (WaxDeck's review-queue
+  import sends `SourceManual` with empty ids, because the settle path
+  is generic over uploads and acquisitions) has its event replace the
+  correct tag-derived row with `source_type='manual'`, empty
+  `source_url`, empty `source_id`. Every acquired-then-reviewed track
+  ends up recorded as manual, so the `source` query field misreports
+  how the item arrived - the exact degradation the DO NOTHING on the
+  tag side was written to prevent, arriving through the other door.
+  Wanted: the event stamp made merge-wise so emptiness never wins - a
+  field-level COALESCE-style upsert, or skipping the DO UPDATE when
+  the incoming input carries no source URL, id, or provider and a row
+  already stands. Threading real meta through every host caller is not
+  the fix: any embedder importing a tagged file with a generic meta
+  hits this, so the hazard belongs to the port. Shipped workaround:
+  none needed for playlist sync (its entry-to-item map in `waxdeck.db`
+  is the dedup and self-heal truth, independent of the acquisition
+  row); the `source` facet simply misreads reviewed acquisitions as
+  `manual` until this lands.
+
 ## WaxLabel
 
 - **Map the MP4 `rtng` advisory atom to a tag.** iTunes stores the

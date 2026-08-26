@@ -703,12 +703,15 @@ func (l *Library) DeleteUpload(ctx context.Context, uc *UserCtx, id string) erro
 // unmade and it can be retried once the cause is fixed.
 func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) ([]string, error) {
 	var warnings, failures []string
-	// Staging path -> item pid for every file that entered the library
-	// ("" when the imported item did not resolve). Settling keys on
-	// membership, and a failed decide persists the pids that did land:
-	// staged copies are moved rather than copied, so a retry must skip
-	// them or it would re-import files that are no longer staged.
-	imported := map[string]string{}
+	// Staging path -> what landed, for every file that entered the
+	// library (a zero value when the imported item did not resolve).
+	// Settling keys on membership, and a failed decide persists the
+	// pids that did land: staged copies are moved rather than copied,
+	// so a retry must skip them or it would re-import files that are no
+	// longer staged. The essence rides along because the resolve step
+	// is the only place that knows it, and the playlist-sync map keeps
+	// it for its self-heal.
+	imported := map[string]importedFile{}
 	fail := func(err error) ([]string, error) {
 		// Persist against the freshest row: everything the identify side
 		// owns, since a stale full-row write would revert candidates on
@@ -738,7 +741,7 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 	for i := range payload.Tracks {
 		doc := &payload.Tracks[i]
 		if doc.PID != "" || doc.Imported {
-			imported[doc.Path] = doc.PID // already in the library
+			imported[doc.Path] = importedFile{pid: doc.PID} // already in the library
 			continue
 		}
 		kind, _ := kindForMediaType(entry.MediaType)
@@ -751,7 +754,7 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 		switch {
 		case res.EpisodePID != "":
 			doc.PID = string(res.EpisodePID)
-			imported[doc.Path] = doc.PID
+			imported[doc.Path] = importedFile{pid: doc.PID}
 		case res.Plan != nil:
 			report, err := l.lib.ApplyImport(ctx, res.Plan)
 			if err != nil {
@@ -763,14 +766,14 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 				continue
 			}
 			doc.Imported = true
-			imported[doc.Path] = ""
-			pid, err := l.resolveImportedItem(ctx, res.Plan, doc)
+			imported[doc.Path] = importedFile{}
+			pid, essence, err := l.resolveImportedItem(ctx, res.Plan, doc)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("%s: imported but not yet resolvable: %v", filepath.Base(doc.Path), err))
 				continue
 			}
 			doc.PID = pid
-			imported[doc.Path] = pid
+			imported[doc.Path] = importedFile{pid: pid, essence: essence}
 		default:
 			failures = append(failures, fmt.Sprintf("%s: the import produced nothing", filepath.Base(doc.Path)))
 		}
@@ -786,12 +789,19 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 	return warnings, nil
 }
 
+// importedFile is what settling needs to know about one landed file:
+// the item it resolved to and the audio essence the resolution rode.
+type importedFile struct {
+	pid     string
+	essence string
+}
+
 // settleImportedUploads marks the upload sessions whose staged files
 // entered the library and reclaims their staging space; every other
 // session stays staged so its bytes survive for a retry. The recorded
 // item pid is what grants the uploader item-scoped editing rights
 // afterward.
-func (l *Library) settleImportedUploads(ctx context.Context, entry *wdb.ReviewEntry, imported map[string]string) {
+func (l *Library) settleImportedUploads(ctx context.Context, entry *wdb.ReviewEntry, imported map[string]importedFile) {
 	if entry.Origin != reviewOriginUpload && entry.Origin != reviewOriginAcquire {
 		return
 	}
@@ -799,21 +809,42 @@ func (l *Library) settleImportedUploads(ctx context.Context, entry *wdb.ReviewEn
 	if err != nil {
 		return
 	}
+	completedMapRow := false
 	for _, r := range rows {
 		if r.State != uploadStaged {
 			continue
 		}
-		pid, ok := imported[r.StagingPath]
+		f, ok := imported[r.StagingPath]
 		if !ok {
 			continue
 		}
 		r.State = uploadImported
-		r.ItemPID = pid
+		r.ItemPID = f.pid
 		if err := l.db.UpdateUpload(ctx, r); err != nil {
 			l.log.Warn("marking upload imported", "upload", r.ID, "err", err)
 		}
+		// The one funnel every import path settles through, so it is
+		// where a playlist-sync download's map row learns its item and
+		// the essence its self-heal re-resolves by. An unresolvable
+		// import (pid "") leaves the row pending.
+		if f.pid != "" {
+			changed, err := l.db.CompletePlaylistSourceMap(ctx, r.ID, f.pid, f.essence, time.Now().UnixNano())
+			if err != nil {
+				l.log.Warn("completing source map row", "upload", r.ID, "err", err)
+			}
+			completedMapRow = completedMapRow || changed
+		}
 		_ = os.RemoveAll(filepath.Join(l.stagingDir, r.ID))
 		l.emitUserEvent(ctx, r.UserID, eventUpload, r.ID)
+	}
+	if completedMapRow {
+		// A sync download just became an item, so the bindings waiting
+		// on it should attach at the sweeper's next tick rather than at
+		// their next interval - which is what makes "joins once its
+		// review entry resolves" mean a minute, not a day.
+		if err := l.db.MarkLivePlaylistSourcesDue(ctx); err != nil {
+			l.log.Warn("re-arming playlist sources after a settle", "err", err)
+		}
 	}
 }
 
@@ -926,7 +957,7 @@ func (l *Library) MayCurateItem(ctx context.Context, uc *UserCtx, apiItemPID str
 
 // resolveImportedItem finds the item an applied import produced for a
 // staged file, through the plan action's essence.
-func (l *Library) resolveImportedItem(ctx context.Context, plan *inbox.Plan, doc *reviewTrackDoc) (string, error) {
+func (l *Library) resolveImportedItem(ctx context.Context, plan *inbox.Plan, doc *reviewTrackDoc) (string, string, error) {
 	essence := ""
 	for _, a := range plan.Actions {
 		if a.Src == doc.Path {
@@ -935,16 +966,16 @@ func (l *Library) resolveImportedItem(ctx context.Context, plan *inbox.Plan, doc
 		}
 	}
 	if essence == "" {
-		return "", errors.New("no essence recorded for the staged file")
+		return "", "", errors.New("no essence recorded for the staged file")
 	}
 	it, _, err := l.lib.ResolveRef(ctx, model.PortableRef{Essence: essence})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if it == nil {
-		return "", errors.New("essence did not resolve")
+		return "", "", errors.New("essence did not resolve")
 	}
-	return string(it.PID), nil
+	return string(it.PID), essence, nil
 }
 
 // discardPendingEntry closes an upload's linked review entry when it is still
