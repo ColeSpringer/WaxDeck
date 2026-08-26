@@ -3,7 +3,51 @@ package subsonic
 import (
 	"strings"
 	"testing"
+
+	"github.com/colespringer/waxdeck/server/internal/service"
 )
+
+// The index cache key must separate every per-caller input of the
+// sweep it fronts. Content rules joined library grants as one, so a
+// rule-carrying account must never share the unrestricted entry, an
+// entry from another rule set, or its grant-mates' rule-free entry.
+func TestIndexScopeSeparatesContentRules(t *testing.T) {
+	unrestricted := &service.UserCtx{AllLibraries: true}
+	denyOne := &service.UserCtx{AllLibraries: true, Explicit: true,
+		TagDeny: []service.TagRule{{Key: "ITUNESADVISORY", Value: "1"}}}
+	denyOther := &service.UserCtx{AllLibraries: true, Explicit: true,
+		TagDeny: []service.TagRule{{Key: "MOOD", Value: "loud"}}}
+	granted := &service.UserCtx{Libraries: map[string]bool{"lib-a": true}}
+	grantedRuled := &service.UserCtx{Libraries: map[string]bool{"lib-a": true},
+		TagDeny: []service.TagRule{{Key: "ITUNESADVISORY", Value: "1"}}}
+
+	if got := indexScope(unrestricted); got != "" {
+		t.Errorf("unrestricted scope = %q, want empty", got)
+	}
+	scopes := map[string]string{}
+	for name, uc := range map[string]*service.UserCtx{
+		"deny-advisory": denyOne, "deny-other": denyOther,
+		"granted": granted, "granted-ruled": grantedRuled,
+	} {
+		s := indexScope(uc)
+		if s == "" {
+			t.Errorf("%s scope is empty: it would share the unrestricted entry", name)
+		}
+		for other, prev := range scopes {
+			if prev == s {
+				t.Errorf("%s and %s share scope %q", name, other, s)
+			}
+		}
+		scopes[name] = s
+	}
+	// An administrator's rules are inert (contentRuleNode returns nil
+	// for them), so an admin shares the unrestricted entry.
+	admin := &service.UserCtx{Admin: true, AllLibraries: true,
+		TagDeny: []service.TagRule{{Key: "ITUNESADVISORY", Value: "1"}}}
+	if got := indexScope(admin); got != "" {
+		t.Errorf("admin scope = %q, want empty", got)
+	}
+}
 
 // Untagged tracks group under the unknown buckets; every album lookup
 // must apply the same defaults, or a song response loses the album and

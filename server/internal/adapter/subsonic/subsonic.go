@@ -738,6 +738,7 @@ type album struct {
 	year     int
 	genre    string
 	durMS    int64
+	explicit bool
 	tracks   []track
 }
 
@@ -809,28 +810,51 @@ func (idx *index) albumForTrack(tr track) *album {
 const idxScopedCap = 4
 
 // indexScope identifies the visibility an index was built for: empty
-// for a full-visibility caller, otherwise the caller's sorted library
-// grants joined behind a prefix, so an account granted nothing does not
-// read as an administrator. Library pids are ULIDs, so the comma
-// cannot appear inside one and the join is unambiguous.
+// for an unrestricted caller, otherwise the caller's sorted library
+// grants and content rules behind prefixes, so an account granted
+// nothing does not read as an administrator. Library pids are ULIDs,
+// so the comma cannot appear inside one; the rule component is
+// length-prefixed so no rule value can fake a boundary.
 //
-// The grant set is the complete key because it is the sweep's only
-// per-caller input: sweepTrackFacts filters on itemVisible, which
-// consults uc.Libraries and nothing else. A second input added there -
-// content rules, a per-account filter - has to be added here in the
-// same change, or one account reads another's index.
+// The key must name every per-caller input of the sweep it fronts:
+// sweepTrackFacts filters on itemVisible (uc.Libraries) and conjoins
+// the caller's tag rules (contentRuleNode). A third input added there
+// has to be added here in the same change, or one account reads
+// another's index. The service-level trackFacts cache shares the
+// assumption, gated on the same rule-free predicate.
 func indexScope(uc *service.UserCtx) string {
-	if uc.AllLibraries {
+	scope := ""
+	if !uc.AllLibraries {
+		libs := make([]string, 0, len(uc.Libraries))
+		for lib, granted := range uc.Libraries {
+			if granted {
+				libs = append(libs, lib)
+			}
+		}
+		sort.Strings(libs)
+		scope = "r:" + strings.Join(libs, ",")
+	}
+	return scope + contentRuleScope(uc)
+}
+
+// contentRuleScope is the tag-rule component of indexScope, empty
+// exactly when contentRuleNode narrows nothing (an administrator, or
+// no rules), so rule-free callers keep sharing the entries they always
+// shared.
+func contentRuleScope(uc *service.UserCtx) string {
+	if uc.Admin || (len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0) {
 		return ""
 	}
-	libs := make([]string, 0, len(uc.Libraries))
-	for lib, granted := range uc.Libraries {
-		if granted {
-			libs = append(libs, lib)
+	var b strings.Builder
+	writeRules := func(label string, rules []service.TagRule) {
+		b.WriteString(label)
+		for _, r := range rules {
+			fmt.Fprintf(&b, "%d:%s=%d:%s,", len(r.Key), r.Key, len(r.Value), r.Value)
 		}
 	}
-	sort.Strings(libs)
-	return "r:" + strings.Join(libs, ",")
+	writeRules("|allow:", uc.TagAllow)
+	writeRules("|deny:", uc.TagDeny)
+	return b.String()
 }
 
 // index returns the grouped view over the service's track sweep,
@@ -1003,6 +1027,9 @@ func buildIndex(rows []track, names map[string]string) *index {
 		}
 		if al.genre == "" {
 			al.genre = tr.Genre
+		}
+		if tr.Explicit {
+			al.explicit = true
 		}
 	}
 	// Artists order by index section first ("#" then A to Z), folded

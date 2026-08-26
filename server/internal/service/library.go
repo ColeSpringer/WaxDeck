@@ -808,17 +808,18 @@ func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, erro
 // summary converts an item view to the list-row DTO.
 func summary(it *model.ItemView) ItemSummary {
 	return ItemSummary{
-		PID:        itemAPIPID(it),
-		MediaType:  mediaTypeForKind(it.Kind),
-		Title:      it.Title,
-		Artist:     it.Artist,
-		Album:      it.Album,
-		ArtistPID:  entityAPIPID(PrefixArtist, it.ArtistPID),
-		AlbumPID:   entityAPIPID(PrefixAlbum, it.AlbumPID),
-		TrackNo:    it.TrackNo,
-		DiscNo:     it.DiscNo,
-		DurationMS: it.DurationMS,
-		Virtual:    it.Virtual,
+		PID:             itemAPIPID(it),
+		MediaType:       mediaTypeForKind(it.Kind),
+		Title:           it.Title,
+		Artist:          it.Artist,
+		Album:           it.Album,
+		ArtistPID:       entityAPIPID(PrefixArtist, it.ArtistPID),
+		AlbumPID:        entityAPIPID(PrefixAlbum, it.AlbumPID),
+		TrackNo:         it.TrackNo,
+		DiscNo:          it.DiscNo,
+		DurationMS:      it.DurationMS,
+		Virtual:         it.Virtual,
+		AdvisoryFlagged: it.AdvisoryFlagged(),
 	}
 }
 

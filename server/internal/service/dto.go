@@ -35,6 +35,10 @@ type ItemSummary struct {
 	DiscNo     int
 	DurationMS int64
 	Virtual    bool
+	// AdvisoryFlagged folds the episode advisory pair (the episode's
+	// own feed flag or its show's). Always false for other kinds, whose
+	// advisory lives in the ITUNESADVISORY custom tag instead.
+	AdvisoryFlagged bool
 }
 
 // ItemDetail is the full single-item shape.

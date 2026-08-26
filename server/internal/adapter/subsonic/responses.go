@@ -212,6 +212,11 @@ type albumID3 struct {
 	Duration  int    `xml:"duration,attr" json:"duration"`
 	Year      int    `xml:"year,attr,omitempty" json:"year,omitempty"`
 	Genre     string `xml:"genre,attr,omitempty" json:"genre,omitempty"`
+
+	// ExplicitStatus follows the child field of the same name: any
+	// member track asserting the advisory marks the album, so a badge
+	// on song rows has one on the album card those rows sit under.
+	ExplicitStatus string `xml:"explicitStatus,attr,omitempty" json:"explicitStatus,omitempty"`
 }
 
 type albumWithSongs struct {
@@ -225,14 +230,17 @@ type albumList2 struct {
 
 // child is the Subsonic song shape (the protocol's directory-era name).
 //
-// ExplicitStatus is the OpenSubsonic content advisory. It is set for
-// podcast episodes, whose feeds declare one, and left empty for music:
-// WaxDeck has no first-class explicit flag for music by decision, and
-// the ITUNESADVISORY custom tag that stands in for one is not on the
-// item read surface this mapping uses, so filling it would cost a read
-// per song on every list response. Empty is also the honest answer for
-// an episode whose feed says nothing, since the parsed flag is a bool
-// and cannot tell a declared "clean" from an absent declaration.
+// ExplicitStatus is the OpenSubsonic content advisory. Episodes carry
+// their feed's declared flag, own or show-level (episodeShape and
+// entryChild's summary arm); music tracks carry an ITUNESADVISORY tag
+// asserting explicit, which the facts sweep resolves as one tag query
+// rather than a read per song; albums derive any-member. Emission is
+// positive-only everywhere: a feed flag is a bool that cannot tell
+// clean from unsaid, and on the tag side a declared clean ("2") is
+// deliberately not forwarded - the tag's value space is messy enough
+// (multi-valued files, the legacy "4", rtng/freeform disagreement)
+// that a wrong "clean" would be worse than the unknown an absent
+// attribute already reads as.
 type child struct {
 	ID          string `xml:"id,attr" json:"id"`
 	Parent      string `xml:"parent,attr,omitempty" json:"parent,omitempty"`
@@ -341,7 +349,7 @@ func (a *artist) id3() artistID3 {
 }
 
 func (al *album) id3() albumID3 {
-	return albumID3{
+	out := albumID3{
 		ID:        al.id,
 		Name:      al.name,
 		Artist:    al.artist,
@@ -352,6 +360,10 @@ func (al *album) id3() albumID3 {
 		Year:      al.year,
 		Genre:     al.genre,
 	}
+	if al.explicit {
+		out.ExplicitStatus = "explicit"
+	}
+	return out
 }
 
 // formatFacts derives a child's suffix and contentType from the stored
@@ -379,7 +391,7 @@ func formatFacts(container string) (suffix, mime string) {
 
 // albumDirChild renders an album as a folder-mode directory entry.
 func albumDirChild(al *album) child {
-	return child{
+	c := child{
 		ID:       al.id,
 		Parent:   al.artistID,
 		IsDir:    true,
@@ -393,6 +405,10 @@ func albumDirChild(al *album) child {
 		ArtistID: al.artistID,
 		Type:     "music",
 	}
+	if al.explicit {
+		c.ExplicitStatus = "explicit"
+	}
+	return c
 }
 
 func songChild(tr track, al *album) child {
@@ -412,6 +428,13 @@ func songChild(tr track, al *album) child {
 		Suffix:      suffix,
 		ContentType: mime,
 		Type:        "music",
+	}
+	if tr.Explicit {
+		// The facts sweep matches the tag values that assert explicit,
+		// never a truthy parse, and any asserting value wins even beside
+		// others - over-claiming explicit is an advisory's safe direction.
+		// Why clean is not emitted: the ExplicitStatus doc on child.
+		c.ExplicitStatus = "explicit"
 	}
 	if al != nil {
 		c.AlbumID = al.id

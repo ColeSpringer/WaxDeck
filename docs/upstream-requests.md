@@ -109,11 +109,12 @@ note.
   an iTunes-bought M4A is the one common case where the advisory is in
   the file and never leaves it. Wanted: decode `rtng` into the
   `ITUNESADVISORY` custom tag on read, keeping the numeric values as
-  they stand (consumers parse `1` as explicit and treat everything
-  else as unasserted), and write it back from that tag on MP4 where
-  the edit surface allows. Shipped workaround: none is possible
-  downstream of the parser - the byte never leaves the file. The
-  planned OpenSubsonic `explicitStatus` emission for music keys on the
-  `ITUNESADVISORY` tag, so `rtng`-only files stay uncovered until this
-  lands; emission is positive-only, so that absence reads as
-  unasserted rather than wrongly clean.
+  they stand (consumers parse `1` and the legacy `4` as explicit and
+  treat everything else as unasserted), and write it back from that
+  tag on MP4 where the edit surface allows. Landed upstream: WaxLabel
+  HEAD (9a3ec23, "Project iTunes structured MP4 atoms as canonical
+  tags") does exactly this; the residue here is adopting a newer pin
+  (go.mod holds v1.4.2), and until that bump `rtng`-only files stay
+  uncovered. The OpenSubsonic `explicitStatus` emission for music keys
+  on the `ITUNESADVISORY` tag; emission is positive-only, so that
+  absence reads as unasserted rather than wrongly clean.

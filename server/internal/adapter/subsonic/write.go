@@ -182,7 +182,7 @@ func (h *Handler) entryChild(idx *index, it service.ItemSummary) child {
 	if tr := idx.trackByPID[it.PID]; tr != nil {
 		return songChild(*tr, idx.albumForTrack(*tr))
 	}
-	return child{
+	c := child{
 		ID:       it.PID,
 		Title:    it.Title,
 		Album:    it.Album,
@@ -196,6 +196,13 @@ func (h *Handler) entryChild(idx *index, it service.ItemSummary) child {
 		// episodes and books through this arm.
 		ContentType: "application/octet-stream",
 	}
+	if it.AdvisoryFlagged {
+		// The episode advisory (own or show-level), so an episode here
+		// answers what getPodcasts answers for the same id. Positive-only
+		// for episodeShape's reason.
+		c.ExplicitStatus = "explicit"
+	}
+	return c
 }
 
 func (h *Handler) createPlaylist(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {

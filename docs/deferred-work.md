@@ -773,23 +773,6 @@ here waits on upstream.
   uploader choose a target library (the create call already carries the
   field), or thread WaxBin's routing decision back to the entry before
   the identify gate reads it.
-- `[in-repo]` **OpenSubsonic `explicitStatus` is not emitted for music.**
-  Podcast episodes carry it now, mapped from the feed's own advisory
-  flag. Music does not, and it is not the one-line addition it looks
-  like: `ITUNESADVISORY` reaches WaxDeck only through the metadata
-  editor's custom-tag surface, and the item read surface the Subsonic
-  song mapping uses carries no custom tags, so filling the field means
-  either widening that read surface deliberately or taking an extra
-  read per song, which on a list response is an N+1. Whoever widens
-  that read surface for another reason should take this with it. Note
-  what the episode half does not do either: the field is only ever
-  emitted in the positive direction, because the advisory parses to a
-  bool and "declared clean" and "the source said nothing" are the same
-  value, so claiming the former would be inventing an assertion. A
-  separate ceiling rides above whatever this builds: MP4's own `rtng`
-  advisory atom never surfaces as a tag, so iTunes-tagged M4As stay
-  uncovered either way - the mapping ask is recorded in
-  `upstream-requests.md` (WaxLabel).
 - `[in-repo]` **Matched-source bindings have no client door.** The
   server accepts a streaming export (Spotify, Apple Music, YouTube
   Music, CSV, text) as a playlist source binding - stored as portable

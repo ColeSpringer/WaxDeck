@@ -37,3 +37,37 @@ func TestFormatFacts(t *testing.T) {
 		}
 	}
 }
+
+// The music advisory is positive-only on every shape: an asserting
+// track emits "explicit", everything else emits nothing (empty means
+// unasserted, never clean), and an album derives any-member.
+func TestExplicitStatusPositiveOnly(t *testing.T) {
+	if got := songChild(track{PID: "tr-1", Explicit: true}, nil); got.ExplicitStatus != "explicit" {
+		t.Errorf("explicit track advisory = %q, want explicit", got.ExplicitStatus)
+	}
+	if got := songChild(track{PID: "tr-2"}, nil); got.ExplicitStatus != "" {
+		t.Errorf("unasserted track advisory = %q, want empty", got.ExplicitStatus)
+	}
+	flagged := &album{id: "al-1", explicit: true}
+	if got := flagged.id3(); got.ExplicitStatus != "explicit" {
+		t.Errorf("flagged album id3 advisory = %q, want explicit", got.ExplicitStatus)
+	}
+	if got := albumDirChild(flagged); got.ExplicitStatus != "explicit" {
+		t.Errorf("flagged album dir advisory = %q, want explicit", got.ExplicitStatus)
+	}
+	plain := &album{id: "al-2"}
+	if got := plain.id3(); got.ExplicitStatus != "" {
+		t.Errorf("plain album id3 advisory = %q, want empty", got.ExplicitStatus)
+	}
+	if got := albumDirChild(plain); got.ExplicitStatus != "" {
+		t.Errorf("plain album dir advisory = %q, want empty", got.ExplicitStatus)
+	}
+	// One flagged member marks the group at build time.
+	idx := buildIndex([]track{
+		{PID: "tr-3", AlbumArtist: "X", Album: "A", Explicit: true},
+		{PID: "tr-4", AlbumArtist: "X", Album: "A"},
+	}, nil)
+	if al := idx.albumForTrack(track{PID: "tr-4"}); al == nil || !al.explicit {
+		t.Error("an album with a flagged member did not derive explicit")
+	}
+}

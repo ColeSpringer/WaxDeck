@@ -289,7 +289,12 @@ The Subsonic surface now covers playlists (create, read, update,
 delete, reorder), stars and ratings, `getStarred2`, scrobbling
 (submissions become listens with full dedup; now-playing updates
 forward to connected scrobblers), the radio library, and bookmark
-calls mapped onto podcast and audiobook resume positions. Clients
+calls mapped onto podcast and audiobook resume positions. Song and
+album rows carry the OpenSubsonic `explicitStatus` advisory - episodes
+from their feed's declared flag (their show's counts too), music from
+an `ITUNESADVISORY` tag asserting explicit, albums from any flagged
+member - emitted only in the positive direction, so an absent value
+means unasserted, never clean. Clients
 authenticate with app passwords, managed under Settings; the login
 password never works there.
 
