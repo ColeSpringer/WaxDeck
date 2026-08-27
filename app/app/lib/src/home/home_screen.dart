@@ -298,6 +298,8 @@ class _DownloadedShelf extends ConsumerWidget {
             items: tiles,
             actionLabel: context.l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll('downloaded'),
+            backSemanticsId: SemanticsIds.shelfBack('downloaded'),
+            forwardSemanticsId: SemanticsIds.shelfForward('downloaded'),
             onAction: () => context.go(WaxRoute.downloads),
             onTapItem: (tile) {
               final at = tiles.indexOf(tile);
@@ -386,6 +388,8 @@ class _NewEpisodesShelf extends ConsumerWidget {
             items: tiles,
             actionLabel: context.l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll('episodes'),
+            backSemanticsId: SemanticsIds.shelfBack('episodes'),
+            forwardSemanticsId: SemanticsIds.shelfForward('episodes'),
             onAction: () => context.go(WaxRoute.podcasts),
             // A tap opens the episode's own screen, the way every other
             // shelf's tap opens what the card is about; the hover play

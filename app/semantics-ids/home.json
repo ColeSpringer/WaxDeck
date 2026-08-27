@@ -16,6 +16,8 @@
     "pinSheetTarget": "pin-sheet-target-{pid}",
     "shelf": "shelf-{shelf}",
     "shelfAll": "shelf-{shelf}-all",
-    "shelfCard": "shelf-{shelf}-{pid}"
+    "shelfBack": "shelf-{shelf}-back",
+    "shelfCard": "shelf-{shelf}-{pid}",
+    "shelfForward": "shelf-{shelf}-forward"
   }
 }

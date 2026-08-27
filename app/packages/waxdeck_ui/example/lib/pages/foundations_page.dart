@@ -23,8 +23,19 @@ class FoundationsPage extends StatelessWidget {
             _Swatch('surface1', colors.surface1, colors.textPrimary),
             _Swatch('surface2', colors.surface2, colors.textPrimary),
             _Swatch('surface3', colors.surface3, colors.textPrimary),
-            _Swatch('hairline', colors.hairline, colors.textPrimary),
-            _Swatch('outline', colors.outline, colors.canvas),
+            // Decorative: hairlines owe no ratio.
+            _Swatch(
+              'hairline',
+              colors.hairline,
+              colors.textPrimary,
+              minimum: null,
+            ),
+            _Swatch(
+              'outline',
+              colors.outline,
+              colors.canvas,
+              minimum: WaxContrast.aaLarge,
+            ),
           ],
         ),
         const SizedBox(height: WaxSpace.s24),
@@ -36,7 +47,13 @@ class FoundationsPage extends StatelessWidget {
             _Swatch('textPrimary', colors.canvas, colors.textPrimary),
             _Swatch('textSecondary', colors.canvas, colors.textSecondary),
             _Swatch('textTertiary', colors.canvas, colors.textTertiary),
-            _Swatch('textDisabled', colors.canvas, colors.textDisabled),
+            // The documented exemption: disabled is sub-AA by design.
+            _Swatch(
+              'textDisabled',
+              colors.canvas,
+              colors.textDisabled,
+              minimum: null,
+            ),
           ],
         ),
         const SizedBox(height: WaxSpace.s24),
@@ -66,6 +83,7 @@ class FoundationsPage extends StatelessWidget {
                 '${domain.name} hue',
                 colors.domain(domain).hue,
                 colors.canvas,
+                minimum: WaxContrast.aaLarge,
               ),
               _Swatch(
                 '${domain.name} container',
@@ -75,6 +93,10 @@ class FoundationsPage extends StatelessWidget {
             ],
           ],
         ),
+        const SizedBox(height: WaxSpace.s24),
+        const SectionHeader(overline: 'Foundations', title: 'The pair matrix'),
+        const SizedBox(height: WaxSpace.s12),
+        const _PairMatrix(),
         const SizedBox(height: WaxSpace.s24),
         const SectionHeader(overline: 'Foundations', title: 'Type scale'),
         _Type('display 30/36 Archivo Expanded 640', WaxType.display),
@@ -179,15 +201,30 @@ class FoundationsPage extends StatelessWidget {
 }
 
 class _Swatch extends StatelessWidget {
-  const _Swatch(this.name, this.background, this.foreground);
+  const _Swatch(
+    this.name,
+    this.background,
+    this.foreground, {
+    this.minimum = WaxContrast.aaText,
+  });
 
   final String name;
   final Color background;
   final Color foreground;
 
+  /// The AA bar this pairing owes; null for pairs that owe none
+  /// (hairlines, the disabled exemption).
+  final double? minimum;
+
   @override
   Widget build(BuildContext context) {
     final ratio = WaxContrast.ratio(foreground, background);
+    final bar = minimum;
+    final verdict = bar == null
+        ? ''
+        : WaxContrast.meets(foreground, background, bar)
+        ? '  AA'
+        : '  FAILS $bar';
     return Container(
       width: 168,
       height: 88,
@@ -203,7 +240,178 @@ class _Swatch extends StatelessWidget {
         children: <Widget>[
           Text(name, style: WaxType.label.copyWith(color: foreground)),
           Text(
-            '${ratio.toStringAsFixed(2)}:1',
+            '${ratio.toStringAsFixed(2)}:1$verdict',
+            style: WaxType.monoData.copyWith(color: foreground),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A hand-kept mirror of the pairs `contrast_test.dart` enumerates,
+/// drawn so the audit can be reviewed by eye per theme.
+class _PairMatrix extends StatelessWidget {
+  const _PairMatrix();
+
+  static const double labelWidth = WaxSpace.s64 + WaxSpace.s48;
+
+  static const double cellWidth = WaxSpace.s64 + WaxSpace.s20;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final surfaces = <({String name, Color color, bool veil})>[
+      (name: 'canvas', color: colors.canvas, veil: false),
+      (name: 'surface1', color: colors.surface1, veil: false),
+      (name: 'surface2', color: colors.surface2, veil: false),
+      (name: 'surface3', color: colors.surface3, veil: false),
+      (
+        name: 'veil/white',
+        color: WaxContrast.flatten(colors.veil, const Color(0xFFFFFFFF)),
+        veil: true,
+      ),
+      (
+        name: 'veil/black',
+        color: WaxContrast.flatten(colors.veil, const Color(0xFF000000)),
+        veil: true,
+      ),
+    ];
+    final text = <String, Color>{
+      'textPrimary': colors.textPrimary,
+      'textSecondary': colors.textSecondary,
+      'textTertiary': colors.textTertiary,
+      'accent': colors.accent,
+      'success': colors.success,
+      'error': colors.error,
+    };
+    final ui = <String, Color>{
+      'outline': colors.outline,
+      for (final domain in WaxDomain.values)
+        '${domain.name} hue': colors.domain(domain).hue,
+    };
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const SizedBox(width: _PairMatrix.labelWidth),
+              for (final surface in surfaces)
+                SizedBox(
+                  width: _PairMatrix.cellWidth,
+                  child: Text(
+                    surface.name,
+                    style: WaxType.caption.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: WaxSpace.s4),
+          for (final fg in text.entries)
+            _MatrixRow(
+              name: fg.key,
+              foreground: fg.value,
+              surfaces: surfaces,
+              minimum: WaxContrast.aaText,
+            ),
+          // Shape foregrounds never sit on the veil, so their veil
+          // cells stay blank rather than crying wolf.
+          for (final fg in ui.entries)
+            _MatrixRow(
+              name: fg.key,
+              foreground: fg.value,
+              surfaces: surfaces,
+              minimum: WaxContrast.aaLarge,
+              onVeil: false,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MatrixRow extends StatelessWidget {
+  const _MatrixRow({
+    required this.name,
+    required this.foreground,
+    required this.surfaces,
+    required this.minimum,
+    this.onVeil = true,
+  });
+
+  final String name;
+  final Color foreground;
+  final List<({String name, Color color, bool veil})> surfaces;
+  final double minimum;
+
+  /// Whether this foreground ever lands on the veil.
+  final bool onVeil;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Row(
+      children: <Widget>[
+        SizedBox(
+          width: _PairMatrix.labelWidth,
+          child: Text(
+            name,
+            style: WaxType.caption.copyWith(color: colors.textSecondary),
+          ),
+        ),
+        for (final surface in surfaces)
+          if (onVeil || !surface.veil)
+            _MatrixCell(
+              foreground: foreground,
+              background: surface.color,
+              minimum: minimum,
+            )
+          else
+            const SizedBox(width: _PairMatrix.cellWidth),
+      ],
+    );
+  }
+}
+
+class _MatrixCell extends StatelessWidget {
+  const _MatrixCell({
+    required this.foreground,
+    required this.background,
+    required this.minimum,
+  });
+
+  final Color foreground;
+  final Color background;
+  final double minimum;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final ratio = WaxContrast.ratio(foreground, background);
+    final passes = WaxContrast.meets(foreground, background, minimum);
+    return Container(
+      width: _PairMatrix.cellWidth,
+      padding: const EdgeInsets.symmetric(
+        horizontal: WaxSpace.s8,
+        vertical: WaxSpace.s4,
+      ),
+      decoration: BoxDecoration(
+        color: background,
+        border: Border.all(
+          color: passes ? colors.hairline : colors.error,
+          width: passes ? 0.5 : 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('Aa', style: WaxType.bodySmall.copyWith(color: foreground)),
+          Text(
+            passes ? ratio.toStringAsFixed(1) : '${ratio.toStringAsFixed(1)}!',
             style: WaxType.monoData.copyWith(color: foreground),
           ),
         ],

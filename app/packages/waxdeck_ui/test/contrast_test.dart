@@ -25,7 +25,7 @@ List<_Pair> _pairsFor(String theme, WaxColors c) {
     'surface3': c.surface3,
   };
 
-  // Foregrounds that carry words: full 4.5:1 text contrast.
+  // Foregrounds that carry words, mono readouts included: full 4.5:1.
   final text = <String, Color>{
     'textPrimary': c.textPrimary,
     'textSecondary': c.textSecondary,
@@ -145,6 +145,32 @@ List<_Pair> _pairsFor(String theme, WaxColors c) {
     ),
   );
 
+  // The veil is translucent, so what the eye reads is it flattened
+  // over whatever scrolls beneath; white and black are the worst
+  // cases. Everything on it is small text, so the 4.5 bar throughout.
+  final veilText = <String, Color>{
+    'textPrimary': c.textPrimary,
+    'textSecondary': c.textSecondary,
+    'textTertiary': c.textTertiary,
+    'accent': c.accent,
+  };
+  for (final backdrop in <String, Color>{
+    'white': const Color(0xFFFFFFFF),
+    'black': const Color(0xFF000000),
+  }.entries) {
+    final flat = WaxContrast.flatten(c.veil, backdrop.value);
+    for (final fg in veilText.entries) {
+      pairs.add(
+        _Pair(
+          '$theme: ${fg.key} on veil over ${backdrop.key}',
+          fg.value,
+          flat,
+          WaxContrast.aaText,
+        ),
+      );
+    }
+  }
+
   return pairs;
 }
 
@@ -172,6 +198,28 @@ void main() {
         });
       }
     }
+
+    // Adjacent text roles must stay a visible step apart, or two of
+    // them read as one tone; 1.25x is the floor (light's
+    // secondary-tertiary step is the tightest shipped, at 1.32).
+    test('the text roles hold visible steps apart', () {
+      for (final theme in themes.entries) {
+        final c = theme.value;
+        final primary = WaxContrast.ratio(c.textPrimary, c.canvas);
+        final secondary = WaxContrast.ratio(c.textSecondary, c.canvas);
+        final tertiary = WaxContrast.ratio(c.textTertiary, c.canvas);
+        expect(
+          primary / secondary,
+          greaterThanOrEqualTo(1.25),
+          reason: '${theme.key}: primary and secondary read as one tone',
+        );
+        expect(
+          secondary / tertiary,
+          greaterThanOrEqualTo(1.25),
+          reason: '${theme.key}: secondary and tertiary read as one tone',
+        );
+      }
+    });
 
     // WCAG exempts disabled controls, and WaxDeck never signals disabled
     // by colour alone. The tokens are still held apart from the readable

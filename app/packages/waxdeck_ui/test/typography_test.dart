@@ -217,4 +217,50 @@ void main() {
       );
     });
   });
+
+  group('no inherited underlines', () {
+    // A null decoration merges in the ambient default - outside a
+    // Material, the yellow double-underlined error style.
+    final styles = <String, TextStyle>{
+      'display': WaxType.display,
+      'titleScreen': WaxType.titleScreen,
+      'titleScreenDesktop': WaxType.titleScreenDesktop,
+      'titleEntity': WaxType.titleEntity,
+      'headline': WaxType.headline,
+      'titleItem': WaxType.titleItem,
+      'body': WaxType.body,
+      'bodySmall': WaxType.bodySmall,
+      'label': WaxType.label,
+      'caption': WaxType.caption,
+      'overline': WaxType.overline,
+      'monoTime': WaxType.monoTime,
+      'monoData': WaxType.monoData,
+    };
+
+    test('every token sets its decoration explicitly', () {
+      for (final style in styles.entries) {
+        expect(
+          style.value.decoration,
+          TextDecoration.none,
+          reason:
+              'WaxType.${style.key} leaves decoration null, so a Text '
+              'outside Material inherits the error style underline',
+        );
+      }
+    });
+
+    testWidgets('a token style outside Material resolves undecorated', (
+      tester,
+    ) async {
+      // MaterialApp's home has no Material of its own.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          home: Center(child: Text('Aa', style: WaxType.caption)),
+        ),
+      );
+      final rich = tester.widget<RichText>(find.byType(RichText));
+      expect(rich.text.style?.decoration, TextDecoration.none);
+    });
+  });
 }

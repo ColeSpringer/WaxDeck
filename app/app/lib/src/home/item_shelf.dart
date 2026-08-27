@@ -148,6 +148,8 @@ class ItemShelf extends ConsumerWidget {
             items: tiles,
             actionLabel: allLocation == null ? null : l10n.homeShelfShowAll,
             actionSemanticsId: SemanticsIds.shelfAll(shelf),
+            backSemanticsId: SemanticsIds.shelfBack(shelf),
+            forwardSemanticsId: SemanticsIds.shelfForward(shelf),
             onAction: allLocation == null
                 ? null
                 : () => context.go(allLocation!),

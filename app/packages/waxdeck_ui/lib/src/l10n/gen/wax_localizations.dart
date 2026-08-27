@@ -663,6 +663,18 @@ abstract class WaxLocalizations {
   /// **'{label}, {value}'**
   String settingsChoiceValue(String label, String value);
 
+  /// Accessible name of the chevron that pages a shelf back toward its start.
+  ///
+  /// In en, this message translates to:
+  /// **'Scroll back'**
+  String get shelfPageBack;
+
+  /// Accessible name of the chevron that pages a shelf forward toward its end.
+  ///
+  /// In en, this message translates to:
+  /// **'Scroll forward'**
+  String get shelfPageForward;
+
   /// How much time something takes, in hours, abbreviated for a caption or a table cell with room for a few characters. The spelled-out form a screen reader hears is durationHours.
   ///
   /// In en, this message translates to:

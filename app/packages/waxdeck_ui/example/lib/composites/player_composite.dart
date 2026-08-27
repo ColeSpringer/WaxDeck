@@ -153,7 +153,7 @@ class PlayerComposite extends StatelessWidget {
   /// scaffold reserves.
   Widget _bottomRegion(WaxColors colors) => Container(
     decoration: BoxDecoration(
-      color: colors.surface1.withValues(alpha: 0.92),
+      color: colors.veil,
       borderRadius: WaxRadius.sheetTop,
       border: Border(top: BorderSide(color: colors.hairline)),
     ),

@@ -17,6 +17,10 @@ import '../fonts/wax_fonts.dart';
 /// along for fallback faces and for any platform that ignores axes;
 /// `test/typography_test.dart` proves the axes actually render rather
 /// than silently snapping to the nearest static weight.
+///
+/// Every token sets `decoration: TextDecoration.none`: a null one
+/// merges in the ambient default, which outside a Material is the
+/// yellow double-underlined error style.
 abstract final class WaxType {
   /// Archivo's width axis: 100 is normal, 125 is the expanded cut used
   /// for the wordmark, screen titles, and hub headers.
@@ -36,6 +40,7 @@ abstract final class WaxType {
     height: height / size,
     letterSpacing: letterSpacing,
     fontWeight: _nearest(weight),
+    decoration: TextDecoration.none,
     fontVariations: [
       FontVariation('wght', weight),
       FontVariation('wdth', width),
@@ -55,6 +60,7 @@ abstract final class WaxType {
     height: height / size,
     letterSpacing: letterSpacing,
     fontWeight: _nearest(weight),
+    decoration: TextDecoration.none,
     fontVariations: [
       FontVariation('wght', weight),
       // Inter's optical-size axis spans 14 to 32: track the rendered
@@ -77,6 +83,7 @@ abstract final class WaxType {
     fontSize: size,
     height: height / size,
     fontWeight: _nearest(weight),
+    decoration: TextDecoration.none,
     fontVariations: [FontVariation('wght', weight)],
     fontFeatures: const [
       FontFeature.tabularFigures(),

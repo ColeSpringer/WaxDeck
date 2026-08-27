@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart'
-    show ValueListenable, precisionErrorTolerance;
+    show ValueListenable, defaultTargetPlatform, precisionErrorTolerance;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RendererBinding;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
 
 import '../icons/wax_icon.dart';
@@ -18,6 +19,7 @@ import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'artwork.dart';
 import 'controls.dart';
+import 'edge_fade.dart';
 import 'indicators.dart';
 import 'secondary_tap.dart';
 import 'snap_physics.dart';
@@ -1023,13 +1025,10 @@ class WaxOptionRow extends StatelessWidget {
 /// restate it ("New to the collection" over "Recently added"). Surfaces
 /// that are not shelves keep [SectionHeader.overline].
 ///
-/// Under a pointer, paging chevrons appear over the row's edges - each
-/// only while there is somewhere to go that way - because a mouse has
-/// no horizontal wheel and a drag, though it works, is not something a
-/// desktop visitor discovers. A page is a viewport's worth of whole
-/// cards, landing on the same card grid a flick snaps to. Touch never
-/// sees them: the affordance is a hover, and a finger scrolls the row
-/// directly.
+/// Paging chevrons sit over the row's edges while there is somewhere
+/// to go that way: resting visible on desktop, hover-armed on touch.
+/// A page is a viewport's worth of whole cards on the flick's snap
+/// grid, and the overflow side wears an [EdgeFade] at rest.
 class ShelfRow extends StatefulWidget {
   const ShelfRow({
     required this.title,
@@ -1040,6 +1039,8 @@ class ShelfRow extends StatefulWidget {
     this.onTapItem,
     this.onPlayItem,
     this.onMoreItem,
+    this.backSemanticsId,
+    this.forwardSemanticsId,
     this.cardWidth,
     this.padding,
     super.key,
@@ -1061,6 +1062,11 @@ class ShelfRow extends StatefulWidget {
   /// whole affordance on touch, so a shelf that spends the long press on
   /// something else cannot also take this.
   final void Function(MediaTileData item)? onMoreItem;
+
+  /// Chevron handles, as plain strings: the package takes no registry
+  /// dependency.
+  final String? backSemanticsId;
+  final String? forwardSemanticsId;
 
   final double? cardWidth;
   final EdgeInsets? padding;
@@ -1156,9 +1162,13 @@ class _ShelfRowState extends State<ShelfRow> {
     );
   }
 
+  /// The width of the fade the overflow side wears at rest.
+  static const double _overflowFade = WaxSpace.s24;
+
   @override
   Widget build(BuildContext context) {
     final sizeClass = WaxSizeClass.of(context);
+    final l10n = context.waxL10n;
     final gutter = widget.padding ?? sizeClass.gutter;
     final width = widget.cardWidth ?? sizeClass.gridExtent;
     final physics = SnapScrollPhysics(
@@ -1166,6 +1176,8 @@ class _ShelfRowState extends State<ShelfRow> {
       leadingInset: gutter.left,
     );
     final items = widget.items;
+    // The carets are direction-fixed glyphs, so RTL swaps the pair.
+    final rtl = Directionality.of(context) == TextDirection.rtl;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -1190,72 +1202,84 @@ class _ShelfRowState extends State<ShelfRow> {
             height: MediaCard.heightFor(context, width: width),
             child: Stack(
               children: <Widget>[
-                NotificationListener<ScrollMetricsNotification>(
-                  onNotification: (_) => _scheduleSync(),
-                  child: NotificationListener<ScrollNotification>(
+                // The row is the builder's child: moving the mask
+                // never re-runs a card's builder.
+                ValueListenableBuilder<({bool back, bool forward})>(
+                  valueListenable: _canPage,
+                  builder: (context, can, child) => EdgeFade(
+                    start: can.back ? _overflowFade : 0,
+                    end: can.forward ? _overflowFade : 0,
+                    child: child!,
+                  ),
+                  child: NotificationListener<ScrollMetricsNotification>(
                     onNotification: (_) => _scheduleSync(),
-                    // Mouse drag joins touch for this row alone. The
-                    // app-wide setting Flutter's own docs warn against
-                    // would take click-drag text selection with it
-                    // wherever prose sits inside a scrollable; a
-                    // horizontal shelf holds no prose, and a vertical
-                    // wheel cannot move it.
-                    child: ScrollConfiguration(
-                      behavior: ScrollConfiguration.of(context).copyWith(
-                        dragDevices: <PointerDeviceKind>{
-                          ...ScrollConfiguration.of(context).dragDevices,
-                          PointerDeviceKind.mouse,
-                        },
-                      ),
-                      child: ListView.separated(
-                        controller: _controller,
-                        scrollDirection: Axis.horizontal,
-                        padding: gutter,
-                        physics: physics,
-                        itemCount: items.length,
-                        separatorBuilder: (_, _) =>
-                            const SizedBox(width: WaxShellMetrics.gridGap),
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          final onTap = widget.onTapItem;
-                          final onPlay = widget.onPlayItem;
-                          final onMore = widget.onMoreItem;
-                          return MediaCard(
-                            data: item,
-                            width: width,
-                            onTap: onTap == null ? null : () => onTap(item),
-                            onPlay: onPlay == null ? null : () => onPlay(item),
-                            onMore: onMore == null ? null : () => onMore(item),
-                          );
-                        },
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (_) => _scheduleSync(),
+                      // Mouse drag joins touch for this row alone: the
+                      // app-wide setting would take click-drag text
+                      // selection with it wherever prose scrolls.
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context).copyWith(
+                          dragDevices: <PointerDeviceKind>{
+                            ...ScrollConfiguration.of(context).dragDevices,
+                            PointerDeviceKind.mouse,
+                          },
+                        ),
+                        child: ListView.separated(
+                          controller: _controller,
+                          scrollDirection: Axis.horizontal,
+                          padding: gutter,
+                          physics: physics,
+                          itemCount: items.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(width: WaxShellMetrics.gridGap),
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final onTap = widget.onTapItem;
+                            final onPlay = widget.onPlayItem;
+                            final onMore = widget.onMoreItem;
+                            return MediaCard(
+                              data: item,
+                              width: width,
+                              onTap: onTap == null ? null : () => onTap(item),
+                              onPlay: onPlay == null
+                                  ? null
+                                  : () => onPlay(item),
+                              onMore: onMore == null
+                                  ? null
+                                  : () => onMore(item),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
                 ),
-                // Centred on the artwork band rather than the whole
-                // cell, which also holds the captions under it. Faded
-                // through the switcher rather than popped: a chevron
-                // appearing under a click already in motion is a
-                // misclick nobody chose.
+                // Centred on the artwork band; the insets pull back
+                // by the halo so the circle sits where it always has.
                 PositionedDirectional(
-                  start: WaxSpace.s8,
-                  top: width / 2 - _ShelfChevron.radius,
+                  start: WaxSpace.s8 - _ShelfChevron.halo,
+                  top: width / 2 - _ShelfChevron.radius - _ShelfChevron.halo,
                   child: _ChevronSlot(
                     pointerOver: _pointerOver,
                     canPage: _canPage,
                     forward: false,
-                    glyph: WaxIcons.backward,
+                    glyph: rtl ? WaxIcons.forward : WaxIcons.backward,
+                    label: l10n.shelfPageBack,
+                    semanticsId: widget.backSemanticsId,
                     onTap: () => _page(forward: false, physics: physics),
                   ),
                 ),
                 PositionedDirectional(
-                  end: WaxSpace.s8,
-                  top: width / 2 - _ShelfChevron.radius,
+                  end: WaxSpace.s8 - _ShelfChevron.halo,
+                  top: width / 2 - _ShelfChevron.radius - _ShelfChevron.halo,
                   child: _ChevronSlot(
                     pointerOver: _pointerOver,
                     canPage: _canPage,
                     forward: true,
-                    glyph: WaxIcons.forward,
+                    glyph: rtl ? WaxIcons.backward : WaxIcons.forward,
+                    label: l10n.shelfPageForward,
+                    semanticsId: widget.forwardSemanticsId,
                     onTap: () => _page(forward: true, physics: physics),
                   ),
                 ),
@@ -1268,15 +1292,16 @@ class _ShelfRowState extends State<ShelfRow> {
   }
 }
 
-/// One chevron's corner of the shelf: listens to the two notifiers so
-/// hover and scroll move only this 32px circle, never the row of cards
-/// beside it, and fades the chevron in and out instead of popping it.
+/// One chevron's corner of the shelf: gone with nowhere to go,
+/// resting dimmed on desktop, full under the pointer.
 class _ChevronSlot extends StatelessWidget {
   const _ChevronSlot({
     required this.pointerOver,
     required this.canPage,
     required this.forward,
     required this.glyph,
+    required this.label,
+    required this.semanticsId,
     required this.onTap,
   });
 
@@ -1284,59 +1309,157 @@ class _ChevronSlot extends StatelessWidget {
   final ValueListenable<({bool back, bool forward})> canPage;
   final bool forward;
   final WaxGlyph glyph;
+  final String label;
+  final String? semanticsId;
   final VoidCallback onTap;
+
+  /// A desktop platform with a mouse actually connected: the platform
+  /// alone lies both ways (a touch-only web tablet reports linux, a
+  /// phone can pair a mouse), so the tracker answers the hardware half.
+  static bool get _restsVisible {
+    final desktop = switch (defaultTargetPlatform) {
+      TargetPlatform.linux ||
+      TargetPlatform.macOS ||
+      TargetPlatform.windows => true,
+      _ => false,
+    };
+    return desktop && RendererBinding.instance.mouseTracker.mouseIsConnected;
+  }
 
   @override
   Widget build(BuildContext context) {
     final motion = WaxMotion.of(context);
-    return ValueListenableBuilder<bool>(
-      valueListenable: pointerOver,
-      builder: (context, over, _) =>
-          ValueListenableBuilder<({bool back, bool forward})>(
-            valueListenable: canPage,
-            builder: (context, can, _) => AnimatedSwitcher(
-              duration: motion.quick,
-              child: over && (forward ? can.forward : can.back)
-                  ? _ShelfChevron(glyph: glyph, onTap: onTap)
-                  : const SizedBox.shrink(),
+    // The tracker notifies when a mouse arrives or leaves.
+    return ListenableBuilder(
+      listenable: RendererBinding.instance.mouseTracker,
+      builder: (context, _) => ValueListenableBuilder<bool>(
+        valueListenable: pointerOver,
+        builder: (context, over, _) =>
+            ValueListenableBuilder<({bool back, bool forward})>(
+              valueListenable: canPage,
+              builder: (context, can, _) {
+                final armed = forward ? can.forward : can.back;
+                return AnimatedSwitcher(
+                  duration: motion.quick,
+                  // A FadeTransition stops painting, not hit testing
+                  // or semantics: ungated, a retired chevron answered
+                  // taps invisibly for the length of the cross-fade.
+                  transitionBuilder: (child, animation) => AnimatedBuilder(
+                    animation: animation,
+                    child: child,
+                    builder: (context, child) {
+                      final retiring =
+                          animation.status == AnimationStatus.reverse ||
+                          animation.status == AnimationStatus.dismissed;
+                      return IgnorePointer(
+                        ignoring: retiring,
+                        child: ExcludeSemantics(
+                          excluding: retiring,
+                          child: FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  child: armed && (over || _restsVisible)
+                      ? _ShelfChevron(
+                          glyph: glyph,
+                          label: label,
+                          semanticsId: semanticsId,
+                          dimmed: !over,
+                          onTap: onTap,
+                        )
+                      : const SizedBox.shrink(),
+                );
+              },
             ),
-          ),
+      ),
     );
   }
 }
 
 /// One paging chevron over a shelf's edge.
 ///
-/// Excluded from semantics the way a scrollbar is: it is a pointer
-/// convenience over a row that scrolls on its own, and a screen reader
-/// walks the cards directly. Out of the focus tree for the same reason -
-/// a tab stop with no readable name, torn out whenever the mouse moves
-/// off the row, would drop keyboard focus to the scope root mid-walk.
-/// Sized for a pointer, not a finger: touch never sees it, which is why
-/// it may sit under the 44px touch floor the real controls keep.
+/// A named semantics button (an excluded node has no web DOM element,
+/// so its clicks fell to the card beneath), kept out of the focus tree
+/// - the cards are the keyboard path. The 32px circle centres in a
+/// [WaxSpace.touchTarget] box whose halo claims taps only.
 class _ShelfChevron extends StatelessWidget {
-  const _ShelfChevron({required this.glyph, required this.onTap});
+  const _ShelfChevron({
+    required this.glyph,
+    required this.label,
+    required this.semanticsId,
+    required this.dimmed,
+    required this.onTap,
+  });
 
-  static const double radius = 16;
+  static const double radius = WaxSpace.pointerTarget / 2;
+
+  /// How far the hit box extends past the circle on each side.
+  static const double halo =
+      (WaxSpace.touchTarget - WaxSpace.pointerTarget) / 2;
+
+  /// Resting strength: enough to survive a dark cover, with hover as
+  /// the step to full.
+  static const double _restOpacity = 0.75;
 
   final WaxGlyph glyph;
+  final String label;
+  final String? semanticsId;
+
+  /// Resting on desktop; full strength under the row's hover.
+  final bool dimmed;
+
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    return ExcludeSemantics(
-      child: Material(
-        color: colors.surface1,
-        shape: CircleBorder(side: BorderSide(color: colors.hairline)),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
+    final motion = WaxMotion.of(context);
+    return Semantics(
+      container: true,
+      button: true,
+      label: label,
+      identifier: semanticsId,
+      onTap: onTap,
+      // Translucent: the halo wins a tap while drag, wheel, and the
+      // card's right-click fall through. Detector and InkWell share
+      // one onTap; give either another handler and a click fires twice.
+      child: AnimatedOpacity(
+        opacity: dimmed ? _restOpacity : 1,
+        duration: motion.quick,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          excludeFromSemantics: true,
           onTap: onTap,
-          canRequestFocus: false,
           child: SizedBox.square(
-            dimension: radius * 2,
+            dimension: WaxSpace.touchTarget,
             child: Center(
-              child: WaxIcon(glyph, size: 18, color: colors.textPrimary),
+              child: Material(
+                color: colors.surface1,
+                shape: CircleBorder(side: BorderSide(color: colors.hairline)),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onTap,
+                  canRequestFocus: false,
+                  excludeFromSemantics: true,
+                  // Here, not an outer MouseRegion: the deeper region
+                  // wins, and the off-web default is the basic arrow.
+                  mouseCursor: SystemMouseCursors.click,
+                  child: SizedBox.square(
+                    dimension: radius * 2,
+                    child: Center(
+                      child: WaxIcon(
+                        glyph,
+                        size: 18,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),

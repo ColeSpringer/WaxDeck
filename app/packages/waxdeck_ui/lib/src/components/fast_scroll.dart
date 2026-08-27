@@ -105,46 +105,57 @@ class _FastScrollRailState extends State<FastScrollRail> {
           // draws a dot, so the alphabet still reads as a ruler.
           final stride = (glyphHeight / slice).ceil().clamp(1, 4);
 
-          return Semantics(
-            identifier: widget.semanticsId,
-            container: true,
-            // Same boundary as the chip row: each letter is its own
-            // button, and merged they become one rail-sized tap target
-            // that jumps to whichever letter merged last.
-            explicitChildNodes: true,
-            label: context.waxL10n.fastScrollLabel,
-            child: GestureDetector(
-              // Drag only: a tap belongs to the letter it lands on, and a
-              // detector claiming both would take it from them.
-              onVerticalDragStart: (details) =>
-                  _reportAt(details.localPosition.dy, height),
-              onVerticalDragUpdate: (details) =>
-                  _reportAt(details.localPosition.dy, height),
-              onVerticalDragEnd: (_) => setState(() => _dragging = null),
-              onVerticalDragCancel: () => setState(() => _dragging = null),
-              child: Column(
-                children: <Widget>[
-                  for (var i = 0; i < widget.letters.length; i++)
-                    Expanded(
-                      child: _RailLetter(
-                        letter: widget.letters[i],
-                        // The first and last always draw: a rail whose
-                        // ends are dots names nothing.
-                        drawn:
-                            i % stride == 0 || i == widget.letters.length - 1,
-                        active:
-                            widget.letters[i] == (_dragging ?? widget.selected),
-                        enabled:
-                            widget.available.isEmpty ||
-                            widget.available.contains(widget.letters[i]),
-                        colors: colors,
-                        semanticsId: widget.letterSemanticsId?.call(
-                          widget.letters[i],
+          // The veil pill is the letters' declared backing over
+          // whatever scrolls beneath. Inside the hide check, so a rail
+          // too short to letter draws no empty pill.
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.veil,
+              borderRadius: WaxRadius.pill,
+              border: Border.all(color: colors.hairline),
+            ),
+            child: Semantics(
+              identifier: widget.semanticsId,
+              container: true,
+              // Same boundary as the chip row: each letter is its own
+              // button, and merged they become one rail-sized tap target
+              // that jumps to whichever letter merged last.
+              explicitChildNodes: true,
+              label: context.waxL10n.fastScrollLabel,
+              child: GestureDetector(
+                // Drag only: a tap belongs to the letter it lands on,
+                // and a detector claiming both would take it from them.
+                onVerticalDragStart: (details) =>
+                    _reportAt(details.localPosition.dy, height),
+                onVerticalDragUpdate: (details) =>
+                    _reportAt(details.localPosition.dy, height),
+                onVerticalDragEnd: (_) => setState(() => _dragging = null),
+                onVerticalDragCancel: () => setState(() => _dragging = null),
+                child: Column(
+                  children: <Widget>[
+                    for (var i = 0; i < widget.letters.length; i++)
+                      Expanded(
+                        child: _RailLetter(
+                          letter: widget.letters[i],
+                          // The first and last always draw: a rail whose
+                          // ends are dots names nothing.
+                          drawn:
+                              i % stride == 0 || i == widget.letters.length - 1,
+                          active:
+                              widget.letters[i] ==
+                              (_dragging ?? widget.selected),
+                          enabled:
+                              widget.available.isEmpty ||
+                              widget.available.contains(widget.letters[i]),
+                          colors: colors,
+                          semanticsId: widget.letterSemanticsId?.call(
+                            widget.letters[i],
+                          ),
+                          onTap: () => widget.onLetter(widget.letters[i]),
                         ),
-                        onTap: () => widget.onLetter(widget.letters[i]),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           );
@@ -175,11 +186,13 @@ class _RailLetter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Tertiary, not the disabled tone, for letters with no bucket:
+    // they still answer a tap, so no WCAG disabled exemption.
     final color = active
         ? colors.accent
         : enabled
         ? colors.textSecondary
-        : colors.textDisabled;
+        : colors.textTertiary;
     return Semantics(
       identifier: semanticsId,
       button: true,

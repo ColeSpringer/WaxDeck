@@ -95,6 +95,8 @@
   "playerSkipForwardSeconds": "{seconds, plural, =1{Avanzar 1 segundo} other{Avanzar {seconds} segundos}}",
   "scaffoldBack": "Atrás",
   "settingsChoiceValue": "{label}, {value}",
+  "shelfPageBack": "Desplazar hacia atrás",
+  "shelfPageForward": "Desplazar hacia adelante",
   "spanHours": "{hours, plural, =1{1 h} other{{hours} h}}",
   "spanHoursMinutes": "{hours} {minutes}",
   "spanMinutes": "{minutes, plural, =1{1 min} other{{minutes} min}}",

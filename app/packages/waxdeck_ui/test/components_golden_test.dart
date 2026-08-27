@@ -1,4 +1,5 @@
 import 'package:alchemist/alchemist.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -56,6 +57,19 @@ Interaction _hoverAll(Finder finder) => (WidgetTester tester) async {
     }
   };
 };
+
+/// A desktop machine whose mouse rests away from everything: the
+/// dimmed at-rest chevron state no hover interaction can capture.
+Future<AsyncCallback?> _desktopMouseAtRest(WidgetTester tester) async {
+  debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+  final pointer = TestPointer(99, PointerDeviceKind.mouse, 99);
+  await tester.sendEventToBinding(pointer.hover(Offset.zero));
+  await tester.pumpAndSettle();
+  return () async {
+    debugDefaultTargetPlatformOverride = null;
+    await tester.sendEventToBinding(pointer.removePointer());
+  };
+}
 
 /// Animated components (the row bars, the skeletons) never
 /// settle by design, so goldens pump a fixed number of frames instead of
@@ -375,6 +389,42 @@ void main() {
       'a hovered shelf offers to page toward what is out of view',
       fileName: 'shelf_chevrons',
       whilePerforming: _hoverAll(find.byType(ShelfRow)),
+      builder: () => GoldenTestGroup(
+        columns: 1,
+        children: <Widget>[
+          for (final variant in <WaxThemeVariant>[
+            WaxThemeVariant.dark,
+            WaxThemeVariant.light,
+          ])
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 420,
+                  child: ShelfRow(
+                    title: 'Recently added',
+                    cardWidth: 120,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    items: <MediaTileData>[
+                      for (var i = 0; i < 6; i++)
+                        MediaTileData(
+                          title: 'Salt Harbour $i',
+                          subtitle: 'Nightjar',
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a desktop shelf shows its overflow before any hover',
+      fileName: 'shelf_chevrons_rest',
+      whilePerforming: _desktopMouseAtRest,
       builder: () => GoldenTestGroup(
         columns: 1,
         children: <Widget>[

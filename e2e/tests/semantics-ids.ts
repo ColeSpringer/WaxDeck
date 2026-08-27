@@ -317,7 +317,9 @@ export const SemanticsIds = {
   pinSheetTarget: (pid: string | number) => `pin-sheet-target-${pid}`,
   shelf: (shelf: string | number) => `shelf-${shelf}`,
   shelfAll: (shelf: string | number) => `shelf-${shelf}-all`,
+  shelfBack: (shelf: string | number) => `shelf-${shelf}-back`,
   shelfCard: (shelf: string | number, pid: string | number) => `shelf-${shelf}-${pid}`,
+  shelfForward: (shelf: string | number) => `shelf-${shelf}-forward`,
 
   // library: The complete item listings and the per-item rows the sync specs drive.
   item: (pid: string | number) => `item-${pid}`,
@@ -932,7 +934,9 @@ export const SemanticsIdPrefixes = {
   pinSheetTarget: 'pin-sheet-target-',
   shelf: 'shelf-',
   shelfAll: 'shelf-',
+  shelfBack: 'shelf-',
   shelfCard: 'shelf-',
+  shelfForward: 'shelf-',
 
   // library: The complete item listings and the per-item rows the sync specs drive.
   item: 'item-',

@@ -572,6 +572,14 @@
       }
     }
   },
+  "shelfPageBack": "Scroll back",
+  "@shelfPageBack": {
+    "description": "Accessible name of the chevron that pages a shelf back toward its start."
+  },
+  "shelfPageForward": "Scroll forward",
+  "@shelfPageForward": {
+    "description": "Accessible name of the chevron that pages a shelf forward toward its end."
+  },
   "spanHours": "{hours, plural, =1{1 hr} other{{hours} hr}}",
   "@spanHours": {
     "description": "How much time something takes, in hours, abbreviated for a caption or a table cell with room for a few characters. The spelled-out form a screen reader hears is durationHours.",

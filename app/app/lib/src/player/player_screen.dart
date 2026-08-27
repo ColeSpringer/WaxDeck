@@ -1031,7 +1031,7 @@ class _UpNextPeek extends ConsumerWidget {
       // into the Material instead, which is what the splash draws on.
       child: Ink(
         decoration: BoxDecoration(
-          color: colors.surface1.withValues(alpha: 0.92),
+          color: colors.veil,
           borderRadius: WaxRadius.sheetTop,
           border: Border(top: BorderSide(color: colors.hairline)),
         ),

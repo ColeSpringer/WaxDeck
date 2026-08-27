@@ -2,17 +2,11 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
-- [8-25-2026] on the homescreen, when there are items on off screen an arrow appears that you are supposed to be able to click and move the shelf view. However, currently when you go to click it you will instead click the track underneath it and start playing and the shelf won't move at all. Also, its not overly obvious that there is flowover as the button doesnt show until you hover over it.
-
-- [8-25-2026] the letters that appear on the right when looking at the albums page (for example) are somewhat hard to read given the background. Might just be worthwhile to do a whole audit of both dark and light mode to make sure contrast meets ally standards and also just to make sure that we have enough subtle variety to make things interesting to look at and informative.
-
 - [8-25-2026] In the metadata editor you can't edit the source. Not sure what that limitation exists.
 
 - [8-24-2026] It doesn't seem like podcasts update listening stats?
 
 - [8-24-2026] Starting a podcast episode is slow on initial play (not downloaded). That might just be a network issue that is not fixable but we should look into that.
-
-- [8-24-2026] The double yellow underline that you see sometimes (the letters on the right when looking through library items like albums or in the admin console over the main headers such as "library" and "people") is ugly.
 
 - [8-24-2026] Undoing "mark finished" can swallow another device's real completion. The undo is two writes - the position back, then the flags beside it (book_screen.dart `_undo`) - and an end-of-book checkpoint from another device landing between them is refused its finished mark while `played` still stands (`spokenWordCrossing`, server/internal/service/playback.go around 316); the flags-clear then lands last, leaving the book at 100 percent, unfinished, play count 0. A tens-of-milliseconds window needing a concurrent cross-device write, and it heals on the next listen past the threshold. Not WaxBin's: every catalog write applies as asked - the fix is an atomic undo, one request restoring position and flags together. The audiobooks spec's seeder used to be the "other device" here (8-24 soak, pass 3) and now waits the whole undo out.
 

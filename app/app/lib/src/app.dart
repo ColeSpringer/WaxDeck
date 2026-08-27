@@ -51,10 +51,16 @@ class WaxDeckApp extends ConsumerWidget {
       // The warmup sits in the builder because Localizations wraps the
       // builder's subtree: this is the highest place the resolved locale
       // can be read from.
-      builder: (context, child) => MiniWindowGate(
-        child: _ReducedMotion(
-          child: LocaleFontWarmup(
-            child: _SystemBars(child: _BootGate(child: child!)),
+      //
+      // The text style is what a Text outside any Material inherits;
+      // without it that is the yellow double-underlined error style.
+      builder: (context, child) => DefaultTextStyle(
+        style: WaxType.body.copyWith(color: WaxColors.of(context).textPrimary),
+        child: MiniWindowGate(
+          child: _ReducedMotion(
+            child: LocaleFontWarmup(
+              child: _SystemBars(child: _BootGate(child: child!)),
+            ),
           ),
         ),
       ),

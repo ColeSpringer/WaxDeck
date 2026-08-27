@@ -385,6 +385,12 @@ class WaxLocalizationsEs extends WaxLocalizations {
   }
 
   @override
+  String get shelfPageBack => 'Desplazar hacia atrás';
+
+  @override
+  String get shelfPageForward => 'Desplazar hacia adelante';
+
+  @override
   String spanHours(int hours) {
     String _temp0 = intl.Intl.pluralLogic(
       hours,

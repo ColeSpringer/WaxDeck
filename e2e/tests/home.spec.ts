@@ -22,6 +22,28 @@ test('home draws its shelves off the collection lists', async ({ app }) => {
   await app.home.revealShelf('sealed');
 });
 
+test('a shelf chevron pages the row instead of playing what is under it', async ({
+  app,
+  page,
+}) => {
+  // Narrow enough that the recent shelf must overflow.
+  await page.setViewportSize({ width: 700, height: 900 });
+  await app.nav.enter('home');
+
+  const shelf = app.home.shelf('recent');
+  await expect(shelf).toBeVisible();
+  await shelf.hover();
+
+  // Paging (back chevron arms, location unchanged) proves the click
+  // landed on the chevron, not the card - and this is the only place
+  // the chevrons' web DOM routing is exercised at all.
+  const forward = app.home.shelfForward('recent');
+  await expect(forward).toBeVisible();
+  await forward.click();
+  await expect(app.home.shelfBack('recent')).toBeVisible();
+  await app.nav.expectAt('home');
+});
+
 test("a shelf's Show all opens the enumeration behind it", async ({ app }) => {
   await app.nav.enter('home');
 

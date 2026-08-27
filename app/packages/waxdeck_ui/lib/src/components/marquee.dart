@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../tokens/motion.dart';
+import 'edge_fade.dart';
 
 /// One line of text that scrolls itself when it does not fit, and sits
 /// still when it does.
@@ -251,9 +252,9 @@ class _WaxMarqueeTextState extends State<WaxMarqueeText>
         return SizedBox(
           height: lineHeight,
           child: ClipRect(
-            child: ShaderMask(
-              blendMode: BlendMode.dstIn,
-              shaderCallback: (rect) => _edgeFade(rect, widget.fadeWidth),
+            child: EdgeFade(
+              start: widget.fadeWidth,
+              end: widget.fadeWidth,
               // The copy that moves is a picture of the text and not a
               // target: it is wider than its slot and slides under the
               // pointer, and the deck bar's title is a tap that opens
@@ -294,28 +295,4 @@ class _WaxMarqueeTextState extends State<WaxMarqueeText>
       },
     );
   }
-}
-
-/// Transparent for [width] at each edge, opaque between: the mask a
-/// [BlendMode.dstIn] `ShaderMask` uses to soften both ends of a moving
-/// line. A slot too narrow for two fades gets none rather than a text
-/// that is transparent all the way across.
-Shader _edgeFade(Rect rect, double width) {
-  if (width <= 0 || rect.width < width * 3) {
-    return const LinearGradient(
-      colors: <Color>[Colors.white, Colors.white],
-    ).createShader(rect);
-  }
-  final stop = width / rect.width;
-  return LinearGradient(
-    begin: Alignment.centerLeft,
-    end: Alignment.centerRight,
-    colors: const <Color>[
-      Colors.transparent,
-      Colors.white,
-      Colors.white,
-      Colors.transparent,
-    ],
-    stops: <double>[0, stop, 1 - stop, 1],
-  ).createShader(rect);
 }

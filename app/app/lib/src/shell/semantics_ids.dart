@@ -325,7 +325,9 @@ abstract final class SemanticsIds {
   static String pinSheetTarget(Object pid) => 'pin-sheet-target-$pid';
   static String shelf(Object shelf) => 'shelf-$shelf';
   static String shelfAll(Object shelf) => 'shelf-$shelf-all';
+  static String shelfBack(Object shelf) => 'shelf-$shelf-back';
   static String shelfCard(Object shelf, Object pid) => 'shelf-$shelf-$pid';
+  static String shelfForward(Object shelf) => 'shelf-$shelf-forward';
 
   // library: The complete item listings and the per-item rows the sync specs drive.
   static String item(Object pid) => 'item-$pid';

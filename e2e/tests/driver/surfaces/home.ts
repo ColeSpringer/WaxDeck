@@ -41,6 +41,16 @@ export class Home extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.shelfAll(name)));
   }
 
+  /// The paging chevrons, each armed only while there is somewhere to
+  /// go that way.
+  shelfBack(name: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.shelfBack(name)));
+  }
+
+  shelfForward(name: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.shelfForward(name)));
+  }
+
   card(shelf: string, pid: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.shelfCard(shelf, pid)));
   }

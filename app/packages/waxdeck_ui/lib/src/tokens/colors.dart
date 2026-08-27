@@ -152,6 +152,11 @@ class WaxColors extends ThemeExtension<WaxColors> {
   /// (it is what hides gradient banding), absent in light.
   final double grainOpacity;
 
+  /// The backing for floating text (rail pill, up-next peek). Derived
+  /// so it cannot drift from [surface1]; its pairs are audited over
+  /// white and black flattens in contrast_test.dart.
+  Color get veil => surface1.withValues(alpha: 0.92);
+
   bool get isDark => brightness == Brightness.dark;
 
   WaxDomainColors domain(WaxDomain domain) => switch (domain) {
@@ -183,7 +188,7 @@ class WaxColors extends ThemeExtension<WaxColors> {
     outline: Color(0xFF827057),
     textPrimary: Color(0xFFF3EDE3),
     textSecondary: Color(0xFFC7BCAA),
-    textTertiary: Color(0xFF9A8E78),
+    textTertiary: Color(0xFFA0947E),
     textDisabled: Color(0xFF6F6350),
     scrim: Color(0x8C000000),
     accent: Color(0xFFE3A244),
@@ -282,7 +287,7 @@ class WaxColors extends ThemeExtension<WaxColors> {
     outline: Color(0xFF827057),
     textPrimary: Color(0xFFF3EDE3),
     textSecondary: Color(0xFFC7BCAA),
-    textTertiary: Color(0xFF9A8E78),
+    textTertiary: Color(0xFFA0947E),
     textDisabled: Color(0xFF6F6350),
     scrim: Color(0x8C000000),
     accent: Color(0xFFE3A244),

@@ -620,7 +620,7 @@ class _SpokenBottomRegionState extends ConsumerState<SpokenBottomRegion> {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colors.surface1.withValues(alpha: 0.92),
+        color: colors.veil,
         borderRadius: WaxRadius.sheetTop,
         border: Border(top: BorderSide(color: colors.hairline)),
       ),
