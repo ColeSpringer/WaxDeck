@@ -168,6 +168,7 @@ test('a server edit reaches a live client in about a second', async ({ app }) =>
   // browser all look like from here.
   await app.nav.enter('tracks');
   await app.music.play(target.pid);
+  await app.player.ready();
   const star = app.player.star();
   await star.waitFor({ timeout: T.nav });
   await expect(star).toHaveAccessibleName('Star');

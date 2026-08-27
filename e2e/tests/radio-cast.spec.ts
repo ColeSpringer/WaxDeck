@@ -303,11 +303,9 @@ test('the device picker lists this device and checks the cast bases', async ({ a
 
   await app.nav.enter('tracks');
   // Something has to be playing for the bar's cast control to exist:
-  // there is no device to send silence to. A row tap plays and pushes
-  // the player over the chrome, so the bar is behind it until that is
-  // left.
+  // there is no device to send silence to. A row tap plays into the
+  // dock, so the bar is right there.
   await app.music.play(target.pid);
-  await app.player.collapse(app.radio.deckBar());
   await app.radio.deckBar().waitFor({ timeout: T.nav });
 
   await app.cast.openPicker();

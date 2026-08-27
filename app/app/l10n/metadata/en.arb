@@ -388,7 +388,7 @@
   },
   "metadataLockField": "Lock {field}",
   "@metadataLockField": {
-    "description": "Accessible name of the control that locks one field. {field} is the field's wire name and is not translated.",
+    "description": "Accessible name of the control that locks one field. {field} is the field's localized label (an unknown field falls back to its wire name).",
     "placeholders": {
       "field": {
         "type": "String",
@@ -683,7 +683,7 @@
   },
   "metadataUnlockField": "Unlock {field}",
   "@metadataUnlockField": {
-    "description": "Accessible name of the control that unlocks one field. {field} is the field's wire name and is not translated.",
+    "description": "Accessible name of the control that unlocks one field. {field} is the field's localized label (an unknown field falls back to its wire name).",
     "placeholders": {
       "field": {
         "type": "String",

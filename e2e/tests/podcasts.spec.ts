@@ -143,6 +143,7 @@ test('subscribe, fetch, and play an episode with silence trimming', async (
   // happened - positions stay honest, so only the counter can tell
   // trimmed playback from ordinary playback this quickly.
   await app.podcasts.playEpisode(episode.pid);
+  await app.player.ready();
   await expect(app.player.trim()).toBeVisible();
   await expect(app.player.trim()).toHaveAccessibleName(/saved/);
 });
@@ -159,6 +160,7 @@ test('the speed sheet reaches any rate in one tap and remembers it', async ({ ap
   // proves, and a download here would be four workers' worth of load on
   // a shared catalog lease for a preset this test could set either way.
   await app.podcasts.playEpisode(episode.pid);
+  await app.player.ready();
 
   // 1.5x from 1x is two presets away, which the cycling button this
   // replaced could only walk to.
@@ -253,8 +255,9 @@ test('an unfetched episode still streams by enclosure passthrough', async (
     '/media/enclosure?',
   );
   // It is really playing, which is the part the row's tap is about: the
-  // fetch-wait path would have left the player empty and queued a
-  // download instead.
+  // fetch-wait path would have queued a download instead of starting
+  // playback.
+  await app.player.ready();
   await expect(app.player.toggle()).toHaveAccessibleName(/Pause/);
 });
 

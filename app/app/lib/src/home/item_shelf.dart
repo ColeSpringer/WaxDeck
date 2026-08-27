@@ -263,15 +263,13 @@ class _DelayedShelfSkeletonState extends State<DelayedShelfSkeleton> {
 
 /// Plays one shelf item where it stands, going nowhere.
 ///
-/// The verb behind a card's hover play affordance, as against
-/// [openHomeItem], which is what tapping the card does. The two differ
-/// on purpose: a tap on a book or an episode opens the screen where the
-/// chapters and the show notes are, because that is where somebody
-/// decides whether to play it - but a press on a play button has already
-/// decided, whatever the medium.
+/// The verb behind a card's hover play affordance, and behind
+/// [openHomeItem]'s track arm. Playback lands in the dock whatever
+/// raised it; the deck bar is the way into the full player.
 ///
-/// One item, and it says so, for the reason [openHomeItem] gives: a
-/// shelf is a dozen unrelated covers rather than a running order. A book
+/// One item, and it says so: a shelf is a dozen unrelated covers
+/// rather than a running order, and queueing the shelf would fill the
+/// queue with a view. A book
 /// names itself as the source instead, because its parts roll inside the
 /// session and there is nothing else in the queue for them to be.
 void playHomeItem(WidgetRef ref, ItemSummary item, PlayProgress progress) {
@@ -319,20 +317,6 @@ void openHomeItem(
       // about whether its feed still holds audio.
       unawaited(context.push(WaxRoute.episode(item.pid)));
     case MediaType.music:
-      // One item, and it says so. A shelf is a dozen unrelated covers
-      // rather than a running order, so queueing the shelf would fill the
-      // queue with a view.
-      ref
-          .read(nowPlayingProvider.notifier)
-          .play(
-            <ItemSummary>[item],
-            source: QueueSource(
-              kind: QueueSourceKind.single,
-              label: item.title,
-              pid: item.pid,
-            ),
-            positionMs: progress.positionMs,
-          );
-      unawaited(context.push(WaxRoute.nowPlaying));
+      playHomeItem(ref, item, progress);
   }
 }

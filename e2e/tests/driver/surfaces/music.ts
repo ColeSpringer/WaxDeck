@@ -69,19 +69,23 @@ export class Music extends Surface {
     await clickThrough(this.bucket(nth), this.entityShuffle());
   }
 
-  /// Start an entity playing from its header.
+  /// Start an entity playing from its header. Play lands in the dock,
+  /// so the deck bar is what proves the click took; a spec that needs
+  /// the full player expands it with `player.ready()`.
   async playEntity(how: 'play' | 'shuffle' = 'shuffle'): Promise<void> {
     await clickThrough(
       how === 'shuffle' ? this.entityShuffle() : this.entityPlay(),
-      this.ctx.page.locator(sem(SemanticsIds.playerToggle)),
+      this.ctx.page.locator(sem(SemanticsIds.deckBar)),
     );
   }
 
   /// Play one row of an opened bucket, which queues what it belongs to.
+  /// Settles on the deck bar, so with something already playing the
+  /// click is skipped - a repeat play needs its own signal.
   async playEntry(nth = 0): Promise<void> {
     await clickThrough(
       this.entry(nth),
-      this.ctx.page.locator(sem(SemanticsIds.playerToggle)),
+      this.ctx.page.locator(sem(SemanticsIds.deckBar)),
     );
   }
 
@@ -145,11 +149,13 @@ export class Music extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.item(pid)));
   }
 
-  /// Open an item, which starts it playing.
+  /// Open an item, which starts it playing in the dock. Settles on the
+  /// deck bar, so a second play while something already plays needs its
+  /// own signal - the bar is already up and the click would be skipped.
   async play(pid: string): Promise<void> {
     await clickThrough(
       this.item(pid),
-      this.ctx.page.locator(sem(SemanticsIds.playerToggle)),
+      this.ctx.page.locator(sem(SemanticsIds.deckBar)),
     );
   }
 

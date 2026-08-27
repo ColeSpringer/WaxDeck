@@ -651,6 +651,17 @@ List<RouteBase> shellRoutes() => <RouteBase>[
             redirect: (context, state) =>
                 WaxRoute.reviewEntry(state.pathParameters['entryId']!),
           ),
+          // A computed track list (an instant mix, a similar-tracks
+          // answer). In the shell, not an overlay: play starts in the
+          // dock now, so the surface a mix lands on has to keep the
+          // deck bar - an over-chrome list would leave audio running
+          // with no transport in sight. Still pushed with its payload;
+          // arriving bare is sent home by the redirect.
+          GoRoute(
+            path: WaxRoute.tracks,
+            redirect: _requires<TrackListArgs>(WaxRoute.home),
+            builder: _trackList,
+          ),
           // One location, one editor per pid kind. An album opens the
           // release workbench - its identity is entity-scoped and its
           // members are what a bulk edit reaches - an artist or
@@ -802,11 +813,6 @@ List<RouteBase> shellRoutes() => <RouteBase>[
   GoRoute(
     path: WaxRoute.carMode,
     builder: (context, state) => const CarModeScreen(),
-  ),
-  GoRoute(
-    path: WaxRoute.tracks,
-    redirect: _requires<TrackListArgs>(WaxRoute.home),
-    builder: _trackList,
   ),
   // A view of the session this client is driving elsewhere, so it carries
   // no payload: which session that is lives in the controller the deck bar

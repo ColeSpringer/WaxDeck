@@ -503,7 +503,7 @@ class _EntityFieldRow extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsetsDirectional.only(start: WaxSpace.s4),
                   child: WaxIcon(
-                    WaxIcons.bookmark,
+                    WaxIcons.lock,
                     size: 16,
                     color: colors.accent,
                     active: true,

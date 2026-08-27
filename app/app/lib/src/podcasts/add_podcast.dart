@@ -362,20 +362,10 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
     ];
   }
 
-  /// The expert path, unchanged: one URL and the kind of source it is.
+  /// The expert path: pick the kind of source first, so the URL field
+  /// can say which address that kind wants.
   List<Widget> _urlForm(AppLocalizations l10n) => <Widget>[
     const SizedBox(height: WaxSpace.s8),
-    // No Semantics identifier wrapper: on the web it would mint a
-    // second, disabled text-field node beside the real input. Tests
-    // locate the field by its label, like the login form.
-    TextField(
-      key: const Key('podcast-url-field'),
-      controller: _urlController,
-      focusNode: _urlFocus,
-      decoration: InputDecoration(labelText: l10n.podcastFeedUrlLabel),
-      keyboardType: TextInputType.url,
-    ),
-    const SizedBox(height: WaxSpace.s12),
     WaxSegmented(
       label: l10n.podcastSourceLabel,
       segments: <WaxSegment>[
@@ -384,6 +374,21 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
       ],
       selected: _sourceType,
       onSelect: (name) => setState(() => _sourceType = name),
+    ),
+    const SizedBox(height: WaxSpace.s12),
+    // No Semantics identifier wrapper: on the web it would mint a
+    // second, disabled text-field node beside the real input. Tests
+    // locate the field by its label, like the login form.
+    TextField(
+      key: const Key('podcast-url-field'),
+      controller: _urlController,
+      focusNode: _urlFocus,
+      decoration: InputDecoration(
+        labelText: _sourceType == 'youtube'
+            ? l10n.podcastYoutubeUrlLabel
+            : l10n.podcastRssUrlLabel,
+      ),
+      keyboardType: TextInputType.url,
     ),
   ];
 }

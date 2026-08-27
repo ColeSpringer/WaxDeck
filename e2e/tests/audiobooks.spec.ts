@@ -167,6 +167,8 @@ test('the book player spans a chapter, and bookmarks keep a place', async ({ app
   await app.nav.enter('books');
   await app.books.open(book.pid);
   await app.books.play();
+  // Play lands in the dock; the chapter bar is the full player's.
+  await app.player.ready();
 
   // The chapter is the unit the bar spans, and the whole book is one
   // press away: a nine-hour bar moves a pixel a minute, and "how far

@@ -171,7 +171,6 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
           startIndex: start,
           source: _source(items, cursor: state.nextCursor),
         );
-    context.push(WaxRoute.nowPlaying);
   }
 
   /// Shuffles what this screen lists.
@@ -236,7 +235,6 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
           shuffle: true,
           source: _source(playable, cursor: page.nextCursor, seed: page.seed),
         );
-    context.push(WaxRoute.nowPlaying);
   }
 
   void _report(String message) {

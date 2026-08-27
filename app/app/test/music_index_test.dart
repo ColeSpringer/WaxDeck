@@ -580,8 +580,8 @@ void main() {
           _track('Alpha', artist: 'Ada Author'),
           _track('Bravo', artist: 'Ada Author'),
         ],
-      // Playing pushes the player, which needs an engine and then never
-      // settles: the playing row's bars repeat for as long as it plays.
+      // Playing needs an engine, and a playing row never settles: its
+      // bars repeat for as long as it plays.
       engine: true,
     );
 

@@ -133,6 +133,17 @@ void main() {
     expect(call.fields, {'artist': 'The Harbour Lights'});
     expect(call.skipLocked, isFalse);
     expect(call.force, isFalse);
+
+    // The toggle is the pointer's way out of selection, and it lives in
+    // the list header rather than in a virtualised row, so a scroll
+    // down a long release can never dispose it.
+    expect(_byId(SemanticsIds.workbenchSelectToggle), findsOneWidget);
+    await tester.tap(
+      _byId(SemanticsIds.workbenchSelectToggle),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.workbenchBulkPane), findsNothing);
   });
 
   testWidgets('the rewrite section regroups the release and the workbench '

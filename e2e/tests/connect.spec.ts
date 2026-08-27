@@ -52,11 +52,12 @@ test('a session mirrors to the server and relays remote control', async ({ app, 
   const endpoints = await app.api.get('/player/endpoints');
   expect((endpoints.endpoints ?? []).some((e) => e.kind === 'client')).toBe(true);
 
-  // Client B: opens its own player screen on another item, then the
-  // device picker, and finds A's session listed.
+  // Client B: plays another item into its dock, expands its own
+  // player, then opens the device picker and finds A's session listed.
   const b = await device();
   await b.nav.enter('tracks');
   await b.music.play(other.pid);
+  await b.player.ready();
   await b.cast.openFromPlayer();
   await b.cast.takeOver(sessionId);
 

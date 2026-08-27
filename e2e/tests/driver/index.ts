@@ -130,6 +130,8 @@ export { T, J } from './budgets';
 export {
   clickInView,
   clickThrough,
+  clickUntil,
+  clickUntilRequested,
   chooseFromMenu,
   typeInto,
   wheelIntoReach,

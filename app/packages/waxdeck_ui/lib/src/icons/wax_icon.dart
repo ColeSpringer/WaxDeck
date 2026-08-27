@@ -408,6 +408,18 @@ abstract final class WaxIcons {
     IconData(0xE0EA, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
+  /// Phosphor `lock-simple`. Something held against edits.
+  static const lock = WaxGlyph(
+    IconData(0xE308, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE308, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `lock-simple-open`. The same hold, released.
+  static const lockOpen = WaxGlyph(
+    IconData(0xE30A, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE30A, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   /// Phosphor `arrow-clockwise`.
   static const refresh = WaxGlyph(
     IconData(0xE036, fontFamily: _regularFamily, fontPackage: _fontPackage),
@@ -604,6 +616,8 @@ abstract final class WaxIcons {
     'delete': delete,
     'share': share,
     'bookmark': bookmark,
+    'lock': lock,
+    'lockOpen': lockOpen,
     'refresh': refresh,
     'upload': upload,
     'openExternal': openExternal,

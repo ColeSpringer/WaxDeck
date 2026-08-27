@@ -676,45 +676,31 @@ class _Header extends StatelessWidget {
     final metadata = state.metadata;
     final title = metadata.fields['title'] ?? l10n.metadataUntitled;
     final artist = metadata.fields['artist'];
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                title,
-                style: WaxType.titleEntity.copyWith(color: colors.textPrimary),
-              ),
-              if (artist != null && artist.isNotEmpty)
-                Text(
-                  artist,
-                  style: WaxType.body.copyWith(color: colors.textSecondary),
-                ),
-              const SizedBox(height: WaxSpace.s8),
-              Text(
-                provenanceSummary(l10n, metadata),
-                style: WaxType.caption.copyWith(color: colors.textTertiary),
-              ),
-              for (final line in artifactSources(l10n, metadata))
-                Text(
-                  line,
-                  style: WaxType.caption.copyWith(color: colors.textTertiary),
-                ),
-            ],
-          ),
+        Text(
+          title,
+          style: WaxType.titleEntity.copyWith(color: colors.textPrimary),
         ),
-        DomainBadge(_domain(metadata.mediaType)),
+        if (artist != null && artist.isNotEmpty)
+          Text(
+            artist,
+            style: WaxType.body.copyWith(color: colors.textSecondary),
+          ),
+        const SizedBox(height: WaxSpace.s8),
+        Text(
+          provenanceSummary(l10n, metadata),
+          style: WaxType.caption.copyWith(color: colors.textTertiary),
+        ),
+        for (final line in artifactSources(l10n, metadata))
+          Text(
+            line,
+            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          ),
       ],
     );
   }
-
-  static WaxDomain _domain(MediaType type) => switch (type) {
-    MediaType.music => WaxDomain.music,
-    MediaType.podcast => WaxDomain.podcasts,
-    MediaType.audiobook => WaxDomain.audiobooks,
-  };
 }
 
 /// The entities this item belongs to. Doors beside the form rather than

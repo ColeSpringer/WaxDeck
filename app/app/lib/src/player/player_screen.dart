@@ -1069,81 +1069,102 @@ class _UpNextPeek extends ConsumerWidget {
                 ),
                 Row(
                   children: <Widget>[
-                    Text(
-                      l10n.playerUpNext,
-                      style: WaxType.overline.copyWith(
-                        color: colors.textTertiary,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (remaining > 0)
-                      Text(
-                        l10n.playerLeftCount(remaining),
-                        style: WaxType.caption.copyWith(
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: WaxSpace.s4),
-                // Title and artist as one paragraph rather than a row of
-                // two. A row strands the artist at the far edge if the
-                // title is Expanded, and splits the width down the middle
-                // if both are Flexible - a flex child is capped at its
-                // share and hands nothing back, so a short artist leaves
-                // a hole the title was truncated to make. One line lays
-                // out left to right and runs out at the end, which is
-                // where an ellipsis belongs. The remaining count is on
-                // the line above and keeps the right edge to itself.
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text.rich(
-                        TextSpan(
-                          children: <InlineSpan>[
-                            TextSpan(
-                              text:
-                                  item?.title ??
-                                  context.l10n.commonLoadingTitle,
-                              style: WaxType.body.copyWith(
-                                color: colors.textPrimary,
+                    // The cover of what is coming leads the strip,
+                    // spanning both text lines beside the name it
+                    // repeats - where the eye lands first, next to the
+                    // words that spell it out. A fixed box whether or
+                    // not the item has resolved: skipping the cell
+                    // while it loads would shove both text lines
+                    // sideways the moment the cover arrives.
+                    SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: item == null
+                          ? null
+                          : ArtworkImage(
+                              size: 40,
+                              artwork: waxArtwork(
+                                ref.watch(artworkStoreProvider),
+                                item.artUrl,
                               ),
+                              monogram: item.title,
+                              shape: waxShapeOf(item.mediaType),
+                              domain: waxDomainOf(item.mediaType),
                             ),
-                            if (item?.artist != null) ...<InlineSpan>[
-                              const WidgetSpan(
-                                child: SizedBox(width: WaxSpace.s8),
-                              ),
-                              TextSpan(
-                                text: item!.artist!,
-                                style: WaxType.caption.copyWith(
-                                  color: colors.textSecondary,
+                    ),
+                    const SizedBox(width: WaxSpace.s12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              // Expanded, and the count keeps itself
+                              // whole: the pair lost the cover's width,
+                              // and a letter-spaced overline beside a
+                              // localized count has to give somewhere
+                              // on a narrow window at a large scale.
+                              Expanded(
+                                child: Text(
+                                  l10n.playerUpNext,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: WaxType.overline.copyWith(
+                                    color: colors.textTertiary,
+                                  ),
                                 ),
                               ),
+                              if (remaining > 0)
+                                Text(
+                                  l10n.playerLeftCount(remaining),
+                                  style: WaxType.caption.copyWith(
+                                    color: colors.textSecondary,
+                                  ),
+                                ),
                             ],
-                          ],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: WaxSpace.s4),
+                          // Title and artist as one paragraph rather
+                          // than a row of two. A row strands the artist
+                          // at the far edge if the title is Expanded,
+                          // and splits the width down the middle if
+                          // both are Flexible - a flex child is capped
+                          // at its share and hands nothing back, so a
+                          // short artist leaves a hole the title was
+                          // truncated to make. One line lays out left
+                          // to right and runs out at the end, which is
+                          // where an ellipsis belongs.
+                          Text.rich(
+                            TextSpan(
+                              children: <InlineSpan>[
+                                TextSpan(
+                                  text:
+                                      item?.title ??
+                                      context.l10n.commonLoadingTitle,
+                                  style: WaxType.body.copyWith(
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                                if (item?.artist != null) ...<InlineSpan>[
+                                  const WidgetSpan(
+                                    child: SizedBox(width: WaxSpace.s8),
+                                  ),
+                                  TextSpan(
+                                    text: item!.artist!,
+                                    style: WaxType.caption.copyWith(
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
-                    // The right edge had nothing on it but the count two
-                    // lines up, so the name sat against a stretch of
-                    // empty bar. The cover of what is coming is the
-                    // thing that belongs there: it says the same as the
-                    // line beside it, faster.
-                    if (item != null) ...<Widget>[
-                      const SizedBox(width: WaxSpace.s12),
-                      ArtworkImage(
-                        size: 32,
-                        artwork: waxArtwork(
-                          ref.watch(artworkStoreProvider),
-                          item.artUrl,
-                        ),
-                        monogram: item.title,
-                        shape: waxShapeOf(item.mediaType),
-                        domain: waxDomainOf(item.mediaType),
-                      ),
-                    ],
                   ],
                 ),
               ],

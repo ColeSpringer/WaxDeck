@@ -4,7 +4,7 @@ import { Locator, expect } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough, typeInto } from '../gestures';
+import { chooseFromMenu, clickThrough, clickToward, typeInto } from '../gestures';
 
 export class Player extends Surface {
   /// Play/pause. Also the marker that something is playing at all,
@@ -30,12 +30,31 @@ export class Player extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.starButton('')));
   }
 
-  /// Wait until the player is up and holding something.
+  /// Wait until the player is up and holding something, expanding it
+  /// from the deck bar when playback started docked.
+  ///
+  /// Play lands in the dock and the full player is a choice, so a spec
+  /// that needs the player makes that choice here. `clickToward` fires
+  /// the expand click only while the toggle is missing - once the
+  /// player is up it overlays the shell and the deck bar leaves the
+  /// semantics tree - and `pushOnce` behind the affordance makes an
+  /// accidental double-click safe.
+  ///
+  /// Call it with local playback started. The expand identifier is
+  /// shared by every face of the bar, and a bar showing a remote
+  /// session or a restore offer expands to a different screen - so on
+  /// those faces this navigates somewhere else and then times out.
   async ready(): Promise<void> {
-    await this.toggle().waitFor({ timeout: T.nav });
+    const expand = this.ctx.page.locator(sem(SemanticsIds.deckExpand));
+    await expect(async () => {
+      await clickToward(expand, { shows: this.toggle() });
+    }).toPass({ timeout: T.nav });
   }
 
   /// Stop the clock, and settle when the transport agrees it has.
+  /// Expands the full player on the way when playback is docked - the
+  /// toggle it drives is the player's - so the player is up when this
+  /// returns.
   ///
   /// A method rather than a click in a spec, because the forced click
   /// belongs to the driver - and because "paused" is the button's own

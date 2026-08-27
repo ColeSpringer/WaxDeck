@@ -7,7 +7,7 @@
 // so each forced click here sits behind a destination or rect-at-rest
 // check instead.
 
-import { expect, Locator, Page } from '@playwright/test';
+import { expect, Locator, Page, Request } from '@playwright/test';
 import { T } from './budgets';
 
 // Type into a flutter text field and verify the app took the text.
@@ -101,6 +101,50 @@ export async function clickToward(
     }
     await expect(goal.gone).toHaveCount(0, { timeout: T.step });
   }
+}
+
+// Click a canvas control until an out-of-band signal reports it landed,
+// as one retried unit. For a click whose effect never shows in the DOM
+// - a media request, a network write - where `clickToward` has nothing
+// to hold to. Only for triggers a repeated click cannot damage: an
+// attempt whose signal stays false through the grace window fires the
+// click again. The polled wait is what `waitFor` is to `clickToward`:
+// without it every toPass tick would re-click, and a re-click that
+// restarts the control can cancel the very effect being polled for.
+export async function clickUntil(
+  trigger: Locator,
+  landed: () => boolean,
+  press: Press = {},
+) {
+  const { button = 'left' } = press;
+  await expect(async () => {
+    if (!landed()) {
+      await trigger.click({ timeout: 2_000, force: true, button }).catch(() => {});
+    }
+    await expect
+      .poll(landed, { timeout: T.step, message: 'the click should land' })
+      .toBe(true);
+  }).toPass({ timeout: T.nav });
+}
+
+// Click a canvas control until the page issues a matching request -
+// `clickUntil` with the listener armed here, so the listener cannot
+// time out under the loop that polls it (a raced clock would strand
+// the flag false while the loop kept clicking).
+export async function clickUntilRequested(
+  page: Pick<Page, 'waitForRequest'>,
+  trigger: Locator,
+  matches: (req: Request) => boolean,
+  press: Press = {},
+) {
+  let seen = false;
+  page
+    .waitForRequest(matches, { timeout: 0 })
+    .then(() => {
+      seen = true;
+    })
+    .catch(() => {});
+  await clickUntil(trigger, () => seen, press);
 }
 
 // Click a canvas control and wait for what it opens, as one retried

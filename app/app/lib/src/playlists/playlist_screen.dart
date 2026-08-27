@@ -176,7 +176,6 @@ class _Header extends ConsumerWidget {
               pid: playlist.pid,
             ),
           );
-      context.push(WaxRoute.nowPlaying);
     }
 
     final l10n = context.l10n;
@@ -791,7 +790,6 @@ void _openEntry(
         ),
         startIndex: index,
       );
-  context.push(WaxRoute.nowPlaying);
 }
 
 /// Rename, visibility, covers, exports, and delete.

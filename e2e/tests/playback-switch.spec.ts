@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { T } from './driver';
+import { T, clickUntilRequested } from './driver';
 
 // Switching items mid-play must replace what the engine is playing.
 // just_audio's web backend caches source players by playlist id, and the
@@ -37,19 +37,15 @@ test('switching tracks mid-play fetches the new media', async ({ app, page }) =>
   // reported success while keeping the old stream loaded - the first
   // item played on (or replayed) under the second item's face - and
   // this request never happened.
-  const mediaB = page.waitForRequest(
+  //
+  // Play lands in the dock, so the listing and its second row never
+  // left the screen - but the deck bar the play gesture settles on is
+  // already up from the first track, so the click is retried with the
+  // media request itself as the goal that proves it landed. A repeated
+  // click merely restarts the same track.
+  await clickUntilRequested(
+    page,
+    app.music.item(b),
     (req) => req.url().includes('/media/') && req.url().includes(`pid=${b}`),
-    { timeout: T.nav },
   );
-  // The player screen sits over the tracks index; its own collapse
-  // control pops it (browser history against flutter's navigator is
-  // handled asynchronously and can pop the wrong thing).
-  await app.player.collapse(app.music.item(b));
-  // Really gone, not merely behind the index: the gesture that plays the
-  // second row skips its own click when the player is already showing,
-  // so a collapse that has not finished would make the tap a no-op and
-  // the request below would never come.
-  await expect(app.player.toggle()).toBeHidden();
-  await app.music.play(b);
-  await mediaB;
 });

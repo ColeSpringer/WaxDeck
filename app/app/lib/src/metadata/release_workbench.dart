@@ -416,17 +416,6 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
         largeTitle: false,
         semanticsId: SemanticsIds.metadataWorkbench,
         onBack: () => context.leave(fallback: WaxRoute.music),
-        actions: <Widget>[
-          WaxIconButton(
-            glyph: _selecting ? WaxIcons.close : WaxIcons.check,
-            label: _selecting
-                ? l10n.metadataWorkbenchSelectLeave
-                : l10n.metadataWorkbenchSelectEnter,
-            active: _selecting,
-            semanticsId: SemanticsIds.workbenchSelectToggle,
-            onPressed: () => unawaited(_toggleSelecting()),
-          ),
-        ],
         // A filling sliver, not a body: the list needs a bounded height
         // and a scroll position of its own for j/k to move by
         // arithmetic, and the pane keeps its save bar under its own
@@ -459,7 +448,13 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
                         children: <Widget>[
                           SizedBox(
                             width: width,
-                            child: _list(members, album.value),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                _selectHeader(),
+                                Expanded(child: _list(members, album.value)),
+                              ],
+                            ),
                           ),
                           if (_twoPane) ...<Widget>[
                             WaxSplitter(
@@ -617,6 +612,29 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
     );
   }
 
+  /// The selection toggle, in a slim header pinned over the list -
+  /// beside the rows it selects, not in the app bar away from them,
+  /// and outside the builder so scrolling a long release can never
+  /// virtualise the only pointer affordance for leaving the mode away.
+  Widget _selectHeader() {
+    final l10n = context.l10n;
+    return Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
+        child: WaxIconButton(
+          glyph: _selecting ? WaxIcons.close : WaxIcons.check,
+          label: _selecting
+              ? l10n.metadataWorkbenchSelectLeave
+              : l10n.metadataWorkbenchSelectEnter,
+          active: _selecting,
+          semanticsId: SemanticsIds.workbenchSelectToggle,
+          onPressed: () => unawaited(_toggleSelecting()),
+        ),
+      ),
+    );
+  }
+
   /// The release itself, as the list's first row: what the workbench
   /// is open on, and the door to its entity fields.
   Widget _albumRow(AlbumDetail? album, {required int trackCount}) {
@@ -634,16 +652,6 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
         ),
         selected: _twoPane && !_selecting && _open == null,
         onTap: () => unawaited(_openAlbum()),
-        actions: <Widget>[
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: WaxSpace.s8),
-            child: WaxIcon(
-              WaxIcons.edit,
-              size: 16,
-              color: WaxColors.of(context).textTertiary,
-            ),
-          ),
-        ],
       ),
     );
   }

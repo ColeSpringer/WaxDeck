@@ -5925,7 +5925,7 @@ abstract class AppLocalizations {
   /// **'Could not load the metadata'**
   String get metadataLoadError;
 
-  /// Accessible name of the control that locks one field. {field} is the field's wire name and is not translated.
+  /// Accessible name of the control that locks one field. {field} is the field's localized label (an unknown field falls back to its wire name).
   ///
   /// In en, this message translates to:
   /// **'Lock {field}'**
@@ -6285,7 +6285,7 @@ abstract class AppLocalizations {
   /// **'Edit metadata'**
   String get metadataTitle;
 
-  /// Accessible name of the control that unlocks one field. {field} is the field's wire name and is not translated.
+  /// Accessible name of the control that unlocks one field. {field} is the field's localized label (an unknown field falls back to its wire name).
   ///
   /// In en, this message translates to:
   /// **'Unlock {field}'**
@@ -9656,12 +9656,6 @@ abstract class AppLocalizations {
   /// **'Explicit'**
   String get podcastExplicit;
 
-  /// Field taking the address of a show to follow.
-  ///
-  /// In en, this message translates to:
-  /// **'Feed or channel URL'**
-  String get podcastFeedUrlLabel;
-
   /// Accessible name of the control asking the server to hold one episode's bytes.
   ///
   /// In en, this message translates to:
@@ -10094,6 +10088,12 @@ abstract class AppLocalizations {
   /// **'Episodes to keep'**
   String get podcastRetentionLabel;
 
+  /// URL field label while the RSS source is selected in the add-by-URL form.
+  ///
+  /// In en, this message translates to:
+  /// **'Feed URL'**
+  String get podcastRssUrlLabel;
+
   /// Label of the podcast directory search box in the add dialog, and of the button that runs it. Names what is searched - the public podcast directories - because the bare "Search directory" read as looking through local folders.
   ///
   /// In en, this message translates to:
@@ -10351,6 +10351,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Lifts speech over a noisy room'**
   String get podcastVoiceBoostHelp;
+
+  /// URL field label while the YouTube source is selected in the add-by-URL form; the parser takes either address.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel or playlist URL'**
+  String get podcastYoutubeUrlLabel;
 
   /// Button on the podcast hub's empty state.
   ///

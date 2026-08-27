@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -118,7 +117,6 @@ class TrackListScreen extends ConsumerWidget {
                         ),
                         startIndex: index,
                       );
-                  context.push(WaxRoute.nowPlaying);
                 },
               );
             },

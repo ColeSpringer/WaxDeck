@@ -85,9 +85,10 @@ class MixShelf extends ConsumerWidget {
 /// Mints a mix from a card's seed and plays it.
 ///
 /// The same landing the instant-mix sheet uses: the track list is pushed
-/// so there is somewhere to come back to, and the player over it. The
-/// mix's own `basis` rides the list, which is what tells the truth about
-/// whether this was sonic or metadata - no copy here may imply otherwise.
+/// so the running order is on screen, and playback starts in the dock.
+/// The mix's own `basis` rides the list, which is what tells the truth
+/// about whether this was sonic or metadata - no copy here may imply
+/// otherwise.
 Future<void> playMixCard(
   BuildContext context,
   WidgetRef ref,
@@ -117,8 +118,8 @@ Future<void> playMixCard(
     // play command: it is honoured whether or not the card is still on
     // screen, and the deck bar is where it shows up. What is conditional
     // is the navigation - the router outlives this widget, so pushing
-    // unguarded would slam a track list and a player over whichever
-    // destination the visitor walked to meanwhile.
+    // unguarded would slam a track list over whichever destination the
+    // visitor walked to meanwhile.
     playback.play(
       mix.items,
       // A stored name or none at all, never the card's sentence: the
@@ -139,7 +140,6 @@ Future<void> playMixCard(
         ),
       ),
     );
-    unawaited(router.push<void>(WaxRoute.nowPlaying));
   } on WaxDeckApiException catch (e) {
     messenger
       ..hideCurrentSnackBar()

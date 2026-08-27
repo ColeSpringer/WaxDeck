@@ -6152,9 +6152,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastExplicit => 'Explicit';
 
   @override
-  String get podcastFeedUrlLabel => 'Feed or channel URL';
-
-  @override
   String podcastFetchEpisode(String title) {
     return 'Fetch $title to the server';
   }
@@ -6483,6 +6480,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastRetentionLabel => 'Episodes to keep';
 
   @override
+  String get podcastRssUrlLabel => 'Feed URL';
+
+  @override
   String get podcastSearchDirectory => 'Search podcast directories';
 
   @override
@@ -6648,6 +6648,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get podcastVoiceBoostHelp => 'Lifts speech over a noisy room';
+
+  @override
+  String get podcastYoutubeUrlLabel => 'Channel or playlist URL';
 
   @override
   String get podcastsEmptyAction => 'Add a show';

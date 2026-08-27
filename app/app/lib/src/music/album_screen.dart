@@ -89,7 +89,6 @@ class AlbumScreen extends ConsumerWidget {
     final items = ref.read(musicItemsProvider(_listing)).value?.items;
     final tracks = albumOrder(items ?? const <ItemSummary>[]);
     playAlbum(
-      context,
       ref,
       pid: pid,
       facts: AlbumFacts.of(
@@ -237,10 +236,9 @@ class _AlbumIdentity extends ConsumerWidget {
   }
 }
 
-/// Plays this album and opens the player on it. The header's buttons and
-/// the palette's rows both run this.
+/// Plays this album into the dock. The header's buttons and the
+/// palette's rows both run this.
 void playAlbum(
-  BuildContext context,
   WidgetRef ref, {
   required String pid,
   required AlbumFacts facts,
@@ -259,7 +257,6 @@ void playAlbum(
           pid: pid,
         ),
       );
-  context.push(WaxRoute.nowPlaying);
 }
 
 class _Header extends ConsumerWidget {
@@ -280,7 +277,6 @@ class _Header extends ConsumerWidget {
             .contains('admin') ??
         false;
     void play({bool shuffle = false}) => playAlbum(
-      context,
       ref,
       pid: pid,
       facts: facts,
@@ -434,7 +430,7 @@ class _TrackList extends ConsumerWidget {
                 semanticsId: SemanticsIds.indexItem(index),
               ),
               leadingIndex: track.trackNumber ?? index + 1,
-              onTap: () => _play(context, ref, index),
+              onTap: () => _play(ref, index),
               // "Go to album" would open the screen the row is on, so
               // the menu keeps only what leads somewhere else. The
               // album handle is the list's own, not the row's, for the
@@ -479,7 +475,7 @@ class _TrackList extends ConsumerWidget {
     );
   }
 
-  void _play(BuildContext context, WidgetRef ref, int index) {
+  void _play(WidgetRef ref, int index) {
     ref
         .read(nowPlayingProvider.notifier)
         .play(
@@ -491,7 +487,6 @@ class _TrackList extends ConsumerWidget {
             pid: albumPid,
           ),
         );
-    context.push(WaxRoute.nowPlaying);
   }
 }
 

@@ -87,9 +87,18 @@ test('sonic coverage answers similar tracks and a sonic path', async ({ app }) =
   // home shelf rather than from the player.
   await app.nav.enter('tracks');
   await app.music.play(charlie);
+  // Paused, like the sibling above: the fixture tracks are seconds
+  // long, and similar-tracks reads the player's current item - a queue
+  // still marching could hand it a neighbour with no proven coverage.
+  // pause() also expands the player, which runSimilarTracks needs.
+  await app.player.pause();
   await app.discovery.runSimilarTracks();
+  // Sonic exactly, not either engine: the seed is the item the API
+  // half just proved answers sonic, and the pause above is what makes
+  // that identity hold - accepting the metadata fallback here would
+  // let the browser half pass without the coverage this spec pins.
   await expect(app.discovery.basis('similar')).toHaveText(
-    /^Answered by the (metadata|sonic) engine$/,
+    /^Answered by the sonic engine$/,
   );
 
   const path = await app.api.get('/mixes/path', {

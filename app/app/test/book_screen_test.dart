@@ -125,6 +125,27 @@ void main() {
     expect(engine.playing, isTrue);
   });
 
+  testWidgets('a tapped chapter selects itself while the session plays', (
+    tester,
+  ) async {
+    // The screen is the tap's own feedback now that play lands in the
+    // dock: the selected row follows the live session position, where
+    // the stored resume lags until a checkpoint writes it back.
+    bool selectedOf(String id) =>
+        (tester.widget(_byId(id).first) as Semantics).properties.selected ??
+        false;
+    final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
+    await tester.pumpWidget(_host(_repo(), engine));
+    await tester.pumpAndSettle();
+
+    expect(selectedOf(SemanticsIds.chapter(1)), isFalse);
+
+    await _tap(tester, SemanticsIds.chapter(1));
+
+    expect(selectedOf(SemanticsIds.chapter(1)), isTrue);
+    expect(selectedOf(SemanticsIds.chapter(0)), isFalse);
+  });
+
   testWidgets('the settings sheet PUTs the per-book settings', (tester) async {
     final repo = _repo();
     await tester.pumpWidget(_host(repo, FakeEngine()));

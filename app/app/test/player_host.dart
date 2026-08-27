@@ -75,9 +75,9 @@ class PlayerHarness {
   }
 }
 
-/// Starts [item] playing and mounts the player over it, which is what a
-/// tap on a row does: the queue gets the item, playback follows it, and
-/// the screen shows what came of that.
+/// Starts [item] playing and mounts the player over it, the state a
+/// listener reaches by expanding the dock: the queue gets the item,
+/// playback follows it, and the screen shows what came of that.
 ///
 /// [host] wraps the player for tests that need more around it than a
 /// bare app: the discovery journeys mount it over the real route table

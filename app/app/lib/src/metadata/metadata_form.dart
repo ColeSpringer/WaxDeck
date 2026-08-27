@@ -966,16 +966,19 @@ class MetadataFieldRow extends StatelessWidget {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final locked = state.isLocked(field.name);
+    // Once: the lock's two names and every control arm below must all
+    // say the same field.
+    final fieldLabel = metadataFieldLabel(l10n, field.name);
     final marks = Padding(
       padding: const EdgeInsets.only(bottom: WaxSpace.s8),
       child: Row(
         children: <Widget>[
           CodecChip(_provenanceText(l10n), emphasis: dirty),
           WaxIconButton(
-            glyph: locked ? WaxIcons.bookmark : WaxIcons.edit,
+            glyph: locked ? WaxIcons.lock : WaxIcons.lockOpen,
             label: locked
-                ? l10n.metadataUnlockField(field.name)
-                : l10n.metadataLockField(field.name),
+                ? l10n.metadataUnlockField(fieldLabel)
+                : l10n.metadataLockField(fieldLabel),
             active: locked,
             size: 16,
             color: locked ? colors.accent : null,
@@ -988,12 +991,12 @@ class MetadataFieldRow extends StatelessWidget {
     final stored = state.metadata.fields[field.name];
     final control = switch (metadataFieldType(field.name)) {
       MetadataFieldType.text => WaxTextField(
-        label: metadataFieldLabel(l10n, field.name),
+        label: fieldLabel,
         controller: draft.controllerFor(field.name, stored ?? ''),
         semanticsId: SemanticsIds.metadataField(field.name),
       ),
       MetadataFieldType.count => WaxTextField(
-        label: metadataFieldLabel(l10n, field.name),
+        label: fieldLabel,
         controller: draft.controllerFor(field.name, stored ?? ''),
         digitsOnly: true,
         semanticsId: SemanticsIds.metadataField(field.name),
@@ -1006,13 +1009,13 @@ class MetadataFieldRow extends StatelessWidget {
               child: ExcludeSemantics(
                 // The switch carries this exact string as its own name.
                 child: Text(
-                  metadataFieldLabel(l10n, field.name),
+                  fieldLabel,
                   style: WaxType.body.copyWith(color: colors.textPrimary),
                 ),
               ),
             ),
             WaxSwitch(
-              label: metadataFieldLabel(l10n, field.name),
+              label: fieldLabel,
               value: draft.toggleValue(field.name, stored),
               semanticsId: SemanticsIds.metadataField(field.name),
               onChanged: busy
@@ -1023,13 +1026,13 @@ class MetadataFieldRow extends StatelessWidget {
         ),
       ),
       MetadataFieldType.genres => _GenreChips(
-        label: metadataFieldLabel(l10n, field.name),
+        label: fieldLabel,
         genres: draft.genresValue(stored),
         onRemove: busy ? null : draft.removeGenre,
         onAdd: busy ? null : onAddGenre,
       ),
       MetadataFieldType.choice => WaxChoice<String>(
-        label: metadataFieldLabel(l10n, field.name),
+        label: fieldLabel,
         value: draft.choiceValue(field.name, stored),
         semanticsId: SemanticsIds.metadataField(field.name),
         options: metadataChoiceOptions(field.name),

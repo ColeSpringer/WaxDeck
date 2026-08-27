@@ -102,17 +102,12 @@ ItemSummary bookItemSummary(BookDetail book) => ItemSummary(
   artUrl: book.artUrl,
 );
 
-/// Starts [book] at [positionMs] on the book timeline and opens the
-/// player.
+/// Starts [book] at [positionMs] on the book timeline. Playback lands
+/// in the dock; the full player is the listener's own step.
 ///
 /// A book queues as itself: its parts roll inside the session, so there
 /// is nothing else in the queue for chapters to be.
-void playBook(
-  BuildContext context,
-  WidgetRef ref,
-  BookDetail book, {
-  required int positionMs,
-}) {
+void playBook(WidgetRef ref, BookDetail book, {required int positionMs}) {
   ref
       .read(nowPlayingProvider.notifier)
       .play(
@@ -124,7 +119,6 @@ void playBook(
         ),
         positionMs: positionMs,
       );
-  context.push(WaxRoute.nowPlaying);
 }
 
 /// Cover, contributors, where the listener stands, and the verbs.
@@ -137,10 +131,11 @@ class _Header extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final progress = _progressOf(ref, book.pid);
     final resume = ref.watch(bookResumeProvider(book.pid)).value;
-    // The resume endpoint is the cross-device answer and names the
-    // chapter; the batch play state is what the hub already holds. Either
-    // one places the listener, so the screen draws whichever landed.
-    final positionMs = resume?.positionMs ?? progress.positionMs;
+    // The live session first, while this book is what is playing. Then
+    // the resume endpoint, which is the cross-device answer and names
+    // the chapter; then the batch play state the hub already holds.
+    final live = liveBookPositionMs(ref, book.pid);
+    final positionMs = live ?? resume?.positionMs ?? progress.positionMs;
     final started = positionMs > 0 && !progress.finished;
     // A finished book's checkpoint sits at its own end, and the button
     // says "Play". An explicit position overrides the session's own
@@ -167,10 +162,20 @@ class _Header extends ConsumerWidget {
         WaxButton(
           // The verb says where it will put you, and the chapter name is
           // the part that makes it a promise rather than a guess.
-          label: started ? _resumeLabel(l10n, resume) : l10n.bookPlay,
+          label: started
+              ? _resumeLabel(
+                  l10n,
+                  // The chapter the label promises follows the position
+                  // the facts line shows: live, the stored name may be
+                  // a chapter behind the session.
+                  live == null
+                      ? resume?.chapter?.title
+                      : _chapterTitleAt(book, positionMs),
+                )
+              : l10n.bookPlay,
           icon: WaxIcons.play,
           semanticsId: SemanticsIds.bookResume,
-          onPressed: () => playBook(context, ref, book, positionMs: playFromMs),
+          onPressed: () => playBook(ref, book, positionMs: playFromMs),
         ),
         if (book.series != null) _SeriesLink(book: book),
         DownloadAction(
@@ -230,9 +235,13 @@ class _Header extends ConsumerWidget {
   /// plain "Resume" where it did not - a book with no chapter marks, or a
   /// screen whose resume read has not landed and is drawing the batch
   /// play state's position instead.
-  static String _resumeLabel(AppLocalizations l10n, BookResume? resume) {
-    final chapter = resume?.chapter?.title;
+  static String _resumeLabel(AppLocalizations l10n, String? chapter) {
     return chapter == null ? l10n.bookResume : l10n.bookResumeChapter(chapter);
+  }
+
+  static String? _chapterTitleAt(BookDetail book, int positionMs) {
+    final at = chapterIndexAt(book.chapters, positionMs);
+    return at < 0 ? null : book.chapters[at].title;
   }
 }
 
@@ -329,10 +338,13 @@ class _Chapters extends ConsumerWidget {
     if (book.chapters.isEmpty) return const SizedBox.shrink();
     final sizeClass = WaxSizeClass.of(context);
     final l10n = context.l10n;
+    // Session-first, like the header: a tapped chapter selects itself.
     final resume = ref.watch(bookResumeProvider(book.pid)).value;
     final positionMs =
-        resume?.positionMs ?? _progressOf(ref, book.pid).positionMs;
-    final current = _chapterAt(book.chapters, positionMs);
+        liveBookPositionMs(ref, book.pid) ??
+        resume?.positionMs ??
+        _progressOf(ref, book.pid).positionMs;
+    final current = chapterIndexAt(book.chapters, positionMs);
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: sizeClass.gutter.horizontal / 2,
@@ -365,25 +377,12 @@ class _Chapters extends ConsumerWidget {
               // claim playback for a chapter that may be nothing but a
               // saved place.
               selected: i == current,
-              onTap: () => playBook(
-                context,
-                ref,
-                book,
-                positionMs: book.chapters[i].startMs,
-              ),
+              onTap: () =>
+                  playBook(ref, book, positionMs: book.chapters[i].startMs),
             ),
         ],
       ),
     );
-  }
-
-  /// Which chapter holds [positionMs], or -1 before anything is heard.
-  static int _chapterAt(List<ChapterMark> chapters, int positionMs) {
-    if (positionMs <= 0) return -1;
-    for (var i = chapters.length - 1; i >= 0; i--) {
-      if (positionMs >= chapters[i].startMs) return i;
-    }
-    return -1;
   }
 
   /// How long chapter [at] runs: to the next chapter's start, or to the
@@ -742,6 +741,29 @@ PlayProgress _progressOf(WidgetRef ref, String pid) {
   return PlayProgressView(
     ref.watch(playProgressProvider(key)).value ?? const {},
   )[pid];
+}
+
+/// The live session position while [pid] is the thing playing, null
+/// otherwise.
+///
+/// Session-first because play lands in the dock: this screen is the
+/// feedback a chapter tap gets, and the stored resume lags behind the
+/// tap until a checkpoint writes it back. Read at build time, not
+/// ticked - the header and the chapter list rebuild when playback
+/// state changes, and the by-the-second clock stays the deck bar's.
+int? liveBookPositionMs(WidgetRef ref, String pid) {
+  final now = ref.watch(nowPlayingProvider);
+  if (now.entry?.pid != pid) return null;
+  return now.session?.displayPosition.inMilliseconds;
+}
+
+/// Which chapter holds [positionMs], or -1 before anything is heard.
+int chapterIndexAt(List<ChapterMark> chapters, int positionMs) {
+  if (positionMs <= 0) return -1;
+  for (var i = chapters.length - 1; i >= 0; i--) {
+    if (positionMs >= chapters[i].startMs) return i;
+  }
+  return -1;
 }
 
 /// Where the caller left off, with the chapter that position falls in.

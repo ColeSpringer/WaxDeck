@@ -34,11 +34,12 @@ export class Books extends Surface {
     await clickThrough(this.card(pid), this.resume());
   }
 
-  /// Resume, which starts playback.
+  /// Resume, which starts playback in the dock. Settles on the deck
+  /// bar, so with something already playing the click is skipped.
   async play(): Promise<void> {
     await clickThrough(
       this.resume(),
-      this.ctx.page.locator(sem(SemanticsIds.playerToggle)),
+      this.ctx.page.locator(sem(SemanticsIds.deckBar)),
     );
   }
 

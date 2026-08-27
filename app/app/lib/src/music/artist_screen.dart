@@ -152,7 +152,6 @@ class _Header extends ConsumerWidget {
             shuffle: shuffle,
             source: artistSource(pid, sourceName, loaded),
           );
-      context.push(WaxRoute.nowPlaying);
     }
 
     final l10n = context.l10n;
@@ -428,7 +427,6 @@ class _Body extends ConsumerWidget {
           startIndex: tracks.indexOf(items[index]),
           source: artistSource(pid, sourceName, state),
         );
-    context.push(WaxRoute.nowPlaying);
   }
 }
 

@@ -238,17 +238,10 @@ test.describe('large-library web gate', () => {
         .waitFor({ timeout: 60_000 });
       await openTracks(page);
 
-      // Opening an item plays it and raises the deck bar.
-      await clickThrough(anyItemRow(page), page.locator(sem(SemanticsIds.playerToggle)));
-
-      // Back to the listing the player screen covered, through the
-      // chrome rather than by URL: a goto here would reload the client
-      // and take the playback this scenario exists to measure with it.
-      await clickThrough(
-        page.locator(sem(SemanticsIds.navDestination('music'))),
-        page.locator(sem(SemanticsIds.musicTile('tracks'))),
-      );
-      await anyItemRow(page).waitFor({ timeout: 60_000 });
+      // Opening an item plays it and raises the deck bar. Play lands in
+      // the dock, so the listing this scenario scrolls never leaves the
+      // screen and there is nothing to navigate back from.
+      await clickThrough(anyItemRow(page), page.locator(sem(SemanticsIds.deckBar)));
       await expect(page.locator(sem(SemanticsIds.deckBar))).toBeVisible({ timeout: 30_000 });
 
       const pacing = await measureScrollPacing(page);

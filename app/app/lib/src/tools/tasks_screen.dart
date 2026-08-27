@@ -348,7 +348,7 @@ class _TaskRow extends ConsumerWidget {
   }
 
   /// Resolves one produced item and opens it the way a home card does:
-  /// per medium, with the player for a track.
+  /// per medium, playing a track into the dock.
   Future<void> _openResult(
     BuildContext context,
     WidgetRef ref,

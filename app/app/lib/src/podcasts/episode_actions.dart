@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -8,7 +7,6 @@ import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
-import '../shell/routes.dart';
 import 'podcasts_controller.dart';
 
 /// The verbs an episode has, wherever it is shown.
@@ -58,12 +56,6 @@ class EpisodeActions {
       await fetchAndWait(context, episode);
       return;
     }
-    unawaitedPlay(episode, positionMs: positionMs);
-    context.push(WaxRoute.nowPlaying);
-  }
-
-  /// The queue write on its own, for a caller that is not navigating.
-  void unawaitedPlay(EpisodeSummary episode, {int positionMs = 0}) {
     ref
         .read(nowPlayingProvider.notifier)
         .play(

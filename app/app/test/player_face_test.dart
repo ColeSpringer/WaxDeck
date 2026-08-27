@@ -13,7 +13,7 @@ import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart' show ArtworkCaption;
+import 'package:waxdeck_ui/waxdeck_ui.dart' show ArtworkCaption, ArtworkImage;
 
 import 'fakes.dart';
 import 'player_host.dart';
@@ -193,6 +193,27 @@ void main() {
             .getSemantics(find.bySemanticsIdentifier(SemanticsIds.playerUpNext))
             .label,
         contains('Gullwing'),
+      );
+
+      // The cover leads the strip, left of the words that repeat it.
+      final peek = find.bySemanticsIdentifier(SemanticsIds.playerUpNext);
+      final cover = find.descendant(
+        of: peek,
+        matching: find.byType(ArtworkImage),
+      );
+      expect(cover, findsOneWidget);
+      expect(
+        tester.getTopLeft(cover).dx,
+        lessThan(
+          tester
+              .getTopLeft(
+                find.descendant(
+                  of: peek,
+                  matching: find.textContaining('Gullwing', findRichText: true),
+                ),
+              )
+              .dx,
+        ),
       );
       await harness.endPlayback(tester);
     });

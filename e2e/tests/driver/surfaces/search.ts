@@ -55,11 +55,12 @@ export class Search extends Surface {
 
   /// Open a hit. Retried as a unit, because Flutter web swallows a click
   /// while its handlers are still attaching and a swallowed one here
-  /// means the player never opens at all.
+  /// means playback never starts at all. Settles on the deck bar, so
+  /// with something already playing the click is skipped.
   async play(group: string, nth: number): Promise<void> {
     await clickThrough(
       this.hit(group, nth),
-      this.ctx.page.locator(sem(SemanticsIds.playerToggle)),
+      this.ctx.page.locator(sem(SemanticsIds.deckBar)),
     );
   }
 }

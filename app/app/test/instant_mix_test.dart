@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/discovery/discovery_actions.dart';
+import 'package:waxdeck/src/discovery/track_list_screen.dart';
+import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -135,20 +137,84 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.instantMixCalls.single.excludePids, isEmpty);
-    // The mix starts playing: the first mix track is loaded into the
-    // engine and its player is on top of the mix list.
+    // The mix starts in the dock: the first mix track is loaded into
+    // the engine while the mix list is the screen on top. The full
+    // player is a choice the deck bar offers, not a landing. The list
+    // is a shell route now, so the real tree carries the deck bar.
     expect(engine.loadedUrl, contains(_mixPid1));
     expect(engine.playing, isTrue);
-    expect(find.text('Mix Opener'), findsWidgets);
-
-    // Popping the player lands on the mix list for the rest of the mix.
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerBack));
-    await tester.pumpAndSettle();
     expect(find.text('Instant mix'), findsOneWidget);
+    expect(find.text('Mix Opener'), findsWidgets);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.scopedItem('mix', 1)),
       findsOneWidget,
     );
+    expect(find.bySemanticsIdentifier(SemanticsIds.playerBack), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsOneWidget);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('playing from the mix list stays put and raises the dock', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      items: [testItem(_mixPid1), testItem(_mixPid2)],
+    );
+    final engine = FakeEngine();
+    final harness = PlayerHarness(
+      playbackContainer(repo: repo, engine: engine),
+    );
+    // The dock in the screen's own slot, the way the shell mounts it,
+    // so the play tap's whole answer is visible in one tree. Animations
+    // off: a playing bar never settles.
+    final screen = Builder(
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: Stack(
+          children: [
+            TrackListScreen(
+              title: 'Instant mix',
+              basis: MixBasis.sonic,
+              items: [
+                testItem(_mixPid1, title: 'Mix Opener'),
+                testItem(_mixPid2, title: 'Mix Follower'),
+              ],
+              idPrefix: 'mix',
+            ),
+            const Align(
+              alignment: Alignment.bottomCenter,
+              child: DeckBarHost(),
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: harness.container,
+        child: routedHost(screen),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsNothing);
+
+    // warnIfMissed: a row's identifier sits on its content region
+    // rather than on the whole row (MediaListRow says why), so the tap
+    // lands on the row's own handler and not on the node the finder
+    // matched.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.scopedItem('mix', 1)),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    // Playback starts from the tapped row, the route does not change,
+    // and the dock is where it shows.
+    expect(engine.loadedUrl, contains(_mixPid2));
+    expect(engine.playing, isTrue);
+    expect(find.text('Instant mix'), findsOneWidget);
+    expect(find.bySemanticsIdentifier(SemanticsIds.playerBack), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsOneWidget);
     await harness.endPlayback(tester);
   });
 

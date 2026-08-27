@@ -69,7 +69,7 @@ class MetadataChaptersSection extends ConsumerWidget {
                   final colors = WaxColors.of(context);
                   final locked = state.isLocked('chapters');
                   return WaxIconButton(
-                    glyph: locked ? WaxIcons.bookmark : WaxIcons.edit,
+                    glyph: locked ? WaxIcons.lock : WaxIcons.lockOpen,
                     label: locked
                         ? l10n.metadataUnlockField(l10n.bookChaptersTitle)
                         : l10n.metadataLockField(l10n.bookChaptersTitle),

@@ -142,16 +142,14 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
         return;
       }
       // An empty queue: mirror how playlists start playback. The mix
-      // list stands in for the playlist screen, and the player opens on
-      // the first track so the mix starts immediately. Popping the
-      // player lands on the list to keep going. Route futures resolve on
-      // pop, so neither push is awaited.
+      // list stands in for the playlist screen, playback starts in the
+      // dock, and the deck bar is the way into the full player. Route
+      // futures resolve on pop, so the push is not awaited.
       //
-      // No production caller reaches this today - the sheet is raised
-      // from the player's own menu, and a player showing a track has a
-      // queue holding it. Kept because it is the right answer for the
-      // state it names, and because enqueueing behind nothing would
-      // leave the tracks queued and silent.
+      // Reached whenever the sheet rises with nothing playing - a
+      // listing row's or a card's Instant mix, not just the player's
+      // own menu - and this is the right answer there: enqueueing
+      // behind nothing would leave the tracks queued and silent.
       unawaited(
         router.push<void>(
           WaxRoute.tracks,
@@ -170,7 +168,6 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
         // provenance line words the kind instead.
         source: const QueueSource(kind: QueueSourceKind.mix, label: ''),
       );
-      unawaited(router.push<void>(WaxRoute.nowPlaying));
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()

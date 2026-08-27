@@ -152,6 +152,7 @@ test('the player adds a track to a fresh manual playlist', async ({ app }) => {
 
   await app.nav.enter('tracks');
   await app.music.play(target.pid);
+  await app.player.ready();
   await app.player.addToPlaylist();
   await app.playlists.createFromSheet('From The Player');
 

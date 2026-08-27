@@ -57,7 +57,7 @@ export class Podcasts extends Surface {
     await clickThrough(this.add(), byUrl);
     await byUrl.click({ timeout: T.step });
     await confirm.waitFor({ timeout: T.nav });
-    await typeInto(page, page.getByRole('textbox', { name: 'Feed or channel URL' }), feedUrl);
+    await typeInto(page, page.getByRole('textbox', { name: 'Feed URL' }), feedUrl);
     await confirm.click();
   }
 
@@ -91,7 +91,9 @@ export class Podcasts extends Surface {
     await clickThrough(this.episodeInfo(pid), shows);
   }
 
-  /// Play an episode from its row.
+  /// Play an episode from its row. Settles on the deck bar, so with
+  /// something already playing the click is skipped - a repeat play
+  /// needs its own signal.
   ///
   /// clickInView, not clickThrough: an episode row sits directly under
   /// the filter chips, and a forced click against a rect read while the
@@ -105,9 +107,9 @@ export class Podcasts extends Surface {
       // is below the fold; the search field is a stable place inside the
       // same scroll view to put the cursor before wheeling.
       surface: page.locator(sem(SemanticsIds.showEpisodeSearch)),
-      settled: page.locator(sem(SemanticsIds.playerToggle)),
+      settled: page.locator(sem(SemanticsIds.deckBar)),
     });
-    await page.locator(sem(SemanticsIds.playerToggle)).waitFor({ timeout: T.nav });
+    await page.locator(sem(SemanticsIds.deckBar)).waitFor({ timeout: T.nav });
   }
 
   /// Unsubscribe, keeping the files the server already fetched.

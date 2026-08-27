@@ -63,6 +63,7 @@ test('login, browse the grid, and play a track', async ({ app, page }) => {
   // walking skeleton, and getting there is part of what it covers.
   await app.nav.to('tracks');
   await app.music.play(pid);
+  await app.player.ready();
 
   // Opening the item starts playback through the single-origin media
   // proxy. The rendered duration proves the stream's metadata decoded.
@@ -100,8 +101,10 @@ test.describe('leaving the full-screen player', () => {
     await app.player.ready();
     await app.player.dismissWithEscape(app.music.item(pid));
 
-    // And back up, to click off the content this time.
-    await app.music.play(pid);
+    // And back up, to click off the content this time. The track is
+    // still playing behind the listing, so expanding the dock is the
+    // whole journey - a second row tap would be skipped by the play
+    // gesture anyway, its deck-bar goal already met.
     await app.player.ready();
     const dismissed = await app.player.dismissByBackdrop(app.music.item(pid));
     test.skip(!dismissed, 'the backdrop gutter needs a window wider than the content');

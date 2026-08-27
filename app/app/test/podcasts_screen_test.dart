@@ -293,6 +293,26 @@ void main() {
     expect(repo.subscribeCalls.single.sourceType, 'youtube');
   });
 
+  testWidgets('the URL field label follows the selected source', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    await _pump(tester, repo);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAdd));
+    await tester.pumpAndSettle();
+    await _openUrlPath(tester);
+
+    expect(find.text('Feed URL'), findsOneWidget);
+    expect(find.text('Channel or playlist URL'), findsNothing);
+
+    await tester.tap(find.text('YouTube'));
+    await tester.pump();
+
+    expect(find.text('Channel or playlist URL'), findsOneWidget);
+    expect(find.text('Feed URL'), findsNothing);
+  });
+
   testWidgets('a failed subscribe says why and keeps the dialog', (
     tester,
   ) async {

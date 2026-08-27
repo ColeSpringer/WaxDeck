@@ -4905,7 +4905,7 @@
   },
   "metadataLockField": "Lock {field}",
   "@metadataLockField": {
-    "description": "Accessible name of the control that locks one field. {field} is the field's wire name and is not translated.",
+    "description": "Accessible name of the control that locks one field. {field} is the field's localized label (an unknown field falls back to its wire name).",
     "placeholders": {
       "field": {
         "type": "String",
@@ -5202,7 +5202,7 @@
   },
   "metadataUnlockField": "Unlock {field}",
   "@metadataUnlockField": {
-    "description": "Accessible name of the control that unlocks one field. {field} is the field's wire name and is not translated.",
+    "description": "Accessible name of the control that unlocks one field. {field} is the field's localized label (an unknown field falls back to its wire name).",
     "placeholders": {
       "field": {
         "type": "String",
@@ -8181,10 +8181,6 @@
   "@podcastExplicit": {
     "description": "Marks a show or an episode the feed flagged as explicit."
   },
-  "podcastFeedUrlLabel": "Feed or channel URL",
-  "@podcastFeedUrlLabel": {
-    "description": "Field taking the address of a show to follow."
-  },
   "podcastFetchEpisode": "Fetch {title} to the server",
   "@podcastFetchEpisode": {
     "description": "Accessible name of the control asking the server to hold one episode's bytes.",
@@ -8595,6 +8591,10 @@
   "@podcastRetentionLabel": {
     "description": "Field bounding how many of a show's downloads the server holds."
   },
+  "podcastRssUrlLabel": "Feed URL",
+  "@podcastRssUrlLabel": {
+    "description": "URL field label while the RSS source is selected in the add-by-URL form."
+  },
   "podcastSearchDirectory": "Search podcast directories",
   "@podcastSearchDirectory": {
     "description": "Label of the podcast directory search box in the add dialog, and of the button that runs it. Names what is searched - the public podcast directories - because the bare \"Search directory\" read as looking through local folders."
@@ -8822,6 +8822,10 @@
   "podcastVoiceBoostHelp": "Lifts speech over a noisy room",
   "@podcastVoiceBoostHelp": {
     "description": "Help under the voice-boost switch."
+  },
+  "podcastYoutubeUrlLabel": "Channel or playlist URL",
+  "@podcastYoutubeUrlLabel": {
+    "description": "URL field label while the YouTube source is selected in the add-by-URL form; the parser takes either address."
   },
   "podcastsEmptyAction": "Add a show",
   "@podcastsEmptyAction": {

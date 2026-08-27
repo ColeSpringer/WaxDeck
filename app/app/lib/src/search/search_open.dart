@@ -12,11 +12,12 @@ import '../shell/routes.dart';
 /// Opens what a search hit names, for the search screen and the palette
 /// alike.
 ///
-/// Pushed, never gone to: every one of these is declared under something
-/// that is not search, so `go` would rebuild that ancestry and throw away
-/// the surface the visitor is standing in. A kind
-/// this build does not know does nothing rather than being played as a
-/// track.
+/// The arms that navigate push, never go: each destination is declared
+/// under something that is not search, so `go` would rebuild that
+/// ancestry and throw away the surface the visitor is standing in. A
+/// track navigates nowhere at all - it plays into the dock where the
+/// visitor stands. A kind this build does not know does nothing rather
+/// than being played as a track.
 void openSearchHit(BuildContext context, WidgetRef ref, SearchHit hit) {
   switch (hit.kind) {
     case 'artist':
@@ -38,7 +39,6 @@ void openSearchHit(BuildContext context, WidgetRef ref, SearchHit hit) {
           pid: hit.pid,
         ),
       );
-      context.push(WaxRoute.nowPlaying);
   }
 }
 
