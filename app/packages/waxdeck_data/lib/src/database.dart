@@ -248,6 +248,22 @@ class ClientSettings extends Table {
 class MirrorDatabase extends _$MirrorDatabase {
   MirrorDatabase(super.executor);
 
+  /// True once [close] was called. The sync engine's outbox writes gate
+  /// on this - a write racing teardown has nowhere to land once the
+  /// mirror is gone - and it has to be this database's own state: the
+  /// engine's lifetime is shorter (a server address change rebuilds it
+  /// while the mirror stays open), so engine disposal is the wrong key.
+  bool get closed => _closed;
+  var _closed = false;
+
+  @override
+  Future<void> close() {
+    // Set before the first await, so a teardown sweep's synchronous
+    // close call is visible to any write that resumes after it.
+    _closed = true;
+    return super.close();
+  }
+
   @override
   int get schemaVersion => 4;
 

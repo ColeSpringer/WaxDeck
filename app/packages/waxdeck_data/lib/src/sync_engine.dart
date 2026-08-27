@@ -525,6 +525,25 @@ class SyncEngine {
 
   // --- the offline outbox ----------------------------------------------------
 
+  /// Runs one outbox write, dropped once the mirror is closed: a
+  /// playback session's unawaited shutdown checkpoint can arrive after
+  /// container teardown has closed the database, and a position with
+  /// nowhere left to land is not worth an uncaught error on the way
+  /// out. The gate is the mirror's own lifetime, not this engine's - a
+  /// server address change rebuilds the engine while the mirror stays
+  /// open, and a session holding the old engine must keep queueing.
+  /// While the mirror is open, every failure still surfaces; drift does
+  /// not export its closed-channel exception type, so the narrowing is
+  /// this state check rather than an `on` clause.
+  Future<void> _outboxWrite(Future<void> Function() body) async {
+    if (db.closed) return;
+    try {
+      await body();
+    } catch (_) {
+      if (!db.closed) rethrow;
+    }
+  }
+
   /// Replaces any queued mutation of the same kind for the same item:
   /// the outbox carries final intents, not history, so an hour of
   /// offline checkpoints replays as one write, not seven hundred.
@@ -536,26 +555,27 @@ class SyncEngine {
 
   /// Queues a position checkpoint (also applied to the local mirror so
   /// offline UI reflects it immediately).
-  Future<void> queueCheckpoint(String pid, int positionMs) async {
-    await _coalesce('position', pid);
-    await db
-        .into(db.outboxMutations)
-        .insert(
-          OutboxMutationsCompanion.insert(
-            kind: 'position',
-            pid: pid,
-            positionMs: Value(positionMs),
-            recordedAt: DateTime.now(),
-          ),
+  Future<void> queueCheckpoint(String pid, int positionMs) =>
+      _outboxWrite(() async {
+        await _coalesce('position', pid);
+        await db
+            .into(db.outboxMutations)
+            .insert(
+              OutboxMutationsCompanion.insert(
+                kind: 'position',
+                pid: pid,
+                positionMs: Value(positionMs),
+                recordedAt: DateTime.now(),
+              ),
+            );
+        await db.customStatement(
+          'INSERT INTO mirror_play_states (pid, position_ms) VALUES (?, ?) '
+          'ON CONFLICT(pid) DO UPDATE SET position_ms = excluded.position_ms',
+          [pid, positionMs],
         );
-    await db.customStatement(
-      'INSERT INTO mirror_play_states (pid, position_ms) VALUES (?, ?) '
-      'ON CONFLICT(pid) DO UPDATE SET position_ms = excluded.position_ms',
-      [pid, positionMs],
-    );
-  }
+      });
 
-  Future<void> queueStar(String pid, bool starred) async {
+  Future<void> queueStar(String pid, bool starred) => _outboxWrite(() async {
     await _coalesce('star', pid);
     await db
         .into(db.outboxMutations)
@@ -572,9 +592,9 @@ class SyncEngine {
       'ON CONFLICT(pid) DO UPDATE SET starred = excluded.starred',
       [pid, starred ? 1 : 0],
     );
-  }
+  });
 
-  Future<void> queueRating(String pid, int? rating) async {
+  Future<void> queueRating(String pid, int? rating) => _outboxWrite(() async {
     await _coalesce('rating', pid);
     await db
         .into(db.outboxMutations)
@@ -591,45 +611,47 @@ class SyncEngine {
       'ON CONFLICT(pid) DO UPDATE SET rating = excluded.rating',
       [pid, rating],
     );
-  }
+  });
 
   /// Queues a star on a catalog entity (an artist or an album).
   ///
   /// No mirror write: mirror_play_states is the item play-state cache,
   /// and an entity star is its own fact, not a member's. The winning
   /// value comes back through the server stream on reconnect.
-  Future<void> queueEntityStar(String pid, bool starred) async {
-    await _coalesce('entity-star', pid);
-    await db
-        .into(db.outboxMutations)
-        .insert(
-          OutboxMutationsCompanion.insert(
-            kind: 'entity-star',
-            pid: pid,
-            starred: Value(starred),
-            recordedAt: DateTime.now(),
-          ),
-        );
-  }
+  Future<void> queueEntityStar(String pid, bool starred) =>
+      _outboxWrite(() async {
+        await _coalesce('entity-star', pid);
+        await db
+            .into(db.outboxMutations)
+            .insert(
+              OutboxMutationsCompanion.insert(
+                kind: 'entity-star',
+                pid: pid,
+                starred: Value(starred),
+                recordedAt: DateTime.now(),
+              ),
+            );
+      });
 
   /// Queues a rating on a catalog entity; see [queueEntityStar].
-  Future<void> queueEntityRating(String pid, int? rating) async {
-    await _coalesce('entity-rating', pid);
-    await db
-        .into(db.outboxMutations)
-        .insert(
-          OutboxMutationsCompanion.insert(
-            kind: 'entity-rating',
-            pid: pid,
-            rating: Value(rating),
-            recordedAt: DateTime.now(),
-          ),
-        );
-  }
+  Future<void> queueEntityRating(String pid, int? rating) =>
+      _outboxWrite(() async {
+        await _coalesce('entity-rating', pid);
+        await db
+            .into(db.outboxMutations)
+            .insert(
+              OutboxMutationsCompanion.insert(
+                kind: 'entity-rating',
+                pid: pid,
+                rating: Value(rating),
+                recordedAt: DateTime.now(),
+              ),
+            );
+      });
 
   /// Queues a finished listen session; the session id is the
   /// idempotency key, so a duplicate flush can never double-count.
-  Future<void> queueListen(ListenSession session) async {
+  Future<void> queueListen(ListenSession session) => _outboxWrite(() async {
     await db
         .into(db.outboxListens)
         .insert(
@@ -644,7 +666,7 @@ class SyncEngine {
           ),
           mode: InsertMode.insertOrIgnore,
         );
-  }
+  });
 
   /// Replays the queues in recorded order. Mutations carry their
   /// recorded times; the server reconciles per medium and the winning
