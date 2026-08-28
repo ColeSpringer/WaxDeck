@@ -53,6 +53,8 @@ import 'package:waxdeck_api_gen/src/model/catalog_sync_entry.dart';
 import 'package:waxdeck_api_gen/src/model/catalog_sync_page.dart';
 import 'package:waxdeck_api_gen/src/model/chapter_mark.dart';
 import 'package:waxdeck_api_gen/src/model/chapters_edit.dart';
+import 'package:waxdeck_api_gen/src/model/commit_credits.dart';
+import 'package:waxdeck_api_gen/src/model/commit_lyrics.dart';
 import 'package:waxdeck_api_gen/src/model/coverage_count.dart';
 import 'package:waxdeck_api_gen/src/model/credit.dart';
 import 'package:waxdeck_api_gen/src/model/credits_edit.dart';
@@ -126,6 +128,7 @@ import 'package:waxdeck_api_gen/src/model/invite_create.dart';
 import 'package:waxdeck_api_gen/src/model/invite_created.dart';
 import 'package:waxdeck_api_gen/src/model/invite_list.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
+import 'package:waxdeck_api_gen/src/model/item_acquisition.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
 import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
@@ -163,6 +166,9 @@ import 'package:waxdeck_api_gen/src/model/media_type.dart';
 import 'package:waxdeck_api_gen/src/model/media_type_listening.dart';
 import 'package:waxdeck_api_gen/src/model/merge_request.dart';
 import 'package:waxdeck_api_gen/src/model/merge_result.dart';
+import 'package:waxdeck_api_gen/src/model/metadata_commit.dart';
+import 'package:waxdeck_api_gen/src/model/metadata_commit_part.dart';
+import 'package:waxdeck_api_gen/src/model/metadata_commit_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_edit.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_fields.dart';
@@ -348,6 +354,8 @@ import 'package:waxdeck_api_gen/src/model/upload_create.dart';
 import 'package:waxdeck_api_gen/src/model/upload_grouping.dart';
 import 'package:waxdeck_api_gen/src/model/upload_page.dart';
 import 'package:waxdeck_api_gen/src/model/upload_quota.dart';
+import 'package:waxdeck_api_gen/src/model/upload_target.dart';
+import 'package:waxdeck_api_gen/src/model/upload_targets.dart';
 import 'package:waxdeck_api_gen/src/model/user.dart';
 import 'package:waxdeck_api_gen/src/model/user_account.dart';
 import 'package:waxdeck_api_gen/src/model/user_create.dart';
@@ -413,6 +421,8 @@ part 'serializers.g.dart';
   CatalogSyncPage,
   ChapterMark,
   ChaptersEdit,
+  CommitCredits,
+  CommitLyrics,
   CoverageCount,
   Credit,
   CreditsEdit,
@@ -486,6 +496,7 @@ part 'serializers.g.dart';
   InviteCreated,
   InviteList,
   Item,
+  ItemAcquisition,
   ItemMetadata,
   ItemPage,
   ItemPermissions,
@@ -523,6 +534,9 @@ part 'serializers.g.dart';
   MediaTypeListening,
   MergeRequest,
   MergeResult,
+  MetadataCommit,
+  MetadataCommitPart,
+  MetadataCommitResult,
   MetadataEdit,
   MetadataEditResult,
   MetadataFields,
@@ -708,6 +722,8 @@ part 'serializers.g.dart';
   UploadGrouping,
   UploadPage,
   UploadQuota,
+  UploadTarget,
+  UploadTargets,
   User,$User,
   UserAccount,
   UserCreate,

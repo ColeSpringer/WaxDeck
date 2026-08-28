@@ -34,6 +34,38 @@ final uploadFormatSetsProvider = FutureProvider<UploadFormatSets>(
   },
 );
 
+/// The libraries this account may file an upload or an acquisition
+/// under.
+///
+/// Empty is the honest answer for three different servers: one too old
+/// for the route, one that refused the read, and one where this account
+/// has nothing writable. All three want the same thing from the client -
+/// no picker, and the server routing as it always did - so the failure
+/// is degraded here rather than surfaced.
+///
+/// autoDispose because the picker is the only reader and a dialog is a
+/// short life; `retry: null` because a failure here is final by
+/// construction (there is nothing to show either way) and the backoff
+/// would hold `.future` unsettled while a dialog waits on it.
+final uploadTargetsProvider = FutureProvider.autoDispose<List<UploadTarget>>(
+  retry: (_, _) => null,
+  (ref) async {
+    try {
+      return await ref.watch(repositoryProvider).listUploadTargets();
+    } on WaxDeckApiException {
+      return const <UploadTarget>[];
+    }
+  },
+);
+
+/// The candidates for one media type, in the order the picker offers
+/// them. A single candidate is not a choice, which is what the picker
+/// keys its own visibility on.
+List<UploadTarget> uploadTargetsFor(
+  List<UploadTarget> targets,
+  MediaType mediaType,
+) => targets.where((t) => t.mediaTypes.contains(mediaType)).toList();
+
 /// How long a pick or drop waits on the health read before filtering
 /// with the mirror. Short on purpose: on the web the picker dialog
 /// must open inside the tap's transient user activation, and a wait
@@ -182,6 +214,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   Future<void> uploadPicked(
     PickedAudioFile file, {
     required String mediaType,
+    String? libraryPid,
     String? batchId,
     bool? identify,
   }) async {
@@ -191,6 +224,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
         fileName: file.name,
         path: path,
         mediaType: mediaType,
+        libraryPid: libraryPid,
         batchId: batchId,
         batchPath: file.relativeDir,
         sizeBytes: file.size,
@@ -207,6 +241,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       size: file.size,
       openRead: openRead,
       mediaType: mediaType,
+      libraryPid: libraryPid,
       batchId: batchId,
       batchPath: file.relativeDir,
       identify: identify,
@@ -223,6 +258,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     required String fileName,
     required String path,
     required String mediaType,
+    String? libraryPid,
     String? batchId,
     String? batchPath,
     int? sizeBytes,
@@ -235,6 +271,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
           fileName: fileName,
           sizeBytes: size,
           mediaType: mediaType,
+          libraryPid: libraryPid,
           batchId: batchId,
           batchPath: _cleanBatchPath(batchId, batchPath),
           identify: identify,
@@ -254,6 +291,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     required int size,
     required Stream<List<int>> Function([int? start, int? end]) openRead,
     required String mediaType,
+    String? libraryPid,
     String? batchId,
     String? batchPath,
     bool? identify,
@@ -264,6 +302,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
           fileName: fileName,
           sizeBytes: size,
           mediaType: mediaType,
+          libraryPid: libraryPid,
           batchId: batchId,
           batchPath: _cleanBatchPath(batchId, batchPath),
           identify: identify,

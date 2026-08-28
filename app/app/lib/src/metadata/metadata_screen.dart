@@ -669,6 +669,38 @@ class _Header extends StatelessWidget {
     return out;
   }
 
+  /// "Origin: a podcast feed - https://feeds.example.com/show/ep-12",
+  /// or null when the catalog recorded no origin for the item.
+  ///
+  /// Read-only by nature: origin is evidence the import left behind
+  /// (an acquisition the server ran, or the file's own `SOURCE_URL`
+  /// tag) rather than a field, so there is nothing to edit and the
+  /// line below says so. The URL arrives already redacted - the read
+  /// answers everyone who can see the item, and the stored value can
+  /// carry credentials - so what is here is what may be shown.
+  static String? originLine(AppLocalizations l10n, ItemMetadata metadata) {
+    final acq = metadata.acquisition;
+    if (acq == null) return null;
+    final source = _originSourceName(l10n, acq.sourceType);
+    final url = acq.sourceUrl;
+    return url == null || url.isEmpty
+        ? l10n.metadataOriginLine(source)
+        : l10n.metadataOriginLineWithUrl(source, url);
+  }
+
+  /// How the item arrived, as a noun phrase the origin line reads
+  /// around. The set is open - a provider stamps its own token - and an
+  /// unknown one is shown as it stands rather than described wrongly.
+  /// `youtube` is a brand, so it is spelled here and not translated.
+  static String _originSourceName(AppLocalizations l10n, String sourceType) =>
+      switch (sourceType) {
+        'local' => l10n.metadataOriginLocal,
+        'rss' => l10n.metadataOriginRss,
+        'manual' => l10n.metadataOriginManual,
+        'youtube' => 'YouTube',
+        _ => sourceType,
+      };
+
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
@@ -676,6 +708,7 @@ class _Header extends StatelessWidget {
     final metadata = state.metadata;
     final title = metadata.fields['title'] ?? l10n.metadataUntitled;
     final artist = metadata.fields['artist'];
+    final origin = originLine(l10n, metadata);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -698,6 +731,17 @@ class _Header extends StatelessWidget {
             line,
             style: WaxType.caption.copyWith(color: colors.textTertiary),
           ),
+        if (origin != null) ...<Widget>[
+          const SizedBox(height: WaxSpace.s8),
+          Text(
+            origin,
+            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          ),
+          Text(
+            l10n.metadataOriginRecorded,
+            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          ),
+        ],
       ],
     );
   }

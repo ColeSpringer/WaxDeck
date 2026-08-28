@@ -208,6 +208,91 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/metadata/commit:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: commitItemMetadata
+      summary: Commit a staged metadata draft in one request
+      description: >
+        Runs every staged part of one item's editor draft server-side,
+        in the order the editor's own sequential save uses: scalar
+        fields, then each credit role, then lyrics (or their removal),
+        then chapters, then each tag set, then each tag removal, then
+        the release status. It exists for latency: the sequential save
+        is one round trip per part, which on a phone reaching a home
+        server through a reverse proxy is felt as lag on a single
+        Save, and every gap between the calls is a partial-failure
+        window on a flaky link.
+
+
+        At least one part is required. `writeBack`, `lock` and `force`
+        are hoisted here rather than repeated per part, and each part
+        takes the ones its own endpoint takes: chapters and tag sets
+        take `lock` and `force`, a tag removal, a lyrics clear and the
+        release status take none.
+
+
+        **Deliberately not a transaction.** Write-back is best-effort
+        by design, so end-to-end atomicity is unattainable, and
+        catalog-only atomicity would need a combined-edit facade
+        upstream. Parts run until one is refused; that part reports
+        `refused` with its `Error`, every later part reports `skipped`,
+        and the parts before it stay committed. That is exactly what
+        the sequential save produces, which is the point: the two
+        paths are interchangeable, and a client keeps the sequential
+        one as its fallback for an older server.
+
+
+        So a refusal is a `200` carrying a refused part, not a `4xx`:
+        the write-back failures the committed parts accumulated are
+        what the editor's banner is made of, and a status code would
+        discard them. A lock conflict that `PATCH /items/{pid}/metadata`
+        answers `409` arrives here as a part refused with
+        `field-locked`, worded exactly as that endpoint words it.
+
+
+        One exception, and it is what the status codes below are for: a
+        failure that says the server is temporarily unwell rather than
+        that the edit was wrong - `catalog-maintenance`, `internal`,
+        `catalog-busy` - answers with its own status code when it
+        happens before anything has committed. Nothing is lost by doing
+        so, and a client answers those with a banner and a retry rather
+        than by showing them to the person who typed the value. Once a
+        part has committed, the same failure rides as a part refusal,
+        because discarding that part's report is the worse trade.
+
+
+        Gated per item like the sequential parts: administrators, or
+        the user whose upload brought the item in. It is not the bulk
+        edit and does not carry that operation's admin-only gate.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataCommit"
+      responses:
+        "200":
+          description: >
+            What each part did. The catalog write for every part
+            reported `committed` has landed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataCommitResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /items/bulk-edit:
     post:
       operationId: bulkEditMetadata
@@ -1191,6 +1276,77 @@ components:
             absent reads as unknown, and a client that treats it as
             false only withholds a door the server would have refused
             anyway.
+        acquisition:
+          $ref: "#/components/schemas/ItemAcquisition"
+
+    ItemAcquisition:
+      type: object
+      description: >
+        How and where the item entered the library: recorded evidence,
+        not a field. It is derived from what the import saw - an
+        acquisition the server performed, or the file's own
+        `SOURCE_URL`/`SOURCE_ID` tags - and no endpoint edits it, so a
+        client draws it as a read-only caption rather than a form line.
+
+
+        Present whenever the catalog holds an origin row, which
+        includes a scanned file carrying acquisition tags; absent means
+        no evidence of origin was ever seen. Absence is the ordinary
+        state of a locally ripped file and is not an error.
+      required: [sourceType]
+      properties:
+        sourceType:
+          type: string
+          description: >
+            How the item arrived: `manual` (acquired by means the
+            catalog did not record - which is what a tag-derived row
+            reads, and what an import that named no provider stamps),
+            `rss`, `youtube`, or whatever an acquisition provider
+            stamped. Open set; treat an unknown value as opaque and
+            show it as it stands. `manual` is much the commonest value
+            and says only that origin evidence exists, so read
+            `sourceUrl` for the substance.
+
+
+            `local` is defined upstream for an item with no remote
+            origin, and this server never writes it: such an item has
+            no acquisition row at all, and so no block here. A client
+            should still handle it, because the value can arrive from a
+            catalog another host wrote.
+          example: rss
+        sourceUrl:
+          type: string
+          description: >
+            Where it came from, redacted for sharing: emitted only for
+            `http`/`https` origins, and reduced to scheme, host and
+            path - userinfo, query and fragment are dropped. The read
+            answers every user who can see the item while the stored
+            value is verbatim (a credentialed feed URL, a signed
+            download link, a local path), so what is not safe for all
+            of them is not emitted at all. Absent means the stored
+            origin was not an http URL, or was empty; it never means
+            the origin is unknown.
+
+
+            The path is kept, because without it the field says only
+            which host and answers nothing. A secret carried in a path
+            segment rather than the query therefore survives the
+            redaction - the trade is deliberate, and the exposure is
+            to accounts that can already see and stream the item.
+          example: https://feeds.example.com/show/episode-12.mp3
+        provider:
+          type: string
+          description: The acquisition provider that answered, when one did.
+          example: rss
+        acquiredAt:
+          type: string
+          format: date-time
+          description: >
+            When the item was acquired, as the catalog recorded it.
+            Optional rather than required because a row whose time the
+            catalog does not hold is better described by its absence
+            than by a timestamp at the start of the era, which a client
+            would render as a confident wrong date.
 
     ItemPermissions:
       type: object
@@ -1254,6 +1410,13 @@ components:
           description: >
             Where a fetched value's bytes came from, on the rows that
             have one (an enrichment or feed cover). Empty otherwise.
+
+
+            Redacted exactly as `ItemAcquisition.sourceUrl` is, and for
+            the same reason: `http`/`https` only, reduced to scheme,
+            host and path, because a feed cover's row holds the show's
+            own enclosure URL and this read answers every account that
+            can see the item.
         locked:
           type: boolean
           description: Whether the field is locked.
@@ -1430,6 +1593,203 @@ components:
             lines skipped.
           items:
             type: string
+
+    MetadataCommit:
+      type: object
+      description: >
+        The staged parts of one item's editor draft. Every part is
+        optional and at least one is required; an empty body answers
+        `invalid-request` rather than committing nothing successfully.
+
+
+        The three write switches are hoisted out of the per-part
+        bodies the sequential endpoints take, because a draft is saved
+        with one set of them.
+      properties:
+        fields:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+          description: >
+            Field name to new value; an empty string clears the field.
+            Names come from the kind's vocabulary, as for
+            `editItemMetadata`.
+        credits:
+          type: array
+          maxItems: 50
+          description: >
+            Replacement people per role, applied in the order given.
+          items:
+            $ref: "#/components/schemas/CommitCredits"
+        lyrics:
+          $ref: "#/components/schemas/CommitLyrics"
+        clearLyrics:
+          type: boolean
+          description: >
+            Remove the stored lyrics. Mutually exclusive with
+            `lyrics`; sending both answers `invalid-request`.
+        chapters:
+          type: array
+          maxItems: 2000
+          description: >
+            A replacement chapter list for a book: ordered,
+            non-overlapping, on the book timeline. An empty array
+            restores the embedded chapters, as for `setBookChapters`.
+          items:
+            $ref: "#/components/schemas/ChapterMark"
+        tagSets:
+          type: object
+          maxProperties: 100
+          description: >
+            Custom tag key to its replacement values; empty values
+            clear that tag. Applied in sorted key order, because a
+            JSON object carries none of its own and the parts list
+            has to be reproducible.
+          additionalProperties:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+        tagRemoves:
+          type: array
+          maxItems: 100
+          description: Custom tag keys to remove, applied in the order given.
+          items:
+            type: string
+        unofficial:
+          type: boolean
+          description: >
+            The release-status mark: true marks the item as having no
+            canonical release, false clears the mark. Omitted leaves it
+            alone.
+        writeBack:
+          type: boolean
+          default: false
+          description: >
+            Also write the new values into the backing file's tags,
+            for the parts that have a tag form (fields, credits,
+            lyrics).
+        lock:
+          type: boolean
+          default: true
+          description: >
+            Lock what each part wrote, against scans and enrichment.
+        force:
+          type: boolean
+          default: false
+          description: Override existing locks.
+
+    CommitCredits:
+      type: object
+      description: >
+        Replacement people for one credit role inside a compound
+        commit. The write switches live on the commit rather than here.
+      required: [role, names]
+      properties:
+        role:
+          type: string
+          description: The role, from the kind's role vocabulary.
+          example: producer
+        names:
+          type: array
+          maxItems: 100
+          description: The people; empty clears the role.
+          items:
+            type: string
+
+    CommitLyrics:
+      type: object
+      description: >
+        Replacement lyrics inside a compound commit. At least one of
+        `lrc` and `plain` must carry content. The write switches live
+        on the commit rather than here.
+      properties:
+        lrc:
+          type: string
+          maxLength: 200000
+          description: >
+            Timed lines as LRC text. Malformed lines are skipped and
+            reported as warnings with their line numbers.
+        plain:
+          type: string
+          maxLength: 200000
+          description: A plain unsynchronized block.
+
+    MetadataCommitResult:
+      type: object
+      description: >
+        What a compound commit did, part by part in execution order.
+
+
+        Read `parts` rather than the status code: a refusal is a 200
+        here, and the accumulated `writeBackFailures` and `warnings`
+        belong to the parts that committed before it.
+
+
+        There is no `resultingAlbumPid`. Editing a release-keying field
+        on one item can still regroup its release, exactly as
+        `editItemMetadata` can, and neither operation reports where it
+        landed; only the bulk edit does, because only its caller (the
+        release workbench) is following a whole release across the
+        move.
+      required: [parts]
+      properties:
+        parts:
+          type: array
+          description: >
+            One entry per part the request carried, in the order they
+            were run. A part after a refused one is present and
+            `skipped`, so the list always accounts for the whole
+            request.
+          items:
+            $ref: "#/components/schemas/MetadataCommitPart"
+        writeBackFailures:
+          type: array
+          description: >
+            Files whose tags could not be updated, merged across every
+            part and deduplicated: several parts can report the same
+            file for the same reason, and each line is for a person to
+            read once.
+          items:
+            $ref: "#/components/schemas/WriteBackFailure"
+        warnings:
+          type: array
+          description: >
+            The parts' non-fatal notes, merged: typed drop warnings
+            from the tag library, roles without a tag form, malformed
+            LRC lines skipped.
+          items:
+            type: string
+
+    MetadataCommitPart:
+      type: object
+      description: One part of a compound commit and what became of it.
+      required: [part, status]
+      properties:
+        part:
+          type: string
+          enum: [fields, credit, lyrics, chapters, tagSet, tagRemove, releaseStatus]
+          description: >
+            Which staged part this entry is about. `lyrics` covers both
+            replacing them and clearing them.
+        detail:
+          type: string
+          description: >
+            Which one, where the part repeats: the role for `credit`,
+            the tag key for `tagSet` and `tagRemove`. Absent otherwise.
+          example: producer
+        status:
+          type: string
+          enum: [committed, refused, skipped]
+          description: >
+            `committed` means the catalog write landed (write-back
+            trouble rides `writeBackFailures`, never this).
+            `refused` is the one part that stopped the commit, with
+            its `refusal`. `skipped` is a part after that one, which
+            was never attempted.
+        refusal:
+          $ref: "#/components/schemas/Error"
 
     BulkEdit:
       type: object

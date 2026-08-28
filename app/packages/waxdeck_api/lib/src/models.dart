@@ -3257,6 +3257,7 @@ class ItemMetadata {
     this.releaseGroupPid,
     this.writeBackIssues = const [],
     this.mayCurate,
+    this.acquisition,
   });
 
   final String pid;
@@ -3298,6 +3299,38 @@ class ItemMetadata {
   /// curator in front of a refusal screen for an item their next save
   /// would be given.
   final bool? mayCurate;
+
+  /// How the item entered the library, when the catalog recorded it.
+  /// Read-only evidence rather than a field: nothing in the edit
+  /// surface writes it. Null on an older server as well as on an item
+  /// with no origin row, which read the same to a caption.
+  final ItemAcquisition? acquisition;
+}
+
+/// One item's recorded origin.
+class ItemAcquisition {
+  const ItemAcquisition({
+    required this.sourceType,
+    this.sourceUrl,
+    this.provider,
+    this.acquiredAt,
+  });
+
+  /// `local`, `rss`, `youtube`, `manual`, or whatever an acquisition
+  /// provider stamped. Open set.
+  final String sourceType;
+
+  /// Where it came from, already redacted by the server: http(s) only,
+  /// with userinfo and query gone. Null when the stored origin was not
+  /// a shareable web address, which is not the same as unknown.
+  final String? sourceUrl;
+
+  final String? provider;
+
+  /// When the catalog recorded the acquisition. Null where it holds no
+  /// time, which is better said by absence than by a date at the start
+  /// of the era.
+  final DateTime? acquiredAt;
 }
 
 /// One file a write-back could not update.
@@ -3324,6 +3357,147 @@ class MetadataEditResult {
   final bool applied;
   final List<WriteBackFailure> writeBackFailures;
   final List<String> warnings;
+}
+
+/// One library an upload or acquisition may name.
+///
+/// Naming one selects the library whose settings govern the import (its
+/// matching mode, its singles auto-apply) and whose read-only state
+/// gates it. It does not choose where the file is placed: that is the
+/// catalog's own routing by media type into a managed root.
+class UploadTarget {
+  const UploadTarget({
+    required this.pid,
+    required this.name,
+    required this.mediaTypes,
+    required this.managed,
+  });
+
+  final String pid;
+  final String name;
+
+  /// What the library accepts, already flattened: a mixed library lists
+  /// every kind it takes.
+  final List<MediaType> mediaTypes;
+
+  /// Whether the library is a managed root, and so a place the catalog
+  /// can put files. Reported, not required.
+  final bool managed;
+}
+
+/// One editor draft's staged parts, for the compound save. Every part
+/// is optional and at least one is required; the nullable collections
+/// are the ones whose empty form means something (an empty chapter list
+/// restores the embedded chapters).
+///
+/// The three write switches live here rather than on each part: a draft
+/// is saved with one set of them.
+class MetadataCommit {
+  const MetadataCommit({
+    this.fields,
+    this.credits = const [],
+    this.lyrics,
+    this.clearLyrics = false,
+    this.chapters,
+    this.tagSets = const {},
+    this.tagRemoves = const [],
+    this.unofficial,
+    this.writeBack = false,
+    this.lock = true,
+    this.force = false,
+  });
+
+  final Map<String, String>? fields;
+  final List<CommitCredits> credits;
+  final CommitLyrics? lyrics;
+  final bool clearLyrics;
+  final List<ChapterEdit>? chapters;
+  final Map<String, List<String>> tagSets;
+  final List<String> tagRemoves;
+  final bool? unofficial;
+  final bool writeBack;
+  final bool lock;
+  final bool force;
+}
+
+/// Replacement people for one credit role inside a compound commit.
+class CommitCredits {
+  const CommitCredits({required this.role, required this.names});
+
+  final String role;
+  final List<String> names;
+}
+
+/// Replacement lyrics inside a compound commit; at least one block
+/// carries content.
+class CommitLyrics {
+  const CommitLyrics({this.lrc, this.plain});
+
+  final String? lrc;
+  final String? plain;
+}
+
+/// What a compound commit did, part by part in execution order.
+///
+/// Read [parts] rather than the absence of a thrown exception: a refused
+/// part is a successful response, and [writeBackFailures] and [warnings]
+/// belong to the parts that committed before it.
+class MetadataCommitResult {
+  const MetadataCommitResult({
+    required this.parts,
+    this.writeBackFailures = const [],
+    this.warnings = const [],
+  });
+
+  final List<MetadataCommitPart> parts;
+  final List<WriteBackFailure> writeBackFailures;
+  final List<String> warnings;
+
+  /// The refusal that stopped the commit, or null when every part
+  /// committed.
+  WaxDeckApiException? get refusal => parts
+      .where((p) => p.status == MetadataCommitStatus.refused)
+      .map((p) => p.refusal)
+      .whereType<WaxDeckApiException>()
+      .firstOrNull;
+}
+
+/// The staged parts a commit reports on. Open on the wire; an unknown
+/// spelling reads as [unknown] rather than failing the parse, since the
+/// envelope's own totals are what a client acts on.
+enum MetadataCommitPartKind {
+  fields,
+  credit,
+  lyrics,
+  chapters,
+  tagSet,
+  tagRemove,
+  releaseStatus,
+  unknown,
+}
+
+/// What became of one part.
+enum MetadataCommitStatus { committed, refused, skipped, unknown }
+
+/// One part of a compound commit and what became of it.
+class MetadataCommitPart {
+  const MetadataCommitPart({
+    required this.part,
+    required this.status,
+    this.detail,
+    this.refusal,
+  });
+
+  final MetadataCommitPartKind part;
+  final MetadataCommitStatus status;
+
+  /// Which one, where the part repeats: the role for a credit, the tag
+  /// key for a tag set or removal.
+  final String? detail;
+
+  /// Why this part was refused, carrying no status code because the
+  /// response itself succeeded.
+  final WaxDeckApiException? refusal;
 }
 
 /// Outcome of a bulk metadata edit.

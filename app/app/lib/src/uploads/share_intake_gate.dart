@@ -67,6 +67,13 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     // no dialog: the share sheet is a fire-and-forget gesture, and
     // auto clustering does the right thing for an album share while
     // leaving unrelated files separate.
+    //
+    // The library follows the same rule: no dialog means no choice, so
+    // the last one this device filed under is used where the server
+    // still offers it, and nothing is named otherwise. A share must not
+    // grow a prompt, and inheriting the last answer is closer to what
+    // the person meant than sending none is on a server with several.
+    final libraryPid = await _sharedTarget(ref);
     String? batchId;
     if (files.length > 1) {
       try {
@@ -75,6 +82,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
             .createUploadBatch(
               grouping: UploadGrouping.auto,
               mediaType: MediaType.music.wireName,
+              libraryPid: libraryPid,
             );
         batchId = batch.id;
       } on WaxDeckApiException catch (e) {
@@ -95,6 +103,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
               fileName: file.name,
               path: file.path,
               mediaType: MediaType.music.wireName,
+              libraryPid: libraryPid,
               batchId: batchId,
             );
       } on WaxDeckApiException catch (e) {
@@ -119,6 +128,17 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
       }
       ref.invalidate(uploadsProvider);
     }
+  }
+
+  /// The library a dialogless share is filed under: the remembered one
+  /// where it is still a music candidate, and null otherwise. Null is
+  /// the server routing exactly as it did before this existed.
+  Future<String?> _sharedTarget(WidgetRef ref) async {
+    final (remembered, targets) = await sharedUploadTarget(ref);
+    if (remembered.isEmpty) return null;
+    final candidates = uploadTargetsFor(targets, MediaType.music);
+    if (candidates.length < 2) return null;
+    return candidates.any((t) => t.pid == remembered) ? remembered : null;
   }
 
   @override

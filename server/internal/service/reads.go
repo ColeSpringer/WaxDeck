@@ -831,13 +831,36 @@ func (l *Library) artSourceForRef(ctx context.Context, ref model.EntityRef) ArtS
 // call sites: the leak this closes was four call sites wide, and a
 // fifth would not know the rule either.
 func (l *Library) artSourceFor(ctx context.Context, ref model.EntityRef, out ArtSourceDTO) ArtSourceDTO {
-	if out.Source != artSourceFeed || out.SourceURL == "" {
+	return l.artSourceRedactor(ctx, ref)(out)
+}
+
+// artSourceRedactor is artSourceFor bound to one entity, with the show
+// lookup taken at most once. The roles read applies the rule to every
+// row it returns and an episode holds up to five, so the per-call form
+// would pay for the same answer five times.
+//
+// A URL that survives the show rule still goes out reduced to scheme,
+// host and path, for the reason redactedSourceURL gives: these reads
+// answer everyone who can see the item, and what the catalog stored is
+// verbatim.
+func (l *Library) artSourceRedactor(ctx context.Context, ref model.EntityRef) func(ArtSourceDTO) ArtSourceDTO {
+	var public, checked bool
+	return func(out ArtSourceDTO) ArtSourceDTO {
+		if out.SourceURL == "" {
+			return out
+		}
+		if out.Source == artSourceFeed {
+			if !checked {
+				public, checked = l.feedArtIsPublic(ctx, ref), true
+			}
+			if !public {
+				out.SourceURL = ""
+				return out
+			}
+		}
+		out.SourceURL = redactedSourceURL(out.SourceURL)
 		return out
 	}
-	if !l.feedArtIsPublic(ctx, ref) {
-		out.SourceURL = ""
-	}
-	return out
 }
 
 // feedArtIsPublic reports whether the show a feed-sourced cover came
@@ -950,7 +973,16 @@ func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) 
 		Roles:     make([]ArtRoleInfoDTO, 0, len(infos)),
 		ArtSource: l.artSourceForRef(ctx, ref),
 	}
+	// Every row through the same rule the envelope's mark goes through.
+	// These are the call sites artSourceFor's comment warned would not
+	// know it: they read the slot's own attribution rather than a
+	// resolve's, so a private show's cover handed out its credentialed
+	// URL here while the mark beside it withheld the same value.
+	redact := l.artSourceRedactor(ctx, ref)
 	for _, i := range infos {
+		mark := redact(ArtSourceDTO{
+			Source: string(i.Source), Provider: i.Provider, SourceURL: i.SourceURL,
+		})
 		role := ArtRoleInfoDTO{
 			Role:      string(i.Role),
 			Format:    i.Format,
@@ -958,7 +990,7 @@ func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) 
 			Height:    i.Height,
 			Source:    string(i.Source),
 			Provider:  i.Provider,
-			SourceURL: i.SourceURL,
+			SourceURL: mark.SourceURL,
 			Locked:    i.Locked,
 		}
 		if i.UpdatedAt != 0 {

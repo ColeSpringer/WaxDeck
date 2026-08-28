@@ -254,6 +254,78 @@ void main() {
     expect(find.text('Lyrics · From an .lrc file'), findsOneWidget);
   });
 
+  testWidgets('a field chip names its producer rather than the wire word', (
+    tester,
+  ) async {
+    // The chip used to print the server's own tokens - `enrichment`,
+    // `musicbrainz` - at the reader. The provider is the answer when
+    // one supplied the value, which is how the header tally keys it.
+    final repo = _repo()
+      ..itemProvenance['tr-1'] = const <FieldProvenance>[
+        FieldProvenance(
+          field: 'title',
+          source: 'enrichment',
+          provider: 'musicbrainz',
+          locked: false,
+        ),
+        FieldProvenance(field: 'artist', source: 'tag', locked: false),
+      ];
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('MusicBrainz'), findsOneWidget);
+    expect(find.text('tags'), findsOneWidget);
+    expect(find.text('enrichment'), findsNothing);
+    expect(find.text('musicbrainz'), findsNothing);
+  });
+
+  testWidgets('the header states a recorded origin and that it is read-only', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..itemAcquisition['tr-1'] = ItemAcquisition(
+        sourceType: 'manual',
+        sourceUrl: 'https://feeds.example.test/show/ep-12.mp3',
+        acquiredAt: DateTime.utc(2026, 8, 25),
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    expect(
+      find.text(
+        'Origin: an unnamed source - https://feeds.example.test/show/ep-12.mp3',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Recorded evidence of how this arrived, not an editable field.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('an origin with no shareable address still names its kind', (
+    tester,
+  ) async {
+    // The server drops a URL it cannot redact into something safe for
+    // everyone who can see the item, so the kind is all that is left.
+    final repo = _repo()
+      ..itemAcquisition['tr-1'] = ItemAcquisition(
+        sourceType: 'rss',
+        acquiredAt: DateTime.utc(2026, 8, 25),
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('Origin: a podcast feed'), findsOneWidget);
+  });
+
+  testWidgets('an item with no recorded origin draws no origin line', (
+    tester,
+  ) async {
+    await _pump(tester, _host(_container(_repo())));
+
+    expect(find.textContaining('Origin: '), findsNothing);
+  });
+
   testWidgets('an embedded lyric is not called art', (tester) async {
     // The art mark for `tag` says "Art from the file"; a lyric that
     // arrived the same way needs its own sentence, not that one.
@@ -1248,6 +1320,147 @@ void main() {
     // Not written, still staged: the count and the chip both stand.
     expect(repo.tagsByPid['tr-1'], isNot(contains('MOOD')));
     expect(find.text('Save 2 changes'), findsOneWidget);
+  });
+
+  testWidgets('one save is one request where the server has the route', (
+    tester,
+  ) async {
+    // The point of the compound endpoint: a phone reaching a home
+    // server through a proxy pays one round trip for a Save rather than
+    // one per staged part.
+    final repo = _repo();
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.enterText(_field('title'), 'Neon Meridian');
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagKey),
+      'MOOD',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagValues),
+      'calm',
+    );
+    final add = find.bySemanticsIdentifier(SemanticsIds.tagAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await _saveNow(tester);
+
+    expect(repo.commitCalls, hasLength(1));
+    expect(repo.commitCalls.single.commit.fields, {'title': 'Neon Meridian'});
+    expect(repo.commitCalls.single.commit.tagSets, {
+      'MOOD': ['calm'],
+    });
+    expect(repo.itemFieldsByPid['tr-1']?['title'], 'Neon Meridian');
+    expect(repo.tagsByPid['tr-1']?['MOOD'], ['calm']);
+  });
+
+  testWidgets('an older server takes the sequential path, once asked', (
+    tester,
+  ) async {
+    // A server without the route answers the router's unmatched-path
+    // 404 as plain text, which the transport reports as `transport`
+    // rather than `not-found`. The answer is remembered: the next save
+    // does not ask again.
+    final repo = _repo()
+      ..commitError = const WaxDeckApiException(
+        code: 'transport',
+        message: '404 page not found',
+        statusCode: 404,
+      );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.enterText(_field('title'), 'Neon Meridian');
+    await _saveNow(tester);
+
+    expect(repo.commitCalls, hasLength(1), reason: 'asked once');
+    expect(repo.editItemMetadataCalls.single.fields, {
+      'title': 'Neon Meridian',
+    });
+    expect(repo.itemFieldsByPid['tr-1']?['title'], 'Neon Meridian');
+    expect(container.read(compoundSaveProvider), isFalse);
+
+    await tester.enterText(_field('artist'), 'The Bree Trio Redux');
+    await _saveNow(tester);
+
+    expect(
+      repo.editItemMetadataCalls,
+      hasLength(2),
+      reason: 'the second save runs sequentially',
+    );
+    expect(
+      repo.commitCalls,
+      hasLength(1),
+      reason: 'and does not ask the missing route again',
+    );
+  });
+
+  testWidgets(
+    'an item that is gone does not put the session on the slow path',
+    (tester) async {
+      // A genuine item-404 carries the server's own `not-found`, and is a
+      // refusal of this save rather than a verdict on the server. Reading
+      // the status code alone would let one bad pid cost every later save
+      // a round trip per part.
+      final repo = _repo()
+        ..commitError = const WaxDeckApiException(
+          code: 'not-found',
+          message: 'no item with pid tr-1',
+          statusCode: 404,
+        );
+      final container = _container(repo);
+      await _pump(tester, _host(container));
+
+      await tester.enterText(_field('title'), 'Neon Meridian');
+      await _saveNow(tester);
+
+      expect(repo.editItemMetadataCalls, isEmpty);
+      expect(container.read(compoundSaveProvider), isTrue);
+    },
+  );
+
+  // Parity between the two save paths is what lets the sequential one
+  // stand in as the fallback, so the same refusal is driven through both
+  // and both are held to this one sentence.
+  const lockedTitleRefusal =
+      'field locked. Check "Force" to overwrite locked fields.';
+
+  Future<void> saveOverALockedTitle(
+    WidgetTester tester, {
+    required bool compound,
+  }) async {
+    final repo = _repo()..lockedFieldsByPid['tr-1'] = {'title'};
+    if (!compound) {
+      repo.commitError = const WaxDeckApiException(
+        code: 'transport',
+        message: '404 page not found',
+        statusCode: 404,
+      );
+    }
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.enterText(_field('title'), 'Neon Meridian');
+    await _saveNow(tester);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      lockedTitleRefusal,
+    );
+    expect(repo.itemFieldsByPid['tr-1']?['title'], isNot('Neon Meridian'));
+  }
+
+  testWidgets('the compound path words a refused part like the server does', (
+    tester,
+  ) async {
+    await saveOverALockedTitle(tester, compound: true);
+  });
+
+  testWidgets('the sequential fallback words the same refusal the same way', (
+    tester,
+  ) async {
+    await saveOverALockedTitle(tester, compound: false);
   });
 
   testWidgets('plain lyrics go to the server as plain text', (tester) async {

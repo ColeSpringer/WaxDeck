@@ -6021,6 +6021,42 @@ abstract class AppLocalizations {
   /// **'Open release group'**
   String get metadataOpenReleaseGroup;
 
+  /// Caption in the metadata editor header naming where the item came from. Read-only: origin is derived from what the import saw.
+  ///
+  /// In en, this message translates to:
+  /// **'Origin: {source}'**
+  String metadataOriginLine(String source);
+
+  /// The same caption when the recorded origin also has a web address. The address is redacted server-side and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Origin: {source} - {url}'**
+  String metadataOriginLineWithUrl(String source, String url);
+
+  /// How an item arrived, as it reads inside the origin caption: scanned from the library with no remote source recorded.
+  ///
+  /// In en, this message translates to:
+  /// **'a local file'**
+  String get metadataOriginLocal;
+
+  /// How an item arrived, as it reads inside the origin caption ("Origin: an unnamed source"): the catalog recorded that it came from somewhere but not how. Much the commonest value, so it must read sensibly both alone and followed by a web address.
+  ///
+  /// In en, this message translates to:
+  /// **'an unnamed source'**
+  String get metadataOriginManual;
+
+  /// Caption under the origin line, saying why the origin has no form control beside it.
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded evidence of how this arrived, not an editable field.'**
+  String get metadataOriginRecorded;
+
+  /// How an item arrived, as it reads inside the origin caption: downloaded from a podcast feed.
+  ///
+  /// In en, this message translates to:
+  /// **'a podcast feed'**
+  String get metadataOriginRss;
+
   /// Chip on a staged change (a tag added to the form, say) that the save bar has not committed yet.
   ///
   /// In en, this message translates to:
@@ -6242,12 +6278,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'you'**
   String get metadataSourceUser;
-
-  /// Chip beside a field, naming where its value came from and which provider answered. Both come from the server and are not translated.
-  ///
-  /// In en, this message translates to:
-  /// **'{source} ({provider})'**
-  String metadataSourceWithProvider(String source, String provider);
 
   /// Field for a custom tag's name.
   ///
@@ -15229,6 +15259,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Uploaded 1 file. It\'s being identified and will appear once it clears review} other{Uploaded {count} files. They\'re being identified and will appear once they clear review}}'**
   String uploadsIdentifying(int count);
+
+  /// Accessible name of the picker choosing which library an upload or download is filed under. Shown only where the server offers more than one for the chosen medium.
+  ///
+  /// In en, this message translates to:
+  /// **'Library'**
+  String get uploadsLibrary;
+
+  /// Help line under the library picker, saying what the choice does. It selects the library whose matching and auto-apply settings govern the import, not the folder the file lands in.
+  ///
+  /// In en, this message translates to:
+  /// **'Which library\'s settings apply. Where the files are placed is the server\'s own choice.'**
+  String get uploadsLibraryHelp;
 
   /// Title of the error state on the uploads screen.
   ///

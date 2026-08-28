@@ -99,11 +99,9 @@ test('the hub sorts, filters, and marks a book finished', async ({ app }) => {
     .toBeTruthy();
 
   // And the undo puts back where the listener was, which was the top -
-  // flags included, and the flags are the half worth waiting for. The
-  // undo is two writes, position then flags, and an end-of-book write
-  // slotting between them is refused its finished mark while `played`
-  // still stands, so a poll on the position alone let the seeder below
-  // race the flag write and lose the mark for good.
+  // flags included. One write now carries both, so there is no longer a
+  // window between them for the seeder below to slot into; the poll is
+  // for the write to land at all, not for two of them to settle.
   await app.shell.snackAction('Undo').click();
   await expect
     .poll(

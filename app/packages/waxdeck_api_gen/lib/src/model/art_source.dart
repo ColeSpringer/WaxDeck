@@ -13,7 +13,7 @@ part 'art_source.g.dart';
 /// Properties:
 /// * [source_] - The producer: `tag` (the file's own embedded cover), `sidecar` (a cover image beside the audio), `user` (set through the curation surface), `enrichment` (fetched from a metadata provider, named in `provider`), `feed` (a podcast feed's image, or a radio station's own announcement), or `generated` (composed by the server from what the catalog already holds, which is what a playlist mosaic is - nobody chose it). A string, not a closed enum: treat an unknown value as unattributed and draw nothing. 
 /// * [provider] - The provider that supplied an `enrichment` cover, as an id (`deezer`, `coverartarchive`, `fanarttv`). Empty for every other source. 
-/// * [sourceUrl] - Where the bytes were fetched from, for a cover that came off the network (`enrichment`, `feed`). Empty otherwise. 
+/// * [sourceUrl] - Where the bytes were fetched from, for a cover that came off the network (`enrichment`, `feed`). Empty otherwise.  Redacted the way `ItemAcquisition.sourceUrl` is, and for the same reason - these reads answer everyone who can see the item while the stored value is verbatim: `http`/`https` only, reduced to scheme, host and path. A `feed` cover on a show with stored credentials is withheld entirely rather than redacted, because its address is minted from the same document the credentials open. So this identifies where a picture came from; it is not a URL to re-fetch it by. 
 /// * [level] - Which rung of the fallback chain answered: `track`, `book`, `episode`, `album`, `artist`, `release_group`, `genre`, `podcast`, or `playlist`. Absent where there is no chain (radio, which resolves nothing from the catalog). Open set; a client that does not recognise a value should name no rung rather than guess. 
 /// * [derived] - True when the answering level holds no cover of its own and the picture came from a member instead - an album showing one of its tracks' covers, which is the ordinary case for an album nobody has given a durable cover. `source` is that member's, so this is what stops a caption reading as though the album made the choice. Absent means the same as false. 
 /// * [updatedAt] - When this attachment was last written.
@@ -27,7 +27,7 @@ abstract class ArtSource implements Built<ArtSource, ArtSourceBuilder> {
   @BuiltValueField(wireName: r'provider')
   String? get provider;
 
-  /// Where the bytes were fetched from, for a cover that came off the network (`enrichment`, `feed`). Empty otherwise. 
+  /// Where the bytes were fetched from, for a cover that came off the network (`enrichment`, `feed`). Empty otherwise.  Redacted the way `ItemAcquisition.sourceUrl` is, and for the same reason - these reads answer everyone who can see the item while the stored value is verbatim: `http`/`https` only, reduced to scheme, host and path. A `feed` cover on a show with stored credentials is withheld entirely rather than redacted, because its address is minted from the same document the credentials open. So this identifies where a picture came from; it is not a URL to re-fetch it by. 
   @BuiltValueField(wireName: r'sourceUrl')
   String? get sourceUrl;
 

@@ -15,7 +15,7 @@ part 'acquisition_request.g.dart';
 /// Properties:
 /// * [url] - The source URL: a single video, a playlist, or a channel the acquisition bridge understands. 
 /// * [mediaType] 
-/// * [libraryPid] - Target library; required when several libraries of the media type are visible to the caller. 
+/// * [libraryPid] - The library this acquisition belongs to, from `GET /uploads/targets`; see `UploadCreate` for what naming one selects. 
 /// * [format] 
 /// * [identify] - Whether what this acquisition downloads is identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided when the acquisition is accepted and carried by the task, so a preference changed while it downloads does not move it. 
 @BuiltValue()
@@ -28,7 +28,7 @@ abstract class AcquisitionRequest implements Built<AcquisitionRequest, Acquisiti
   MediaType get mediaType;
   // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
 
-  /// Target library; required when several libraries of the media type are visible to the caller. 
+  /// The library this acquisition belongs to, from `GET /uploads/targets`; see `UploadCreate` for what naming one selects. 
   @BuiltValueField(wireName: r'libraryPid')
   String? get libraryPid;
 

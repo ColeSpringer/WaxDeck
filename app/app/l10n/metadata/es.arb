@@ -98,6 +98,12 @@
   "metadataOpenAlbum": "Abrir el álbum",
   "metadataOpenArtist": "Abrir el artista",
   "metadataOpenReleaseGroup": "Abrir el grupo de lanzamiento",
+  "metadataOriginLine": "Procedencia: {source}",
+  "metadataOriginLineWithUrl": "Procedencia: {source} - {url}",
+  "metadataOriginLocal": "un archivo local",
+  "metadataOriginManual": "una fuente no identificada",
+  "metadataOriginRecorded": "Evidencia registrada de cómo llegó esto; no es un campo editable.",
+  "metadataOriginRss": "un feed de pódcast",
   "metadataPendingChip": "Sin guardar",
   "metadataPreviewApply": "Aplicar estos cambios",
   "metadataPreviewBuiltinsNote": "Las fuentes integradas del servidor no se pueden previsualizar; al aplicar aún pueden rellenar los huecos restantes.",
@@ -153,7 +159,6 @@
   "@metadataSourceUser": {
     "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
   },
-  "metadataSourceWithProvider": "{source} ({provider})",
   "metadataTagKey": "Clave",
   "metadataTagStagedRemove": "Se quitará al guardar",
   "metadataTagValues": "Valores, separados por comas",

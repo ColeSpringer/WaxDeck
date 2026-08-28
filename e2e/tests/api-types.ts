@@ -1592,6 +1592,39 @@ export interface paths {
         patch: operations["editItemMetadata"];
         trace?: never;
     };
+    "/items/{pid}/metadata/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commit a staged metadata draft in one request
+         * @description Runs every staged part of one item's editor draft server-side, in the order the editor's own sequential save uses: scalar fields, then each credit role, then lyrics (or their removal), then chapters, then each tag set, then each tag removal, then the release status. It exists for latency: the sequential save is one round trip per part, which on a phone reaching a home server through a reverse proxy is felt as lag on a single Save, and every gap between the calls is a partial-failure window on a flaky link.
+         *
+         *     At least one part is required. `writeBack`, `lock` and `force` are hoisted here rather than repeated per part, and each part takes the ones its own endpoint takes: chapters and tag sets take `lock` and `force`, a tag removal, a lyrics clear and the release status take none.
+         *
+         *     **Deliberately not a transaction.** Write-back is best-effort by design, so end-to-end atomicity is unattainable, and catalog-only atomicity would need a combined-edit facade upstream. Parts run until one is refused; that part reports `refused` with its `Error`, every later part reports `skipped`, and the parts before it stay committed. That is exactly what the sequential save produces, which is the point: the two paths are interchangeable, and a client keeps the sequential one as its fallback for an older server.
+         *
+         *     So a refusal is a `200` carrying a refused part, not a `4xx`: the write-back failures the committed parts accumulated are what the editor's banner is made of, and a status code would discard them. A lock conflict that `PATCH /items/{pid}/metadata` answers `409` arrives here as a part refused with `field-locked`, worded exactly as that endpoint words it.
+         *
+         *     One exception, and it is what the status codes below are for: a failure that says the server is temporarily unwell rather than that the edit was wrong - `catalog-maintenance`, `internal`, `catalog-busy` - answers with its own status code when it happens before anything has committed. Nothing is lost by doing so, and a client answers those with a banner and a retry rather than by showing them to the person who typed the value. Once a part has committed, the same failure rides as a part refusal, because discarding that part's report is the worse trade.
+         *
+         *     Gated per item like the sequential parts: administrators, or the user whose upload brought the item in. It is not the bulk edit and does not carry that operation's admin-only gate.
+         */
+        post: operations["commitItemMetadata"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/bulk-edit": {
         parameters: {
             query?: never;
@@ -2282,7 +2315,11 @@ export interface paths {
         /**
          * Set or clear an item's played and finished flags
          * @description Sets the calling user's played and finished flags for the item directly and returns the resulting playback state. This is the other direction from the completion rules, which are monotonic by construction: a position checkpoint can mark an item played and finished but never un-mark it, so undoing a mis-tapped "mark finished" needs its own verb.
-         *     Position is untouched, so a client undoing a mark writes the old position through `PUT /items/{pid}/play-state` and clears the flags here. Three combinations are refused with `invalid-request`: a negative play count, `finished` without `played` (every UI renders that row as finished while `played is false` still matches it), and `played` with an explicit `playCount` of 0 (zeroing the count is what un-marking means).
+         *     Send `positionMs` to restore the resume position in the same write. That is what undoing a mis-tapped "mark finished" needs: position and flags move together, so a completion checkpoint arriving from another device lands either wholly before the undo or wholly after it, instead of being refused its finished mark by flags the undo is about to clear and leaving the item at the end, unfinished, with no play counted. Omit `positionMs` to leave the position alone; a client that instead writes it through `PUT /items/{pid}/play-state` first still works, with the window this field closes.
+         *
+         *     A position restored here never re-derives completion. The spoken-word rules that mark an item played from the position it reaches are suppressed for this write, or an undo restoring a past-threshold position would re-mark what it just cleared.
+         *
+         *     Four combinations are refused with `invalid-request`: a negative play count, a negative `positionMs`, `finished` without `played` (every UI renders that row as finished while `played is false` still matches it), and `played` with an explicit `playCount` of 0 (zeroing the count is what un-marking means).
          */
         put: operations["setPlayed"];
         post?: never;
@@ -4309,7 +4346,7 @@ export interface paths {
         put?: never;
         /**
          * Start an upload
-         * @description Creates a resumable upload session for one audio file. The caller must hold upload rights; the declared size counts against the caller's pending-upload limit up front so a full one fails fast, and the file name's extension is checked against the server's accepted formats. The required media type label routes the file to the matching library kind; `libraryPid` pins a specific library (required when several libraries of that kind are visible to the caller). Passing the file's SHA-256 up front lets the server warn about an exact duplicate before any bytes move: the response's `duplicate` names the existing item and the client can abandon the session without spending bandwidth (a fingerprint-level duplicate check still runs at completion). Bytes then flow through the data endpoint in any number of chunks.
+         * @description Creates a resumable upload session for one audio file. The caller must hold upload rights; the declared size counts against the caller's pending-upload limit up front so a full one fails fast, and the file name's extension is checked against the server's accepted formats. The required media type label routes the file to the matching library kind; `libraryPid` names which library it belongs to, which is a choice about settings rather than about placement (see the field). Passing the file's SHA-256 up front lets the server warn about an exact duplicate before any bytes move: the response's `duplicate` names the existing item and the client can abandon the session without spending bandwidth (a fingerprint-level duplicate check still runs at completion). Bytes then flow through the data endpoint in any number of chunks.
          *     Three ceilings answer before any of that: a `sizeBytes` past the schema's maximum answers `invalid-request` and names the limit, since no allowance anybody can change moves it; a staging volume with no room for the declared size - counting what the sessions already receiving still owe it - answers `storage-full`, which is the server's disk rather than the caller's allowance; and opening a session is paced per account, which answers `rate-limited`. Sending bytes and abandoning a session are not paced: one is bounded by the ceilings above and the other is what releases them.
          */
         post: operations["createUpload"];
@@ -4429,6 +4466,30 @@ export interface paths {
          * @description Declares the batch complete: every member staged so far is grouped per the batch's grouping intent and the review entries open (their ids land in `reviewEntryIds`). Members still receiving bytes fall back to opening their own per-file entry when they later complete. Call this exactly when the client finishes sending members - after per-file failures too, so the files that did arrive are reviewed (a batch whose every member was deleted finalizes empty). Only the batch's owner (or an administrator) may finalize; anyone else sees `not-found`. Idempotent: finalizing a finalized batch answers the same batch again. Finalizing a batch the server has already expired answers `conflict` - its members were grouped with what had arrived when the server closed it.
          */
         post: operations["completeUploadBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/uploads/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the libraries an upload may name
+         * @description The libraries the caller may name as an upload's or acquisition's target: visible to them, and not read-only. Needs upload rights. Unpaginated, for the reason the admin library listing documents - libraries are a handful of roots, not a collection that grows with content - and it carries no paths and no counts, so a plain uploader learns nothing about the server's filesystem from it.
+         *
+         *     **What naming a target does, and does not do.** It does not choose the folder the file lands in: placement is the catalog's own routing, which sends each media kind to the one managed root that accepts it. What the pid selects is the library whose per-library settings apply to the import - its matching mode, and whether a single-track submission may auto-apply its match - and whose read-only state gates it. On the common server with one library per media type the two are the same library and the distinction never shows; where they differ, this is the one that is chosen.
+         *
+         *     `managed` says whether the library is a managed root, which is what makes it a possible destination for placement as well as a policy target. It is reported rather than filtered on: a library can legitimately be the policy target without being where the bytes land.
+         */
+        get: operations["listUploadTargets"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4773,7 +4834,11 @@ export interface components {
              * @example coverartarchive
              */
             provider?: string;
-            /** @description Where the bytes were fetched from, for a cover that came off the network (`enrichment`, `feed`). Empty otherwise. */
+            /**
+             * @description Where the bytes were fetched from, for a cover that came off the network (`enrichment`, `feed`). Empty otherwise.
+             *
+             *     Redacted the way `ItemAcquisition.sourceUrl` is, and for the same reason - these reads answer everyone who can see the item while the stored value is verbatim: `http`/`https` only, reduced to scheme, host and path. A `feed` cover on a show with stored credentials is withheld entirely rather than redacted, because its address is minted from the same document the credentials open. So this identifies where a picture came from; it is not a URL to re-fetch it by.
+             */
             sourceUrl?: string;
             /**
              * @description Which rung of the fallback chain answered: `track`, `book`, `episode`, `album`, `artist`, `release_group`, `genre`, `podcast`, or `playlist`. Absent where there is no chain (radio, which resolves nothing from the catalog). Open set; a client that does not recognise a value should name no rung rather than guess.
@@ -6538,7 +6603,7 @@ export interface components {
             source?: string;
             /** @description The provider that supplied an `enrichment` cover. */
             provider?: string;
-            /** @description Where a fetched cover's bytes came from. */
+            /** @description Where a fetched cover's bytes came from, redacted exactly as `ArtSource.sourceUrl` is: scheme, host and path only, and withheld altogether for a `feed` cover on a show with stored credentials. */
             sourceUrl?: string;
             /**
              * Format: date-time
@@ -6649,6 +6714,38 @@ export interface components {
             writeBackIssues: components["schemas"]["WriteBackIssue"][];
             /** @description Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. */
             mayCurate?: boolean;
+            acquisition?: components["schemas"]["ItemAcquisition"];
+        };
+        /**
+         * @description How and where the item entered the library: recorded evidence, not a field. It is derived from what the import saw - an acquisition the server performed, or the file's own `SOURCE_URL`/`SOURCE_ID` tags - and no endpoint edits it, so a client draws it as a read-only caption rather than a form line.
+         *
+         *     Present whenever the catalog holds an origin row, which includes a scanned file carrying acquisition tags; absent means no evidence of origin was ever seen. Absence is the ordinary state of a locally ripped file and is not an error.
+         */
+        ItemAcquisition: {
+            /**
+             * @description How the item arrived: `manual` (acquired by means the catalog did not record - which is what a tag-derived row reads, and what an import that named no provider stamps), `rss`, `youtube`, or whatever an acquisition provider stamped. Open set; treat an unknown value as opaque and show it as it stands. `manual` is much the commonest value and says only that origin evidence exists, so read `sourceUrl` for the substance.
+             *
+             *     `local` is defined upstream for an item with no remote origin, and this server never writes it: such an item has no acquisition row at all, and so no block here. A client should still handle it, because the value can arrive from a catalog another host wrote.
+             * @example rss
+             */
+            sourceType: string;
+            /**
+             * @description Where it came from, redacted for sharing: emitted only for `http`/`https` origins, and reduced to scheme, host and path - userinfo, query and fragment are dropped. The read answers every user who can see the item while the stored value is verbatim (a credentialed feed URL, a signed download link, a local path), so what is not safe for all of them is not emitted at all. Absent means the stored origin was not an http URL, or was empty; it never means the origin is unknown.
+             *
+             *     The path is kept, because without it the field says only which host and answers nothing. A secret carried in a path segment rather than the query therefore survives the redaction - the trade is deliberate, and the exposure is to accounts that can already see and stream the item.
+             * @example https://feeds.example.com/show/episode-12.mp3
+             */
+            sourceUrl?: string;
+            /**
+             * @description The acquisition provider that answered, when one did.
+             * @example rss
+             */
+            provider?: string;
+            /**
+             * Format: date-time
+             * @description When the item was acquired, as the catalog recorded it. Optional rather than required because a row whose time the catalog does not hold is better described by its absence than by a timestamp at the start of the era, which a client would render as a confident wrong date.
+             */
+            acquiredAt?: string;
         };
         /** @description The caller's permissions on one item. */
         ItemPermissions: {
@@ -6669,7 +6766,11 @@ export interface components {
             source: string;
             /** @description The enrichment provider, for enriched fields. */
             provider?: string;
-            /** @description Where a fetched value's bytes came from, on the rows that have one (an enrichment or feed cover). Empty otherwise. */
+            /**
+             * @description Where a fetched value's bytes came from, on the rows that have one (an enrichment or feed cover). Empty otherwise.
+             *
+             *     Redacted exactly as `ItemAcquisition.sourceUrl` is, and for the same reason: `http`/`https` only, reduced to scheme, host and path, because a feed cover's row holds the show's own enclosure URL and this read answers every account that can see the item.
+             */
             sourceUrl?: string;
             /** @description Whether the field is locked. */
             locked: boolean;
@@ -6769,6 +6870,98 @@ export interface components {
             writeBackFailures?: components["schemas"]["WriteBackFailure"][];
             /** @description Non-fatal notes: typed drop warnings from the tag library (a format refusing embedded synced lyrics, a chapter cap), roles without a tag form, malformed LRC lines skipped. */
             warnings?: string[];
+        };
+        /**
+         * @description The staged parts of one item's editor draft. Every part is optional and at least one is required; an empty body answers `invalid-request` rather than committing nothing successfully.
+         *
+         *     The three write switches are hoisted out of the per-part bodies the sequential endpoints take, because a draft is saved with one set of them.
+         */
+        MetadataCommit: {
+            /** @description Field name to new value; an empty string clears the field. Names come from the kind's vocabulary, as for `editItemMetadata`. */
+            fields?: {
+                [key: string]: string;
+            };
+            /** @description Replacement people per role, applied in the order given. */
+            credits?: components["schemas"]["CommitCredits"][];
+            lyrics?: components["schemas"]["CommitLyrics"];
+            /** @description Remove the stored lyrics. Mutually exclusive with `lyrics`; sending both answers `invalid-request`. */
+            clearLyrics?: boolean;
+            /** @description A replacement chapter list for a book: ordered, non-overlapping, on the book timeline. An empty array restores the embedded chapters, as for `setBookChapters`. */
+            chapters?: components["schemas"]["ChapterMark"][];
+            /** @description Custom tag key to its replacement values; empty values clear that tag. Applied in sorted key order, because a JSON object carries none of its own and the parts list has to be reproducible. */
+            tagSets?: {
+                [key: string]: string[];
+            };
+            /** @description Custom tag keys to remove, applied in the order given. */
+            tagRemoves?: string[];
+            /** @description The release-status mark: true marks the item as having no canonical release, false clears the mark. Omitted leaves it alone. */
+            unofficial?: boolean;
+            /**
+             * @description Also write the new values into the backing file's tags, for the parts that have a tag form (fields, credits, lyrics).
+             * @default false
+             */
+            writeBack: boolean;
+            /**
+             * @description Lock what each part wrote, against scans and enrichment.
+             * @default true
+             */
+            lock: boolean;
+            /**
+             * @description Override existing locks.
+             * @default false
+             */
+            force: boolean;
+        };
+        /** @description Replacement people for one credit role inside a compound commit. The write switches live on the commit rather than here. */
+        CommitCredits: {
+            /**
+             * @description The role, from the kind's role vocabulary.
+             * @example producer
+             */
+            role: string;
+            /** @description The people; empty clears the role. */
+            names: string[];
+        };
+        /** @description Replacement lyrics inside a compound commit. At least one of `lrc` and `plain` must carry content. The write switches live on the commit rather than here. */
+        CommitLyrics: {
+            /** @description Timed lines as LRC text. Malformed lines are skipped and reported as warnings with their line numbers. */
+            lrc?: string;
+            /** @description A plain unsynchronized block. */
+            plain?: string;
+        };
+        /**
+         * @description What a compound commit did, part by part in execution order.
+         *
+         *     Read `parts` rather than the status code: a refusal is a 200 here, and the accumulated `writeBackFailures` and `warnings` belong to the parts that committed before it.
+         *
+         *     There is no `resultingAlbumPid`. Editing a release-keying field on one item can still regroup its release, exactly as `editItemMetadata` can, and neither operation reports where it landed; only the bulk edit does, because only its caller (the release workbench) is following a whole release across the move.
+         */
+        MetadataCommitResult: {
+            /** @description One entry per part the request carried, in the order they were run. A part after a refused one is present and `skipped`, so the list always accounts for the whole request. */
+            parts: components["schemas"]["MetadataCommitPart"][];
+            /** @description Files whose tags could not be updated, merged across every part and deduplicated: several parts can report the same file for the same reason, and each line is for a person to read once. */
+            writeBackFailures?: components["schemas"]["WriteBackFailure"][];
+            /** @description The parts' non-fatal notes, merged: typed drop warnings from the tag library, roles without a tag form, malformed LRC lines skipped. */
+            warnings?: string[];
+        };
+        /** @description One part of a compound commit and what became of it. */
+        MetadataCommitPart: {
+            /**
+             * @description Which staged part this entry is about. `lyrics` covers both replacing them and clearing them.
+             * @enum {string}
+             */
+            part: "fields" | "credit" | "lyrics" | "chapters" | "tagSet" | "tagRemove" | "releaseStatus";
+            /**
+             * @description Which one, where the part repeats: the role for `credit`, the tag key for `tagSet` and `tagRemove`. Absent otherwise.
+             * @example producer
+             */
+            detail?: string;
+            /**
+             * @description `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted.
+             * @enum {string}
+             */
+            status: "committed" | "refused" | "skipped";
+            refusal?: components["schemas"]["Error"];
         };
         /** @description The same scalar edits applied to many items. */
         BulkEdit: {
@@ -7195,6 +7388,13 @@ export interface components {
             finished: boolean;
             /** @description The play count to store. Omitted or null keeps the stored count, which is what a client that only means to flip the flags should send; 0 resets it, so an undo of a mis-tapped mark clears the play it added rather than leaving it counted. Setting `played` true without naming a count stores the smallest count consistent with it, so a played item never sorts as never-played. */
             playCount?: number | null;
+            /**
+             * Format: int64
+             * @description A resume position to restore in the same write as the flags. Omitted leaves the stored position alone.
+             *
+             *     It applies unconditionally, and `recordedAt` does not gate it: the recorded-time rule is about the flags, and there is no way to tell a dropped stale flag write from a value-identical one. So this field is for a live write. A client replaying an offline queue should keep sending the position through `PUT /items/{pid}/play-state`, which is the surface that reconciles a replayed position per medium (furthest-wins against recency) rather than applying it blindly.
+             */
+            positionMs?: number;
             /**
              * Format: date-time
              * @description When the change was made on the client, sent only when replaying an offline queue. The server skips the write when the item's flags changed more recently than this. Live mutations omit it and always apply, which is what an interactive un-mark wants: a client clock trailing the server would otherwise drop it as stale.
@@ -9716,7 +9916,7 @@ export interface components {
              */
             sizeBytes: number;
             mediaType: components["schemas"]["MediaType"];
-            /** @description Target library; required when several libraries of the media type are visible to the caller. */
+            /** @description The library this upload belongs to, from `GET /uploads/targets`. It selects the library whose matching mode and singles auto-apply setting govern the import, and whose read-only state gates it; it does not choose where the file is placed, which is the catalog's own routing by media type into a managed root. Omitted, the entry belongs to no named library and per-library settings fall back to the one library that could hold its media, staying off where that is ambiguous. */
             libraryPid?: string;
             /** @description Lowercase hex SHA-256 of the file, for the up-front exact duplicate warning and the completion integrity check. */
             sha256?: string;
@@ -9807,7 +10007,7 @@ export interface components {
         UploadBatchCreate: {
             grouping: components["schemas"]["UploadGrouping"];
             mediaType: components["schemas"]["MediaType"];
-            /** @description Target library for every member; required when several libraries of the media type are visible to the caller. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). */
+            /** @description The library every member belongs to; see `UploadCreate` for what naming one selects. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). */
             libraryPid?: string;
             /** @description Whether the batch's files are identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided once here and applied to every entry the batch opens, so a member's own value is ignored. */
             identify?: boolean;
@@ -9868,12 +10068,33 @@ export interface components {
          * @enum {string}
          */
         AcquisitionFormat: "best" | "opus" | "mp3" | "m4a" | "flac";
+        /** @description The libraries a caller may name as an upload target. */
+        UploadTargets: {
+            targets: components["schemas"]["UploadTarget"][];
+        };
+        /** @description One library an upload or acquisition may name. Deliberately narrower than the administrative library listing: a name, what it accepts, and whether it is managed. No path, no item count. */
+        UploadTarget: {
+            /**
+             * @description Library PID, as `libraryPid` takes it.
+             * @example lb-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            pid: string;
+            /**
+             * @description Display name (the configured root name).
+             * @example music
+             */
+            name: string;
+            /** @description The media this library accepts, resolved for the caller: a mixed library lists every kind it takes, so a client filters on membership rather than having to know what `mixed` means. Podcast libraries are not upload targets and never appear. */
+            mediaTypes: components["schemas"]["MediaType"][];
+            /** @description Whether the library is a managed root, and so a place the catalog can put files. Reported for a client that wants to say so; naming an unmanaged library is allowed, because the pid selects policy rather than placement. */
+            managed: boolean;
+        };
         /** @description One source URL to acquire. */
         AcquisitionRequest: {
             /** @description The source URL: a single video, a playlist, or a channel the acquisition bridge understands. */
             url: string;
             mediaType: components["schemas"]["MediaType"];
-            /** @description Target library; required when several libraries of the media type are visible to the caller. */
+            /** @description The library this acquisition belongs to, from `GET /uploads/targets`; see `UploadCreate` for what naming one selects. */
             libraryPid?: string;
             format?: components["schemas"]["AcquisitionFormat"];
             /** @description Whether what this acquisition downloads is identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided when the acquisition is accepted and carried by the task, so a preference changed while it downloads does not move it. */
@@ -12625,7 +12846,7 @@ export interface operations {
                     "X-Art-Source"?: string;
                     /** @description The provider that supplied an `enrichment` cover. Omitted for every other source. */
                     "X-Art-Provider"?: string;
-                    /** @description Where a fetched cover's bytes came from. Omitted for a cover that never crossed the network. */
+                    /** @description Where a fetched cover's bytes came from, redacted as `ArtSource.sourceUrl` is. Omitted for a cover that never crossed the network, and for one whose feed is credentialed. */
                     "X-Art-Source-Url"?: string;
                     /** @description Which rung of the fallback chain answered (`track`, `album`, `artist`, `podcast`, ...), so a caller can tell an item's own cover from an inherited one. */
                     "X-Art-Level"?: string;
@@ -12930,6 +13151,38 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["FieldLocked"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    commitItemMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetadataCommit"];
+            };
+        };
+        responses: {
+            /** @description What each part did. The catalog write for every part reported `committed` has landed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetadataCommitResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -17674,6 +17927,29 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    listUploadTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The libraries this caller may name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadTargets"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["CatalogMaintenance"];
         };
     };
     createAcquisition: {

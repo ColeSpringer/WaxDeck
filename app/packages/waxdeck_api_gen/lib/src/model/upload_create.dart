@@ -15,7 +15,7 @@ part 'upload_create.g.dart';
 /// * [fileName] - The file's name (base name only; any path is rejected). The extension picks the accepted-format check. 
 /// * [sizeBytes] - Total file size in bytes. The maximum is the largest single file WaxDeck accepts - 16 GiB, clear of even a long hi-res or DSD single-file release - and a session declaring more answers `invalid-request` rather than opening. What is actually accepted is still bounded by the caller's quota and by the room on the server's staging volume. 
 /// * [mediaType] 
-/// * [libraryPid] - Target library; required when several libraries of the media type are visible to the caller. 
+/// * [libraryPid] - The library this upload belongs to, from `GET /uploads/targets`. It selects the library whose matching mode and singles auto-apply setting govern the import, and whose read-only state gates it; it does not choose where the file is placed, which is the catalog's own routing by media type into a managed root. Omitted, the entry belongs to no named library and per-library settings fall back to the one library that could hold its media, staying off where that is ambiguous. 
 /// * [sha256] - Lowercase hex SHA-256 of the file, for the up-front exact duplicate warning and the completion integrity check. 
 /// * [batchId] - Joins the session to an open upload batch owned by the caller; its grouping intent then decides how this file reaches the review queue. The session must declare the batch's media type and library. Referencing a batch that is not open, or not the caller's, or mismatching either field, answers `invalid-request`. 
 /// * [batchPath] - The file's directory relative to the picked or dropped folder, forward-slash separated (empty or absent for a file at the top). The `auto` grouping clusters by it, so disc subfolders (`CD1`, `Disc 2`) fold into one album. Must stay relative - absolute paths and `..` segments are rejected, as is passing it without `batchId`. `fileName` stays a bare name regardless. 
@@ -34,7 +34,7 @@ abstract class UploadCreate implements Built<UploadCreate, UploadCreateBuilder> 
   MediaType get mediaType;
   // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
 
-  /// Target library; required when several libraries of the media type are visible to the caller. 
+  /// The library this upload belongs to, from `GET /uploads/targets`. It selects the library whose matching mode and singles auto-apply setting govern the import, and whose read-only state gates it; it does not choose where the file is placed, which is the catalog's own routing by media type into a managed root. Omitted, the entry belongs to no named library and per-library settings fall back to the one library that could hold its media, staying off where that is ambiguous. 
   @BuiltValueField(wireName: r'libraryPid')
   String? get libraryPid;
 

@@ -856,6 +856,8 @@ abstract final class SemanticsIds {
       'upload-grouping-$wireName';
   static const String uploadIdentify = 'upload-identify';
   static const String uploadIdentifyingReview = 'upload-identifying-review';
+  static const String uploadLibrary = 'upload-library';
+  static String uploadLibraryOption(Object pid) => 'upload-library-$pid';
   static const String uploadMediaConfirm = 'upload-media-confirm';
   static const String uploadMediaType = 'upload-media-type';
   static const String uploadPick = 'upload-pick';

@@ -229,11 +229,19 @@ abstract interface class WaxDeckRepository {
   /// clears it, and a positive value sets it exactly. [recordedAt] marks
   /// an offline-queue replay; an interactive un-mark leaves it null so a
   /// client clock trailing the server cannot drop the write as stale.
+  ///
+  /// [positionMs] restores the resume position in the same write, which
+  /// is what makes an undo atomic against a completion checkpoint from
+  /// another device. Null leaves the position alone. A server too old
+  /// for the field ignores it and answers with the position it kept, so
+  /// a caller that needs it compares the returned state and falls back
+  /// to [putPlayState].
   Future<PlayState> setPlayed(
     String pid, {
     required bool played,
     required bool finished,
     int? playCount,
+    int? positionMs,
     DateTime? recordedAt,
   });
 
@@ -992,6 +1000,12 @@ abstract interface class WaxDeckRepository {
     bool? identify,
   });
 
+  /// `GET /uploads/targets`: the libraries this caller may name as an
+  /// upload's or acquisition's target. Needs upload rights. A server
+  /// too old for the route answers 404, which callers degrade to an
+  /// empty list: no picker, and the server routes as it always did.
+  Future<List<UploadTarget>> listUploadTargets();
+
   /// `POST /uploads/batches`: opens a batch grouping several sessions
   /// into review units by the declared intent. [identify] decides
   /// identification for every entry the batch opens; absent means the
@@ -1062,6 +1076,23 @@ abstract interface class WaxDeckRepository {
     bool lock = true,
     bool force = false,
   });
+
+  /// `POST /items/{pid}/metadata/commit`: runs a whole staged editor
+  /// draft in one request, in the same order the per-part calls would.
+  ///
+  /// It exists for latency: the sequential save is one round trip per
+  /// part. Parts run until one is refused; that part reports its own
+  /// error and the later ones report skipped, which is exactly what the
+  /// sequential path produces, so the two are interchangeable. A
+  /// refusal therefore does not throw - read
+  /// [MetadataCommitResult.parts], or its `refusal` shorthand.
+  ///
+  /// A server too old for the route answers 404, which is a thrown
+  /// `WaxDeckApiException` a caller can fall back on.
+  Future<MetadataCommitResult> commitItemMetadata(
+    String pid,
+    MetadataCommit commit,
+  );
 
   /// `POST /items/bulk-edit`: applies one field edit to many items.
   /// [skipLocked] passes over locked fields instead of failing.
@@ -2096,6 +2127,7 @@ class WaxDeckClient implements WaxDeckRepository {
     required bool played,
     required bool finished,
     int? playCount,
+    int? positionMs,
     DateTime? recordedAt,
   }) => _guard(() async {
     final response = await _gen.getPlaybackApi().setPlayed(
@@ -2105,6 +2137,7 @@ class WaxDeckClient implements WaxDeckRepository {
           ..played = played
           ..finished = finished
           ..playCount = playCount
+          ..positionMs = positionMs
           ..recordedAt = recordedAt?.toUtc(),
       ),
     );
@@ -3572,6 +3605,21 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<List<UploadTarget>> listUploadTargets() => _guard(() async {
+    final response = await _gen.getUploadsApi().listUploadTargets();
+    return _require(response.data).targets
+        .map(
+          (t) => UploadTarget(
+            pid: t.pid,
+            name: t.name,
+            mediaTypes: t.mediaTypes.map(mediaTypeFromGen).toList(),
+            managed: t.managed,
+          ),
+        )
+        .toList();
+  });
+
+  @override
   Future<UploadBatch> createUploadBatch({
     required UploadGrouping grouping,
     required String mediaType,
@@ -3714,6 +3762,18 @@ class WaxDeckClient implements WaxDeckRepository {
       ),
     );
     return bulkEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<MetadataCommitResult> commitItemMetadata(
+    String pid,
+    MetadataCommit commit,
+  ) => _guard(() async {
+    final response = await _gen.getMetadataApi().commitItemMetadata(
+      pid: pid,
+      metadataCommit: metadataCommitToGen(commit),
+    );
+    return metadataCommitResultFromGen(_require(response.data));
   });
 
   @override

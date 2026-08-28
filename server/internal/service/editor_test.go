@@ -191,3 +191,35 @@ func TestEditorScalarFieldsOverlay(t *testing.T) {
 		t.Fatal("empty value was not omitted")
 	}
 }
+
+func TestRedactedSourceURL(t *testing.T) {
+	// The stored value is verbatim - a credentialed feed URL, a signed
+	// link, a local path - and the read answers everyone who can see
+	// the item, so anything that is not plainly shareable is dropped
+	// rather than trimmed.
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain https survives", "https://feeds.example.test/show/ep-12.mp3", "https://feeds.example.test/show/ep-12.mp3"},
+		{"http survives", "http://feeds.example.test/ep.mp3", "http://feeds.example.test/ep.mp3"},
+		{"userinfo goes", "https://user:secret@feeds.example.test/ep.mp3", "https://feeds.example.test/ep.mp3"},
+		{"query goes whole", "https://cdn.example.test/ep.mp3?token=abc&exp=1", "https://cdn.example.test/ep.mp3"},
+		{"fragment goes", "https://cdn.example.test/ep.mp3#t=30", "https://cdn.example.test/ep.mp3"},
+		{"scheme case folds", "HTTPS://cdn.example.test/ep.mp3", "https://cdn.example.test/ep.mp3"},
+		{"file path is not emitted", "file:///srv/media/incoming/ep.mp3", ""},
+		{"bare path is not emitted", "/srv/media/incoming/ep.mp3", ""},
+		{"other schemes are not emitted", "s3://bucket/key", ""},
+		{"hostless http is not emitted", "http:///ep.mp3", ""},
+		{"empty stays empty", "", ""},
+		{"unparseable is not emitted", "https://exa mple.test/\x7f", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := redactedSourceURL(tc.in); got != tc.want {
+				t.Errorf("redactedSourceURL(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}

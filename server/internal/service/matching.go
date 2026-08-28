@@ -608,12 +608,20 @@ func (l *Library) LibrarySinglesAutoApply(ctx context.Context, libraryPID string
 }
 
 // singlesAutoApplyFor resolves the singles switch for one entry. An
-// upload or acquisition carries no target library until import routing
-// places it, so an empty pid falls back to the one library that could
-// hold the entry's media - the unambiguous destination on the common
-// single-library server. More than one candidate stays off: guessing
-// which library's opt-in to honor would auto-apply under a grant
-// nobody made for that destination.
+// upload or acquisition that named no target library falls back to the
+// one library that could hold the entry's media - the unambiguous
+// destination on the common single-library server. More than one
+// candidate stays off: guessing which library's opt-in to honor would
+// auto-apply under a grant nobody made for that destination.
+//
+// The candidate set is the destination picker's, minus visibility:
+// non-podcast, accepts the kind, and writable. Writability matters
+// because the picker offers only writable libraries, so a server with
+// one writable music root and one read-only one shows no picker, sends
+// no pid, and would land here - counting two candidates and staying
+// off for an ambiguity the uploader was never given a way to resolve.
+// Visibility is left out because it is per-user and this is not: an
+// entry reaches here after its uploader is gone from the request.
 func (l *Library) singlesAutoApplyFor(ctx context.Context, entry *wdb.ReviewEntry) bool {
 	if entry.LibraryPID != "" {
 		return l.LibrarySinglesAutoApply(ctx, entry.LibraryPID)
@@ -632,6 +640,9 @@ func (l *Library) singlesAutoApplyFor(ctx context.Context, entry *wdb.ReviewEntr
 			continue
 		}
 		if lib.Media != "" && !lib.Media.Accepts(kind) {
+			continue
+		}
+		if l.CheckWritable(ctx, string(lib.PID)) != nil {
 			continue
 		}
 		if only != nil {

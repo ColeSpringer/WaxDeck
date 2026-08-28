@@ -606,8 +606,10 @@ paths:
                 type: string
             X-Art-Source-Url:
               description: >
-                Where a fetched cover's bytes came from. Omitted for a
-                cover that never crossed the network.
+                Where a fetched cover's bytes came from, redacted as
+                `ArtSource.sourceUrl` is. Omitted for a cover that never
+                crossed the network, and for one whose feed is
+                credentialed.
               schema:
                 type: string
             X-Art-Level:
@@ -1348,7 +1350,11 @@ components:
           description: The provider that supplied an `enrichment` cover.
         sourceUrl:
           type: string
-          description: Where a fetched cover's bytes came from.
+          description: >
+            Where a fetched cover's bytes came from, redacted exactly as
+            `ArtSource.sourceUrl` is: scheme, host and path only, and
+            withheld altogether for a `feed` cover on a show with stored
+            credentials.
         updatedAt:
           type: string
           format: date-time

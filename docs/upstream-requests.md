@@ -96,6 +96,27 @@ note.
   row); the `source` facet simply misreads reviewed acquisitions as
   `manual` until this lands.
 
+- **An acquisition-edit facade.** An item's origin is an
+  evidence-derived acquisitions table: `Library.Acquisition` reads it,
+  and nothing on the facade writes one outside an acquisition or import
+  the library itself performed (`Acquire` stamps the episode row,
+  `inbox.importOne` stamps the placed file's, and the scan inserts a
+  tag-derived row when the file carries `SOURCE_URL`/`SOURCE_ID`).
+  `source` is not a metadata field either, so the editor's field
+  vocabulary cannot reach it. That leaves a wrong origin permanently
+  wrong: a mis-tagged rip reads as acquired from wherever its
+  `SOURCE_URL` pointed, and every acquired-then-reviewed item reads
+  `manual` with an empty URL (see the clobber entry above). Wanted: a
+  curate verb on the facade - `SetAcquisition(ctx, itemPID, input)`, or
+  a clear - so a host can correct or remove a recorded origin, with the
+  same evidence-wins rules applying to later automatic writes. Shipped
+  workaround: WaxDeck surfaces the recorded origin read-only in the
+  metadata editor (a caption saying it is recorded evidence rather than
+  a field), which answers "why can I not edit this" without pretending
+  it is editable. The editor follow-up this unlocks is a small one: the
+  caption becomes an editable line under the same curate gate the rest
+  of the form uses.
+
 ## WaxLabel
 
 - **Map the MP4 `rtng` advisory atom to a tag.** iTunes stores the

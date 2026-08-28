@@ -229,11 +229,27 @@ paths:
         finished but never un-mark it, so undoing a mis-tapped "mark
         finished" needs its own verb.
 
-        Position is untouched, so a client undoing a mark writes the old
-        position through `PUT /items/{pid}/play-state` and clears the
-        flags here. Three combinations are refused with
-        `invalid-request`: a negative play count, `finished` without
-        `played` (every UI renders that row as finished while
+        Send `positionMs` to restore the resume position in the same
+        write. That is what undoing a mis-tapped "mark finished" needs:
+        position and flags move together, so a completion checkpoint
+        arriving from another device lands either wholly before the
+        undo or wholly after it, instead of being refused its finished
+        mark by flags the undo is about to clear and leaving the item
+        at the end, unfinished, with no play counted. Omit `positionMs`
+        to leave the position alone; a client that instead writes it
+        through `PUT /items/{pid}/play-state` first still works, with
+        the window this field closes.
+
+
+        A position restored here never re-derives completion. The
+        spoken-word rules that mark an item played from the position it
+        reaches are suppressed for this write, or an undo restoring a
+        past-threshold position would re-mark what it just cleared.
+
+
+        Four combinations are refused with `invalid-request`: a
+        negative play count, a negative `positionMs`, `finished`
+        without `played` (every UI renders that row as finished while
         `played is false` still matches it), and `played` with an
         explicit `playCount` of 0 (zeroing the count is what un-marking
         means).
@@ -828,6 +844,24 @@ components:
             counted. Setting `played` true without naming a count stores
             the smallest count consistent with it, so a played item
             never sorts as never-played.
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            A resume position to restore in the same write as the
+            flags. Omitted leaves the stored position alone.
+
+
+            It applies unconditionally, and `recordedAt` does not gate
+            it: the recorded-time rule is about the flags, and there is
+            no way to tell a dropped stale flag write from a
+            value-identical one. So this field is for a live write. A
+            client replaying an offline queue should keep sending the
+            position through `PUT /items/{pid}/play-state`, which is
+            the surface that reconciles a replayed position per medium
+            (furthest-wins against recency) rather than applying it
+            blindly.
         recordedAt:
           type: string
           format: date-time

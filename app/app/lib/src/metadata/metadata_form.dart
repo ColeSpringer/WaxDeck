@@ -1,6 +1,7 @@
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_label.dart';
 import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import 'metadata_controller.dart';
@@ -952,13 +953,15 @@ class MetadataFieldRow extends StatelessWidget {
   /// owns the sheet because the canonical tree is its read.
   final VoidCallback? onAddGenre;
 
+  /// Who set this field, named the way the header's tally names it:
+  /// the provider where one supplied the value, the source token
+  /// otherwise, and either read through the producer vocabulary rather
+  /// than shown as the wire word. The chip used to print `enrichment`
+  /// and `musicbrainz` at the reader.
   String _provenanceText(AppLocalizations l10n) {
     final p = state.provenanceFor(field.name);
     if (p == null) return l10n.metadataSourceUnknown;
-    final provider = p.provider;
-    return provider == null
-        ? p.source
-        : l10n.metadataSourceWithProvider(p.source, provider);
+    return provenanceProducerName(l10n, p.provider ?? p.source);
   }
 
   @override

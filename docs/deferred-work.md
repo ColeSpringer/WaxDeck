@@ -731,25 +731,6 @@ here waits on upstream.
 
 ## Curation and metadata
 
-- `[in-repo]` **The editor's unified save is one press but many round
-  trips.** The save bar commits the staged draft as sequential calls:
-  one for the scalar fields, one per changed credit role, one per tag
-  set or remove, one for lyrics, one for release status. Against the
-  headline client - a phone on cellular reaching a home server through
-  a reverse proxy - that is N x 100-300ms felt as lag on a single Save,
-  and every gap between calls is a partial-failure window on a flaky
-  link. The fix shape is a WaxDeck-only compound endpoint (a spec
-  delta, not an upstream ask): one POST carrying the staged parts, run
-  server-side in the same order, answering with per-part outcomes in
-  the `bulkEditMetadata` edited/skipped/failures idiom plus the
-  accumulated write-back failures. Deliberately not a transaction:
-  write-back is best-effort by design, so end-to-end atomicity is
-  unattainable, and catalog-only atomicity would need a combined-edit
-  facade upstream that is not worth its weight - the client already
-  reports partial commits honestly (committed parts adopt clean,
-  refused parts stay staged with the refusal beside them), and that
-  model carries over. The client keeps the sequential path as the
-  fallback for older servers.
 - `[upstream]` **The provider chain fills only the front artwork slot.**
   The art-role model (front, back, disc, booklet, background) ships on
   the read and write surfaces, but enrichment still fills the front
@@ -779,18 +760,6 @@ here waits on upstream.
   not invoke it. The Dart half is pinned by host tests over a mocked
   channel. Automating the picker taps in CI (uiautomator against the
   emulator the conformance job already boots) is the fix shape.
-- `[in-repo]` **Singles auto-apply cannot reach untargeted uploads on a
-  multi-music-library server.** An upload or URL acquisition carries no
-  library pid until import routing places it, so the per-library
-  singles switch resolves through a fallback: the one library that
-  could hold the entry's media. With several music libraries the
-  destination is ambiguous and the gate stays off - honoring any one
-  library's opt-in would auto-apply under a grant nobody made for the
-  actual destination. The app also offers no destination picker on
-  upload, though the API accepts `libraryPid`. Fix shape: let the
-  uploader choose a target library (the create call already carries the
-  field), or thread WaxBin's routing decision back to the entry before
-  the identify gate reads it.
 - `[in-repo]` **Matched-source bindings have no client door.** The
   server accepts a streaming export (Spotify, Apple Music, YouTube
   Music, CSV, text) as a playlist source binding - stored as portable

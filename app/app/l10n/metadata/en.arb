@@ -462,6 +462,46 @@
   "@metadataOpenReleaseGroup": {
     "description": "Door from the metadata editor to the release group this item belongs to: the album across its editions."
   },
+  "metadataOriginLine": "Origin: {source}",
+  "@metadataOriginLine": {
+    "description": "Caption in the metadata editor header naming where the item came from. Read-only: origin is derived from what the import saw.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "a podcast feed"
+      }
+    }
+  },
+  "metadataOriginLineWithUrl": "Origin: {source} - {url}",
+  "@metadataOriginLineWithUrl": {
+    "description": "The same caption when the recorded origin also has a web address. The address is redacted server-side and is not translated.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "a podcast feed"
+      },
+      "url": {
+        "type": "String",
+        "example": "https://feeds.example.com/show/ep-12.mp3"
+      }
+    }
+  },
+  "metadataOriginLocal": "a local file",
+  "@metadataOriginLocal": {
+    "description": "How an item arrived, as it reads inside the origin caption: scanned from the library with no remote source recorded."
+  },
+  "metadataOriginManual": "an unnamed source",
+  "@metadataOriginManual": {
+    "description": "How an item arrived, as it reads inside the origin caption (\"Origin: an unnamed source\"): the catalog recorded that it came from somewhere but not how. Much the commonest value, so it must read sensibly both alone and followed by a web address."
+  },
+  "metadataOriginRecorded": "Recorded evidence of how this arrived, not an editable field.",
+  "@metadataOriginRecorded": {
+    "description": "Caption under the origin line, saying why the origin has no form control beside it."
+  },
+  "metadataOriginRss": "a podcast feed",
+  "@metadataOriginRss": {
+    "description": "How an item arrived, as it reads inside the origin caption: downloaded from a podcast feed."
+  },
   "metadataPendingChip": "Unsaved",
   "@metadataPendingChip": {
     "description": "Chip on a staged change (a tag added to the form, say) that the save bar has not committed yet."
@@ -642,20 +682,6 @@
   "metadataSourceUser": "you",
   "@metadataSourceUser": {
     "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
-  },
-  "metadataSourceWithProvider": "{source} ({provider})",
-  "@metadataSourceWithProvider": {
-    "description": "Chip beside a field, naming where its value came from and which provider answered. Both come from the server and are not translated.",
-    "placeholders": {
-      "source": {
-        "type": "String",
-        "example": "enrichment"
-      },
-      "provider": {
-        "type": "String",
-        "example": "MusicBrainz"
-      }
-    }
   },
   "metadataTagKey": "Key",
   "@metadataTagKey": {

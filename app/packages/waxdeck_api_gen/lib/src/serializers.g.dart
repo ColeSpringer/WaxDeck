@@ -53,6 +53,8 @@ Serializers _$serializers =
           ..add(CatalogSyncPage.serializer)
           ..add(ChapterMark.serializer)
           ..add(ChaptersEdit.serializer)
+          ..add(CommitCredits.serializer)
+          ..add(CommitLyrics.serializer)
           ..add(CoverageCount.serializer)
           ..add(Credit.serializer)
           ..add(CreditsEdit.serializer)
@@ -129,6 +131,7 @@ Serializers _$serializers =
           ..add(InviteCreated.serializer)
           ..add(InviteList.serializer)
           ..add(Item.serializer)
+          ..add(ItemAcquisition.serializer)
           ..add(ItemMetadata.serializer)
           ..add(ItemPage.serializer)
           ..add(ItemPermissions.serializer)
@@ -173,6 +176,11 @@ Serializers _$serializers =
           ..add(MergeRequest.serializer)
           ..add(MergeRequestEntityTypeEnum.serializer)
           ..add(MergeResult.serializer)
+          ..add(MetadataCommit.serializer)
+          ..add(MetadataCommitPart.serializer)
+          ..add(MetadataCommitPartPart_Enum.serializer)
+          ..add(MetadataCommitPartStatusEnum.serializer)
+          ..add(MetadataCommitResult.serializer)
           ..add(MetadataEdit.serializer)
           ..add(MetadataEditResult.serializer)
           ..add(MetadataFields.serializer)
@@ -369,6 +377,8 @@ Serializers _$serializers =
           ..add(UploadGrouping.serializer)
           ..add(UploadPage.serializer)
           ..add(UploadQuota.serializer)
+          ..add(UploadTarget.serializer)
+          ..add(UploadTargets.serializer)
           ..add(UserAccount.serializer)
           ..add(UserCreate.serializer)
           ..add(UserPage.serializer)
@@ -621,6 +631,24 @@ Serializers _$serializers =
               const FullType(MediaTypeListening),
             ]),
             () => ListBuilder<MediaTypeListening>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(MediaType)]),
+            () => ListBuilder<MediaType>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(MetadataCommitPart),
+            ]),
+            () => ListBuilder<MetadataCommitPart>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(WriteBackFailure)]),
+            () => ListBuilder<WriteBackFailure>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ModelLibrary)]),
@@ -1097,6 +1125,10 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
           )
@@ -1218,6 +1250,10 @@ Serializers _$serializers =
             () => ListBuilder<Upload>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(UploadTarget)]),
+            () => ListBuilder<UploadTarget>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(UserAccount)]),
             () => ListBuilder<UserAccount>(),
           )
@@ -1264,6 +1300,32 @@ Serializers _$serializers =
               const FullType(String),
             ]),
             () => MapBuilder<String, String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType(String),
+            ]),
+            () => MapBuilder<String, String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(CommitCredits)]),
+            () => ListBuilder<CommitCredits>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ChapterMark)]),
+            () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType(BuiltList, const [const FullType(String)]),
+            ]),
+            () => MapBuilder<String, BuiltList<String>>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltMap, const [

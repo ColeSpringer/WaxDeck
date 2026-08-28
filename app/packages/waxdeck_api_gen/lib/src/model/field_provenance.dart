@@ -14,7 +14,7 @@ part 'field_provenance.g.dart';
 /// * [field] - The field, possibly namespaced, or `art` / `lyrics` for an artifact row. 
 /// * [source_] - The producer: `tag` (the file's own tags), `sidecar` (a companion file beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the curation surface), `enrichment` (supplied by a metadata provider, named in `provider`), `organize` (written by an organize tag write-back), or `feed` (a podcast feed). A string, not a closed enum. `sidecar` and `feed` reach only artifact rows; a scalar field is never produced from a cover image or a feed. 
 /// * [provider] - The enrichment provider, for enriched fields.
-/// * [sourceUrl] - Where a fetched value's bytes came from, on the rows that have one (an enrichment or feed cover). Empty otherwise. 
+/// * [sourceUrl] - Where a fetched value's bytes came from, on the rows that have one (an enrichment or feed cover). Empty otherwise.  Redacted exactly as `ItemAcquisition.sourceUrl` is, and for the same reason: `http`/`https` only, reduced to scheme, host and path, because a feed cover's row holds the show's own enclosure URL and this read answers every account that can see the item. 
 /// * [locked] - Whether the field is locked.
 /// * [updatedAt] - When the value last changed.
 @BuiltValue()
@@ -31,7 +31,7 @@ abstract class FieldProvenance implements Built<FieldProvenance, FieldProvenance
   @BuiltValueField(wireName: r'provider')
   String? get provider;
 
-  /// Where a fetched value's bytes came from, on the rows that have one (an enrichment or feed cover). Empty otherwise. 
+  /// Where a fetched value's bytes came from, on the rows that have one (an enrichment or feed cover). Empty otherwise.  Redacted exactly as `ItemAcquisition.sourceUrl` is, and for the same reason: `http`/`https` only, reduced to scheme, host and path, because a feed cover's row holds the show's own enclosure URL and this read answers every account that can see the item. 
   @BuiltValueField(wireName: r'sourceUrl')
   String? get sourceUrl;
 

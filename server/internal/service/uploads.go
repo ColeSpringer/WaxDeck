@@ -202,10 +202,16 @@ func (l *Library) requireUploader(uc *UserCtx) error {
 	return nil
 }
 
-// validateUploadTargetLibrary checks a caller-named target library
-// for the upload surfaces (sessions and batches): it must exist, be
-// visible to the caller, and be writable. Empty means the server
-// routes by media type and passes here.
+// validateUploadTargetLibrary checks a caller-named target library for
+// the upload surfaces (sessions, batches, and acquisitions): it must
+// exist, not be the internal episode library, be visible to the
+// caller, and be writable. Empty means the server routes by media type
+// and passes here.
+//
+// The predicate is UploadTargets' own, so what the picker offers and
+// what create accepts cannot drift: offering a destination the create
+// call refuses is the obvious half, and accepting one the picker
+// deliberately withholds is the same drift in the other direction.
 func (l *Library) validateUploadTargetLibrary(ctx context.Context, uc *UserCtx, apiPID string) error {
 	if apiPID == "" {
 		return nil
@@ -214,13 +220,109 @@ func (l *Library) validateUploadTargetLibrary(ctx context.Context, uc *UserCtx, 
 	if !ok || prefix != PrefixLibrary {
 		return errNotFound("no such library")
 	}
-	if _, err := l.libraryByPID(ctx, pid); err != nil {
+	lib, err := l.libraryByPID(ctx, pid)
+	if err != nil {
 		return err
+	}
+	// Episodes ingest into the podcast library by their own path and
+	// never through this pid; filing a music upload under it would give
+	// the entry that library's matching mode and singles setting.
+	// Defence in depth rather than a door somebody is knocking on: no
+	// client read hands out that library's pid, which is also why there
+	// is no test for it here.
+	if lib.Mode == model.ModePodcast {
+		return errNotFound("no such library")
 	}
 	if !uc.AllLibraries && !uc.Libraries[string(pid)] {
 		return errNotFound("no such library")
 	}
 	return l.CheckWritable(ctx, string(pid))
+}
+
+// UploadTargetDTO is one library an upload or acquisition may name.
+type UploadTargetDTO struct {
+	PID  string
+	Name string
+	// MediaTypes is what the library accepts, resolved for the caller:
+	// a mixed library lists every kind, so a picker filters on
+	// membership rather than teaching itself what "mixed" means.
+	MediaTypes []string
+	Managed    bool
+}
+
+// UploadTargets lists the libraries the caller may name as an upload's
+// or acquisition's target: visible to them, and not read-only. It is
+// the read behind the destination picker, and deliberately narrow -
+// no paths, no counts - so a plain uploader learns nothing about the
+// server's filesystem from it. The admin library listing stays
+// admin-only for exactly that reason.
+//
+// Managed is reported and not filtered on. Placement is the catalog's
+// own routing, which sends each kind to the one managed root that
+// accepts it and never reads the pid a caller named; what the pid
+// selects is the library whose settings govern the import and whose
+// read-only state gates it. So an unmanaged library is a legitimate
+// answer here, and filtering it out would hide a real choice.
+func (l *Library) UploadTargets(ctx context.Context, uc *UserCtx) ([]UploadTargetDTO, error) {
+	if err := l.requireUploader(uc); err != nil {
+		return nil, err
+	}
+	libs, err := l.lib.Libraries(ctx)
+	if err != nil {
+		return nil, classify(err)
+	}
+	roots := l.libraryRoots()
+	names := make(map[string]string, len(roots))
+	managed := make(map[string]bool, len(roots))
+	for _, r := range roots {
+		clean := cleanRootPath(r.Path)
+		names[clean] = r.Name
+		if r.Managed {
+			managed[clean] = true
+		}
+	}
+	out := make([]UploadTargetDTO, 0, len(libs))
+	for _, lib := range libs {
+		// The internal episode library is not an upload target: episodes
+		// ingest into it by their own path and never through this pid.
+		if lib.Mode == model.ModePodcast {
+			continue
+		}
+		bare := string(lib.PID)
+		if !uc.AllLibraries && !uc.Libraries[bare] {
+			continue
+		}
+		if l.CheckWritable(ctx, bare) != nil {
+			continue
+		}
+		clean := cleanRootPath(lib.DisplayRoot)
+		name := names[clean]
+		if name == "" {
+			name = filepath.Base(lib.DisplayRoot)
+		}
+		out = append(out, UploadTargetDTO{
+			PID:        apiPID(PrefixLibrary, lib.PID),
+			Name:       name,
+			MediaTypes: acceptedMediaTypes(lib.MediaType()),
+			Managed:    managed[clean],
+		})
+	}
+	return out, nil
+}
+
+// acceptedMediaTypes flattens a library's media class into the media
+// types a client filters on, in the contract's own order.
+func acceptedMediaTypes(m model.MediaType) []string {
+	out := make([]string, 0, 2)
+	for _, mt := range []struct {
+		name string
+		kind model.Kind
+	}{{"music", model.KindTrack}, {"audiobook", model.KindBook}} {
+		if m.Accepts(mt.kind) {
+			out = append(out, mt.name)
+		}
+	}
+	return out
 }
 
 // CreateUpload opens a resumable session, charging the declared size

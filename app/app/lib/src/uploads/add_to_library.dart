@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../settings/client_settings_providers.dart';
 import '../settings/prefs_controller.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -145,20 +149,31 @@ Future<void> acquireFromUrl(
   final messenger = ref.read(shellMessengerProvider.notifier);
   final router = GoRouter.of(context);
   final l10n = context.l10n;
-  final identifyDefault = await _identifyDefault(ref);
+  // Joined, not awaited in turn: both are pre-dialog seeds and paying
+  // their round trips end to end doubles the wait before the sheet.
+  final (identifyDefault, targets, remembered) = await _dialogSeeds(ref);
   if (!context.mounted) return;
   final request =
       await showDialog<
-        ({String url, MediaType mediaType, String format, bool? identify})
+        ({
+          String url,
+          MediaType mediaType,
+          String format,
+          bool? identify,
+          String libraryPid,
+        })
       >(
         context: context,
         builder: (_) => AcquireDialog(
           initial: initial,
           initialUrl: initialUrl,
           initialIdentify: identifyDefault,
+          targets: targets,
+          rememberedTarget: remembered,
         ),
       );
   if (request == null) return;
+  _rememberUploadTarget(ref, request.libraryPid);
   try {
     await ref
         .read(repositoryProvider)
@@ -167,6 +182,7 @@ Future<void> acquireFromUrl(
           mediaType: request.mediaType,
           format: request.format,
           identify: request.identify,
+          libraryPid: request.libraryPid.isEmpty ? null : request.libraryPid,
         );
     ref
       ..invalidate(uploadsProvider)
@@ -293,20 +309,29 @@ Future<void> uploadPickedFiles(
   // this loop reports is worded from a code, and there is no context to
   // read a table through once the last upload settles.
   final l10n = context.l10n;
-  final identifyDefault = await _identifyDefault(ref);
+  final (identifyDefault, targets, remembered) = await _dialogSeeds(ref);
   if (!context.mounted) return;
   final choice =
       await showDialog<
-        ({MediaType mediaType, UploadGrouping grouping, bool? identify})
+        ({
+          MediaType mediaType,
+          UploadGrouping grouping,
+          bool? identify,
+          String libraryPid,
+        })
       >(
         context: context,
         builder: (_) => MediaTypeDialog(
           initial: initial ?? MediaType.music,
           fileCount: files.length,
           initialIdentify: identifyDefault,
+          targets: targets,
+          rememberedTarget: remembered,
         ),
       );
   if (choice == null) return;
+  _rememberUploadTarget(ref, choice.libraryPid);
+  final libraryPid = choice.libraryPid.isEmpty ? null : choice.libraryPid;
   final repository = ref.read(repositoryProvider);
   String? batchId;
   if (files.length > 1) {
@@ -314,6 +339,7 @@ Future<void> uploadPickedFiles(
       final batch = await repository.createUploadBatch(
         grouping: choice.grouping,
         mediaType: choice.mediaType.wireName,
+        libraryPid: libraryPid,
         identify: choice.identify,
       );
       batchId = batch.id;
@@ -330,6 +356,7 @@ Future<void> uploadPickedFiles(
           .uploadPicked(
             file,
             mediaType: choice.mediaType.wireName,
+            libraryPid: libraryPid,
             batchId: batchId,
             identify: choice.identify,
           );
@@ -386,6 +413,78 @@ Future<void> uploadPickedFiles(
   }
 }
 
+/// The libraries this account may file under, or none.
+///
+/// Read here rather than watched in the dialog because the dialog is
+/// built once and a list arriving mid-tap would grow a row under a
+/// pointer already moving; and because a server without the route, one
+/// that refused the read, and one that never answers all degrade to the
+/// same empty list - no picker, and the server routing as it always
+/// did.
+///
+/// Time-boxed like its two neighbours and for the same reason: the
+/// app's Dio carries no timeouts, so a server that takes the socket and
+/// never answers would otherwise hold the dialog shut for good,
+/// dropping picked files and eating a shared URL the gate has already
+/// dequeued. try/catch bounds errors, not time.
+Future<List<UploadTarget>> _uploadTargets(WidgetRef ref) => ref
+    .read(uploadTargetsProvider.future)
+    .catchError((Object _, StackTrace _) => const <UploadTarget>[])
+    .timeout(_targetsWait, onTimeout: () => const <UploadTarget>[]);
+
+/// How long a dialog waits on the target list before opening without a
+/// picker.
+const _targetsWait = Duration(seconds: 2);
+
+/// The library the last submission was filed under, or empty.
+///
+/// Read straight from the store rather than through a [StoredSetting]:
+/// that mixin answers its default synchronously and hydrates in the
+/// background, and nothing else in the app reads this key, so every
+/// read here would be the first one and would answer empty - the cold
+/// start being exactly the launch this is for. Bounded like the reads
+/// beside it, though this one is local.
+Future<String> _rememberedTarget(WidgetRef ref) async {
+  try {
+    final store = ref.read(clientSettingsStoreProvider);
+    final raw = await store
+        .read(ClientSettingKeys.uploadTarget)
+        .timeout(_targetsWait, onTimeout: () => null);
+    return raw ?? '';
+  } on Exception {
+    return '';
+  }
+}
+
+/// Remembers the library that was chosen, so the next submission opens
+/// on it. An empty pid is the picker not having been a choice at all,
+/// which must not overwrite a real answer from a server with several.
+void _rememberUploadTarget(WidgetRef ref, String pid) {
+  if (pid.isEmpty) return;
+  final store = ref.read(clientSettingsStoreProvider);
+  unawaited(
+    store.write(ClientSettingKeys.uploadTarget, pid).catchError((Object _) {}),
+  );
+}
+
+/// The remembered library and the candidate list, for the one intake
+/// that opens no dialog. Public because the share gate is a sibling
+/// file rather than a caller of the dialogs.
+Future<(String, List<UploadTarget>)> sharedUploadTarget(WidgetRef ref) async {
+  final remembered = _rememberedTarget(ref);
+  final targets = _uploadTargets(ref);
+  return (await remembered, await targets);
+}
+
+/// The three values a dialog opens on, gathered together so their
+/// waits overlap rather than stack.
+Future<(bool?, List<UploadTarget>, String)> _dialogSeeds(WidgetRef ref) async {
+  final identify = _identifyDefault(ref);
+  final targets = _uploadTargets(ref);
+  final remembered = _rememberedTarget(ref);
+  return (await identify, await targets, await remembered);
+}
+
 /// What the identification switch opens on. Awaited, not sampled: the
 /// provider is lazy, so a synchronous read answers the default for
 /// anybody who has not opened Settings. Null where it cannot be read,
@@ -419,6 +518,8 @@ class AcquireDialog extends StatefulWidget {
     this.initial = MediaType.music,
     this.initialUrl,
     required this.initialIdentify,
+    this.targets = const [],
+    this.rememberedTarget = '',
   });
 
   final MediaType initial;
@@ -429,6 +530,14 @@ class AcquireDialog extends StatefulWidget {
   /// What the switch opens on; null is sent absent. Required, not
   /// defaulted: a caller that forgot it would ignore the preference.
   final bool? initialIdentify;
+
+  /// Every library this account may file under, unfiltered: the medium
+  /// is chosen inside the dialog, so the narrowing is too.
+  final List<UploadTarget> targets;
+
+  /// The library the last submission went to, honoured where it is
+  /// still on offer for the chosen medium.
+  final String rememberedTarget;
 
   @override
   State<AcquireDialog> createState() => _AcquireDialogState();
@@ -442,6 +551,13 @@ class _AcquireDialogState extends State<AcquireDialog> {
   // Null is "nobody has said": drawn as on, sent absent.
   late bool? _identify = widget.initialIdentify;
   var _format = 'best';
+
+  /// The pid last chosen here, or the remembered one until somebody
+  /// chooses. What is sent is [resolveUploadTarget] of it against the
+  /// candidates for the chosen medium, resolved per build: switching
+  /// the medium moves the choice onto one that medium offers, without
+  /// this having to follow the move.
+  late String _target = widget.rememberedTarget;
 
   @override
   void initState() {
@@ -460,6 +576,8 @@ class _AcquireDialogState extends State<AcquireDialog> {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final url = _urlController.text.trim();
+    final candidates = uploadTargetsFor(widget.targets, _mediaType);
+    final target = resolveUploadTarget(candidates, _target);
     return AlertDialog(
       backgroundColor: colors.surface2,
       title: Text(l10n.uploadsFromUrl),
@@ -479,6 +597,11 @@ class _AcquireDialogState extends State<AcquireDialog> {
             MediaTypeSelector(
               value: _mediaType,
               onChanged: (value) => setState(() => _mediaType = value),
+            ),
+            UploadTargetSelector(
+              candidates: candidates,
+              value: target,
+              onChanged: (value) => setState(() => _target = value),
             ),
             // Format is a download choice, so it is hidden for podcasts,
             // which subscribe to a feed rather than transcode a file.
@@ -517,6 +640,11 @@ class _AcquireDialogState extends State<AcquireDialog> {
                   mediaType: _mediaType,
                   format: _mediaType == MediaType.podcast ? 'best' : _format,
                   identify: _identify,
+                  // Only where the picker was a real choice: one
+                  // candidate is the routing the server would have done
+                  // anyway, and naming it would pin a policy nobody
+                  // asked for.
+                  libraryPid: candidates.length > 1 ? target : '',
                 )),
         ),
       ],
@@ -533,6 +661,8 @@ class MediaTypeDialog extends StatefulWidget {
     this.initial = MediaType.music,
     this.fileCount = 1,
     required this.initialIdentify,
+    this.targets = const [],
+    this.rememberedTarget = '',
   });
 
   final MediaType initial;
@@ -545,6 +675,12 @@ class MediaTypeDialog extends StatefulWidget {
   /// [AcquireDialog.initialIdentify].
   final bool? initialIdentify;
 
+  /// See [AcquireDialog.targets].
+  final List<UploadTarget> targets;
+
+  /// See [AcquireDialog.rememberedTarget].
+  final String rememberedTarget;
+
   @override
   State<MediaTypeDialog> createState() => _MediaTypeDialogState();
 }
@@ -554,11 +690,16 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
   late bool? _identify = widget.initialIdentify;
   var _grouping = UploadGrouping.auto;
 
+  /// See [_AcquireDialogState._target].
+  late String _target = widget.rememberedTarget;
+
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final several = widget.fileCount > 1;
+    final candidates = uploadTargetsFor(widget.targets, _mediaType);
+    final target = resolveUploadTarget(candidates, _target);
     return AlertDialog(
       backgroundColor: colors.surface2,
       title: Text(
@@ -575,6 +716,11 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
             MediaTypeSelector(
               value: _mediaType,
               onChanged: (value) => setState(() => _mediaType = value),
+            ),
+            UploadTargetSelector(
+              candidates: candidates,
+              value: target,
+              onChanged: (value) => setState(() => _target = value),
             ),
             if (several) ...<Widget>[
               const SizedBox(height: WaxSpace.s16),
@@ -606,6 +752,7 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
             mediaType: _mediaType,
             grouping: _grouping,
             identify: _identify,
+            libraryPid: candidates.length > 1 ? target : '',
           )),
         ),
       ],
@@ -705,6 +852,72 @@ class MediaTypeSelector extends StatelessWidget {
       onChanged: onChanged,
     );
   }
+}
+
+/// Which library the submission is filed under, when the server offers
+/// more than one candidate for the chosen medium.
+///
+/// Hidden below two candidates on purpose: a question with one answer
+/// is not a question, and the server routes exactly as it always did
+/// when nothing is named. It is also hidden while the read is in
+/// flight, so the dialog never grows a row under a pointer already
+/// moving to Upload.
+///
+/// The help line is there because the choice is narrower than the word
+/// "library" suggests: it selects whose settings govern the import, not
+/// the folder the bytes land in, which is the catalog's own routing.
+class UploadTargetSelector extends StatelessWidget {
+  const UploadTargetSelector({
+    super.key,
+    required this.candidates,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<UploadTarget> candidates;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (candidates.length < 2) return const SizedBox.shrink();
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    final names = {for (final t in candidates) t.pid: t.name};
+    return Padding(
+      padding: const EdgeInsets.only(top: WaxSpace.s16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          WaxChoice<String>(
+            label: l10n.uploadsLibrary,
+            value: value,
+            semanticsId: SemanticsIds.uploadLibrary,
+            optionSemanticsIdFor: SemanticsIds.uploadLibraryOption,
+            options: candidates.map((t) => t.pid).toList(),
+            labelFor: (pid) => names[pid] ?? pid,
+            onChanged: onChanged,
+          ),
+          const SizedBox(height: WaxSpace.s4),
+          Text(
+            l10n.uploadsLibraryHelp,
+            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The candidate this dialog opens on: the remembered choice where it
+/// is still on offer, and the first candidate otherwise. A pid from
+/// another server, or one whose library stopped accepting this medium,
+/// is not sent.
+String resolveUploadTarget(List<UploadTarget> candidates, String remembered) {
+  if (candidates.isEmpty) return '';
+  if (candidates.any((t) => t.pid == remembered)) return remembered;
+  return candidates.first.pid;
 }
 
 /// Does this stop for you, or go straight in as delivered? Named for

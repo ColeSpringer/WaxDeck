@@ -42,6 +42,8 @@
   "uploadsIdentifyOther": "Revisar antes de añadir",
   "uploadsIdentifyOtherHelp": "Espera tu decisión. Desactivado, lo añade con las etiquetas que trae",
   "uploadsIdentifying": "{count, plural, =1{Se ha subido 1 archivo. Se está identificando y aparecerá cuando pase la revisión} other{Se han subido {count} archivos. Se están identificando y aparecerán cuando pasen la revisión}}",
+  "uploadsLibrary": "Biblioteca",
+  "uploadsLibraryHelp": "Qué ajustes de biblioteca se aplican. Dónde se colocan los archivos lo decide el servidor.",
   "uploadsLoadError": "No se han podido cargar las subidas",
   "uploadsLoadMore": "Cargar más",
   "uploadsMediaBook": "Audiolibro",

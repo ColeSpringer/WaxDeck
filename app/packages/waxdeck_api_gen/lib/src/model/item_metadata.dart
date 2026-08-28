@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/item_acquisition.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics_state.dart';
 import 'package:waxdeck_api_gen/src/model/write_back_issue.dart';
 import 'package:waxdeck_api_gen/src/model/field_provenance.dart';
@@ -37,6 +38,7 @@ part 'item_metadata.g.dart';
 /// * [releaseGroupPid] - The item's release group entity, when any.
 /// * [writeBackIssues] - Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store). 
 /// * [mayCurate] - Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. 
+/// * [acquisition] 
 @BuiltValue()
 abstract class ItemMetadata implements Built<ItemMetadata, ItemMetadataBuilder> {
   /// The item.
@@ -109,6 +111,9 @@ abstract class ItemMetadata implements Built<ItemMetadata, ItemMetadataBuilder> 
   /// Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. 
   @BuiltValueField(wireName: r'mayCurate')
   bool? get mayCurate;
+
+  @BuiltValueField(wireName: r'acquisition')
+  ItemAcquisition? get acquisition;
 
   ItemMetadata._();
 
@@ -233,6 +238,13 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
       yield serializers.serialize(
         object.mayCurate,
         specifiedType: const FullType(bool),
+      );
+    }
+    if (object.acquisition != null) {
+      yield r'acquisition';
+      yield serializers.serialize(
+        object.acquisition,
+        specifiedType: const FullType(ItemAcquisition),
       );
     }
   }
@@ -383,6 +395,13 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.mayCurate = valueDes;
+          break;
+        case r'acquisition':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(ItemAcquisition),
+          ) as ItemAcquisition;
+          result.acquisition.replace(valueDes);
           break;
         default:
           unhandled.add(key);

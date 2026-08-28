@@ -645,42 +645,73 @@ class _BookOverflow extends ConsumerWidget {
   /// and `finished`, and the completion rules are monotonic - they mark
   /// and never un-mark - so a mis-tap used to leave the book in the
   /// Finished shelf forever with the hub's unfinished filter hiding it.
-  /// The flags go back through their own verb, with the play count the
-  /// mark added cleared rather than left standing.
   ///
-  /// Position first, flags second: a checkpoint re-derives completion
-  /// from the position it writes, so the flag write has to be the one
-  /// nothing runs after. Doing it the other way round leaves the write
-  /// that can re-mark as the last word.
+  /// One request, position and flags together. As two writes there was
+  /// a window between them where the book stood at its end with the
+  /// mark still on, and an end-of-book checkpoint from another device
+  /// landing in it was refused its finished mark - `played` still stood
+  /// when the crossing was evaluated - while the flag clear then landed
+  /// last: the book left at 100 percent, unfinished, nothing counted.
+  /// The server serializes the write against that checkpoint, so the
+  /// outcome is now whichever of the two arrived second, whole.
   ///
-  /// Attempted independently, which is the half that matters more. One
-  /// `try` around both meant any failure of the first - a 503, a network
-  /// blip, or the catalog's own refusal of a played row with a zero
-  /// count - skipped the second and landed in an empty catch: the toast
-  /// dismissed and nothing moved at all, where before this verb existed
-  /// the position at least went back.
+  /// The old two-request path survives as the fallback, for a server
+  /// too old for `positionMs` (which keeps the stored position, and the
+  /// returned state says so) and for a write that was refused and may
+  /// have moved nothing. It is the old path whole - position, then
+  /// flags again - and not just its position half, because a checkpoint
+  /// re-derives completion from the position it writes: restoring a
+  /// past-threshold position with nothing after it would re-mark
+  /// exactly what the undo just cleared. The atomic write suppresses
+  /// that derive; `putPlayState` cannot.
+  ///
+  /// Running it when the position had already landed costs two writes
+  /// and changes nothing, which is why the check is allowed to be
+  /// approximate: the state is re-read outside the server's own lock,
+  /// so a checkpoint from the still-playing engine can make the
+  /// position differ for reasons that are not an old server.
   Future<void> _undo(
     ProviderContainer container,
     WaxDeckRepository repository,
     PlayState before,
   ) async {
+    // Zero rather than null when the book was not played before: null
+    // keeps the stored count, which would leave the play the mark added
+    // counted. The catalog refuses a played row with a zero count, so a
+    // book that was already played keeps its own.
+    final count = before.played ? before.playCount : 0;
     var moved = false;
+    PlayState? after;
+    try {
+      after = await repository.setPlayed(
+        book.pid,
+        played: before.played,
+        finished: before.finished,
+        playCount: count,
+        positionMs: before.positionMs,
+      );
+      moved = true;
+    } on WaxDeckApiException {
+      // Nothing to say from a dismissed toast; the pair below still
+      // runs, which is what a mis-tap at least wants back.
+    }
+    if (after != null && after.positionMs == before.positionMs) {
+      if (moved) _refresh(container);
+      return;
+    }
     try {
       await repository.putPlayState(book.pid, before.positionMs);
       moved = true;
     } on WaxDeckApiException {
-      // Nothing to say from a dismissed toast; the flag write still runs.
+      // The flags may well have gone back, which is the half that the
+      // completion rules cannot undo on their own.
     }
     try {
       await repository.setPlayed(
         book.pid,
         played: before.played,
         finished: before.finished,
-        // Zero rather than null when the book was not played before:
-        // null keeps the stored count, which would leave the play the
-        // mark added counted. The catalog refuses a played row with a
-        // zero count, so a book that was already played keeps its own.
-        playCount: before.played ? before.playCount : 0,
+        playCount: count,
       );
       moved = true;
     } on WaxDeckApiException {

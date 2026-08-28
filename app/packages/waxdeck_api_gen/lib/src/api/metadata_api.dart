@@ -26,6 +26,8 @@ import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
 import 'package:waxdeck_api_gen/src/model/locks_edit.dart';
 import 'package:waxdeck_api_gen/src/model/locks_result.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics_edit.dart';
+import 'package:waxdeck_api_gen/src/model/metadata_commit.dart';
+import 'package:waxdeck_api_gen/src/model/metadata_commit_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_edit.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_fields.dart';
@@ -396,6 +398,114 @@ class MetadataApi {
     );
 
     return _response;
+  }
+
+  /// Commit a staged metadata draft in one request
+  /// Runs every staged part of one item&#39;s editor draft server-side, in the order the editor&#39;s own sequential save uses: scalar fields, then each credit role, then lyrics (or their removal), then chapters, then each tag set, then each tag removal, then the release status. It exists for latency: the sequential save is one round trip per part, which on a phone reaching a home server through a reverse proxy is felt as lag on a single Save, and every gap between the calls is a partial-failure window on a flaky link.  At least one part is required. &#x60;writeBack&#x60;, &#x60;lock&#x60; and &#x60;force&#x60; are hoisted here rather than repeated per part, and each part takes the ones its own endpoint takes: chapters and tag sets take &#x60;lock&#x60; and &#x60;force&#x60;, a tag removal, a lyrics clear and the release status take none.  **Deliberately not a transaction.** Write-back is best-effort by design, so end-to-end atomicity is unattainable, and catalog-only atomicity would need a combined-edit facade upstream. Parts run until one is refused; that part reports &#x60;refused&#x60; with its &#x60;Error&#x60;, every later part reports &#x60;skipped&#x60;, and the parts before it stay committed. That is exactly what the sequential save produces, which is the point: the two paths are interchangeable, and a client keeps the sequential one as its fallback for an older server.  So a refusal is a &#x60;200&#x60; carrying a refused part, not a &#x60;4xx&#x60;: the write-back failures the committed parts accumulated are what the editor&#39;s banner is made of, and a status code would discard them. A lock conflict that &#x60;PATCH /items/{pid}/metadata&#x60; answers &#x60;409&#x60; arrives here as a part refused with &#x60;field-locked&#x60;, worded exactly as that endpoint words it.  One exception, and it is what the status codes below are for: a failure that says the server is temporarily unwell rather than that the edit was wrong - &#x60;catalog-maintenance&#x60;, &#x60;internal&#x60;, &#x60;catalog-busy&#x60; - answers with its own status code when it happens before anything has committed. Nothing is lost by doing so, and a client answers those with a banner and a retry rather than by showing them to the person who typed the value. Once a part has committed, the same failure rides as a part refusal, because discarding that part&#39;s report is the worse trade.  Gated per item like the sequential parts: administrators, or the user whose upload brought the item in. It is not the bulk edit and does not carry that operation&#39;s admin-only gate. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [metadataCommit] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [MetadataCommitResult] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<MetadataCommitResult>> commitItemMetadata({ 
+    required String pid,
+    required MetadataCommit metadataCommit,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/metadata/commit'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(MetadataCommit);
+      _bodyData = _serializers.serialize(metadataCommit, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    MetadataCommitResult? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(MetadataCommitResult),
+      ) as MetadataCommitResult;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<MetadataCommitResult>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// Edit entity fields

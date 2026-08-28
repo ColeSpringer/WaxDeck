@@ -220,6 +220,16 @@ components:
           description: >
             Where the bytes were fetched from, for a cover that came off
             the network (`enrichment`, `feed`). Empty otherwise.
+
+
+            Redacted the way `ItemAcquisition.sourceUrl` is, and for the
+            same reason - these reads answer everyone who can see the
+            item while the stored value is verbatim: `http`/`https`
+            only, reduced to scheme, host and path. A `feed` cover on a
+            show with stored credentials is withheld entirely rather
+            than redacted, because its address is minted from the same
+            document the credentials open. So this identifies where a
+            picture came from; it is not a URL to re-fetch it by.
         level:
           type: string
           description: >

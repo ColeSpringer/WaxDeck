@@ -17,6 +17,7 @@ import 'package:waxdeck_api_gen/src/model/upload_batch.dart';
 import 'package:waxdeck_api_gen/src/model/upload_batch_create.dart';
 import 'package:waxdeck_api_gen/src/model/upload_create.dart';
 import 'package:waxdeck_api_gen/src/model/upload_page.dart';
+import 'package:waxdeck_api_gen/src/model/upload_targets.dart';
 
 class UploadsApi {
 
@@ -305,7 +306,7 @@ class UploadsApi {
   }
 
   /// Start an upload
-  /// Creates a resumable upload session for one audio file. The caller must hold upload rights; the declared size counts against the caller&#39;s pending-upload limit up front so a full one fails fast, and the file name&#39;s extension is checked against the server&#39;s accepted formats. The required media type label routes the file to the matching library kind; &#x60;libraryPid&#x60; pins a specific library (required when several libraries of that kind are visible to the caller). Passing the file&#39;s SHA-256 up front lets the server warn about an exact duplicate before any bytes move: the response&#39;s &#x60;duplicate&#x60; names the existing item and the client can abandon the session without spending bandwidth (a fingerprint-level duplicate check still runs at completion). Bytes then flow through the data endpoint in any number of chunks. Three ceilings answer before any of that: a &#x60;sizeBytes&#x60; past the schema&#39;s maximum answers &#x60;invalid-request&#x60; and names the limit, since no allowance anybody can change moves it; a staging volume with no room for the declared size - counting what the sessions already receiving still owe it - answers &#x60;storage-full&#x60;, which is the server&#39;s disk rather than the caller&#39;s allowance; and opening a session is paced per account, which answers &#x60;rate-limited&#x60;. Sending bytes and abandoning a session are not paced: one is bounded by the ceilings above and the other is what releases them. 
+  /// Creates a resumable upload session for one audio file. The caller must hold upload rights; the declared size counts against the caller&#39;s pending-upload limit up front so a full one fails fast, and the file name&#39;s extension is checked against the server&#39;s accepted formats. The required media type label routes the file to the matching library kind; &#x60;libraryPid&#x60; names which library it belongs to, which is a choice about settings rather than about placement (see the field). Passing the file&#39;s SHA-256 up front lets the server warn about an exact duplicate before any bytes move: the response&#39;s &#x60;duplicate&#x60; names the existing item and the client can abandon the session without spending bandwidth (a fingerprint-level duplicate check still runs at completion). Bytes then flow through the data endpoint in any number of chunks. Three ceilings answer before any of that: a &#x60;sizeBytes&#x60; past the schema&#39;s maximum answers &#x60;invalid-request&#x60; and names the limit, since no allowance anybody can change moves it; a staging volume with no room for the declared size - counting what the sessions already receiving still owe it - answers &#x60;storage-full&#x60;, which is the server&#39;s disk rather than the caller&#39;s allowance; and opening a session is paced per account, which answers &#x60;rate-limited&#x60;. Sending bytes and abandoning a session are not paced: one is bounded by the ceilings above and the other is what releases them. 
   ///
   /// Parameters:
   /// * [uploadCreate] 
@@ -649,6 +650,90 @@ class UploadsApi {
     }
 
     return Response<Upload>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// List the libraries an upload may name
+  /// The libraries the caller may name as an upload&#39;s or acquisition&#39;s target: visible to them, and not read-only. Needs upload rights. Unpaginated, for the reason the admin library listing documents - libraries are a handful of roots, not a collection that grows with content - and it carries no paths and no counts, so a plain uploader learns nothing about the server&#39;s filesystem from it.  **What naming a target does, and does not do.** It does not choose the folder the file lands in: placement is the catalog&#39;s own routing, which sends each media kind to the one managed root that accepts it. What the pid selects is the library whose per-library settings apply to the import - its matching mode, and whether a single-track submission may auto-apply its match - and whose read-only state gates it. On the common server with one library per media type the two are the same library and the distinction never shows; where they differ, this is the one that is chosen.  &#x60;managed&#x60; says whether the library is a managed root, which is what makes it a possible destination for placement as well as a policy target. It is reported rather than filtered on: a library can legitimately be the policy target without being where the bytes land. 
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [UploadTargets] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<UploadTargets>> listUploadTargets({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/uploads/targets';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    UploadTargets? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(UploadTargets),
+      ) as UploadTargets;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<UploadTargets>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

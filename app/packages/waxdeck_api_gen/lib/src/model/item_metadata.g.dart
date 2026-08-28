@@ -43,6 +43,8 @@ class _$ItemMetadata extends ItemMetadata {
   final BuiltList<WriteBackIssue> writeBackIssues;
   @override
   final bool? mayCurate;
+  @override
+  final ItemAcquisition? acquisition;
 
   factory _$ItemMetadata([void Function(ItemMetadataBuilder)? updates]) =>
       (ItemMetadataBuilder()..update(updates))._build();
@@ -66,6 +68,7 @@ class _$ItemMetadata extends ItemMetadata {
     this.releaseGroupPid,
     required this.writeBackIssues,
     this.mayCurate,
+    this.acquisition,
   }) : super._();
   @override
   ItemMetadata rebuild(void Function(ItemMetadataBuilder) updates) =>
@@ -95,7 +98,8 @@ class _$ItemMetadata extends ItemMetadata {
         artistPid == other.artistPid &&
         releaseGroupPid == other.releaseGroupPid &&
         writeBackIssues == other.writeBackIssues &&
-        mayCurate == other.mayCurate;
+        mayCurate == other.mayCurate &&
+        acquisition == other.acquisition;
   }
 
   @override
@@ -119,6 +123,7 @@ class _$ItemMetadata extends ItemMetadata {
     _$hash = $jc(_$hash, releaseGroupPid.hashCode);
     _$hash = $jc(_$hash, writeBackIssues.hashCode);
     _$hash = $jc(_$hash, mayCurate.hashCode);
+    _$hash = $jc(_$hash, acquisition.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -143,7 +148,8 @@ class _$ItemMetadata extends ItemMetadata {
           ..add('artistPid', artistPid)
           ..add('releaseGroupPid', releaseGroupPid)
           ..add('writeBackIssues', writeBackIssues)
-          ..add('mayCurate', mayCurate))
+          ..add('mayCurate', mayCurate)
+          ..add('acquisition', acquisition))
         .toString();
   }
 }
@@ -237,6 +243,12 @@ class ItemMetadataBuilder
   bool? get mayCurate => _$this._mayCurate;
   set mayCurate(bool? mayCurate) => _$this._mayCurate = mayCurate;
 
+  ItemAcquisitionBuilder? _acquisition;
+  ItemAcquisitionBuilder get acquisition =>
+      _$this._acquisition ??= ItemAcquisitionBuilder();
+  set acquisition(ItemAcquisitionBuilder? acquisition) =>
+      _$this._acquisition = acquisition;
+
   ItemMetadataBuilder() {
     ItemMetadata._defaults(this);
   }
@@ -262,6 +274,7 @@ class ItemMetadataBuilder
       _releaseGroupPid = $v.releaseGroupPid;
       _writeBackIssues = $v.writeBackIssues.toBuilder();
       _mayCurate = $v.mayCurate;
+      _acquisition = $v.acquisition?.toBuilder();
       _$v = null;
     }
     return this;
@@ -328,6 +341,7 @@ class ItemMetadataBuilder
             releaseGroupPid: releaseGroupPid,
             writeBackIssues: writeBackIssues.build(),
             mayCurate: mayCurate,
+            acquisition: _acquisition?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -349,6 +363,9 @@ class ItemMetadataBuilder
 
         _$failedField = 'writeBackIssues';
         writeBackIssues.build();
+
+        _$failedField = 'acquisition';
+        _acquisition?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'ItemMetadata',

@@ -2,12 +2,50 @@ package service
 
 import (
 	"context"
+	"hash/fnv"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
+
+// playedStripes is how many mutexes the played decide-act paths share.
+// A fixed array rather than a map keyed by item: no allocation, no
+// eviction question, and the only cost of a collision is that two
+// unrelated items briefly serialize.
+const playedStripes = 64
+
+// lockPlayed serializes one user's played decide-act for one item and
+// returns the unlock.
+//
+// Three paths read the stored play state, decide from it, and write:
+// the checkpoint's spoken-word derive, the listen ingest's, and an
+// undo that restores a position beside the flags. Interleaved, they
+// produce a state neither would produce alone - the end position,
+// flags cleared, the finished mark refused because `played` still
+// stood when the crossing was evaluated. Serializing per (user, item)
+// makes each of them atomic against the others, so every outcome is
+// one of the two sequential ones.
+//
+// Held only around the decide-act. Event emission, scrobble enqueue
+// and logging stay outside, nothing under it blocks on the network,
+// and no locked region takes a second stripe.
+//
+// It is not free of slow work, and the comment should not pretend
+// otherwise: the catalog's own checkpoint flushes every buffered
+// position, so a stripe held across one covers a write per listener
+// with a position pending. The alternative is a per-item flush the
+// facade does not offer.
+func (l *Library) lockPlayed(userID string, itemPID model.PID) func() {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(userID))
+	_, _ = h.Write([]byte("/"))
+	_, _ = h.Write([]byte(itemPID))
+	m := &l.playedLocks[h.Sum32()%playedStripes]
+	m.Lock()
+	return m.Unlock
+}
 
 // Played thresholds per medium. A session marks its item played when
 // msPlayed crosses the medium's threshold; the rules differ because
@@ -221,6 +259,34 @@ func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string
 	if positionMS < 0 {
 		return false, errInvalid("positionMs must not be negative")
 	}
+	applied, err = l.checkpointLocked(ctx, uc, it, positionMS, recordedAt)
+	if err != nil || !applied {
+		return applied, err
+	}
+	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
+	return true, nil
+}
+
+// checkpointLocked is the checkpoint's whole read-decide-write, under
+// the item's stripe.
+//
+// The stripe is what makes the derive sound: without it the state read
+// inside the crossing can see flags a concurrent undo is about to
+// clear, and the finished mark this checkpoint owes gets refused while
+// the undo's clear lands last - the item ends at its final position,
+// unfinished, with nothing counted.
+//
+// The replay reconciliation is inside it for the same reason and not
+// only the write: it reads the position stamp, decides on the strength
+// of it, and then rewrites it. Deciding outside would let a queued
+// replay read a pre-undo stamp, block, and then land its end position,
+// its older stamp, and a fresh mark on top of an undo that finished
+// meanwhile - which is neither of the two sequential outcomes, since
+// running second the replay would have read the undo's newer stamp and
+// been dropped as stale.
+func (l *Library) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, recordedAt *time.Time) (bool, error) {
+	unlock := l.lockPlayed(uc.ID, it.PID)
+	defer unlock()
 	stampNS := time.Now().UnixNano()
 	if recordedAt != nil {
 		recNS := clampRecorded(*recordedAt)
@@ -252,15 +318,35 @@ func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string
 			stampNS = stamp.PositionNS
 		}
 	}
-	if err := l.lib.Playback().Checkpoint(ctx, model.PID(uc.CatalogPID), it.PID, positionMS); err != nil {
-		return false, classify(err)
+	if err := l.writePosition(ctx, uc, it, positionMS); err != nil {
+		return false, err
 	}
 	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), stampNS); err != nil {
-		l.log.Warn("stamping position", "pid", apiItemPID, "err", err)
+		l.log.Warn("stamping position", "pid", string(it.PID), "err", err)
 	}
 	l.markSpokenWordProgress(ctx, uc, it, positionMS)
-	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
 	return true, nil
+}
+
+// writePosition persists one item's resume position through the
+// catalog's checkpoint.
+//
+// That call flushes every buffered position, not only this one, so its
+// error may belong to another user's item entirely - a tick for
+// something deleted answers not-found, and passing it through would
+// tell this caller their own item is gone and, worse, would look like a
+// refusal they could act on. Only maintenance survives as itself; the
+// rest becomes an internal failure naming what did not happen.
+func (l *Library) writePosition(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64) error {
+	err := l.lib.Playback().Checkpoint(ctx, model.PID(uc.CatalogPID), it.PID, positionMS)
+	if err == nil {
+		return nil
+	}
+	if KindOf(err) == KindMaintenance {
+		return classify(err)
+	}
+	l.log.Warn("writing resume position", "pid", string(it.PID), "err", err)
+	return &Error{Kind: KindInternal, Msg: "the resume position could not be written", Err: err}
 }
 
 // markSpokenWordProgress derives played and finished for podcasts and
@@ -400,20 +486,88 @@ func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string,
 // catalog refuses a negative count, a finished-but-unplayed row, and a
 // played row with an explicit zero count; those come back as
 // invalid-request rather than as internal errors.
-func (l *Library) SetPlayed(ctx context.Context, uc *UserCtx, apiItemPID string, played, finished bool, playCount *int, recordedAt *time.Time) (PlayState, error) {
+//
+// A non-nil positionMS restores the resume position in the same step as
+// the flags, under the item's stripe, which is what makes an undo
+// atomic against a completion checkpoint from another device. The
+// spoken-word derive is deliberately not run for that position: it is
+// being restored, not reached, and deriving from it would re-mark
+// exactly what the undo just cleared.
+//
+// The position also skips the per-medium replay reconciliation
+// Checkpoint runs, and recordedAt does not gate it. Nothing here can
+// tell a flags write dropped as a stale replay from a value-identical
+// one, so gating the position on the flags is not available; the field
+// is for a live write, and a replayed offline position belongs on the
+// checkpoint surface that reconciles it.
+func (l *Library) SetPlayed(ctx context.Context, uc *UserCtx, apiItemPID string, played, finished bool, playCount *int, positionMS *int64, recordedAt *time.Time) (PlayState, error) {
+	if positionMS != nil && *positionMS < 0 {
+		return PlayState{}, errInvalid("positionMs must not be negative")
+	}
+	if positionMS != nil && recordedAt != nil {
+		// The position applies unconditionally and stamps at
+		// server-now, which is only honest for a live write. A replayed
+		// offline position belongs on the checkpoint surface, which
+		// reconciles it per medium instead of applying it blindly;
+		// accepting both here would let a replay claim the newest
+		// observation and drop a genuinely newer one.
+		return PlayState{}, errInvalid("positionMs is for a live write; replay a queued position through the play-state endpoint")
+	}
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return PlayState{}, err
 	}
-	changed, err := l.lib.Playback().SetPlayed(ctx, model.PID(uc.CatalogPID), it.PID,
-		played, finished, playCount, asOfNS(recordedAt))
+	changed, err := l.setPlayedLocked(ctx, uc, it, played, finished, playCount, positionMS, recordedAt)
 	if err != nil {
-		return PlayState{}, classify(err)
+		return PlayState{}, err
 	}
 	if changed {
 		l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
 	}
 	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
+}
+
+// setPlayedLocked is SetPlayed's write half, under the item's stripe.
+//
+// The stripe is taken whether or not a position rides along, because
+// the flags alone are enough to tear: spokenWordCrossing reads them and
+// decides on the strength of what it read (a played item is owed no
+// second mark), so a bare flags-clear landing between that read and its
+// MarkPlayed is the original bug with no position write involved. One
+// uncontended mutex is the whole cost of closing it for every caller,
+// including the ones that predate this field.
+//
+// The position goes first. A reader that catches the gap sees the
+// restored position with the mark still standing, which is the state
+// the checkpoint path already produces and heals from; the other order
+// would show the item unplayed at its end position, which is exactly
+// the state the undo exists to prevent.
+func (l *Library) setPlayedLocked(ctx context.Context, uc *UserCtx, it *model.ItemView,
+	played, finished bool, playCount *int, positionMS *int64, recordedAt *time.Time,
+) (bool, error) {
+	unlock := l.lockPlayed(uc.ID, it.PID)
+	defer unlock()
+	if positionMS != nil {
+		if err := l.writePosition(ctx, uc, it, *positionMS); err != nil {
+			return false, err
+		}
+		// Stamped at server-now, which is what makes this the newest
+		// observation of where the listener is. Sound because a
+		// position may only ride a live write: the caller that would
+		// want a recorded time here is refused in SetPlayed.
+		if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), time.Now().UnixNano()); err != nil {
+			l.log.Warn("stamping position", "pid", string(it.PID), "err", err)
+		}
+	}
+	changed, err := l.lib.Playback().SetPlayed(ctx, model.PID(uc.CatalogPID), it.PID,
+		played, finished, playCount, asOfNS(recordedAt))
+	if err != nil {
+		return false, classify(err)
+	}
+	// A position write is a change even when the flags were already
+	// what they are asked to be, or an undo that only moves the
+	// position would emit nothing for other devices to see.
+	return changed || positionMS != nil, nil
 }
 
 // IngestListens records a batch of listen sessions for user userID,
@@ -474,77 +628,101 @@ func (l *Library) IngestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 		}
 		res.Accepted++
 		mt := mediaTypeForKind(it.Kind)
-		crossed := false
-		finished := s.Finished
-		switch mt {
-		case "podcast", "audiobook":
-			// Spoken word derives played from the position reached, never
-			// the listened-milliseconds ratio (trimming and speed changes
-			// must not distort it); the client finished flag counts for
-			// single-file episodes but never finishes a multi-part book.
-			// The stored position is the right input here even though a
-			// session carries no position of its own: clients flush
-			// checkpoints before listen reports (live and in the offline
-			// outbox), and the checkpoint path evaluates the same crossing
-			// independently, so an out-of-order listen can never lose a
-			// mark for good.
-			st, stErr := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID)
-			if stErr != nil {
-				res.Accepted--
-				if delErr := l.db.DeleteListen(ctx, uc.ID, s.SessionID); delErr != nil {
-					l.log.Error("compensating listen delete", "session", s.SessionID, "err", delErr)
-				}
-				return res, classify(stErr)
-			}
-			var pos int64
-			if st != nil {
-				pos = st.PositionMS
-			}
-			var evalErr error
-			crossed, finished, evalErr = l.spokenWordCrossing(ctx, uc, it, pos)
-			if evalErr != nil {
-				res.Accepted--
-				if delErr := l.db.DeleteListen(ctx, uc.ID, s.SessionID); delErr != nil {
-					l.log.Error("compensating listen delete", "session", s.SessionID, "err", delErr)
-				}
-				return res, evalErr
-			}
-			if mt == "podcast" && s.Finished && (st == nil || !st.Played) {
-				crossed = true
-				finished = true
-			}
-		default:
-			crossed = crossedPlayedThreshold(mt, s.MsPlayed, it.DurationMS) || s.Finished
+		out := l.markListenPlayed(ctx, uc, it, s, mt)
+		if out.permanent != nil {
+			// The mark can never apply (the item vanished mid-batch);
+			// the listen itself is still valid data, so keep it.
+			l.log.Warn("marking played", "pid", s.PID, "err", out.permanent)
 		}
-		if crossed {
-			if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished); err == nil {
-				l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
-				// A crossed music listen is exactly the scrobble
-				// threshold; deliveries drain from the durable outbox.
-				if mt == "music" {
-					l.enqueueScrobbles(ctx, uc, it, s.StartedAt)
-				}
-			} else {
-				err = classify(err)
-				switch KindOf(err) {
-				case KindNotFound, KindInvalid:
-					// The mark can never apply (the item vanished mid-batch);
-					// the listen itself is still valid data, so keep it.
-					l.log.Warn("marking played", "pid", s.PID, "err", err)
-				default:
-					// Transient. The inserted row would make a retry a
-					// duplicate that skips the mark forever, so take the row
-					// back out and fail the batch; the retry redoes both.
-					res.Accepted--
-					if delErr := l.db.DeleteListen(ctx, uc.ID, s.SessionID); delErr != nil {
-						l.log.Error("compensating listen delete", "session", s.SessionID, "err", delErr)
-					}
-					return res, err
-				}
+		if out.fatal != nil {
+			// The inserted row would make a retry a duplicate that skips
+			// the mark forever, so take the row back out and fail the
+			// batch; the retry redoes both.
+			res.Accepted--
+			if delErr := l.db.DeleteListen(ctx, uc.ID, s.SessionID); delErr != nil {
+				l.log.Error("compensating listen delete", "session", s.SessionID, "err", delErr)
+			}
+			return res, out.fatal
+		}
+		if out.marked {
+			l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
+			// A crossed music listen is exactly the scrobble threshold;
+			// deliveries drain from the durable outbox.
+			if mt == "music" {
+				l.enqueueScrobbles(ctx, uc, it, s.StartedAt)
 			}
 		}
 	}
 	return res, nil
+}
+
+// listenMarkOutcome is what one accepted listen's played decide-act
+// produced. The two error kinds are not interchangeable: fatal fails
+// the batch and takes the listen row back out, while permanent is a
+// mark that can never apply and leaves the listen standing.
+type listenMarkOutcome struct {
+	marked    bool
+	fatal     error
+	permanent error
+}
+
+// markListenPlayed evaluates whether one accepted listen crosses its
+// medium's played threshold and applies the mark, under the item's
+// stripe so the read it decides from and the write it makes are one
+// step against a concurrent checkpoint or undo.
+//
+// Event emission and the scrobble enqueue are the caller's, so nothing
+// under the stripe reaches past the catalog.
+func (l *Library) markListenPlayed(ctx context.Context, uc *UserCtx, it *model.ItemView, s ListenSession, mt string) listenMarkOutcome {
+	unlock := l.lockPlayed(uc.ID, it.PID)
+	defer unlock()
+	crossed := false
+	finished := s.Finished
+	switch mt {
+	case "podcast", "audiobook":
+		// Spoken word derives played from the position reached, never
+		// the listened-milliseconds ratio (trimming and speed changes
+		// must not distort it); the client finished flag counts for
+		// single-file episodes but never finishes a multi-part book.
+		// The stored position is the right input here even though a
+		// session carries no position of its own: clients flush
+		// checkpoints before listen reports (live and in the offline
+		// outbox), and the checkpoint path evaluates the same crossing
+		// independently, so an out-of-order listen can never lose a
+		// mark for good.
+		st, stErr := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID)
+		if stErr != nil {
+			return listenMarkOutcome{fatal: classify(stErr)}
+		}
+		var pos int64
+		if st != nil {
+			pos = st.PositionMS
+		}
+		var evalErr error
+		crossed, finished, evalErr = l.spokenWordCrossing(ctx, uc, it, pos)
+		if evalErr != nil {
+			return listenMarkOutcome{fatal: evalErr}
+		}
+		if mt == "podcast" && s.Finished && (st == nil || !st.Played) {
+			crossed = true
+			finished = true
+		}
+	default:
+		crossed = crossedPlayedThreshold(mt, s.MsPlayed, it.DurationMS) || s.Finished
+	}
+	if !crossed {
+		return listenMarkOutcome{}
+	}
+	if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished); err != nil {
+		err = classify(err)
+		switch KindOf(err) {
+		case KindNotFound, KindInvalid:
+			return listenMarkOutcome{permanent: err}
+		default:
+			return listenMarkOutcome{fatal: err}
+		}
+	}
+	return listenMarkOutcome{marked: true}
 }
 
 // invalidSession reports why a reported session can never be recorded,

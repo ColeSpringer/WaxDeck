@@ -47,8 +47,9 @@ paths:
         one fails fast, and the file name's extension is checked against the
         server's accepted formats. The required media type label
         routes the file to the matching library kind; `libraryPid`
-        pins a specific library (required when several libraries of
-        that kind are visible to the caller). Passing the file's
+        names which library it belongs to, which is a choice about
+        settings rather than about placement (see the field). Passing
+        the file's
         SHA-256 up front lets the server warn about an exact
         duplicate before any bytes move: the response's `duplicate`
         names the existing item and the client can abandon the
@@ -309,6 +310,52 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+  /uploads/targets:
+    get:
+      operationId: listUploadTargets
+      summary: List the libraries an upload may name
+      description: >
+        The libraries the caller may name as an upload's or
+        acquisition's target: visible to them, and not read-only. Needs
+        upload rights. Unpaginated, for the reason the admin library
+        listing documents - libraries are a handful of roots, not a
+        collection that grows with content - and it carries no paths and
+        no counts, so a plain uploader learns nothing about the server's
+        filesystem from it.
+
+
+        **What naming a target does, and does not do.** It does not
+        choose the folder the file lands in: placement is the catalog's
+        own routing, which sends each media kind to the one managed root
+        that accepts it. What the pid selects is the library whose
+        per-library settings apply to the import - its matching mode,
+        and whether a single-track submission may auto-apply its match -
+        and whose read-only state gates it. On the common server with
+        one library per media type the two are the same library and the
+        distinction never shows; where they differ, this is the one that
+        is chosen.
+
+
+        `managed` says whether the library is a managed root, which is
+        what makes it a possible destination for placement as well as a
+        policy target. It is reported rather than filtered on: a
+        library can legitimately be the policy target without being
+        where the bytes land.
+      tags: [uploads]
+      responses:
+        "200":
+          description: The libraries this caller may name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadTargets"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /acquisitions:
     post:
       operationId: createAcquisition
@@ -420,8 +467,15 @@ components:
         libraryPid:
           type: string
           description: >
-            Target library; required when several libraries of the
-            media type are visible to the caller.
+            The library this upload belongs to, from
+            `GET /uploads/targets`. It selects the library whose
+            matching mode and singles auto-apply setting govern the
+            import, and whose read-only state gates it; it does not
+            choose where the file is placed, which is the catalog's own
+            routing by media type into a managed root. Omitted, the
+            entry belongs to no named library and per-library settings
+            fall back to the one library that could hold its media,
+            staying off where that is ambiguous.
         sha256:
           type: string
           description: >
@@ -583,8 +637,8 @@ components:
         libraryPid:
           type: string
           description: >
-            Target library for every member; required when several
-            libraries of the media type are visible to the caller.
+            The library every member belongs to; see `UploadCreate`
+            for what naming one selects.
             Members re-declare it at session creation and must
             match (a differing member value answers
             `invalid-request`).
@@ -696,6 +750,49 @@ components:
       enum: [best, opus, mp3, m4a, flac]
       default: best
 
+    UploadTargets:
+      type: object
+      description: The libraries a caller may name as an upload target.
+      required: [targets]
+      properties:
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadTarget"
+
+    UploadTarget:
+      type: object
+      description: >
+        One library an upload or acquisition may name. Deliberately
+        narrower than the administrative library listing: a name, what
+        it accepts, and whether it is managed. No path, no item count.
+      required: [pid, name, mediaTypes, managed]
+      properties:
+        pid:
+          type: string
+          description: Library PID, as `libraryPid` takes it.
+          example: lb-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: Display name (the configured root name).
+          example: music
+        mediaTypes:
+          type: array
+          description: >
+            The media this library accepts, resolved for the caller: a
+            mixed library lists every kind it takes, so a client filters
+            on membership rather than having to know what `mixed` means.
+            Podcast libraries are not upload targets and never appear.
+          items:
+            $ref: "#/components/schemas/MediaType"
+        managed:
+          type: boolean
+          description: >
+            Whether the library is a managed root, and so a place the
+            catalog can put files. Reported for a client that wants to
+            say so; naming an unmanaged library is allowed, because the
+            pid selects policy rather than placement.
+
     AcquisitionRequest:
       type: object
       description: One source URL to acquire.
@@ -713,8 +810,9 @@ components:
         libraryPid:
           type: string
           description: >
-            Target library; required when several libraries of the
-            media type are visible to the caller.
+            The library this acquisition belongs to, from
+            `GET /uploads/targets`; see `UploadCreate` for what naming
+            one selects.
         format:
           $ref: "#/components/schemas/AcquisitionFormat"
         identify:

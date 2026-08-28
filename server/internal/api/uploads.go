@@ -90,6 +90,35 @@ func (s *Server) ListUploads(ctx context.Context, req ListUploadsRequestObject) 
 	return ListUploads200JSONResponse(page), nil
 }
 
+// ListUploadTargets answers the destination picker: the libraries this
+// caller may name, with no paths and no counts. Gated by upload rights
+// rather than by admin, which is why it is its own narrow operation and
+// not a relaxed listLibraries.
+func (s *Server) ListUploadTargets(ctx context.Context, _ ListUploadTargetsRequestObject) (ListUploadTargetsResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	targets, err := s.svc.UploadTargets(ctx, uc)
+	if err != nil {
+		if service.KindOf(err) == service.KindForbidden {
+			return ListUploadTargets403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	out := UploadTargets{Targets: make([]UploadTarget, 0, len(targets))}
+	for _, t := range targets {
+		media := make([]MediaType, 0, len(t.MediaTypes))
+		for _, m := range t.MediaTypes {
+			media = append(media, MediaType(m))
+		}
+		out.Targets = append(out.Targets, UploadTarget{
+			Pid: t.PID, Name: t.Name, MediaTypes: media, Managed: t.Managed,
+		})
+	}
+	return ListUploadTargets200JSONResponse(out), nil
+}
+
 func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject) (CreateUploadResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {

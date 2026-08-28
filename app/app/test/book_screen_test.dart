@@ -224,10 +224,16 @@ void main() {
       expect(find.text('Marked finished'), findsOneWidget);
 
       // The undo puts back where the listener actually was, which is the
-      // position read before the write rather than zero.
+      // position read before the write rather than zero - and it rides
+      // the same request as the flags, so a completion checkpoint from
+      // another device cannot land between the two.
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
-      expect(repo.putPlayStateCalls.last.positionMs, 600000);
+      expect(repo.setPlayedCalls.last.positionMs, 600000);
+      expect(repo.playPositions[bookPid], 600000);
+      // No second write: the mark's own position write is still the last
+      // one this test made.
+      expect(repo.putPlayStateCalls.last.positionMs, 3600000);
 
       // And the flags with it. Writing the position back alone left the
       // book finished forever - the completion rules only ever mark -
@@ -237,6 +243,40 @@ void main() {
       expect(repo.setPlayedCalls.last.played, isFalse);
       expect(repo.setPlayedCalls.last.finished, isFalse);
       expect(repo.setPlayedCalls.last.playCount, 0);
+      expect(repo.finishedPids, isNot(contains(bookPid)));
+    });
+
+    testWidgets('a server that ignores the position gets the old write', (
+      tester,
+    ) async {
+      // One too old for `positionMs` answers with the position it kept,
+      // which is how the client tells the field was dropped rather than
+      // applied. The fallback is then the old path whole - position,
+      // then the flags again - because a checkpoint re-derives
+      // completion from the position it writes, so a restored
+      // past-threshold position with nothing after it would re-mark
+      // what the undo just cleared.
+      final repo = _repo()
+        ..playPositions[bookPid] = 600000
+        ..setPlayedIgnoresPosition = true;
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMarkFinished);
+      final marked = repo.setPlayedCalls.length;
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      final undo = repo.setPlayedCalls.skip(marked).toList();
+      expect(undo, hasLength(2), reason: 'the atomic try, then the old pair');
+      expect(undo.first.positionMs, 600000);
+      // The flag write is the one nothing runs after.
+      expect(undo.last.positionMs, isNull);
+      expect(undo.last.played, isFalse);
+      expect(undo.last.finished, isFalse);
+      expect(repo.putPlayStateCalls.last.positionMs, 600000);
+      expect(repo.playPositions[bookPid], 600000);
       expect(repo.finishedPids, isNot(contains(bookPid)));
     });
 
@@ -319,7 +359,8 @@ void main() {
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(repo.putPlayStateCalls.last.positionMs, 600000);
+      expect(repo.setPlayedCalls.last.positionMs, 600000);
+      expect(repo.playPositions[bookPid], 600000);
     });
 
     testWidgets('starts the book over from zero', (tester) async {

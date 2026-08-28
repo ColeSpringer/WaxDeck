@@ -15,7 +15,7 @@ part 'upload_batch_create.g.dart';
 /// Properties:
 /// * [grouping] 
 /// * [mediaType] 
-/// * [libraryPid] - Target library for every member; required when several libraries of the media type are visible to the caller. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). 
+/// * [libraryPid] - The library every member belongs to; see `UploadCreate` for what naming one selects. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). 
 /// * [identify] - Whether the batch's files are identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided once here and applied to every entry the batch opens, so a member's own value is ignored. 
 @BuiltValue()
 abstract class UploadBatchCreate implements Built<UploadBatchCreate, UploadBatchCreateBuilder> {
@@ -27,7 +27,7 @@ abstract class UploadBatchCreate implements Built<UploadBatchCreate, UploadBatch
   MediaType get mediaType;
   // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
 
-  /// Target library for every member; required when several libraries of the media type are visible to the caller. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). 
+  /// The library every member belongs to; see `UploadCreate` for what naming one selects. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). 
   @BuiltValueField(wireName: r'libraryPid')
   String? get libraryPid;
 

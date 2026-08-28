@@ -99,6 +99,19 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 	setOpt(&out.ArtistPid, d.ArtistPID)
 	setOpt(&out.AlbumPid, d.AlbumPID)
 	setOpt(&out.ReleaseGroupPid, d.ReleaseGroupPID)
+	if a := d.Acquisition; a != nil {
+		acq := ItemAcquisition{SourceType: a.SourceType}
+		if !a.AcquiredAt.IsZero() {
+			acq.AcquiredAt = ptr(a.AcquiredAt)
+		}
+		if a.SourceURL != "" {
+			acq.SourceUrl = ptr(a.SourceURL)
+		}
+		if a.Provider != "" {
+			acq.Provider = ptr(a.Provider)
+		}
+		out.Acquisition = &acq
+	}
 	for _, p := range d.Provenance {
 		fp := FieldProvenance{Field: p.Field, Source: p.Source, Locked: p.Locked}
 		if p.Provider != "" {
@@ -228,6 +241,141 @@ func (s *Server) EditItemMetadata(ctx context.Context, req EditItemMetadataReque
 	return EditItemMetadata200JSONResponse(editResultJSON(out)), nil
 }
 
+// CommitItemMetadata runs a whole staged editor draft in one request.
+//
+// Gated per item exactly like the sequential parts it orchestrates:
+// administrators, or the user whose upload brought the item in. It is
+// not the bulk edit and does not carry that operation's admin-only
+// gate.
+//
+// A part refused mid-way is a 200 carrying that part's refusal, not a
+// 4xx: the write-back failures the earlier parts accumulated are what
+// the editor's banner is made of, and a status code would discard them.
+// The refusals below are for a request that commits nothing at all.
+func (s *Server) CommitItemMetadata(ctx context.Context, req CommitItemMetadataRequestObject) (CommitItemMetadataResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+		return CommitItemMetadata403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+	}
+	if req.Body == nil {
+		return CommitItemMetadata400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	out, err := s.svc.CommitItemMetadata(ctx, uc, req.Pid, metadataCommitDTO(*req.Body))
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return CommitItemMetadata400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindNotFound:
+			return CommitItemMetadata404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		}
+		return nil, err
+	}
+	return CommitItemMetadata200JSONResponse(commitResultJSON(out)), nil
+}
+
+// metadataCommitDTO reads the wire body into the service's staged-parts
+// shape. The pointer fields stay pointers: an absent chapter list and an
+// empty one mean different things, and so do an absent release status
+// and a cleared one.
+func metadataCommitDTO(b MetadataCommit) service.MetadataCommitDTO {
+	out := service.MetadataCommitDTO{
+		ClearLyrics: derefBool(b.ClearLyrics),
+		Unofficial:  b.Unofficial,
+		Params:      editParams(b.WriteBack, b.Lock, b.Force),
+	}
+	if b.Fields != nil {
+		out.Fields = *b.Fields
+	}
+	if b.Credits != nil {
+		for _, c := range *b.Credits {
+			out.Credits = append(out.Credits, service.CommitCreditsDTO{Role: c.Role, Names: c.Names})
+		}
+	}
+	if b.Lyrics != nil {
+		out.Lyrics = &service.CommitLyricsDTO{
+			LRC: deref(b.Lyrics.Lrc), Plain: deref(b.Lyrics.Plain),
+		}
+	}
+	if b.Chapters != nil {
+		marks := make([]service.ChapterMark, 0, len(*b.Chapters))
+		for _, ch := range *b.Chapters {
+			marks = append(marks, chapterMarkDTO(ch))
+		}
+		out.Chapters = &marks
+	}
+	if b.TagSets != nil {
+		out.TagSets = *b.TagSets
+	}
+	if b.TagRemoves != nil {
+		out.TagRemoves = *b.TagRemoves
+	}
+	return out
+}
+
+// commitResultJSON is the compound commit's envelope, assembled the way
+// the bulk edit's is.
+func commitResultJSON(out service.MetadataCommitOutcomeDTO) MetadataCommitResult {
+	result := MetadataCommitResult{Parts: make([]MetadataCommitPart, 0, len(out.Parts))}
+	for _, p := range out.Parts {
+		part := MetadataCommitPart{
+			Part:   MetadataCommitPartPart(p.Part),
+			Status: MetadataCommitPartStatus(p.Status),
+		}
+		if p.Detail != "" {
+			part.Detail = ptr(p.Detail)
+		}
+		if p.Refusal != nil {
+			refusal := partRefusal(p.Refusal)
+			part.Refusal = &refusal
+		}
+		result.Parts = append(result.Parts, part)
+	}
+	if len(out.Failures) > 0 {
+		fs := writeBackFailuresJSON(out.Failures)
+		result.WriteBackFailures = &fs
+	}
+	if len(out.Warnings) > 0 {
+		result.Warnings = &out.Warnings
+	}
+	return result
+}
+
+// chapterMarkDTO reads one wire chapter into the service's form. Shared
+// by the chapters endpoint and the compound commit, so the two cannot
+// read a chapter differently.
+func chapterMarkDTO(ch ChapterMark) service.ChapterMark {
+	return service.ChapterMark{
+		Index:   ch.Index,
+		Title:   deref(ch.Title),
+		StartMS: ch.StartMs,
+		EndMS:   derefInt64(ch.EndMs),
+	}
+}
+
+// partRefusal projects a service error onto the Error one refused part
+// carries. The service's error kinds are the contract's own codes, so
+// this adds none: it is the same table ResponseErrorHandler uses, minus
+// the status.
+//
+// The message is the error's own, exactly as the per-part endpoints
+// send it (`errObj("field-locked", err.Error())` and its siblings) -
+// the catalog's sentence names which field is locked, and the editor
+// draws it in front of the person who typed the value. A generic
+// fallback here would have the same refusal read differently depending
+// on which save path the session took, which is the property the
+// sequential fallback rests on. Internal is the exception: nothing
+// wrapped is surfaced there, because it may name internals.
+func partRefusal(err error) Error {
+	kind := service.KindOf(err)
+	if kind == "" || kind == service.KindInternal {
+		return errObj("internal", kindMessage(err, "internal server error"))
+	}
+	return errObj(string(kind), err.Error())
+}
+
 func (s *Server) BulkEditMetadata(ctx context.Context, req BulkEditMetadataRequestObject) (BulkEditMetadataResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
@@ -353,12 +501,7 @@ func (s *Server) SetBookChapters(ctx context.Context, req SetBookChaptersRequest
 	}
 	chapters := make([]service.ChapterMark, 0, len(req.Body.Chapters))
 	for _, ch := range req.Body.Chapters {
-		chapters = append(chapters, service.ChapterMark{
-			Index:   ch.Index,
-			Title:   deref(ch.Title),
-			StartMS: ch.StartMs,
-			EndMS:   derefInt64(ch.EndMs),
-		})
+		chapters = append(chapters, chapterMarkDTO(ch))
 	}
 	out, err := s.svc.SetBookChapters(ctx, uc, req.Pid, chapters,
 		boolOr(req.Body.Lock, true), derefBool(req.Body.Force))

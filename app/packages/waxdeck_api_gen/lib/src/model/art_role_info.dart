@@ -18,7 +18,7 @@ part 'art_role_info.g.dart';
 /// * [height] - Pixel height, 0 when nothing could measure the image. See `width`. 
 /// * [source_] - Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`, `generated`). A string, not a closed enum. 
 /// * [provider] - The provider that supplied an `enrichment` cover.
-/// * [sourceUrl] - Where a fetched cover's bytes came from.
+/// * [sourceUrl] - Where a fetched cover's bytes came from, redacted exactly as `ArtSource.sourceUrl` is: scheme, host and path only, and withheld altogether for a `feed` cover on a show with stored credentials. 
 /// * [updatedAt] - When this slot was last written.
 /// * [locked] - Whether the entity's front cover is pinned against enrichment and scan re-derives. False on every non-front role. 
 @BuiltValue()
@@ -47,7 +47,7 @@ abstract class ArtRoleInfo implements Built<ArtRoleInfo, ArtRoleInfoBuilder> {
   @BuiltValueField(wireName: r'provider')
   String? get provider;
 
-  /// Where a fetched cover's bytes came from.
+  /// Where a fetched cover's bytes came from, redacted exactly as `ArtSource.sourceUrl` is: scheme, host and path only, and withheld altogether for a `feed` cover on a show with stored credentials. 
   @BuiltValueField(wireName: r'sourceUrl')
   String? get sourceUrl;
 

@@ -1468,6 +1468,7 @@ ItemPermissions itemPermissionsFromGen(gen.ItemPermissions p) =>
 
 ItemMetadata itemMetadataFromGen(gen.ItemMetadata meta) {
   final lyrics = meta.lyrics;
+  final acq = meta.acquisition;
   return ItemMetadata(
     pid: meta.pid,
     mediaType: mediaTypeFromGen(meta.mediaType),
@@ -1516,6 +1517,14 @@ ItemMetadata itemMetadataFromGen(gen.ItemMetadata meta) {
         )
         .toList(),
     mayCurate: meta.mayCurate,
+    acquisition: acq == null
+        ? null
+        : ItemAcquisition(
+            sourceType: acq.sourceType,
+            sourceUrl: acq.sourceUrl,
+            provider: acq.provider,
+            acquiredAt: acq.acquiredAt?.toUtc(),
+          ),
   );
 }
 
@@ -1563,6 +1572,90 @@ gen.ChapterMark chapterEditToGen(ChapterEdit chapter) {
       ..title = chapter.title
       ..startMs = chapter.startMs
       ..endMs = chapter.endMs,
+  );
+}
+
+gen.MetadataCommit metadataCommitToGen(MetadataCommit commit) {
+  final fields = commit.fields;
+  final chapters = commit.chapters;
+  final lyrics = commit.lyrics;
+  return gen.MetadataCommit(
+    (b) => b
+      ..fields = fields == null ? null : MapBuilder<String, String>(fields)
+      ..credits = commit.credits.isEmpty
+          ? null
+          : ListBuilder<gen.CommitCredits>(
+              commit.credits.map(
+                (c) => gen.CommitCredits(
+                  (cb) => cb
+                    ..role = c.role
+                    ..names = ListBuilder<String>(c.names),
+                ),
+              ),
+            )
+      ..lyrics = lyrics == null
+          ? null
+          : (gen.CommitLyricsBuilder()
+              ..lrc = lyrics.lrc
+              ..plain = lyrics.plain)
+      ..clearLyrics = commit.clearLyrics ? true : null
+      ..chapters = chapters == null
+          ? null
+          : ListBuilder<gen.ChapterMark>(chapters.map(chapterEditToGen))
+      ..tagSets = commit.tagSets.isEmpty
+          ? null
+          : MapBuilder<String, BuiltList<String>>({
+              for (final e in commit.tagSets.entries)
+                e.key: BuiltList<String>(e.value),
+            })
+      ..tagRemoves = commit.tagRemoves.isEmpty
+          ? null
+          : ListBuilder<String>(commit.tagRemoves)
+      ..unofficial = commit.unofficial
+      ..writeBack = commit.writeBack
+      ..lock = commit.lock
+      ..force = commit.force,
+  );
+}
+
+MetadataCommitResult metadataCommitResultFromGen(gen.MetadataCommitResult r) {
+  return MetadataCommitResult(
+    parts: r.parts.map(metadataCommitPartFromGen).toList(),
+    writeBackFailures:
+        r.writeBackFailures?.map(writeBackFailureFromGen).toList() ?? const [],
+    warnings: r.warnings?.toList() ?? const [],
+  );
+}
+
+MetadataCommitPart metadataCommitPartFromGen(gen.MetadataCommitPart p) {
+  final refusal = p.refusal;
+  return MetadataCommitPart(
+    part: switch (p.part_.name) {
+      'fields' => MetadataCommitPartKind.fields,
+      'credit' => MetadataCommitPartKind.credit,
+      'lyrics' => MetadataCommitPartKind.lyrics,
+      'chapters' => MetadataCommitPartKind.chapters,
+      'tagSet' => MetadataCommitPartKind.tagSet,
+      'tagRemove' => MetadataCommitPartKind.tagRemove,
+      'releaseStatus' => MetadataCommitPartKind.releaseStatus,
+      _ => MetadataCommitPartKind.unknown,
+    },
+    status: switch (p.status.name) {
+      'committed' => MetadataCommitStatus.committed,
+      'refused' => MetadataCommitStatus.refused,
+      'skipped' => MetadataCommitStatus.skipped,
+      _ => MetadataCommitStatus.unknown,
+    },
+    detail: p.detail,
+    // No status code: the response itself succeeded, and this is the
+    // refusal of one part inside it.
+    refusal: refusal == null
+        ? null
+        : WaxDeckApiException(
+            code: refusal.code,
+            message: refusal.message,
+            params: refusal.params?.toMap(),
+          ),
   );
 }
 

@@ -3720,6 +3720,29 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataOpenReleaseGroup => 'Abrir el grupo de lanzamiento';
 
   @override
+  String metadataOriginLine(String source) {
+    return 'Procedencia: $source';
+  }
+
+  @override
+  String metadataOriginLineWithUrl(String source, String url) {
+    return 'Procedencia: $source - $url';
+  }
+
+  @override
+  String get metadataOriginLocal => 'un archivo local';
+
+  @override
+  String get metadataOriginManual => 'una fuente no identificada';
+
+  @override
+  String get metadataOriginRecorded =>
+      'Evidencia registrada de cómo llegó esto; no es un campo editable.';
+
+  @override
+  String get metadataOriginRss => 'un feed de pódcast';
+
+  @override
   String get metadataPendingChip => 'Sin guardar';
 
   @override
@@ -3849,11 +3872,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataSourceUser => 'ti';
-
-  @override
-  String metadataSourceWithProvider(String source, String provider) {
-    return '$source ($provider)';
-  }
 
   @override
   String get metadataTagKey => 'Clave';
@@ -9852,6 +9870,13 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get uploadsLibrary => 'Biblioteca';
+
+  @override
+  String get uploadsLibraryHelp =>
+      'Qué ajustes de biblioteca se aplican. Dónde se colocan los archivos lo decide el servidor.';
 
   @override
   String get uploadsLoadError => 'No se han podido cargar las subidas';

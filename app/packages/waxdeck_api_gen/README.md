@@ -429,6 +429,7 @@ Class | Method | HTTP request | Description
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemArtwork**](doc/MetadataApi.md#clearitemartwork) | **DELETE** /items/{pid}/artwork | Clear item artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemLyrics**](doc/MetadataApi.md#clearitemlyrics) | **DELETE** /items/{pid}/lyrics | Clear lyrics
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemTag**](doc/MetadataApi.md#clearitemtag) | **DELETE** /items/{pid}/tags/{key} | Clear a custom tag
+[*MetadataApi*](doc/MetadataApi.md) | [**commitItemMetadata**](doc/MetadataApi.md#commititemmetadata) | **POST** /items/{pid}/metadata/commit | Commit a staged metadata draft in one request
 [*MetadataApi*](doc/MetadataApi.md) | [**editEntity**](doc/MetadataApi.md#editentity) | **PATCH** /entities/{entityType}/{entityPid} | Edit entity fields
 [*MetadataApi*](doc/MetadataApi.md) | [**editItemMetadata**](doc/MetadataApi.md#edititemmetadata) | **PATCH** /items/{pid}/metadata | Edit scalar fields
 [*MetadataApi*](doc/MetadataApi.md) | [**enrichItem**](doc/MetadataApi.md#enrichitem) | **POST** /items/{pid}/enrich | Enrich one item now
@@ -591,6 +592,7 @@ Class | Method | HTTP request | Description
 [*UploadsApi*](doc/UploadsApi.md) | [**createUploadBatch**](doc/UploadsApi.md#createuploadbatch) | **POST** /uploads/batches | Open an upload batch
 [*UploadsApi*](doc/UploadsApi.md) | [**deleteUpload**](doc/UploadsApi.md#deleteupload) | **DELETE** /uploads/{uploadId} | Abandon an upload
 [*UploadsApi*](doc/UploadsApi.md) | [**getUpload**](doc/UploadsApi.md#getupload) | **GET** /uploads/{uploadId} | Inspect an upload
+[*UploadsApi*](doc/UploadsApi.md) | [**listUploadTargets**](doc/UploadsApi.md#listuploadtargets) | **GET** /uploads/targets | List the libraries an upload may name
 [*UploadsApi*](doc/UploadsApi.md) | [**listUploads**](doc/UploadsApi.md#listuploads) | **GET** /uploads | List the caller&#39;s uploads
 [*UploadsApi*](doc/UploadsApi.md) | [**putUploadData**](doc/UploadsApi.md#putuploaddata) | **PUT** /uploads/{uploadId}/data | Send upload bytes
 [*UsersApi*](doc/UsersApi.md) | [**approveSignupRequest**](doc/UsersApi.md#approvesignuprequest) | **POST** /users/requests/{userId}/approve | Approve a signup request
@@ -654,6 +656,8 @@ Class | Method | HTTP request | Description
  - [CatalogSyncPage](doc/CatalogSyncPage.md)
  - [ChapterMark](doc/ChapterMark.md)
  - [ChaptersEdit](doc/ChaptersEdit.md)
+ - [CommitCredits](doc/CommitCredits.md)
+ - [CommitLyrics](doc/CommitLyrics.md)
  - [CoverageCount](doc/CoverageCount.md)
  - [Credit](doc/Credit.md)
  - [CreditsEdit](doc/CreditsEdit.md)
@@ -727,6 +731,7 @@ Class | Method | HTTP request | Description
  - [InviteCreated](doc/InviteCreated.md)
  - [InviteList](doc/InviteList.md)
  - [Item](doc/Item.md)
+ - [ItemAcquisition](doc/ItemAcquisition.md)
  - [ItemMetadata](doc/ItemMetadata.md)
  - [ItemPage](doc/ItemPage.md)
  - [ItemPermissions](doc/ItemPermissions.md)
@@ -764,6 +769,9 @@ Class | Method | HTTP request | Description
  - [MediaTypeListening](doc/MediaTypeListening.md)
  - [MergeRequest](doc/MergeRequest.md)
  - [MergeResult](doc/MergeResult.md)
+ - [MetadataCommit](doc/MetadataCommit.md)
+ - [MetadataCommitPart](doc/MetadataCommitPart.md)
+ - [MetadataCommitResult](doc/MetadataCommitResult.md)
  - [MetadataEdit](doc/MetadataEdit.md)
  - [MetadataEditResult](doc/MetadataEditResult.md)
  - [MetadataFields](doc/MetadataFields.md)
@@ -949,6 +957,8 @@ Class | Method | HTTP request | Description
  - [UploadGrouping](doc/UploadGrouping.md)
  - [UploadPage](doc/UploadPage.md)
  - [UploadQuota](doc/UploadQuota.md)
+ - [UploadTarget](doc/UploadTarget.md)
+ - [UploadTargets](doc/UploadTargets.md)
  - [User](doc/User.md)
  - [UserAccount](doc/UserAccount.md)
  - [UserCreate](doc/UserCreate.md)

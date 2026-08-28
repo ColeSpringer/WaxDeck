@@ -19,6 +19,8 @@
     "uploadGroupingOption": "upload-grouping-{wireName}",
     "uploadIdentify": "upload-identify",
     "uploadIdentifyingReview": "upload-identifying-review",
+    "uploadLibrary": "upload-library",
+    "uploadLibraryOption": "upload-library-{pid}",
     "uploadMediaConfirm": "upload-media-confirm",
     "uploadMediaType": "upload-media-type",
     "uploadPick": "upload-pick",

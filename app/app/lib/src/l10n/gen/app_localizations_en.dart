@@ -3672,6 +3672,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataOpenReleaseGroup => 'Open release group';
 
   @override
+  String metadataOriginLine(String source) {
+    return 'Origin: $source';
+  }
+
+  @override
+  String metadataOriginLineWithUrl(String source, String url) {
+    return 'Origin: $source - $url';
+  }
+
+  @override
+  String get metadataOriginLocal => 'a local file';
+
+  @override
+  String get metadataOriginManual => 'an unnamed source';
+
+  @override
+  String get metadataOriginRecorded =>
+      'Recorded evidence of how this arrived, not an editable field.';
+
+  @override
+  String get metadataOriginRss => 'a podcast feed';
+
+  @override
   String get metadataPendingChip => 'Unsaved';
 
   @override
@@ -3801,11 +3824,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataSourceUser => 'you';
-
-  @override
-  String metadataSourceWithProvider(String source, String provider) {
-    return '$source ($provider)';
-  }
 
   @override
   String get metadataTagKey => 'Key';
@@ -9716,6 +9734,13 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get uploadsLibrary => 'Library';
+
+  @override
+  String get uploadsLibraryHelp =>
+      'Which library\'s settings apply. Where the files are placed is the server\'s own choice.';
 
   @override
   String get uploadsLoadError => 'Could not load uploads';

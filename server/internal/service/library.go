@@ -246,6 +246,9 @@ type Library struct {
 	// so concurrent readers of one shared list do not each composite it.
 	coverSyncing map[model.PID]bool
 	coverSyncMu  sync.Mutex
+	// playedLocks serializes the played decide-act per (user, item);
+	// see lockPlayed.
+	playedLocks [playedStripes]sync.Mutex
 	// transcriptHTTP is the guarded client for transcript pointers,
 	// built on first use; allowPrivateFeedHosts relaxes its SSRF guard.
 	transcriptHTTP        *http.Client

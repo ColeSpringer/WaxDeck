@@ -77,6 +77,16 @@ func (l *Library) PlayerProgress(userID, pid string, positionMS int64) {
 	if err != nil {
 		return
 	}
+	// Under the item's stripe even though it decides nothing: the tick
+	// lands in the catalog's pending buffer and is persisted by
+	// whatever flush comes next, from anywhere, so a tick buffered
+	// while an undo held the stripe would be written after the undo's
+	// own position and beside the flags it cleared - the end position
+	// with the flags off, which is the state the stripe exists to make
+	// unreachable. Taking it costs one uncontended mutex per five
+	// seconds per playing remote session.
+	unlock := l.lockPlayed(uc.ID, it.PID)
+	defer unlock()
 	l.lib.Playback().Progress(model.PID(uc.CatalogPID), it.PID, positionMS)
 }
 

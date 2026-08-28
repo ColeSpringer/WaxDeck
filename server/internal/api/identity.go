@@ -640,7 +640,7 @@ func (s *Server) SetPlayed(ctx context.Context, req SetPlayedRequestObject) (Set
 		return SetPlayed400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
 	st, err := s.svc.SetPlayed(ctx, uc, req.Pid,
-		req.Body.Played, req.Body.Finished, req.Body.PlayCount, req.Body.RecordedAt)
+		req.Body.Played, req.Body.Finished, req.Body.PlayCount, req.Body.PositionMs, req.Body.RecordedAt)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindNotFound:

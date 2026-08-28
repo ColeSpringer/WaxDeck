@@ -14,6 +14,7 @@ part 'played_update.g.dart';
 /// * [played] - Whether the item counts as played at least once.
 /// * [finished] - Whether the listener reached the end. Never true while `played` is false. 
 /// * [playCount] - The play count to store. Omitted or null keeps the stored count, which is what a client that only means to flip the flags should send; 0 resets it, so an undo of a mis-tapped mark clears the play it added rather than leaving it counted. Setting `played` true without naming a count stores the smallest count consistent with it, so a played item never sorts as never-played. 
+/// * [positionMs] - A resume position to restore in the same write as the flags. Omitted leaves the stored position alone.  It applies unconditionally, and `recordedAt` does not gate it: the recorded-time rule is about the flags, and there is no way to tell a dropped stale flag write from a value-identical one. So this field is for a live write. A client replaying an offline queue should keep sending the position through `PUT /items/{pid}/play-state`, which is the surface that reconciles a replayed position per medium (furthest-wins against recency) rather than applying it blindly. 
 /// * [recordedAt] - When the change was made on the client, sent only when replaying an offline queue. The server skips the write when the item's flags changed more recently than this. Live mutations omit it and always apply, which is what an interactive un-mark wants: a client clock trailing the server would otherwise drop it as stale. 
 @BuiltValue()
 abstract class PlayedUpdate implements Built<PlayedUpdate, PlayedUpdateBuilder> {
@@ -28,6 +29,10 @@ abstract class PlayedUpdate implements Built<PlayedUpdate, PlayedUpdateBuilder> 
   /// The play count to store. Omitted or null keeps the stored count, which is what a client that only means to flip the flags should send; 0 resets it, so an undo of a mis-tapped mark clears the play it added rather than leaving it counted. Setting `played` true without naming a count stores the smallest count consistent with it, so a played item never sorts as never-played. 
   @BuiltValueField(wireName: r'playCount')
   int? get playCount;
+
+  /// A resume position to restore in the same write as the flags. Omitted leaves the stored position alone.  It applies unconditionally, and `recordedAt` does not gate it: the recorded-time rule is about the flags, and there is no way to tell a dropped stale flag write from a value-identical one. So this field is for a live write. A client replaying an offline queue should keep sending the position through `PUT /items/{pid}/play-state`, which is the surface that reconciles a replayed position per medium (furthest-wins against recency) rather than applying it blindly. 
+  @BuiltValueField(wireName: r'positionMs')
+  int? get positionMs;
 
   /// When the change was made on the client, sent only when replaying an offline queue. The server skips the write when the item's flags changed more recently than this. Live mutations omit it and always apply, which is what an interactive un-mark wants: a client clock trailing the server would otherwise drop it as stale. 
   @BuiltValueField(wireName: r'recordedAt')
@@ -71,6 +76,13 @@ class _$PlayedUpdateSerializer implements PrimitiveSerializer<PlayedUpdate> {
       yield serializers.serialize(
         object.playCount,
         specifiedType: const FullType.nullable(int),
+      );
+    }
+    if (object.positionMs != null) {
+      yield r'positionMs';
+      yield serializers.serialize(
+        object.positionMs,
+        specifiedType: const FullType(int),
       );
     }
     if (object.recordedAt != null) {
@@ -124,6 +136,13 @@ class _$PlayedUpdateSerializer implements PrimitiveSerializer<PlayedUpdate> {
           ) as int?;
           if (valueDes == null) continue;
           result.playCount = valueDes;
+          break;
+        case r'positionMs':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.positionMs = valueDes;
           break;
         case r'recordedAt':
           final valueDes = serializers.deserialize(

@@ -85,17 +85,12 @@ func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, med
 	if !ok {
 		return ToolTaskDTO{}, errInvalid("unknown media type")
 	}
-	if libraryPID != "" {
-		prefix, pid, ok := parseAPIPID(libraryPID)
-		if !ok || prefix != PrefixLibrary {
-			return ToolTaskDTO{}, errNotFound("no such library")
-		}
-		if _, err := l.libraryByPID(ctx, pid); err != nil {
-			return ToolTaskDTO{}, err
-		}
-		if !uc.AllLibraries && !uc.Libraries[string(pid)] {
-			return ToolTaskDTO{}, errNotFound("no such library")
-		}
+	// The upload surfaces' own check, rather than a second copy of it:
+	// this one used to stop at visibility and let an acquisition name a
+	// read-only library the settle would then refuse, which targeted
+	// acquisitions make ordinary rather than exotic.
+	if err := l.validateUploadTargetLibrary(ctx, uc, libraryPID); err != nil {
+		return ToolTaskDTO{}, err
 	}
 	// Acquired files are placed into the library, which the catalog
 	// only does for a managed root. Fail here, before spending a

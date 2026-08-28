@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../music/album_detail.dart' show retryUnlessRefused;
@@ -496,7 +497,9 @@ class _EntityFieldRow extends StatelessWidget {
           child: Row(
             children: <Widget>[
               CodecChip(
-                row == null ? l10n.metadataSourceUnknown : row.source,
+                row == null
+                    ? l10n.metadataSourceUnknown
+                    : provenanceProducerName(l10n, row.source),
                 emphasis: dirty,
               ),
               if (row?.locked ?? false)

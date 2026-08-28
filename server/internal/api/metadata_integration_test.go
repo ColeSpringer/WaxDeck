@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -603,6 +604,7 @@ func TestMetadataEditorLifecycle(t *testing.T) {
 		{"PUT", "/api/v1/items/" + alpha + "/release-status", map[string]any{"unofficial": true}},
 		{"PUT", "/api/v1/items/" + alpha + "/locks", map[string]any{"fields": []string{"title"}, "locked": true}},
 		{"PATCH", "/api/v1/entities/album/" + albumPid, map[string]any{"edits": map[string]string{"sort": "Nope"}}},
+		{"POST", "/api/v1/items/" + alpha + "/metadata/commit", map[string]any{"fields": map[string]string{"title": "Nope"}}},
 	}
 	for _, f := range forbidden {
 		resp := metadataReq(t, h.ts, f.method, f.path, sam, f.body)
@@ -1184,4 +1186,379 @@ func readAll(t *testing.T, resp *http.Response, want int, what string) []byte {
 		t.Fatalf("%s status = %d, want %d", what, resp.StatusCode, want)
 	}
 	return body
+}
+
+// TestMetadataAcquisitionOrigin covers the read-only origin block: it is
+// present for any item the catalog holds origin evidence for, absent for
+// one it does not, and its URL is redacted before it leaves the server.
+//
+// Redaction is unconditional because the metadata read answers everyone
+// who can see the item, not just a curator, and the stored value is
+// whatever the acquisition or the file's own SOURCE_URL tag said.
+func TestMetadataAcquisitionOrigin(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	// A SOURCE_URL tag is what makes the scan record origin evidence at
+	// all; the row it writes reads `manual`, since the tag says the item
+	// came from somewhere without saying by what mechanism.
+	// Durations distinct from the demo library's and from each other:
+	// identical essence dedups to one item, as UploadSources notes.
+	specs := []fixtures.Spec{
+		{
+			Name: "acquired", Codec: fixtures.CodecFLAC, Duration: 4 * time.Second,
+			Tags: map[string]string{
+				"TITLE": "Acquired Cut", "ARTIST": "Nobody In Particular",
+				"SOURCE_URL": "https://feeder:hunter2@feeds.example.test/show/ep-12.mp3?token=abc123",
+				"SOURCE_ID":  "ep-12",
+			},
+		},
+		{
+			Name: "sideloaded", Codec: fixtures.CodecFLAC, Duration: 4500 * time.Millisecond,
+			Tags: map[string]string{
+				"TITLE": "Sideloaded Cut", "ARTIST": "Nobody In Particular",
+				"SOURCE_URL": "file:///srv/incoming/ep-13.mp3",
+			},
+		},
+		{
+			Name: "ripped", Codec: fixtures.CodecFLAC, Duration: 5 * time.Second,
+			Tags: map[string]string{
+				"TITLE": "Ripped Cut", "ARTIST": "Nobody In Particular",
+			},
+		},
+	}
+	if _, err := fixtures.Generate(h.library, specs...); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+
+	pids := map[string]string{}
+	for _, it := range h.items(t, "").Items {
+		pids[it.Title] = it.Pid
+	}
+	for _, title := range []string{"Acquired Cut", "Sideloaded Cut", "Ripped Cut"} {
+		if pids[title] == "" {
+			t.Fatalf("the %q fixture did not scan", title)
+		}
+	}
+
+	acquired := h.itemMeta(t, pids["Acquired Cut"]).Acquisition
+	if acquired == nil {
+		t.Fatal("an item with a SOURCE_URL tag carries no acquisition block")
+	}
+	if acquired.SourceType != "manual" {
+		t.Errorf("sourceType = %q, want manual (tag evidence names no mechanism)", acquired.SourceType)
+	}
+	if acquired.SourceUrl == nil {
+		t.Fatal("an http origin was not emitted")
+	}
+	if got, want := *acquired.SourceUrl, "https://feeds.example.test/show/ep-12.mp3"; got != want {
+		t.Errorf("sourceUrl = %q, want %q: userinfo and query must not leave the server", got, want)
+	}
+	if acquired.AcquiredAt.IsZero() {
+		t.Error("acquiredAt is zero; the catalog stamps scan time when the tags carry no date")
+	}
+
+	sideloaded := h.itemMeta(t, pids["Sideloaded Cut"]).Acquisition
+	if sideloaded == nil {
+		t.Fatal("an item with a non-http SOURCE_URL tag carries no acquisition block")
+	}
+	if sideloaded.SourceUrl != nil {
+		t.Errorf("sourceUrl = %q for a file:// origin, want absent", *sideloaded.SourceUrl)
+	}
+
+	if ripped := h.itemMeta(t, pids["Ripped Cut"]).Acquisition; ripped != nil {
+		t.Errorf("a plainly ripped item carries an acquisition block: %+v", ripped)
+	}
+}
+
+// metadataCommit posts a compound commit and decodes the result. It
+// takes the 200 the operation answers for a refused part too: the part
+// list is the answer, not the status code.
+func metadataCommit(t *testing.T, h *harness, pid string, body map[string]any) MetadataCommitResult {
+	t.Helper()
+	resp := h.postJSON(t, "/api/v1/items/"+pid+"/metadata/commit", body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("commit status = %d, want 200", resp.StatusCode)
+	}
+	return decode[MetadataCommitResult](t, resp)
+}
+
+// commitStatuses is the parts list flattened to "part[detail]=status",
+// which is what the ordering and skipping assertions read.
+func commitStatuses(result MetadataCommitResult) []string {
+	out := make([]string, 0, len(result.Parts))
+	for _, p := range result.Parts {
+		entry := string(p.Part)
+		if p.Detail != nil {
+			entry += "[" + *p.Detail + "]"
+		}
+		out = append(out, entry+"="+string(p.Status))
+	}
+	return out
+}
+
+// TestMetadataCommitRunsEveryStagedPart is the compound save's happy
+// path: one request carries the whole draft, the parts run in the
+// editor's own order, and every one of them lands in the catalog.
+func TestMetadataCommitRunsEveryStagedPart(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	pid := h.items(t, "").Items[0].Pid
+
+	result := metadataCommit(t, h, pid, map[string]any{
+		"fields":     map[string]string{"title": "Committed Title", "genre": "Ambient"},
+		"credits":    []map[string]any{{"role": "producer", "names": []string{"Rae Okada"}}},
+		"lyrics":     map[string]any{"plain": "one line"},
+		"tagSets":    map[string]any{"MOOD": []string{"calm"}, "AAA": []string{"first"}},
+		"tagRemoves": []string{"NOTHING_HERE"},
+		"unofficial": true,
+		"lock":       false,
+	})
+
+	// Sorted tag sets, because a JSON object carries no order of its own
+	// and the parts list has to be reproducible.
+	want := []string{
+		"fields=committed",
+		"credit[producer]=committed",
+		"lyrics=committed",
+		"tagSet[AAA]=committed",
+		"tagSet[MOOD]=committed",
+		"tagRemove[NOTHING_HERE]=committed",
+		"releaseStatus=committed",
+	}
+	if got := commitStatuses(result); !slices.Equal(got, want) {
+		t.Fatalf("parts = %v, want %v", got, want)
+	}
+
+	md := h.itemMeta(t, pid)
+	if md.Fields["title"] != "Committed Title" || md.Fields["genre"] != "Ambient" {
+		t.Errorf("fields = %+v, want the committed values", md.Fields)
+	}
+	producers := ""
+	for _, c := range md.Credits {
+		if c.Role == "producer" {
+			producers = strings.Join(c.Names, ", ")
+		}
+	}
+	if producers != "Rae Okada" {
+		t.Errorf("producer credit = %q, want Rae Okada (credits: %+v)", producers, md.Credits)
+	}
+	if md.Lyrics == nil {
+		t.Error("lyrics did not commit")
+	}
+	if !md.Unofficial {
+		t.Error("release status did not commit")
+	}
+	tags := map[string][]string{}
+	for _, tg := range md.CustomTags {
+		tags[tg.Key] = tg.Values
+	}
+	if len(tags["MOOD"]) != 1 || len(tags["AAA"]) != 1 {
+		t.Errorf("tags = %+v, want both sets stored", tags)
+	}
+}
+
+// TestMetadataCommitStopsAtTheFirstRefusal pins the semantics the
+// sequential save has: parts run until one is refused, that one carries
+// its own error, and the rest are reported as never attempted. The
+// refusal is a 200, because the earlier parts committed and a status
+// code would throw their outcome away.
+func TestMetadataCommitStopsAtTheFirstRefusal(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	pid := h.items(t, "").Items[0].Pid
+
+	// Lock a custom tag, then stage a draft whose second part touches it.
+	resp := h.putJSON(t, "/api/v1/items/"+pid+"/locks",
+		map[string]any{"fields": []string{"tag.MOOD"}, "locked": true})
+	wantStatus(t, resp, 200, "lock the tag")
+
+	result := metadataCommit(t, h, pid, map[string]any{
+		"fields":     map[string]string{"title": "Landed First"},
+		"tagSets":    map[string]any{"MOOD": []string{"calm"}},
+		"unofficial": true,
+		"lock":       false,
+	})
+
+	want := []string{
+		"fields=committed",
+		"tagSet[MOOD]=refused",
+		"releaseStatus=skipped",
+	}
+	if got := commitStatuses(result); !slices.Equal(got, want) {
+		t.Fatalf("parts = %v, want %v", got, want)
+	}
+	refused := result.Parts[1]
+	if refused.Refusal == nil {
+		t.Fatal("a refused part carries no error")
+	}
+	if refused.Refusal.Code != "field-locked" {
+		t.Errorf("refusal code = %q, want field-locked (no new codes here)", refused.Refusal.Code)
+	}
+
+	// The part before the refusal really committed, and the one after it
+	// really did not.
+	md := h.itemMeta(t, pid)
+	if md.Fields["title"] != "Landed First" {
+		t.Errorf("title = %q, want the committed value", md.Fields["title"])
+	}
+	if md.Unofficial {
+		t.Error("a skipped part was applied")
+	}
+}
+
+// TestMetadataCommitRefusesAnEmptyDraft covers the body checks that
+// commit nothing at all, which are the ones that answer a status code
+// rather than a part.
+func TestMetadataCommitRefusesAnEmptyDraft(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	pid := h.items(t, "").Items[0].Pid
+
+	for _, tc := range []struct {
+		name string
+		body map[string]any
+	}{
+		{"nothing staged", map[string]any{"lock": false}},
+		{"empty fields map", map[string]any{"fields": map[string]string{}}},
+		{"lyrics and their removal at once", map[string]any{
+			"lyrics": map[string]any{"plain": "words"}, "clearLyrics": true,
+		}},
+		{"lyrics with no text", map[string]any{"lyrics": map[string]any{}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := h.postJSON(t, "/api/v1/items/"+pid+"/metadata/commit", tc.body)
+			wantStatus(t, resp, 400, tc.name)
+		})
+	}
+
+	resp := h.postJSON(t, "/api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/metadata/commit",
+		map[string]any{"fields": map[string]string{"title": "Nope"}})
+	wantStatus(t, resp, 404, "an unknown item")
+}
+
+// TestMetadataCommitReportsWriteBackFailures is the reason a refusal is
+// a 200: what the committed parts could not write to disk is what the
+// editor's banner is made of, and a status code would discard it.
+func TestMetadataCommitReportsWriteBackFailures(t *testing.T) {
+	t.Parallel()
+	skipWithoutUnwritablePaths(t)
+	h := newHarness(t)
+
+	var pid string
+	for _, it := range h.items(t, "").Items {
+		if it.Title == "Alpha Song" {
+			pid = it.Pid
+		}
+	}
+	if pid == "" {
+		t.Fatal("no Alpha Song item")
+	}
+	// Both the file and its directory: the tag writer replaces the file
+	// atomically, so a writable directory would let it succeed anyway.
+	alpha := filepath.Join(h.library, "alpha.flac")
+	if _, err := os.Stat(alpha); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(alpha, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(h.library, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(h.library, 0o755)
+		_ = os.Chmod(alpha, 0o644)
+	})
+
+	result := metadataCommit(t, h, pid, map[string]any{
+		"fields":     map[string]string{"title": "Write Me Back"},
+		"unofficial": true,
+		"writeBack":  true,
+		"lock":       false,
+	})
+	if got := commitStatuses(result); !slices.Equal(got, []string{"fields=committed", "releaseStatus=committed"}) {
+		t.Fatalf("parts = %v, want both committed", got)
+	}
+	if result.WriteBackFailures == nil || len(*result.WriteBackFailures) == 0 {
+		t.Fatal("an unwritable file produced no write-back failure")
+	}
+	// The catalog write still landed; write-back trouble rides along.
+	if h.itemMeta(t, pid).Fields["title"] != "Write Me Back" {
+		t.Error("the catalog edit did not commit")
+	}
+}
+
+// TestMetadataCommitEnforcesItsDeclaredBounds keeps the collection caps
+// the contract declares from having no owner: the generated binding
+// does not enforce them, and every sibling edit surface checks its own
+// at the door. Without this a caller who may curate one item hands the
+// orchestrator an arbitrarily long step list, each step a catalog write.
+func TestMetadataCommitEnforcesItsDeclaredBounds(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	pid := h.items(t, "").Items[0].Pid
+
+	credits := make([]map[string]any, 51)
+	for i := range credits {
+		credits[i] = map[string]any{"role": "producer", "names": []string{"X"}}
+	}
+	tagSets := map[string]any{}
+	for i := 0; i < 101; i++ {
+		tagSets[fmt.Sprintf("K%03d", i)] = []string{"v"}
+	}
+	removes := make([]string, 101)
+	for i := range removes {
+		removes[i] = fmt.Sprintf("K%03d", i)
+	}
+
+	for _, tc := range []struct {
+		name string
+		body map[string]any
+	}{
+		{"too many credit roles", map[string]any{"credits": credits}},
+		{"too many tag sets", map[string]any{"tagSets": tagSets}},
+		{"too many tag removals", map[string]any{"tagRemoves": removes}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := h.postJSON(t, "/api/v1/items/"+pid+"/metadata/commit", tc.body)
+			wantStatus(t, resp, 400, tc.name)
+		})
+	}
+}
+
+// TestMetadataCommitWordsARefusalLikeTheEndpointItStandsIn is the
+// parity the sequential fallback rests on: the same refusal has to read
+// the same whichever path the session took, because it is drawn in
+// front of the person who typed the value.
+func TestMetadataCommitWordsARefusalLikeTheEndpointItStandsIn(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	pid := h.items(t, "").Items[0].Pid
+
+	resp := h.putJSON(t, "/api/v1/items/"+pid+"/locks",
+		map[string]any{"fields": []string{"title"}, "locked": true})
+	wantStatus(t, resp, 200, "lock the title")
+
+	// The per-field endpoint's own words.
+	resp = h.patchJSON(t, "/api/v1/items/"+pid+"/metadata",
+		map[string]any{"fields": map[string]string{"title": "Nope"}, "lock": false})
+	if resp.StatusCode != 409 {
+		t.Fatalf("sequential edit status = %d, want 409", resp.StatusCode)
+	}
+	sequential := decode[Error](t, resp)
+
+	result := metadataCommit(t, h, pid, map[string]any{
+		"fields": map[string]string{"title": "Nope"}, "lock": false,
+	})
+	if len(result.Parts) != 1 || result.Parts[0].Refusal == nil {
+		t.Fatalf("parts = %+v, want one refused part", result.Parts)
+	}
+	compound := *result.Parts[0].Refusal
+	if compound.Code != sequential.Code || compound.Message != sequential.Message {
+		t.Errorf("compound refusal = %+v, want the sequential path's %+v", compound, sequential)
+	}
+	if !strings.Contains(compound.Message, "title") {
+		t.Errorf("refusal message = %q, want it to name the locked field", compound.Message)
+	}
 }

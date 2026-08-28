@@ -822,8 +822,15 @@ class FakeRepository implements WaxDeckRepository {
 
   /// Every played/finished write, in call order, so a test can see what
   /// an undo actually asked for rather than only where it landed.
-  final List<({String pid, bool played, bool finished, int? playCount})>
+  final List<
+    ({String pid, bool played, bool finished, int? playCount, int? positionMs})
+  >
   setPlayedCalls = [];
+
+  /// Makes the fake behave like a server too old for `positionMs`: the
+  /// field is recorded but the position is left where it was, which is
+  /// what the returned state then reports.
+  bool setPlayedIgnoresPosition = false;
 
   @override
   Future<PlayState> setPlayed(
@@ -831,6 +838,7 @@ class FakeRepository implements WaxDeckRepository {
     required bool played,
     required bool finished,
     int? playCount,
+    int? positionMs,
     DateTime? recordedAt,
   }) async {
     await (mutationGate ?? Future<void>.value());
@@ -841,6 +849,7 @@ class FakeRepository implements WaxDeckRepository {
       played: played,
       finished: finished,
       playCount: playCount,
+      positionMs: positionMs,
     ));
     // The fake keeps one finished set behind both flags, which is what
     // every reader of it asks about; the server's three-way play count
@@ -849,6 +858,9 @@ class FakeRepository implements WaxDeckRepository {
       finishedPids.add(pid);
     } else {
       finishedPids.remove(pid);
+    }
+    if (positionMs != null && !setPlayedIgnoresPosition) {
+      playPositions[pid] = positionMs;
     }
     return _playStateOf(pid);
   }
@@ -3240,6 +3252,7 @@ class FakeRepository implements WaxDeckRepository {
       albumPid: entities?.albumPid,
       releaseGroupPid: entities?.releaseGroupPid,
       mayCurate: mayCurateItems,
+      acquisition: itemAcquisition[pid],
     );
   }
 
@@ -3262,6 +3275,182 @@ class FakeRepository implements WaxDeckRepository {
     (itemFieldsByPid[pid] ??= {}).addAll(fields);
     if (lock) (lockedFieldsByPid[pid] ??= {}).addAll(fields.keys);
     return const MetadataEditResult(applied: true);
+  }
+
+  /// The libraries the fake server offers as upload targets. Empty is
+  /// also what a server too old for the route looks like to a caller.
+  final List<UploadTarget> uploadTargets = [];
+
+  /// When set, the targets read throws it, which is a server that has
+  /// the route and refused the read.
+  WaxDeckApiException? uploadTargetsError;
+
+  @override
+  Future<List<UploadTarget>> listUploadTargets() async {
+    final error = uploadTargetsError;
+    if (error != null) throw error;
+    return List.of(uploadTargets);
+  }
+
+  /// When set, the compound save answers with this instead of running,
+  /// so a test can stand in an older server (404, no route) or a
+  /// refusal of the whole request.
+  WaxDeckApiException? commitError;
+
+  /// Every compound commit, so a test can see that one request carried
+  /// what N would have.
+  final List<({String pid, MetadataCommit commit})> commitCalls = [];
+
+  @override
+  Future<MetadataCommitResult> commitItemMetadata(
+    String pid,
+    MetadataCommit commit,
+  ) async {
+    // Recorded before the refusal, not after: a test that asks whether
+    // the client stopped trying the route needs the attempt to be
+    // observable even when it fails.
+    commitCalls.add((pid: pid, commit: commit));
+    final error = commitError;
+    if (error != null) throw error;
+    // The parts run through the same fake writes the sequential path
+    // uses, in the same order, so the two paths cannot drift here in a
+    // way they would not on the server.
+    final parts = <MetadataCommitPart>[];
+    final failures = <WriteBackFailure>[];
+    final warnings = <String>[];
+    var refused = false;
+    Future<void> part(
+      MetadataCommitPartKind kind,
+      String? detail,
+      Future<MetadataEditResult?> Function() run,
+    ) async {
+      if (refused) {
+        parts.add(
+          MetadataCommitPart(
+            part: kind,
+            detail: detail,
+            status: MetadataCommitStatus.skipped,
+          ),
+        );
+        return;
+      }
+      try {
+        final result = await run();
+        parts.add(
+          MetadataCommitPart(
+            part: kind,
+            detail: detail,
+            status: MetadataCommitStatus.committed,
+          ),
+        );
+        if (result != null) {
+          failures.addAll(result.writeBackFailures);
+          warnings.addAll(result.warnings);
+        }
+      } on WaxDeckApiException catch (e) {
+        refused = true;
+        parts.add(
+          MetadataCommitPart(
+            part: kind,
+            detail: detail,
+            status: MetadataCommitStatus.refused,
+            // No status code: the response itself succeeded.
+            refusal: WaxDeckApiException(code: e.code, message: e.message),
+          ),
+        );
+      }
+    }
+
+    final fields = commit.fields;
+    if (fields != null && fields.isNotEmpty) {
+      await part(
+        MetadataCommitPartKind.fields,
+        null,
+        () => editItemMetadata(
+          pid,
+          fields: fields,
+          writeBack: commit.writeBack,
+          lock: commit.lock,
+          force: commit.force,
+        ),
+      );
+    }
+    for (final credit in commit.credits) {
+      await part(
+        MetadataCommitPartKind.credit,
+        credit.role,
+        () => setItemCredits(
+          pid,
+          role: credit.role,
+          names: credit.names,
+          writeBack: commit.writeBack,
+          lock: commit.lock,
+          force: commit.force,
+        ),
+      );
+    }
+    if (commit.lyrics case final lyrics?) {
+      await part(
+        MetadataCommitPartKind.lyrics,
+        null,
+        () => setItemLyrics(
+          pid,
+          lrc: lyrics.lrc,
+          plain: lyrics.plain,
+          writeBack: commit.writeBack,
+          lock: commit.lock,
+          force: commit.force,
+        ),
+      );
+    } else if (commit.clearLyrics) {
+      await part(MetadataCommitPartKind.lyrics, null, () async {
+        await clearItemLyrics(pid);
+        return null;
+      });
+    }
+    if (commit.chapters case final chapters?) {
+      await part(
+        MetadataCommitPartKind.chapters,
+        null,
+        () => setBookChapters(
+          pid,
+          chapters: chapters,
+          lock: commit.lock,
+          force: commit.force,
+        ),
+      );
+    }
+    // Sorted, as the server applies them: a JSON object carries no order.
+    for (final key in commit.tagSets.keys.toList()..sort()) {
+      await part(MetadataCommitPartKind.tagSet, key, () async {
+        await setItemTag(
+          pid,
+          key,
+          values: commit.tagSets[key]!,
+          lock: commit.lock,
+          force: commit.force,
+        );
+        return null;
+      });
+    }
+    for (final key in commit.tagRemoves) {
+      await part(MetadataCommitPartKind.tagRemove, key, () async {
+        await clearItemTag(pid, key);
+        return null;
+      });
+    }
+    if (commit.unofficial case final unofficial?) {
+      await part(
+        MetadataCommitPartKind.releaseStatus,
+        null,
+        () => setReleaseStatus(pid, unofficial: unofficial),
+      );
+    }
+    return MetadataCommitResult(
+      parts: parts,
+      writeBackFailures: failures,
+      warnings: warnings,
+    );
   }
 
   final List<
@@ -3392,6 +3581,10 @@ class FakeRepository implements WaxDeckRepository {
   /// The editor's provenance rows per item: the scalar fields somebody
   /// set, plus an art or lyrics row wherever the item holds one.
   final Map<String, List<FieldProvenance>> itemProvenance = {};
+
+  /// The recorded origin per item, for the editor's read-only origin
+  /// caption. Absent is the ordinary state of a plainly ripped item.
+  final Map<String, ItemAcquisition> itemAcquisition = {};
 
   /// Entity front-cover pins, by "entityType/entityPid".
   final Map<String, bool> entityArtworkLocks = {};
