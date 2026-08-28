@@ -14576,6 +14576,30 @@ abstract class AppLocalizations {
   /// **'Reported by'**
   String get statsLogReportedBy;
 
+  /// Names the audiobook share of the listening split, on the bar's legend.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobooks'**
+  String get statsMediaAudiobooks;
+
+  /// Names the music share of the listening split, on the bar's legend.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get statsMediaMusic;
+
+  /// Names the podcast share of the listening split, on the bar's legend.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcasts'**
+  String get statsMediaPodcasts;
+
+  /// Names the radio share of the listening split, on the bar's legend.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio'**
+  String get statsMediaRadio;
+
   /// How many times a ranked entry was played, under its name.
   ///
   /// In en, this message translates to:
@@ -14623,6 +14647,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'sessions'**
   String get statsSessions;
+
+  /// One share inside the split bar's spoken summary: what it is, then how long. A key of its own so a locale can reorder the pair or punctuate it.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} {duration}'**
+  String statsSplitShare(String label, String duration);
+
+  /// The whole split read aloud, since the bar itself is a canvas. {shares} is the already-joined list of shares, largest first.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening by media type: {shares}.'**
+  String statsSplitSummary(String shares);
 
   /// Under the calendar: how many days in a row this listener has played something, now and at their best.
   ///

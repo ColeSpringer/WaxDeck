@@ -1229,6 +1229,11 @@ func run() error {
 		Shares:         shareTokens,
 		WorkerTokens:   workerTokenList,
 		TrustedProxies: trusted,
+		// The signal context, not the request one: background work the
+		// API starts has to outlive the request that asked for it and
+		// still end when the process is asked to stop, or Group.Wait
+		// holds the shutdown open for the worker's whole budget.
+		ProcCtx: ctx,
 	})
 	apiHandler := api.HandlerWithOptions(
 		api.NewStrictHandlerWithOptions(srv, nil, api.StrictHTTPServerOptions{

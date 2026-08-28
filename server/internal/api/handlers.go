@@ -71,6 +71,13 @@ type Server struct {
 	// no one caller can pin goroutines and upstream sockets against
 	// remote files this server does not control.
 	relayStreams relayGate
+	// enclosures remembers where each episode's redirect chain ends,
+	// so a scrub does not walk an ad-tech prefix chain again.
+	enclosures enclosureRoutes
+	// procCtx outlives any one request and ends with the process. Work
+	// spawned on it survives the request that asked for it without
+	// holding a shutdown open.
+	procCtx context.Context
 	// uploads paces the upload surface per account, so a client that
 	// has stopped waiting for its own answers cannot loop the server
 	// through work the byte ceilings never see.
@@ -109,6 +116,12 @@ type Options struct {
 	// TrustedProxies is the parsed WAXDECK_TRUSTED_PROXIES list. Empty
 	// keeps the socket address authoritative.
 	TrustedProxies trustedProxies
+	// ProcCtx lives for the process rather than for a request: work
+	// that has to outlive the request that started it, and still end
+	// when the process is asked to stop, is spawned on this. Nil
+	// defaults to Background, which is right for a test and wrong for a
+	// deployment - Group.Wait would have nothing to cut short.
+	ProcCtx context.Context
 }
 
 // NewServer builds the API server. Bridge may be nil when streaming is
@@ -124,6 +137,9 @@ func NewServer(version string, opts Options) *Server {
 	}
 	if opts.Group == nil {
 		opts.Group = supervise.NewGroup(nil)
+	}
+	if opts.ProcCtx == nil {
+		opts.ProcCtx = context.Background()
 	}
 	return &Server{
 		Version:      version,
@@ -144,6 +160,7 @@ func NewServer(version string, opts Options) *Server {
 		shares:       opts.Shares,
 		workerTokens: opts.WorkerTokens,
 		trusted:      opts.TrustedProxies,
+		procCtx:      opts.ProcCtx,
 	}
 }
 

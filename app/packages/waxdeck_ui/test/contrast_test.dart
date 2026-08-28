@@ -38,6 +38,15 @@ List<_Pair> _pairsFor(String theme, WaxColors c) {
   // Foregrounds that draw shapes: 3:1, the bar for non-text UI. Domain
   // hues live here because words inside a domain-tinted surface use that
   // domain's onContainer token instead.
+  //
+  // Crossed with every surface below, which is what the media split bar
+  // rests on: its segments are domain hues separated by a gap of the
+  // track they sit on, so hue-against-surface is the pairing that makes
+  // the gaps read as breaks. Hue against hue is not a guard and cannot
+  // be - the closest pair of domain hues is within 1.05:1 in light,
+  // because they are identity tints rather than a categorical scale,
+  // which is why that bar gaps its segments and why its legend carries
+  // the words.
   final ui = <String, Color>{
     'outline': c.outline,
     'music hue': c.music.hue,

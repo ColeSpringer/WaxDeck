@@ -9278,6 +9278,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statsLogReportedBy => 'Reported by';
 
   @override
+  String get statsMediaAudiobooks => 'Audiobooks';
+
+  @override
+  String get statsMediaMusic => 'Music';
+
+  @override
+  String get statsMediaPodcasts => 'Podcasts';
+
+  @override
+  String get statsMediaRadio => 'Radio';
+
+  @override
   String statsPlays(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -9308,6 +9320,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statsSessions => 'sessions';
+
+  @override
+  String statsSplitShare(String label, String duration) {
+    return '$label $duration';
+  }
+
+  @override
+  String statsSplitSummary(String shares) {
+    return 'Listening by media type: $shares.';
+  }
 
   @override
   String statsStreaks(int current, int longest) {

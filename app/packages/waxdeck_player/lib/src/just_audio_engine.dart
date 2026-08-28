@@ -36,8 +36,9 @@ import 'fetchable/fetchable.dart';
 ///
 /// Desktop is not in this table at all: mpv through media_kit does not
 /// report a failed load, it simply never finishes one, so nothing
-/// reaches here to be classified. That is a bug rather than a gap and
-/// sits in `docs/bugs.md`.
+/// reaches here to be classified. What ends that wait is the engine's
+/// own load deadline, and what classifies the result is the probe
+/// below - alone, rather than as a refinement of a code.
 @visibleForTesting
 MediaFault mediaFaultOf(Object failure) {
   if (failure is! PlayerException) return MediaFault.transport;
@@ -112,6 +113,27 @@ Future<MediaFault> probedMediaFaultOf(
   }
 }
 
+/// How long a load may take before the engine stops waiting for it.
+///
+/// The outer bound on a platform that can decline to answer at all: mpv
+/// never reports a failed load, so without this the session sits on the
+/// last face forever. Generous, because everything under it is a real
+/// load that deserves to finish - a cold NAS, a large file over a slow
+/// link. The cost of that generosity is at the far end: a slow but
+/// legitimate load whose URL still answers is classified as the media
+/// and auto-skipped rather than paned. "Answers" is a status line -
+/// `fetchable` reads one and hangs up - so a host that returns headers
+/// promptly and then stalls the body reads as the media every time. Taken knowingly, because it is
+/// the same verdict Android already gives garbage bytes on disk, and
+/// the skip surface names what happened.
+const Duration _defaultLoadDeadline = Duration(seconds: 15);
+
+/// How long a `stop()` gets, both the one before a load and the one
+/// that abandons a timed-out load. A player that would not finish a
+/// load may not finish a stop either, so this is what keeps a hang from
+/// moving one call along rather than being reported.
+const Duration _defaultStopGrace = Duration(seconds: 2);
+
 /// [AudioEnginePort] backed by just_audio.
 ///
 /// One facade drives every platform: the bundled just_audio backends on
@@ -125,12 +147,27 @@ Future<MediaFault> probedMediaFaultOf(
 /// never grows past two: the consumed item is dropped the moment the
 /// engine walks out of it.
 class JustAudioEngine implements AudioEnginePort {
-  JustAudioEngine() : _player = AudioPlayer() {
+  JustAudioEngine() : this.withPlayer(AudioPlayer());
+
+  /// The seams the load deadline is tested through: a player that can
+  /// be made to hang, a probe that answers without a network, and a
+  /// deadline short enough to wait out. Nothing but a test builds an
+  /// engine this way.
+  @visibleForTesting
+  JustAudioEngine.withPlayer(
+    this._player, {
+    this._loadDeadline = _defaultLoadDeadline,
+    this._stopGrace = _defaultStopGrace,
+    this._probe = fetchable,
+  }) {
     _indexSub = _player.currentIndexStream.listen(_onIndexChanged);
     _durationSub = _player.durationStream.listen(_rememberDuration);
   }
 
   final AudioPlayer _player;
+  final Duration _loadDeadline;
+  final Duration _stopGrace;
+  final Future<bool> Function(String url) _probe;
   final _boundaries = StreamController<void>.broadcast();
   final _refusals = StreamController<Object>.broadcast();
   late final StreamSubscription<int?> _indexSub;
@@ -178,7 +215,7 @@ class JustAudioEngine implements AudioEnginePort {
     // off the edit queue: a slow one has to stay interruptible by the
     // next load, which is just_audio's own contract.
     final source = _sourceFor(url, clipStart, clipEnd);
-    _generation++;
+    final generation = ++_generation;
     _loadedSource = source;
     _preloadedSource = null;
     _preloadedLength = null;
@@ -197,15 +234,30 @@ class JustAudioEngine implements AudioEnginePort {
       // gapless is lost: crossings ride the preload window and never
       // pass through here.
       if (_player.processingState != ProcessingState.idle) {
-        await _player.stop();
+        // Bounded like the abandonment stop below and for the same
+        // reason: this runs against a player that may be mid-hang from
+        // a load the deadline already gave up on, and an unbounded wait
+        // here would simply move the hang one call along - no deadline,
+        // no fault, no pane. A stop that will not land leaves the load
+        // to fail on its own deadline, which is the honest report.
+        try {
+          await _player.stop().timeout(_stopGrace);
+        } on TimeoutException {
+          // Swallowed: the load below is what answers for this player.
+        }
       }
-      await _player.setAudioSources(
-        [source],
-        initialIndex: 0,
-        initialPosition: initialPosition,
-      );
+      await _player
+          .setAudioSources(
+            [source],
+            initialIndex: 0,
+            initialPosition: initialPosition,
+          )
+          .timeout(_loadDeadline);
     } on Object catch (failure) {
-      throw MediaLoadException(await probedMediaFaultOf(failure, url), failure);
+      throw MediaLoadException(
+        await _faultOf(failure, url, generation),
+        failure,
+      );
     } finally {
       // An edit already in flight when this load started can put its
       // source into the list the load just built: both go through the
@@ -216,6 +268,54 @@ class JustAudioEngine implements AudioEnginePort {
       // A load that threw owns the window just as much as one that did
       // not, so the trim rides the failure path too.
       _repairWindow();
+    }
+  }
+
+  /// What a failed load was, including the failure the platform never
+  /// reported.
+  ///
+  /// A load the deadline cut short arrives as a `TimeoutException`, so
+  /// [probedMediaFaultOf] would take its own early exit - the probe is
+  /// spent only on a `PlayerException`, because everywhere else a
+  /// failure from outside the plugin says nothing about the media.
+  /// Here it says everything: a deadline is the only report the desktop
+  /// gives, so the probe is the whole classification rather than a
+  /// refinement of one. A URL that answers a ranged GET while the
+  /// player could not finish with it is the media's fault; a URL that
+  /// does not answer is the transport's.
+  Future<MediaFault> _faultOf(
+    Object failure,
+    String url,
+    int generation,
+  ) async {
+    if (failure is! TimeoutException) {
+      return probedMediaFaultOf(failure, url, probe: _probe);
+    }
+    // Abandoned, not cancelled: just_audio has no cancel, so the source
+    // stays attached until something replaces it, and on the mpv bridge
+    // that leaves the file open. Best-effort and time-bounded, and its
+    // failure is nothing to act on - the window repair already fences
+    // whatever the abandoned load left behind.
+    //
+    // Fenced on the generation, because a load is deliberately
+    // interruptible: fifteen seconds is long enough for the listener to
+    // have tapped something else, and that item is playing on this same
+    // player. Stopping it here would silence a track nobody reported a
+    // fault for. The classification below still runs - the caller of
+    // the load that timed out is owed an answer either way.
+    if (generation == _generation) {
+      try {
+        await _player.stop().timeout(_stopGrace);
+      } on Object {
+        // A player that will not stop is the same player that would not
+        // load; the fault below is still the honest answer.
+      }
+    }
+    try {
+      return await _probe(url) ? MediaFault.source : MediaFault.transport;
+    } on Object {
+      // The port promises MediaLoadException and nothing else.
+      return MediaFault.transport;
     }
   }
 

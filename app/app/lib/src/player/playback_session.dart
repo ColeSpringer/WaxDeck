@@ -292,44 +292,94 @@ class PlaybackSession {
   /// play.
   Future<void> start({bool autoplay = true}) async {
     _engineOwners[engine] = this;
-    await (_configLoad = _loadConfig());
-    if (_disposed) return;
+    // The three reads are independent and go out together. Config feeds
+    // the rate, trim, and intro/outro, all applied after the load; play
+    // state feeds only the resume point; play-info needs neither. Run in
+    // turn they were three round trips of silence before the first byte
+    // of an episode was even asked for, which is what made a
+    // not-yet-fetched podcast slow to start.
+    //
+    // What that costs is the dispose gates that used to sit between
+    // them: a session let go while the first read was in flight now
+    // spends all three, so skipping fast through a queue mints a
+    // play-info per tap. Bounded on the server rather than here - the
+    // background chain resolve those mint has a ceiling of its own -
+    // because a gate here would have to be a gate before the reads,
+    // which is the serialization this removes.
+    _configLoad = _loadConfig();
+    PlayState? saved;
+    PlayInfo? playInfo;
+    Object? stateFailure;
+    Object? infoFailure;
     try {
+      // Joined rather than awaited one after another: a failure has to
+      // leave no sibling read unwaited, or its own failure arrives as
+      // an unhandled async error rather than in the catch below.
+      //
+      // Each read holds its own failure instead of letting the join
+      // report one. `Future.wait` answers with whichever error landed
+      // first, and the offline fallback below branches on the status
+      // code it is handed - so a server mid-restart, answering 503 to
+      // one read and 404 to the other, would decide between playing a
+      // downloaded copy and rethrowing by whichever socket won the
+      // race. Re-raised in a fixed order instead, which is the order
+      // the serialized version had.
+      await Future.wait<void>(<Future<void>>[
+        _configLoad!,
+        if (initialPositionMs == null)
+          repository
+              .getPlayState(item.pid)
+              .then<void>((v) {
+                saved = v;
+              })
+              .catchError((Object e) {
+                stateFailure = e;
+              }),
+        if (!_isBook)
+          repository
+              .getPlayInfo(item.pid, maxBitrateKbps: maxBitrateKbps)
+              .then<void>((v) {
+                playInfo = v;
+              })
+              .catchError((Object e) {
+                infoFailure = e;
+              }),
+      ]);
+      if (stateFailure != null) throw stateFailure!;
+      if (infoFailure != null) throw infoFailure!;
+      // Let go while those were resolving: a tap on something else, or
+      // the queue emptying. Loading here would put this item's media
+      // over whatever took the engine, under a session nothing can
+      // reach. One check for all three, because nothing between here
+      // and the load awaits again.
+      if (_disposed) return;
       var resumeMs = initialPositionMs;
       if (resumeMs == null) {
-        final saved = await repository.getPlayState(item.pid);
+        final state = saved!;
         // A finished item has no resume point: its checkpoint sits at
         // its own end, and playing it again means playing it. Loading
         // media at the position it ends at also fails outright on web,
         // where the element answers "no supported source" for a source
         // it is asked to begin past, so this is the difference between
         // starting over and an error pane.
-        resumeMs = saved.finished ? 0 : saved.positionMs;
+        resumeMs = state.finished ? 0 : state.positionMs;
         if (autoplay) {
           // Applied to the load rather than as a seek after it, so the
           // ordinary case has no stutter at the seam.
-          resumeMs = _rewound(resumeMs, since: saved.updatedAt);
+          resumeMs = _rewound(resumeMs, since: state.updatedAt);
         } else {
           // A queue put back at launch stands at its checkpoint and may
           // never be played at all. Rewinding it here would move the
           // position this session goes on to write back, so ten cold
           // starts nobody listened to would walk a book backwards; the
           // step is owed to the first play and spent there.
-          _restedSince = saved.updatedAt;
+          _restedSince = state.updatedAt;
         }
       }
-      // Let go while this was resolving: a tap on something else, or the
-      // queue emptying. Loading here would put this item's media over
-      // whatever took the engine, under a session nothing can reach.
-      if (_disposed) return;
       if (_isBook) {
         await _loadPartFor(resumeMs, autoplay: false);
       } else {
-        final info = await repository.getPlayInfo(
-          item.pid,
-          maxBitrateKbps: maxBitrateKbps,
-        );
-        if (_disposed) return;
+        final info = playInfo!;
         _loadedDurationMs = info.durationMs;
         _applyOutroCutoff(info.durationMs);
         // The same guard against a checkpoint the media outgrew: a

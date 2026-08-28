@@ -8,14 +8,15 @@
 //   flutter test integration_test/load_fault_test.dart -d emulator-5554
 //   flutter test integration_test/load_fault_test.dart -d linux
 //
-// Both halves pin platform behaviour WaxDeck builds on. On Android
-// every failure arrives as one code and one constant string, and the
-// engine's reachability probe (`probedMediaFaultOf`) is what tells
-// them apart - so the split asserted there is the probe working end to
-// end, on a real device, against this file's own server. On desktop
-// the failure never arrives at all, which is the open bug in
-// `docs/bugs.md`; the desktop half starting to fail is mpv starting to
-// report, and the signal to go close that entry.
+// Both halves pin platform behaviour WaxDeck builds on, and both end
+// in the same split for the same reason. On Android every failure
+// arrives as one code and one constant string, so the engine's
+// reachability probe is what tells them apart. On desktop mpv reports
+// no failure at all - the load simply never finishes - so the engine's
+// load deadline is what produces a failure to classify, and the probe
+// is then the whole verdict rather than a refinement of one. Two
+// different silences, one answer: media the device can fetch while the
+// player cannot finish with it is the media's own fault.
 import 'dart:async';
 import 'dart:io';
 
@@ -24,9 +25,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
-/// How long a load gets before it counts as never answering. Generous:
-/// the point is to tell "throws late" apart from "does not throw".
-const _budget = Duration(seconds: 20);
+/// The tone's location, from a define or the environment.
+///
+/// Both channels, because both callers exist and neither can use the
+/// other's: `flutter test -d <device>` runs inside the app process on
+/// the device, which cannot see the shell that launched it, so an
+/// emulator run needs a define; run-desktop.sh runs on this machine and
+/// a define would mean recompiling per invocation, so it exports the
+/// variable instead. The conformance suite beside this one resolves it
+/// the same way.
+const _mediaDefine = String.fromEnvironment('WAXDECK_CONFORMANCE_MEDIA');
+
+/// A local path becomes a file URI; a URL is passed through. The
+/// emulator run serves the tone over loopback HTTP, because an app on a
+/// device has no host path to open.
+String _mediaUrl(String value) =>
+    value.startsWith('http://') || value.startsWith('https://')
+    ? value
+    : Uri.file(value).toString();
+
+/// How long a load gets before it counts as never answering.
+///
+/// Comfortably outside the engine's own fifteen-second deadline and the
+/// stop and probe that follow it, so a load this calls hung is one the
+/// engine failed to give up on rather than one still giving up.
+const _budget = Duration(seconds: 30);
 
 /// What one attempted load did.
 sealed class Outcome {
@@ -61,11 +84,15 @@ class Threw extends Outcome {
 }
 
 Future<Outcome> _attempt(String url) async {
-  ensureAudioEngineInitialized();
-  final engine = JustAudioEngine();
-  // Silenced before anything is asked of it: whoever is at the keyboard
-  // should not hear a test, and a load that half-succeeds can start.
-  await engine.setVolume(0);
+  final engine = await _silentEngine();
+  try {
+    return await _attemptOn(engine, url);
+  } finally {
+    await engine.dispose();
+  }
+}
+
+Future<Outcome> _attemptOn(JustAudioEngine engine, String url) async {
   try {
     await engine.load(url).timeout(_budget);
     return const Loaded();
@@ -73,13 +100,37 @@ Future<Outcome> _attempt(String url) async {
     return const Hung();
   } on MediaLoadException catch (e) {
     return Threw(e.fault, e.cause.toString());
-  } finally {
-    await engine.dispose();
   }
+}
+
+Future<JustAudioEngine> _silentEngine() async {
+  ensureAudioEngineInitialized();
+  final engine = JustAudioEngine();
+  // Silenced before anything is asked of it: whoever is at the keyboard
+  // should not hear a test, and a load that half-succeeds can start.
+  await engine.setVolume(0);
+  return engine;
 }
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  final media = _mediaDefine.isNotEmpty
+      ? _mediaDefine
+      : Platform.environment['WAXDECK_CONFORMANCE_MEDIA'] ?? '';
+  if (media.isEmpty) {
+    // The control below is what makes every expectation in this file
+    // mean something: without it the taxonomy passes just as well
+    // against an engine that cannot load anything at all. Skipping
+    // quietly would leave the desktop-conformance job green having
+    // proved nothing, so this fails loudly instead - the same rule the
+    // conformance suite beside it follows.
+    throw StateError(
+      'WAXDECK_CONFORMANCE_MEDIA must name the synthesized tone, as a '
+      '--dart-define or in the environment; run this through '
+      'e2e/run-desktop.sh or the android-conformance workflow',
+    );
+  }
 
   late Directory dir;
   late HttpServer server;
@@ -122,14 +173,7 @@ void main() {
   testWidgets('a real file loads, so a failure below means the file', (
     _,
   ) async {
-    // The control. Without it every expectation here would also pass
-    // against an engine that cannot load anything at all.
-    final media = const String.fromEnvironment('WAXDECK_CONFORMANCE_MEDIA');
-    if (media.isEmpty) {
-      markTestSkipped('WAXDECK_CONFORMANCE_MEDIA names the synthesized tone');
-      return;
-    }
-    expect(await _attempt('file://$media'), isA<Loaded>());
+    expect(await _attempt(_mediaUrl(media)), isA<Loaded>());
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   testWidgets('every way a load can fail lands on the right side', (_) async {
@@ -171,12 +215,38 @@ void main() {
       return;
     }
 
-    // Desktop (mpv through media_kit): the load future never settles at
-    // all - no throw, no completion - so there is nothing to classify
-    // and, worse, nothing for the session to give up on. That is the
-    // bug in docs/bugs.md, and this is what closing it changes.
+    // Desktop (mpv through media_kit): the platform reports nothing at
+    // all - the load future used to never settle, no throw and no
+    // completion, so there was nothing to classify and nothing for the
+    // session to give up on. The engine's load deadline is what ends
+    // that wait, and past it the reachability probe is the only
+    // evidence there is. No cause is asserted: what threw is the
+    // deadline, so the cause is the engine's own TimeoutException
+    // rather than anything the platform said.
+    const badMedia = <String>{'undecodable bytes', 'truncated file'};
     for (final o in outcomes.entries) {
-      expect(o.value, isA<Hung>(), reason: '${o.key} answered after all');
+      final threw = o.value;
+      expect(threw, isA<Threw>(), reason: '${o.key} never gave up');
+      expect(
+        (threw as Threw).fault,
+        badMedia.contains(o.key) ? MediaFault.source : MediaFault.transport,
+        reason: o.key,
+      );
     }
   }, timeout: const Timeout(Duration(minutes: 5)));
+
+  testWidgets('an engine that gave up on one load can play the next', (
+    _,
+  ) async {
+    // The abandoned load is stopped rather than cancelled - just_audio
+    // has no cancel - and that stop runs against a player that has
+    // already declined to finish something. If it left the engine
+    // wedged, every fault above would cost the rest of the session.
+    final engine = await _silentEngine();
+    addTearDown(engine.dispose);
+
+    final failed = await _attemptOn(engine, urls['undecodable bytes']!);
+    expect(failed, isA<Threw>(), reason: 'nothing to recover from');
+    expect(await _attemptOn(engine, _mediaUrl(media)), isA<Loaded>());
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

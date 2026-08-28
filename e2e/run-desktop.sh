@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Runs the Linux desktop integration tests: the app journey against the
 # same cold stack the playwright suite uses (fixture library, waxflow
-# sidecar, server), and the engine conformance suite over a synthesized
-# tone. Needs a display and an audio sink; on a headless machine wrap
-# the invocation in xvfb-run and point PULSE_SINK at a null sink.
+# sidecar, server), the engine conformance suite over a synthesized
+# tone, and the fault taxonomy every way a load can fail. Needs a
+# display and an audio sink; on a headless machine wrap the invocation
+# in xvfb-run and point PULSE_SINK at a null sink.
 set -euo pipefail
 
 # No arguments: linux is the only desktop this runs on, and a named but
@@ -65,3 +66,9 @@ cd "$E2E_DIR/../app/app"
 flutter test integration_test/desktop_playback_test.dart -d linux
 WAXDECK_CONFORMANCE_MEDIA="$CONF_DIR/conformance-tone.flac" \
 	flutter test integration_test/real_engine_conformance_test.dart -d linux
+# The fault taxonomy, which only a real player can answer for: mpv
+# reports no failed load at all, so this is where the engine's load
+# deadline is measured rather than assumed. The tone is the control
+# and the recovery case's good load.
+WAXDECK_CONFORMANCE_MEDIA="$CONF_DIR/conformance-tone.flac" \
+	flutter test integration_test/load_fault_test.dart -d linux

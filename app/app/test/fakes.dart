@@ -113,6 +113,11 @@ class FakeRepository implements WaxDeckRepository {
   /// hold a resolution open and act while it is in flight.
   Completer<void>? playInfoGate;
 
+  /// The same for [getPodcast], which is the show config a session
+  /// reads at start. Holding it open is how a test sees whether the
+  /// other two reads waited on it.
+  Completer<void>? podcastGate;
+
   /// When set, position checkpoints fail with it.
   WaxDeckApiException? putPlayStateError;
 
@@ -226,6 +231,9 @@ class FakeRepository implements WaxDeckRepository {
 
   /// The maxBitrateKbps each [getPlayInfo] call carried, in order.
   final List<int?> playInfoMaxBitrates = [];
+
+  /// Show pids [getPodcast] was asked for, in order.
+  final List<String> getPodcastCalls = [];
   final List<String> importedOpml = [];
   int refreshCalls = 0;
   int _subscribeCounter = 0;
@@ -756,8 +764,26 @@ class FakeRepository implements WaxDeckRepository {
     return null;
   }
 
+  /// Pids read one at a time through [getPlayState], in order. Only the
+  /// override records: the mutations below answer with the same state
+  /// and would otherwise show up here as reads nobody made.
+  final List<String> playStateReads = [];
+
+  /// Thrown by [getPlayState] when set. Its own field rather than
+  /// [playStateError], which the mutations use: a session start reads
+  /// and writes play state, and a test about one failing has to leave
+  /// the other working.
+  WaxDeckApiException? getPlayStateError;
+
   @override
-  Future<PlayState> getPlayState(String pid) async => PlayState(
+  Future<PlayState> getPlayState(String pid) async {
+    playStateReads.add(pid);
+    final error = getPlayStateError;
+    if (error != null) throw error;
+    return _playStateOf(pid);
+  }
+
+  PlayState _playStateOf(String pid) => PlayState(
     pid: pid,
     positionMs: playPositions[pid] ?? 0,
     played: finishedPids.contains(pid),
@@ -824,7 +850,7 @@ class FakeRepository implements WaxDeckRepository {
     } else {
       finishedPids.remove(pid);
     }
-    return getPlayState(pid);
+    return _playStateOf(pid);
   }
 
   @override
@@ -837,7 +863,7 @@ class FakeRepository implements WaxDeckRepository {
     final error = playStateError;
     if (error != null) return _failLikeANetwork(error);
     starredByPid[pid] = starred;
-    return getPlayState(pid);
+    return _playStateOf(pid);
   }
 
   @override
@@ -850,7 +876,7 @@ class FakeRepository implements WaxDeckRepository {
     final error = playStateError;
     if (error != null) return _failLikeANetwork(error);
     ratingByPid[pid] = rating;
-    return getPlayState(pid);
+    return _playStateOf(pid);
   }
 
   /// The pid sets each batched play-state read covered, in call order,
@@ -860,7 +886,7 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<List<PlayState>> listPlayStates(List<String> pids) async {
     playStateBatches.add(List<String>.of(pids));
-    return [for (final pid in pids) await getPlayState(pid)];
+    return [for (final pid in pids) _playStateOf(pid)];
   }
 
   /// Entity stars and ratings, keyed by entity pid. Their own maps, not
@@ -1165,6 +1191,8 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<PodcastDetail> getPodcast(String pid) async {
+    getPodcastCalls.add(pid);
+    await podcastGate?.future;
     final show = subscriptions[pid]?.show ?? shows[pid];
     if (show == null) {
       throw const WaxDeckApiException(

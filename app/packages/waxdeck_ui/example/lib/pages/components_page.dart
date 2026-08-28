@@ -371,6 +371,49 @@ class _ComponentsPageState extends State<ComponentsPage> {
         ),
         const SizedBox(height: WaxSpace.s24),
 
+        const SectionHeader(
+          overline: 'Content',
+          title: 'How listening divides',
+        ),
+        // All four domains at once, and one share small enough to fall
+        // to the painter's floor: a sliver thinner than the bar's own
+        // rounded ends would draw as a smudge rather than as a share.
+        const SizedBox(
+          width: 320,
+          child: MediaSplitBar(
+            summary:
+                'Listening by media type: music 6h 40m, podcasts 3h 20m, '
+                'audiobooks 1h 40m, radio 8m.',
+            segments: <MediaSplitSegment>[
+              MediaSplitSegment(
+                label: 'Music',
+                value: 24000000,
+                valueLabel: '6h 40m',
+                domain: WaxDomain.music,
+              ),
+              MediaSplitSegment(
+                label: 'Podcasts',
+                value: 12000000,
+                valueLabel: '3h 20m',
+                domain: WaxDomain.podcasts,
+              ),
+              MediaSplitSegment(
+                label: 'Audiobooks',
+                value: 6000000,
+                valueLabel: '1h 40m',
+                domain: WaxDomain.audiobooks,
+              ),
+              MediaSplitSegment(
+                label: 'Radio',
+                value: 480000,
+                valueLabel: '8m',
+                domain: WaxDomain.radio,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
         const SectionHeader(overline: 'Content', title: 'Scrolling titles'),
         // Both cases side by side in the same slot, because the whole
         // design is that they are the same widget: the long one travels

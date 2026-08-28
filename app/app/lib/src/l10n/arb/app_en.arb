@@ -12286,6 +12286,22 @@
   "@statsLogReportedBy": {
     "description": "Accessible name of the listen log's client filter."
   },
+  "statsMediaAudiobooks": "Audiobooks",
+  "@statsMediaAudiobooks": {
+    "description": "Names the audiobook share of the listening split, on the bar's legend."
+  },
+  "statsMediaMusic": "Music",
+  "@statsMediaMusic": {
+    "description": "Names the music share of the listening split, on the bar's legend."
+  },
+  "statsMediaPodcasts": "Podcasts",
+  "@statsMediaPodcasts": {
+    "description": "Names the podcast share of the listening split, on the bar's legend."
+  },
+  "statsMediaRadio": "Radio",
+  "@statsMediaRadio": {
+    "description": "Names the radio share of the listening split, on the bar's legend."
+  },
   "statsPlays": "{count, plural, =1{1 play} other{{count} plays}}",
   "@statsPlays": {
     "description": "How many times a ranked entry was played, under its name.",
@@ -12323,6 +12339,30 @@
   "statsSessions": "sessions",
   "@statsSessions": {
     "description": "Caption under how many listening sessions were recorded. Lower case: it sits under a figure."
+  },
+  "statsSplitShare": "{label} {duration}",
+  "@statsSplitShare": {
+    "description": "One share inside the split bar's spoken summary: what it is, then how long. A key of its own so a locale can reorder the pair or punctuate it.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Podcasts"
+      },
+      "duration": {
+        "type": "String",
+        "example": "3h 20m"
+      }
+    }
+  },
+  "statsSplitSummary": "Listening by media type: {shares}.",
+  "@statsSplitSummary": {
+    "description": "The whole split read aloud, since the bar itself is a canvas. {shares} is the already-joined list of shares, largest first.",
+    "placeholders": {
+      "shares": {
+        "type": "String",
+        "example": "Music 6h 40m, Podcasts 3h 20m"
+      }
+    }
   },
   "statsStreaks": "{current, plural, =1{Current streak: 1 day} other{Current streak: {current} days}} · {longest, plural, =1{Longest: 1 day} other{Longest: {longest} days}}",
   "@statsStreaks": {

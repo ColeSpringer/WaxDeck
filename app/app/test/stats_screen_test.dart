@@ -194,6 +194,71 @@ void main() {
     expect(find.byType(ErrorState), findsWidgets);
   });
 
+  testWidgets('the split names every media type in the range', (tester) async {
+    // The reported bug: a listener with podcast hours could not tell
+    // from this screen whether any of them had been counted. The
+    // figures are one number; the split is what names them.
+    final repo = _statsRepo()
+      ..listeningStats = ListeningStats(
+        range: '30d',
+        bucket: 'day',
+        timezone: 'UTC',
+        totalMs: 9000000,
+        sessions: 12,
+        timeSavedMs: 0,
+        byMediaType: const [
+          MediaTypeListening(
+            mediaType: StatsMediaType.music,
+            ms: 5400000,
+            sessions: 8,
+          ),
+          MediaTypeListening(
+            mediaType: StatsMediaType.podcast,
+            ms: 3600000,
+            sessions: 4,
+          ),
+        ],
+      );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('stats-media-split')), findsOneWidget);
+    expect(find.text('Music'), findsOneWidget);
+    expect(find.text('Podcasts'), findsOneWidget);
+    expect(find.text('1h 30m'), findsOneWidget);
+    expect(find.text('1h 0m'), findsOneWidget);
+
+    // The bar is a canvas, so the whole split has to be one sentence.
+    expect(
+      tester.getSemantics(find.byKey(const Key('stats-media-split'))).label,
+      'Listening by media type: Music 1h 30m, Podcasts 1h 0m.',
+    );
+  });
+
+  testWidgets('one media type draws no split', (tester) async {
+    // A bar that is all one colour says nothing the total did not.
+    final repo = _statsRepo()
+      ..listeningStats = ListeningStats(
+        range: '30d',
+        bucket: 'day',
+        timezone: 'UTC',
+        totalMs: 5400000,
+        sessions: 8,
+        timeSavedMs: 0,
+        byMediaType: const [
+          MediaTypeListening(
+            mediaType: StatsMediaType.music,
+            ms: 5400000,
+            sessions: 8,
+          ),
+        ],
+      );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('stats-media-split')), findsNothing);
+  });
+
   testWidgets('top list tabs switch the kind', (tester) async {
     final repo = _statsRepo();
     await tester.pumpWidget(_host(repo));

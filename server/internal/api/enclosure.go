@@ -30,6 +30,7 @@ func (s *Server) enclosurePlayInfo(ctx context.Context, userID, pid string, caus
 		return GetPlayInfo200JSONResponse{}, false
 	}
 	token, exp := s.media.Mint(userID, pid)
+	s.warmEnclosure(pid, src)
 	return GetPlayInfo200JSONResponse{
 		Pid:        pid,
 		Url:        enclosureURL(pid, token),
@@ -160,32 +161,33 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 	// releases the upstream socket as well as the read.
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, nil)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "service-unreachable", "the podcast host could not be contacted")
-		return
-	}
-	req.Header.Set("User-Agent", "WaxDeck")
-	// A private or paid feed refuses an unauthenticated GET. The
-	// credentials are the show's own and never reach the listener: they
-	// are set on this outbound request, and Go strips Authorization from
-	// a redirect that leaves the host, so a CDN hop does not carry them
-	// either. The service layer decides whether this caller gets them.
-	if src.AuthUser != "" {
-		req.SetBasicAuth(src.AuthUser, src.AuthPass)
-	}
-	// The two conditional-range headers, forwarded verbatim. If-Range
-	// alone is meaningless, and a host that honors it needs the validator
-	// exactly as it issued it.
-	for _, h := range []string{"Range", "If-Range"} {
-		if v := r.Header.Get(h); v != "" {
-			req.Header.Set(h, v)
+
+	// A remembered chain end is tried first. It is a shortcut, not an
+	// address: anything wrong with it drops the entry and the full
+	// chain is walked once, which is what this handler did before the
+	// cache existed.
+	var resp *http.Response
+	if shortcut, ok := s.enclosures.lookup(pid, src.URL); ok {
+		tried, triedErr := s.fetchEnclosure(ctx, r, src, shortcut)
+		if usableEnclosureResponse(tried, triedErr) {
+			resp = tried
+		} else {
+			if tried != nil {
+				tried.Body.Close()
+			}
+			s.enclosures.forget(pid)
 		}
 	}
-	resp, err := s.svc.EnclosureHTTP().Do(req)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "service-unreachable", "the podcast host could not be reached")
-		return
+	if resp == nil {
+		walked, err := s.fetchEnclosure(ctx, r, src, src.URL)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "service-unreachable", "the podcast host could not be reached")
+			return
+		}
+		resp = walked
+		// Recorded only for a walk: re-recording the shortcut would let
+		// one entry outlive every expiry its signature carried.
+		s.rememberEnclosureRoute(pid, src, resp)
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
@@ -237,8 +239,12 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 	if out.Get("Content-Type") == "" {
 		out.Set("Content-Type", src.MimeType)
 	}
-	// The bytes are the podcast host's and the URL is per-listener; a
-	// shared cache holding either would be wrong.
+	// The bytes are the podcast host's and this origin-relative URL is
+	// per-listener - it carries that listener's media token - so a
+	// shared cache holding either would be wrong. Nothing to do with
+	// the route cache above, which holds no bytes and no token: that
+	// one remembers where the feed's own enclosure URL redirects to,
+	// which is the same address for every listener.
 	out.Set("Cache-Control", "no-store")
 	w.WriteHeader(resp.StatusCode)
 
@@ -328,5 +334,159 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+	}
+}
+
+// fetchEnclosure performs one upstream GET for the relay against
+// target, carrying the listener's range headers.
+//
+// The feed's credentials go out only when target is on the host the
+// feed named. On a walk that is always true; on a remembered chain end
+// it usually is not, and the difference matters because a remembered
+// URL arrives without the chain that produced it. See
+// [sameEnclosureOrigin].
+func (s *Server) fetchEnclosure(ctx context.Context, r *http.Request, src service.EnclosureSource, target string) (*http.Response, error) {
+	req, err := enclosureRequest(ctx, src, target)
+	if err != nil {
+		return nil, err
+	}
+	// The two conditional-range headers, forwarded verbatim. If-Range
+	// alone is meaningless, and a host that honors it needs the validator
+	// exactly as it issued it.
+	for _, h := range []string{"Range", "If-Range"} {
+		if v := r.Header.Get(h); v != "" {
+			req.Header.Set(h, v)
+		}
+	}
+	return s.svc.EnclosureHTTP().Do(req)
+}
+
+// enclosureRequest builds one outbound GET at target on the feed's
+// behalf. The single place the credential rule is applied, so the relay
+// and the background warm cannot drift apart on it.
+func enclosureRequest(ctx context.Context, src service.EnclosureSource, target string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "WaxDeck")
+	// A private or paid feed refuses an unauthenticated GET. The
+	// credentials are the show's own and never reach the listener: they
+	// are set on this outbound request, and Go strips Authorization from
+	// a redirect that leaves the host, so a CDN hop does not carry them
+	// either. The service layer decides whether this caller gets them.
+	if src.AuthUser != "" && sameEnclosureOrigin(target, src.URL) {
+		req.SetBasicAuth(src.AuthUser, src.AuthPass)
+	}
+	return req, nil
+}
+
+// usableEnclosureResponse reports whether an upstream answer is one
+// this relay can act on: exactly the statuses the switch below serves
+// or reports, and nothing else.
+//
+// The set, not `< 400`. Go's client returns a 3xx with a nil error in
+// documented cases - a redirect carrying no Location, a 304, a 305 -
+// and every one of those falls through to the bad-gateway default. Read
+// as usable, a remembered chain end that started answering one would
+// never be invalidated, so the 502 would repeat for the whole TTL
+// without the chain being re-walked even after the host recovered.
+//
+// 416 is in the set because it is the one refusal that is about the
+// listener rather than the URL: they scrubbed past the end of the
+// episode, and walking the whole chain would answer 416 again from
+// further away.
+//
+// The same predicate decides what is worth remembering. A chain that
+// ended in a 404 or an expired credential is a chain worth walking
+// again, not one worth caching: cached, every retry costs the shortcut
+// plus the walk and never converges, and a media element retries
+// hardest on exactly this failure.
+func usableEnclosureResponse(resp *http.Response, err error) bool {
+	if err != nil || resp == nil {
+		return false
+	}
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusPartialContent, http.StatusRequestedRangeNotSatisfiable:
+		return true
+	default:
+		return false
+	}
+}
+
+// rememberEnclosureRoute records where a walk ended, when the entry
+// would be worth having.
+//
+// Two refusals. A response the relay cannot act on says nothing about
+// where the chain ends - see [usableEnclosureResponse]. And a
+// credentialed feed whose chain leaves its own origin cannot be
+// shortcut at all: the shortcut would go out unauthenticated, earn a
+// 401, and cost a full walk on top of itself. Remembering nothing there
+// is what keeps such a feed at one walk per range rather than two,
+// which is what it cost before this cache existed.
+func (s *Server) rememberEnclosureRoute(pid string, src service.EnclosureSource, resp *http.Response) {
+	if !usableEnclosureResponse(resp, nil) || resp.Request == nil || resp.Request.URL == nil {
+		return
+	}
+	resolved := resp.Request.URL.String()
+	if src.AuthUser != "" && !sameEnclosureOrigin(resolved, src.URL) {
+		return
+	}
+	s.enclosures.remember(pid, src.URL, resolved)
+}
+
+// enclosureWarmDeadline bounds one background chain resolve. Longer
+// than the walk should ever take and far shorter than a listen, because
+// this is a head start and nothing is waiting on it.
+const enclosureWarmDeadline = 30 * time.Second
+
+// warmEnclosure resolves an episode's redirect chain in the background,
+// so the walk is already paid for by the time the engine's own GET
+// arrives.
+//
+// This is the other half of the first-play cost: play-info answers in
+// milliseconds and the listener then waits on seven hops before a byte
+// of audio moves. One ranged GET for a single byte walks the same chain
+// and fills the route cache; if it loses the race the relay walks it
+// itself, exactly as before.
+//
+// Single-flight per episode, because a queue of taps on one show would
+// otherwise walk one chain once per tap.
+func (s *Server) warmEnclosure(pid string, src service.EnclosureSource) {
+	if !s.enclosures.claimWarm(pid, src.URL) {
+		return
+	}
+	// The process context rather than the request's, which ends as soon
+	// as play-info is written: the whole point is to outlive it. Not
+	// `context.WithoutCancel`, which strips the shutdown signal along
+	// with the request's - Group.Wait blocks until every worker
+	// returns, so an uncancellable walk against a host that accepted
+	// and went silent would hold a stop open for its whole deadline.
+	warm, cancel := context.WithTimeout(s.procCtx, enclosureWarmDeadline)
+	started := s.group.GoOnce(warm, "enclosure-warm", func(wctx context.Context) error {
+		defer cancel()
+		defer s.enclosures.releaseWarm(pid)
+		req, err := enclosureRequest(wctx, src, src.URL)
+		if err != nil {
+			return nil
+		}
+		// One byte: the chain is walked by the request, not by the
+		// body, and a host that ignores the range answers the whole
+		// episode - which is why the body is closed rather than read.
+		req.Header.Set("Range", "bytes=0-0")
+		resp, err := s.svc.EnclosureHTTP().Do(req)
+		if err != nil {
+			// Nothing to report: the relay will walk the chain itself
+			// and answer the listener with whatever this would have
+			// said.
+			return nil
+		}
+		defer resp.Body.Close()
+		s.rememberEnclosureRoute(pid, src, resp)
+		return nil
+	})
+	if !started {
+		cancel()
+		s.enclosures.releaseWarm(pid)
 	}
 }

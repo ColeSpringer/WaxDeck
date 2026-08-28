@@ -137,6 +137,22 @@ class _ListeningSection extends ConsumerWidget {
               ),
             ],
           ),
+          // Under the headline, because the split is the answer to the
+          // question the figures raise: a listener who only sees hours
+          // and sessions has no way to tell whether podcasts are in
+          // there at all. One media type is not a split, so it draws
+          // nothing rather than a bar that is all one colour.
+          //
+          // Counted after the zero shares are dropped, not before: a
+          // listen the server recorded with no time on it - a play
+          // abandoned in its first instant - still gets a slice of its
+          // own on the wire, and counting those would draw the
+          // single-colour bar this refuses to draw and read out a share
+          // that appears in neither the bar nor the legend.
+          if (_shares(value.byMediaType).length > 1) ...<Widget>[
+            const SizedBox(height: WaxSpace.s20),
+            _mediaSplit(l10n, _shares(value.byMediaType)),
+          ],
           const SizedBox(height: WaxSpace.s16),
           if (value.buckets.isEmpty)
             Padding(
@@ -170,6 +186,48 @@ class _ListeningSection extends ConsumerWidget {
           ],
         ],
       ),
+    );
+  }
+
+  /// The media types with time on them, in the order the server ranked
+  /// them.
+  static List<MediaTypeListening> _shares(List<MediaTypeListening> all) =>
+      <MediaTypeListening>[
+        for (final m in all)
+          if (m.ms > 0) m,
+      ];
+
+  /// The split bar over its legend, already ordered largest share
+  /// first by the server.
+  static Widget _mediaSplit(
+    AppLocalizations l10n,
+    List<MediaTypeListening> byMediaType,
+  ) {
+    String labelOf(StatsMediaType type) => switch (type) {
+      StatsMediaType.music => l10n.statsMediaMusic,
+      StatsMediaType.podcast => l10n.statsMediaPodcasts,
+      StatsMediaType.audiobook => l10n.statsMediaAudiobooks,
+      StatsMediaType.radio => l10n.statsMediaRadio,
+    };
+    final shares = <String>[
+      for (final m in byMediaType)
+        l10n.statsSplitShare(labelOf(m.mediaType), l10n.formatListenTime(m.ms)),
+    ];
+    return MediaSplitBar(
+      key: const Key('stats-media-split'),
+      summary: l10n.statsSplitSummary(shares.join(', ')),
+      segments: <MediaSplitSegment>[
+        for (final m in byMediaType)
+          MediaSplitSegment(
+            label: labelOf(m.mediaType),
+            // Milliseconds are what the bar is drawn from, so a share
+            // measured in days still sizes against one measured in
+            // minutes without either being rounded away first.
+            value: m.ms,
+            valueLabel: l10n.formatListenTime(m.ms),
+            domain: waxDomainOfStats(m.mediaType),
+          ),
+      ],
     );
   }
 

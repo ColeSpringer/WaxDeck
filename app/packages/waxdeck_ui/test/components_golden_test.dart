@@ -629,6 +629,58 @@ void main() {
     );
 
     goldenTest(
+      'a media split names every share it draws',
+      fileName: 'media_split',
+      builder: () => GoldenTestGroup(
+        columns: 3,
+        children: <Widget>[
+          for (final variant in WaxThemeVariant.values)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                const SizedBox(
+                  width: 260,
+                  child: MediaSplitBar(
+                    summary: 'Listening by media type.',
+                    segments: <MediaSplitSegment>[
+                      MediaSplitSegment(
+                        label: 'Music',
+                        value: 24000000,
+                        valueLabel: '6h 40m',
+                        domain: WaxDomain.music,
+                      ),
+                      MediaSplitSegment(
+                        label: 'Podcasts',
+                        value: 12000000,
+                        valueLabel: '3h 20m',
+                        domain: WaxDomain.podcasts,
+                      ),
+                      MediaSplitSegment(
+                        label: 'Audiobooks',
+                        value: 6000000,
+                        valueLabel: '1h 40m',
+                        domain: WaxDomain.audiobooks,
+                      ),
+                      // Under a percent of the total: the painter's
+                      // floor is what keeps it a share rather than a
+                      // smudge between two rounded ends.
+                      MediaSplitSegment(
+                        label: 'Radio',
+                        value: 480000,
+                        valueLabel: '8m',
+                        domain: WaxDomain.radio,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
       'a caption under a cover reads at two weights and wraps at two lines',
       fileName: 'artwork_caption',
       builder: () => GoldenTestGroup(

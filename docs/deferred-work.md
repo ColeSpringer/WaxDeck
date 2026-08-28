@@ -31,6 +31,24 @@ here waits on upstream.
 ## Playback and apps
 
 
+- `[in-repo]` **The engine's load deadline covers `load` and nothing
+  else.** `JustAudioEngine.load` now abandons a load mpv never finishes
+  and reports it as a `MediaLoadException`, and the stops on either
+  side of it are bounded too. Two sibling calls into the same plugin on
+  the same platform are still unbounded: `preloadNext`'s
+  `addAudioSource` and the replay `setAudioSources` in `play()`. The
+  preload is the sharper of the two - it runs inside `_edit`, which
+  serializes on one future, so a hang there stalls every queued window
+  edit including the repair `load`'s own failure path depends on. The
+  replay is the likelier: its comment says it exists because the mpv
+  bridge never leaves the completed state on its own, so it reloads
+  unconditionally on exactly the platform that declines to finish
+  loads. Not bounded with `load` because a timeout in either leaves the
+  window in a state the port has no vocabulary for - a preload that
+  half-landed is not a preload that failed - and deciding what the
+  engine reports for those is a design question `load` did not have to
+  answer.
+
 - `[in-repo]` **Riverpod 3's automatic retry is unaudited across the
   app.** A provider that throws anything which is not an `Error` is
   re-run ten times over about thirteen seconds, and between attempts it
@@ -788,14 +806,13 @@ here waits on upstream.
 
 ## Discovery and stats
 
-- `[in-repo]` **The per-media-type listening split is drawn by no client
-  surface.** `ListeningStats.byMediaType` and `YearInReview.byMediaType`
-  have always shipped and no screen reads either. Radio now has a slice
-  in both - it is the reason the field gained a value - so the wire is
-  answering a question nothing asks on screen. Recorded rather than
-  answered here because the fix is a chart nobody specified, and the
-  question of what the stats screen should show alongside the total is
-  a design one.
+- `[in-repo]` **The year in review draws no per-media-type split.** The
+  stats screen now renders `ListeningStats.byMediaType` as a stacked bar
+  under its headline (`MediaSplitBar`), which is what the field was
+  always for; `YearInReview.byMediaType` still reaches no surface. A
+  conscious cut rather than an oversight: the recap is a sequence of
+  single-claim panels and a four-way split is not one claim, so where it
+  would go is a design question the stats screen did not have to answer.
 
 - `[in-repo]` **The web build has no downloads of its own to announce.**
   The bell now reports what this device finished transferring
