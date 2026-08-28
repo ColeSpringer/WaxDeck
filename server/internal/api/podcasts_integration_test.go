@@ -1757,9 +1757,10 @@ func TestEnclosureHeadDoesNotPullTheEpisode(t *testing.T) {
 	h := newPodcastHarness(t)
 
 	// The enclosure is large enough that pulling it is unmistakable
-	// against whatever the transport buffers ahead of the first read.
-	const size = 8 << 20
-	var served atomic.Int64
+	// against whatever the transport buffers ahead of the first read;
+	// the assertion at the bottom is what sets how large.
+	const size = 32 << 20
+	var served, streams atomic.Int64
 	feed := newFeedServer(t, 1)
 	files := http.FileServer(http.Dir(feed.dir))
 	feed.ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1768,6 +1769,30 @@ func TestEnclosureHeadDoesNotPullTheEpisode(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "audio/mpeg")
+		// The chain warm's range, answered in the one byte it asks
+		// for. play-info resolves the redirect chain in the background
+		// with this GET, so it is in flight before the HEAD below is
+		// issued, and the tally here weighs the whole host rather than
+		// one request: a host that ignored the range would answer the
+		// warm with the episode too, and the count would carry two
+		// abandoned transfers where it means to carry the probe's one.
+		// Taking ranges is what a podcast host does anyway; the host
+		// that does not has its own test.
+		//
+		// Matched on the head of the file rather than on the exact
+		// header, so a warm that one day asks for a larger opening
+		// still lands here instead of falling through and being
+		// reported below as the relay's doing. Nothing else in this
+		// test sends a Range.
+		if strings.HasPrefix(r.Header.Get("Range"), "bytes=0-") {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-0/%d", size))
+			w.Header().Set("Content-Length", "1")
+			w.WriteHeader(http.StatusPartialContent)
+			n, _ := w.Write([]byte{0})
+			served.Add(int64(n))
+			return
+		}
+		streams.Add(1)
 		w.Header().Set("Content-Length", strconv.Itoa(size))
 		w.WriteHeader(http.StatusOK)
 		buf := make([]byte, 32<<10)
@@ -1811,6 +1836,13 @@ func TestEnclosureHeadDoesNotPullTheEpisode(t *testing.T) {
 	if cl := head.Header.Get("Content-Length"); cl != strconv.Itoa(size) {
 		t.Errorf("HEAD Content-Length = %q, want %d", cl, size)
 	}
+	// One transfer, and it is the probe's: the chain warm was answered
+	// in a byte above. A second one means the warm is streaming the
+	// episode again, which the tally below cannot tell apart from the
+	// relay reading one and would report against the relay.
+	if got := streams.Load(); got != 1 {
+		t.Fatalf("the host was made to stream the episode %d times, want 1 (the probe's own)", got)
+	}
 	// The host may have pushed some bytes before the relay let go; what
 	// must not happen is the whole episode moving for a probe.
 	//
@@ -1819,9 +1851,17 @@ func TestEnclosureHeadDoesNotPullTheEpisode(t *testing.T) {
 	// as served the moment the kernel accepts them. Linux autotunes
 	// those into the megabytes, so a tight fraction here measures
 	// `tcp_wmem` rather than this handler and fails on a box whose
-	// buffers have warmed up. Half the episode is the honest line: no
-	// socket buffer reaches it, and a relay missing its HEAD branch
-	// moves all 8 MB straight past it.
+	// buffers have warmed up. Half the episode is the honest line, and
+	// the episode is sized so that half of it clears the ceiling on
+	// that residue rather than merely the spills seen so far: a send
+	// buffer and a receive buffer, both fully autotuned, come to about
+	// ten megabytes on a stock Linux. A relay missing its HEAD branch
+	// moves all 32 MB straight past the line.
+	//
+	// A measurement rather than a gate, though. If it ever reds on a
+	// box with more buffer than that reasoning allows for, the answer
+	// is to gate it: write one chunk and wait on r.Context(), which the
+	// relay letting go cancels. Not a larger episode.
 	if got := served.Load(); got > size/2 {
 		t.Errorf("a HEAD probe pulled %d bytes of a %d byte episode", got, size)
 	}
