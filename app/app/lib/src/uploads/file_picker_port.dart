@@ -116,6 +116,17 @@ class FolderPickBuilder {
   }
 }
 
+/// Joins a picked folder's own name to a path relative to it, which is
+/// the `relativeDir` shape every platform's walk reports. Shared,
+/// because the walks compose it from different halves - the desktop one
+/// from a filesystem path, the Android one from a tree-relative
+/// directory and the granted root - and they have to agree.
+String joinRelativeDir(String root, String relative) {
+  if (root.isEmpty) return relative;
+  if (relative.isEmpty) return root;
+  return '$root/$relative';
+}
+
 /// One folder pick: the audio that survived the extension filter, plus
 /// counts of what the filter dropped. Split, because the two halves
 /// mean different things to the person who picked the folder - a cover

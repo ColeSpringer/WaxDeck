@@ -22,6 +22,13 @@
 # It also exercises the cleartext network-security config for real: the
 # tone is served over plain HTTP, which targetSdk 36 blocks outright
 # without that posture.
+#
+# The waxdeck/saf channel test rides the same emulator afterwards. Its
+# system tree picker needs someone to tap through, and `flutter test`
+# holds the device's one instrumentation slot, so the taps come from an
+# adb driver running beside it (e2e/tools/run-saf-probe.sh). Same
+# emulator, second suite: a picker this job already booted a device for
+# is not worth booting another one for.
 name: Android engine conformance
 
 on:
@@ -35,6 +42,11 @@ on:
       - "app/app/pubspec.yaml"
       - "app/pubspec.lock"
       - "fixtures/**"
+      # The Dart half of the waxdeck/saf protocol, whose Kotlin half is
+      # already covered by app/app/android above.
+      - "app/app/lib/src/uploads/saf_folder_picker.dart"
+      - "e2e/tools/drive-saf-picker.sh"
+      - "e2e/tools/run-saf-probe.sh"
       - ".github/workflows/android-conformance.yaml"
   schedule:
     - cron: "43 5 * * 2" # Tuesdays, 05:43 UTC
@@ -113,6 +125,15 @@ jobs:
           echo "::error::the tone server never answered"
           cat "$RUNNER_TEMP/tone-server.log"
           exit 1
+      # The tree the SAF channel test walks. Synthesized like the tone
+      # and pushed onto the device by the runner script, never
+      # committed.
+      - name: Synthesize the SAF probe folder
+        run: |
+          set -euo pipefail
+          cd fixtures
+          go run ./cmd/fixturegen -out "$RUNNER_TEMP/wax-saf" -preset saf-probe
+          find "$RUNNER_TEMP/wax-saf" -type f
       # google_apis rather than the smaller AOSP or ATD images: nothing
       # here wants Play services, but google_apis is the one variant
       # published at every API level, and a weekly job that dies in
@@ -136,10 +157,13 @@ jobs:
           # what a silenced conformance run wants.
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           script: >-
+            rm -rf "$RUNNER_TEMP/wax-saf-artifacts" &&
             cd app/app &&
             flutter test integration_test/real_engine_conformance_test.dart
             -d emulator-5554
-            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac
+            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
+            "$GITHUB_WORKSPACE/e2e/tools/run-saf-probe.sh"
+            "$RUNNER_TEMP/wax-saf/WaxProbe" emulator-5554
       # The identical run again, only when the first failed: the one
       # observed failure mode is the harness dying before any test
       # starts, and a retry is cheaper than the promotion question
@@ -157,7 +181,23 @@ jobs:
           # different question.
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           script: >-
+            rm -rf "$RUNNER_TEMP/wax-saf-artifacts" &&
             cd app/app &&
             flutter test integration_test/real_engine_conformance_test.dart
             -d emulator-5554
-            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac
+            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
+            "$GITHUB_WORKSPACE/e2e/tools/run-saf-probe.sh"
+            "$RUNNER_TEMP/wax-saf/WaxProbe" emulator-5554
+      # What the device looked like when the picker driver lost its
+      # way: run-saf-probe.sh captures a screenshot and a final view
+      # hierarchy, and DocumentsUI drifting is unreadable without them.
+      # Nothing is captured when the SAF half never ran, hence ignore -
+      # and each attempt empties the directory first, so what uploads
+      # is never the earlier attempt's device.
+      - name: Device capture on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: saf-picker-capture
+          path: ${{ runner.temp }}/wax-saf-artifacts
+          if-no-files-found: ignore

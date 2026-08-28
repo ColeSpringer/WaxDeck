@@ -1,6 +1,7 @@
 package com.colespringer.waxdeck
 
 import android.content.ClipData
+import android.content.ContentResolver
 import android.content.Intent
 import android.content.res.AssetFileDescriptor
 import android.net.Uri
@@ -17,16 +18,21 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 // audio_service hosts the engine in its media service, so the base
 // class comes from it. Share-sheet traffic runs both ways over the
 // waxdeck/share channel: intake queues audio and text, cards go out.
-// Folder uploads run over waxdeck/saf: one pickTree call opens the
-// system tree picker, walks the tree, and answers every file under it;
-// readChunk then serves the transfer's windowed reads. The channel
-// stays a capability grant - the extension filter, ordering, and the
-// transfer are Dart-side.
+// Folder uploads run over waxdeck/saf, pulled a page at a time:
+// pickTree opens the system tree picker and answers the granted root,
+// nextTreeBatch advances the walk by a bounded number of entries,
+// disposeTreeWalk drops one nobody finished, and readChunk serves the
+// transfer's windowed reads. Pull rather than push, so the caller sets
+// the pace and nothing - here, in the messenger's encode, or Dart-side
+// - ever holds a whole tree. The channel stays a capability grant: the
+// extension filter, ordering, and the transfer are Dart-side.
 class MainActivity : AudioServiceActivity() {
     private val pendingShares = ArrayDeque<Map<String, Any?>>()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -68,6 +74,14 @@ class MainActivity : AudioServiceActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "pickTree" -> pickTree(result)
+                    "nextTreeBatch" -> nextTreeBatch(call, result)
+                    "disposeTreeWalk" -> {
+                        // Naming a walk that is not the current one is
+                        // not a failure - it is a superseded loop
+                        // tidying up after one that is already gone.
+                        walkFor(call)?.let { dropTreeWalk(it) }
+                        result.success(null)
+                    }
                     "readChunk" -> readChunk(call, result)
                     else -> result.notImplemented()
                 }
@@ -105,38 +119,192 @@ class MainActivity : AudioServiceActivity() {
             result.success(null)
             return
         }
-        // Off the main thread: a big tree is one query per directory.
-        // Throwable, not Exception: a pathological tree ends in an
-        // Error, and a worker dying silently would leave the Dart
-        // future waiting forever.
-        Thread {
-            val answer = try {
-                enumerateTree(tree)
+        // A grant is what supersedes the last walk, not merely
+        // opening a picker: a second pick the user cancels leaves the
+        // first one's walk alone.
+        dropTreeWalk()
+        // The walk resolves documents through the application context
+        // and lives in the companion: Android may recreate this
+        // activity mid-walk while the engine - and with it the Dart
+        // loop pulling batches - lives on in audio_service's cache.
+        val walk = TreeWalk(applicationContext.contentResolver, tree, nextWalkId())
+        treeWalk = walk
+        // Off the main thread from the first query: naming the root is
+        // already one round trip to the provider. Throwable, not
+        // Exception: a pathological tree ends in an Error, and a worker
+        // dying silently would leave the Dart future waiting forever.
+        safWalks.execute {
+            val root = try {
+                walk.start()
             } catch (e: Throwable) {
-                mainHandler.post { result.error("enumerate-failed", e.message, null) }
-                return@Thread
+                mainHandler.post {
+                    dropTreeWalk(walk)
+                    result.error("enumerate-failed", e.message, null)
+                }
+                return@execute
             }
-            mainHandler.post { result.success(answer) }
-        }.start()
+            // The walk's id goes back with it: every later call names
+            // the walk it belongs to, so a superseded loop can neither
+            // consume a newer walk's entries nor dispose it.
+            mainHandler.post {
+                result.success(mapOf("root" to root, "walk" to walk.id))
+            }
+        }
     }
 
-    // Lists every file under the picked tree: name, size, and the
-    // directory path rooted at the tree's own display name - the
-    // relativeDir shape the desktop and web walks build. Iterative
-    // with a visited set: a provider may hand back an ancestor as a
-    // child (shortcut documents), and recursing there would loop until
-    // the process died.
-    private fun enumerateTree(tree: Uri): List<Map<String, Any>> {
-        val out = mutableListOf<Map<String, Any>>()
-        val rootId = DocumentsContract.getTreeDocumentId(tree)
-        val visited = hashSetOf(rootId)
-        val stack = ArrayDeque<Pair<String, String>>()
-        stack.addLast(rootId to treeDisplayName(tree))
-        while (stack.isNotEmpty()) {
-            val (documentId, dir) = stack.removeLast()
+    // Advances the open walk by at most `max` entries and answers them
+    // with whether the tree is finished. A failure mid-walk drops the
+    // walk: the tree is half-read, and half a folder is not a pick.
+    private fun nextTreeBatch(call: MethodCall, result: MethodChannel.Result) {
+        val walk = walkFor(call)
+        if (walk == null) {
+            result.error("no-walk", "no folder pick is open", null)
+            return
+        }
+        val max = (call.argument<Number>("max")?.toInt() ?: BATCH_LIMIT)
+            .coerceIn(1, BATCH_LIMIT)
+        safWalks.execute {
+            val page = try {
+                walk.next(max)
+            } catch (e: Throwable) {
+                mainHandler.post {
+                    dropTreeWalk(walk)
+                    result.error("enumerate-failed", e.message, null)
+                }
+                return@execute
+            }
+            mainHandler.post {
+                // A finished walk frees itself; disposeTreeWalk is for
+                // the caller that stopped early.
+                if (page.done) dropTreeWalk(walk)
+                result.success(mapOf("entries" to page.entries, "done" to page.done))
+            }
+        }
+    }
+
+    // The open walk, when the caller named it. A call naming another
+    // one comes from a loop a newer pick superseded, and answering it
+    // would hand the new walk's entries to the wrong caller.
+    private fun walkFor(call: MethodCall): TreeWalk? {
+        val walk = treeWalk ?: return null
+        return if (call.argument<String>("walk") == walk.id) walk else null
+    }
+
+    // Drops the walk; what is left of it is garbage, since the worker
+    // is the process's and not the walk's. Main thread only, which is
+    // where every channel call and every posted reply runs.
+    //
+    // A reply posted from the worker names the walk it came from: a
+    // newer pick may have superseded that one while the batch was in
+    // flight, and the old answer must not take the new walk down.
+    private fun dropTreeWalk(only: TreeWalk? = null) {
+        val walk = treeWalk ?: return
+        if (only != null && only !== walk) return
+        treeWalk = null
+    }
+
+    // One folder pick's traversal, resumable: the stack, the visited
+    // set, and the current directory's listing that enumerateTree used
+    // to hold in locals live here instead, so a batch can stop
+    // anywhere and the next call picks up where it left off.
+    //
+    // Every field is touched on [safWalks] and nowhere else, which is
+    // what makes them safe without locks - the discipline cachedRead
+    // keeps on safReads. The resolver comes from the application
+    // context because the walk outlives any one activity instance, and
+    // [id] is how a caller says which walk it means.
+    private class TreeWalk(
+        private val resolver: ContentResolver,
+        private val tree: Uri,
+        val id: String,
+    ) {
+        // Directories still to list, each with its path relative to the
+        // tree root, and the ids already queued: a provider may hand
+        // back an ancestor as a child (shortcut documents), and
+        // following one would loop until the process died.
+        private val stack = ArrayDeque<Pair<String, String>>()
+        private val visited = hashSetOf<String>()
+
+        // The directory being emitted, listed whole and handed out a
+        // page at a time: what one batch holds is a page, but what the
+        // walk holds is one directory's rows, not the tree's. That is
+        // the bound a cursor held open across channel calls would trade
+        // for a cursor a provider can invalidate under it, and one
+        // directory is small beside the pick the Dart side is building
+        // anyway.
+        private val pending = ArrayDeque<Row>()
+
+        // A listed file before it is worth a document URI or a
+        // descriptor open, both of which the emitting batch pays for.
+        private class Row(
+            val id: String,
+            val name: String,
+            val dir: String,
+            val size: Long?,
+        )
+
+        class Page(val entries: List<Map<String, Any>>, val done: Boolean)
+
+        // Seeds the walk at the tree root and answers its display name,
+        // which is the directory every entry hangs off - the Dart side
+        // prefixes it, so it does not ride every entry across the
+        // channel.
+        fun start(): String {
+            val rootId = DocumentsContract.getTreeDocumentId(tree)
+            visited.add(rootId)
+            stack.addLast(rootId to "")
+            return treeDisplayName()
+        }
+
+        fun next(max: Int): Page {
+            val out = ArrayList<Map<String, Any>>()
+            // Directories are budgeted as well as entries: a page that
+            // fills from one listing is the common case, but a run of
+            // empty directories would otherwise walk the whole tree
+            // inside one batch and answer nothing.
+            var listed = 0
+            while (out.size < max && listed < max) {
+                val row = pending.removeFirstOrNull()
+                if (row == null) {
+                    val dir = stack.removeLastOrNull() ?: break
+                    list(dir)
+                    listed++
+                    continue
+                }
+                out.add(
+                    mapOf(
+                        "name" to row.name,
+                        // The upload session declares its size up
+                        // front. A provider whose listing reports none
+                        // gets one more chance through the opened
+                        // descriptor; still unknown crosses as -1,
+                        // which the Dart side counts rather than
+                        // dropping - a whole folder of these must not
+                        // read as an empty pick. Paid here rather than
+                        // while listing, so a directory of them costs
+                        // one open per emitted entry instead of a batch
+                        // that stalls before it answers anything.
+                        "size" to (row.size ?: sizeViaDescriptor(row.id)),
+                        "relativeDir" to row.dir,
+                        "uri" to DocumentsContract
+                            .buildDocumentUriUsingTree(tree, row.id).toString(),
+                    ),
+                )
+            }
+            return Page(out, pending.isEmpty() && stack.isEmpty())
+        }
+
+        // Lists one directory: subdirectories onto the stack, files
+        // into the page queue.
+        private fun list(entry: Pair<String, String>) {
+            val (documentId, dir) = entry
             val children =
                 DocumentsContract.buildChildDocumentsUriUsingTree(tree, documentId)
-            contentResolver.query(
+            // A null cursor is a provider that failed, not a directory
+            // with nothing in it - and the difference matters, because
+            // swallowing it answers `done` over a tree that was never
+            // finished. Half a folder is not a pick.
+            val cursor = resolver.query(
                 children,
                 arrayOf(
                     DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -147,66 +315,52 @@ class MainActivity : AudioServiceActivity() {
                 null,
                 null,
                 null,
-            )?.use { cursor ->
+            ) ?: throw IllegalStateException("the folder could not be listed")
+            cursor.use {
                 while (cursor.moveToNext()) {
                     val id = cursor.getString(0) ?: continue
                     val name = cursor.getString(1) ?: continue
                     if (cursor.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        if (visited.add(id)) stack.addLast(id to "$dir/$name")
+                        val path = if (dir.isEmpty()) name else "$dir/$name"
+                        if (visited.add(id)) stack.addLast(id to path)
                         continue
                     }
-                    // The upload session declares its size up front. A
-                    // provider whose listing reports none gets one
-                    // more chance through the opened descriptor;
-                    // still unknown crosses as -1, which the Dart side
-                    // counts rather than dropping - a whole folder of
-                    // these must not read as an empty pick.
-                    val size =
-                        if (cursor.isNull(3)) sizeViaDescriptor(tree, id)
-                        else cursor.getLong(3)
-                    out.add(
-                        mapOf(
-                            "name" to name,
-                            "size" to size,
-                            "relativeDir" to dir,
-                            "uri" to DocumentsContract
-                                .buildDocumentUriUsingTree(tree, id).toString(),
-                        ),
-                    )
+                    val size = if (cursor.isNull(3)) null else cursor.getLong(3)
+                    pending.addLast(Row(id, name, dir, size))
                 }
             }
         }
-        return out
-    }
 
-    // The size a listing did not carry, asked of the opened descriptor;
-    // -1 where even that does not know.
-    private fun sizeViaDescriptor(tree: Uri, id: String): Long = try {
-        val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
-        contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
-            if (afd.length == AssetFileDescriptor.UNKNOWN_LENGTH) -1L else afd.length
-        } ?: -1L
-    } catch (_: Exception) {
-        -1L
-    }
-
-    private fun treeDisplayName(tree: Uri): String {
-        val doc = DocumentsContract.buildDocumentUriUsingTree(
-            tree,
-            DocumentsContract.getTreeDocumentId(tree),
-        )
-        contentResolver.query(
-            doc,
-            arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(0)?.let { return it }
+        // The size a listing did not carry, asked of the opened
+        // descriptor; -1 where even that does not know.
+        private fun sizeViaDescriptor(id: String): Long = try {
+            val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
+            resolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
+                if (afd.length == AssetFileDescriptor.UNKNOWN_LENGTH) -1L else afd.length
+            } ?: -1L
+        } catch (_: Exception) {
+            -1L
         }
-        // Storage document ids read "primary:Music"; the leaf is the name.
-        return DocumentsContract.getTreeDocumentId(tree)
-            .substringAfterLast(':').substringAfterLast('/').ifEmpty { "folder" }
+
+        private fun treeDisplayName(): String {
+            val doc = DocumentsContract.buildDocumentUriUsingTree(
+                tree,
+                DocumentsContract.getTreeDocumentId(tree),
+            )
+            resolver.query(
+                doc,
+                arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0)?.let { return it }
+            }
+            // Storage document ids read "primary:Music"; the leaf is
+            // the name.
+            return DocumentsContract.getTreeDocumentId(tree)
+                .substringAfterLast(':').substringAfterLast('/').ifEmpty { "folder" }
+        }
     }
 
     // One [start, start+length) window of a document, served from the
@@ -228,15 +382,22 @@ class MainActivity : AudioServiceActivity() {
             result.error("bad-request", "uri, start, and length are required", null)
             return
         }
-        safReads.execute {
-            val answer = try {
-                readWindow(uri, start, length)
-            } catch (e: Throwable) {
-                dropCachedRead()
-                mainHandler.post { result.error("read-failed", e.message, null) }
-                return@execute
+        try {
+            safReads.execute {
+                val answer = try {
+                    readWindow(uri, start, length)
+                } catch (e: Throwable) {
+                    dropCachedRead()
+                    mainHandler.post { result.error("read-failed", e.message, null) }
+                    return@execute
+                }
+                mainHandler.post { result.success(answer) }
             }
-            mainHandler.post { result.success(answer) }
+        } catch (_: RejectedExecutionException) {
+            // The activity that owned this reader is gone. Answered
+            // rather than dropped: a call that never replies leaves the
+            // transfer waiting for a window that is never coming.
+            result.error("read-failed", "the document reader is closed", null)
         }
     }
 
@@ -428,5 +589,33 @@ class MainActivity : AudioServiceActivity() {
         // onActivityResult has to find the pending reply, or that
         // future never completes.
         var pendingTree: MethodChannel.Result? = null
+
+        // Here for the same reason: the walk outlives the activity it
+        // was picked in, so onDestroy leaves it alone and the Dart
+        // loop - or the next grant - is what ends it.
+        var treeWalk: TreeWalk? = null
+
+        private var walkSerial = 0L
+
+        fun nextWalkId(): String = "walk-${++walkSerial}"
+
+        // One walk worker for the whole process, made on first use and
+        // never shut down. Shared rather than per-walk so an abandoned
+        // walk leaks nothing but its own state, and outside the
+        // activity because a walk outlives the instance that started
+        // it. Tasks are serialized, so a stale batch finishes before a
+        // newer walk's begins and each still touches only its own
+        // state.
+        val safWalks: ExecutorService by lazy {
+            Executors.newSingleThreadExecutor { runnable ->
+                Thread(runnable, "wax-saf-walk").apply { isDaemon = true }
+            }
+        }
+
+        // Both the size a batch answers when the caller names none and
+        // the ceiling on what it will answer. One number, because the
+        // ceiling exists to bound the main-thread encode and a bound
+        // ten times the size anyone asks for bounds nothing.
+        const val BATCH_LIMIT = 500
     }
 }

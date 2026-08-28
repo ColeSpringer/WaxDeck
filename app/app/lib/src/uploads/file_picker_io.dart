@@ -127,7 +127,10 @@ Future<FolderPick> _filesUnder(Directory root, UploadFormatSets formats) async {
       PickedAudioFile(
         name: name,
         size: await entity.length(),
-        relativeDir: _joinDir(rootName, _relativeDirOf(entity.path, rootPath)),
+        relativeDir: joinRelativeDir(
+          rootName,
+          _relativeDirOf(entity.path, rootPath),
+        ),
         path: entity.path,
         openRead: ([int? start, int? end]) => entity.openRead(start, end),
       ),
@@ -170,10 +173,4 @@ String _relativeDirOf(String path, String rootPath) {
   if (dir == root) return '';
   if (!dir.startsWith('$root/')) return '';
   return dir.substring(root.length + 1);
-}
-
-String _joinDir(String a, String b) {
-  if (a.isEmpty) return b;
-  if (b.isEmpty) return a;
-  return '$a/$b';
 }

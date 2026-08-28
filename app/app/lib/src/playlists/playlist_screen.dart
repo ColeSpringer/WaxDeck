@@ -258,11 +258,17 @@ class _StatusChips extends ConsumerWidget {
                   : (binding.lastError ?? '').isNotEmpty
                   ? l10n.playlistSyncChipFailing
                   // "Synced" is a claim about the past, so a binding
-                  // that has never completed a run says "scheduled"
-                  // rather than asserting a sync that never happened.
-                  : binding.lastSyncedAt == null
+                  // that has never completed a run does not make it.
+                  // What it says instead depends on what it is: a live
+                  // source has a schedule to wait for, a matched export
+                  // has none by construction and re-matches on demand,
+                  // so telling somebody a sync is scheduled would be
+                  // waiting for something that is never coming.
+                  : binding.lastSyncedAt != null
+                  ? l10n.playlistSyncChipSynced
+                  : binding.live
                   ? l10n.playlistSyncChipPending
-                  : l10n.playlistSyncChipSynced,
+                  : l10n.playlistSyncChipMatched,
               emphasis:
                   binding.disabled || (binding.lastError ?? '').isNotEmpty,
             ),

@@ -5236,6 +5236,15 @@ class AppLocalizationsEs extends AppLocalizations {
       'Quien la creó todavía no ha puesto nada en esta lista.';
 
   @override
+  String playlistImportBindFailed(String reason) {
+    return 'Se ha creado la lista, pero no se ha podido mantenerla vinculada a la exportación: $reason';
+  }
+
+  @override
+  String get playlistImportBound =>
+      'Se mantiene vinculada a esta exportación. Puedes volver a emparejarla cuando quieras desde los ajustes de sincronización de la lista.';
+
+  @override
   String get playlistImportComplete => 'Importación completada';
 
   @override
@@ -5255,6 +5264,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistImportHintText => 'Una pista por línea: artista - título';
+
+  @override
+  String get playlistImportKeepMatched =>
+      'Mantenerla vinculada a esta exportación';
+
+  @override
+  String get playlistImportKeepMatchedHelp =>
+      'La exportación se guarda con la lista y se vuelve a emparejar con la biblioteca cuando lo pidas. La pertenencia sigue a la exportación, así que las pistas añadidas a mano se descartan';
 
   @override
   String get playlistImportMenu => 'Importar una lista de reproducción';
@@ -5871,6 +5888,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistSyncChipFailing => 'Sincronización con fallos';
+
+  @override
+  String get playlistSyncChipMatched => 'Emparejada';
 
   @override
   String get playlistSyncChipOff => 'Sincronización suspendida';

@@ -548,6 +548,7 @@ export const SemanticsIds = {
   playlistExportNspProceed: 'playlist-export-nsp-proceed',
   playlistExportPortable: 'playlist-export-portable',
   playlistImport: 'playlist-import',
+  playlistImportKeepMatched: 'playlist-import-keep-matched',
   playlistImportName: 'playlist-import-name',
   playlistImportPayload: 'playlist-import-payload',
   playlistImportReport: 'playlist-import-report',

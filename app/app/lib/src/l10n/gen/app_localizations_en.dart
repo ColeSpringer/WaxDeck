@@ -5179,6 +5179,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'The owner has not put anything in this list yet.';
 
   @override
+  String playlistImportBindFailed(String reason) {
+    return 'The playlist was created, but keeping it matched to the export failed: $reason';
+  }
+
+  @override
+  String get playlistImportBound =>
+      'Kept matched to this export. Re-match it whenever you like from the playlist\'s sync settings.';
+
+  @override
   String get playlistImportComplete => 'Import complete';
 
   @override
@@ -5197,6 +5206,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistImportHintText => 'One track a line: artist - title';
+
+  @override
+  String get playlistImportKeepMatched => 'Keep it matched to this export';
+
+  @override
+  String get playlistImportKeepMatchedHelp =>
+      'The export is stored with the playlist and re-matched against the library on demand. Membership follows the export, so tracks added by hand are reconciled away';
 
   @override
   String get playlistImportMenu => 'Import playlist';
@@ -5805,6 +5821,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistSyncChipFailing => 'Sync failing';
+
+  @override
+  String get playlistSyncChipMatched => 'Matched';
 
   @override
   String get playlistSyncChipOff => 'Sync suspended';

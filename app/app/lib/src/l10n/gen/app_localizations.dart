@@ -8163,6 +8163,18 @@ abstract class AppLocalizations {
   /// **'The owner has not put anything in this list yet.'**
   String get playlistForeignEmptyMessage;
 
+  /// Line in the import report when the playlist was made but the source binding was refused. {reason} is the server's own sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'The playlist was created, but keeping it matched to the export failed: {reason}'**
+  String playlistImportBindFailed(String reason);
+
+  /// Line in the import report when the created playlist was also bound to the pasted export.
+  ///
+  /// In en, this message translates to:
+  /// **'Kept matched to this export. Re-match it whenever you like from the playlist\'s sync settings.'**
+  String get playlistImportBound;
+
   /// Title of the report after an import that made a playlist.
   ///
   /// In en, this message translates to:
@@ -8198,6 +8210,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'One track a line: artist - title'**
   String get playlistImportHintText;
+
+  /// Switch in the import dialog binding the created playlist to the pasted export.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep it matched to this export'**
+  String get playlistImportKeepMatched;
+
+  /// Help line under the keep-matched switch, saying what binding the export does.
+  ///
+  /// In en, this message translates to:
+  /// **'The export is stored with the playlist and re-matched against the library on demand. Membership follows the export, so tracks added by hand are reconciled away'**
+  String get playlistImportKeepMatchedHelp;
 
   /// Accessible name of the menu offering the places a playlist can be imported from.
   ///
@@ -9223,6 +9247,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync failing'**
   String get playlistSyncChipFailing;
+
+  /// Status chip on a playlist bound to a streaming export rather than a live URL, before any re-match has run. Such a binding has no schedule, so it never says the sync is scheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Matched'**
+  String get playlistSyncChipMatched;
 
   /// Status chip on a synced playlist whose schedule was suspended after repeated failures.
   ///

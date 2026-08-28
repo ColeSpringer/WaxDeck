@@ -296,6 +296,33 @@ void main() {
     );
   });
 
+  testWidgets('a never-run matched binding says matched, not scheduled', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    );
+    final pl = await _manualPlaylist(repo);
+    // What the import dialog's keep-matched switch stores: an export,
+    // no URL, no interval - and so no schedule for anyone to wait on.
+    repo.playlistSources[pl.pid] = const PlaylistSource(
+      source: 'spotify',
+      live: false,
+      mode: 'mirror',
+      refCount: 12,
+      disabled: false,
+      consecutiveFailures: 0,
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
+    await tester.pumpAndSettle();
+    expect(find.text('Matched'), findsOneWidget);
+    expect(
+      find.text('Sync scheduled'),
+      findsNothing,
+      reason: 'a matched export has no schedule to be waiting for',
+    );
+  });
+
   testWidgets('the sheet frames the failure and reads out the last run', (
     tester,
   ) async {

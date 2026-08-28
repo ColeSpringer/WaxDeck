@@ -2,14 +2,19 @@
 // system tree picker opens, a driver outside this process (adb input
 // taps, scripted beside the test invocation) walks it to the probe
 // folder pushed to /sdcard/Music/WaxProbe and confirms, and the test
-// asserts the walk, the filter accounting, and the windowed reads that
-// come back. Host unit tests mock the channel; only this proves the
-// Kotlin half - grant, traversal, readChunk - on a device.
+// asserts the walk - pulled in batches small enough that the probe
+// crosses several, so the resumable half of the protocol runs - the
+// filter accounting, and the windowed reads that come back. Host unit
+// tests mock the channel; only this proves the Kotlin half - grant,
+// traversal, resume, readChunk - on a device.
 //
-// Run it by hand, like the suites beside it (the picker taps make it
-// interactive unless a driver taps for you):
-//   adb push <probe folder> /sdcard/Music/WaxProbe
-//   flutter test integration_test/saf_channel_test.dart -d emulator-5554
+// The taps have to come from outside because `flutter test` holds the
+// device's one instrumentation slot. e2e/tools/run-saf-probe.sh is the
+// recipe, and it is what the android-conformance workflow runs:
+//   cd fixtures && go run ./cmd/fixturegen -out /tmp/wax-saf -preset saf-probe
+//   e2e/tools/run-saf-probe.sh /tmp/wax-saf/WaxProbe emulator-5554
+// Tapping through by hand still works - push the probe, run the test
+// below, and answer the picker yourself.
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -19,6 +24,14 @@ import 'package:waxdeck/src/uploads/saf_folder_picker.dart';
 /// How long the picker interaction gets before the run counts as
 /// undriven. Generous: a human tapping through also passes.
 const _budget = Duration(minutes: 2);
+
+/// A page small enough that the probe folder crosses several of them.
+/// The resumable half of the protocol - Kotlin's stack, its visited
+/// set, and the directory it is part way through - only runs at all
+/// when a walk needs more than one batch, and a probe big enough to
+/// force that at the production page size is too big to push onto an
+/// emulator.
+const _batch = 2;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +46,7 @@ void main() {
 
       final pick = await pickSafAudioFolder(
         const UploadFormatSets(),
+        batch: _batch,
       ).timeout(_budget);
 
       // The probe folder: lantern-one/two at the top, sodium-sky under

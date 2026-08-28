@@ -130,21 +130,29 @@ is best-effort: enumeration inspects a bounded prefix of the source,
 so a long playlist's later entries count as unknown until a download
 is attempted.
 
-A streaming export (Spotify, Apple Music, YouTube Music, CSV, text)
-can be recorded as a binding too. It reconciles match-only and on
-demand: a sync re-runs the import resolve ladder against the library,
-attaches what matched, and reports the misses, downloading nothing -
-there is no live connector to re-fetch the export from, so there is no
-schedule either.
+A streaming export (Spotify, Apple Music, YouTube Music, CSV, text,
+portable) can be recorded as a binding too. It reconciles match-only
+and on demand: a sync re-runs the import resolve ladder against the
+library, attaches what matched, and reports the misses, downloading
+nothing - there is no live connector to re-fetch the export from, so
+there is no schedule either. The door is **Import playlist**, which
+offers to keep the new playlist matched to what you pasted; it binds as
+mirror, because the playlist is that export rather than a copy of it,
+so a later re-match fills what the first pass missed and reconciles
+away anything added by hand. That switch is the only way to make one
+from the app: a playlist you already have cannot be bound to an export
+here, and a matched binding's mode cannot be changed once it is made -
+both are the API's to do.
 
 Sync health rides the binding. The playlist header wears a chip
-(Synced, Sync failing, Sync suspended - and Sync scheduled before the
-first run completes), the settings sheet shows the last run's counts
-and the last error, and a binding that keeps failing is suspended
-after ten consecutive misses - a successful manual sync turns it back
-on. A sync never overwrites an edit you are making: a run that
-collides with a concurrent change backs off whole and retries at the
-next interval. The mirror modes also refuse a listing they cannot
+(Synced, Sync failing, Sync suspended - and, before any run has
+completed, Sync scheduled for a live source or Matched for an export,
+which has no schedule to be waiting for), the settings sheet shows the
+last run's counts and the last error, and a binding that keeps failing
+is suspended after ten consecutive misses - a successful manual sync
+turns it back on. A sync never overwrites an edit you are making: a run
+that collides with a concurrent change backs off whole and retries at
+the next interval. The mirror modes also refuse a listing they cannot
 trust - one cut short by the enumeration cap, or a clean empty answer
 from a source that has synced before - rather than removing what a
 partial page merely failed to show. **Stop syncing** removes the

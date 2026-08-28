@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'playlists_controller.dart';
 
@@ -50,6 +51,11 @@ enum PlaylistImportSource {
 
   /// Only M3U insists on a name: the rest carry one.
   bool get needsName => this == PlaylistImportSource.m3u;
+
+  /// Whether the created playlist can be bound to what was pasted.
+  /// M3U alone cannot: it is not in the binding's source enum, because
+  /// a file of paths is not something to re-match against.
+  bool get canBind => this != PlaylistImportSource.m3u;
 }
 
 /// One menu, one entry per source, each opening its own paste box.
@@ -159,6 +165,10 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
   final _payload = TextEditingController();
   var _busy = false;
 
+  /// Whether the created playlist is bound to what was pasted. Off by
+  /// default: an import is a copy until somebody says otherwise.
+  var _keepMatched = false;
+
   /// Inside the dialog, not a snackbar: this stays open on a refusal and
   /// a snackbar renders on the scaffold behind the modal.
   String? _error;
@@ -191,6 +201,12 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
     });
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    // Read here, beside the navigator and messenger and for the same
+    // reason: the bind happens after an await, and `ref` is only good
+    // while this dialog is mounted - which a dismissal ends. The
+    // import already ran, so the binding somebody asked for should not
+    // depend on the dialog still being up.
+    final repository = ref.read(repositoryProvider);
     try {
       if (_source == PlaylistImportSource.m3u) {
         final result = await ref
@@ -236,27 +252,75 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
           return;
         }
       }
+      // Decided once: the binding's whole meaning is that it is what
+      // was imported, so both calls send the same body.
+      final exportPayload = refs == null ? payload : null;
       final result = await ref
           .read(playlistsProvider.notifier)
           .importExport(
             source: _source.wire,
             name: name.isEmpty ? exportedName : name,
-            payload: refs == null ? payload : null,
+            payload: exportPayload,
             refs: refs,
           );
+      // Bound here, before the pop, because this is where the parsed
+      // export and the created pid are both still in hand; only the
+      // outcome crosses into the report.
+      final binding = await _bind(
+        repository,
+        l10n,
+        result.playlistPid,
+        payload: exportPayload,
+        refs: refs,
+      );
       if (mounted) navigator.pop();
       // This dialog's own context died with the pop; the navigator's
       // context hosts the report.
       if (!navigator.mounted) return;
       await showDialog<void>(
         context: navigator.context,
-        builder: (_) => _ImportReportDialog(result: result),
+        builder: (_) => _ImportReportDialog(result: result, binding: binding),
       );
     } on WaxDeckApiException catch (e) {
       // What was pasted is what was refused, so the server's own words.
       if (mounted) setState(() => _error = explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Binds the created playlist to what was just pasted, and answers
+  /// what the report should say about it - null when nobody asked, or
+  /// when nothing was created to bind.
+  ///
+  /// Mode `mirror`, because the binding's meaning is "this playlist is
+  /// that export": membership converges on the export and a later
+  /// re-match fills what this pass missed. A failure is reported rather
+  /// than raised - the playlist exists either way, and the import is
+  /// what the dialog is closing on.
+  Future<_BindOutcome?> _bind(
+    WaxDeckRepository repository,
+    AppLocalizations l10n,
+    String? playlistPid, {
+    String? payload,
+    List<PortableRef>? refs,
+  }) async {
+    if (!_keepMatched || playlistPid == null) return null;
+    try {
+      // The repository rather than the playlist's sync notifier: this
+      // pid is seconds old, so writing through one would start a
+      // binding read whose not-found can land after the write and cache
+      // a bound playlist as unbound.
+      await repository.setPlaylistSource(
+        playlistPid,
+        mode: 'mirror',
+        source: _source.wire,
+        payload: payload,
+        refs: refs,
+      );
+      return const _BindOutcome.kept();
+    } on Object catch (e) {
+      return _BindOutcome.refused(explainRefusal(l10n, e));
     }
   }
 
@@ -299,6 +363,19 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
                   ),
                 ),
               ),
+              if (_source.canBind)
+                WaxSettingRow(
+                  title: l10n.playlistImportKeepMatched,
+                  help: l10n.playlistImportKeepMatchedHelp,
+                  control: WaxSwitch(
+                    value: _keepMatched,
+                    label: l10n.playlistImportKeepMatched,
+                    semanticsId: SemanticsIds.playlistImportKeepMatched,
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(() => _keepMatched = value),
+                  ),
+                ),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: WaxSpace.s8),
@@ -327,12 +404,33 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
   }
 }
 
-/// The import report: what was created, how much resolved, and the
-/// entries with no library match.
+/// What binding the created playlist to the pasted export did, worded
+/// for the report. The dialog carries the outcome, not the request, so
+/// nothing about the bind has to be re-derived there.
+class _BindOutcome {
+  const _BindOutcome.kept() : message = null, refused = false;
+  const _BindOutcome.refused(String this.message) : refused = true;
+
+  /// The server's own sentence for a refusal; null when it worked, and
+  /// the report says so in the table's words.
+  final String? message;
+
+  final bool refused;
+
+  String lineOf(AppLocalizations l10n) => refused
+      ? l10n.playlistImportBindFailed(message!)
+      : l10n.playlistImportBound;
+}
+
+/// The import report: what was created, how much resolved, whether it
+/// stayed matched to the export, and the entries with no library match.
 class _ImportReportDialog extends StatelessWidget {
-  const _ImportReportDialog({required this.result});
+  const _ImportReportDialog({required this.result, this.binding});
 
   final PlaylistImportResult result;
+
+  /// What the keep-matched switch did, or null when it was off.
+  final _BindOutcome? binding;
 
   @override
   Widget build(BuildContext context) {
@@ -362,6 +460,15 @@ class _ImportReportDialog extends StatelessWidget {
                   : l10n.playlistImportNoMatches,
               style: WaxType.body.copyWith(color: colors.textPrimary),
             ),
+            if (binding != null) ...<Widget>[
+              const SizedBox(height: WaxSpace.s8),
+              Text(
+                binding!.lineOf(l10n),
+                style: WaxType.bodySmall.copyWith(
+                  color: binding!.refused ? colors.error : colors.textSecondary,
+                ),
+              ),
+            ],
             if (result.missing.isNotEmpty) ...<Widget>[
               const SizedBox(height: WaxSpace.s12),
               Text(

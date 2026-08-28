@@ -740,38 +740,22 @@ here waits on upstream.
   carry per-role art first - the "per-role candidate art on the
   enrichment port" ask in `upstream-requests.md` (WaxBin). The slots
   are readable and hand-settable meanwhile.
-- `[in-repo]` **An Android folder pick ships the whole tree as one
-  channel envelope.** `pickTree` enumerates every file under the
-  chosen tree Kotlin-side and answers a single list - name, size,
-  relativeDir, and a 150-plus-character document URI per entry -
-  which the messenger encodes on the main thread and the Dart side
-  holds whole while filtering and sorting. Picking one album folder
-  is nothing; picking "Internal storage" over tens of thousands of
-  files peaks all three copies at once and can jank or ANR before the
-  filter drops a single file. Fix shapes when taken: stream the walk
-  in batches over the channel, or pass the accepted set into
-  `pickTree` and filter Kotlin-side (which moves policy across the
-  channel - the reason it was not done in the first pass).
-- `[in-repo]` **The waxdeck/saf Kotlin half has no automated
-  coverage.** `saf_channel_test.dart` proves grant, traversal, and
-  windowed reads end-to-end on a real device, but the system picker
-  needs a human (or a scripted uiautomator driver) to tap through, so
-  the test is run by hand and the android-conformance workflow does
-  not invoke it. The Dart half is pinned by host tests over a mocked
-  channel. Automating the picker taps in CI (uiautomator against the
-  emulator the conformance job already boots) is the fix shape.
-- `[in-repo]` **Matched-source bindings have no client door.** The
-  server accepts a streaming export (Spotify, Apple Music, YouTube
-  Music, CSV, text) as a playlist source binding - stored as portable
-  refs, re-matched on demand, misses reported - and the settings sheet
-  renders, previews, syncs, and unbinds one, but nothing in the client
-  creates one: the sheet's bind form takes a live URL only, so a
-  matched binding is minted over the API. The natural door is the
-  existing import flow, which holds the parsed export in hand at
-  exactly the moment the created playlist's pid comes back - a
-  "keep it re-matching" switch there is one repository call. Not built
-  with the sync feature because it lives on a screen the feature
-  otherwise never touched.
+- `[in-repo]` **A matched binding can only be made at import, as
+  `mirror`, and never afterwards.** The import dialog's keep-matched
+  switch is the only client path to one: it binds the playlist it just
+  created, and it binds `mirror`, which is what "this playlist is that
+  export" means. Two things follow. An existing playlist cannot be
+  bound to an export at all - including one whose bind the server
+  refused a moment earlier, which leaves the import's own report
+  telling somebody about a binding they now have no way to make.
+  And the mode cannot be changed later: the sync sheet's matched branch
+  is prose plus the run and unbind buttons, Save renders only for a
+  live binding, and re-importing makes a second playlist rather than
+  rebinding the first - and would bind `mirror` again anyway. The
+  endpoint accepts `append` and takes a binding for any owned playlist;
+  what is missing is somewhere to say so. The fix shape is the sync
+  sheet growing a matched arm - paste an export, pick the mode - which
+  would answer all of it at once.
 
 ## Discovery and stats
 

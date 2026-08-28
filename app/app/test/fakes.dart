@@ -5317,7 +5317,15 @@ class FakeRepository implements WaxDeckRepository {
   );
 
   final List<
-    ({String pid, String mode, String? url, String? source, int? intervalHours})
+    ({
+      String pid,
+      String mode,
+      String? url,
+      String? source,
+      String? payload,
+      List<PortableRef>? refs,
+      int? intervalHours,
+    })
   >
   setPlaylistSourceCalls = [];
   final List<String> unbindPlaylistSourceCalls = [];
@@ -5355,6 +5363,8 @@ class FakeRepository implements WaxDeckRepository {
       mode: mode,
       url: url,
       source: source,
+      payload: payload,
+      refs: refs == null ? null : List.of(refs),
       intervalHours: intervalHours,
     ));
     final err = playlistSourceError;

@@ -175,6 +175,20 @@
   "@playlistForeignEmptyMessage": {
     "description": "Message under the empty state of somebody else's playlist, which this account cannot fill."
   },
+  "playlistImportBindFailed": "The playlist was created, but keeping it matched to the export failed: {reason}",
+  "@playlistImportBindFailed": {
+    "description": "Line in the import report when the playlist was made but the source binding was refused. {reason} is the server's own sentence.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "a matched source takes append or mirror"
+      }
+    }
+  },
+  "playlistImportBound": "Kept matched to this export. Re-match it whenever you like from the playlist's sync settings.",
+  "@playlistImportBound": {
+    "description": "Line in the import report when the created playlist was also bound to the pasted export."
+  },
   "playlistImportComplete": "Import complete",
   "@playlistImportComplete": {
     "description": "Title of the report after an import that made a playlist."
@@ -210,6 +224,14 @@
   "playlistImportHintText": "One track a line: artist - title",
   "@playlistImportHintText": {
     "description": "What the paste box wants for a plain text import."
+  },
+  "playlistImportKeepMatched": "Keep it matched to this export",
+  "@playlistImportKeepMatched": {
+    "description": "Switch in the import dialog binding the created playlist to the pasted export."
+  },
+  "playlistImportKeepMatchedHelp": "The export is stored with the playlist and re-matched against the library on demand. Membership follows the export, so tracks added by hand are reconciled away",
+  "@playlistImportKeepMatchedHelp": {
+    "description": "Help line under the keep-matched switch, saying what binding the export does."
   },
   "playlistImportMenu": "Import playlist",
   "@playlistImportMenu": {
@@ -1081,6 +1103,10 @@
   "playlistSyncChipFailing": "Sync failing",
   "@playlistSyncChipFailing": {
     "description": "Status chip on a synced playlist whose last sync run failed."
+  },
+  "playlistSyncChipMatched": "Matched",
+  "@playlistSyncChipMatched": {
+    "description": "Status chip on a playlist bound to a streaming export rather than a live URL, before any re-match has run. Such a binding has no schedule, so it never says the sync is scheduled."
   },
   "playlistSyncChipOff": "Sync suspended",
   "@playlistSyncChipOff": {

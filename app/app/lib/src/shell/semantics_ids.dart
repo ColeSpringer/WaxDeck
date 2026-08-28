@@ -566,6 +566,8 @@ abstract final class SemanticsIds {
   static const String playlistExportNspProceed = 'playlist-export-nsp-proceed';
   static const String playlistExportPortable = 'playlist-export-portable';
   static const String playlistImport = 'playlist-import';
+  static const String playlistImportKeepMatched =
+      'playlist-import-keep-matched';
   static const String playlistImportName = 'playlist-import-name';
   static const String playlistImportPayload = 'playlist-import-payload';
   static const String playlistImportReport = 'playlist-import-report';
