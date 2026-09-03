@@ -111,6 +111,7 @@
   "playlistRuleFieldAlbumLabel": "Sello del álbum",
   "playlistRuleFieldAlbumMedia": "Soporte del álbum",
   "playlistRuleFieldArtist": "Artista",
+  "playlistRuleFieldBpm": "BPM",
   "playlistRuleFieldCodec": "Códec",
   "playlistRuleFieldContainer": "Contenedor",
   "playlistRuleFieldDiscNumber": "Número de disco",

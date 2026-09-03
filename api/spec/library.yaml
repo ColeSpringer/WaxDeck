@@ -1192,6 +1192,13 @@ components:
               type: integer
               description: Release / publication year.
               example: 2024
+            bpm:
+              type: integer
+              description: >
+                Stated tempo, whole. Absent or `0` for an item carrying
+                none, which is most of them; nothing measures it, so
+                this is the tag's number and not an analysis result.
+              example: 128
             codec:
               type: string
               description: Source audio codec.

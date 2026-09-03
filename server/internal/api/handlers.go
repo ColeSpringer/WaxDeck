@@ -1219,6 +1219,9 @@ func itemJSON(d service.ItemDetail) Item {
 	if d.DiscNo != 0 {
 		it.DiscNumber = ptr(d.DiscNo)
 	}
+	if d.BPM != 0 {
+		it.Bpm = ptr(d.BPM)
+	}
 	if d.Codec != "" {
 		it.Codec = ptr(d.Codec)
 	}

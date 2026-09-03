@@ -24,9 +24,11 @@ const (
 // chapteredBookTitle names the single-file chaptered fixture book.
 const chapteredBookTitle = "The Chaptered Fixture"
 
-// generateM4B renders one MP4/AAC spec into dir and renames the result
-// to the .m4b extension that classifies it as an audiobook.
-func generateM4B(dir string, spec Spec) (string, error) {
+// GenerateM4B renders one MP4/AAC spec into dir and renames the result
+// to the .m4b extension that classifies it as an audiobook. Exported
+// for the tests whose subject is a book's own tags - a series name, a
+// narrator credit - which the two named books below do not carry.
+func GenerateM4B(dir string, spec Spec) (string, error) {
 	spec.Codec = CodecAAC
 	spec.Container = ContainerMP4
 	paths, err := Generate(dir, spec)
@@ -71,7 +73,7 @@ func GenerateBook(dir string) (string, error) {
 				"TRACKNUMBER": p.track,
 			},
 		}
-		if _, err := generateM4B(bookDir, spec); err != nil {
+		if _, err := GenerateM4B(bookDir, spec); err != nil {
 			return "", fmt.Errorf("fixtures: book part %s: %w", p.file, err)
 		}
 	}
@@ -99,7 +101,7 @@ func GenerateChapteredBook(dir string) (string, error) {
 			{Start: 4500 * time.Millisecond, End: 7 * time.Second, Title: "Ending"},
 		},
 	}
-	path, err := generateM4B(dir, spec)
+	path, err := GenerateM4B(dir, spec)
 	if err != nil {
 		return "", fmt.Errorf("fixtures: chaptered book: %w", err)
 	}

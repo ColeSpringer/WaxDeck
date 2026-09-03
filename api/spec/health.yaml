@@ -547,8 +547,12 @@ components:
       properties:
         entityType:
           type: string
-          enum: [album, artist, release-group, genre]
-          description: What is being merged.
+          enum: [album, artist, release-group, genre, series]
+          description: >
+            What is being merged. `series` is the one kind the
+            duplicates listing never reports: a series is a tag rather
+            than a curated entity, so a split spelling is found by
+            eye on a book screen and merged from there.
         survivorPid:
           type: string
           description: The entity that keeps its pid.

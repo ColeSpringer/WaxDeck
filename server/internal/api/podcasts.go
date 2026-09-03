@@ -476,6 +476,7 @@ func (s *Server) GetBook(ctx context.Context, req GetBookRequestObject) (GetBook
 	out.ArtSource = artSourceJSON(bd.ArtSource)
 	setOpt(&out.Subtitle, bd.Subtitle)
 	setOpt(&out.Series, bd.Series)
+	setOpt(&out.SeriesPid, bd.SeriesPID)
 	setOpt(&out.SeriesSequence, bd.SeriesSequence)
 	setOpt(&out.Publisher, bd.Publisher)
 	setOpt(&out.Asin, bd.ASIN)
@@ -495,6 +496,43 @@ func (s *Server) GetBook(ctx context.Context, req GetBookRequestObject) (GetBook
 		out.Settings = &settings
 	}
 	return GetBook200JSONResponse(out), nil
+}
+
+// ListBookSeries pages the series behind the visible books. It exists
+// to name a merge target: a series is a tag rather than a curated
+// entity, so a split spelling has no duplicates finding to arrive
+// through.
+func (s *Server) ListBookSeries(ctx context.Context, req ListBookSeriesRequestObject) (ListBookSeriesResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limit, ok := pageLimit(req.Params.Limit, 100, 500)
+	if !ok {
+		return ListBookSeries400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
+	}
+	page, err := s.svc.ListBookSeries(ctx, uc, deref(req.Params.Cursor), limit)
+	if err != nil {
+		if service.KindOf(err) == service.KindInvalid {
+			return ListBookSeries400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	out := BookSeriesPage{Series: make([]BookSeries, 0, len(page.Series))}
+	for _, sr := range page.Series {
+		row := BookSeries{Pid: sr.PID, Name: sr.Name}
+		if sr.BookCount > 0 {
+			row.BookCount = ptr(sr.BookCount)
+		}
+		if sr.TotalDurationMS > 0 {
+			row.TotalDurationMs = ptr(sr.TotalDurationMS)
+		}
+		out.Series = append(out.Series, row)
+	}
+	if page.NextCursor != "" {
+		out.NextCursor = ptr(page.NextCursor)
+	}
+	return ListBookSeries200JSONResponse(out), nil
 }
 
 func (s *Server) GetBookResume(ctx context.Context, req GetBookResumeRequestObject) (GetBookResumeResponseObject, error) {

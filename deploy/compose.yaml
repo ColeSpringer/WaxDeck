@@ -89,9 +89,53 @@ services:
   waxseal:
     image: ghcr.io/colespringer/waxseal:latest
     profiles: [youtube]
-    environment:
-      WAXSEAL_ADDR: 0.0.0.0:4416
-      WAXSEAL_API_KEYS: ${WAXSEAL_API_KEYS:-}
+    # Flags, not environment: WaxSeal's knobs are --host, --port and
+    # --tenant-keys, and it has never read an environment variable for
+    # any of them. An empty key list leaves a keyless daemon that warns,
+    # which is the right failure: the `label=key` form refuses to start
+    # on an empty key, and a profile that will not boot is worse than
+    # one that boots open on an internal network.
+    #
+    # The daemon's only tenant is WaxDeck, so its key is WaxDeck's own
+    # rather than a second variable beside it. Two would be one setting
+    # with two places to get it wrong, and getting it wrong keys the
+    # daemon against a key nobody sends - refusing every mint and its
+    # own health check, with nothing naming the cause.
+    command:
+      [
+        "server",
+        "--host",
+        "0.0.0.0",
+        "--tenant-keys",
+        "${WAXDECK_SEAL_API_KEY:-}",
+      ]
+    # Headless Chromium needs the working space; the default 64 MB
+    # crashes it under load. Matches WaxSeal's own compose.
+    shm_size: "1gb"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # The image's own check pings /ping without a key, which a keyed
+    # daemon answers 401. Same probe, carrying the key WaxDeck itself
+    # authenticates with, so a green container means the acquisition
+    # path can actually mint.
+    healthcheck:
+      test:
+        - CMD
+        - waxseal
+        - ping
+        - --addr
+        - 127.0.0.1:4416
+        - --strict
+        - --key
+        - ${WAXDECK_SEAL_API_KEY:-}
+      interval: 30s
+      timeout: 110s
+      start_period: 120s
+      retries: 3
+    # It drains in-flight mints for up to 60s on SIGTERM; a shorter
+    # grace period would SIGKILL a browser mid-attestation.
+    stop_grace_period: 70s
     networks: [internal]
     restart: unless-stopped
     logging:

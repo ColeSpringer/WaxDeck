@@ -158,6 +158,122 @@ void main() {
     expect(edit.edits, {'type': 'ep'});
   });
 
+  testWidgets('clearing an mbid that merges takes the screen to the '
+      'survivor', (tester) async {
+    const survivor = 'ar-01HZX5N8QW3F4V9T2B7KD3M9SUR';
+    final repo = _repo();
+    repo.entityEditMergesInto = survivor;
+    repo.entityCurationByKey['artist/$_artist'] = const [
+      EntityCuratedField(
+        field: 'mbid',
+        value: 'b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d',
+        source: 'user',
+        locked: false,
+      ),
+    ];
+    await _pump(tester, repo, entity: EditableEntity.artist, pid: _artist);
+
+    await tester.enterText(_field('mbid'), '');
+    await tester.pump();
+    await _save(tester);
+
+    // The edited row is gone, so the editor moved onto the one that
+    // absorbed it rather than sitting on a dead pid.
+    expect(repo.entityEdits.single.edits, {'mbid': ''});
+    expect(find.text(survivor), findsNothing);
+    expect(
+      tester.widget<EntityEditorScreen>(find.byType(EntityEditorScreen)).pid,
+      survivor,
+    );
+  });
+
+  testWidgets('the artist rename moves every crediting track', (tester) async {
+    final repo = _repo();
+    repo.facetItems['artist ${_artist.substring(3)}'] = <ItemSummary>[
+      testItem('tr-1'),
+    ];
+    await _pump(tester, repo, entity: EditableEntity.artist, pid: _artist);
+
+    // The box starts empty rather than seeded from the member's display
+    // credit: that string is the whole ARTIST tag, which on a
+    // collaboration names people this entity is not, and the rename
+    // applies with force. The new name is stated in full.
+    final field = find.bySemanticsIdentifier(
+      SemanticsIds.entityRenameField('name'),
+    );
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .controller
+          .text,
+      isEmpty,
+      reason: 'a joined credit must not become the rename baseline',
+    );
+    await tester.enterText(field, 'The Bree Quartet');
+    await tester.pumpAndSettle();
+
+    final apply = find.bySemanticsIdentifier(SemanticsIds.entityRenameApply);
+    await tester.ensureVisible(apply);
+    await tester.pumpAndSettle();
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.entityRenameConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    // Force, because the rename locks what it writes: a second one
+    // would otherwise refuse on the first one's locks.
+    final call = repo.renameEntityCalls.single;
+    expect(call.entityType, 'artist');
+    expect(call.entityPid, _artist);
+    expect(call.fields, {'name': 'The Bree Quartet'});
+    expect(call.force, isTrue);
+    // The entity edit endpoint is untouched: the two forms write
+    // through different verbs.
+    expect(repo.entityEdits, isEmpty);
+  });
+
+  testWidgets('the release-group rename takes both keying fields', (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.facetItems['release-group ${_group.substring(3)}'] = <ItemSummary>[
+      testItem('tr-1'),
+    ];
+    repo.itemFieldsByPid['tr-1'] = {
+      'album': 'Long Exposure',
+      'album_artist': 'The Bree Trio',
+    };
+    await _pump(tester, repo, entity: EditableEntity.releaseGroup, pid: _group);
+
+    final album = find.bySemanticsIdentifier(
+      SemanticsIds.entityRenameField('album'),
+    );
+    await tester.ensureVisible(album);
+    await tester.pumpAndSettle();
+    await tester.enterText(album, 'Short Exposure');
+    await tester.pumpAndSettle();
+
+    final apply = find.bySemanticsIdentifier(SemanticsIds.entityRenameApply);
+    await tester.ensureVisible(apply);
+    await tester.pumpAndSettle();
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.entityRenameConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    // Only what changed: album_artist was left alone, so it stays out
+    // of the write.
+    expect(repo.renameEntityCalls.single.fields, {'album': 'Short Exposure'});
+  });
+
   testWidgets('a member gets the refusal, not a form', (tester) async {
     final repo = _repo(admin: false);
     await _pump(tester, repo, entity: EditableEntity.artist, pid: _artist);

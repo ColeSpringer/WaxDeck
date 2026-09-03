@@ -251,6 +251,7 @@ type child struct {
 	Track       int    `xml:"track,attr,omitempty" json:"track,omitempty"`
 	DiscNumber  int    `xml:"discNumber,attr,omitempty" json:"discNumber,omitempty"`
 	Year        int    `xml:"year,attr,omitempty" json:"year,omitempty"`
+	BPM         int    `xml:"bpm,attr,omitempty" json:"bpm,omitempty"`
 	Genre       string `xml:"genre,attr,omitempty" json:"genre,omitempty"`
 	CoverArt    string `xml:"coverArt,attr,omitempty" json:"coverArt,omitempty"`
 	Duration    int    `xml:"duration,attr" json:"duration"`
@@ -425,6 +426,7 @@ func songChild(tr track, al *album) child {
 		Track:       tr.TrackNo,
 		DiscNumber:  tr.DiscNo,
 		Year:        tr.Year,
+		BPM:         tr.BPM,
 		Genre:       tr.Genre,
 		CoverArt:    tr.PID,
 		Duration:    int(tr.DurationMS / 1000),

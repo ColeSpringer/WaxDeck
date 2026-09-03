@@ -8,7 +8,7 @@ import 'package:built_value/serializer.dart';
 
 part 'enrich_field_proposal.g.dart';
 
-/// One field an enrichment provider would fill. `lyrics` carries the full text (LRC when the provider answered timed lines); `genre` the joined, normalized genre scalar; a book want proposes each scalar it can fill as its own row. 
+/// One field an enrichment provider would fill. `lyrics` carries the full text (LRC when the provider answered timed lines); `genre` the joined, normalized genre scalar; a book want proposes each scalar it can fill as its own row.  Every row is fill-when-empty and lock-respecting: enrichment never replaces a value someone else set, which is what makes the injected providers safe to run beside MusicBrainz matching. Matching is authoritative for identity and locks what it writes, so these fill only what nothing has claimed. 
 ///
 /// Properties:
 /// * [name] - The metadata field the proposal targets.

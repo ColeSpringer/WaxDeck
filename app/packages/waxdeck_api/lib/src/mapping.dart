@@ -266,6 +266,7 @@ ItemDetail itemDetailFromGen(gen.Item item, {String baseUrl = ''}) {
     artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
     genres: item.genres?.toList() ?? const [],
     year: item.year,
+    bpm: item.bpm,
     codec: item.codec,
     container: item.container,
     sampleRate: item.sampleRate,
@@ -753,6 +754,22 @@ gen.BookSettings bookSettingsToGen(BookSettings settings) {
   );
 }
 
+BookSeriesPage bookSeriesPageFromGen(gen.BookSeriesPage page) {
+  return BookSeriesPage(
+    series: page.series
+        .map(
+          (s) => BookSeries(
+            pid: s.pid,
+            name: s.name,
+            bookCount: s.bookCount ?? 0,
+            totalDurationMs: s.totalDurationMs ?? 0,
+          ),
+        )
+        .toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
 BookDetail bookDetailFromGen(gen.BookDetail book, {String baseUrl = ''}) {
   final artUrl = book.artUrl;
   final settings = book.settings;
@@ -763,6 +780,7 @@ BookDetail bookDetailFromGen(gen.BookDetail book, {String baseUrl = ''}) {
     authors: book.authors.toList(),
     narrators: book.narrators.toList(),
     series: book.series,
+    seriesPid: book.seriesPid,
     seriesSequence: book.seriesSequence,
     publisher: book.publisher,
     asin: book.asin,
@@ -1457,6 +1475,7 @@ MetadataFields metadataFieldsFromGen(gen.MetadataFields fields) {
           ),
         )
         .toList(),
+    reservedTagKeys: fields.reservedTagKeys?.toList() ?? const [],
   );
 }
 
@@ -1540,6 +1559,45 @@ MetadataEditResult metadataEditResultFromGen(gen.MetadataEditResult result) {
         result.writeBackFailures?.map(writeBackFailureFromGen).toList() ??
         const [],
     warnings: result.warnings?.toList() ?? const [],
+    mergedInto: result.mergedInto,
+    movedAlbums: result.movedAlbums?.toList() ?? const [],
+  );
+}
+
+DetachResult detachResultFromGen(gen.DetachResult result) {
+  return DetachResult(
+    itemPid: result.itemPid,
+    oldAlbumPid: result.oldAlbumPid,
+    newAlbumPid: result.newAlbumPid,
+    newReleaseGroupPid: result.newReleaseGroupPid,
+    writeBackFailures:
+        result.failures?.map(writeBackFailureFromGen).toList() ?? const [],
+  );
+}
+
+/// A rename outcome a newer server added deserializes to the
+/// generator's sentinel, which reads here as the plain rename: the row
+/// is where the caller left it, which is the safe thing for a screen
+/// following the pid to believe.
+EntityRenameOutcome entityRenameOutcomeFromGen(
+  gen.EntityRenameResultOutcomeEnum outcome,
+) => switch (outcome) {
+  gen.EntityRenameResultOutcomeEnum.renamed => EntityRenameOutcome.renamed,
+  gen.EntityRenameResultOutcomeEnum.merged => EntityRenameOutcome.merged,
+  gen.EntityRenameResultOutcomeEnum.refreshed => EntityRenameOutcome.refreshed,
+  _ => EntityRenameOutcome.renamed,
+};
+
+EntityRenameResult entityRenameResultFromGen(gen.EntityRenameResult result) {
+  return EntityRenameResult(
+    entityPid: result.entityPid,
+    outcome: entityRenameOutcomeFromGen(result.outcome),
+    members: result.members,
+    credits: result.credits,
+    mergedInto: result.mergedInto,
+    movedAlbums: result.movedAlbums?.toList() ?? const [],
+    writeBackFailures:
+        result.failures?.map(writeBackFailureFromGen).toList() ?? const [],
   );
 }
 

@@ -411,6 +411,40 @@ void main() {
       expect(repo.splitBookCalls.map((c) => c.pid), [bookPid]);
     });
 
+    testWidgets('an admin folds a split series into another spelling', (
+      tester,
+    ) async {
+      const loser = 'sr-01JZX5N8QW3F4V9T2B7KDLOSER1';
+      const survivor = 'sr-01JZX5N8QW3F4V9T2B7KDSURVIV';
+      final repo =
+          _adminRepo(
+              testBook(bookPid, series: 'Harbour Chronicles', seriesPid: loser),
+            )
+            ..bookSeries.addAll(const <BookSeries>[
+              BookSeries(pid: loser, name: 'Harbour Chronicles', bookCount: 1),
+              BookSeries(
+                pid: survivor,
+                name: 'Harbor Chronicles',
+                bookCount: 4,
+              ),
+            ]);
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.seriesMerge);
+
+      // The book's own series is the loser, so it is not offered as a
+      // target: merging a thing into itself is not a choice.
+      expect(_byId(SemanticsIds.seriesMergeTarget(loser)), findsNothing);
+      await _tap(tester, SemanticsIds.seriesMergeTarget(survivor));
+
+      final call = repo.mergeDuplicatesCalls.single;
+      expect(call.entityType, 'series');
+      expect(call.survivorPid, survivor);
+      expect(call.loserPids, [loser]);
+    });
+
     testWidgets('the file tools are hidden from a listener', (tester) async {
       await tester.pumpWidget(
         _host(

@@ -84,6 +84,26 @@
   "@libraryKindArtist": {
     "description": "The word for an artist where it stands inside a sentence, such as the star row's accessible names. Lower case."
   },
+  "libraryMenuDetach": "Detach from release",
+  "@libraryMenuDetach": {
+    "description": "Overflow row pulling one track off the release a MusicBrainz id pinned it to."
+  },
+  "libraryMenuDetachConfirmBody": "The track leaves the release a MusicBrainz id pins it to and lands on the album its own tags imply.",
+  "@libraryMenuDetachConfirmBody": {
+    "description": "Body of that confirmation: where the track lands and why its file's tags are cleared."
+  },
+  "libraryMenuDetachConfirmTitle": "Detach this track?",
+  "@libraryMenuDetachConfirmTitle": {
+    "description": "Title of the confirmation that row asks before writing."
+  },
+  "libraryMenuDetachWriteBackHelp": "Also clear the release tags in the track's file, so the next scan does not put it back",
+  "@libraryMenuDetachWriteBackHelp": {
+    "description": "Line under the detach confirmation's write-tags switch. Off leaves the catalog edit alone on disk, which is what a read-only library can still take."
+  },
+  "libraryMenuDetached": "Detached from the release.",
+  "@libraryMenuDetached": {
+    "description": "Message after a detach lands."
+  },
   "libraryMenuGoToAlbum": "Go to album",
   "@libraryMenuGoToAlbum": {
     "description": "Item-menu row opening the album the item belongs to."

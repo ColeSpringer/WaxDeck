@@ -35,6 +35,8 @@ Serializers _$serializers =
           ..add(BookMergeRequest.serializer)
           ..add(BookPart.serializer)
           ..add(BookResume.serializer)
+          ..add(BookSeries.serializer)
+          ..add(BookSeriesPage.serializer)
           ..add(BookSettings.serializer)
           ..add(BookSplitRequest.serializer)
           ..add(Bookmark.serializer)
@@ -64,6 +66,8 @@ Serializers _$serializers =
           ..add(DeleteItemsRequestModeEnum.serializer)
           ..add(DeleteItemsResult.serializer)
           ..add(DeletePlanEntry.serializer)
+          ..add(DetachRequest.serializer)
+          ..add(DetachResult.serializer)
           ..add(DeviceSession.serializer)
           ..add(DeviceSessionKindEnum.serializer)
           ..add(DiagnosticCount.serializer)
@@ -100,6 +104,9 @@ Serializers _$serializers =
           ..add(EntityCuration.serializer)
           ..add(EntityEdit.serializer)
           ..add(EntityPlayState.serializer)
+          ..add(EntityRename.serializer)
+          ..add(EntityRenameResult.serializer)
+          ..add(EntityRenameResultOutcomeEnum.serializer)
           ..add(EntityTypeFields.serializer)
           ..add(Episode.serializer)
           ..add(EpisodeFilter.serializer)
@@ -418,6 +425,10 @@ Serializers _$serializers =
             () => ListBuilder<Backup>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(BookSeries)]),
+            () => ListBuilder<BookSeries>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Bookmark)]),
             () => ListBuilder<Bookmark>(),
           )
@@ -606,6 +617,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EntityTypeFields)]),
             () => ListBuilder<EntityTypeFields>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(LinkedIdentity)]),
@@ -1169,6 +1184,14 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(WriteBackFailure)]),
+            () => ListBuilder<WriteBackFailure>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltMap, const [
               const FullType(String),
               const FullType(String),
@@ -1263,6 +1286,14 @@ Serializers _$serializers =
             () => ListBuilder<WriteBackFailure>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(WriteBackFailure)]),
+            () => ListBuilder<WriteBackFailure>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
             () => ListBuilder<String>(),
           )
@@ -1273,6 +1304,13 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(num)]),
             () => ListBuilder<num>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType(String),
+            ]),
+            () => MapBuilder<String, String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltMap, const [

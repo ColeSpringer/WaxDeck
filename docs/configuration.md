@@ -44,8 +44,14 @@ Read by compose itself, not the server.
 - `WAXFLOW_API_KEYS`: API keys the WaxFlow sidecar accepts, comma
   separated; generate each with `openssl rand -hex 24`. `make up`
   seeds one. `WAXDECK_FLOW_API_KEY` must be one of these values.
-- `WAXSEAL_API_KEYS`: same shape, for the optional WaxSeal sidecar
-  (see YouTube below).
+- The optional WaxSeal sidecar takes no key list of its own: compose
+  hands it `WAXDECK_SEAL_API_KEY` (see YouTube below) as its single
+  tenant key, so the key the daemon requires and the key WaxDeck sends
+  cannot drift apart. It reaches the daemon as a `--tenant-keys` flag
+  rather than an environment variable, which is why compose spells the
+  sidecar's whole command out. Left empty the sidecar runs keyless: it
+  accepts any key, including none, from anything that can reach the
+  internal network.
 
 ## Address, data, and identity
 
@@ -271,9 +277,20 @@ root).
   Empty disables cutting.
 - `WAXDECK_SEAL_URL` / `WAXDECK_SEAL_API_KEY`: the optional WaxSeal
   attestation sidecar, which unlocks the full-quality path. Under
-  compose: start it with `--profile youtube`, set
-  `WAXDECK_SEAL_URL=http://waxseal:4416`, and put the key in both
-  `WAXDECK_SEAL_API_KEY` and `WAXSEAL_API_KEYS`.
+  compose: start it with `--profile youtube` and uncomment
+  `WAXDECK_SEAL_URL=http://waxseal:4416` in `deploy/.env`. Without that
+  URL the sidecar runs and is never contacted, and acquisitions stay on
+  the key-free path. `WAXDECK_SEAL_API_KEY` is the whole key story -
+  `make up` mints one, compose gives it to the daemon as its only
+  tenant key and to WaxDeck as the key it sends, and the sidecar's
+  health check pings with it, so a container that goes healthy is one
+  this server can actually mint against.
+
+
+  The daemon keeps 12 seconds between an in-page mint and establishing
+  a browser context, so the first acquisition after a sidecar restart
+  can wait that long before the audio starts moving. Later ones do not:
+  the separation is per context, not per request.
 - `WAXDECK_SOURCE_STUB_URL`: base URL of a `sourceserv` fixture host to
   use as the acquisition source. Test stacks only - the end-to-end
   suite drives acquisition and playlist syncing against it - and never

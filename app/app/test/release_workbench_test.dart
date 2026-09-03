@@ -146,25 +146,15 @@ void main() {
     expect(_byId(SemanticsIds.workbenchBulkPane), findsNothing);
   });
 
-  testWidgets('the rewrite section regroups the release and the workbench '
-      'follows it', (tester) async {
-    final repo = _repo();
-    repo.bulkEditRegroupsTo = _regrouped;
-    repo.albums[_regrouped] = const AlbumDetail(
-      pid: _regrouped,
-      title: 'Renamed Harbour',
-      itemCount: 2,
-    );
-    repo.facetItems['album ${_regrouped.substring(3)}'] =
-        repo.facetItems['album ${_album.substring(3)}']!;
-    await _pump(tester, repo);
-
-    // The rewrite section sits at the bottom of the pane's scroll.
+  // The rewrite goes through the entity rename, not a bulk edit over a
+  // drained member list: the server enumerates the members, so a page
+  // that scrolled only part of the way cannot split the release.
+  Future<void> rewriteAlbum(WidgetTester tester, String title) async {
     await tester.ensureVisible(_byId(SemanticsIds.albumRewriteField('album')));
     await tester.pumpAndSettle();
     await tester.enterText(
       _byId(SemanticsIds.albumRewriteField('album')),
-      'Renamed Harbour',
+      title,
     );
     await tester.pumpAndSettle();
     await tester.ensureVisible(_byId(SemanticsIds.albumRewriteApply));
@@ -173,16 +163,52 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(_byId(SemanticsIds.albumRewriteConfirm));
     await tester.pumpAndSettle();
+  }
+
+  testWidgets('the rewrite section renames the release in place', (
+    tester,
+  ) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    await rewriteAlbum(tester, 'Renamed Harbour');
 
     // Force, because the rewrite itself locks these fields: without it
     // the second rename would refuse on the first one's locks.
-    final call = repo.bulkEditCalls.single;
+    final call = repo.renameEntityCalls.single;
+    expect(call.entityType, 'album');
+    expect(call.entityPid, _album);
     expect(call.fields, {'album': 'Renamed Harbour'});
     expect(call.force, isTrue);
-    expect(call.itemPids, ['tr-A', 'tr-B']);
+    expect(repo.bulkEditCalls, isEmpty);
 
-    // The regroup moved the members onto a fresh pid, and the surface
-    // moved with them: the new release's workbench, not a stale one.
+    // The release kept its pid, so the workbench stays where it is and
+    // shows the new title.
+    expect(find.text('Renamed Harbour'), findsWidgets);
+    expect(find.text('Long Exposure'), findsNothing);
+  });
+
+  testWidgets('a rewrite onto a taken name merges, and the workbench '
+      'follows the survivor', (tester) async {
+    final repo = _repo();
+    repo.renameEntityResult = const EntityRenameResult(
+      entityPid: _album,
+      outcome: EntityRenameOutcome.merged,
+      members: 2,
+      credits: 0,
+      mergedInto: _regrouped,
+    );
+    repo.albums[_regrouped] = const AlbumDetail(
+      pid: _regrouped,
+      title: 'Renamed Harbour',
+      itemCount: 2,
+    );
+    repo.facetItems['album ${_regrouped.substring(3)}'] =
+        repo.facetItems['album ${_album.substring(3)}']!;
+    await _pump(tester, repo);
+    await rewriteAlbum(tester, 'Renamed Harbour');
+
+    // The named release is gone, so the surface moved to the one that
+    // absorbed it rather than sitting on a dead pid.
     expect(find.text('Renamed Harbour'), findsWidgets);
     expect(find.text('Long Exposure'), findsNothing);
   });

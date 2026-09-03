@@ -396,6 +396,12 @@ abstract final class WaxIcons {
     IconData(0xE4A6, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
+  /// Phosphor `link-break`. Something pulled off what it was tied to.
+  static const detach = WaxGlyph(
+    IconData(0xE2E4, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE2E4, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   /// Phosphor `share-network`.
   static const share = WaxGlyph(
     IconData(0xE408, fontFamily: _regularFamily, fontPackage: _fontPackage),
@@ -614,6 +620,7 @@ abstract final class WaxIcons {
     'sort': sort,
     'edit': edit,
     'delete': delete,
+    'detach': detach,
     'share': share,
     'bookmark': bookmark,
     'lock': lock,

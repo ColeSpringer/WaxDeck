@@ -16,6 +16,8 @@ part 'metadata_edit_result.g.dart';
 /// * [applied] - Always true; the catalog committed.
 /// * [writeBackFailures] - Files whose tags could not be updated.
 /// * [warnings] - Non-fatal notes: typed drop warnings from the tag library (a format refusing embedded synced lyrics, a chapter cap), roles without a tag form, malformed LRC lines skipped. 
+/// * [mergedInto] - The surviving entity when the edit re-keyed this one onto a key another entity already held, which only an `mbid` clear does. The named entity is gone; talk about this pid instead. 
+/// * [movedAlbums] - Albums that left the edited release group because the clear re-keyed it and their titles put them in a group of their own. Their members are no longer reachable through the edited group. 
 @BuiltValue()
 abstract class MetadataEditResult implements Built<MetadataEditResult, MetadataEditResultBuilder> {
   /// Always true; the catalog committed.
@@ -29,6 +31,14 @@ abstract class MetadataEditResult implements Built<MetadataEditResult, MetadataE
   /// Non-fatal notes: typed drop warnings from the tag library (a format refusing embedded synced lyrics, a chapter cap), roles without a tag form, malformed LRC lines skipped. 
   @BuiltValueField(wireName: r'warnings')
   BuiltList<String>? get warnings;
+
+  /// The surviving entity when the edit re-keyed this one onto a key another entity already held, which only an `mbid` clear does. The named entity is gone; talk about this pid instead. 
+  @BuiltValueField(wireName: r'mergedInto')
+  String? get mergedInto;
+
+  /// Albums that left the edited release group because the clear re-keyed it and their titles put them in a group of their own. Their members are no longer reachable through the edited group. 
+  @BuiltValueField(wireName: r'movedAlbums')
+  BuiltList<String>? get movedAlbums;
 
   MetadataEditResult._();
 
@@ -69,6 +79,20 @@ class _$MetadataEditResultSerializer implements PrimitiveSerializer<MetadataEdit
       yield r'warnings';
       yield serializers.serialize(
         object.warnings,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
+    if (object.mergedInto != null) {
+      yield r'mergedInto';
+      yield serializers.serialize(
+        object.mergedInto,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.movedAlbums != null) {
+      yield r'movedAlbums';
+      yield serializers.serialize(
+        object.movedAlbums,
         specifiedType: const FullType(BuiltList, [FullType(String)]),
       );
     }
@@ -115,6 +139,20 @@ class _$MetadataEditResultSerializer implements PrimitiveSerializer<MetadataEdit
             specifiedType: const FullType(BuiltList, [FullType(String)]),
           ) as BuiltList<String>;
           result.warnings.replace(valueDes);
+          break;
+        case r'mergedInto':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.mergedInto = valueDes;
+          break;
+        case r'movedAlbums':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>;
+          result.movedAlbums.replace(valueDes);
           break;
         default:
           unhandled.add(key);

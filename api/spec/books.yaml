@@ -27,6 +27,50 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /books/series:
+    get:
+      operationId: listBookSeries
+      summary: List audiobook series
+      description: >
+        The series the visible audiobooks belong to, in collation order.
+        A series is a name a book's tags carry rather than an entity
+        anyone curates, so this listing exists for one job: naming the
+        target of a series merge when a spelling split one in two.
+
+
+        Filtered by library visibility, so a series held only in
+        libraries this account cannot see is absent.
+      tags: [books]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum series per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of series.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookSeriesPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /books/{pid}/resume:
     get:
       operationId: getBookResume
@@ -180,6 +224,40 @@ paths:
 
 components:
   schemas:
+    BookSeriesPage:
+      type: object
+      description: One keyset page of audiobook series.
+      required: [series]
+      properties:
+        series:
+          type: array
+          description: Series in collation order.
+          items:
+            $ref: "#/components/schemas/BookSeries"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; absent on the last one.
+
+    BookSeries:
+      type: object
+      description: One audiobook series.
+      required: [pid, name]
+      properties:
+        pid:
+          type: string
+          description: Series PID.
+          example: sr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: The series name, as the books' tags spell it.
+        bookCount:
+          type: integer
+          description: Books in the series that this account can see.
+        totalDurationMs:
+          type: integer
+          format: int64
+          description: Their combined running time.
+
     Bookmark:
       type: object
       description: One place a listener marked in a book.
@@ -308,6 +386,12 @@ components:
         series:
           type: string
           description: Series name, when the book belongs to one.
+        seriesPid:
+          type: string
+          description: >
+            The series entity behind `series`, so a caller can name it
+            to a merge. Absent when the book belongs to none.
+          example: sr-01JZX5N8QW3F4V9T2B7KD3M9R6
         seriesSequence:
           type: string
           description: >

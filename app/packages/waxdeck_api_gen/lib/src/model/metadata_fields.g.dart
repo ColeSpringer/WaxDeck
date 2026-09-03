@@ -11,12 +11,17 @@ class _$MetadataFields extends MetadataFields {
   final BuiltList<KindFields> kinds;
   @override
   final BuiltList<EntityTypeFields> entityTypes;
+  @override
+  final BuiltList<String>? reservedTagKeys;
 
   factory _$MetadataFields([void Function(MetadataFieldsBuilder)? updates]) =>
       (MetadataFieldsBuilder()..update(updates))._build();
 
-  _$MetadataFields._({required this.kinds, required this.entityTypes})
-    : super._();
+  _$MetadataFields._({
+    required this.kinds,
+    required this.entityTypes,
+    this.reservedTagKeys,
+  }) : super._();
   @override
   MetadataFields rebuild(void Function(MetadataFieldsBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -29,7 +34,8 @@ class _$MetadataFields extends MetadataFields {
     if (identical(other, this)) return true;
     return other is MetadataFields &&
         kinds == other.kinds &&
-        entityTypes == other.entityTypes;
+        entityTypes == other.entityTypes &&
+        reservedTagKeys == other.reservedTagKeys;
   }
 
   @override
@@ -37,6 +43,7 @@ class _$MetadataFields extends MetadataFields {
     var _$hash = 0;
     _$hash = $jc(_$hash, kinds.hashCode);
     _$hash = $jc(_$hash, entityTypes.hashCode);
+    _$hash = $jc(_$hash, reservedTagKeys.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -45,7 +52,8 @@ class _$MetadataFields extends MetadataFields {
   String toString() {
     return (newBuiltValueToStringHelper(r'MetadataFields')
           ..add('kinds', kinds)
-          ..add('entityTypes', entityTypes))
+          ..add('entityTypes', entityTypes)
+          ..add('reservedTagKeys', reservedTagKeys))
         .toString();
   }
 }
@@ -65,6 +73,12 @@ class MetadataFieldsBuilder
   set entityTypes(ListBuilder<EntityTypeFields>? entityTypes) =>
       _$this._entityTypes = entityTypes;
 
+  ListBuilder<String>? _reservedTagKeys;
+  ListBuilder<String> get reservedTagKeys =>
+      _$this._reservedTagKeys ??= ListBuilder<String>();
+  set reservedTagKeys(ListBuilder<String>? reservedTagKeys) =>
+      _$this._reservedTagKeys = reservedTagKeys;
+
   MetadataFieldsBuilder() {
     MetadataFields._defaults(this);
   }
@@ -74,6 +88,7 @@ class MetadataFieldsBuilder
     if ($v != null) {
       _kinds = $v.kinds.toBuilder();
       _entityTypes = $v.entityTypes.toBuilder();
+      _reservedTagKeys = $v.reservedTagKeys?.toBuilder();
       _$v = null;
     }
     return this;
@@ -100,6 +115,7 @@ class MetadataFieldsBuilder
           _$MetadataFields._(
             kinds: kinds.build(),
             entityTypes: entityTypes.build(),
+            reservedTagKeys: _reservedTagKeys?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -108,6 +124,8 @@ class MetadataFieldsBuilder
         kinds.build();
         _$failedField = 'entityTypes';
         entityTypes.build();
+        _$failedField = 'reservedTagKeys';
+        _reservedTagKeys?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'MetadataFields',

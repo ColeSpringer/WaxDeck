@@ -15,11 +15,15 @@ import 'package:waxdeck_api_gen/src/model/bulk_edit.dart';
 import 'package:waxdeck_api_gen/src/model/bulk_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/chapters_edit.dart';
 import 'package:waxdeck_api_gen/src/model/credits_edit.dart';
+import 'package:waxdeck_api_gen/src/model/detach_request.dart';
+import 'package:waxdeck_api_gen/src/model/detach_result.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_result.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_preview.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curation.dart';
 import 'package:waxdeck_api_gen/src/model/entity_edit.dart';
+import 'package:waxdeck_api_gen/src/model/entity_rename.dart';
+import 'package:waxdeck_api_gen/src/model/entity_rename_result.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/item_acquisition_edit.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
@@ -580,8 +584,116 @@ class MetadataApi {
     );
   }
 
+  /// Detach a track from its release
+  /// Pulls one track off an album chain a MusicBrainz id pins it to - the album&#39;s own release id, or an mbid-keyed release group above it - and onto the heuristic album its own tags and folder imply. This is the per-member counterpart of clearing that id on the whole entity, which is what a mis-scanned track sitting on the wrong release needs.  Refused with &#x60;invalid-request&#x60; for an item that is not a track, one on no album, one whose chain carries no MusicBrainz id, and an album&#39;s last member - that last one has nothing to detach onto, so clear the album&#39;s &#x60;mbid&#x60; instead.  &#x60;writeBack&#x60; also strips &#x60;MUSICBRAINZ_ALBUMID&#x60; and &#x60;MUSICBRAINZ_RELEASEGROUPID&#x60; from the track&#39;s file, which is what stops the next scan adopting it back; a file that cannot be written is reported in &#x60;failures&#x60; while the detach stands. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [detachRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [DetachResult] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<DetachResult>> detachItem({ 
+    required String pid,
+    DetachRequest? detachRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/detach'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(DetachRequest);
+      _bodyData = detachRequest == null ? null : _serializers.serialize(detachRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    DetachResult? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(DetachResult),
+      ) as DetachResult;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<DetachResult>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Edit entity fields
-  /// Edits an entity&#39;s own fields: &#x60;sort&#x60; and &#x60;mbid&#x60; for artists; &#x60;sort&#x60;, &#x60;mbid&#x60;, and &#x60;type&#x60; for release groups; &#x60;sort&#x60;, &#x60;mbid&#x60;, &#x60;barcode&#x60;, &#x60;label&#x60;, &#x60;catalog_number&#x60;, &#x60;media&#x60;, and &#x60;country&#x60; for albums. Entity edits carry their own provenance, readable below. &#x60;writeBack&#x60; pushes the values that have tag forms into member files.  &#x60;barcode&#x60; and &#x60;country&#x60; are normalized on the way in, where a scan stores the tag verbatim, so an edit refuses values &#x60;GET /albums/{pid}&#x60; will happily show (\&quot;US &amp;amp; Europe\&quot; is a country a scan can store and an edit cannot). &#x60;media&#x60; has no normalizer and is stored as typed. 
+  /// Edits an entity&#39;s own fields: &#x60;sort&#x60; and &#x60;mbid&#x60; for artists; &#x60;sort&#x60;, &#x60;mbid&#x60;, and &#x60;type&#x60; for release groups; &#x60;sort&#x60;, &#x60;mbid&#x60;, &#x60;barcode&#x60;, &#x60;label&#x60;, &#x60;catalog_number&#x60;, &#x60;media&#x60;, and &#x60;country&#x60; for albums. Entity edits carry their own provenance, readable below. &#x60;writeBack&#x60; pushes the values that have tag forms into member files.  &#x60;barcode&#x60; and &#x60;country&#x60; are normalized on the way in, where a scan stores the tag verbatim, so an edit refuses values &#x60;GET /albums/{pid}&#x60; will happily show (\&quot;US &amp;amp; Europe\&quot; is a country a scan can store and an edit cannot). &#x60;media&#x60; has no normalizer and is stored as typed.  Clearing an &#x60;mbid&#x60; re-keys the entity, which is the one edit that can move it: the chain falls back to the heuristic key, so the entity may merge into a twin that already held it (&#x60;mergedInto&#x60;) or, on a release group, shed differently titled albums into groups of their own (&#x60;movedAlbums&#x60;). With &#x60;writeBack&#x60; an album&#39;s or release group&#39;s &#x60;mbid&#x60; clear also strips that id from the member files, which is what stops the next scan putting the linkage back. A clear that merges is refused alongside any other field with code &#x60;conflict&#x60;, whose message names the survivor to edit instead, because the merge deletes the row those other values would be written to. 
   ///
   /// Parameters:
   /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
@@ -1528,6 +1640,116 @@ class MetadataApi {
     }
 
     return Response<RematchResult>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Rename an entity in place
+  /// Moves a whole album, release group, or artist onto a new name by rewriting the keying fields of every one of its members in one transaction. The entity row survives, so its pid, artwork, curation, stars, and enrichment marker all stay; editing the same fields through a bulk item edit would only move the members that edit covered, leaving the rest behind on the old key.  &#x60;genre&#x60;, &#x60;playlist&#x60;, and &#x60;podcast&#x60; carry no keying fields and answer &#x60;invalid-request&#x60;.  &#x60;outcome&#x60; says what happened to the identity key: &#x60;renamed&#x60; when it moved and the row stayed, &#x60;merged&#x60; when the new key was already taken and this entity folded into the incumbent named by &#x60;mergedInto&#x60;, &#x60;refreshed&#x60; when the new key equals the old one (a case-only rename).  The refusals are the cases that would otherwise split the entity silently: an empty name, a member whose keying field is locked (without &#x60;force&#x60;), an archived member with no primary file, members that would land on different keys, and a release group whose albums are titled apart. &#x60;writeBack&#x60; also writes the new values into every member file&#39;s tags, which is what makes the rename survive the next scan; a file that cannot be written is reported in &#x60;failures&#x60; while the rename stands. 
+  ///
+  /// Parameters:
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
+  /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [entityRename] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [EntityRenameResult] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<EntityRenameResult>> renameEntity({ 
+    required String entityType,
+    required String entityPid,
+    required EntityRename entityRename,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/entities/{entityType}/{entityPid}/rename'.replaceAll('{' r'entityType' '}', encodeQueryParameter(_serializers, entityType, const FullType(String)).toString()).replaceAll('{' r'entityPid' '}', encodeQueryParameter(_serializers, entityPid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(EntityRename);
+      _bodyData = _serializers.serialize(entityRename, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    EntityRenameResult? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(EntityRenameResult),
+      ) as EntityRenameResult;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<EntityRenameResult>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

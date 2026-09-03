@@ -19,6 +19,7 @@ const (
 	PrefixPodcast      = "pc"
 	PrefixEpisode      = "ep"
 	PrefixBook         = "bk"
+	PrefixSeries       = "sr"
 	PrefixJob          = "jb"
 	PrefixLibrary      = "lb"
 	PrefixAppPassword  = "ap"

@@ -48,10 +48,19 @@ final compoundSaveProvider = NotifierProvider<CompoundSaveSupport, bool>(
 /// Everything the metadata editor renders for one item: the stored
 /// metadata plus the field vocabulary for its media kind.
 class MetadataEditorState {
-  const MetadataEditorState({required this.metadata, required this.kindFields});
+  const MetadataEditorState({
+    required this.metadata,
+    required this.kindFields,
+    this.reservedTagKeys = const {},
+  });
 
   final ItemMetadata metadata;
   final KindFields kindFields;
+
+  /// The custom-tag keys the catalog owns through a field of its own,
+  /// so the tag editor refuses one before the round trip rather than
+  /// after it. Canonical (uppercase) as the server states them.
+  final Set<String> reservedTagKeys;
 
   FieldProvenance? provenanceFor(String field) =>
       metadata.provenance.where((p) => p.field == field).firstOrNull;
@@ -81,7 +90,11 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
     final kind =
         fields.kinds.where((k) => k.kind == metadata.mediaType).firstOrNull ??
         KindFields(kind: metadata.mediaType, fields: const []);
-    return MetadataEditorState(metadata: metadata, kindFields: kind);
+    return MetadataEditorState(
+      metadata: metadata,
+      kindFields: kind,
+      reservedTagKeys: fields.reservedTagKeys.toSet(),
+    );
   }
 
   /// Commits everything the draft staged, in one pass: the scalar

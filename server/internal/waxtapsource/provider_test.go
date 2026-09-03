@@ -21,6 +21,7 @@ import (
 	waxlabel "github.com/colespringer/waxlabel"
 	"github.com/colespringer/waxlabel/tag"
 	waxtap "github.com/colespringer/waxtap/v3"
+	"github.com/colespringer/waxtap/v3/waxerr"
 )
 
 // fakeTap is a canned, network-free tap. Its Enumerate honors MaxItems and Stop
@@ -296,6 +297,167 @@ func TestEnumerateSkipsUnavailableEntry(t *testing.T) {
 	}
 }
 
+// throttleErr is the metadata throttle's shape: UNPLAYABLE with the
+// "Video unavailable" reason, classified as ErrVideoUnavailable. The
+// reason text cannot separate it from a dead video; only the status
+// can, which is why the predicate reads the status.
+func throttleErr(id string) error {
+	return fmt.Errorf("enrich %s: %w", id, &waxerr.PlayabilityError{
+		Status: "UNPLAYABLE", Reason: "Video unavailable",
+		Sentinel: waxtap.ErrVideoUnavailable,
+	})
+}
+
+// deadErr is what a removed, private, or nonexistent video answers:
+// the same sentinel under status ERROR.
+func deadErr(id string) error {
+	return fmt.Errorf("enrich %s: %w", id, &waxerr.PlayabilityError{
+		Status: "ERROR", Reason: "Video unavailable",
+		Sentinel: waxtap.ErrVideoUnavailable,
+	})
+}
+
+func TestEnumerateKeepsThrottledEntriesAndStopsEnriching(t *testing.T) {
+	f := channelFake(4)
+	// The newest entry is enriched; the second is throttled, which ends
+	// the pass. Entries are newest first, so vid(4) leads.
+	f.infoErrs = map[string]error{vid(3): throttleErr(vid(3))}
+	var logs bytes.Buffer
+	p := testProvider(t, f, &logs)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	// Every entry survives: the throttle is about the identity asking,
+	// not about the videos. This is the regression - the same sentinel
+	// under a different status once dropped a third of a catalogue.
+	if len(enum.Feed.Episodes) != 4 {
+		t.Fatalf("episodes = %d, want all 4 kept", len(enum.Feed.Episodes))
+	}
+	// The throttled entry keeps the listing's own title rather than the
+	// enriched one, which is exactly what "unenriched" means.
+	byID := map[string]string{}
+	for _, ep := range enum.Feed.Episodes {
+		byID[ep.GUID] = ep.Title
+	}
+	if got := byID[vid(4)]; got != "full title "+vid(4) {
+		t.Errorf("first entry title = %q, want the enriched one", got)
+	}
+	if got := byID[vid(3)]; got != "upload "+vid(3) {
+		t.Errorf("throttled entry title = %q, want the listing's", got)
+	}
+	// The budget stops being spent: no Info call after the refusal.
+	if len(f.infoCalls) != 2 {
+		t.Errorf("Info calls = %v, want the pass to stop at the throttle", f.infoCalls)
+	}
+	if !strings.Contains(logs.String(), "youtube metadata throttled") {
+		t.Error("the throttle was not logged")
+	}
+	if strings.Contains(logs.String(), "skipping unavailable youtube entry") {
+		t.Error("a throttled entry was reported as unavailable")
+	}
+	// The cursor does not move past entries this pass could not enrich.
+	// Advancing it would make the gap permanent: the next run's Stop
+	// lists nothing at or below the cursor, so those episodes would keep
+	// the listing's bare title for the life of the subscription.
+	if enum.ETag != "" {
+		t.Errorf("ETag = %q on a throttled first sync, want the cursor held", enum.ETag)
+	}
+}
+
+// TestEnumerateHoldsTheCursorWhenThrottled is the incremental half: a
+// later run that throttles must leave the stored cursor where it was,
+// so the entries it could not enrich are listed again next time.
+func TestEnumerateHoldsTheCursorWhenThrottled(t *testing.T) {
+	f := channelFake(4)
+	f.infoErrs = map[string]error{vid(3): throttleErr(vid(3))}
+	p := testProvider(t, f, nil)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u", ETag: vid(2)})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if enum.ETag != vid(2) {
+		t.Errorf("ETag = %q, want the incoming cursor %q held", enum.ETag, vid(2))
+	}
+}
+
+// TestEnumerateAdvancesTheCursorWhenOnlySkipping is the contrast: a
+// dropped entry is genuinely gone, so the cursor moves past it.
+func TestEnumerateAdvancesTheCursorWhenOnlySkipping(t *testing.T) {
+	f := channelFake(4)
+	f.infoErrs = map[string]error{vid(3): deadErr(vid(3))}
+	p := testProvider(t, f, nil)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if enum.ETag != vid(4) {
+		t.Errorf("ETag = %q, want the newest listed id %q", enum.ETag, vid(4))
+	}
+}
+
+func TestEnumerateStillSkipsAnErrorStatusVideo(t *testing.T) {
+	f := channelFake(3)
+	f.infoErrs = map[string]error{vid(2): deadErr(vid(2))}
+	var logs bytes.Buffer
+	p := testProvider(t, f, &logs)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if len(enum.Feed.Episodes) != 2 {
+		t.Fatalf("episodes = %d, want the removed video dropped", len(enum.Feed.Episodes))
+	}
+	for _, ep := range enum.Feed.Episodes {
+		if ep.GUID == vid(2) {
+			t.Error("a status-ERROR video was cataloged")
+		}
+	}
+	// And the pass carries on: a verdict about one video says nothing
+	// about the next.
+	if len(f.infoCalls) != 3 {
+		t.Errorf("Info calls = %v, want every entry probed", f.infoCalls)
+	}
+	if !strings.Contains(logs.String(), "skipping unavailable youtube entry") {
+		t.Error("the skip was not logged")
+	}
+}
+
+// TestEnumerateTreatsAnyUnplayableAsThrottled pins the edge of the
+// predicate. Upstream classifies only "members" and "country" reasons
+// specially, so an UNPLAYABLE blocked for anything else - a copyright
+// claim, a policy takedown - also folds to ErrVideoUnavailable and
+// matches the throttle shape. That is deliberate and it is the safe
+// direction: a false throttle defers enrichment to the next run, while
+// a false skip drops the episode from the feed for good.
+func TestEnumerateTreatsAnyUnplayableAsThrottled(t *testing.T) {
+	f := channelFake(3)
+	f.infoErrs = map[string]error{
+		vid(2): fmt.Errorf("enrich %s: %w", vid(2), &waxerr.PlayabilityError{
+			Status: "UNPLAYABLE", Reason: "This video is no longer available due to a copyright claim",
+			Sentinel: waxtap.ErrVideoUnavailable,
+		}),
+	}
+	p := testProvider(t, f, nil)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	// Kept, not dropped: the entry is cataloged bare and the cursor
+	// holds, so the next run re-lists it and can settle the question.
+	if len(enum.Feed.Episodes) != 3 {
+		t.Fatalf("episodes = %d, want the entry kept for a later pass", len(enum.Feed.Episodes))
+	}
+	if enum.ETag != "" {
+		t.Errorf("ETag = %q, want the cursor held so the entry is re-listed", enum.ETag)
+	}
+}
+
 func TestEnumerateHardInfoErrorFails(t *testing.T) {
 	f := channelFake(2)
 	f.infoErrs = map[string]error{
@@ -552,6 +714,10 @@ func TestFetchLogsDownloadWarnings(t *testing.T) {
 	f.warnings = []waxtap.Warning{
 		{Code: waxtap.WarnSessionRotated, Detail: "continuing with a new session"},
 		{Code: waxtap.WarnProceedUncut, Detail: "sponsorblock unreachable"},
+		// A code this build's WaxTap added: the recovered set is a
+		// closed list and everything else warns, so a new one describing
+		// a worse delivery lands on the right side without being named.
+		{Code: waxtap.WarnImplicitLossy, Detail: "opus re-encoded into m4a"},
 	}
 	var logs bytes.Buffer
 	p := testProvider(t, f, &logs)
@@ -565,6 +731,7 @@ func TestFetchLogsDownloadWarnings(t *testing.T) {
 		`code=session-rotated`,
 		`level=WARN msg="youtube download degraded" url=`,
 		`code=proceed-uncut`,
+		`code=implicit-lossy`,
 	} {
 		if !strings.Contains(logs.String(), want) {
 			t.Errorf("missing %q in logs:\n%s", want, logs.String())

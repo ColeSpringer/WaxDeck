@@ -44,8 +44,11 @@ type ItemSummary struct {
 // ItemDetail is the full single-item shape.
 type ItemDetail struct {
 	ItemSummary
-	Genres     []string
-	Year       int
+	Genres []string
+	Year   int
+	// BPM is the track's stated tempo, whole; 0 for an item carrying
+	// none, which is most of them.
+	BPM        int
 	Codec      string
 	Container  string
 	SampleRate int

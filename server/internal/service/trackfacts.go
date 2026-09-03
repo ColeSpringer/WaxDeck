@@ -38,9 +38,11 @@ type TrackFacts struct {
 	TrackNo     int
 	DiscNo      int
 	Year        int
-	DurationMS  int64
-	Codec       string
-	Container   string
+	// BPM is the stated tempo, whole; 0 for a track carrying none.
+	BPM        int
+	DurationMS int64
+	Codec      string
+	Container  string
 
 	// Explicit reports an ITUNESADVISORY custom tag asserting explicit
 	// (advisoryExplicitValues); a declared clean and an absent tag both
@@ -156,6 +158,7 @@ func (l *Library) sweepTrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFact
 				TrackNo:     it.TrackNo,
 				DiscNo:      it.DiscNo,
 				Year:        it.Year,
+				BPM:         it.BPM,
 				DurationMS:  it.DurationMS,
 				Codec:       it.Codec,
 				Container:   it.Container,

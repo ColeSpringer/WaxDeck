@@ -26,6 +26,9 @@
     "booksAdd": "books-add",
     "booksHub": "books-hub",
     "booksHubOverflow": "books-hub-overflow",
-    "chapter": "chapter-{index}"
+    "chapter": "chapter-{index}",
+    "seriesMerge": "series-merge",
+    "seriesMergeSheet": "series-merge-sheet",
+    "seriesMergeTarget": "series-merge-target-{pid}"
   }
 }

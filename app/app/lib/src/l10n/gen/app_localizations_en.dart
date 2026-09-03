@@ -2069,6 +2069,37 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String bookSeriesBookCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count books',
+      one: '1 book',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get bookSeriesMerge => 'Merge series into...';
+
+  @override
+  String bookSeriesMergeDone(String series) {
+    return 'Merged into \"$series\".';
+  }
+
+  @override
+  String get bookSeriesMergeEmpty => 'There is no other series to merge into.';
+
+  @override
+  String get bookSeriesMergeHelp =>
+      'The books in this series move to the one you pick, and this spelling goes away. Nothing else about the books changes.';
+
+  @override
+  String bookSeriesMergeTitle(String series) {
+    return 'Merge \"$series\" into';
+  }
+
+  @override
   String bookSeriesSequence(String number, String series) {
     return 'Book $number of $series';
   }
@@ -3328,6 +3359,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get libraryKindArtist => 'artist';
 
   @override
+  String get libraryMenuDetach => 'Detach from release';
+
+  @override
+  String get libraryMenuDetachConfirmBody =>
+      'The track leaves the release a MusicBrainz id pins it to and lands on the album its own tags imply.';
+
+  @override
+  String get libraryMenuDetachConfirmTitle => 'Detach this track?';
+
+  @override
+  String get libraryMenuDetachWriteBackHelp =>
+      'Also clear the release tags in the track\'s file, so the next scan does not put it back';
+
+  @override
+  String get libraryMenuDetached => 'Detached from the release.';
+
+  @override
   String get libraryMenuGoToAlbum => 'Go to album';
 
   @override
@@ -3493,6 +3541,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataFieldAuthorSort => 'Author, for sorting';
+
+  @override
+  String get metadataFieldBpm => 'BPM';
 
   @override
   String get metadataFieldComment => 'Comment';
@@ -3898,6 +3949,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataTagKey => 'Key';
 
   @override
+  String metadataTagReserved(String key) {
+    return '$key is stored as its own field, not as a custom tag.';
+  }
+
+  @override
   String get metadataTagStagedRemove => 'Removed when you save';
 
   @override
@@ -4088,37 +4144,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicAlbumRewriteConfirmBody =>
-      'The edited fields are rewritten on every track. Because every member moves at once, the release keeps its entry - artwork, pins and play history with it - unless the new name already belongs to another release, in which case the two merge. Locks on those fields are overridden, then set again by the rewrite.';
+      'The edited fields are rewritten on every track of this release at once, so it keeps its entry - artwork, pins and play history with it. If the new name already belongs to another release, the two merge and this page follows. Locks on those fields are overridden, then set again by the rewrite.';
 
   @override
-  String get musicAlbumRewriteConfirmTitle => 'Regroup this release?';
+  String get musicAlbumRewriteConfirmTitle => 'Rewrite this release?';
 
   @override
   String get musicAlbumRewriteHelp =>
-      'These live on the tracks rather than the release. Saving rewrites them on every member, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.';
+      'These live on the tracks rather than the release. Saving rewrites them on every member at once, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.';
 
   @override
-  String get musicAlbumRewriteIncomplete =>
-      'Could not load every track on this release, so nothing was rewritten.';
-
-  @override
-  String get musicAlbumRewriteMoved =>
-      'The release regrouped onto a new entry.';
+  String get musicAlbumRewriteMerged =>
+      'The release merged into the one that already had this name.';
 
   @override
   String get musicAlbumRewriteOverline => 'On the tracks';
 
   @override
-  String get musicAlbumRewriteTitle => 'Album, artist, and year';
-
-  @override
-  String musicAlbumRewriteTooLarge(int count) {
-    return 'One rewrite takes at most 1,000 tracks; this release has $count.';
+  String musicAlbumRewriteRenamed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Rewrote $count tracks',
+      one: 'Rewrote 1 track',
+    );
+    return '$_temp0';
   }
 
   @override
-  String get musicAlbumRewriteWriteBackHelp =>
-      'Also rewrite these tags inside each track\'s file';
+  String get musicAlbumRewriteTitle => 'Album, artist, and year';
 
   @override
   String get musicAlbumTitle => 'Album';
@@ -4247,11 +4301,57 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicEmptyTitle => 'No music yet';
 
   @override
+  String get musicEntityRenameApply => 'Rename';
+
+  @override
+  String get musicEntityRenameArtistHelp =>
+      'The artist\'s name lives on the tracks that credit them. Type the new name in full: renaming rewrites it on every one at once, so the artist keeps this page - its picture, pins and play history with it; a name another artist already has merges the two, and this page follows.';
+
+  @override
+  String get musicEntityRenameConfirmBody =>
+      'Every member is rewritten at once, so the entry survives with everything attached to it. If the new name is already taken, the two merge and this page follows. Locks on these fields are overridden, then set again by the rename.';
+
+  @override
+  String get musicEntityRenameConfirmTitle => 'Rename this entry?';
+
+  @override
+  String musicEntityRenameDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Renamed across $count tracks',
+      one: 'Renamed across 1 track',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicEntityRenameGroupHelp =>
+      'These live on the tracks rather than the release group. Renaming rewrites them on every member at once, so the group keeps this page; a name another group already has merges the two, and this page follows.';
+
+  @override
+  String get musicEntityRenameMerged =>
+      'Merged into the entry that already had this name.';
+
+  @override
+  String get musicEntityRenameOverline => 'On the members';
+
+  @override
+  String get musicEntityRenameTitle => 'Name';
+
+  @override
+  String get musicEntityRenameWriteBackHelp =>
+      'Also rewrite these tags inside each member\'s file';
+
+  @override
   String get musicFieldArtistMbid => 'MusicBrainz artist ID';
 
   @override
   String get musicFieldArtistMbidHelp =>
       'The identifier this artist matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.';
+
+  @override
+  String get musicFieldArtistName => 'Artist name';
 
   @override
   String get musicFieldArtistSortHelp =>
@@ -5528,6 +5628,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistRuleFieldArtist => 'Artist';
+
+  @override
+  String get playlistRuleFieldBpm => 'BPM';
 
   @override
   String get playlistRuleFieldCodec => 'Codec';

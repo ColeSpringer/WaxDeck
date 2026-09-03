@@ -194,6 +194,10 @@
   "@metadataFieldAuthorSort": {
     "description": "Name of the editable metadata field the server calls `author_sort`."
   },
+  "metadataFieldBpm": "BPM",
+  "@metadataFieldBpm": {
+    "description": "Label of the tempo field: beats per minute, the tag's stated number rather than anything measured."
+  },
   "metadataFieldComment": "Comment",
   "@metadataFieldComment": {
     "description": "Name of the editable metadata field the server calls `comment`."
@@ -586,7 +590,9 @@
   "@metadataPreviewProvider": {
     "description": "Names the metadata provider that supplied one previewed value.",
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "metadataPreviewTitle": "Fetch preview",
@@ -746,6 +752,15 @@
   "metadataTagKey": "Key",
   "@metadataTagKey": {
     "description": "Field for a custom tag's name."
+  },
+  "metadataTagReserved": "{key} is stored as its own field, not as a custom tag.",
+  "@metadataTagReserved": {
+    "description": "Refusal under the custom-tag key input when the key is one the catalog owns through a field of its own.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
   },
   "metadataTagStagedRemove": "Removed when you save",
   "@metadataTagStagedRemove": {

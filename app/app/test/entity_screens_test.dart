@@ -325,6 +325,43 @@ void main() {
       expect(find.byType(MetadataScreen), findsOneWidget);
     });
 
+    testWidgets('a track row detaches from the release it sits on', (
+      tester,
+    ) async {
+      final repository = FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-1',
+            username: 'admin',
+            roles: <String>['admin'],
+          ),
+        ),
+      )..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+      // The row is offered only where there is an mbid-pinned release to
+      // leave; the server refuses a chain that carries none.
+      repository.albums['al-1'] = const AlbumDetail(
+        pid: 'al-1',
+        title: 'Long Exposure',
+        mbid: '33333333-3333-3333-3333-333333333333',
+      );
+
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuDetach));
+      await tester.pumpAndSettle();
+      // Nothing is written until the confirmation is answered: the
+      // track's file loses its release tags.
+      expect(repository.detachCalls, isEmpty);
+      await tester.tap(_byId(SemanticsIds.itemMenuDetachConfirm));
+      await tester.pumpAndSettle();
+
+      expect(repository.detachCalls.single.pid, 'tr-One');
+      expect(repository.detachCalls.single.writeBack, isTrue);
+    });
+
     testWidgets('a member is offered the pin and not the editor', (
       tester,
     ) async {
@@ -338,6 +375,14 @@ void main() {
           ),
         ),
       )..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+      // An mbid-pinned release, so the detach row's other precondition
+      // is satisfied and the permission gate is the only thing left
+      // that can hide it.
+      repository.albums['al-1'] = const AlbumDetail(
+        pid: 'al-1',
+        title: 'Long Exposure',
+        mbid: '33333333-3333-3333-3333-333333333333',
+      );
 
       await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
 
@@ -345,6 +390,25 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Pin to Home'), findsOneWidget);
       expect(find.text('Edit album details'), findsNothing);
+
+      // The entity sheet is dismissed first. Left open, its modal
+      // barrier swallows the next tap, the row menu never opens, and
+      // every findsNothing below passes for the wrong reason.
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.itemMenuSheet('tr-One')), findsNothing);
+
+      // The detach is a catalog write, so it sits behind the same door
+      // the editor does.
+      await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
+      await tester.pumpAndSettle();
+      expect(
+        _byId(SemanticsIds.itemMenuSheet('tr-One')),
+        findsOneWidget,
+        reason:
+            'the row menu must actually open for the assertion below to mean anything',
+      );
+      expect(_byId(SemanticsIds.itemMenuDetach), findsNothing);
     });
   });
 

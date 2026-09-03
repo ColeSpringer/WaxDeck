@@ -268,6 +268,112 @@ func TestDuplicatesListAndMerge(t *testing.T) {
 	}
 }
 
+// TestReleaseGroupsMergeAndNeverFork covers the group rung the
+// duplicates listing gained. Two halves, because the listing's own
+// finding is not reachable on a catalog this server built: upstream
+// refuses a user edit that would put one MusicBrainz id on two groups,
+// and a scan of an edition carrying that id adopts it into the group
+// already holding it rather than forking a twin. So the check earns its
+// place for catalogs predating the mbid-first key, and what is testable
+// here is the no-fork rule and the merge verb behind it.
+func TestReleaseGroupsMergeAndNeverFork(t *testing.T) {
+	t.Parallel()
+	const rgMBID = "44444444-4444-4444-4444-444444444444"
+	dupes := t.TempDir()
+	if _, err := fixtures.Generate(dupes, fixtures.Spec{
+		Name: "hotel", Codec: fixtures.CodecFLAC, Duration: 3 * time.Second, Tags: map[string]string{
+			"TITLE": "Hotel Song", "ARTIST": "Group Twins", "ALBUM": "Loose Edition"},
+	}); err != nil {
+		t.Fatalf("generating the loose fixture: %v", err)
+	}
+	h := newHarness(t, service.Root{Name: "dupes", Path: dupes})
+
+	// The loose group takes the id in its column, which is what
+	// enrichment does: the group's own key does not move with it.
+	loose := releaseGroupOf(t, h, "Hotel Song")
+	resp := h.patchJSON(t, "/api/v1/entities/release-group/"+loose, map[string]any{
+		"edits": map[string]string{"mbid": rgMBID},
+	})
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("setting the release-group mbid status = %d: %s", resp.StatusCode, body)
+	}
+
+	// A second edition arrives carrying the same id in its tags, under
+	// a title that would key a group of its own. It joins the group
+	// holding the id instead, which is why the duplicate finding does
+	// not arise here.
+	if _, err := fixtures.Generate(dupes, fixtures.Spec{
+		Name: "golf", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second, Tags: map[string]string{
+			"TITLE": "Golf Song", "ARTIST": "Group Twins", "ALBUM": "Keyed Edition",
+			"MUSICBRAINZ_RELEASEGROUPID": rgMBID},
+	}); err != nil {
+		t.Fatalf("generating the keyed fixture: %v", err)
+	}
+	h.rescanAndWait(t)
+	if keyed := releaseGroupOf(t, h, "Golf Song"); keyed != loose {
+		t.Fatalf("the id-carrying edition forked group %s beside %s", keyed, loose)
+	}
+	resp = get(t, h.ts, "/api/v1/library/duplicates", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("duplicates status = %d", resp.StatusCode)
+	}
+	for _, g := range decode[DuplicateGroups](t, resp).Groups {
+		if g.EntityType == "release-group" {
+			t.Fatalf("release-group duplicate reported on a catalog that cannot hold one: %+v", g)
+		}
+	}
+
+	// The merge verb takes the group rung, which is what a listed
+	// finding would ask it to do.
+	if _, err := fixtures.Generate(dupes, fixtures.Spec{
+		Name: "india", Codec: fixtures.CodecFLAC, Duration: 4 * time.Second, Tags: map[string]string{
+			"TITLE": "India Song", "ARTIST": "Group Twins", "ALBUM": "Third Edition"},
+	}); err != nil {
+		t.Fatalf("generating the third fixture: %v", err)
+	}
+	h.rescanAndWait(t)
+	third := releaseGroupOf(t, h, "India Song")
+	if third == loose {
+		t.Fatalf("the third edition landed on the same group %s", loose)
+	}
+	resp = h.postJSON(t, "/api/v1/library/duplicates/merge", map[string]any{
+		"entityType":  "release-group",
+		"survivorPid": loose,
+		"loserPids":   []string{third},
+	})
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("release-group merge status = %d: %s", resp.StatusCode, body)
+	}
+	res := decode[MergeResult](t, resp)
+	if res.Merged != 1 || res.ChildrenMoved == 0 {
+		t.Fatalf("merge result = %+v, want one merge that re-parented an album", res)
+	}
+	if got := releaseGroupOf(t, h, "India Song"); got != loose {
+		t.Fatalf("after the merge the third edition sits under %s, want the survivor %s", got, loose)
+	}
+}
+
+// releaseGroupOf resolves the release group behind the track with the
+// given title, which is two hops: an item names its album and an album
+// names its group.
+func releaseGroupOf(t *testing.T, h *harness, title string) string {
+	t.Helper()
+	for _, it := range h.items(t, "?limit=100").Items {
+		if it.Title != title || it.AlbumPid == nil {
+			continue
+		}
+		album := decode[AlbumDetail](t, get(t, h.ts, "/api/v1/albums/"+*it.AlbumPid, h.token))
+		if album.ReleaseGroupPid == nil {
+			t.Fatalf("album %s carries no release group", *it.AlbumPid)
+		}
+		return *album.ReleaseGroupPid
+	}
+	t.Fatalf("no track titled %q in the library", title)
+	return ""
+}
+
 // TestUpgradesEndpoints exercises the listing and resolve validation.
 // The fixtures are never fingerprint-analyzed in the harness (analysis
 // is a separate catalog pass no server path triggers here), so the

@@ -519,6 +519,7 @@ class ItemDetail extends ItemSummary {
     super.artUrl,
     this.genres = const [],
     this.year,
+    this.bpm,
     this.codec,
     this.container,
     this.sampleRate,
@@ -529,6 +530,11 @@ class ItemDetail extends ItemSummary {
 
   final List<String> genres;
   final int? year;
+
+  /// Stated tempo, whole. Null for an item carrying none, which is most
+  /// of them; nothing measures it, so this is the tag's number rather
+  /// than an analysis result.
+  final int? bpm;
   final String? codec;
   final String? container;
   final int? sampleRate;
@@ -1526,6 +1532,30 @@ class BookSettings {
   final bool? trimSilence;
 }
 
+/// One audiobook series: a name the books' tags carry rather than an
+/// entity anyone curates, which is why it has a listing but no screen.
+class BookSeries {
+  const BookSeries({
+    required this.pid,
+    required this.name,
+    this.bookCount = 0,
+    this.totalDurationMs = 0,
+  });
+
+  final String pid;
+  final String name;
+  final int bookCount;
+  final int totalDurationMs;
+}
+
+/// One keyset page of series.
+class BookSeriesPage {
+  const BookSeriesPage({this.series = const [], this.nextCursor});
+
+  final List<BookSeries> series;
+  final String? nextCursor;
+}
+
 /// Full audiobook detail. Positions are book-timeline milliseconds
 /// spanning all parts.
 class BookDetail {
@@ -1536,6 +1566,7 @@ class BookDetail {
     this.authors = const [],
     this.narrators = const [],
     this.series,
+    this.seriesPid,
     this.seriesSequence,
     this.publisher,
     this.asin,
@@ -1557,6 +1588,10 @@ class BookDetail {
   final List<String> authors;
   final List<String> narrators;
   final String? series;
+
+  /// The series entity behind [series], so a caller can name it to a
+  /// merge. Null when the book belongs to none.
+  final String? seriesPid;
   final String? seriesSequence;
   final String? publisher;
   final String? asin;
@@ -3031,10 +3066,19 @@ class EntityTypeFields {
 /// The metadata editor vocabulary: per-kind item fields plus per-type
 /// entity fields.
 class MetadataFields {
-  const MetadataFields({required this.kinds, required this.entityTypes});
+  const MetadataFields({
+    required this.kinds,
+    required this.entityTypes,
+    this.reservedTagKeys = const [],
+  });
 
   final List<KindFields> kinds;
   final List<EntityTypeFields> entityTypes;
+
+  /// Custom-tag keys the catalog owns through a field of its own, so a
+  /// tag editor can refuse one before the round trip. The server
+  /// refuses them either way.
+  final List<String> reservedTagKeys;
 }
 
 /// Where one metadata field's current value came from.
@@ -3364,11 +3408,90 @@ class MetadataEditResult {
     required this.applied,
     this.writeBackFailures = const [],
     this.warnings = const [],
+    this.mergedInto,
+    this.movedAlbums = const [],
   });
 
   final bool applied;
   final List<WriteBackFailure> writeBackFailures;
   final List<String> warnings;
+
+  /// The surviving entity when the edit re-keyed this one onto a key
+  /// another entity already held, which only an `mbid` clear does. The
+  /// edited pid is gone; a screen sitting on it follows this one.
+  final String? mergedInto;
+
+  /// Albums that left the edited release group because the clear
+  /// re-keyed it and their titles put them in a group of their own.
+  final List<String> movedAlbums;
+}
+
+/// Where a detached track came from and where it landed.
+class DetachResult {
+  const DetachResult({
+    required this.itemPid,
+    required this.oldAlbumPid,
+    this.newAlbumPid,
+    this.newReleaseGroupPid,
+    this.writeBackFailures = const [],
+  });
+
+  final String itemPid;
+
+  /// The album the track left.
+  final String oldAlbumPid;
+
+  /// The album it landed on, absent when its own tags carry no
+  /// grouping evidence beyond the release id it gave up.
+  final String? newAlbumPid;
+  final String? newReleaseGroupPid;
+
+  final List<WriteBackFailure> writeBackFailures;
+}
+
+/// What a rename did to an entity's identity key.
+enum EntityRenameOutcome {
+  /// The key moved and the row stayed, keeping its pid.
+  renamed,
+
+  /// The new key was already taken, so the row folded into the
+  /// incumbent named by [EntityRenameResult.mergedInto].
+  merged,
+
+  /// The new key equals the old one, so only the display columns moved.
+  /// A case-only rename lands here.
+  refreshed,
+}
+
+/// The outcome of renaming a whole album, release group, or artist.
+class EntityRenameResult {
+  const EntityRenameResult({
+    required this.entityPid,
+    required this.outcome,
+    required this.members,
+    required this.credits,
+    this.mergedInto,
+    this.movedAlbums = const [],
+    this.writeBackFailures = const [],
+  });
+
+  final String entityPid;
+  final EntityRenameOutcome outcome;
+
+  /// How many items carried the rename.
+  final int members;
+
+  /// How many contributor-role credits moved with an artist rename.
+  final int credits;
+
+  /// Where the entity went when [outcome] is [EntityRenameOutcome.merged].
+  final String? mergedInto;
+
+  /// Albums that came out under a different release group than they
+  /// went in under.
+  final List<String> movedAlbums;
+
+  final List<WriteBackFailure> writeBackFailures;
 }
 
 /// One library an upload or acquisition may name.

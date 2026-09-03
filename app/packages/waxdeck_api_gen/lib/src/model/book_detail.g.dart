@@ -22,6 +22,8 @@ class _$BookDetail extends BookDetail {
   @override
   final String? series;
   @override
+  final String? seriesPid;
+  @override
   final String? seriesSequence;
   @override
   final String? publisher;
@@ -57,6 +59,7 @@ class _$BookDetail extends BookDetail {
     required this.authors,
     required this.narrators,
     this.series,
+    this.seriesPid,
     this.seriesSequence,
     this.publisher,
     this.asin,
@@ -88,6 +91,7 @@ class _$BookDetail extends BookDetail {
         authors == other.authors &&
         narrators == other.narrators &&
         series == other.series &&
+        seriesPid == other.seriesPid &&
         seriesSequence == other.seriesSequence &&
         publisher == other.publisher &&
         asin == other.asin &&
@@ -112,6 +116,7 @@ class _$BookDetail extends BookDetail {
     _$hash = $jc(_$hash, authors.hashCode);
     _$hash = $jc(_$hash, narrators.hashCode);
     _$hash = $jc(_$hash, series.hashCode);
+    _$hash = $jc(_$hash, seriesPid.hashCode);
     _$hash = $jc(_$hash, seriesSequence.hashCode);
     _$hash = $jc(_$hash, publisher.hashCode);
     _$hash = $jc(_$hash, asin.hashCode);
@@ -138,6 +143,7 @@ class _$BookDetail extends BookDetail {
           ..add('authors', authors)
           ..add('narrators', narrators)
           ..add('series', series)
+          ..add('seriesPid', seriesPid)
           ..add('seriesSequence', seriesSequence)
           ..add('publisher', publisher)
           ..add('asin', asin)
@@ -186,6 +192,10 @@ class BookDetailBuilder implements Builder<BookDetail, BookDetailBuilder> {
   String? _series;
   String? get series => _$this._series;
   set series(String? series) => _$this._series = series;
+
+  String? _seriesPid;
+  String? get seriesPid => _$this._seriesPid;
+  set seriesPid(String? seriesPid) => _$this._seriesPid = seriesPid;
 
   String? _seriesSequence;
   String? get seriesSequence => _$this._seriesSequence;
@@ -254,6 +264,7 @@ class BookDetailBuilder implements Builder<BookDetail, BookDetailBuilder> {
       _authors = $v.authors.toBuilder();
       _narrators = $v.narrators.toBuilder();
       _series = $v.series;
+      _seriesPid = $v.seriesPid;
       _seriesSequence = $v.seriesSequence;
       _publisher = $v.publisher;
       _asin = $v.asin;
@@ -305,6 +316,7 @@ class BookDetailBuilder implements Builder<BookDetail, BookDetailBuilder> {
             authors: authors.build(),
             narrators: narrators.build(),
             series: series,
+            seriesPid: seriesPid,
             seriesSequence: seriesSequence,
             publisher: publisher,
             asin: asin,

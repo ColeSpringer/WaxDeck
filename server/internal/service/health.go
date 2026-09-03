@@ -826,8 +826,18 @@ func (l *Library) ListDuplicateGroups(ctx context.Context, uc *UserCtx) ([]Dupli
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
+	// The release-group check is here for catalogs that predate the
+	// mbid-first group key: nothing this server does can put one
+	// MusicBrainz id on two groups now (an entity edit that would is
+	// refused, and a scan of an edition carrying the id adopts it into
+	// the group already holding it), but a catalog forked by an older
+	// build still carries the pair, and the contract has always
+	// promised release-group groups here.
 	rep, err := l.lib.Audit(ctx, waxbin.AuditOptions{
-		Only: []model.AuditCheck{model.CheckDuplicateArtist, model.CheckDuplicateAlbum, model.CheckDuplicateGenre},
+		Only: []model.AuditCheck{
+			model.CheckDuplicateArtist, model.CheckDuplicateAlbum,
+			model.CheckDuplicateGenre, model.CheckDuplicateReleaseGroup,
+		},
 	})
 	if err != nil {
 		return nil, classify(err)
@@ -882,17 +892,8 @@ func (l *Library) MergeDuplicates(ctx context.Context, uc *UserCtx, entityType, 
 	if !uc.Admin {
 		return MergeResultDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	var met model.MergeEntity
-	switch entityType {
-	case "artist":
-		met = model.MergeArtist
-	case "album":
-		met = model.MergeAlbum
-	case "release-group":
-		met = model.MergeReleaseGroup
-	case "genre":
-		met = model.MergeGenre
-	default:
+	met, ok := mergeEntityForType(entityType)
+	if !ok {
 		return MergeResultDTO{}, errInvalid("unknown entity type " + entityType)
 	}
 	if len(loserPids) == 0 {

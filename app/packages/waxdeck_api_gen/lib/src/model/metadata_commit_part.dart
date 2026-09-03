@@ -15,7 +15,7 @@ part 'metadata_commit_part.g.dart';
 /// Properties:
 /// * [part_] - Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
 /// * [detail] - Which one, where the part repeats: the role for `credit`, the tag key for `tagSet` and `tagRemove`. Absent otherwise. 
-/// * [status] - `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted. 
+/// * [status] - `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
 /// * [refusal] 
 @BuiltValue()
 abstract class MetadataCommitPart implements Built<MetadataCommitPart, MetadataCommitPartBuilder> {
@@ -28,7 +28,7 @@ abstract class MetadataCommitPart implements Built<MetadataCommitPart, MetadataC
   @BuiltValueField(wireName: r'detail')
   String? get detail;
 
-  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted. 
+  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
   @BuiltValueField(wireName: r'status')
   MetadataCommitPartStatusEnum get status;
   // enum statusEnum {  committed,  refused,  skipped,  };
@@ -200,16 +200,16 @@ class MetadataCommitPartPart_Enum extends EnumClass {
 
 class MetadataCommitPartStatusEnum extends EnumClass {
 
-  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted. 
+  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
   @BuiltValueEnumConst(wireName: r'committed')
   static const MetadataCommitPartStatusEnum committed = _$metadataCommitPartStatusEnum_committed;
-  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted. 
+  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
   @BuiltValueEnumConst(wireName: r'refused')
   static const MetadataCommitPartStatusEnum refused = _$metadataCommitPartStatusEnum_refused;
-  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted. 
+  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
   @BuiltValueEnumConst(wireName: r'skipped')
   static const MetadataCommitPartStatusEnum skipped = _$metadataCommitPartStatusEnum_skipped;
-  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted. 
+  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const MetadataCommitPartStatusEnum unknownDefaultOpenApi = _$metadataCommitPartStatusEnum_unknownDefaultOpenApi;
 

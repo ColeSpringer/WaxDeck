@@ -179,6 +179,9 @@ export const SemanticsIds = {
   booksHub: 'books-hub',
   booksHubOverflow: 'books-hub-overflow',
   chapter: (index: string | number) => `chapter-${index}`,
+  seriesMerge: 'series-merge',
+  seriesMergeSheet: 'series-merge-sheet',
+  seriesMergeTarget: (pid: string | number) => `series-merge-target-${pid}`,
 
   // commands: The command palette, the keyboard reference sheet, and the rows in each.
   commandPalette: 'command-palette',
@@ -326,6 +329,9 @@ export const SemanticsIds = {
   itemDelete: 'item-delete',
   itemDeleteConfirm: 'item-delete-confirm',
   itemDeleteMode: (mode: string | number) => `item-delete-mode-${mode}`,
+  itemMenuDetach: 'item-menu-detach',
+  itemMenuDetachConfirm: 'item-menu-detach-confirm',
+  itemMenuDetachWriteBack: 'item-menu-detach-writeback',
   itemMenuGoAlbum: 'item-menu-go-album',
   itemMenuGoArtist: 'item-menu-go-artist',
   itemMenuMix: 'item-menu-mix',
@@ -363,6 +369,10 @@ export const SemanticsIds = {
   enrichPreviewCover: 'enrich-preview-cover',
   enrichPreviewRow: (name: string | number) => `enrich-preview-row-${name}`,
   entityEditor: 'entity-editor',
+  entityRenameApply: 'entity-rename-apply',
+  entityRenameConfirm: 'entity-rename-confirm',
+  entityRenameField: (name: string | number) => `entity-rename-field-${name}`,
+  entityRenameWriteBack: 'entity-rename-writeback',
   fieldLock: (name: string | number) => `field-lock-${name}`,
   lyricsField: 'lyrics-field',
   lyricsPreview: 'lyrics-preview',
@@ -901,6 +911,7 @@ export const SemanticsIdPrefixes = {
   bookFinishedFilter: 'book-finished-',
   bookSort: 'book-sort-',
   chapter: 'chapter-',
+  seriesMergeTarget: 'series-merge-target-',
 
   // commands: The command palette, the keyboard reference sheet, and the rows in each.
   commandPaletteEntry: 'command-palette-entry-',
@@ -966,6 +977,7 @@ export const SemanticsIdPrefixes = {
   artSlotSet: 'art-slot-set-',
   creditRemove: 'credit-remove-',
   enrichPreviewRow: 'enrich-preview-row-',
+  entityRenameField: 'entity-rename-field-',
   fieldLock: 'field-lock-',
   metadataField: 'metadata-field-',
   metadataGenreOption: 'metadata-genre-option-',

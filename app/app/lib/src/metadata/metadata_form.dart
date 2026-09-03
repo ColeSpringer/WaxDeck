@@ -35,6 +35,7 @@ String metadataFieldLabel(AppLocalizations l10n, String name) => switch (name) {
   'year' => l10n.metadataFieldYear,
   'track_no' => l10n.metadataFieldTrackNo,
   'disc_no' => l10n.metadataFieldDiscNo,
+  'bpm' => l10n.metadataFieldBpm,
   'isrc' => l10n.metadataFieldIsrc,
   'mbid' => l10n.metadataFieldMbid,
   'compilation' => l10n.metadataFieldCompilation,
@@ -81,7 +82,7 @@ String metadataRoleLabel(AppLocalizations l10n, String role) => switch (role) {
 
 /// The most items one `bulkEditMetadata` batch takes, mirroring the
 /// server's own refusal; the copy that states it lives in
-/// `metadataBulkLockNote` and `musicAlbumRewriteTooLarge`.
+/// `metadataBulkLockNote`.
 const metadataBulkEditCap = 1000;
 
 /// How one field is edited. The wire carries every value as a string;
@@ -92,6 +93,7 @@ MetadataFieldType metadataFieldType(String name) => switch (name) {
   'year' ||
   'track_no' ||
   'disc_no' ||
+  'bpm' ||
   'season' ||
   'episode_no' => MetadataFieldType.count,
   'compilation' || 'explicit' || 'pinned' => MetadataFieldType.toggle,
@@ -1622,6 +1624,27 @@ class _MetadataTagsSectionState extends State<MetadataTagsSection> {
   final _key = TextEditingController();
   final _values = TextEditingController();
 
+  /// The reserved key the person just typed, held so the field can say
+  /// why Add did nothing. Cleared when the key itself changes.
+  String? _reserved;
+
+  @override
+  void initState() {
+    super.initState();
+    // On the text, not on every notification: a controller is a
+    // ValueNotifier over the whole editing value, so it fires for a
+    // caret move and a composing change too - and clearing there would
+    // wipe the explanation the moment somebody tapped back in to read
+    // it, leaving the rejected key in the box and Add silently doing
+    // nothing.
+    _key.addListener(() {
+      final rejected = _reserved;
+      if (rejected != null && _key.text.trim().toUpperCase() != rejected) {
+        setState(() => _reserved = null);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _key.dispose();
@@ -1640,6 +1663,14 @@ class _MetadataTagsSectionState extends State<MetadataTagsSection> {
     // change count cannot see, which is a chip that says "Unsaved" over
     // a save bar that stays off.
     if (key.isEmpty || values.isEmpty) return;
+    // A key the catalog owns through a field of its own - BPM through
+    // bpm, ISRC through isrc - is refused here rather than staged and
+    // refused on Save, which would take the whole draft's save with it.
+    // The server refuses it either way; this is the sentence in front.
+    if (widget.state.reservedTagKeys.contains(key.toUpperCase())) {
+      setState(() => _reserved = key.toUpperCase());
+      return;
+    }
     widget.draft.stageTag(key, values);
     _key.clear();
     _values.clear();
@@ -1687,6 +1718,9 @@ class _MetadataTagsSectionState extends State<MetadataTagsSection> {
               child: WaxTextField(
                 label: l10n.metadataTagKey,
                 controller: _key,
+                errorText: _reserved == null
+                    ? null
+                    : l10n.metadataTagReserved(_reserved!),
                 semanticsId: SemanticsIds.tagKey,
               ),
             ),

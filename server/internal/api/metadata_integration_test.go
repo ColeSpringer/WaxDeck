@@ -1362,6 +1362,198 @@ func TestMetadataCommitRunsEveryStagedPart(t *testing.T) {
 	}
 }
 
+// TestMetadataCommitAppliesEveryCreditRoleAtOnce pins the credit half
+// of a compound save. The roles go upstream as one atomic batch, which
+// is what lets an artist every listed role moves be renamed in place
+// rather than left behind, and they mirror into the file in one pass.
+// The report still carries a row per role, because that is the shape
+// the editor's per-role banner reads.
+func TestMetadataCommitAppliesEveryCreditRoleAtOnce(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	pid := h.items(t, "").Items[0].Pid
+
+	result := metadataCommit(t, h, pid, map[string]any{
+		"credits": []map[string]any{
+			{"role": "producer", "names": []string{"Wren Alvarez"}},
+			{"role": "mixer", "names": []string{"Wren Alvarez"}},
+		},
+		"writeBack": true,
+		"lock":      false,
+	})
+	want := []string{"credit[producer]=committed", "credit[mixer]=committed"}
+	if got := commitStatuses(result); !slices.Equal(got, want) {
+		t.Fatalf("parts = %v, want %v", got, want)
+	}
+	if result.WriteBackFailures != nil && len(*result.WriteBackFailures) != 0 {
+		t.Fatalf("write-back failures = %+v", *result.WriteBackFailures)
+	}
+
+	byRole := map[string][]string{}
+	for _, c := range h.itemMeta(t, pid).Credits {
+		byRole[c.Role] = c.Names
+	}
+	for _, role := range []string{"producer", "mixer"} {
+		if len(byRole[role]) != 1 || byRole[role][0] != "Wren Alvarez" {
+			t.Fatalf("%s credit = %v, want the one name (credits: %+v)", role, byRole[role], byRole)
+		}
+	}
+
+	// Both roles landed in the file, not only the catalog: a rescan
+	// that re-reads the tags keeps them.
+	h.rescanAndWait(t)
+	byRole = map[string][]string{}
+	for _, c := range h.itemMeta(t, pid).Credits {
+		byRole[c.Role] = c.Names
+	}
+	for _, role := range []string{"producer", "mixer"} {
+		if len(byRole[role]) != 1 {
+			t.Fatalf("%s credit after a rescan = %v; the write-back did not reach the file", role, byRole[role])
+		}
+	}
+}
+
+// TestMetadataCommitWritesBackTheRolesThatCan pins the half a batch
+// must not lose: a book's translator has no round-trippable tag, and
+// upstream refuses that one role while the author beside it still
+// reaches the file. Turning write-back off for the whole batch instead
+// would leave the author's ALBUMARTIST as it was, and the next scan
+// would read the stale value back over the edit.
+func TestMetadataCommitWritesBackTheRolesThatCan(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) == 0 {
+		t.Fatal("no audiobook scanned")
+	}
+	pid := books.Items[0].Pid
+
+	result := metadataCommit(t, h, pid, map[string]any{
+		"credits": []map[string]any{
+			{"role": "author", "names": []string{"Wren Alvarez"}},
+			{"role": "translator", "names": []string{"Bo Marsh"}},
+		},
+		"writeBack": true,
+		"lock":      false,
+	})
+	want := []string{"credit[author]=committed", "credit[translator]=committed"}
+	if got := commitStatuses(result); !slices.Equal(got, want) {
+		t.Fatalf("parts = %v, want %v", got, want)
+	}
+	// The untaggable role is named rather than silently dropping the
+	// whole batch's write-back.
+	if result.Warnings == nil || len(*result.Warnings) == 0 {
+		t.Fatal("the translator's missing tag form went unreported")
+	}
+
+	// The author reached the file. Asserted on disk rather than through
+	// a rescan: upstream re-resolves a member only when its content
+	// changes, so a rescan of an untouched file would report the
+	// catalog's own value and pass either way.
+	for _, part := range bookPartPaths(t, h) {
+		if got := albumArtistOf(t, part); got != "Wren Alvarez" {
+			t.Fatalf("on-disk ALBUMARTIST in %s = %q, want the edited author; the batch's write-back did not reach the file",
+				filepath.Base(part), got)
+		}
+	}
+}
+
+// albumArtistOf reads one file's ALBUMARTIST off disk, which is where a
+// credit write-back has to land to survive the next re-resolve.
+func albumArtistOf(t *testing.T, path string) string {
+	t.Helper()
+	doc, err := waxlabel.ParseFile(context.Background(), path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", filepath.Base(path), err)
+	}
+	if vals, ok := doc.Get(tag.AlbumArtist); ok && len(vals) > 0 {
+		return vals[0]
+	}
+	return ""
+}
+
+// bookPartPaths lists the backing files behind a book item.
+func bookPartPaths(t *testing.T, h *harness) []string {
+	t.Helper()
+	var out []string
+	err := filepath.Walk(h.library, func(p string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && strings.HasSuffix(p, ".m4b") {
+			out = append(out, p)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) == 0 {
+		t.Fatal("no book parts on disk")
+	}
+	return out
+}
+
+// TestMetadataCommitRefusesTheWholeCreditBatch is the other half: the
+// batch is atomic, so a locked role takes every role with it. The first
+// credit row carries the refusal and the rest read skipped, which is
+// the contract's one-refused-part shape.
+func TestMetadataCommitRefusesTheWholeCreditBatch(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	pid := h.items(t, "").Items[0].Pid
+
+	resp := h.putJSON(t, "/api/v1/items/"+pid+"/locks",
+		map[string]any{"fields": []string{"credit.mixer"}, "locked": true})
+	wantStatus(t, resp, 200, "lock the mixer credit")
+
+	result := metadataCommit(t, h, pid, map[string]any{
+		"credits": []map[string]any{
+			{"role": "producer", "names": []string{"Wren Alvarez"}},
+			{"role": "mixer", "names": []string{"Wren Alvarez"}},
+		},
+		"unofficial": true,
+		"lock":       false,
+	})
+	want := []string{
+		"credit[producer]=refused",
+		"credit[mixer]=skipped",
+		"releaseStatus=skipped",
+	}
+	if got := commitStatuses(result); !slices.Equal(got, want) {
+		t.Fatalf("parts = %v, want %v", got, want)
+	}
+	if result.Parts[0].Refusal == nil || result.Parts[0].Refusal.Code != "field-locked" {
+		t.Fatalf("refusal = %+v, want field-locked", result.Parts[0].Refusal)
+	}
+
+	// Nothing committed: the unlocked role rolled back with the locked
+	// one.
+	for _, c := range h.itemMeta(t, pid).Credits {
+		if c.Role == "producer" {
+			t.Fatalf("the producer credit committed inside a refused batch: %+v", c)
+		}
+	}
+}
+
+// TestMetadataCommitRefusesADuplicateRole covers the body check the
+// atomic batch adds: a role named twice is a draft contradicting
+// itself, refused whole rather than applied twice.
+func TestMetadataCommitRefusesADuplicateRole(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	pid := h.items(t, "").Items[0].Pid
+
+	resp := h.postJSON(t, "/api/v1/items/"+pid+"/metadata/commit", map[string]any{
+		"credits": []map[string]any{
+			{"role": "producer", "names": []string{"One"}},
+			{"role": "Producer", "names": []string{"Two"}},
+		},
+	})
+	wantStatus(t, resp, 400, "a role named twice")
+}
+
 // TestMetadataCommitStopsAtTheFirstRefusal pins the semantics the
 // sequential save has: parts run until one is refused, that one carries
 // its own error, and the rest are reported as never attempted. The

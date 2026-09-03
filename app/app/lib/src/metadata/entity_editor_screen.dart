@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -14,6 +15,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'artwork_manager.dart';
+import 'rename_section.dart';
 
 /// The two catalog entities editable at their own location beside the
 /// release: an artist and a release group. One screen, because their
@@ -36,6 +38,15 @@ enum EditableEntity {
   List<String> get fields => switch (this) {
     artist => const ['sort', 'mbid'],
     releaseGroup => const ['sort', 'mbid', 'type'],
+  };
+
+  /// The keying fields the rename verb takes for this rung. They live
+  /// on the member tracks rather than on the entity, which is why they
+  /// are not in [fields]: moving them moves the entity's identity, and
+  /// only the rename endpoint can do that without splitting it.
+  List<String> get renameFields => switch (this) {
+    artist => const ['name'],
+    releaseGroup => const ['album', 'album_artist'],
   };
 }
 
@@ -85,6 +96,43 @@ final _entityNameProvider = FutureProvider.autoDispose
         EditableEntity.artist => first?.artist,
         EditableEntity.releaseGroup => first?.album,
       };
+    }, retry: retryUnlessRefused);
+
+/// The keying values the rename inputs start from, read off one member
+/// the way the album pane's rewrite section reads them. An entity has
+/// no detail read, and the values agree across members by construction
+/// - they are the key the entity groups on - so one member answers.
+final _renameSeedProvider = FutureProvider.autoDispose
+    .family<Map<String, String>, ({EditableEntity entity, String pid})>((
+      ref,
+      key,
+    ) async {
+      final repo = ref.watch(repositoryProvider);
+      final page = await repo.listItems(
+        facet: key.entity.dimension.wireName,
+        facetKey: musicFacetKey(key.entity.dimension, key.pid),
+        limit: 1,
+      );
+      final first = page.items.firstOrNull;
+      if (first == null) return const {};
+      // A release group's two keying fields are item fields, so they
+      // come off the metadata read and seed the inputs directly.
+      if (key.entity == EditableEntity.releaseGroup) {
+        final metadata = await repo.getItemMetadata(first.pid);
+        return {
+          for (final field in key.entity.renameFields)
+            field: metadata.fields[field] ?? '',
+        };
+      }
+      // An artist's is not. A member's `artist` is its display credit -
+      // the raw ARTIST string - which on a collaboration names several
+      // people, and this entity is only one of them. Seeding the box
+      // with it would offer a curator the wrong baseline to edit, and
+      // the rename applies with force, so a typo fix would move the
+      // whole artist onto a name that was never its own. Left empty:
+      // the rename states the new name outright, and every keystroke
+      // is a deliberate change rather than a diff against a guess.
+      return const {'name': ''};
     }, retry: retryUnlessRefused);
 
 /// The artist and release-group editors, deep-linkable at
@@ -206,7 +254,7 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
-      await ref
+      final result = await ref
           .read(repositoryProvider)
           .editEntity(
             widget.entity.wire,
@@ -233,6 +281,12 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
       }
       ref.invalidate(entityCurationProvider(_curationKey));
       messenger.show(l10n.musicAlbumEditorSaved);
+      // An mbid clear is the one edit that can re-key the entity onto a
+      // heuristic twin, which deletes this pid. Follow the survivor
+      // rather than leaving the screen on a row that is gone.
+      if (result.mergedInto case final survivor?) {
+        context.replace(WaxRoute.metadata(survivor));
+      }
     } on WaxDeckApiException catch (e) {
       if (mounted) {
         messenger.show(
@@ -244,6 +298,45 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// The rename section: the values that key the entity, which the
+  /// edit endpoint above cannot take because they live on the members.
+  Widget _renameSection() {
+    final l10n = context.l10n;
+    final seedKey = (entity: widget.entity, pid: widget.pid);
+    final artist = widget.entity == EditableEntity.artist;
+    return EntityRenameSection(
+      entityType: widget.entity.wire,
+      pid: widget.pid,
+      fields: widget.entity.renameFields,
+      seed: ref.watch(_renameSeedProvider(seedKey)),
+      onRetrySeed: () => ref.invalidate(_renameSeedProvider(seedKey)),
+      copy: RenameSectionCopy(
+        title: l10n.musicEntityRenameTitle,
+        overline: l10n.musicEntityRenameOverline,
+        help: artist
+            ? l10n.musicEntityRenameArtistHelp
+            : l10n.musicEntityRenameGroupHelp,
+        applyLabel: l10n.musicEntityRenameApply,
+        confirmTitle: l10n.musicEntityRenameConfirmTitle,
+        confirmBody: l10n.musicEntityRenameConfirmBody,
+        merged: l10n.musicEntityRenameMerged,
+        renamed: l10n.musicEntityRenameDone,
+      ),
+      ids: RenameSectionIds(
+        field: SemanticsIds.entityRenameField,
+        writeBack: SemanticsIds.entityRenameWriteBack,
+        apply: SemanticsIds.entityRenameApply,
+        confirm: SemanticsIds.entityRenameConfirm,
+      ),
+      busy: _busy,
+      onBusyChanged: (busy) => setState(() => _busy = busy),
+      onMerged: (survivor) => context.replace(WaxRoute.metadata(survivor)),
+      onRenamed: () => ref
+        ..invalidate(entityCurationProvider(_curationKey))
+        ..invalidate(_entityNameProvider(seedKey)),
+    );
   }
 
   String _labelOf(AppLocalizations l10n, String field) => switch (field) {
@@ -445,6 +538,8 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
             semanticsId: SemanticsIds.metadataSave,
             onPressed: changed.isEmpty || _busy ? null : () => _save(changed),
           ),
+          const SizedBox(height: WaxSpace.s24),
+          _renameSection(),
           const SizedBox(height: WaxSpace.s32),
         ],
       ),

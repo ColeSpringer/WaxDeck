@@ -53,6 +53,7 @@ String ruleFieldLabel(AppLocalizations l10n, String field) {
     'year' => l10n.playlistRuleFieldYear,
     'trackNumber' => l10n.playlistRuleFieldTrackNumber,
     'discNumber' => l10n.playlistRuleFieldDiscNumber,
+    'bpm' => l10n.playlistRuleFieldBpm,
     'season' => l10n.playlistRuleFieldSeason,
     'publishedAt' => l10n.playlistRuleFieldPublishedAt,
     'durationMs' => l10n.playlistRuleFieldDurationMs,

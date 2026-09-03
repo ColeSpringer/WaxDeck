@@ -13,6 +13,10 @@ class _$MetadataEditResult extends MetadataEditResult {
   final BuiltList<WriteBackFailure>? writeBackFailures;
   @override
   final BuiltList<String>? warnings;
+  @override
+  final String? mergedInto;
+  @override
+  final BuiltList<String>? movedAlbums;
 
   factory _$MetadataEditResult([
     void Function(MetadataEditResultBuilder)? updates,
@@ -22,6 +26,8 @@ class _$MetadataEditResult extends MetadataEditResult {
     required this.applied,
     this.writeBackFailures,
     this.warnings,
+    this.mergedInto,
+    this.movedAlbums,
   }) : super._();
   @override
   MetadataEditResult rebuild(
@@ -38,7 +44,9 @@ class _$MetadataEditResult extends MetadataEditResult {
     return other is MetadataEditResult &&
         applied == other.applied &&
         writeBackFailures == other.writeBackFailures &&
-        warnings == other.warnings;
+        warnings == other.warnings &&
+        mergedInto == other.mergedInto &&
+        movedAlbums == other.movedAlbums;
   }
 
   @override
@@ -47,6 +55,8 @@ class _$MetadataEditResult extends MetadataEditResult {
     _$hash = $jc(_$hash, applied.hashCode);
     _$hash = $jc(_$hash, writeBackFailures.hashCode);
     _$hash = $jc(_$hash, warnings.hashCode);
+    _$hash = $jc(_$hash, mergedInto.hashCode);
+    _$hash = $jc(_$hash, movedAlbums.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -56,7 +66,9 @@ class _$MetadataEditResult extends MetadataEditResult {
     return (newBuiltValueToStringHelper(r'MetadataEditResult')
           ..add('applied', applied)
           ..add('writeBackFailures', writeBackFailures)
-          ..add('warnings', warnings))
+          ..add('warnings', warnings)
+          ..add('mergedInto', mergedInto)
+          ..add('movedAlbums', movedAlbums))
         .toString();
   }
 }
@@ -80,6 +92,16 @@ class MetadataEditResultBuilder
       _$this._warnings ??= ListBuilder<String>();
   set warnings(ListBuilder<String>? warnings) => _$this._warnings = warnings;
 
+  String? _mergedInto;
+  String? get mergedInto => _$this._mergedInto;
+  set mergedInto(String? mergedInto) => _$this._mergedInto = mergedInto;
+
+  ListBuilder<String>? _movedAlbums;
+  ListBuilder<String> get movedAlbums =>
+      _$this._movedAlbums ??= ListBuilder<String>();
+  set movedAlbums(ListBuilder<String>? movedAlbums) =>
+      _$this._movedAlbums = movedAlbums;
+
   MetadataEditResultBuilder() {
     MetadataEditResult._defaults(this);
   }
@@ -90,6 +112,8 @@ class MetadataEditResultBuilder
       _applied = $v.applied;
       _writeBackFailures = $v.writeBackFailures?.toBuilder();
       _warnings = $v.warnings?.toBuilder();
+      _mergedInto = $v.mergedInto;
+      _movedAlbums = $v.movedAlbums?.toBuilder();
       _$v = null;
     }
     return this;
@@ -121,6 +145,8 @@ class MetadataEditResultBuilder
             ),
             writeBackFailures: _writeBackFailures?.build(),
             warnings: _warnings?.build(),
+            mergedInto: mergedInto,
+            movedAlbums: _movedAlbums?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -129,6 +155,9 @@ class MetadataEditResultBuilder
         _writeBackFailures?.build();
         _$failedField = 'warnings';
         _warnings?.build();
+
+        _$failedField = 'movedAlbums';
+        _movedAlbums?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'MetadataEditResult',

@@ -14,6 +14,8 @@ const MergeRequestEntityTypeEnum _$mergeRequestEntityTypeEnum_releaseGroup =
     const MergeRequestEntityTypeEnum._('releaseGroup');
 const MergeRequestEntityTypeEnum _$mergeRequestEntityTypeEnum_genre =
     const MergeRequestEntityTypeEnum._('genre');
+const MergeRequestEntityTypeEnum _$mergeRequestEntityTypeEnum_series =
+    const MergeRequestEntityTypeEnum._('series');
 const MergeRequestEntityTypeEnum
 _$mergeRequestEntityTypeEnum_unknownDefaultOpenApi =
     const MergeRequestEntityTypeEnum._('unknownDefaultOpenApi');
@@ -28,6 +30,8 @@ MergeRequestEntityTypeEnum _$mergeRequestEntityTypeEnumValueOf(String name) {
       return _$mergeRequestEntityTypeEnum_releaseGroup;
     case 'genre':
       return _$mergeRequestEntityTypeEnum_genre;
+    case 'series':
+      return _$mergeRequestEntityTypeEnum_series;
     case 'unknownDefaultOpenApi':
       return _$mergeRequestEntityTypeEnum_unknownDefaultOpenApi;
     default:
@@ -41,6 +45,7 @@ final BuiltSet<MergeRequestEntityTypeEnum> _$mergeRequestEntityTypeEnumValues =
       _$mergeRequestEntityTypeEnum_artist,
       _$mergeRequestEntityTypeEnum_releaseGroup,
       _$mergeRequestEntityTypeEnum_genre,
+      _$mergeRequestEntityTypeEnum_series,
       _$mergeRequestEntityTypeEnum_unknownDefaultOpenApi,
     ]);
 
@@ -54,6 +59,7 @@ class _$MergeRequestEntityTypeEnumSerializer
     'artist': 'artist',
     'releaseGroup': 'release-group',
     'genre': 'genre',
+    'series': 'series',
     'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
@@ -61,6 +67,7 @@ class _$MergeRequestEntityTypeEnumSerializer
     'artist': 'artist',
     'release-group': 'releaseGroup',
     'genre': 'genre',
+    'series': 'series',
     'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 

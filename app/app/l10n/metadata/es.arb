@@ -42,6 +42,7 @@
   "metadataFieldAsin": "ASIN",
   "metadataFieldAuthor": "Autor",
   "metadataFieldAuthorSort": "Autor, para ordenar",
+  "metadataFieldBpm": "BPM",
   "metadataFieldComment": "Comentario",
   "metadataFieldCompilation": "Recopilación",
   "metadataFieldComposer": "Compositor",
@@ -175,6 +176,7 @@
     "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
   },
   "metadataTagKey": "Clave",
+  "metadataTagReserved": "{key} se guarda en su propio campo, no como etiqueta personalizada.",
   "metadataTagStagedRemove": "Se quitará al guardar",
   "metadataTagValues": "Valores, separados por comas",
   "metadataTagsOverline": "Todo aquello para lo que el vocabulario no tiene un campo",

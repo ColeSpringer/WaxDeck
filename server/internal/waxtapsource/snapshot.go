@@ -42,6 +42,7 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 		Truncated:   pl.Continuation != "" || (maxEntries > 0 && len(pl.Entries) >= maxEntries),
 	}
 	infoCalls := 0
+	throttled := false
 	for i := range pl.Entries {
 		entry := pl.Entries[i]
 		e := syncsource.PlaylistSnapshotEntry{
@@ -51,10 +52,19 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 			Title:      entry.Title,
 			DurationMS: entry.Duration.Milliseconds(),
 		}
-		if infoCalls < budget {
+		if infoCalls < budget && !throttled {
 			infoCalls++
 			v, ierr := p.tap.Info(ctx, entry.VideoID, waxtap.InfoBasic, waxtap.WithFullMetadata())
 			switch {
+			case isMetadataThrottle(ierr):
+				// The throttle says nothing about this video, so the
+				// entry keeps AvailabilityKnown false rather than being
+				// marked unavailable - which is what once retired a
+				// third of a channel for good. The rest of the budget
+				// goes unspent: the next call is refused the same way.
+				throttled = true
+				p.log.Info("youtube metadata throttled; probing no further this pass",
+					"video", entry.VideoID, "probed", infoCalls-1, "err", ierr)
 			case ierr == nil:
 				e.AvailabilityKnown = true
 				if v.Title != "" {

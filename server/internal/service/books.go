@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/read"
 	"github.com/oklog/ulid/v2"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -39,6 +40,7 @@ type BookDetail struct {
 	Authors         []string
 	Narrators       []string
 	Series          string
+	SeriesPID       string
 	SeriesSequence  string
 	Publisher       string
 	ASIN            string
@@ -75,6 +77,7 @@ func (l *Library) BookDetailFor(ctx context.Context, uc *UserCtx, apiBookPID str
 		Authors:         bd.Authors,
 		Narrators:       bd.Narrators,
 		Series:          bd.Series,
+		SeriesPID:       entityAPIPID(PrefixSeries, bd.SeriesPID),
 		SeriesSequence:  bd.SeriesSeq,
 		Publisher:       bd.Publisher,
 		ASIN:            bd.ASIN,
@@ -294,6 +297,68 @@ func (l *Library) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID str
 		return nil, errNotFound("no book with pid " + apiBookPID)
 	}
 	return bd, nil
+}
+
+// BookSeriesDTO is one audiobook series.
+type BookSeriesDTO struct {
+	PID             string
+	Name            string
+	BookCount       int
+	TotalDurationMS int64
+}
+
+// BookSeriesPageDTO is one keyset page of series.
+type BookSeriesPageDTO struct {
+	Series     []BookSeriesDTO
+	NextCursor string
+}
+
+// bookSeriesPageSize bounds one page of the series listing.
+const bookSeriesPageSize = 100
+
+// ListBookSeries pages the series the visible books belong to.
+//
+// The page can come back short, or empty with more to come: upstream
+// enumerates and hydrates separately, and this drops what the caller
+// cannot see on top of that. So nextCursor follows the page's own
+// HasMore rather than whether anything survived the filter, which is
+// what keeps a caller draining instead of stopping on a filtered-out
+// window.
+func (l *Library) ListBookSeries(ctx context.Context, uc *UserCtx, cursor string, limit int) (BookSeriesPageDTO, error) {
+	if limit <= 0 || limit > 500 {
+		limit = bookSeriesPageSize
+	}
+	if cursor != "" {
+		if _, _, ok := read.Cursor(cursor).Decode(); !ok {
+			return BookSeriesPageDTO{}, errInvalid("cursor is malformed")
+		}
+	}
+	page, err := l.lib.EntityPage(ctx, read.EntitySeries, read.Cursor(cursor), limit)
+	if err != nil {
+		return BookSeriesPageDTO{}, classify(err)
+	}
+	out := BookSeriesPageDTO{Series: make([]BookSeriesDTO, 0, len(page.Entities))}
+	for _, ent := range page.Entities {
+		if ent == nil {
+			continue
+		}
+		if !uc.AllLibraries && !l.entityInLibraries(ent, uc) {
+			continue
+		}
+		row := BookSeriesDTO{PID: apiPID(PrefixSeries, ent.PID), Name: ent.Name}
+		// The counts are catalog-wide: EntityPage takes no library
+		// scope, so a series with one visible book and nine hidden ones
+		// would advertise ten to an account that can open one. Answered
+		// only where they are true, exactly as the album read does.
+		if uc.AllLibraries {
+			row.BookCount, row.TotalDurationMS = ent.ItemCount, ent.TotalDurationMS
+		}
+		out.Series = append(out.Series, row)
+	}
+	if page.HasMore {
+		out.NextCursor = string(page.Next)
+	}
+	return out, nil
 }
 
 func bookSettingsDTO(row wdb.BookSettings) BookSettings {

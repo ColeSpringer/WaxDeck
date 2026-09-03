@@ -183,6 +183,9 @@ abstract final class SemanticsIds {
   static const String booksHub = 'books-hub';
   static const String booksHubOverflow = 'books-hub-overflow';
   static String chapter(Object index) => 'chapter-$index';
+  static const String seriesMerge = 'series-merge';
+  static const String seriesMergeSheet = 'series-merge-sheet';
+  static String seriesMergeTarget(Object pid) => 'series-merge-target-$pid';
 
   // commands: The command palette, the keyboard reference sheet, and the rows in each.
   static const String commandPalette = 'command-palette';
@@ -334,6 +337,9 @@ abstract final class SemanticsIds {
   static const String itemDelete = 'item-delete';
   static const String itemDeleteConfirm = 'item-delete-confirm';
   static String itemDeleteMode(Object mode) => 'item-delete-mode-$mode';
+  static const String itemMenuDetach = 'item-menu-detach';
+  static const String itemMenuDetachConfirm = 'item-menu-detach-confirm';
+  static const String itemMenuDetachWriteBack = 'item-menu-detach-writeback';
   static const String itemMenuGoAlbum = 'item-menu-go-album';
   static const String itemMenuGoArtist = 'item-menu-go-artist';
   static const String itemMenuMix = 'item-menu-mix';
@@ -372,6 +378,10 @@ abstract final class SemanticsIds {
   static const String enrichPreviewCover = 'enrich-preview-cover';
   static String enrichPreviewRow(Object name) => 'enrich-preview-row-$name';
   static const String entityEditor = 'entity-editor';
+  static const String entityRenameApply = 'entity-rename-apply';
+  static const String entityRenameConfirm = 'entity-rename-confirm';
+  static String entityRenameField(Object name) => 'entity-rename-field-$name';
+  static const String entityRenameWriteBack = 'entity-rename-writeback';
   static String fieldLock(Object name) => 'field-lock-$name';
   static const String lyricsField = 'lyrics-field';
   static const String lyricsPreview = 'lyrics-preview';

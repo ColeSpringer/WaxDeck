@@ -188,6 +188,45 @@
       }
     }
   },
+  "bookSeriesBookCount": "{count, plural, =1{1 book} other{{count} books}}",
+  "@bookSeriesBookCount": {
+    "description": "Subtitle on a series row in the picker: how many books it holds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bookSeriesMerge": "Merge series into...",
+  "@bookSeriesMerge": {
+    "description": "Admin overflow entry on a book screen, opening the picker that folds this book's series into another."
+  },
+  "bookSeriesMergeDone": "Merged into \"{series}\".",
+  "@bookSeriesMergeDone": {
+    "description": "Message after the merge lands, naming the survivor.",
+    "placeholders": {
+      "series": {
+        "type": "String"
+      }
+    }
+  },
+  "bookSeriesMergeEmpty": "There is no other series to merge into.",
+  "@bookSeriesMergeEmpty": {
+    "description": "Shown in the picker when the library holds no other series."
+  },
+  "bookSeriesMergeHelp": "The books in this series move to the one you pick, and this spelling goes away. Nothing else about the books changes.",
+  "@bookSeriesMergeHelp": {
+    "description": "Line under that title: what the merge moves and what it leaves alone."
+  },
+  "bookSeriesMergeTitle": "Merge \"{series}\" into",
+  "@bookSeriesMergeTitle": {
+    "description": "Title of that picker, naming the series being merged away.",
+    "placeholders": {
+      "series": {
+        "type": "String"
+      }
+    }
+  },
   "bookSeriesSequence": "Book {number} of {series}",
   "@bookSeriesSequence": {
     "description": "Where a book sits in its series, as a link to the rest of it.",

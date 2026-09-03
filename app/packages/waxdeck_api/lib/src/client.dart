@@ -438,6 +438,10 @@ abstract interface class WaxDeckRepository {
   /// the caller's per-book settings.
   Future<BookDetail> getBook(String pid);
 
+  /// `GET /books/series`: one keyset page of the series the visible
+  /// audiobooks belong to.
+  Future<BookSeriesPage> listBookSeries({String? cursor, int? limit});
+
   /// `GET /books/{pid}/resume`: the caller's cross-device resume point
   /// on the book timeline.
   Future<BookResume> getBookResume(String pid);
@@ -1269,6 +1273,22 @@ abstract interface class WaxDeckRepository {
     bool force = false,
   });
 
+  /// `POST /items/{pid}/detach`: pulls one track off the release a
+  /// MusicBrainz id pins it to.
+  Future<DetachResult> detachItem(String pid, {bool writeBack = false});
+
+  /// `POST /entities/{entityType}/{entityPid}/rename`: moves a whole
+  /// album, release group, or artist onto new keying values, keeping
+  /// the row.
+  Future<EntityRenameResult> renameEntity(
+    String entityType,
+    String entityPid, {
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  });
+
   /// `GET /entities/{entityType}/{entityPid}/curation`: the entity's
   /// curated field overrides.
   Future<List<EntityCuratedField>> getEntityCuration(
@@ -1350,7 +1370,7 @@ abstract interface class WaxDeckRepository {
 
   /// `POST /library/duplicates/merge`: merges [loserPids] into
   /// [survivorPid]. [entityType] is `album`, `artist`,
-  /// `release-group`, or `genre`.
+  /// `release-group`, `genre`, or `series`.
   Future<MergeOutcome> mergeDuplicates({
     required String entityType,
     required String survivorPid,
@@ -2569,6 +2589,16 @@ class WaxDeckClient implements WaxDeckRepository {
     final response = await _gen.getBooksApi().getBook(pid: pid);
     return bookDetailFromGen(_require(response.data), baseUrl: _baseUrl);
   });
+
+  @override
+  Future<BookSeriesPage> listBookSeries({String? cursor, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getBooksApi().listBookSeries(
+          cursor: cursor,
+          limit: limit,
+        );
+        return bookSeriesPageFromGen(_require(response.data));
+      });
 
   @override
   Future<BookResume> getBookResume(String pid) => _guard(() async {
@@ -4093,6 +4123,39 @@ class WaxDeckClient implements WaxDeckRepository {
       ),
     );
     return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<DetachResult> detachItem(String pid, {bool writeBack = false}) =>
+      _guard(() async {
+        final response = await _gen.getMetadataApi().detachItem(
+          pid: pid,
+          detachRequest: gen.DetachRequest((b) => b..writeBack = writeBack),
+        );
+        return detachResultFromGen(_require(response.data));
+      });
+
+  @override
+  Future<EntityRenameResult> renameEntity(
+    String entityType,
+    String entityPid, {
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().renameEntity(
+      entityType: entityType,
+      entityPid: entityPid,
+      entityRename: gen.EntityRename(
+        (b) => b
+          ..fields = MapBuilder<String, String>(fields)
+          ..writeBack = writeBack
+          ..lock = lock
+          ..force = force,
+      ),
+    );
+    return entityRenameResultFromGen(_require(response.data));
   });
 
   @override

@@ -995,6 +995,19 @@ paths:
         `GET /albums/{pid}` will happily show ("US &amp; Europe" is a
         country a scan can store and an edit cannot). `media` has no
         normalizer and is stored as typed.
+
+
+        Clearing an `mbid` re-keys the entity, which is the one edit
+        that can move it: the chain falls back to the heuristic key, so
+        the entity may merge into a twin that already held it
+        (`mergedInto`) or, on a release group, shed differently titled
+        albums into groups of their own (`movedAlbums`). With
+        `writeBack` an album's or release group's `mbid` clear also
+        strips that id from the member files, which is what stops the
+        next scan putting the linkage back. A clear that merges is
+        refused alongside any other field with code `conflict`, whose
+        message names the survivor to edit instead, because the merge
+        deletes the row those other values would be written to.
       tags: [metadata]
       requestBody:
         required: true
@@ -1022,6 +1035,80 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /entities/{entityType}/{entityPid}/rename:
+    parameters:
+      - $ref: "#/components/parameters/EntityType"
+      - $ref: "#/components/parameters/EntityPid"
+    post:
+      operationId: renameEntity
+      summary: Rename an entity in place
+      description: >
+        Moves a whole album, release group, or artist onto a new name by
+        rewriting the keying fields of every one of its members in one
+        transaction. The entity row survives, so its pid, artwork,
+        curation, stars, and enrichment marker all stay; editing the
+        same fields through a bulk item edit would only move the members
+        that edit covered, leaving the rest behind on the old key.
+
+
+        `genre`, `playlist`, and `podcast` carry no keying fields and
+        answer `invalid-request`.
+
+
+        `outcome` says what happened to the identity key: `renamed` when
+        it moved and the row stayed, `merged` when the new key was
+        already taken and this entity folded into the incumbent named by
+        `mergedInto`, `refreshed` when the new key equals the old one
+        (a case-only rename).
+
+
+        The refusals are the cases that would otherwise split the entity
+        silently: an empty name, a member whose keying field is locked
+        (without `force`), an archived member with no primary file,
+        members that would land on different keys, and a release group
+        whose albums are titled apart. `writeBack` also writes the new
+        values into every member file's tags, which is what makes the
+        rename survive the next scan; a file that cannot be written is
+        reported in `failures` while the rename stands.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntityRename"
+      responses:
+        "200":
+          description: The rename outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityRenameResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            A member's keying field or a moved credit is locked and the
+            request did not set `force` (code `field-locked`); the
+            rename would split the entity rather than move it (code
+            `conflict`: members landing on different keys, an archived
+            member, a release group titled apart, a reference the batch
+            does not cover); or `writeBack` was asked for on a
+            read-only library (code `read-only`). The message names the
+            case.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /entities/{entityType}/{entityPid}/curation:
     parameters:
       - $ref: "#/components/parameters/EntityType"
@@ -1044,6 +1131,64 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/detach:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: detachItem
+      summary: Detach a track from its release
+      description: >
+        Pulls one track off an album chain a MusicBrainz id pins it to -
+        the album's own release id, or an mbid-keyed release group above
+        it - and onto the heuristic album its own tags and folder imply.
+        This is the per-member counterpart of clearing that id on the
+        whole entity, which is what a mis-scanned track sitting on the
+        wrong release needs.
+
+
+        Refused with `invalid-request` for an item that is not a track,
+        one on no album, one whose chain carries no MusicBrainz id, and
+        an album's last member - that last one has nothing to detach
+        onto, so clear the album's `mbid` instead.
+
+
+        `writeBack` also strips `MUSICBRAINZ_ALBUMID` and
+        `MUSICBRAINZ_RELEASEGROUPID` from the track's file, which is
+        what stops the next scan adopting it back; a file that cannot be
+        written is reported in `failures` while the detach stands.
+      tags: [metadata]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DetachRequest"
+      responses:
+        "200":
+          description: The detach outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetachResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `writeBack` was asked for on a library that is read-only
+            (code `read-only`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1311,6 +1456,16 @@ components:
           description: Editable fields per entity type.
           items:
             $ref: "#/components/schemas/EntityTypeFields"
+        reservedTagKeys:
+          type: array
+          description: >
+            Custom-tag keys the catalog owns through a field of its own
+            (`BPM` through `bpm`, `ISRC` through `isrc`, and so on), in
+            sorted order. A custom-tag editor refuses one of these
+            before the round trip; `setItemTag` refuses it either way.
+          items:
+            type: string
+            example: BPM
 
     KindFields:
       type: object
@@ -1864,6 +2019,22 @@ components:
             lines skipped.
           items:
             type: string
+        mergedInto:
+          type: string
+          description: >
+            The surviving entity when the edit re-keyed this one onto a
+            key another entity already held, which only an `mbid` clear
+            does. The named entity is gone; talk about this pid
+            instead.
+        movedAlbums:
+          type: array
+          description: >
+            Albums that left the edited release group because the clear
+            re-keyed it and their titles put them in a group of their
+            own. Their members are no longer reachable through the
+            edited group.
+          items:
+            type: string
 
     MetadataCommit:
       type: object
@@ -1890,7 +2061,14 @@ components:
           type: array
           maxItems: 50
           description: >
-            Replacement people per role, applied in the order given.
+            Replacement people per role. They apply as one atomic
+            batch, which is what lets an artist every listed role moves
+            be renamed in place rather than left behind; a role named
+            twice answers `invalid-request`. Because the batch is
+            atomic, a refusal in any role leaves them all uncommitted:
+            the first `credit` part carries the refusal and the rest
+            read `skipped`, and the message names the role that
+            refused.
           items:
             $ref: "#/components/schemas/CommitCredits"
         lyrics:
@@ -2058,7 +2236,8 @@ components:
             trouble rides `writeBackFailures`, never this).
             `refused` is the one part that stopped the commit, with
             its `refusal`. `skipped` is a part after that one, which
-            was never attempted.
+            was never attempted, or a `credit` role that shared an
+            atomic batch with the refused one.
         refusal:
           $ref: "#/components/schemas/Error"
 
@@ -2296,6 +2475,126 @@ components:
           default: false
           description: Override existing locks.
 
+    DetachRequest:
+      type: object
+      description: A per-member detach.
+      properties:
+        writeBack:
+          type: boolean
+          default: false
+          description: >
+            Also strip the two MusicBrainz release tags from the
+            track's file.
+
+    DetachResult:
+      type: object
+      description: >
+        Where a detached track came from and where it landed. The
+        catalog write succeeded whenever this shape returns; write-back
+        trouble rides along in `failures`.
+      required: [itemPid, oldAlbumPid]
+      properties:
+        itemPid:
+          type: string
+          description: The detached track.
+        oldAlbumPid:
+          type: string
+          description: The album it left.
+        newAlbumPid:
+          type: string
+          description: >
+            The album it landed on. Absent when the track's own tags
+            carry no grouping evidence beyond the release id, which
+            leaves it ungrouped exactly as a scan of those tags would.
+        newReleaseGroupPid:
+          type: string
+          description: The release group above that album, when there is one.
+        failures:
+          type: array
+          description: Files whose tags could not be updated.
+          items:
+            $ref: "#/components/schemas/WriteBackFailure"
+
+    EntityRename:
+      type: object
+      description: An entity rename.
+      required: [fields]
+      properties:
+        fields:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+          description: >
+            The keying fields to move the entity onto. An album takes
+            `album`, `album_artist`, and `year`; a release group takes
+            `album` and `album_artist`; an artist takes `name`. A field
+            outside its rung's vocabulary, or a name renamed to nothing,
+            is refused.
+        writeBack:
+          type: boolean
+          default: false
+          description: >
+            Also write the new values into every member file's tags
+            (`ALBUM`, `ALBUMARTIST`, `DATE`, `ARTIST`, plus the moved
+            contributor credits).
+        lock:
+          type: boolean
+          default: true
+          description: >
+            Lock each renamed field on every member, and each moved
+            credit's own `credit.<role>` lock.
+        force:
+          type: boolean
+          default: false
+          description: Override a locked keying field or credit.
+
+    EntityRenameResult:
+      type: object
+      description: >
+        What a rename did. The catalog write succeeded whenever this
+        shape returns; write-back trouble rides along in `failures`
+        instead of failing the rename.
+      required: [entityPid, outcome, members, credits]
+      properties:
+        entityPid:
+          type: string
+          description: >
+            The renamed entity. Unchanged from the request, since the
+            row survives; on `merged` the row is gone and `mergedInto`
+            names where it went.
+        outcome:
+          type: string
+          enum: [renamed, merged, refreshed]
+          description: What the rename did to the entity's identity key.
+        mergedInto:
+          type: string
+          description: >
+            The surviving entity when `outcome` is `merged`. Present
+            only then.
+        movedAlbums:
+          type: array
+          description: >
+            Albums that came out under a different release group than
+            they went in under, which an album rename can do when the
+            new anchor or title implies a group the album was not in.
+          items:
+            type: string
+        members:
+          type: integer
+          description: How many items carried the rename.
+        credits:
+          type: integer
+          description: >
+            How many contributor-role credits (producer, composer,
+            narrator, translator, editor) moved with an artist rename.
+            An item can be counted in both `members` and here.
+        failures:
+          type: array
+          description: Files whose tags could not be updated.
+          items:
+            $ref: "#/components/schemas/WriteBackFailure"
+
     EntityCuration:
       type: object
       description: An entity's curated fields.
@@ -2387,6 +2686,13 @@ components:
         the full text (LRC when the provider answered timed lines);
         `genre` the joined, normalized genre scalar; a book want
         proposes each scalar it can fill as its own row.
+
+
+        Every row is fill-when-empty and lock-respecting: enrichment
+        never replaces a value someone else set, which is what makes
+        the injected providers safe to run beside MusicBrainz matching.
+        Matching is authoritative for identity and locks what it
+        writes, so these fill only what nothing has claimed.
       required: [name, proposed, provider]
       properties:
         name:

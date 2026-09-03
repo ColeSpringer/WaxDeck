@@ -104,6 +104,14 @@ func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 	if videoID == "" {
 		videoID = v.ID
 	}
+	// Which door the bytes came through, which the client name cannot
+	// say: the watch-page scrape and the player endpoint report the
+	// same client and differ in what they need to work. It is the fact
+	// that explains a run where one video needed the scrape and its
+	// neighbours did not, and it exists only on a delivery, which is
+	// why it is logged here and not on the Info path.
+	p.log.Info("youtube download delivered", "video", videoID,
+		"client", res.Client, "via_watch_page", res.ViaWatchPage)
 	p.stampProvenance(ctx, path, req.URL, videoID)
 
 	f, err := os.Open(path)

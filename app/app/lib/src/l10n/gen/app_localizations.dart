@@ -3573,6 +3573,42 @@ abstract class AppLocalizations {
   /// **'Resume {chapter}'**
   String bookResumeChapter(String chapter);
 
+  /// Subtitle on a series row in the picker: how many books it holds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 book} other{{count} books}}'**
+  String bookSeriesBookCount(int count);
+
+  /// Admin overflow entry on a book screen, opening the picker that folds this book's series into another.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge series into...'**
+  String get bookSeriesMerge;
+
+  /// Message after the merge lands, naming the survivor.
+  ///
+  /// In en, this message translates to:
+  /// **'Merged into \"{series}\".'**
+  String bookSeriesMergeDone(String series);
+
+  /// Shown in the picker when the library holds no other series.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no other series to merge into.'**
+  String get bookSeriesMergeEmpty;
+
+  /// Line under that title: what the merge moves and what it leaves alone.
+  ///
+  /// In en, this message translates to:
+  /// **'The books in this series move to the one you pick, and this spelling goes away. Nothing else about the books changes.'**
+  String get bookSeriesMergeHelp;
+
+  /// Title of that picker, naming the series being merged away.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge \"{series}\" into'**
+  String bookSeriesMergeTitle(String series);
+
   /// Where a book sits in its series, as a link to the rest of it.
   ///
   /// In en, this message translates to:
@@ -5445,6 +5481,36 @@ abstract class AppLocalizations {
   /// **'artist'**
   String get libraryKindArtist;
 
+  /// Overflow row pulling one track off the release a MusicBrainz id pinned it to.
+  ///
+  /// In en, this message translates to:
+  /// **'Detach from release'**
+  String get libraryMenuDetach;
+
+  /// Body of that confirmation: where the track lands and why its file's tags are cleared.
+  ///
+  /// In en, this message translates to:
+  /// **'The track leaves the release a MusicBrainz id pins it to and lands on the album its own tags imply.'**
+  String get libraryMenuDetachConfirmBody;
+
+  /// Title of the confirmation that row asks before writing.
+  ///
+  /// In en, this message translates to:
+  /// **'Detach this track?'**
+  String get libraryMenuDetachConfirmTitle;
+
+  /// Line under the detach confirmation's write-tags switch. Off leaves the catalog edit alone on disk, which is what a read-only library can still take.
+  ///
+  /// In en, this message translates to:
+  /// **'Also clear the release tags in the track\'s file, so the next scan does not put it back'**
+  String get libraryMenuDetachWriteBackHelp;
+
+  /// Message after a detach lands.
+  ///
+  /// In en, this message translates to:
+  /// **'Detached from the release.'**
+  String get libraryMenuDetached;
+
   /// Item-menu row opening the album the item belongs to.
   ///
   /// In en, this message translates to:
@@ -5708,6 +5774,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Author, for sorting'**
   String get metadataFieldAuthorSort;
+
+  /// Label of the tempo field: beats per minute, the tag's stated number rather than anything measured.
+  ///
+  /// In en, this message translates to:
+  /// **'BPM'**
+  String get metadataFieldBpm;
 
   /// Name of the editable metadata field the server calls `comment`.
   ///
@@ -6399,6 +6471,12 @@ abstract class AppLocalizations {
   /// **'Key'**
   String get metadataTagKey;
 
+  /// Refusal under the custom-tag key input when the key is one the catalog owns through a field of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'{key} is stored as its own field, not as a custom tag.'**
+  String metadataTagReserved(String key);
+
   /// Marker on a custom tag whose removal is staged but not yet committed by the save bar.
   ///
   /// In en, this message translates to:
@@ -6675,35 +6753,29 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Rewrite 1 track} other{Rewrite {count} tracks}}'**
   String musicAlbumRewriteApply(int count);
 
-  /// Body of that confirmation: the regroup and the lock behavior, both pinned by the server's own semantics.
+  /// Body of that confirmation: the in-place rename, the merge on a taken name, and the lock behavior, all pinned by the server's own semantics.
   ///
   /// In en, this message translates to:
-  /// **'The edited fields are rewritten on every track. Because every member moves at once, the release keeps its entry - artwork, pins and play history with it - unless the new name already belongs to another release, in which case the two merge. Locks on those fields are overridden, then set again by the rewrite.'**
+  /// **'The edited fields are rewritten on every track of this release at once, so it keeps its entry - artwork, pins and play history with it. If the new name already belongs to another release, the two merge and this page follows. Locks on those fields are overridden, then set again by the rewrite.'**
   String get musicAlbumRewriteConfirmBody;
 
   /// Title of the confirmation the rewrite asks before writing.
   ///
   /// In en, this message translates to:
-  /// **'Regroup this release?'**
+  /// **'Rewrite this release?'**
   String get musicAlbumRewriteConfirmTitle;
 
-  /// Blurb under the rewrite heading, stating the regroup up front: the album pid changes, it is not renamed in place.
+  /// Blurb under the rewrite heading, stating up front what the rename does: the release keeps its pid unless the new name is taken.
   ///
   /// In en, this message translates to:
-  /// **'These live on the tracks rather than the release. Saving rewrites them on every member, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.'**
+  /// **'These live on the tracks rather than the release. Saving rewrites them on every member at once, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.'**
   String get musicAlbumRewriteHelp;
 
-  /// Refusal when the member list would not finish loading: rewriting only the loaded part would regroup those tracks and strand the rest, splitting the release.
+  /// Message after a rewrite whose new name was already another release's, shown as the workbench moves to the survivor.
   ///
   /// In en, this message translates to:
-  /// **'Could not load every track on this release, so nothing was rewritten.'**
-  String get musicAlbumRewriteIncomplete;
-
-  /// Message after a rewrite, shown as the workbench moves to the album the tracks landed on.
-  ///
-  /// In en, this message translates to:
-  /// **'The release regrouped onto a new entry.'**
-  String get musicAlbumRewriteMoved;
+  /// **'The release merged into the one that already had this name.'**
+  String get musicAlbumRewriteMerged;
 
   /// Line above that heading: these fields live on the members, not the release entity.
   ///
@@ -6711,23 +6783,17 @@ abstract class AppLocalizations {
   /// **'On the tracks'**
   String get musicAlbumRewriteOverline;
 
+  /// Message after a rewrite that kept the release: how many member tracks took the new values.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Rewrote 1 track} other{Rewrote {count} tracks}}'**
+  String musicAlbumRewriteRenamed(int count);
+
   /// Heading over the workbench section that rewrites the release-keying fields on every member track.
   ///
   /// In en, this message translates to:
   /// **'Album, artist, and year'**
   String get musicAlbumRewriteTitle;
-
-  /// Refusal when the release holds more members than the bulk endpoint's batch cap.
-  ///
-  /// In en, this message translates to:
-  /// **'One rewrite takes at most 1,000 tracks; this release has {count}.'**
-  String musicAlbumRewriteTooLarge(int count);
-
-  /// Line under the rewrite section's write-tags switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Also rewrite these tags inside each track\'s file'**
-  String get musicAlbumRewriteWriteBackHelp;
 
   /// Title of the album editor before the album it edits has loaded.
   ///
@@ -6861,6 +6927,66 @@ abstract class AppLocalizations {
   /// **'No music yet'**
   String get musicEmptyTitle;
 
+  /// Button applying the staged rename to every member.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get musicEntityRenameApply;
+
+  /// Blurb under the rename heading on an artist: the rename keeps the entity unless the new name is taken.
+  ///
+  /// In en, this message translates to:
+  /// **'The artist\'s name lives on the tracks that credit them. Type the new name in full: renaming rewrites it on every one at once, so the artist keeps this page - its picture, pins and play history with it; a name another artist already has merges the two, and this page follows.'**
+  String get musicEntityRenameArtistHelp;
+
+  /// Body of that confirmation: the in-place rename, the merge on a taken name, and the lock behavior.
+  ///
+  /// In en, this message translates to:
+  /// **'Every member is rewritten at once, so the entry survives with everything attached to it. If the new name is already taken, the two merge and this page follows. Locks on these fields are overridden, then set again by the rename.'**
+  String get musicEntityRenameConfirmBody;
+
+  /// Title of the confirmation the rename asks before writing.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename this entry?'**
+  String get musicEntityRenameConfirmTitle;
+
+  /// Message after a rename that kept the entity: how many member tracks took the new values.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Renamed across 1 track} other{Renamed across {count} tracks}}'**
+  String musicEntityRenameDone(int count);
+
+  /// The same blurb for a release group, whose keying fields are the album title and its artist.
+  ///
+  /// In en, this message translates to:
+  /// **'These live on the tracks rather than the release group. Renaming rewrites them on every member at once, so the group keeps this page; a name another group already has merges the two, and this page follows.'**
+  String get musicEntityRenameGroupHelp;
+
+  /// Message after a rename whose new name was already another entity's, shown as the screen moves to the survivor.
+  ///
+  /// In en, this message translates to:
+  /// **'Merged into the entry that already had this name.'**
+  String get musicEntityRenameMerged;
+
+  /// Line above that heading: these values live on the member tracks, not the entity.
+  ///
+  /// In en, this message translates to:
+  /// **'On the members'**
+  String get musicEntityRenameOverline;
+
+  /// Heading over the entity editor's rename section.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get musicEntityRenameTitle;
+
+  /// Line under the rename section's write-tags switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Also rewrite these tags inside each member\'s file'**
+  String get musicEntityRenameWriteBackHelp;
+
   /// The artist's identifier at MusicBrainz, on the artist editor.
   ///
   /// In en, this message translates to:
@@ -6872,6 +6998,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The identifier this artist matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.'**
   String get musicFieldArtistMbidHelp;
+
+  /// Label of the artist editor's rename input.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist name'**
+  String get musicFieldArtistName;
 
   /// Help under the sort name field on the artist editor.
   ///
@@ -8725,6 +8857,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Artist'**
   String get playlistRuleFieldArtist;
+
+  /// Smart-playlist rule field: a track's stated tempo.
+  ///
+  /// In en, this message translates to:
+  /// **'BPM'**
+  String get playlistRuleFieldBpm;
 
   /// Smart-rule field: the audio codec a file is encoded with.
   ///

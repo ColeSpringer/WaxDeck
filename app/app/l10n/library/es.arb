@@ -18,6 +18,11 @@
   "libraryDeleteTrashDone": "{count, plural, =1{Se ha movido 1 archivo a la papelera} other{Se han movido {count} archivos a la papelera}}",
   "libraryKindAlbum": "álbum",
   "libraryKindArtist": "artista",
+  "libraryMenuDetach": "Separar de la edición",
+  "libraryMenuDetachConfirmBody": "La pista deja la edición a la que la fija un identificador de MusicBrainz y pasa al álbum que implican sus propias etiquetas.",
+  "libraryMenuDetachConfirmTitle": "¿Separar esta pista?",
+  "libraryMenuDetachWriteBackHelp": "Borrar también las etiquetas de edición del archivo de la pista, para que el siguiente análisis no la devuelva",
+  "libraryMenuDetached": "Separada de la edición.",
   "libraryMenuGoToAlbum": "Ir al álbum",
   "libraryMenuGoToArtist": "Ir al artista",
   "libraryMenuShareAlbum": "Compartir el álbum"

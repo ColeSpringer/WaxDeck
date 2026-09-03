@@ -1428,6 +1428,7 @@ class FakeRepository implements WaxDeckRepository {
       authors: book.authors,
       narrators: book.narrators,
       series: book.series,
+      seriesPid: book.seriesPid,
       seriesSequence: book.seriesSequence,
       publisher: book.publisher,
       asin: book.asin,
@@ -3143,6 +3144,36 @@ class FakeRepository implements WaxDeckRepository {
     })
   >
   entityEdits = [];
+
+  /// Every entity rename, with the flags it carried.
+  final List<
+    ({
+      String entityType,
+      String entityPid,
+      Map<String, String> fields,
+      bool writeBack,
+      bool lock,
+      bool force,
+    })
+  >
+  renameEntityCalls = [];
+
+  /// Every detach, in call order.
+  final List<({String pid, bool writeBack})> detachCalls = [];
+
+  /// What the next [detachItem] answers; the default reports a landing
+  /// on a fresh album.
+  DetachResult? detachResult;
+
+  /// Where an `mbid` clear re-keys the entity, when a test is about
+  /// the merge branch: the survivor's pid, reported the way the server
+  /// reports it so a screen following the caller's pid can move.
+  String? entityEditMergesInto;
+
+  /// What the next [renameEntity] answers. A test that cares about the
+  /// merge branch sets one; the default is the plain rename that keeps
+  /// the pid.
+  EntityRenameResult? renameEntityResult;
   final List<({String entityType, String entityPid, int byteCount})>
   entityArtworkCalls = [];
   final List<({String entityType, String entityPid})> clearEntityArtworkCalls =
@@ -3181,6 +3212,9 @@ class FakeRepository implements WaxDeckRepository {
         fields: [EditableField(name: 'name', writeBack: false)],
       ),
     ],
+    // One reserved key, because the tag editor's refusal is about the
+    // set being consulted rather than about which keys are in it.
+    reservedTagKeys: ['BPM'],
   );
 
   void _requireUnlocked(String pid, Iterable<String> fields, bool force) {
@@ -3823,7 +3857,91 @@ class FakeRepository implements WaxDeckRepository {
         );
       }
     }
+    final survivor = entityEditMergesInto;
+    if (survivor != null && edits['mbid'] == '') {
+      return MetadataEditResult(applied: true, mergedInto: survivor);
+    }
     return const MetadataEditResult(applied: true);
+  }
+
+  /// The series the book listing answers, in one page.
+  final List<BookSeries> bookSeries = [];
+
+  @override
+  Future<BookSeriesPage> listBookSeries({String? cursor, int? limit}) async {
+    return BookSeriesPage(series: List<BookSeries>.of(bookSeries));
+  }
+
+  @override
+  Future<DetachResult> detachItem(String pid, {bool writeBack = false}) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    detachCalls.add((pid: pid, writeBack: writeBack));
+    return detachResult ??
+        DetachResult(
+          itemPid: pid,
+          oldAlbumPid: 'al-01JZX5N8QW3F4V9T2B7KDALBUM',
+          newAlbumPid: 'al-01JZX5N8QW3F4V9T2B7KDLOOSE',
+        );
+  }
+
+  @override
+  Future<EntityRenameResult> renameEntity(
+    String entityType,
+    String entityPid, {
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    renameEntityCalls.add((
+      entityType: entityType,
+      entityPid: entityPid,
+      fields: Map<String, String>.of(fields),
+      writeBack: writeBack,
+      lock: lock,
+      force: force,
+    ));
+    // The rename writes the keying fields onto every member and locks
+    // them, exactly as the real one does, whichever branch it takes.
+    for (final member
+        in facetItems['$entityType ${entityPid.substring(3)}'] ??
+            const <ItemSummary>[]) {
+      (itemFieldsByPid[member.pid] ??= {}).addAll(fields);
+      (lockedFieldsByPid[member.pid] ??= {}).addAll(fields.keys);
+    }
+    final canned = renameEntityResult;
+    if (canned != null) return canned;
+    // The default is the branch the row survives: the album read
+    // answers the new title, so a test can rename and then refetch.
+    if (entityType == 'album') {
+      final album = albums[entityPid];
+      if (album != null) {
+        albums[entityPid] = AlbumDetail(
+          pid: album.pid,
+          title: fields['album'] ?? album.title,
+          sortKey: album.sortKey,
+          mbid: album.mbid,
+          year: int.tryParse(fields['year'] ?? '') ?? album.year,
+          releaseGroupPid: album.releaseGroupPid,
+          barcode: album.barcode,
+          label: album.label,
+          catalogNumber: album.catalogNumber,
+          media: album.media,
+          country: album.country,
+          itemCount: album.itemCount,
+          totalDurationMs: album.totalDurationMs,
+        );
+      }
+    }
+    return EntityRenameResult(
+      entityPid: entityPid,
+      outcome: EntityRenameOutcome.renamed,
+      members: albums[entityPid]?.itemCount ?? 0,
+      credits: 0,
+    );
   }
 
   @override
@@ -5727,6 +5845,7 @@ BookDetail testBook(
   String? descriptionHtml,
   String? subtitle,
   String? series,
+  String? seriesPid,
   String? seriesSequence,
   String? publisher,
   String? isbn,
@@ -5742,6 +5861,7 @@ BookDetail testBook(
     authors: authors,
     narrators: narrators,
     series: series,
+    seriesPid: seriesPid,
     seriesSequence: seriesSequence,
     publisher: publisher,
     isbn: isbn,

@@ -52,6 +52,12 @@ type EntityTypeFieldsDTO struct {
 type MetadataFieldsDTO struct {
 	Kinds       []KindFieldsDTO
 	EntityTypes []EntityTypeFieldsDTO
+	// ReservedTagKeys are the custom-tag keys upstream owns through
+	// another surface (BPM through the bpm field, ISRC through its
+	// own, and so on), so a custom-tag editor can refuse one before
+	// the round trip rather than after it. The server refuses them
+	// either way.
+	ReservedTagKeys []string
 }
 
 // WriteBackFailureDTO is one file a write-back could not update.
@@ -63,9 +69,16 @@ type WriteBackFailureDTO struct {
 
 // EditOutcomeDTO reports a committed catalog edit: write-back failures
 // and non-fatal warnings ride along, never an error.
+//
+// MergedInto and MovedAlbums are the entity-edit half. Only an mbid
+// clear re-keys an entity, so only that edit can leave the caller's pid
+// gone (merged into a heuristic twin) or shed differently titled albums
+// out of a release group; every other edit leaves both empty.
 type EditOutcomeDTO struct {
-	Failures []WriteBackFailureDTO
-	Warnings []string
+	Failures    []WriteBackFailureDTO
+	Warnings    []string
+	MergedInto  string
+	MovedAlbums []string
 }
 
 // BulkEditOutcomeDTO reports a bulk edit's per-item outcomes.
@@ -212,8 +225,8 @@ type MetadataEditParams struct {
 var editorTrackFields = []EditableFieldDTO{
 	{"title", true}, {"artist", true}, {"album_artist", true}, {"album", true},
 	{"composer", true}, {"composer_sort", true}, {"comment", true}, {"genre", true},
-	{"year", true}, {"track_no", true}, {"disc_no", true}, {"isrc", true},
-	{"mbid", true}, {"compilation", true},
+	{"year", true}, {"track_no", true}, {"disc_no", true}, {"bpm", true},
+	{"isrc", true}, {"mbid", true}, {"compilation", true},
 }
 
 // editorBookFields is the book scalar vocabulary. Only the fields the
@@ -304,6 +317,7 @@ func (l *Library) MetadataFieldVocabulary() MetadataFieldsDTO {
 		})
 	}
 	out.EntityTypes = editorEntityFields
+	out.ReservedTagKeys = model.ReservedTagKeys()
 	return out
 }
 
@@ -620,6 +634,61 @@ func (l *Library) SetItemCredits(ctx context.Context, uc *UserCtx, apiPID, role 
 		return EditOutcomeDTO{}, err
 	}
 	out.Warnings = append(out.Warnings, warnings...)
+	return out, nil
+}
+
+// SetItemCreditsBatch replaces several roles' contributors on one item
+// in a single upstream transaction. The compound commit uses it where
+// the sequential path calls SetItemCredits per role, because gathering
+// the roles lets upstream's rename pre-pass see every reference before
+// the first write: an artist the whole batch moves is renamed in place,
+// keeping its pid, art, curation and stars, instead of being left
+// behind while a fresh row takes the credits.
+//
+// SkipLocked stays off, so a locked credit refuses the batch exactly as
+// it refuses a single role. The batch is atomic, so the refusal takes
+// every role with it; the caller's report says so.
+func (l *Library) SetItemCreditsBatch(ctx context.Context, uc *UserCtx, apiPID string, credits []CommitCreditsDTO, p MetadataEditParams) (EditOutcomeDTO, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiPID)
+	if err != nil {
+		return EditOutcomeDTO{}, err
+	}
+	edits := make([]model.ItemCreditEdit, 0, len(credits))
+	var warnings []string
+	for _, cr := range credits {
+		r := model.ContributorRole(strings.ToLower(strings.TrimSpace(cr.Role)))
+		if !model.RoleValidForKind(r, it.Kind) {
+			return EditOutcomeDTO{}, errInvalid("role " + cr.Role + " does not apply to a " + mediaTypeForKind(it.Kind) + " item")
+		}
+		if len(cr.Names) > 100 {
+			return EditOutcomeDTO{}, errInvalid("at most 100 names per role, and " + cr.Role + " carries more")
+		}
+		// Named, not switched off: upstream mirrors the batch one pass
+		// per file and refuses only the roles with no round-trippable
+		// tag, so the author beside a translator still reaches the file.
+		// Turning write-back off for the whole batch would leave that
+		// author on disk as it was, and the next scan would read the old
+		// value back over the edit.
+		if p.WriteBack && (r == model.RoleTranslator || r == model.RoleEditor) {
+			warnings = append(warnings, "role "+string(r)+" has no on-disk tag form; that credit is database-only")
+		}
+		edits = append(edits, model.ItemCreditEdit{ItemPID: it.PID, Role: r, Names: cr.Names})
+	}
+	if p.WriteBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return EditOutcomeDTO{}, err
+		}
+	}
+	res, err := l.lib.SetCreditsBatch(ctx, edits, waxbin.CreditEditOptions{
+		WriteBack: p.WriteBack, Lock: model.LockOf(p.Lock), Force: p.Force,
+	})
+	if err != nil {
+		return EditOutcomeDTO{}, classify(err)
+	}
+	out := EditOutcomeDTO{Warnings: warnings}
+	for _, wbe := range res.WriteBackErrors {
+		out.Failures = append(out.Failures, writeBackFailures(wbe)...)
+	}
 	return out, nil
 }
 
@@ -1058,8 +1127,26 @@ func mergeEntityForType(entityType string) (model.MergeEntity, bool) {
 		return model.MergeReleaseGroup, true
 	case "genre":
 		return model.MergeGenre, true
+	case "series":
+		return model.MergeSeries, true
 	default:
 		return "", false
+	}
+}
+
+// entityPrefixForType is the API pid prefix an entity type's own pids
+// carry. It answers the entity types an edit or a rename accepts; a
+// genre has no pid prefix of its own and neither verb reaches one.
+func entityPrefixForType(entityType string) string {
+	switch entityType {
+	case "album":
+		return PrefixAlbum
+	case "artist":
+		return PrefixArtist
+	case "release-group":
+		return PrefixReleaseGroup
+	default:
+		return ""
 	}
 }
 
@@ -1381,10 +1468,90 @@ func (l *Library) EditEntity(ctx context.Context, entityType, apiEntityPID strin
 			return EditOutcomeDTO{}, err
 		}
 	}
-	_, err = l.lib.EditEntity(ctx, et, pid, edits, waxbin.EntityEditOptions{
+	rep, err := l.lib.EditEntity(ctx, et, pid, edits, waxbin.EntityEditOptions{
 		WriteBack: p.WriteBack, Lock: model.LockOf(p.Lock), Force: p.Force,
 	})
-	return editOutcomeFromWriteBack(err)
+	out, err := editOutcomeFromWriteBack(err)
+	if err != nil {
+		return EditOutcomeDTO{}, err
+	}
+	// The report survives a write-back error: the catalog re-key
+	// committed, so a caller still following the old pid needs the
+	// survivor even when the member files went unwritten.
+	if rep != nil {
+		out.MergedInto = entityAPIPID(entityPrefixForType(entityType), rep.MergedInto)
+		for _, moved := range rep.MovedAlbums {
+			out.MovedAlbums = append(out.MovedAlbums, apiPID(PrefixAlbum, moved))
+		}
+	}
+	return out, nil
+}
+
+// EntityRenameOutcomeDTO reports what an entity rename did.
+type EntityRenameOutcomeDTO struct {
+	EntityPID   string
+	Outcome     string
+	MergedInto  string
+	MovedAlbums []string
+	Members     int
+	Credits     int
+	Failures    []WriteBackFailureDTO
+}
+
+// RenameEntity moves a whole album, release group, or artist onto new
+// keying values, keeping the row. Upstream owns the field vocabulary
+// and every refusal that guards coverage (an empty name, a locked or
+// archived member, members that would land apart), so this validates
+// only what it knows first: that the entity type has keying fields at
+// all, and that the pid parses.
+//
+// The rename is the entity-rung answer to a bulk item edit, which moves
+// only the members it covers and leaves the rest behind on the old key.
+func (l *Library) RenameEntity(ctx context.Context, entityType, apiEntityPID string, fields map[string]string, p MetadataEditParams) (EntityRenameOutcomeDTO, error) {
+	et, ok := mergeEntityForType(entityType)
+	if !ok {
+		return EntityRenameOutcomeDTO{}, errInvalid("unknown entity type " + entityType)
+	}
+	if !model.EntityRenamable(et) {
+		return EntityRenameOutcomeDTO{}, errInvalid(entityType + " entities carry no keying fields to rename")
+	}
+	pid, err := editorEntityPID(entityType, apiEntityPID)
+	if err != nil {
+		return EntityRenameOutcomeDTO{}, err
+	}
+	if len(fields) == 0 {
+		return EntityRenameOutcomeDTO{}, errInvalid("at least one field is required")
+	}
+	if p.WriteBack {
+		if err := l.CheckWritable(ctx, ""); err != nil {
+			return EntityRenameOutcomeDTO{}, err
+		}
+	}
+	rep, err := l.lib.RenameEntity(ctx, et, pid, fields, waxbin.RenameOptions{
+		WriteBack: p.WriteBack, Lock: model.LockOf(p.Lock), Force: p.Force,
+	})
+	// A write-back failure leaves the rename standing, so the report is
+	// still the answer and the failed files ride along in it.
+	out, err := editOutcomeFromWriteBack(err)
+	if err != nil {
+		return EntityRenameOutcomeDTO{}, err
+	}
+	if rep == nil {
+		return EntityRenameOutcomeDTO{}, &Error{Kind: KindInternal, Msg: "the rename committed without reporting what it did"}
+	}
+	prefix := entityPrefixForType(entityType)
+	res := EntityRenameOutcomeDTO{
+		EntityPID:  apiPID(prefix, rep.EntityPID),
+		Outcome:    string(rep.Outcome),
+		MergedInto: entityAPIPID(prefix, rep.MergedInto),
+		Members:    rep.Members,
+		Credits:    rep.Credits,
+		Failures:   out.Failures,
+	}
+	for _, moved := range rep.MovedAlbums {
+		res.MovedAlbums = append(res.MovedAlbums, apiPID(PrefixAlbum, moved))
+	}
+	return res, nil
 }
 
 // EntityCurationFor reads an entity's curated fields with provenance.
@@ -1412,6 +1579,50 @@ func (l *Library) EntityCurationFor(ctx context.Context, entityType, apiEntityPI
 		out = append(out, dto)
 	}
 	return out, nil
+}
+
+// DetachOutcomeDTO reports where a detached track came from and where
+// it landed.
+type DetachOutcomeDTO struct {
+	ItemPID            string
+	OldAlbumPID        string
+	NewAlbumPID        string
+	NewReleaseGroupPID string
+	Failures           []WriteBackFailureDTO
+}
+
+// DetachItem pulls one track off an mbid-pinned album chain and onto
+// the heuristic one its own tags imply. Every refusal is upstream's -
+// a non-track, a track on no album, a chain with no MusicBrainz id, an
+// album's last member - and each arrives as a sentence worth passing
+// through, so nothing is re-checked here.
+func (l *Library) DetachItem(ctx context.Context, uc *UserCtx, apiPID string, writeBack bool) (DetachOutcomeDTO, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiPID)
+	if err != nil {
+		return DetachOutcomeDTO{}, err
+	}
+	if writeBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return DetachOutcomeDTO{}, err
+		}
+	}
+	rep, err := l.lib.Detach(ctx, it.PID, waxbin.DetachOptions{WriteBack: writeBack})
+	// A write-back failure leaves the detach standing, so the report is
+	// still the answer and the failed file rides along in it.
+	out, err := editOutcomeFromWriteBack(err)
+	if err != nil {
+		return DetachOutcomeDTO{}, err
+	}
+	if rep == nil {
+		return DetachOutcomeDTO{}, &Error{Kind: KindInternal, Msg: "the detach committed without reporting what it did"}
+	}
+	return DetachOutcomeDTO{
+		ItemPID:            apiPID,
+		OldAlbumPID:        entityAPIPID(PrefixAlbum, rep.OldAlbumPID),
+		NewAlbumPID:        entityAPIPID(PrefixAlbum, rep.NewAlbumPID),
+		NewReleaseGroupPID: entityAPIPID(PrefixReleaseGroup, rep.NewReleaseGroupPID),
+		Failures:           out.Failures,
+	}, nil
 }
 
 // --- release status ---------------------------------------------------------------
@@ -1495,10 +1706,16 @@ type MetadataCommitOutcomeDTO struct {
 }
 
 // commitStep is one staged part bound to the call that applies it.
+//
+// details is set by a step that applies several report rows at once:
+// the credits go upstream as one atomic batch, so their rows share the
+// step's outcome. The first row carries a refusal and the rest read
+// skipped, keeping the contract's one-refused-part shape.
 type commitStep struct {
-	part   string
-	detail string
-	run    func(context.Context) (EditOutcomeDTO, error)
+	part    string
+	detail  string
+	details []string
+	run     func(context.Context) (EditOutcomeDTO, error)
 }
 
 // CommitItemMetadata applies every staged part of one editor draft in
@@ -1531,11 +1748,21 @@ func (l *Library) CommitItemMetadata(ctx context.Context, uc *UserCtx, apiPID st
 	seen := map[string]bool{}
 	refused := false
 	committed := 0
+	// rows is a step's report rows: the details it fans over, or the
+	// single row a plain step is.
+	rows := func(st commitStep) []string {
+		if st.details != nil {
+			return st.details
+		}
+		return []string{st.detail}
+	}
 	for _, st := range steps {
 		if refused {
-			out.Parts = append(out.Parts, MetadataCommitPartDTO{
-				Part: st.part, Detail: st.detail, Status: CommitSkipped,
-			})
+			for _, detail := range rows(st) {
+				out.Parts = append(out.Parts, MetadataCommitPartDTO{
+					Part: st.part, Detail: detail, Status: CommitSkipped,
+				})
+			}
 			continue
 		}
 		res, err := st.run(ctx)
@@ -1551,15 +1778,25 @@ func (l *Library) CommitItemMetadata(ctx context.Context, uc *UserCtx, apiPID st
 				return MetadataCommitOutcomeDTO{}, err
 			}
 			refused = true
-			out.Parts = append(out.Parts, MetadataCommitPartDTO{
-				Part: st.part, Detail: st.detail, Status: CommitRefused, Refusal: err,
-			})
+			for i, detail := range rows(st) {
+				status := CommitSkipped
+				if i == 0 {
+					status = CommitRefused
+				}
+				part := MetadataCommitPartDTO{Part: st.part, Detail: detail, Status: status}
+				if i == 0 {
+					part.Refusal = err
+				}
+				out.Parts = append(out.Parts, part)
+			}
 			continue
 		}
 		committed++
-		out.Parts = append(out.Parts, MetadataCommitPartDTO{
-			Part: st.part, Detail: st.detail, Status: CommitCommitted,
-		})
+		for _, detail := range rows(st) {
+			out.Parts = append(out.Parts, MetadataCommitPartDTO{
+				Part: st.part, Detail: detail, Status: CommitCommitted,
+			})
+		}
 		// Deduplicated: several parts can report the same file for the
 		// same reason, and each line is for a person to read once.
 		for _, f := range res.Failures {
@@ -1603,6 +1840,18 @@ func validateCommit(c MetadataCommitDTO) error {
 	if len(c.Credits) > 50 {
 		return errInvalid("at most 50 credit roles per commit")
 	}
+	// The credit roles go upstream as one atomic batch, which names
+	// each (item, role) slot once. Two entries for a role are a body
+	// contradicting itself rather than a second edit, so they are
+	// refused here with a sentence instead of upstream with one.
+	seenRoles := map[string]bool{}
+	for _, cr := range c.Credits {
+		role := strings.ToLower(strings.TrimSpace(cr.Role))
+		if seenRoles[role] {
+			return errInvalid("credit role " + role + " is named twice; a commit sets each role once")
+		}
+		seenRoles[role] = true
+	}
 	if len(c.TagSets) > 100 {
 		return errInvalid("at most 100 tag sets per commit")
 	}
@@ -1635,9 +1884,13 @@ func (l *Library) commitSteps(pid string, uc *UserCtx, c MetadataCommitDTO) []co
 			return l.EditItemMetadata(ctx, uc, pid, c.Fields, c.Params)
 		}})
 	}
-	for _, cr := range c.Credits {
-		steps = append(steps, commitStep{part: CommitPartCredit, detail: cr.Role, run: func(ctx context.Context) (EditOutcomeDTO, error) {
-			return l.SetItemCredits(ctx, uc, pid, cr.Role, cr.Names, c.Params)
+	if len(c.Credits) > 0 {
+		roles := make([]string, 0, len(c.Credits))
+		for _, cr := range c.Credits {
+			roles = append(roles, cr.Role)
+		}
+		steps = append(steps, commitStep{part: CommitPartCredit, details: roles, run: func(ctx context.Context) (EditOutcomeDTO, error) {
+			return l.SetItemCreditsBatch(ctx, uc, pid, c.Credits, c.Params)
 		}})
 	}
 	switch {
@@ -2088,6 +2341,7 @@ func editorScalarFields(it *model.ItemView, prov []model.FieldProvenance) map[st
 		setInt("year", it.Year)
 		setInt("track_no", it.TrackNo)
 		setInt("disc_no", it.DiscNo)
+		setInt("bpm", it.BPM)
 		if it.Compilation {
 			fields["compilation"] = "true"
 		}

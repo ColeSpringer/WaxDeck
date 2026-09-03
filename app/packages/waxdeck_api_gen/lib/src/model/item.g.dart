@@ -24,6 +24,8 @@ class _$Item extends Item {
   @override
   final int? sampleRate;
   @override
+  final int? bpm;
+  @override
   final String pid;
   @override
   final MediaType mediaType;
@@ -58,6 +60,7 @@ class _$Item extends Item {
     this.genres,
     this.bitrate,
     this.sampleRate,
+    this.bpm,
     required this.pid,
     required this.mediaType,
     required this.title,
@@ -89,6 +92,7 @@ class _$Item extends Item {
         genres == other.genres &&
         bitrate == other.bitrate &&
         sampleRate == other.sampleRate &&
+        bpm == other.bpm &&
         pid == other.pid &&
         mediaType == other.mediaType &&
         title == other.title &&
@@ -113,6 +117,7 @@ class _$Item extends Item {
     _$hash = $jc(_$hash, genres.hashCode);
     _$hash = $jc(_$hash, bitrate.hashCode);
     _$hash = $jc(_$hash, sampleRate.hashCode);
+    _$hash = $jc(_$hash, bpm.hashCode);
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, mediaType.hashCode);
     _$hash = $jc(_$hash, title.hashCode);
@@ -139,6 +144,7 @@ class _$Item extends Item {
           ..add('genres', genres)
           ..add('bitrate', bitrate)
           ..add('sampleRate', sampleRate)
+          ..add('bpm', bpm)
           ..add('pid', pid)
           ..add('mediaType', mediaType)
           ..add('title', title)
@@ -189,6 +195,10 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   int? _sampleRate;
   int? get sampleRate => _$this._sampleRate;
   set sampleRate(covariant int? sampleRate) => _$this._sampleRate = sampleRate;
+
+  int? _bpm;
+  int? get bpm => _$this._bpm;
+  set bpm(covariant int? bpm) => _$this._bpm = bpm;
 
   String? _pid;
   String? get pid => _$this._pid;
@@ -251,6 +261,7 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
       _genres = $v.genres?.toBuilder();
       _bitrate = $v.bitrate;
       _sampleRate = $v.sampleRate;
+      _bpm = $v.bpm;
       _pid = $v.pid;
       _mediaType = $v.mediaType;
       _title = $v.title;
@@ -294,6 +305,7 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
             genres: _genres?.build(),
             bitrate: bitrate,
             sampleRate: sampleRate,
+            bpm: bpm,
             pid: BuiltValueNullFieldError.checkNotNull(pid, r'Item', 'pid'),
             mediaType: BuiltValueNullFieldError.checkNotNull(
               mediaType,

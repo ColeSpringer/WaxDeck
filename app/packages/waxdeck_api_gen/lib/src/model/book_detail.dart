@@ -23,6 +23,7 @@ part 'book_detail.g.dart';
 /// * [authors] - Author display names, in credit order.
 /// * [narrators] - Narrator display names, in credit order.
 /// * [series] - Series name, when the book belongs to one.
+/// * [seriesPid] - The series entity behind `series`, so a caller can name it to a merge. Absent when the book belongs to none. 
 /// * [seriesSequence] - Position within the series, as the source states it (decimals like `1.5` are preserved). 
 /// * [publisher] - Publisher, when known.
 /// * [asin] - Audible ASIN, when known.
@@ -64,6 +65,10 @@ abstract class BookDetail implements Built<BookDetail, BookDetailBuilder> {
   /// Series name, when the book belongs to one.
   @BuiltValueField(wireName: r'series')
   String? get series;
+
+  /// The series entity behind `series`, so a caller can name it to a merge. Absent when the book belongs to none. 
+  @BuiltValueField(wireName: r'seriesPid')
+  String? get seriesPid;
 
   /// Position within the series, as the source states it (decimals like `1.5` are preserved). 
   @BuiltValueField(wireName: r'seriesSequence')
@@ -173,6 +178,13 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
       yield r'series';
       yield serializers.serialize(
         object.series,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.seriesPid != null) {
+      yield r'seriesPid';
+      yield serializers.serialize(
+        object.seriesPid,
         specifiedType: const FullType(String),
       );
     }
@@ -325,6 +337,13 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
             specifiedType: const FullType(String),
           ) as String;
           result.series = valueDes;
+          break;
+        case r'seriesPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.seriesPid = valueDes;
           break;
         case r'seriesSequence':
           final valueDes = serializers.deserialize(

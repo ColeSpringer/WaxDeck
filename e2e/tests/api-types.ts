@@ -886,6 +886,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/books/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List audiobook series
+         * @description The series the visible audiobooks belong to, in collation order. A series is a name a book's tags carry rather than an entity anyone curates, so this listing exists for one job: naming the target of a series merge when a spelling split one in two.
+         *
+         *     Filtered by library visibility, so a series held only in libraries this account cannot see is absent.
+         */
+        get: operations["listBookSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/books/{pid}/resume": {
         parameters: {
             query?: never;
@@ -1900,8 +1922,41 @@ export interface paths {
          * @description Edits an entity's own fields: `sort` and `mbid` for artists; `sort`, `mbid`, and `type` for release groups; `sort`, `mbid`, `barcode`, `label`, `catalog_number`, `media`, and `country` for albums. Entity edits carry their own provenance, readable below. `writeBack` pushes the values that have tag forms into member files.
          *
          *     `barcode` and `country` are normalized on the way in, where a scan stores the tag verbatim, so an edit refuses values `GET /albums/{pid}` will happily show ("US &amp; Europe" is a country a scan can store and an edit cannot). `media` has no normalizer and is stored as typed.
+         *
+         *     Clearing an `mbid` re-keys the entity, which is the one edit that can move it: the chain falls back to the heuristic key, so the entity may merge into a twin that already held it (`mergedInto`) or, on a release group, shed differently titled albums into groups of their own (`movedAlbums`). With `writeBack` an album's or release group's `mbid` clear also strips that id from the member files, which is what stops the next scan putting the linkage back. A clear that merges is refused alongside any other field with code `conflict`, whose message names the survivor to edit instead, because the merge deletes the row those other values would be written to.
          */
         patch: operations["editEntity"];
+        trace?: never;
+    };
+    "/entities/{entityType}/{entityPid}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
+                entityType: components["parameters"]["EntityType"];
+                /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                entityPid: components["parameters"]["EntityPid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rename an entity in place
+         * @description Moves a whole album, release group, or artist onto a new name by rewriting the keying fields of every one of its members in one transaction. The entity row survives, so its pid, artwork, curation, stars, and enrichment marker all stay; editing the same fields through a bulk item edit would only move the members that edit covered, leaving the rest behind on the old key.
+         *
+         *     `genre`, `playlist`, and `podcast` carry no keying fields and answer `invalid-request`.
+         *
+         *     `outcome` says what happened to the identity key: `renamed` when it moved and the row stayed, `merged` when the new key was already taken and this entity folded into the incumbent named by `mergedInto`, `refreshed` when the new key equals the old one (a case-only rename).
+         *
+         *     The refusals are the cases that would otherwise split the entity silently: an empty name, a member whose keying field is locked (without `force`), an archived member with no primary file, members that would land on different keys, and a release group whose albums are titled apart. `writeBack` also writes the new values into every member file's tags, which is what makes the rename survive the next scan; a file that cannot be written is reported in `failures` while the rename stands.
+         */
+        post: operations["renameEntity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/entities/{entityType}/{entityPid}/curation": {
@@ -1923,6 +1978,33 @@ export interface paths {
         get: operations["getEntityCuration"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{pid}/detach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Detach a track from its release
+         * @description Pulls one track off an album chain a MusicBrainz id pins it to - the album's own release id, or an mbid-keyed release group above it - and onto the heuristic album its own tags and folder imply. This is the per-member counterpart of clearing that id on the whole entity, which is what a mis-scanned track sitting on the wrong release needs.
+         *
+         *     Refused with `invalid-request` for an item that is not a track, one on no album, one whose chain carries no MusicBrainz id, and an album's last member - that last one has nothing to detach onto, so clear the album's `mbid` instead.
+         *
+         *     `writeBack` also strips `MUSICBRAINZ_ALBUMID` and `MUSICBRAINZ_RELEASEGROUPID` from the track's file, which is what stops the next scan adopting it back; a file that cannot be written is reported in `failures` while the detach stands.
+         */
+        post: operations["detachItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5648,6 +5730,30 @@ export interface components {
              */
             state: "pending" | "active";
         };
+        /** @description One keyset page of audiobook series. */
+        BookSeriesPage: {
+            /** @description Series in collation order. */
+            series: components["schemas"]["BookSeries"][];
+            /** @description Cursor for the next page; absent on the last one. */
+            nextCursor?: string;
+        };
+        /** @description One audiobook series. */
+        BookSeries: {
+            /**
+             * @description Series PID.
+             * @example sr-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            pid: string;
+            /** @description The series name, as the books' tags spell it. */
+            name: string;
+            /** @description Books in the series that this account can see. */
+            bookCount?: number;
+            /**
+             * Format: int64
+             * @description Their combined running time.
+             */
+            totalDurationMs?: number;
+        };
         /** @description One place a listener marked in a book. */
         Bookmark: {
             /**
@@ -5731,6 +5837,11 @@ export interface components {
             narrators: string[];
             /** @description Series name, when the book belongs to one. */
             series?: string;
+            /**
+             * @description The series entity behind `series`, so a caller can name it to a merge. Absent when the book belongs to none.
+             * @example sr-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            seriesPid?: string;
             /** @description Position within the series, as the source states it (decimals like `1.5` are preserved). */
             seriesSequence?: string;
             /** @description Publisher, when known. */
@@ -6274,10 +6385,10 @@ export interface components {
         /** @description A duplicate entity merge. */
         MergeRequest: {
             /**
-             * @description What is being merged.
+             * @description What is being merged. `series` is the one kind the duplicates listing never reports: a series is a tag rather than a curated entity, so a split spelling is found by eye on a book screen and merged from there.
              * @enum {string}
              */
-            entityType: "album" | "artist" | "release-group" | "genre";
+            entityType: "album" | "artist" | "release-group" | "genre" | "series";
             /** @description The entity that keeps its pid. */
             survivorPid: string;
             /** @description The entities merged into the survivor. */
@@ -6556,6 +6667,11 @@ export interface components {
              */
             year?: number;
             /**
+             * @description Stated tempo, whole. Absent or `0` for an item carrying none, which is most of them; nothing measures it, so this is the tag's number and not an analysis result.
+             * @example 128
+             */
+            bpm?: number;
+            /**
              * @description Source audio codec.
              * @example flac
              */
@@ -6699,6 +6815,8 @@ export interface components {
             kinds: components["schemas"]["KindFields"][];
             /** @description Editable fields per entity type. */
             entityTypes: components["schemas"]["EntityTypeFields"][];
+            /** @description Custom-tag keys the catalog owns through a field of its own (`BPM` through `bpm`, `ISRC` through `isrc`, and so on), in sorted order. A custom-tag editor refuses one of these before the round trip; `setItemTag` refuses it either way. */
+            reservedTagKeys?: string[];
         };
         /** @description One item kind's editable vocabulary. */
         KindFields: {
@@ -6964,6 +7082,10 @@ export interface components {
             writeBackFailures?: components["schemas"]["WriteBackFailure"][];
             /** @description Non-fatal notes: typed drop warnings from the tag library (a format refusing embedded synced lyrics, a chapter cap), roles without a tag form, malformed LRC lines skipped. */
             warnings?: string[];
+            /** @description The surviving entity when the edit re-keyed this one onto a key another entity already held, which only an `mbid` clear does. The named entity is gone; talk about this pid instead. */
+            mergedInto?: string;
+            /** @description Albums that left the edited release group because the clear re-keyed it and their titles put them in a group of their own. Their members are no longer reachable through the edited group. */
+            movedAlbums?: string[];
         };
         /**
          * @description The staged parts of one item's editor draft. Every part is optional and at least one is required; an empty body answers `invalid-request` rather than committing nothing successfully.
@@ -6975,7 +7097,7 @@ export interface components {
             fields?: {
                 [key: string]: string;
             };
-            /** @description Replacement people per role, applied in the order given. */
+            /** @description Replacement people per role. They apply as one atomic batch, which is what lets an artist every listed role moves be renamed in place rather than left behind; a role named twice answers `invalid-request`. Because the batch is atomic, a refusal in any role leaves them all uncommitted: the first `credit` part carries the refusal and the rest read `skipped`, and the message names the role that refused. */
             credits?: components["schemas"]["CommitCredits"][];
             lyrics?: components["schemas"]["CommitLyrics"];
             /** @description Remove the stored lyrics. Mutually exclusive with `lyrics`; sending both answers `invalid-request`. */
@@ -7051,7 +7173,7 @@ export interface components {
              */
             detail?: string;
             /**
-             * @description `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted.
+             * @description `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one.
              * @enum {string}
              */
             status: "committed" | "refused" | "skipped";
@@ -7210,6 +7332,69 @@ export interface components {
              */
             force: boolean;
         };
+        /** @description A per-member detach. */
+        DetachRequest: {
+            /**
+             * @description Also strip the two MusicBrainz release tags from the track's file.
+             * @default false
+             */
+            writeBack: boolean;
+        };
+        /** @description Where a detached track came from and where it landed. The catalog write succeeded whenever this shape returns; write-back trouble rides along in `failures`. */
+        DetachResult: {
+            /** @description The detached track. */
+            itemPid: string;
+            /** @description The album it left. */
+            oldAlbumPid: string;
+            /** @description The album it landed on. Absent when the track's own tags carry no grouping evidence beyond the release id, which leaves it ungrouped exactly as a scan of those tags would. */
+            newAlbumPid?: string;
+            /** @description The release group above that album, when there is one. */
+            newReleaseGroupPid?: string;
+            /** @description Files whose tags could not be updated. */
+            failures?: components["schemas"]["WriteBackFailure"][];
+        };
+        /** @description An entity rename. */
+        EntityRename: {
+            /** @description The keying fields to move the entity onto. An album takes `album`, `album_artist`, and `year`; a release group takes `album` and `album_artist`; an artist takes `name`. A field outside its rung's vocabulary, or a name renamed to nothing, is refused. */
+            fields: {
+                [key: string]: string;
+            };
+            /**
+             * @description Also write the new values into every member file's tags (`ALBUM`, `ALBUMARTIST`, `DATE`, `ARTIST`, plus the moved contributor credits).
+             * @default false
+             */
+            writeBack: boolean;
+            /**
+             * @description Lock each renamed field on every member, and each moved credit's own `credit.<role>` lock.
+             * @default true
+             */
+            lock: boolean;
+            /**
+             * @description Override a locked keying field or credit.
+             * @default false
+             */
+            force: boolean;
+        };
+        /** @description What a rename did. The catalog write succeeded whenever this shape returns; write-back trouble rides along in `failures` instead of failing the rename. */
+        EntityRenameResult: {
+            /** @description The renamed entity. Unchanged from the request, since the row survives; on `merged` the row is gone and `mergedInto` names where it went. */
+            entityPid: string;
+            /**
+             * @description What the rename did to the entity's identity key.
+             * @enum {string}
+             */
+            outcome: "renamed" | "merged" | "refreshed";
+            /** @description The surviving entity when `outcome` is `merged`. Present only then. */
+            mergedInto?: string;
+            /** @description Albums that came out under a different release group than they went in under, which an album rename can do when the new anchor or title implies a group the album was not in. */
+            movedAlbums?: string[];
+            /** @description How many items carried the rename. */
+            members: number;
+            /** @description How many contributor-role credits (producer, composer, narrator, translator, editor) moved with an artist rename. An item can be counted in both `members` and here. */
+            credits: number;
+            /** @description Files whose tags could not be updated. */
+            failures?: components["schemas"]["WriteBackFailure"][];
+        };
         /** @description An entity's curated fields. */
         EntityCuration: {
             /** @description Curated fields with provenance. */
@@ -7253,7 +7438,11 @@ export interface components {
             fields?: components["schemas"]["EnrichFieldProposal"][];
             cover?: components["schemas"]["EnrichCoverProposal"];
         };
-        /** @description One field an enrichment provider would fill. `lyrics` carries the full text (LRC when the provider answered timed lines); `genre` the joined, normalized genre scalar; a book want proposes each scalar it can fill as its own row. */
+        /**
+         * @description One field an enrichment provider would fill. `lyrics` carries the full text (LRC when the provider answered timed lines); `genre` the joined, normalized genre scalar; a book want proposes each scalar it can fill as its own row.
+         *
+         *     Every row is fill-when-empty and lock-respecting: enrichment never replaces a value someone else set, which is what makes the injected providers safe to run beside MusicBrainz matching. Matching is authoritative for identity and locks what it writes, so these fill only what nothing has claimed.
+         */
         EnrichFieldProposal: {
             /** @description The metadata field the proposal targets. */
             name: string;
@@ -12113,6 +12302,34 @@ export interface operations {
             503: components["responses"]["CatalogMaintenance"];
         };
     };
+    listBookSeries: {
+        parameters: {
+            query?: {
+                /** @description Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. */
+                cursor?: string;
+                /** @description Maximum series per page. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of series. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookSeriesPage"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
     getBookResume: {
         parameters: {
             query?: never;
@@ -13784,6 +14001,49 @@ export interface operations {
             503: components["responses"]["CatalogMaintenance"];
         };
     };
+    renameEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
+                entityType: components["parameters"]["EntityType"];
+                /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                entityPid: components["parameters"]["EntityPid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityRename"];
+            };
+        };
+        responses: {
+            /** @description The rename outcome. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityRenameResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description A member's keying field or a moved credit is locked and the request did not set `force` (code `field-locked`); the rename would split the entity rather than move it (code `conflict`: members landing on different keys, an archived member, a release group titled apart, a reference the batch does not cover); or `writeBack` was asked for on a read-only library (code `read-only`). The message names the case. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
     getEntityCuration: {
         parameters: {
             query?: never;
@@ -13810,6 +14070,47 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    detachItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DetachRequest"];
+            };
+        };
+        responses: {
+            /** @description The detach outcome. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetachResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `writeBack` was asked for on a library that is read-only (code `read-only`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };

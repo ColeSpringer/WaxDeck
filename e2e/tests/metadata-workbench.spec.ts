@@ -109,7 +109,7 @@ async function importOwnAlbum(
   return { albumPid, trackPids };
 }
 
-test('the workbench edits a member, bulk-writes the pair, and follows a regroup', async ({ app, page }) => {
+test('the workbench edits a member, bulk-writes the pair, and renames the release in place', async ({ app, page }) => {
   test.setTimeout(J.journey);
   const stamp = Date.now().toString(36);
   const { albumPid, trackPids } = await importOwnAlbum(app, stamp);
@@ -209,9 +209,10 @@ test('the workbench edits a member, bulk-writes the pair, and follows a regroup'
   // from the member's editor.
   await clickThrough(app.metadata.albumRow(), app.metadata.albumEditor());
 
-  // Rename the release. The rewrite goes to the member tracks, which
-  // regroups them onto a fresh album pid - and the workbench follows.
-  const renamed = `Workbench Regroup ${stamp}`;
+  // Rename the release. The rewrite moves every member at once through
+  // the entity rename, so the album keeps its pid and the workbench
+  // stays where it is.
+  const renamed = `Workbench Rename ${stamp}`;
   await app.metadata.intoView(
     app.metadata.rewriteField('album'),
     app.metadata.pane(),
@@ -226,27 +227,28 @@ test('the workbench edits a member, bulk-writes the pair, and follows a regroup'
     gone: app.metadata.rewriteConfirm(),
   });
 
-  // The members landed on a new album, and the location moved with
-  // them rather than staying on the ghost of the old one.
-  let regrouped = '';
+  // The release took the new title without moving: the row survives a
+  // rename that covers every member, which is what keeps its artwork,
+  // pins and play history attached.
   await expect
     .poll(
       async () => {
-        const item = await app.api.tryGet('/items/{pid}', {
-          path: { pid: trackPids[0] },
+        const fresh = await app.api.tryGet('/albums/{pid}', {
+          path: { pid: albumPid },
         });
-        regrouped = item?.albumPid ?? '';
-        return regrouped !== '' && regrouped !== albumPid;
+        return fresh?.title ?? '';
       },
-      { timeout: T.fetch, message: 'the rewrite should regroup the release' },
+      { timeout: T.fetch, message: 'the rewrite should rename the release' },
     )
-    .toBe(true);
+    .toBe(renamed);
+  const member0 = await app.api.get('/items/{pid}', {
+    path: { pid: trackPids[0] },
+  });
+  expect(member0.albumPid, 'the members stayed on the album').toBe(albumPid);
   await expect
     .poll(() => app.nav.location(), {
       timeout: T.nav,
-      message: 'the workbench should follow the regrouped release',
+      message: 'the workbench should stay on the renamed release',
     })
-    .toContain(`/metadata/${regrouped}`);
-  const fresh = await app.api.get('/albums/{pid}', { path: { pid: regrouped } });
-  expect(fresh.title).toBe(renamed);
+    .toContain(`/metadata/${albumPid}`);
 });

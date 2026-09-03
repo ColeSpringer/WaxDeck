@@ -221,25 +221,54 @@ here waits on upstream.
   nothing on touch either way, because a `MouseRegion` reports no hover
   to a finger.
 
-- `[in-repo]` **Every injected enrichment provider is cover-only.**
-  Deezer, iTunes and Fanart.tv all advertise `enrich.CapCover` and
-  nothing else, and all three refuse anything but `TargetReleaseGroup`,
-  so the Service only ever asks them for an album cover. Two things
-  follow. **Their fields go unused**: a Deezer track carries an ISRC, a
-  BPM, a duration, a track position, an explicit flag and a release
-  date, and a Deezer album carries a label, genres and a UPC - and the
-  port already has the slots, `Candidate.Fields` (documented as
-  "reserved for injected providers") and `Candidate.Genres`. We fill
-  neither, so MusicBrainz is the only field source by omission rather
-  than by decision. **And the per-edition cover rung has no injected
-  producer**: with `MatchReleases` on, `enrich.go` asks for
-  `TargetRelease` art once an album is matched to a pressing, every
-  injected provider declines, and the Cover Art Archive takes it
-  uncontested - the source measured at 24-37s per lookup with no hit
-  when radio was leaning on it. Declining is what the port asks of a
-  provider that only knows groups, so the fix is not simply to answer:
-  it is to decide whether a Deezer or iTunes album is close enough to a
-  named edition to answer for it, and to say so.
+- `[in-repo]` **The per-edition cover rung has no injected producer.**
+  With `MatchReleases` on, `enrich.go` asks for `TargetRelease` art once
+  an album is matched to a pressing; every injected provider declines,
+  and the Cover Art Archive takes it uncontested - the source measured
+  at 24-37s per lookup with no hit when radio was leaning on it.
+  Declining is what the port asks of a provider that only knows groups,
+  so the fix is not simply to answer: it is to decide whether a Deezer
+  or iTunes album is close enough to a named edition to answer for it,
+  and to say so.
+
+  **Their fields go unused**, and an attempt at it was reverted with
+  three specific obstacles measured, so the next attempt starts from
+  them rather than from scratch. A Deezer album carries a label and
+  genres, an iTunes hit a primary genre and a release date, and the port
+  already has `Candidate.Fields` and `Candidate.Genres` to put them in.
+  What stopped it:
+
+  * **`year` cannot be filled per item.** It is in upstream's
+    `editKeyFields` and in `identity.AlbumKey`, so writing it on the one
+    track a curator opened re-keys that track alone: a twelve-track
+    heuristic album silently became eleven plus a fork, with the enrich
+    report saying only `fields:year: itunes`. Filling a release's year
+    means moving every member at once, which is the rename verb, not an
+    item-scoped fill.
+  * **`label` is a shared-entity write on a curate-gated path.** Every
+    other enrich commit is item-scoped. `EnrichItemFor` admits the
+    uploader who brought an item in, while `editEntity` is
+    administrators-only, so filling an album's label there let a
+    non-admin uploader who owns one track rewrite a shared album's
+    column - and the item's own lock map cannot even see that column's
+    lock, since `label` is an entity field and `st.locked` is built from
+    item provenance.
+  * **A Deezer genre costs a request per release group.** Genres live on
+    `/album/{id}`, not the search hit, and upstream's library-wide genre
+    pass stamps `Want: CapGenres` while reading only `cand.Genres` - so
+    advertising the bit fires a second paced request per matched group
+    whose label the engine discards. Advertising it on iTunes is free by
+    comparison, but the genre ladder returns at the first hit and the
+    provider list is `[deezer, itunes, discogs?]`, so it would demote an
+    operator's configured Discogs (genres *and* styles) below one coarse
+    album genre.
+
+  The shape that answers all three is the `CapFields` ask in
+  `docs/upstream-requests.md`: a bit the engine gates on, and an apply
+  pass that knows an entity-rung field from an item one. Also still out
+  of reach per-track - a Deezer track carries an ISRC, a BPM, a duration
+  and an explicit flag - which needs a recording-target request the port
+  has no capability for either.
 
   Not a gap: there is no track-level cover search, and there should not
   be. `CapCover` is defined as release-group cover-art bytes and a track
@@ -248,25 +277,27 @@ here waits on upstream.
   track because a station announces a song and nothing else, and it
   wants the album carrying it.
 
-- `[in-repo]` **The enrichment source set has never been designed as a
-  set.** It grew one provider at a time - Deezer, iTunes, Audnexus,
-  Fanart.tv behind a key, MusicBrainz and the Cover Art Archive through
-  matching - and what exists is a list, not an order. Nothing states
-  which source is authoritative for which field, what happens when two
-  disagree, or which one a self-hoster gets when they have no keys; the
-  confidence numbers (Deezer 0.7, and friends) were picked one at a time
-  and have never been compared against each other. Radio's artwork rung
-  now has an explicit chain with a stated order and a documented reason
-  for it (`CoverChain` in `server/internal/providers/coverart.go`,
-  Deezer first for speed, the archive behind it for coverage and
-  licensing); enrichment has no equivalent. Worth a pass that decides
-  the defaults, the fallbacks, and the per-field precedence, and that
-  revisits whether the set is the right one - iTunes in particular sits
+- `[in-repo]` **The enrichment source set has an order but no operator
+  control.** The per-field precedence is now stated and enforced
+  (`docs/curation-and-metadata.md`): MusicBrainz matching is
+  authoritative for identity and locks what it writes, every injected
+  provider fills only empty unlocked fields, and genres invert the order
+  deliberately without ever evicting a MusicBrainz genre. What is left
+  is the operator's half. The set grew one provider at a time - Deezer,
+  iTunes, Audnexus, Fanart.tv behind a key, MusicBrainz and the Cover
+  Art Archive through matching - and it is still a list rather than an
+  ordering anyone chose: the confidence numbers (Deezer 0.7, and
+  friends) were picked one at a time and have never been compared,
+  nothing says which one a self-hoster with no keys ends up on, and the
+  only control is one all-or-nothing toggle per subsystem. Radio's
+  artwork rung has the shape this wants (`CoverChain` in
+  `server/internal/providers/coverart.go`, Deezer first for speed, the
+  archive behind it for coverage and licensing). Worth a pass that lets
+  an operator order or disable sources individually, and that revisits
+  whether the set is the right one - iTunes in particular sits
   awkwardly, since its terms restrict artwork use to promoting store
   content and it shares a per-IP budget with the radio path if both
-  ever ask it. Also unanswered: whether an operator should be able to
-  order or disable sources individually rather than through one
-  all-or-nothing toggle per subsystem.
+  ever ask it.
 
 - `[in-repo]` **The radio artwork wake is broadcast, not addressed.**
   A cover landing marks the `radio` topic on every connection
@@ -748,6 +779,29 @@ here waits on upstream.
   what is missing is somewhere to say so. The fix shape is the sync
   sheet growing a matched arm - paste an export, pick the mode - which
   would answer all of it at once.
+
+- `[in-repo]` **Books have no series screen.** A series is now a real
+  entity with a pid, a listing (`GET /books/series`) and a merge, but
+  no location of its own: the book screen's series line still narrows
+  the hub to the author, which is where the rest of the series usually
+  is but not what it says. The listing exists to name a merge target,
+  not to browse. Upstream now has an entity page read for a series
+  (`EntityPage(read.EntitySeries)`, `BooksInSeries`), so a real series
+  dimension - a route, a bucket in the books hub, the books in
+  sequence - can follow whenever the books hub grows one.
+
+- `[in-repo]` **A track's tempo has no read surface.** `bpm` is editable,
+  rides `Item`, and reaches Subsonic, but nothing in this client draws
+  it: the only technical-facts row is the album screen's chip line,
+  which describes a release through its first track, and a per-track
+  tempo there would be a wrong answer dressed as a fact. So the one
+  place a tempo is visible is the metadata editor, which answers a
+  `ForbiddenPage` to anyone without curate rights - a listener cannot
+  see it at all. The fix wants a per-track facts surface (a track detail
+  sheet, or a facts block on the editor's read half) that this client
+  has never had; BPM is simply the first field to want one. Subsonic
+  clients read it today, which is what makes this a gap rather than a
+  blocker.
 
 ## Discovery and stats
 

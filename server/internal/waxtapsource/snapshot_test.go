@@ -64,6 +64,47 @@ func TestPlaylistSnapshotKeepsOrderAndFlagsUnavailable(t *testing.T) {
 	}
 }
 
+// TestPlaylistSnapshotLeavesThrottledEntriesUnknown is the same
+// sentinel under the other status: the metadata throttle says nothing
+// about the video, so the entry must not come back marked unavailable -
+// a mirror would drop it, permanently, on nothing.
+func TestPlaylistSnapshotLeavesThrottledEntriesUnknown(t *testing.T) {
+	f := &fakeTap{
+		playlist: waxtap.Playlist{
+			ID: "PL1", Title: "Road Tapes",
+			Entries: []waxtap.PlaylistEntry{
+				{VideoID: "vid-a", Title: "a", Index: 0},
+				{VideoID: "vid-b", Title: "b", Index: 1},
+				{VideoID: "vid-c", Title: "c", Index: 2},
+			},
+		},
+		infos:    map[string]*waxtap.Video{"vid-a": {ID: "vid-a", Title: "Track A"}},
+		infoErrs: map[string]error{"vid-b": throttleErr("vid-b")},
+	}
+	snap, err := snapshotProvider(f, 0).PlaylistSnapshot(context.Background(), "https://youtube.example/pl", syncsource.SnapshotOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Entries) != 3 {
+		t.Fatalf("entries = %d, want all three", len(snap.Entries))
+	}
+	b := snap.Entries[1]
+	if b.Unavailable || b.AvailabilityKnown {
+		t.Fatalf("throttled entry reported an availability verdict: %+v", b)
+	}
+	if b.Title != "b" {
+		t.Fatalf("throttled entry lost its listing title: %+v", b)
+	}
+	// The rest of the budget goes unspent: the next probe would be
+	// refused the same way, and its entry stays unknown too.
+	if len(f.infoCalls) != 2 {
+		t.Errorf("Info calls = %v, want the pass to stop at the throttle", f.infoCalls)
+	}
+	if c := snap.Entries[2]; c.AvailabilityKnown || c.Unavailable {
+		t.Errorf("an unprobed entry claimed an availability verdict: %+v", c)
+	}
+}
+
 func TestPlaylistSnapshotCoverIsFirstAvailableThumbnail(t *testing.T) {
 	f := &fakeTap{
 		playlist: waxtap.Playlist{

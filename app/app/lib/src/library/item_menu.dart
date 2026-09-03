@@ -9,12 +9,14 @@ import '../discovery/discovery_actions.dart';
 import '../home/pin_action.dart';
 import '../home/pinned_controller.dart';
 import '../l10n/l10n.dart';
+import '../music/album_detail.dart';
 import '../music/music_controllers.dart';
 import '../settings/settings_registry.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/add_to_library.dart';
+import 'item_detach.dart';
 
 /// Whether this session gets an editor door on item rows: what the
 /// session already knows - the admin role, or the upload right while a
@@ -191,6 +193,29 @@ Future<void> showItemMenuSheet(
                         title: title,
                       )),
                     );
+                  },
+                ),
+              // The escape hatch for a track a release id put on the
+              // wrong album: it leaves for the album its own tags
+              // imply. Behind the editor gate, because it is a catalog
+              // write - and behind the album's own mbid, because the
+              // server refuses a chain that carries none, which is
+              // every album in a library that has never run matching.
+              // Offering it there would be a confirmation promising to
+              // rewrite tags, answered by a refusal.
+              if (music &&
+                  albumPid != null &&
+                  mayOfferItemEdit(sheetRef) &&
+                  (sheetRef.watch(albumDetailProvider(albumPid)).value?.mbid ??
+                          '')
+                      .isNotEmpty)
+                WaxOptionRow(
+                  title: l10n.libraryMenuDetach,
+                  glyph: WaxIcons.detach,
+                  semanticsId: SemanticsIds.itemMenuDetach,
+                  onTap: () {
+                    close();
+                    unawaited(confirmDetachItem(rootContext, pid: pid));
                   },
                 ),
               if (music && albumPid != null)

@@ -28,6 +28,7 @@ part 'item.g.dart';
 /// * [artUrl] - Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
 /// * [genres] - Display genres.
 /// * [year] - Release / publication year.
+/// * [bpm] - Stated tempo, whole. Absent or `0` for an item carrying none, which is most of them; nothing measures it, so this is the tag's number and not an analysis result. 
 /// * [codec] - Source audio codec.
 /// * [container] - Source file container.
 /// * [sampleRate] - Source sample rate in Hz.
@@ -66,6 +67,10 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   /// Source sample rate in Hz.
   @BuiltValueField(wireName: r'sampleRate')
   int? get sampleRate;
+
+  /// Stated tempo, whole. Absent or `0` for an item carrying none, which is most of them; nothing measures it, so this is the tag's number and not an analysis result. 
+  @BuiltValueField(wireName: r'bpm')
+  int? get bpm;
 
   Item._();
 
@@ -215,6 +220,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
       object.durationMs,
       specifiedType: const FullType(int),
     );
+    if (object.bpm != null) {
+      yield r'bpm';
+      yield serializers.serialize(
+        object.bpm,
+        specifiedType: const FullType(int),
+      );
+    }
   }
 
   @override
@@ -370,6 +382,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
             specifiedType: const FullType(int),
           ) as int;
           result.durationMs = valueDes;
+          break;
+        case r'bpm':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.bpm = valueDes;
           break;
         default:
           unhandled.add(key);

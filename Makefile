@@ -280,9 +280,11 @@ deploy/.env:
 	@umask 077; \
 	 key=$$(openssl rand -hex 24); \
 	 worker=$$(openssl rand -hex 24); \
+	 seal=$$(openssl rand -hex 24); \
 	 sed -e "s|^WAXFLOW_API_KEYS=.*|WAXFLOW_API_KEYS=$$key|" \
 	     -e "s|^WAXDECK_FLOW_API_KEY=.*|WAXDECK_FLOW_API_KEY=$$key|" \
 	     -e "s|^WAXDECK_WORKER_TOKENS=.*|WAXDECK_WORKER_TOKENS=$$worker|" \
+	     -e "s|^WAXDECK_SEAL_API_KEY=.*|WAXDECK_SEAL_API_KEY=$$seal|" \
 	     deploy/.env.example > deploy/.env
 	@echo "wrote deploy/.env with generated keys; set WAXDECK_LIBRARY to your music path"
 

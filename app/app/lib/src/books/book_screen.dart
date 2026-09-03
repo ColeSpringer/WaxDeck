@@ -25,6 +25,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../tools/tasks_screen.dart' show toolTasksProvider;
 import 'books_controller.dart';
+import 'series_merge.dart';
 
 /// What the book's overflow can do.
 enum _BookAction {
@@ -35,6 +36,7 @@ enum _BookAction {
   editMetadata,
   merge,
   split,
+  mergeSeries,
 }
 
 /// One audiobook: its cover, who made it, where the listener is in it,
@@ -550,6 +552,16 @@ class _BookOverflow extends ConsumerWidget {
               label: l10n.bookSplit,
               glyph: WaxIcons.sort,
             ),
+          // A series is a name the books' tags carry rather than a
+          // curated entity, so a split spelling never reaches the
+          // duplicates dashboard. It is found by eye, here.
+          if (book.seriesPid != null)
+            WaxMenuItem<_BookAction>(
+              value: _BookAction.mergeSeries,
+              label: l10n.bookSeriesMerge,
+              glyph: WaxIcons.detach,
+              semanticsId: SemanticsIds.seriesMerge,
+            ),
         ],
       ],
       onSelected: (action) => _run(context, ref, action),
@@ -592,6 +604,8 @@ class _BookOverflow extends ConsumerWidget {
             () => ref.read(repositoryProvider).splitBook(book.pid),
           ),
         );
+      case _BookAction.mergeSeries:
+        unawaited(showSeriesMergeSheet(context, book: book));
     }
   }
 

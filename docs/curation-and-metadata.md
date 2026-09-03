@@ -452,6 +452,17 @@ services implementing the contract in `docs/custom-provider-api/`. The
 editor's per-item fetch uses the same providers for one item at a
 time.
 
+The precedence between them is one rule, and it is what makes the
+key-free providers safe to run beside the identity pass. MusicBrainz
+matching is authoritative for identity fields and locks what it writes,
+so nothing below it can move those values. Every injected provider
+writes fill-when-empty and lock-respecting: it fills a field nothing has
+claimed, and never replaces a value a person, a tag, or the match put
+there. Genres are the one place the order is inverted on purpose - the
+injected providers are asked first, because they answer where
+MusicBrainz has no genre at all - and even there a MusicBrainz genre is
+never evicted.
+
 Artist portraits come from two passes, split by whether the artist has
 a MusicBrainz id. An artist matching one rides the catalog's own
 enrichment pass, which asks fanart.tv and Deezer for artist art

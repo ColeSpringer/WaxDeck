@@ -34,11 +34,23 @@ note.
   the tempo is per track and no capability bit asks for one. Wanted: a
   `CapFields` bit and an apply pass for `Candidate.Fields` under the
   same fill-when-empty, lock-respecting, provenance-stamped rules the
-  other capabilities get. Shipped workaround: WaxDeck reads
-  `Candidate.Fields` itself in its per-item propose/commit path, which
-  is how an Audnexus book gets its publisher and year, so a field
-  reaches an item somebody asked about and nowhere else. BPM arrives
-  from tags instead.
+  other capabilities get, and one that distinguishes an entity-rung
+  field from an item one. That last part is not a nicety: WaxDeck tried
+  to fill a release's year and label from Deezer and iTunes through its
+  own per-item path and reverted it, because `year` is in
+  `editKeyFields` (writing it on one member forks that member off its
+  album) and `label` is an entity column whose lock an item's
+  provenance map cannot see. Gating also matters: the library-wide genre
+  pass stamps `Want: CapGenres` and reads only `cand.Genres`, so a
+  provider that answers facts under that bit pays an extra request per
+  release group for a value the engine discards. Shipped workaround:
+  WaxDeck reads `Candidate.Fields` itself in its per-item
+  propose/commit path, which is how an Audnexus book gets its publisher
+  and year - an item-scoped field on an item somebody asked about, and
+  nowhere else. A per-track value (Deezer knows a track's BPM, ISRC and
+  explicit flag) is out of reach entirely: it needs a recording-target
+  request, and no capability bit asks for one. BPM arrives from tags
+  instead.
 
 - **`ArtRoleInfo.locked` cannot say which pin set it.** The field is the
   effective lock on a slot: the entity's whole-artwork pin, which gates
@@ -68,30 +80,30 @@ note.
   rotation behind it. Wanted: a bounded enrich option on
   `EnumerateOptions` (enrich the first n entries) so a caller's budget
   runs inside the loop that already knows how to rotate, without
-  exporting identity rotation itself. Shipped workaround: none yet.
-  WaxDeck's own enrichment loop takes the throttle verdict at face
-  value and marks a perfectly good video unavailable for good; the fix
-  in flight is to mirror the unexported throttle shape (a
-  `*waxerr.PlayabilityError` with status `UNPLAYABLE` wrapping
-  `ErrVideoUnavailable`), keep such an entry unenriched, and stop
-  spending the run's budget - which recovers the entry but still costs
-  the rotation this ask would give it.
+  exporting identity rotation itself. Shipped workaround: WaxDeck
+  mirrors the unexported throttle shape (a `*waxerr.PlayabilityError`
+  with status `UNPLAYABLE` wrapping `ErrVideoUnavailable`), keeps such
+  an entry unenriched rather than unavailable, and stops spending the
+  run's budget. That recovers the entries, at two costs this ask would
+  remove: the predicate is a copy of an unexported one, which drifts
+  silently the day the shape changes, and a throttled run enriches
+  nothing at all where a rotation would have enriched everything.
 
 ## WaxSeal
 
 - **A keyed daemon fails its own image healthcheck.** `/ping` is
-  tenant-gated, and `waxseal ping` has no key flag, so the image's own
-  healthcheck (`waxseal ping --addr 127.0.0.1:4416 --strict`) is
-  refused the moment the daemon is started with `--tenant-keys`. The
-  choice a compose file is left with is a keyless daemon that anyone on
-  the network can drive, or a keyed one that reports unhealthy forever.
-  Wanted: either a key flag on `ping`, or a loopback exemption on the
-  `/ping` route so a local liveness probe needs no tenant. Shipped
-  workaround: none yet. WaxDeck's compose runs the sidecar keyless
-  today (it sets `WAXSEAL_API_KEYS`, which WaxSeal has never read), so
-  the healthcheck passes because nothing is gated; keying the daemon
-  means disabling the container healthcheck with a comment naming this
-  ask, which is the fix in flight.
+  tenant-gated and the image's baked-in healthcheck
+  (`waxseal ping --addr 127.0.0.1:4416 --strict`) sends no key, so the
+  daemon answers its own probe 401 the moment it is started with
+  `--tenant-keys`. Every operator who keys the sidecar has to override
+  the healthcheck to fix it. Wanted: the image's own probe carrying a
+  key - an entrypoint that passes the daemon's single tenant key, an
+  environment variable the healthcheck reads, or a loopback exemption
+  on `/ping` so a local liveness probe needs no tenant at all. Shipped
+  workaround: WaxDeck's compose replaces the healthcheck with the same
+  probe plus `--key ${WAXDECK_SEAL_API_KEY}`, which works because the
+  `ping` subcommand does take a key; what is missing is the image
+  doing it without being told.
 
 ## WaxLabel
 

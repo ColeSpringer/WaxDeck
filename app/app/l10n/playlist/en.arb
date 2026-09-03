@@ -604,6 +604,10 @@
   "@playlistRuleFieldArtist": {
     "description": "Smart-rule field: an item's artist, author, or show."
   },
+  "playlistRuleFieldBpm": "BPM",
+  "@playlistRuleFieldBpm": {
+    "description": "Smart-playlist rule field: a track's stated tempo."
+  },
   "playlistRuleFieldCodec": "Codec",
   "@playlistRuleFieldCodec": {
     "description": "Smart-rule field: the audio codec a file is encoded with."

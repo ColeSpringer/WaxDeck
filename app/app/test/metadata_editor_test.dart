@@ -1181,6 +1181,48 @@ void main() {
     expect(repo.tagsByPid['tr-1'], containsPair('ENERGY', ['high']));
   });
 
+  testWidgets('a reserved key is refused at the tag field', (tester) async {
+    final repo = _repo();
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagKey),
+      'bpm',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagValues),
+      '128',
+    );
+    final add = find.bySemanticsIdentifier(SemanticsIds.tagAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+
+    // Refused where it was typed, with the reason, rather than staged
+    // and taking the whole draft's save down with it. Case-folded: the
+    // server states the canonical key.
+    expect(
+      find.text('BPM is stored as its own field, not as a custom tag.'),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.tagRemove('BPM')),
+      findsNothing,
+    );
+
+    // Typing again clears the refusal, so the field is not stuck red.
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagKey),
+      'ENERGY',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('BPM is stored as its own field, not as a custom tag.'),
+      findsNothing,
+    );
+  });
+
   testWidgets('a staged tag removal can be taken back', (tester) async {
     final repo = _repo();
     repo.tagsByPid['tr-1'] = {

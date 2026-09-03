@@ -17,6 +17,7 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/source"
 	waxtap "github.com/colespringer/waxtap/v3"
+	"github.com/colespringer/waxtap/v3/waxerr"
 )
 
 // enrichLimit caps the per-video metadata (Info) calls made during one
@@ -204,6 +205,7 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 
 	feed := &model.Feed{Title: pl.Title, Author: pl.Author}
 	infoCalls := 0
+	throttled := false
 	for i := range pl.Entries {
 		entry := pl.Entries[i]
 		ep := model.FeedEpisode{
@@ -213,10 +215,23 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 			EnclosureURL:  watchURL(entry.VideoID),
 			EnclosureType: "audio/mp4",
 		}
-		if infoCalls < enrichLimit {
+		if infoCalls < enrichLimit && !throttled {
 			infoCalls++
 			v, ierr := p.tap.Info(ctx, entry.VideoID, waxtap.InfoBasic, waxtap.WithFullMetadata())
 			if ierr != nil {
+				if isMetadataThrottle(ierr) {
+					// Not a verdict about this video: YouTube is refusing
+					// metadata to this identity. The entry is cataloged
+					// unenriched - it keeps the listing's title and duration,
+					// which is what the basic page already gave - and the rest
+					// of the budget is left unspent, because every remaining
+					// call would be refused the same way.
+					throttled = true
+					p.log.Info("youtube metadata throttled; enriching no further this pass",
+						"video", entry.VideoID, "enriched", infoCalls-1, "err", ierr)
+					feed.Episodes = append(feed.Episodes, ep)
+					continue
+				}
 				if isSkipClass(ierr) {
 					// The video exists but cannot be delivered (members-only,
 					// geo-blocked, removed, ...). Cataloging it would create an
@@ -239,6 +254,18 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 		// The newest listed id, even if enrichment dropped that entry: the cursor
 		// tracks what was seen, not what was cataloged.
 		etag = pl.Entries[0].VideoID
+	}
+	if throttled {
+		// A throttled pass is the one case where advancing the cursor would
+		// make the gap permanent. The skip case above drops entries that are
+		// genuinely gone, so moving past them loses nothing; a throttled entry
+		// is cataloged but bare - listing title and duration only - and the
+		// next run's Stop would list nothing at or below this cursor, leaving
+		// those episodes without a description, a date or an image for the life
+		// of the subscription. Holding the cursor where it was re-lists them
+		// once the throttle lifts. It costs a re-walk of the same page, which
+		// is what the throttle already forced.
+		etag = lastSeen
 	}
 	return &source.Enumeration{
 		Feed:        feed,
@@ -287,4 +314,27 @@ func isSkipClass(err error) bool {
 		}
 	}
 	return false
+}
+
+// isMetadataThrottle reports whether an Info failure is YouTube's
+// metadata throttle rather than a verdict about the video.
+//
+// The two are the same sentinel - ErrVideoUnavailable - and only the
+// playability status separates them: the throttle answers UNPLAYABLE
+// while a deleted, private, or nonexistent video answers ERROR. This
+// mirrors WaxTap's own unexported throttleShaped, which its enumeration
+// uses to decide a rotation; nothing exports the predicate, and getting
+// it wrong here is the bug this exists for - a throttled channel had a
+// third of its catalogue marked permanently unavailable.
+//
+// ErrTemporarilyUnavailable is checked too even though no Info call
+// mints it today: it is minted only inside WaxTap's own enrichment, so
+// it arrives the day this package uses Enrich instead.
+func isMetadataThrottle(err error) bool {
+	if errors.Is(err, waxtap.ErrTemporarilyUnavailable) {
+		return true
+	}
+	var pe *waxerr.PlayabilityError
+	return errors.As(err, &pe) && pe.Status == "UNPLAYABLE" &&
+		errors.Is(err, waxtap.ErrVideoUnavailable)
 }

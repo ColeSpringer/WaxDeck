@@ -35,6 +35,8 @@ import 'package:waxdeck_api_gen/src/model/book_detail.dart';
 import 'package:waxdeck_api_gen/src/model/book_merge_request.dart';
 import 'package:waxdeck_api_gen/src/model/book_part.dart';
 import 'package:waxdeck_api_gen/src/model/book_resume.dart';
+import 'package:waxdeck_api_gen/src/model/book_series.dart';
+import 'package:waxdeck_api_gen/src/model/book_series_page.dart';
 import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:waxdeck_api_gen/src/model/book_split_request.dart';
 import 'package:waxdeck_api_gen/src/model/bookmark.dart';
@@ -63,6 +65,8 @@ import 'package:waxdeck_api_gen/src/model/custom_tag.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_request.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_result.dart';
 import 'package:waxdeck_api_gen/src/model/delete_plan_entry.dart';
+import 'package:waxdeck_api_gen/src/model/detach_request.dart';
+import 'package:waxdeck_api_gen/src/model/detach_result.dart';
 import 'package:waxdeck_api_gen/src/model/device_session.dart';
 import 'package:waxdeck_api_gen/src/model/diagnostic_count.dart';
 import 'package:waxdeck_api_gen/src/model/diagnostic_summary.dart';
@@ -96,6 +100,8 @@ import 'package:waxdeck_api_gen/src/model/entity_curated_field.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curation.dart';
 import 'package:waxdeck_api_gen/src/model/entity_edit.dart';
 import 'package:waxdeck_api_gen/src/model/entity_play_state.dart';
+import 'package:waxdeck_api_gen/src/model/entity_rename.dart';
+import 'package:waxdeck_api_gen/src/model/entity_rename_result.dart';
 import 'package:waxdeck_api_gen/src/model/entity_type_fields.dart';
 import 'package:waxdeck_api_gen/src/model/episode.dart';
 import 'package:waxdeck_api_gen/src/model/episode_filter.dart';
@@ -404,6 +410,8 @@ part 'serializers.g.dart';
   BookMergeRequest,
   BookPart,
   BookResume,
+  BookSeries,
+  BookSeriesPage,
   BookSettings,
   BookSplitRequest,
   Bookmark,
@@ -432,6 +440,8 @@ part 'serializers.g.dart';
   DeleteItemsRequest,
   DeleteItemsResult,
   DeletePlanEntry,
+  DetachRequest,
+  DetachResult,
   DeviceSession,
   DiagnosticCount,
   DiagnosticSummary,
@@ -465,6 +475,8 @@ part 'serializers.g.dart';
   EntityCuration,
   EntityEdit,
   EntityPlayState,
+  EntityRename,
+  EntityRenameResult,
   EntityTypeFields,
   Episode,
   EpisodeFilter,

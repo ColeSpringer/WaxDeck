@@ -16,7 +16,7 @@ part 'metadata_commit.g.dart';
 ///
 /// Properties:
 /// * [fields] - Field name to new value; an empty string clears the field. Names come from the kind's vocabulary, as for `editItemMetadata`. 
-/// * [credits] - Replacement people per role, applied in the order given. 
+/// * [credits] - Replacement people per role. They apply as one atomic batch, which is what lets an artist every listed role moves be renamed in place rather than left behind; a role named twice answers `invalid-request`. Because the batch is atomic, a refusal in any role leaves them all uncommitted: the first `credit` part carries the refusal and the rest read `skipped`, and the message names the role that refused. 
 /// * [lyrics] 
 /// * [clearLyrics] - Remove the stored lyrics. Mutually exclusive with `lyrics`; sending both answers `invalid-request`. 
 /// * [chapters] - A replacement chapter list for a book: ordered, non-overlapping, on the book timeline. An empty array restores the embedded chapters, as for `setBookChapters`. 
@@ -32,7 +32,7 @@ abstract class MetadataCommit implements Built<MetadataCommit, MetadataCommitBui
   @BuiltValueField(wireName: r'fields')
   BuiltMap<String, String>? get fields;
 
-  /// Replacement people per role, applied in the order given. 
+  /// Replacement people per role. They apply as one atomic batch, which is what lets an artist every listed role moves be renamed in place rather than left behind; a role named twice answers `invalid-request`. Because the batch is atomic, a refusal in any role leaves them all uncommitted: the first `credit` part carries the refusal and the rest read `skipped`, and the message names the role that refused. 
   @BuiltValueField(wireName: r'credits')
   BuiltList<CommitCredits>? get credits;
 

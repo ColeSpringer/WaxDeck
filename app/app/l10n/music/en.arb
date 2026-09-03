@@ -135,46 +135,38 @@
       }
     }
   },
-  "musicAlbumRewriteConfirmBody": "The edited fields are rewritten on every track. Because every member moves at once, the release keeps its entry - artwork, pins and play history with it - unless the new name already belongs to another release, in which case the two merge. Locks on those fields are overridden, then set again by the rewrite.",
+  "musicAlbumRewriteConfirmBody": "The edited fields are rewritten on every track of this release at once, so it keeps its entry - artwork, pins and play history with it. If the new name already belongs to another release, the two merge and this page follows. Locks on those fields are overridden, then set again by the rewrite.",
   "@musicAlbumRewriteConfirmBody": {
-    "description": "Body of that confirmation: the regroup and the lock behavior, both pinned by the server's own semantics."
+    "description": "Body of that confirmation: the in-place rename, the merge on a taken name, and the lock behavior, all pinned by the server's own semantics."
   },
-  "musicAlbumRewriteConfirmTitle": "Regroup this release?",
+  "musicAlbumRewriteConfirmTitle": "Rewrite this release?",
   "@musicAlbumRewriteConfirmTitle": {
     "description": "Title of the confirmation the rewrite asks before writing."
   },
-  "musicAlbumRewriteHelp": "These live on the tracks rather than the release. Saving rewrites them on every member, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.",
+  "musicAlbumRewriteHelp": "These live on the tracks rather than the release. Saving rewrites them on every member at once, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.",
   "@musicAlbumRewriteHelp": {
-    "description": "Blurb under the rewrite heading, stating the regroup up front: the album pid changes, it is not renamed in place."
+    "description": "Blurb under the rewrite heading, stating up front what the rename does: the release keeps its pid unless the new name is taken."
   },
-  "musicAlbumRewriteIncomplete": "Could not load every track on this release, so nothing was rewritten.",
-  "@musicAlbumRewriteIncomplete": {
-    "description": "Refusal when the member list would not finish loading: rewriting only the loaded part would regroup those tracks and strand the rest, splitting the release."
-  },
-  "musicAlbumRewriteMoved": "The release regrouped onto a new entry.",
-  "@musicAlbumRewriteMoved": {
-    "description": "Message after a rewrite, shown as the workbench moves to the album the tracks landed on."
+  "musicAlbumRewriteMerged": "The release merged into the one that already had this name.",
+  "@musicAlbumRewriteMerged": {
+    "description": "Message after a rewrite whose new name was already another release's, shown as the workbench moves to the survivor."
   },
   "musicAlbumRewriteOverline": "On the tracks",
   "@musicAlbumRewriteOverline": {
     "description": "Line above that heading: these fields live on the members, not the release entity."
   },
-  "musicAlbumRewriteTitle": "Album, artist, and year",
-  "@musicAlbumRewriteTitle": {
-    "description": "Heading over the workbench section that rewrites the release-keying fields on every member track."
-  },
-  "musicAlbumRewriteTooLarge": "One rewrite takes at most 1,000 tracks; this release has {count}.",
-  "@musicAlbumRewriteTooLarge": {
-    "description": "Refusal when the release holds more members than the bulk endpoint's batch cap.",
+  "musicAlbumRewriteRenamed": "{count, plural, =1{Rewrote 1 track} other{Rewrote {count} tracks}}",
+  "@musicAlbumRewriteRenamed": {
+    "description": "Message after a rewrite that kept the release: how many member tracks took the new values.",
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
   },
-  "musicAlbumRewriteWriteBackHelp": "Also rewrite these tags inside each track's file",
-  "@musicAlbumRewriteWriteBackHelp": {
-    "description": "Line under the rewrite section's write-tags switch."
+  "musicAlbumRewriteTitle": "Album, artist, and year",
+  "@musicAlbumRewriteTitle": {
+    "description": "Heading over the workbench section that rewrites the release-keying fields on every member track."
   },
   "musicAlbumTitle": "Album",
   "@musicAlbumTitle": {
@@ -309,6 +301,51 @@
   "@musicEmptyTitle": {
     "description": "Empty state of the music library, on the hub and on the tracks listing."
   },
+  "musicEntityRenameApply": "Rename",
+  "@musicEntityRenameApply": {
+    "description": "Button applying the staged rename to every member."
+  },
+  "musicEntityRenameArtistHelp": "The artist's name lives on the tracks that credit them. Type the new name in full: renaming rewrites it on every one at once, so the artist keeps this page - its picture, pins and play history with it; a name another artist already has merges the two, and this page follows.",
+  "@musicEntityRenameArtistHelp": {
+    "description": "Blurb under the rename heading on an artist: the rename keeps the entity unless the new name is taken."
+  },
+  "musicEntityRenameConfirmBody": "Every member is rewritten at once, so the entry survives with everything attached to it. If the new name is already taken, the two merge and this page follows. Locks on these fields are overridden, then set again by the rename.",
+  "@musicEntityRenameConfirmBody": {
+    "description": "Body of that confirmation: the in-place rename, the merge on a taken name, and the lock behavior."
+  },
+  "musicEntityRenameConfirmTitle": "Rename this entry?",
+  "@musicEntityRenameConfirmTitle": {
+    "description": "Title of the confirmation the rename asks before writing."
+  },
+  "musicEntityRenameDone": "{count, plural, =1{Renamed across 1 track} other{Renamed across {count} tracks}}",
+  "@musicEntityRenameDone": {
+    "description": "Message after a rename that kept the entity: how many member tracks took the new values.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicEntityRenameGroupHelp": "These live on the tracks rather than the release group. Renaming rewrites them on every member at once, so the group keeps this page; a name another group already has merges the two, and this page follows.",
+  "@musicEntityRenameGroupHelp": {
+    "description": "The same blurb for a release group, whose keying fields are the album title and its artist."
+  },
+  "musicEntityRenameMerged": "Merged into the entry that already had this name.",
+  "@musicEntityRenameMerged": {
+    "description": "Message after a rename whose new name was already another entity's, shown as the screen moves to the survivor."
+  },
+  "musicEntityRenameOverline": "On the members",
+  "@musicEntityRenameOverline": {
+    "description": "Line above that heading: these values live on the member tracks, not the entity."
+  },
+  "musicEntityRenameTitle": "Name",
+  "@musicEntityRenameTitle": {
+    "description": "Heading over the entity editor's rename section."
+  },
+  "musicEntityRenameWriteBackHelp": "Also rewrite these tags inside each member's file",
+  "@musicEntityRenameWriteBackHelp": {
+    "description": "Line under the rename section's write-tags switch."
+  },
   "musicFieldArtistMbid": "MusicBrainz artist ID",
   "@musicFieldArtistMbid": {
     "description": "The artist's identifier at MusicBrainz, on the artist editor."
@@ -316,6 +353,10 @@
   "musicFieldArtistMbidHelp": "The identifier this artist matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.",
   "@musicFieldArtistMbidHelp": {
     "description": "Help under the MusicBrainz artist ID field."
+  },
+  "musicFieldArtistName": "Artist name",
+  "@musicFieldArtistName": {
+    "description": "Label of the artist editor's rename input."
   },
   "musicFieldArtistSortHelp": "How this artist files in an A-to-Z list. Empty files them under their name.",
   "@musicFieldArtistSortHelp": {

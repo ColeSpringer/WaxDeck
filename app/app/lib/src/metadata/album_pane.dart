@@ -15,7 +15,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'artwork_manager.dart';
-import 'metadata_form.dart';
+import 'rename_section.dart';
 
 /// The fields whose values key a release. Editing any of them moves the
 /// members to a new release identity, and where they land depends on
@@ -100,12 +100,10 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
   var _force = false;
   var _busy = false;
 
-  /// The rewrite section's own staging, on the same seed rule. Its
-  /// write-back rides a switch of its own: embedding a year into twelve
-  /// files is a different decision than embedding a barcode.
-  final _rewriteControllers = <String, TextEditingController>{};
-  final _rewriteSeeded = <String, String>{};
-  var _rewriteWriteBack = false;
+  /// Whether the rename section below holds anything unsaved. It owns
+  /// its own inputs; this is the half of the pane's dirtiness it
+  /// reports up.
+  var _rewriteDirty = false;
 
   /// Every editable entity field, as the two things the form's
   /// bookkeeping needs: the name the endpoint takes it under, and what
@@ -125,9 +123,6 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
     for (final controller in _controllers.values) {
       controller.dispose();
     }
-    for (final controller in _rewriteControllers.values) {
-      controller.dispose();
-    }
     super.dispose();
   }
 
@@ -140,8 +135,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
     if (onDirty == null) return;
     final album = ref.read(albumDetailProvider(widget.pid)).value;
     final dirty =
-        (album != null && _changed(album).isNotEmpty) ||
-        _rewriteStaged().isNotEmpty;
+        (album != null && _changed(album).isNotEmpty) || _rewriteDirty;
     if (dirty != _reportedDirty) {
       _reportedDirty = dirty;
       onDirty(dirty);
@@ -151,17 +145,6 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
   TextEditingController _controllerFor(String field, String initial) =>
       _controllers.putIfAbsent(field, () {
         _seeded[field] = initial;
-        final controller = TextEditingController(text: initial);
-        controller.addListener(() {
-          setState(() {});
-          _reportDirty();
-        });
-        return controller;
-      });
-
-  TextEditingController _rewriteControllerFor(String field, String initial) =>
-      _rewriteControllers.putIfAbsent(field, () {
-        _rewriteSeeded[field] = initial;
         final controller = TextEditingController(text: initial);
         controller.addListener(() {
           setState(() {});
@@ -205,16 +188,6 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
       if (controller.text != stored) changed[field.wire] = controller.text;
     }
     return changed;
-  }
-
-  Map<String, String> _rewriteStaged() {
-    final staged = <String, String>{};
-    for (final entry in _rewriteControllers.entries) {
-      if (entry.value.text != _rewriteSeeded[entry.key]) {
-        staged[entry.key] = entry.value.text;
-      }
-    }
-    return staged;
   }
 
   @override
@@ -405,7 +378,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
     final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
-      await ref
+      final result = await ref
           .read(repositoryProvider)
           .editEntity(
             'album',
@@ -415,6 +388,11 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
             lock: _lock,
             force: _force,
           );
+      // The save may land while this pane is being left - a merge below
+      // replaces the route, and the workbench can be popped under it.
+      // Reading through a disposed ref throws past the catch, which
+      // only knows the server's refusals.
+      if (!mounted) return;
       // What was sent stops counting as typed-in, which is what lets the
       // refetch below adopt it. Load-bearing where the server
       // normalizes: type `0-36000-29145-2` and the stored value comes
@@ -427,6 +405,15 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
         _seeded[field] = changed[field]!;
       }
       _reportDirty();
+      // An mbid clear is the one entity edit that can re-key the album
+      // onto a heuristic twin, which deletes this pid: refetching it
+      // would put an error state under a "Saved" toast. The host moves
+      // the workbench instead, exactly as a merging rename does.
+      if (result.mergedInto case final survivor?) {
+        messenger.show(l10n.musicAlbumRewriteMerged);
+        widget.onRegrouped(survivor);
+        return;
+      }
       ref
         ..invalidate(albumDetailProvider(widget.pid))
         ..invalidate(albumCurationProvider(widget.pid));
@@ -445,184 +432,54 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
     }
   }
 
-  /// The three fields the album bug asked for and the entity endpoint
-  /// cannot take: they live on the member tracks, so changing them is a
-  /// bulk edit over the members - and a regroup, which the copy says
-  /// before the confirm repeats it.
+  /// The three fields the album bug asked for and the entity edit
+  /// endpoint cannot take: they live on the member tracks. The rename
+  /// verb moves them on every member in one transaction, so the release
+  /// keeps its row - a name another release owns is the one case that
+  /// moves the page, and the confirm says so before it writes.
   Widget _rewriteSection() {
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
-    final seed = ref.watch(_rewriteSeedProvider(widget.pid));
-    final members = albumOrder(
-      ref
-              .watch(
-                musicItemsProvider((
-                  dimension: MusicDimension.albums,
-                  segment: widget.pid,
-                )),
-              )
-              .value
-              ?.items ??
-          const <ItemSummary>[],
-    );
-    final staged = _rewriteStaged();
-    return Semantics(
-      container: true,
-      explicitChildNodes: true,
-      identifier: SemanticsIds.albumRewrite,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          SectionHeader(
-            title: l10n.musicAlbumRewriteTitle,
-            overline: l10n.musicAlbumRewriteOverline,
-          ),
-          Text(
-            l10n.musicAlbumRewriteHelp,
-            style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
-          ),
-          const SizedBox(height: WaxSpace.s12),
-          // Rows only from a resolved seed. Building them from an error
-          // with empty seeds would create the controllers empty for
-          // good - they seed on first sight - and a named release would
-          // read blank here until the pane was remounted.
-          ...switch (seed) {
-            AsyncValue(value: final seeds?) => <Widget>[
-              for (final field in albumRewriteFields) ...<Widget>[
-                WaxTextField(
-                  label: metadataFieldLabel(l10n, field),
-                  controller: _rewriteControllerFor(field, seeds[field] ?? ''),
-                  digitsOnly: field == 'year',
-                  semanticsId: SemanticsIds.albumRewriteField(field),
-                ),
-                const SizedBox(height: WaxSpace.s12),
-              ],
-              WaxSettingRow(
-                title: l10n.metadataWriteBackTitle,
-                help: l10n.musicAlbumRewriteWriteBackHelp,
-                control: WaxSwitch(
-                  label: l10n.metadataWriteBackTitle,
-                  value: _rewriteWriteBack,
-                  semanticsId: SemanticsIds.albumRewriteWriteBack,
-                  onChanged: (v) => setState(() => _rewriteWriteBack = v),
-                ),
-              ),
-              const SizedBox(height: WaxSpace.s8),
-              WaxButton(
-                label: l10n.musicAlbumRewriteApply(members.length),
-                icon: WaxIcons.edit,
-                kind: WaxButtonKind.tonal,
-                semanticsId: SemanticsIds.albumRewriteApply,
-                onPressed: staged.isEmpty || _busy || members.isEmpty
-                    ? null
-                    : () => _applyRewrite(staged),
-              ),
-            ],
-            AsyncValue(hasError: true, error: final Object error) => <Widget>[
-              ErrorState(
-                title: l10n.metadataLoadError,
-                message: context.explain(error),
-                onRetry: () => ref.invalidate(_rewriteSeedProvider(widget.pid)),
-              ),
-            ],
-            _ => const <Widget>[SkeletonShapes(shape: SkeletonShape.list)],
-          },
-        ],
-      ),
-    );
-  }
-
-  Future<void> _applyRewrite(Map<String, String> staged) async {
-    final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.musicAlbumRewriteConfirmTitle),
-        content: Text(l10n.musicAlbumRewriteConfirmBody),
-        actions: <Widget>[
-          WaxButton(
-            label: l10n.commonCancel,
-            kind: WaxButtonKind.text,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          WaxButton(
-            label: l10n.musicAlbumRewriteConfirmTitle,
-            semanticsId: SemanticsIds.albumRewriteConfirm,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
-    );
-    if (!(confirmed ?? false) || !mounted || _busy) return;
-    setState(() => _busy = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    // The count the button shows is the release's own, not the loaded
+    // page's: the rename covers every member whether or not the list
+    // scrolled that far.
+    final members =
+        ref.watch(albumDetailProvider(widget.pid)).value?.itemCount ?? 0;
     final listing = (dimension: MusicDimension.albums, segment: widget.pid);
-    try {
-      // The whole release, not the loaded page: a rewrite over a prefix
-      // of the members would split the album in two. Bounded - the
-      // endpoint refuses more than a thousand anyway.
-      var state = ref.read(musicItemsProvider(listing)).value;
-      for (var i = 0; i < 10 && (state?.hasMore ?? false); i++) {
-        await ref.read(musicItemsProvider(listing).notifier).loadMore();
-        state = ref.read(musicItemsProvider(listing)).value;
-      }
-      // The loop above is best effort: loadMore swallows an API failure
-      // (and no-ops while a scroll-driven load is in flight), keeping
-      // the cursor. A rewrite over what did load would regroup those
-      // members and strand the rest, so an undrained list refuses
-      // rather than splitting the release - with force on, no lock
-      // would catch it.
-      if (state?.hasMore ?? true) {
-        messenger.show(l10n.musicAlbumRewriteIncomplete);
-        return;
-      }
-      final pids = [
-        for (final item in state?.items ?? <ItemSummary>[]) item.pid,
-      ];
-      if (pids.isEmpty) return;
-      if (pids.length > metadataBulkEditCap) {
-        messenger.show(l10n.musicAlbumRewriteTooLarge(pids.length));
-        return;
-      }
-      // Force, deliberately: the rewrite locks these fields on every
-      // member, so the second rename would otherwise refuse on the
-      // locks the first one took.
-      final result = await ref
-          .read(repositoryProvider)
-          .bulkEditMetadata(
-            itemPids: pids,
-            fields: staged,
-            writeBack: _rewriteWriteBack,
-            force: true,
-          );
-      for (final entry in staged.entries) {
-        _rewriteSeeded[entry.key] = entry.value;
-      }
-      _reportDirty();
-      final moved =
-          result.resultingAlbumPid != null &&
-          result.resultingAlbumPid != widget.pid;
-      messenger.show(
-        <String>[
-          moved
-              ? l10n.musicAlbumRewriteMoved
-              : l10n.metadataBulkEdited(result.edited.length),
-          if (result.writeBackFailures.isNotEmpty)
-            l10n.metadataWriteBackWarning,
-        ].join('\n'),
-      );
-      if (moved) {
-        widget.onRegrouped(result.resultingAlbumPid!);
-        return;
-      }
-      ref
+    return EntityRenameSection(
+      entityType: 'album',
+      pid: widget.pid,
+      fields: albumRewriteFields,
+      seed: ref.watch(_rewriteSeedProvider(widget.pid)),
+      onRetrySeed: () => ref.invalidate(_rewriteSeedProvider(widget.pid)),
+      copy: RenameSectionCopy(
+        title: l10n.musicAlbumRewriteTitle,
+        overline: l10n.musicAlbumRewriteOverline,
+        help: l10n.musicAlbumRewriteHelp,
+        applyLabel: l10n.musicAlbumRewriteApply(members),
+        confirmTitle: l10n.musicAlbumRewriteConfirmTitle,
+        confirmBody: l10n.musicAlbumRewriteConfirmBody,
+        merged: l10n.musicAlbumRewriteMerged,
+        renamed: l10n.musicAlbumRewriteRenamed,
+      ),
+      ids: RenameSectionIds(
+        section: SemanticsIds.albumRewrite,
+        field: SemanticsIds.albumRewriteField,
+        writeBack: SemanticsIds.albumRewriteWriteBack,
+        apply: SemanticsIds.albumRewriteApply,
+        confirm: SemanticsIds.albumRewriteConfirm,
+      ),
+      busy: _busy,
+      onBusyChanged: (busy) => setState(() => _busy = busy),
+      canApply: members > 0,
+      onDirtyChanged: (dirty) {
+        _rewriteDirty = dirty;
+        _reportDirty();
+      },
+      onMerged: widget.onRegrouped,
+      onRenamed: () => ref
         ..invalidate(albumDetailProvider(widget.pid))
-        ..invalidate(musicItemsProvider(listing));
-    } on WaxDeckApiException catch (e) {
-      messenger.show(explainRefusal(l10n, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+        ..invalidate(musicItemsProvider(listing)),
+    );
   }
 }
 

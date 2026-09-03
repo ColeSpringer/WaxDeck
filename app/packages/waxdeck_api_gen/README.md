@@ -396,6 +396,7 @@ Class | Method | HTTP request | Description
 [*BooksApi*](doc/BooksApi.md) | [**deleteBookmark**](doc/BooksApi.md#deletebookmark) | **DELETE** /books/{pid}/bookmarks/{bookmarkId} | Remove one bookmark
 [*BooksApi*](doc/BooksApi.md) | [**getBook**](doc/BooksApi.md#getbook) | **GET** /books/{pid} | Get one audiobook&#39;s detail
 [*BooksApi*](doc/BooksApi.md) | [**getBookResume**](doc/BooksApi.md#getbookresume) | **GET** /books/{pid}/resume | Where the caller left off in a book
+[*BooksApi*](doc/BooksApi.md) | [**listBookSeries**](doc/BooksApi.md#listbookseries) | **GET** /books/series | List audiobook series
 [*BooksApi*](doc/BooksApi.md) | [**listBookmarks**](doc/BooksApi.md#listbookmarks) | **GET** /books/{pid}/bookmarks | List the caller&#39;s bookmarks in a book
 [*BooksApi*](doc/BooksApi.md) | [**putBookSettings**](doc/BooksApi.md#putbooksettings) | **PUT** /books/{pid}/settings | Replace the caller&#39;s playback settings for a book
 [*DiscoveryApi*](doc/DiscoveryApi.md) | [**createInstantMix**](doc/DiscoveryApi.md#createinstantmix) | **POST** /mixes/instant | Instant mix
@@ -431,6 +432,7 @@ Class | Method | HTTP request | Description
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemLyrics**](doc/MetadataApi.md#clearitemlyrics) | **DELETE** /items/{pid}/lyrics | Clear lyrics
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemTag**](doc/MetadataApi.md#clearitemtag) | **DELETE** /items/{pid}/tags/{key} | Clear a custom tag
 [*MetadataApi*](doc/MetadataApi.md) | [**commitItemMetadata**](doc/MetadataApi.md#commititemmetadata) | **POST** /items/{pid}/metadata/commit | Commit a staged metadata draft in one request
+[*MetadataApi*](doc/MetadataApi.md) | [**detachItem**](doc/MetadataApi.md#detachitem) | **POST** /items/{pid}/detach | Detach a track from its release
 [*MetadataApi*](doc/MetadataApi.md) | [**editEntity**](doc/MetadataApi.md#editentity) | **PATCH** /entities/{entityType}/{entityPid} | Edit entity fields
 [*MetadataApi*](doc/MetadataApi.md) | [**editItemMetadata**](doc/MetadataApi.md#edititemmetadata) | **PATCH** /items/{pid}/metadata | Edit scalar fields
 [*MetadataApi*](doc/MetadataApi.md) | [**enrichItem**](doc/MetadataApi.md#enrichitem) | **POST** /items/{pid}/enrich | Enrich one item now
@@ -441,6 +443,7 @@ Class | Method | HTTP request | Description
 [*MetadataApi*](doc/MetadataApi.md) | [**getMetadataFields**](doc/MetadataApi.md#getmetadatafields) | **GET** /metadata/fields | Discover the editable field vocabulary
 [*MetadataApi*](doc/MetadataApi.md) | [**previewEnrichItem**](doc/MetadataApi.md#previewenrichitem) | **POST** /items/{pid}/enrich/preview | Preview a one-item enrichment
 [*MetadataApi*](doc/MetadataApi.md) | [**rematchItem**](doc/MetadataApi.md#rematchitem) | **POST** /items/{pid}/rematch | Requeue an item for matching
+[*MetadataApi*](doc/MetadataApi.md) | [**renameEntity**](doc/MetadataApi.md#renameentity) | **POST** /entities/{entityType}/{entityPid}/rename | Rename an entity in place
 [*MetadataApi*](doc/MetadataApi.md) | [**setBookChapters**](doc/MetadataApi.md#setbookchapters) | **PUT** /books/{pid}/chapters | Replace a book&#39;s chapters
 [*MetadataApi*](doc/MetadataApi.md) | [**setEntityArtwork**](doc/MetadataApi.md#setentityartwork) | **PUT** /entities/{entityType}/{entityPid}/artwork | Set entity artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**setEntityArtworkLock**](doc/MetadataApi.md#setentityartworklock) | **PUT** /entities/{entityType}/{entityPid}/artwork/lock | Pin or unpin an entity&#39;s artwork
@@ -640,6 +643,8 @@ Class | Method | HTTP request | Description
  - [BookMergeRequest](doc/BookMergeRequest.md)
  - [BookPart](doc/BookPart.md)
  - [BookResume](doc/BookResume.md)
+ - [BookSeries](doc/BookSeries.md)
+ - [BookSeriesPage](doc/BookSeriesPage.md)
  - [BookSettings](doc/BookSettings.md)
  - [BookSplitRequest](doc/BookSplitRequest.md)
  - [Bookmark](doc/Bookmark.md)
@@ -668,6 +673,8 @@ Class | Method | HTTP request | Description
  - [DeleteItemsRequest](doc/DeleteItemsRequest.md)
  - [DeleteItemsResult](doc/DeleteItemsResult.md)
  - [DeletePlanEntry](doc/DeletePlanEntry.md)
+ - [DetachRequest](doc/DetachRequest.md)
+ - [DetachResult](doc/DetachResult.md)
  - [DeviceSession](doc/DeviceSession.md)
  - [DiagnosticCount](doc/DiagnosticCount.md)
  - [DiagnosticSummary](doc/DiagnosticSummary.md)
@@ -701,6 +708,8 @@ Class | Method | HTTP request | Description
  - [EntityCuration](doc/EntityCuration.md)
  - [EntityEdit](doc/EntityEdit.md)
  - [EntityPlayState](doc/EntityPlayState.md)
+ - [EntityRename](doc/EntityRename.md)
+ - [EntityRenameResult](doc/EntityRenameResult.md)
  - [EntityTypeFields](doc/EntityTypeFields.md)
  - [Episode](doc/Episode.md)
  - [EpisodeFilter](doc/EpisodeFilter.md)

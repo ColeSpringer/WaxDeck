@@ -42,6 +42,13 @@ func editResultJSON(o service.EditOutcomeDTO) MetadataEditResult {
 		ws := append([]string{}, o.Warnings...)
 		out.Warnings = &ws
 	}
+	if o.MergedInto != "" {
+		out.MergedInto = ptr(o.MergedInto)
+	}
+	if len(o.MovedAlbums) > 0 {
+		moved := append([]string{}, o.MovedAlbums...)
+		out.MovedAlbums = &moved
+	}
 	return out
 }
 
@@ -187,6 +194,10 @@ func (s *Server) GetMetadataFields(ctx context.Context, _ GetMetadataFieldsReque
 			EntityType: e.EntityType,
 			Fields:     editableFieldsJSON(e.Fields),
 		})
+	}
+	if len(vocab.ReservedTagKeys) > 0 {
+		keys := append([]string{}, vocab.ReservedTagKeys...)
+		out.ReservedTagKeys = &keys
 	}
 	return GetMetadataFields200JSONResponse(out), nil
 }
@@ -906,6 +917,58 @@ func (s *Server) EditEntity(ctx context.Context, req EditEntityRequestObject) (E
 	return EditEntity200JSONResponse(editResultJSON(out)), nil
 }
 
+// RenameEntity moves a whole entity onto new keying values. The
+// refusals are upstream's and arrive as sentences worth showing: a
+// field outside the rung's vocabulary and an empty name as 400, a
+// locked member as 409 field-locked, and the coverage refusals (members
+// landing apart, an archived member, a group titled apart) as 409
+// conflict.
+func (s *Server) RenameEntity(ctx context.Context, req RenameEntityRequestObject) (RenameEntityResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !uc.Admin {
+		return RenameEntity403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Body == nil || len(req.Body.Fields) == 0 {
+		return RenameEntity400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a fields body is required"))}, nil
+	}
+	out, err := s.svc.RenameEntity(ctx, string(req.EntityType), req.EntityPid, req.Body.Fields,
+		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return RenameEntity400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindNotFound:
+			return RenameEntity404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
+		case service.KindLocked:
+			return RenameEntity409JSONResponse(errObj("field-locked", err.Error())), nil
+		case service.KindConflict:
+			return RenameEntity409JSONResponse(errObj("conflict", err.Error())), nil
+		}
+		return nil, err
+	}
+	res := EntityRenameResult{
+		EntityPid: out.EntityPID,
+		Outcome:   EntityRenameResultOutcome(out.Outcome),
+		Members:   out.Members,
+		Credits:   out.Credits,
+	}
+	if out.MergedInto != "" {
+		res.MergedInto = ptr(out.MergedInto)
+	}
+	if len(out.MovedAlbums) > 0 {
+		moved := append([]string{}, out.MovedAlbums...)
+		res.MovedAlbums = &moved
+	}
+	if len(out.Failures) > 0 {
+		fs := writeBackFailuresJSON(out.Failures)
+		res.Failures = &fs
+	}
+	return RenameEntity200JSONResponse(res), nil
+}
+
 func (s *Server) GetEntityCuration(ctx context.Context, req GetEntityCurationRequestObject) (GetEntityCurationResponseObject, error) {
 	if _, _, err := s.requireUserCtx(ctx); err != nil {
 		return nil, err
@@ -929,6 +992,48 @@ func (s *Server) GetEntityCuration(ctx context.Context, req GetEntityCurationReq
 		out.Curated = append(out.Curated, cf)
 	}
 	return GetEntityCuration200JSONResponse(out), nil
+}
+
+// --- detach -------------------------------------------------------------------------
+
+// DetachItem pulls one track off its mbid-pinned release. Curate-gated
+// like every item mutation beside it; the refusals are upstream's own
+// sentences, which name the case (a non-track, a chain with no id, an
+// album's last member).
+func (s *Server) DetachItem(ctx context.Context, req DetachItemRequestObject) (DetachItemResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+		return DetachItem403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+	}
+	writeBack := false
+	if req.Body != nil {
+		writeBack = boolOr(req.Body.WriteBack, false)
+	}
+	out, err := s.svc.DetachItem(ctx, uc, req.Pid, writeBack)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return DetachItem400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindNotFound:
+			return DetachItem404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		}
+		return nil, err
+	}
+	res := DetachResult{ItemPid: out.ItemPID, OldAlbumPid: out.OldAlbumPID}
+	if out.NewAlbumPID != "" {
+		res.NewAlbumPid = ptr(out.NewAlbumPID)
+	}
+	if out.NewReleaseGroupPID != "" {
+		res.NewReleaseGroupPid = ptr(out.NewReleaseGroupPID)
+	}
+	if len(out.Failures) > 0 {
+		fs := writeBackFailuresJSON(out.Failures)
+		res.Failures = &fs
+	}
+	return DetachItem200JSONResponse(res), nil
 }
 
 // --- release status ---------------------------------------------------------------

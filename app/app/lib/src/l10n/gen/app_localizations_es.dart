@@ -2104,6 +2104,37 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String bookSeriesBookCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count libros',
+      one: '1 libro',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get bookSeriesMerge => 'Fusionar la serie con...';
+
+  @override
+  String bookSeriesMergeDone(String series) {
+    return 'Fusionada con «$series».';
+  }
+
+  @override
+  String get bookSeriesMergeEmpty => 'No hay otra serie con la que fusionar.';
+
+  @override
+  String get bookSeriesMergeHelp =>
+      'Los libros de esta serie pasan a la que elijas y esta grafía desaparece. Nada más de los libros cambia.';
+
+  @override
+  String bookSeriesMergeTitle(String series) {
+    return 'Fusionar «$series» con';
+  }
+
+  @override
   String bookSeriesSequence(String number, String series) {
     return 'Libro $number de $series';
   }
@@ -3375,6 +3406,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryKindArtist => 'artista';
 
   @override
+  String get libraryMenuDetach => 'Separar de la edición';
+
+  @override
+  String get libraryMenuDetachConfirmBody =>
+      'La pista deja la edición a la que la fija un identificador de MusicBrainz y pasa al álbum que implican sus propias etiquetas.';
+
+  @override
+  String get libraryMenuDetachConfirmTitle => '¿Separar esta pista?';
+
+  @override
+  String get libraryMenuDetachWriteBackHelp =>
+      'Borrar también las etiquetas de edición del archivo de la pista, para que el siguiente análisis no la devuelva';
+
+  @override
+  String get libraryMenuDetached => 'Separada de la edición.';
+
+  @override
   String get libraryMenuGoToAlbum => 'Ir al álbum';
 
   @override
@@ -3540,6 +3588,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataFieldAuthorSort => 'Autor, para ordenar';
+
+  @override
+  String get metadataFieldBpm => 'BPM';
 
   @override
   String get metadataFieldComment => 'Comentario';
@@ -3946,6 +3997,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataTagKey => 'Clave';
 
   @override
+  String metadataTagReserved(String key) {
+    return '$key se guarda en su propio campo, no como etiqueta personalizada.';
+  }
+
+  @override
   String get metadataTagStagedRemove => 'Se quitará al guardar';
 
   @override
@@ -4137,37 +4193,35 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicAlbumRewriteConfirmBody =>
-      'Los campos editados se reescriben en todas las pistas. Como todos los miembros se mueven a la vez, el lanzamiento conserva su entrada - y con ella las ilustraciones, las fijaciones y el historial - salvo que el nombre nuevo ya sea de otro lanzamiento, en cuyo caso se fusionan. Los bloqueos de esos campos se ignoran y la reescritura los vuelve a establecer.';
+      'Los campos editados se reescriben en todas las pistas de esta edición a la vez, así que conserva su entrada, junto con la portada, los anclajes y el historial de reproducción. Si el nombre nuevo ya pertenece a otra edición, ambas se fusionan y esta página la sigue. Los bloqueos de esos campos se anulan y la reescritura vuelve a ponerlos.';
 
   @override
-  String get musicAlbumRewriteConfirmTitle => '¿Reagrupar este lanzamiento?';
+  String get musicAlbumRewriteConfirmTitle => '¿Reescribir esta edición?';
 
   @override
   String get musicAlbumRewriteHelp =>
-      'Estos datos viven en las pistas, no en el lanzamiento. Guardar los reescribe en cada miembro, lo que renombra el lanzamiento sin moverlo y mantiene esta página en él; si el nombre ya es de otro lanzamiento, los dos se fusionan y esta página lo sigue.';
+      'Estos viven en las pistas, no en la edición. Al guardar se reescriben en todos los miembros a la vez, lo que renombra la edición en su sitio y mantiene esta página en ella; un nombre que ya tenga otra edición fusiona las dos, y esta página la sigue.';
 
   @override
-  String get musicAlbumRewriteIncomplete =>
-      'No se han podido cargar todas las pistas de este lanzamiento, así que no se ha reescrito nada.';
-
-  @override
-  String get musicAlbumRewriteMoved =>
-      'El lanzamiento se ha reagrupado en una entrada nueva.';
+  String get musicAlbumRewriteMerged =>
+      'La edición se fusionó con la que ya tenía este nombre.';
 
   @override
   String get musicAlbumRewriteOverline => 'En las pistas';
 
   @override
-  String get musicAlbumRewriteTitle => 'Álbum, artista y año';
-
-  @override
-  String musicAlbumRewriteTooLarge(int count) {
-    return 'Una reescritura admite como máximo 1.000 pistas; este lanzamiento tiene $count.';
+  String musicAlbumRewriteRenamed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se reescribieron $count pistas',
+      one: 'Se reescribió 1 pista',
+    );
+    return '$_temp0';
   }
 
   @override
-  String get musicAlbumRewriteWriteBackHelp =>
-      'Reescribe también estas etiquetas dentro del archivo de cada pista';
+  String get musicAlbumRewriteTitle => 'Álbum, artista y año';
 
   @override
   String get musicAlbumTitle => 'Álbum';
@@ -4296,11 +4350,57 @@ class AppLocalizationsEs extends AppLocalizations {
   String get musicEmptyTitle => 'Todavía no hay música';
 
   @override
+  String get musicEntityRenameApply => 'Renombrar';
+
+  @override
+  String get musicEntityRenameArtistHelp =>
+      'El nombre del artista vive en las pistas que lo acreditan. Escribe el nombre nuevo completo: al renombrarlo se reescribe en todas a la vez, así que el artista conserva esta página, junto con su foto, sus anclajes y su historial de reproducción; un nombre que ya tenga otro artista fusiona los dos, y esta página lo sigue.';
+
+  @override
+  String get musicEntityRenameConfirmBody =>
+      'Todos los miembros se reescriben a la vez, así que la entrada sobrevive con todo lo que lleva asociado. Si el nombre nuevo ya está ocupado, ambas se fusionan y esta página la sigue. Los bloqueos de estos campos se anulan y el renombrado vuelve a ponerlos.';
+
+  @override
+  String get musicEntityRenameConfirmTitle => '¿Renombrar esta entrada?';
+
+  @override
+  String musicEntityRenameDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se renombró en $count pistas',
+      one: 'Se renombró en 1 pista',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get musicEntityRenameGroupHelp =>
+      'Estos viven en las pistas, no en el grupo de edición. Al renombrar se reescriben en todos los miembros a la vez, así que el grupo conserva esta página; un nombre que ya tenga otro grupo fusiona los dos, y esta página lo sigue.';
+
+  @override
+  String get musicEntityRenameMerged =>
+      'Se fusionó con la entrada que ya tenía este nombre.';
+
+  @override
+  String get musicEntityRenameOverline => 'En los miembros';
+
+  @override
+  String get musicEntityRenameTitle => 'Nombre';
+
+  @override
+  String get musicEntityRenameWriteBackHelp =>
+      'Reescribir también estas etiquetas dentro del archivo de cada miembro';
+
+  @override
   String get musicFieldArtistMbid => 'ID de artista de MusicBrainz';
 
   @override
   String get musicFieldArtistMbidHelp =>
       'El identificador con el que este artista coincidió en MusicBrainz. El enriquecimiento lo rellena; fijarlo aquí ancla la coincidencia a mano.';
+
+  @override
+  String get musicFieldArtistName => 'Nombre del artista';
 
   @override
   String get musicFieldArtistSortHelp =>
@@ -5591,6 +5691,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistRuleFieldArtist => 'Artista';
+
+  @override
+  String get playlistRuleFieldBpm => 'BPM';
 
   @override
   String get playlistRuleFieldCodec => 'Códec';

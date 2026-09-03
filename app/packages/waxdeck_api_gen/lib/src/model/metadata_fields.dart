@@ -16,6 +16,7 @@ part 'metadata_fields.g.dart';
 /// Properties:
 /// * [kinds] - Editable fields per item kind.
 /// * [entityTypes] - Editable fields per entity type.
+/// * [reservedTagKeys] - Custom-tag keys the catalog owns through a field of its own (`BPM` through `bpm`, `ISRC` through `isrc`, and so on), in sorted order. A custom-tag editor refuses one of these before the round trip; `setItemTag` refuses it either way. 
 @BuiltValue()
 abstract class MetadataFields implements Built<MetadataFields, MetadataFieldsBuilder> {
   /// Editable fields per item kind.
@@ -25,6 +26,10 @@ abstract class MetadataFields implements Built<MetadataFields, MetadataFieldsBui
   /// Editable fields per entity type.
   @BuiltValueField(wireName: r'entityTypes')
   BuiltList<EntityTypeFields> get entityTypes;
+
+  /// Custom-tag keys the catalog owns through a field of its own (`BPM` through `bpm`, `ISRC` through `isrc`, and so on), in sorted order. A custom-tag editor refuses one of these before the round trip; `setItemTag` refuses it either way. 
+  @BuiltValueField(wireName: r'reservedTagKeys')
+  BuiltList<String>? get reservedTagKeys;
 
   MetadataFields._();
 
@@ -59,6 +64,13 @@ class _$MetadataFieldsSerializer implements PrimitiveSerializer<MetadataFields> 
       object.entityTypes,
       specifiedType: const FullType(BuiltList, [FullType(EntityTypeFields)]),
     );
+    if (object.reservedTagKeys != null) {
+      yield r'reservedTagKeys';
+      yield serializers.serialize(
+        object.reservedTagKeys,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
   }
 
   @override
@@ -95,6 +107,13 @@ class _$MetadataFieldsSerializer implements PrimitiveSerializer<MetadataFields> 
             specifiedType: const FullType(BuiltList, [FullType(EntityTypeFields)]),
           ) as BuiltList<EntityTypeFields>;
           result.entityTypes.replace(valueDes);
+          break;
+        case r'reservedTagKeys':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>;
+          result.reservedTagKeys.replace(valueDes);
           break;
         default:
           unhandled.add(key);
