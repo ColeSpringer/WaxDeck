@@ -79,6 +79,14 @@ const (
 	CorruptGarbage Corruption = "garbage"
 )
 
+// AllCorruptions is every malformed flavor there is, in one place
+// because a flavor has readers outside this package that cannot see the
+// constants: Filename spells the marker into the name a scan reads back
+// as a title, and the desktop playback journey keeps cards carrying one
+// out of the card it taps. A flavor added above and not here goes
+// unseen by both, which the pin in fixtures_test.go is what catches.
+var AllCorruptions = []Corruption{CorruptTruncated, CorruptGarbage}
+
 // Chapter is one chapter marker to embed where the container supports
 // them (MP4 today).
 type Chapter struct {

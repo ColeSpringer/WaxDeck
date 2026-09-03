@@ -4,19 +4,25 @@
 // the fault taxonomy in `waxdeck_player` is built on the difference and
 // nothing else in the suite can see it.
 //
-// Run it by hand, like the conformance suite beside it:
+// Both halves run in CI: the desktop one through e2e/run-desktop.sh,
+// the Android one on the emulator the conformance workflow already
+// boots. By hand it is the same two commands:
 //   flutter test integration_test/load_fault_test.dart -d emulator-5554
 //   flutter test integration_test/load_fault_test.dart -d linux
 //
+// A characterization test is worth its last run and no more, which is
+// why neither half is left to be remembered.
+//
 // Both halves pin platform behaviour WaxDeck builds on, and both end
 // in the same split for the same reason. On Android every failure
-// arrives as one code and one constant string, so the engine's
-// reachability probe is what tells them apart. On desktop mpv reports
-// no failure at all - the load simply never finishes - so the engine's
-// load deadline is what produces a failure to classify, and the probe
-// is then the whole verdict rather than a refinement of one. Two
-// different silences, one answer: media the device can fetch while the
-// player cannot finish with it is the media's own fault.
+// arrives as one code and one constant string, so the engine's stream
+// probe is what tells them apart. On desktop mpv reports no failure at
+// all - the load simply never finishes - so the engine's load deadline
+// is what produces a failure to classify, and the probe is then the
+// whole verdict rather than a refinement of one. Two different
+// silences, one answer: media the device can fetch while the player
+// cannot finish with it is the media's own fault, and so is media the
+// server answers 415 for.
 import 'dart:async';
 import 'dart:io';
 
@@ -43,6 +49,15 @@ String _mediaUrl(String value) =>
     value.startsWith('http://') || value.startsWith('https://')
     ? value
     : Uri.file(value).toString();
+
+/// The rows in `urls` whose fault is the media rather than the way to
+/// it, and so the ones a queue may step past.
+///
+/// One list for both platforms, because agreeing is the point: the
+/// halves reach it from opposite directions - a code that says nothing
+/// on Android, no report at all on desktop - and a split that differed
+/// between them would be the bug this file exists to catch.
+const _badMedia = <String>{'undecodable bytes', 'truncated file', 'http 415'};
 
 /// How long a load gets before it counts as never answering.
 ///
@@ -148,7 +163,14 @@ void main() {
     // and the emulator case needs no port forwarding.
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((req) {
-      req.response.statusCode = req.uri.path.contains('502') ? 502 : 404;
+      // Exact paths rather than substring guards: the table is then
+      // exhaustive over what `urls` below asks for, and reading it does
+      // not depend on the order the arms happen to be in.
+      req.response.statusCode = switch (req.uri.path) {
+        '/502.mp3' => HttpStatus.badGateway,
+        '/415.mp3' => HttpStatus.unsupportedMediaType,
+        _ => HttpStatus.notFound,
+      };
       req.response.close();
     });
     final base = 'http://127.0.0.1:${server.port}';
@@ -156,6 +178,12 @@ void main() {
       // The bytes are the problem.
       'undecodable bytes': 'file://${dir.path}/garbage.mp3',
       'truncated file': 'file://${dir.path}/truncated.mp3',
+      // The bytes are the problem and the server says so: what
+      // WaxDeck's own stream endpoint answers when it cannot make
+      // audio out of the file (`unsupported-format`, the sidecar's
+      // 415). The player is told nothing either way, so the split has
+      // to come from the probe reading the status.
+      'http 415': '$base/415.mp3',
       // Getting the bytes is the problem.
       'missing file': 'file://${dir.path}/absent.mp3',
       'http 404': '$base/nope.mp3',
@@ -186,17 +214,18 @@ void main() {
     }
 
     if (Platform.isAndroid) {
-      // Measured on wax-conformance-35: all seven arrive as
+      // Measured on wax-conformance-35, and again on wax-phone-36 when
+      // the refusal row joined them: all of them arrive as
       // PlayerException(0, "Source error"). ExoPlayer's TYPE_SOURCE
       // covers an unreadable container and a refused request alike,
       // and the cause that separates them does not cross just_audio's
       // platform channel - if a cause below ever stops being that
       // constant, the platform has started saying more and the probe
-      // is doing a job the code could. Until then the reachability
-      // probe is the classifier: media the device can fetch while the
-      // player refuses it is the media's own fault, so the two bad
-      // files split from the five bad paths.
-      const badMedia = <String>{'undecodable bytes', 'truncated file'};
+      // is doing a job the code could. Until then the stream probe is
+      // the classifier: media the device can fetch while the player
+      // refuses it is the media's own fault, and so is media the
+      // server itself refuses to decode. The two bad files and the
+      // refusal split from the five bad paths.
       for (final o in outcomes.entries) {
         final threw = o.value;
         expect(threw, isA<Threw>(), reason: '${o.key} did not throw');
@@ -208,7 +237,7 @@ void main() {
         );
         expect(
           threw.fault,
-          badMedia.contains(o.key) ? MediaFault.source : MediaFault.transport,
+          _badMedia.contains(o.key) ? MediaFault.source : MediaFault.transport,
           reason: o.key,
         );
       }
@@ -219,17 +248,16 @@ void main() {
     // all - the load future used to never settle, no throw and no
     // completion, so there was nothing to classify and nothing for the
     // session to give up on. The engine's load deadline is what ends
-    // that wait, and past it the reachability probe is the only
-    // evidence there is. No cause is asserted: what threw is the
-    // deadline, so the cause is the engine's own TimeoutException
-    // rather than anything the platform said.
-    const badMedia = <String>{'undecodable bytes', 'truncated file'};
+    // that wait, and past it the stream probe is the only evidence
+    // there is. No cause is asserted: what threw is the deadline, so
+    // the cause is the engine's own TimeoutException rather than
+    // anything the platform said.
     for (final o in outcomes.entries) {
       final threw = o.value;
       expect(threw, isA<Threw>(), reason: '${o.key} never gave up');
       expect(
         (threw as Threw).fault,
-        badMedia.contains(o.key) ? MediaFault.source : MediaFault.transport,
+        _badMedia.contains(o.key) ? MediaFault.source : MediaFault.transport,
         reason: o.key,
       );
     }

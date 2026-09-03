@@ -10,8 +10,8 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 /// never finishes one - so on desktop there was nothing to classify and
 /// nothing for the session to give up on. These pin the engine's own
 /// answer to that: past the deadline the load is abandoned, the source
-/// released, and the fault decided by the reachability probe, which is
-/// the only evidence available when the platform reports none.
+/// released, and the fault decided by the stream probe, which is the
+/// only evidence available when the platform reports none.
 ///
 /// Here rather than in waxdeck_player, which carries no test directory
 /// of its own.
@@ -82,19 +82,19 @@ class _HangingPlayer implements AudioPlayer {
 /// An engine over [player] with a deadline short enough to wait out.
 JustAudioEngine _engine(
   _HangingPlayer player, {
-  required bool reachable,
+  required StreamProbe found,
   Duration deadline = const Duration(milliseconds: 40),
 }) => JustAudioEngine.withPlayer(
   player,
   loadDeadline: deadline,
   stopGrace: const Duration(milliseconds: 40),
-  probe: (_) async => reachable,
+  probe: (_) async => found,
 );
 
 void main() {
   test('a load that never settles becomes a fault', () async {
     final player = _HangingPlayer();
-    final engine = _engine(player, reachable: false);
+    final engine = _engine(player, found: StreamProbe.unreachable);
     addTearDown(engine.dispose);
 
     await expectLater(
@@ -111,7 +111,7 @@ void main() {
     // is what garbage on disk looks like from out here, and what
     // Android reports directly.
     final player = _HangingPlayer();
-    final engine = _engine(player, reachable: true);
+    final engine = _engine(player, found: StreamProbe.answered);
     addTearDown(engine.dispose);
 
     final fault = await engine
@@ -121,9 +121,27 @@ void main() {
     expect(fault, MediaFault.source);
   });
 
-  test('a URL that does not answer is the transport', () async {
+  test('a URL that refuses the file is the media too', () async {
+    // The case the desktop had no answer for: a file the server will
+    // not serve as audio answers 415, mpv sits on it until the
+    // deadline, and reading that as the transport left the queue
+    // standing on a retry that cannot work. It is the file, so the
+    // queue may step past it - the same verdict Android gives the same
+    // bytes.
     final player = _HangingPlayer();
-    final engine = _engine(player, reachable: false);
+    final engine = _engine(player, found: StreamProbe.unplayable);
+    addTearDown(engine.dispose);
+
+    final fault = await engine
+        .load('http://x/garbage.flac')
+        .then<MediaFault?>((_) => null)
+        .onError<MediaLoadException>((e, _) => e.fault);
+    expect(fault, MediaFault.source);
+  });
+
+  test('a URL that reaches nothing is the transport', () async {
+    final player = _HangingPlayer();
+    final engine = _engine(player, found: StreamProbe.unreachable);
     addTearDown(engine.dispose);
 
     final fault = await engine
@@ -138,7 +156,7 @@ void main() {
     // something replaces it, and on the mpv bridge that keeps the file
     // open. The stop is what releases it.
     final player = _HangingPlayer();
-    final engine = _engine(player, reachable: false);
+    final engine = _engine(player, found: StreamProbe.unreachable);
     addTearDown(engine.dispose);
 
     await expectLater(
@@ -150,7 +168,7 @@ void main() {
 
   test('a stop that hangs does not bury the fault', () async {
     final player = _HangingPlayer(stopHangs: true);
-    final engine = _engine(player, reachable: false);
+    final engine = _engine(player, found: StreamProbe.unreachable);
     addTearDown(engine.dispose);
 
     await expectLater(
@@ -170,7 +188,7 @@ void main() {
       stopHangs: true,
       state: ProcessingState.ready,
     );
-    final engine = _engine(player, reachable: false);
+    final engine = _engine(player, found: StreamProbe.unreachable);
     addTearDown(engine.dispose);
 
     await expectLater(
@@ -193,7 +211,7 @@ void main() {
       player,
       loadDeadline: const Duration(milliseconds: 200),
       stopGrace: const Duration(milliseconds: 40),
-      probe: (_) async => false,
+      probe: (_) async => StreamProbe.unreachable,
     );
     addTearDown(engine.dispose);
 
@@ -246,7 +264,7 @@ void main() {
       loadDeadline: const Duration(seconds: 5),
       probe: (_) async {
         probed = true;
-        return true;
+        return StreamProbe.answered;
       },
     );
     addTearDown(engine.dispose);

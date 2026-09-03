@@ -37,7 +37,28 @@ Future<String> _apiToken(HttpClient http) async {
   return body['token'] as String;
 }
 
-/// Which of the "Recently added" pids are music, by pid.
+/// The corruption flavors `fixtures.Spec.Filename` spells into a
+/// fixture's name, and so into the title a scan reads back off it:
+/// `flac-garbage-1000ms-44100hz-2ch`.
+///
+/// Kept in step from the other side: `fixtures.AllCorruptions` is the
+/// list, and `TestCorruptionMarkersReachTheDesktopJourney` fails if a
+/// flavor added there is not excluded here.
+///
+/// The library under this journey is the whole codec matrix, robustness
+/// flavors included, so a card being music is not yet a claim that it
+/// can be played through. Garbage bytes decode to nothing, so the
+/// stream endpoint answers 415 and the load dies on the engine's
+/// deadline; a truncated encode streams, but it holds about half a
+/// second of audio under the second it declares, which lands under the
+/// half-track bar the server counts a play at. Neither can finish this
+/// journey, and nothing about the shelf's order keeps them off the
+/// front of it, so they are dropped here rather than left to be
+/// tapped.
+const _brokenByDesign = <String>['-garbage-', '-truncated-'];
+
+/// Which of the "Recently added" pids are music this can play through,
+/// by pid.
 ///
 /// Read from the list the shelf itself reads rather than from search: a
 /// pid that is in the library is not the same claim as a pid on the
@@ -45,7 +66,7 @@ Future<String> _apiToken(HttpClient http) async {
 /// home was rebuilt around shelves. Music specifically, because that is
 /// the medium whose card plays - a book or an episode opens its own
 /// screen instead.
-Future<Set<String>> _musicShelfPids(HttpClient http, String token) async {
+Future<Set<String>> _playableShelfPids(HttpClient http, String token) async {
   final req = await http.getUrl(
     Uri.parse('$_base/api/v1/library/browse?list=recently-added&limit=24'),
   );
@@ -55,7 +76,9 @@ Future<Set<String>> _musicShelfPids(HttpClient http, String token) async {
   final items = (body['items'] as List<dynamic>).cast<Map<String, dynamic>>();
   return <String>{
     for (final item in items)
-      if (item['mediaType'] == 'music') item['pid'] as String,
+      if (item['mediaType'] == 'music' &&
+          !_brokenByDesign.any((item['title'] as String).contains))
+        item['pid'] as String,
   };
 }
 
@@ -76,7 +99,7 @@ Iterable<String> _renderedIdentifiers(WidgetTester tester) => tester
 /// playback bug. Asking the screen what it built answers both.
 Future<String> _builtMusicPid(
   WidgetTester tester,
-  Set<String> music, {
+  Set<String> playable, {
   Duration timeout = const Duration(seconds: 60),
 }) async {
   const prefix = 'shelf-$_shelf-';
@@ -85,13 +108,13 @@ Future<String> _builtMusicPid(
     for (final id in _renderedIdentifiers(tester)) {
       if (!id.startsWith(prefix)) continue;
       final pid = id.substring(prefix.length);
-      if (music.contains(pid)) return pid;
+      if (playable.contains(pid)) return pid;
     }
     if (DateTime.now().isAfter(deadline)) {
       fail(
         'timed out after $timeout waiting for a music card on the '
-        '"$_shelf" shelf; the library has ${music.length} music rows in '
-        'its recently-added window',
+        '"$_shelf" shelf; the library has ${playable.length} playable '
+        'music rows in its recently-added window',
       );
     }
     await tester.pump(const Duration(milliseconds: 200));
@@ -165,26 +188,43 @@ Future<void> _run(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('login-submit')));
 
   // Home draws its shelves; a music card plays what it is about rather
-  // than opening a screen, which is what puts the player up.
+  // than opening a screen, which is what starts a session.
   //
   // The list is read here, after sign-in, so it is the same view the app
   // just built rather than one taken before the session existed.
-  late final Set<String> music;
+  late final Set<String> playable;
   await tester.runAsync(() async {
-    music = await _musicShelfPids(http, token);
+    playable = await _playableShelfPids(http, token);
   });
-  final pid = await _builtMusicPid(tester, music);
+  final pid = await _builtMusicPid(tester, playable);
 
   // Identifiers come from the generated registry, never typed here: the
   // one this test used to hand-write went stale the moment home was
   // rebuilt, and it took a suite that runs in no CI with it.
   final card = find.bySemanticsIdentifier(SemanticsIds.shelfCard(_shelf, pid));
   await _pumpUntilFound(tester, card);
-  await tester.tap(card);
-  await _pumpUntilFound(
-    tester,
-    find.bySemanticsIdentifier(SemanticsIds.playerToggle),
+  // Nothing is playing yet, and the marker below is only worth pumping
+  // for if that is true: `_pumpUntilFound` answers before its first
+  // frame when the finder already matches, so a handle that could be on
+  // screen ahead of the tap would pass this step having proved nothing.
+  final transport = find.bySemanticsIdentifier(SemanticsIds.deckPlay);
+  expect(
+    transport,
+    findsNothing,
+    reason: 'the deck bar had a transport before the card was tapped',
   );
+  await tester.tap(card);
+  // The deck bar's transport, not the player's: play lands in the dock
+  // and the full player is a choice made from there, so the bar is what
+  // proves the tap took, which is what the playwright driver settles on
+  // after a play verb for the same reason. The transport rather than the
+  // bar
+  // itself, because the bar is also drawn for a restored-queue offer,
+  // which is a face with no transport and nothing playing behind it.
+  // Even this is a marker rather than the proof - it is drawn for a
+  // session that failed to load too - and the accounting below is what
+  // only real playback can satisfy.
+  await _pumpUntilFound(tester, transport);
 
   // The fixture track lasts seconds; completing it makes the client
   // report its listen session. The server marking the item played closes

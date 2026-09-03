@@ -295,6 +295,28 @@ func TestCorrupt(t *testing.T) {
 	})
 }
 
+// The desktop playback journey excludes deliberately-broken fixtures
+// from the card it taps, by the marker Filename spells into their
+// names. The two sides are in different languages with nothing between
+// them but this: a flavor added here and left out there puts an
+// unplayable card back in the draw, and the journey fails a minute
+// later on a timeout that reads like a playback bug.
+func TestCorruptionMarkersReachTheDesktopJourney(t *testing.T) {
+	const journey = "../app/app/integration_test/desktop_playback_test.dart"
+	src, err := os.ReadFile(journey)
+	if err != nil {
+		t.Fatalf("reading %s: %v (if the journey moved, move this pin with it)", journey, err)
+	}
+	for _, c := range fixtures.AllCorruptions {
+		// The marker as the journey writes it: the filename carries the
+		// flavor between hyphens, so that is what its exclusion matches.
+		marker := "'-" + string(c) + "-'"
+		if !strings.Contains(string(src), marker) {
+			t.Errorf("%s does not exclude %s fixtures (%s)", journey, c, marker)
+		}
+	}
+}
+
 func TestFilenames(t *testing.T) {
 	cases := []struct {
 		spec fixtures.Spec

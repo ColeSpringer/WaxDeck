@@ -23,6 +23,15 @@
 # tone is served over plain HTTP, which targetSdk 36 blocks outright
 # without that posture.
 #
+# The fault taxonomy rides it too, between the two. It is a
+# characterization test - it pins what the platform actually reports
+# rather than what its documentation says - and a claim like that is
+# worth only as much as its last run: unrun, the Android half of it was
+# a comment saying "measured" about an emulator nobody had booted since.
+# It is seconds on a device this job has already paid to boot, and it is
+# the only thing that holds the two platforms to one answer about which
+# failures move a queue.
+#
 # The waxdeck/saf channel test rides the same emulator afterwards. Its
 # system tree picker needs someone to tap through, and `flutter test`
 # holds the device's one instrumentation slot, so the taps come from an
@@ -162,6 +171,9 @@ jobs:
             flutter test integration_test/real_engine_conformance_test.dart
             -d emulator-5554
             --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
+            flutter test integration_test/load_fault_test.dart
+            -d emulator-5554
+            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
             "$GITHUB_WORKSPACE/e2e/tools/run-saf-probe.sh"
             "$RUNNER_TEMP/wax-saf/WaxProbe" emulator-5554
       # The identical run again, only when the first failed: the one
@@ -184,6 +196,9 @@ jobs:
             rm -rf "$RUNNER_TEMP/wax-saf-artifacts" &&
             cd app/app &&
             flutter test integration_test/real_engine_conformance_test.dart
+            -d emulator-5554
+            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
+            flutter test integration_test/load_fault_test.dart
             -d emulator-5554
             --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
             "$GITHUB_WORKSPACE/e2e/tools/run-saf-probe.sh"

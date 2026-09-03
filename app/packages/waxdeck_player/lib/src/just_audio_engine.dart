@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'audio_engine_port.dart';
-import 'fetchable/fetchable.dart';
+import 'stream_probe/stream_probe.dart';
 
 /// Which half of a failed load a just_audio failure describes.
 ///
@@ -70,22 +70,25 @@ MediaFault mediaFaultOf(Object failure) {
 const Set<int> _appleFormatErrors = <int>{-11828, -11829};
 
 /// [mediaFaultOf], then one question the platform cannot refuse to
-/// answer: when the code carried no verdict, is the URL fetchable at
-/// all?
+/// answer: when the code carried no verdict, what does the URL say
+/// about itself?
 ///
 /// On Android every load failure arrives as `TYPE_SOURCE` with a
 /// constant string (measured; see [mediaFaultOf]), so the code alone
 /// left a bad rip standing on the retry pane. The probe separates the
-/// halves from outside the plugin: a URL that answers a ranged GET has
+/// halves from outside the plugin. A URL that answers a ranged GET has
 /// nothing wrong with its server, its network, or its token, so what
-/// refused was the bytes - [MediaFault.source]. WaxDeck's stream URLs
-/// are HMAC-signed and replayable (`auth/mediatoken.go`), so the
-/// request consumes nothing, and it is spent only on a load that has
-/// already failed.
+/// refused was the bytes - [MediaFault.source]. A URL that answers 415
+/// says the same thing from the other side: our own endpoint would not
+/// make audio out of that file either ([StreamProbe.unplayable]), which
+/// is a verdict about the media and not about the way to it. WaxDeck's
+/// stream URLs are HMAC-signed and replayable (`auth/mediatoken.go`),
+/// so the request consumes nothing, and it is spent only on a load that
+/// has already failed.
 ///
-/// Refinement runs one way. A probe that fails proves nothing new -
-/// the transport verdict it would confirm is already the answer - so
-/// an unfetchable URL and a probe that breaks both leave
+/// Refinement runs one way. A probe that reaches nothing proves
+/// nothing new - the transport verdict it would confirm is already the
+/// answer - so an unreachable URL and a probe that breaks both leave
 /// [MediaFault.transport] standing, and a [MediaFault.source] from the
 /// table is never second-guessed. Only a `PlayerException` is probed:
 /// the player refusing for a reason it will not name is the ambiguity
@@ -98,14 +101,14 @@ const Set<int> _appleFormatErrors = <int>{-11828, -11829};
 Future<MediaFault> probedMediaFaultOf(
   Object failure,
   String url, {
-  Future<bool> Function(String url) probe = fetchable,
+  Future<StreamProbe> Function(String url) probe = probeStream,
 }) async {
   final fault = mediaFaultOf(failure);
   if (fault != MediaFault.transport || failure is! PlayerException) {
     return fault;
   }
   try {
-    return await probe(url) ? MediaFault.source : fault;
+    return (await probe(url)).blamesMedia ? MediaFault.source : fault;
   } on Object {
     // The port promises MediaLoadException and nothing else; a probe
     // that broke does not get to break that.
@@ -122,10 +125,11 @@ Future<MediaFault> probedMediaFaultOf(
 /// link. The cost of that generosity is at the far end: a slow but
 /// legitimate load whose URL still answers is classified as the media
 /// and auto-skipped rather than paned. "Answers" is a status line -
-/// `fetchable` reads one and hangs up - so a host that returns headers
-/// promptly and then stalls the body reads as the media every time. Taken knowingly, because it is
-/// the same verdict Android already gives garbage bytes on disk, and
-/// the skip surface names what happened.
+/// `probeStream` reads one and hangs up - so a host that returns
+/// headers promptly and then stalls the body reads as the media every
+/// time. Taken knowingly, because it is the same verdict Android
+/// already gives garbage bytes on disk, and the skip surface names
+/// what happened.
 const Duration _defaultLoadDeadline = Duration(seconds: 15);
 
 /// How long a `stop()` gets, both the one before a load and the one
@@ -158,7 +162,7 @@ class JustAudioEngine implements AudioEnginePort {
     this._player, {
     this._loadDeadline = _defaultLoadDeadline,
     this._stopGrace = _defaultStopGrace,
-    this._probe = fetchable,
+    this._probe = probeStream,
   }) {
     _indexSub = _player.currentIndexStream.listen(_onIndexChanged);
     _durationSub = _player.durationStream.listen(_rememberDuration);
@@ -167,7 +171,7 @@ class JustAudioEngine implements AudioEnginePort {
   final AudioPlayer _player;
   final Duration _loadDeadline;
   final Duration _stopGrace;
-  final Future<bool> Function(String url) _probe;
+  final Future<StreamProbe> Function(String url) _probe;
   final _boundaries = StreamController<void>.broadcast();
   final _refusals = StreamController<Object>.broadcast();
   late final StreamSubscription<int?> _indexSub;
@@ -281,8 +285,10 @@ class JustAudioEngine implements AudioEnginePort {
   /// Here it says everything: a deadline is the only report the desktop
   /// gives, so the probe is the whole classification rather than a
   /// refinement of one. A URL that answers a ranged GET while the
-  /// player could not finish with it is the media's fault; a URL that
-  /// does not answer is the transport's.
+  /// player could not finish with it is the media's fault, and so is
+  /// one that answers 415 - mpv giving up on a file the server would
+  /// not serve as audio is the same file twice. A URL that answers
+  /// neither is the transport's.
   Future<MediaFault> _faultOf(
     Object failure,
     String url,
@@ -312,7 +318,9 @@ class JustAudioEngine implements AudioEnginePort {
       }
     }
     try {
-      return await _probe(url) ? MediaFault.source : MediaFault.transport;
+      return (await _probe(url)).blamesMedia
+          ? MediaFault.source
+          : MediaFault.transport;
     } on Object {
       // The port promises MediaLoadException and nothing else.
       return MediaFault.transport;

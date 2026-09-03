@@ -34,7 +34,7 @@ void main() {
     test('a source failure is not read as the file', () {
       // TYPE_SOURCE carries an unreadable container and a refused HTTP
       // request under one number, so the table alone goes the safe
-      // way; the reachability probe below is what can say more.
+      // way; the stream probe below is what can say more.
       expect(
         mediaFaultOf(PlayerException(0, 'Source error', null)),
         MediaFault.transport,
@@ -83,7 +83,7 @@ void main() {
     });
   });
 
-  group('the reachability probe', () {
+  group('the stream probe', () {
     // Android is where the table has no verdict to give, so it is
     // where the probe's gate matters most.
     setUp(() => debugDefaultTargetPlatformOverride = TargetPlatform.android);
@@ -92,25 +92,41 @@ void main() {
     PlayerException sourceError() => PlayerException(0, 'Source error', null);
 
     test(
-      'a fetchable URL turns an unexplained failure into the file',
+      'a URL that answers turns an unexplained failure into the file',
       () async {
         expect(
           await probedMediaFaultOf(
             sourceError(),
             'http://x/a.mp3',
-            probe: (_) async => true,
+            probe: (_) async => StreamProbe.answered,
           ),
           MediaFault.source,
         );
       },
     );
 
-    test('an unfetchable URL leaves transport standing', () async {
+    test('a URL that refuses the file is the file too', () async {
+      // 415 from our own endpoint: the server would not make audio out
+      // of that file either, so the player giving up on it is one
+      // verdict twice. Standing on the retry pane here offers a press
+      // that cannot come out differently, and stops a queue that has
+      // nothing wrong with the rest of it.
+      expect(
+        await probedMediaFaultOf(
+          sourceError(),
+          'http://x/a.flac',
+          probe: (_) async => StreamProbe.unplayable,
+        ),
+        MediaFault.source,
+      );
+    });
+
+    test('a URL that reaches nothing leaves transport standing', () async {
       expect(
         await probedMediaFaultOf(
           sourceError(),
           'http://x/a.mp3',
-          probe: (_) async => false,
+          probe: (_) async => StreamProbe.unreachable,
         ),
         MediaFault.transport,
       );
@@ -126,7 +142,7 @@ void main() {
           'http://x/a.mp3',
           probe: (_) async {
             asked = true;
-            return false;
+            return StreamProbe.unreachable;
           },
         ),
         MediaFault.source,
@@ -137,7 +153,7 @@ void main() {
     test('a failure that is not the player is never probed', () async {
       // The probe resolves the player refusing without a reason. A
       // failure from anywhere else says nothing about the media, and a
-      // fetchable URL must not turn it into a skip.
+      // URL that answers must not turn it into a skip.
       var asked = false;
       expect(
         await probedMediaFaultOf(
@@ -145,7 +161,7 @@ void main() {
           'http://x/a.mp3',
           probe: (_) async {
             asked = true;
-            return true;
+            return StreamProbe.answered;
           },
         ),
         MediaFault.transport,

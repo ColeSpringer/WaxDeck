@@ -62,13 +62,30 @@ done
 # file: launching the next file's app process on the heels of the last
 # one's exit is flaky on linux desktop (the debug connection never comes
 # up), and separate invocations give it room.
+#
+# Every suite runs whatever the ones before it did, and the failures are
+# reported together at the end. They answer for different halves of the
+# stack - the app journey, the engine's format conformance, the fault
+# taxonomy - so stopping at the first hides the other two behind it for
+# as long as that failure stands, which is exactly what one stale
+# journey did. The cost is paid by a runner broken for all three (no
+# display, no audio sink, a stack that died): it spends three timeouts
+# saying so where fail-fast spent one.
+#
+# The tone is exported rather than named per suite: the journey ignores
+# it, and the two that need it fail loudly when it is missing. The fault
+# taxonomy is the one only a real player can answer for - mpv reports no
+# failed load at all, so that is where the engine's load deadline is
+# measured rather than assumed, with the tone as its control and its
+# recovery case's good load.
 cd "$E2E_DIR/../app/app"
-flutter test integration_test/desktop_playback_test.dart -d linux
-WAXDECK_CONFORMANCE_MEDIA="$CONF_DIR/conformance-tone.flac" \
-	flutter test integration_test/real_engine_conformance_test.dart -d linux
-# The fault taxonomy, which only a real player can answer for: mpv
-# reports no failed load at all, so this is where the engine's load
-# deadline is measured rather than assumed. The tone is the control
-# and the recovery case's good load.
-WAXDECK_CONFORMANCE_MEDIA="$CONF_DIR/conformance-tone.flac" \
-	flutter test integration_test/load_fault_test.dart -d linux
+export WAXDECK_CONFORMANCE_MEDIA="$CONF_DIR/conformance-tone.flac"
+FAILED=()
+for suite in desktop_playback real_engine_conformance load_fault; do
+  flutter test "integration_test/${suite}_test.dart" -d linux ||
+    FAILED+=("$suite")
+done
+[ ${#FAILED[@]} -eq 0 ] || {
+  echo "desktop suites failed: ${FAILED[*]}" >&2
+  exit 1
+}
