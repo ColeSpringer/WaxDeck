@@ -2,6 +2,12 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
+- [9-3-2026] In the minimized deck, when playing radio the "artist - song" doesn't scroll or anything when the full text is cutoff/too long.
+
+- [9-3-2026] In the minimized deck, the scrolling text for a title that is too long to show fully has its furthest most text cut off on both the left and right.
+
+- [9-3-2026] The tooltips when hovering over things are too aggressive. once they start showing up (after hovering for a second or two on something) they appear immediately and for everything you hover over afterward. We need to make this element sensitive. The timer should reset when you hover over a different element so its a deliberate choice by the user.
+
 - [8-28-2026] When you save a song from the radio, there are 2 seperate actions with the same icon. The always visible magnifying glass searches your library for it and the one from the menu identifies it from a review entry.
 
 - [8-28-2026] notification doesnt clear even after dealing with the task unless you specifally go and clear/click on the notification.
