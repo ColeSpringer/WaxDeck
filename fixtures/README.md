@@ -48,14 +48,27 @@ end-to-end harnesses scan it alongside the matrix.
 
 | Route | Codec / container |
 | --- | --- |
-| Valid | PCM in WAV, PCM in AIFF, FLAC, FLAC in Matroska, MP3, AAC in ADTS, AAC in MP4, ALAC in MP4, Opus in Ogg, Vorbis in Ogg |
+| Valid | PCM in WAV, PCM in AIFF, FLAC, FLAC in Matroska, MP3, AAC in ADTS, AAC in MP4, ALAC in MP4, Opus in Ogg, Vorbis in Ogg, HE-AAC in ADTS, HE-AAC in MP4, WavPack, Monkey's Audio |
 | Corrupt | `CorruptTruncated` (valid encode cut at half), `CorruptGarbage` (deterministic junk bytes) |
+| Vendored | Musepack SV8 with chapters, WMA with chapters |
 
 The MP4 routes use WaxFlow's progressive container override, producing
 flat moov+mdat files its format registry demuxes back; the default MP4
 form is fragmented CMAF, which exists for streaming rather than for
-files. The vendored WMA/APE/WavPack samples the plan of record allows
-as the one binary-media exception are deferred for now.
+files. HE-AAC is reached by naming the codec, since `.m4a` and `.aac`
+resolve to plain AAC-LC.
+
+WMA and Musepack are the one binary-media exception: WaxFlow decodes
+both and encodes neither, so no `Spec` can synthesize them. Two samples
+of a few KB each sit under `testdata/exotics/` and are served by
+`Vendored(name)` (bytes) and `WriteVendored(dir, names...)` (files),
+with `AllExotics` naming the set. Both carry chapters, which is the
+decode path they exist to cover.
+
+Tags are handed to WaxFlow's muxers verbatim, and a muxer now fails the
+transcode on a tag block it cannot fit rather than dropping it. A `Spec`
+over `MaxTagBytes` (48 KiB, Ogg's comment-header cap and the tightest
+bound in play) is refused up front so the error names the fixture.
 
 ## Tests
 

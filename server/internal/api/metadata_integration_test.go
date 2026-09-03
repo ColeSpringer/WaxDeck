@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -19,6 +20,9 @@ import (
 	"time"
 
 	"golang.org/x/image/tiff"
+
+	waxlabel "github.com/colespringer/waxlabel"
+	"github.com/colespringer/waxlabel/tag"
 
 	"github.com/colespringer/waxdeck/fixtures"
 )
@@ -1561,4 +1565,214 @@ func TestMetadataCommitWordsARefusalLikeTheEndpointItStandsIn(t *testing.T) {
 	if !strings.Contains(compound.Message, "title") {
 		t.Errorf("refusal message = %q, want it to name the locked field", compound.Message)
 	}
+}
+
+// TestMetadataAcquisitionEdit covers the correction verbs. The origin
+// used to be read-only, which left a wrong one permanently wrong: the
+// automatic recorder is merge-wise and never lowers a field, so an
+// empty value in a later event keeps whatever stands. These two write
+// every editable column as sent and take the row off outright.
+func TestMetadataAcquisitionEdit(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	// A SOURCE_URL tag is what makes the scan record an origin at all,
+	// and the row it writes reads `manual` with the tag's own url and
+	// id - which is the wrong-origin case this surface exists for.
+	// Duration distinct from every other preset, for the
+	// fingerprint-dedup reason DemoLibrary gives.
+	if _, err := fixtures.Generate(h.library, fixtures.Spec{
+		Name: "misattributed", Codec: fixtures.CodecFLAC, Duration: 6200 * time.Millisecond,
+		Tags: map[string]string{
+			"TITLE": "Misattributed Cut", "ARTIST": "Nobody In Particular",
+			"SOURCE_URL": "https://wrong.example.test/show/ep-99.mp3",
+			"SOURCE_ID":  "ep-99",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+
+	pid := ""
+	for _, it := range h.items(t, "").Items {
+		if it.Title == "Misattributed Cut" {
+			pid = it.Pid
+		}
+	}
+	if pid == "" {
+		t.Fatal("the misattributed fixture did not scan")
+	}
+	before := h.itemMeta(t, pid).Acquisition
+	if before == nil || before.SourceType != "manual" {
+		t.Fatalf("scanned origin = %+v, want a manual tag-derived row", before)
+	}
+	if before.SourceId == nil || *before.SourceId != "ep-99" {
+		t.Fatalf("scanned sourceId = %v, want the tag's", before.SourceId)
+	}
+	if before.Locked != nil && *before.Locked {
+		t.Fatal("a tag-derived origin arrived locked")
+	}
+
+	// The correction. provider is sent, sourceId deliberately is not:
+	// an absent column is cleared, which is the rule that makes lowering
+	// a wrong value possible at all.
+	stamp := time.Date(2024, 3, 4, 5, 6, 7, 0, time.UTC)
+	resp := putJSON(t, h.ts, "/api/v1/items/"+pid+"/acquisition", h.token, map[string]any{
+		"sourceType": "rss",
+		"sourceUrl":  "https://right.example.test/feed/ep-1.mp3",
+		"provider":   "rss",
+		"acquiredAt": stamp.Format(time.RFC3339),
+	})
+	wantStatus(t, resp, 200, "correct the origin")
+
+	after := h.itemMeta(t, pid).Acquisition
+	if after == nil {
+		t.Fatal("the corrected item carries no origin")
+	}
+	if after.SourceType != "rss" {
+		t.Errorf("sourceType = %q, want rss", after.SourceType)
+	}
+	if after.SourceUrl == nil || *after.SourceUrl != "https://right.example.test/feed/ep-1.mp3" {
+		t.Errorf("sourceUrl = %v, want the corrected one", after.SourceUrl)
+	}
+	if after.SourceId != nil {
+		t.Errorf("sourceId = %q, want the absent column cleared", *after.SourceId)
+	}
+	if after.AcquiredAt == nil || !after.AcquiredAt.Equal(stamp) {
+		t.Errorf("acquiredAt = %v, want %v", after.AcquiredAt, stamp)
+	}
+	// The lock is on by default, which is what stops the next scan
+	// re-deriving the wrong row from tags still in the file.
+	if after.Locked == nil || !*after.Locked {
+		t.Error("the correction left the origin unlocked")
+	}
+	if md := h.itemMeta(t, pid); !containsString(md.LockedFields, "acquisition") {
+		t.Errorf("lockedFields = %v, want acquisition", md.LockedFields)
+	}
+
+	// A second correction over the standing lock is refused, and goes
+	// through with force.
+	resp = putJSON(t, h.ts, "/api/v1/items/"+pid+"/acquisition", h.token,
+		map[string]any{"sourceType": "youtube"})
+	wantStatus(t, resp, 409, "correct a locked origin")
+	resp = putJSON(t, h.ts, "/api/v1/items/"+pid+"/acquisition", h.token,
+		map[string]any{"sourceType": "youtube", "force": true})
+	wantStatus(t, resp, 200, "force over the lock")
+	if got := h.itemMeta(t, pid).Acquisition; got == nil || got.SourceType != "youtube" {
+		t.Fatalf("forced origin = %+v, want youtube", got)
+	}
+	// The forced write cleared every absent column, the acquiredAt
+	// included - it carries forward only because it is the one field
+	// absence means "keep" for.
+	if got := h.itemMeta(t, pid).Acquisition; got.AcquiredAt == nil || !got.AcquiredAt.Equal(stamp) {
+		t.Errorf("acquiredAt after a forced rewrite = %v, want the standing stamp", got.AcquiredAt)
+	}
+
+	// An unrecognized type is refused rather than stored, and so is
+	// `local`, which is spelled by having no row at all.
+	for _, bad := range []string{"telepathy", "local", ""} {
+		resp = putJSON(t, h.ts, "/api/v1/items/"+pid+"/acquisition", h.token,
+			map[string]any{"sourceType": bad, "force": true})
+		wantStatus(t, resp, 400, "set sourceType "+bad)
+	}
+
+	// The redacted-URL trap. The read strips userinfo, query and
+	// fragment, so a client is never shown the stored string in full -
+	// and a form that resent what it displayed would replace a
+	// ?v=XYZ with the truncated form. An absent sourceUrl therefore
+	// keeps what stands; only an explicit empty string clears it.
+	wantStatus(t, putJSON(t, h.ts, "/api/v1/items/"+pid+"/acquisition", h.token, map[string]any{
+		"sourceType": "youtube",
+		"sourceUrl":  "https://www.youtube.test/watch?v=dQw4w9WgXcQ",
+		"force":      true,
+	}), 200, "state a URL carrying a query")
+	if got := h.itemMeta(t, pid).Acquisition; got.SourceUrl == nil ||
+		*got.SourceUrl != "https://www.youtube.test/watch" {
+		t.Fatalf("read-back sourceUrl = %v, want the redacted form", got.SourceUrl)
+	}
+	// Correcting only the provider, the way the sheet does when nobody
+	// touched the address box.
+	wantStatus(t, putJSON(t, h.ts, "/api/v1/items/"+pid+"/acquisition", h.token, map[string]any{
+		"sourceType": "youtube", "provider": "waxtap", "force": true,
+	}), 200, "correct the provider alone")
+	// Write it back, which is the only way to read the stored string in
+	// full: the file gets it verbatim while the API read redacts.
+	wantStatus(t, putJSON(t, h.ts, "/api/v1/items/"+pid+"/acquisition", h.token, map[string]any{
+		"sourceType": "youtube", "provider": "waxtap", "writeBack": true, "force": true,
+	}), 200, "and again with write-back")
+	// The query survived two corrections that never mentioned the URL.
+	if got := acquisitionTagsOf(t, filepath.Join(h.library, "misattributed.flac")); got["SOURCE_URL"] !=
+		"https://www.youtube.test/watch?v=dQw4w9WgXcQ" {
+		t.Errorf("the untouched URL did not survive a correction: %v", got)
+	}
+	// An explicit empty string is how it comes off.
+	wantStatus(t, putJSON(t, h.ts, "/api/v1/items/"+pid+"/acquisition", h.token, map[string]any{
+		"sourceType": "manual", "sourceUrl": "", "force": true,
+	}), 200, "clear the URL explicitly")
+	if got := h.itemMeta(t, pid).Acquisition; got.SourceUrl != nil {
+		t.Errorf("sourceUrl = %q after an explicit clear", *got.SourceUrl)
+	}
+
+	// Write-back is what makes a correction outlive a rescan without
+	// leaning on the lock: the file's own tags carry it, so the scan
+	// re-derives the corrected row rather than the wrong one.
+	resp = putJSON(t, h.ts, "/api/v1/items/"+pid+"/acquisition", h.token, map[string]any{
+		"sourceType": "rss",
+		"sourceUrl":  "https://right.example.test/feed/ep-1.mp3",
+		"sourceId":   "ep-1",
+		"writeBack":  true,
+		"force":      true,
+	})
+	wantStatus(t, resp, 200, "correct with write-back")
+	if got := acquisitionTagsOf(t, filepath.Join(h.library, "misattributed.flac")); got["SOURCE_ID"] != "ep-1" ||
+		got["SOURCE_URL"] != "https://right.example.test/feed/ep-1.mp3" {
+		t.Errorf("file tags after write-back = %v", got)
+	}
+
+	// The clear takes the row off, and is idempotent.
+	wantStatus(t, h.deleteReq(t, "/api/v1/items/"+pid+"/acquisition?force=true"), 204, "clear the origin")
+	if got := h.itemMeta(t, pid).Acquisition; got != nil {
+		t.Fatalf("origin after the clear = %+v, want absent", got)
+	}
+	wantStatus(t, h.deleteReq(t, "/api/v1/items/"+pid+"/acquisition?force=true"), 204, "clear again")
+}
+
+// A non-curator gets the same refusal here as on every other item-scoped
+// mutation: the origin is curated metadata, not a read.
+func TestMetadataAcquisitionEditNeedsCurate(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	page := h.items(t, "")
+	if len(page.Items) == 0 {
+		t.Fatal("no items in the demo library")
+	}
+	pid := page.Items[0].Pid
+	wantStatus(t, h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "listener", "password": "long-enough-pw",
+	}), 201, "create non-admin user")
+	listener := loginAs(t, h.ts, "listener", "long-enough-pw").Token
+
+	wantStatus(t, reqAs(t, h, "PUT", "/api/v1/items/"+pid+"/acquisition", listener,
+		map[string]any{"sourceType": "rss"}), 403, "a listener correcting an origin")
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/items/"+pid+"/acquisition", listener, nil),
+		403, "a listener clearing an origin")
+}
+
+// acquisitionTagsOf reads a file's origin tags back off disk, which is
+// the only place a write-back can be confirmed: the read surface
+// redacts the URL and reports the catalog's row, not the file's.
+func acquisitionTagsOf(t *testing.T, path string) map[string]string {
+	t.Helper()
+	doc, err := waxlabel.ParseFile(context.Background(), path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", filepath.Base(path), err)
+	}
+	out := map[string]string{}
+	for key, name := range map[tag.Key]string{
+		tag.SourceURL: "SOURCE_URL", tag.SourceID: "SOURCE_ID",
+	} {
+		if vals, ok := doc.Get(key); ok && len(vals) > 0 {
+			out[name] = vals[0]
+		}
+	}
+	return out
 }

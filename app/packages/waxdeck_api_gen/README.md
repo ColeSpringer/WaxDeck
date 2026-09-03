@@ -426,6 +426,7 @@ Class | Method | HTTP request | Description
 [*LibraryApi*](doc/LibraryApi.md) | [**search**](doc/LibraryApi.md#search) | **GET** /library/search | Search the library
 [*MetadataApi*](doc/MetadataApi.md) | [**bulkEditMetadata**](doc/MetadataApi.md#bulkeditmetadata) | **POST** /items/bulk-edit | Edit fields on many items
 [*MetadataApi*](doc/MetadataApi.md) | [**clearEntityArtwork**](doc/MetadataApi.md#clearentityartwork) | **DELETE** /entities/{entityType}/{entityPid}/artwork | Clear entity artwork
+[*MetadataApi*](doc/MetadataApi.md) | [**clearItemAcquisition**](doc/MetadataApi.md#clearitemacquisition) | **DELETE** /items/{pid}/acquisition | Remove an item&#39;s recorded origin
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemArtwork**](doc/MetadataApi.md#clearitemartwork) | **DELETE** /items/{pid}/artwork | Clear item artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemLyrics**](doc/MetadataApi.md#clearitemlyrics) | **DELETE** /items/{pid}/lyrics | Clear lyrics
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemTag**](doc/MetadataApi.md#clearitemtag) | **DELETE** /items/{pid}/tags/{key} | Clear a custom tag
@@ -443,6 +444,7 @@ Class | Method | HTTP request | Description
 [*MetadataApi*](doc/MetadataApi.md) | [**setBookChapters**](doc/MetadataApi.md#setbookchapters) | **PUT** /books/{pid}/chapters | Replace a book&#39;s chapters
 [*MetadataApi*](doc/MetadataApi.md) | [**setEntityArtwork**](doc/MetadataApi.md#setentityartwork) | **PUT** /entities/{entityType}/{entityPid}/artwork | Set entity artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**setEntityArtworkLock**](doc/MetadataApi.md#setentityartworklock) | **PUT** /entities/{entityType}/{entityPid}/artwork/lock | Pin or unpin an entity&#39;s artwork
+[*MetadataApi*](doc/MetadataApi.md) | [**setItemAcquisition**](doc/MetadataApi.md#setitemacquisition) | **PUT** /items/{pid}/acquisition | Correct an item&#39;s recorded origin
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemArtwork**](doc/MetadataApi.md#setitemartwork) | **PUT** /items/{pid}/artwork | Set item artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemCredits**](doc/MetadataApi.md#setitemcredits) | **PUT** /items/{pid}/credits | Replace one credit role
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemLocks**](doc/MetadataApi.md#setitemlocks) | **PUT** /items/{pid}/locks | Lock or unlock fields
@@ -732,6 +734,7 @@ Class | Method | HTTP request | Description
  - [InviteList](doc/InviteList.md)
  - [Item](doc/Item.md)
  - [ItemAcquisition](doc/ItemAcquisition.md)
+ - [ItemAcquisitionEdit](doc/ItemAcquisitionEdit.md)
  - [ItemMetadata](doc/ItemMetadata.md)
  - [ItemPage](doc/ItemPage.md)
  - [ItemPermissions](doc/ItemPermissions.md)

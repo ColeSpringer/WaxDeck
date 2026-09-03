@@ -21,6 +21,7 @@ import 'package:waxdeck_api_gen/src/model/enrich_preview.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curation.dart';
 import 'package:waxdeck_api_gen/src/model/entity_edit.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
+import 'package:waxdeck_api_gen/src/model/item_acquisition_edit.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
 import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
 import 'package:waxdeck_api_gen/src/model/locks_edit.dart';
@@ -45,7 +46,7 @@ class MetadataApi {
   const MetadataApi(this._dio, this._serializers);
 
   /// Edit fields on many items
-  /// Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). &#x60;skipLocked&#x60; skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with &#x60;field-locked&#x60;. Write-back failures are reported per item and never undo the catalog batch. Every edited field is locked on every edited item, so a repeat edit of the same field needs &#x60;force&#x60; or &#x60;skipLocked&#x60;. Editing a release-keying field (&#x60;album&#x60;, &#x60;album_artist&#x60;, &#x60;year&#x60;) regroups the edited tracks onto a fresh album entity rather than renaming the release in place; &#x60;resultingAlbumPid&#x60; reports where they landed. 
+  /// Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). &#x60;skipLocked&#x60; skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with &#x60;field-locked&#x60;. Write-back failures are reported per item and never undo the catalog batch. Every edited field is locked on every edited item, so a repeat edit of the same field needs &#x60;force&#x60; or &#x60;skipLocked&#x60;. Editing a release-keying field (&#x60;album&#x60;, &#x60;album_artist&#x60;, &#x60;year&#x60;) moves the edited tracks to a new release identity, and where they land depends on coverage: a batch holding **every** member of the album renames the release in place, so the album keeps its pid along with its artwork, curation and play state, while a batch holding only **some** of them forks those onto a fresh album entity and leaves the rest behind. A rename onto a name another release already owns merges into it. &#x60;resultingAlbumPid&#x60; reports where the edited items sit either way. 
   ///
   /// Parameters:
   /// * [bulkEdit] 
@@ -203,6 +204,77 @@ class MetadataApi {
 
     final _queryParameters = <String, dynamic>{
       if (role != null) r'role': encodeQueryParameter(_serializers, role, const FullType(ArtRole)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
+  }
+
+  /// Remove an item&#39;s recorded origin
+  /// Takes the origin row off, so the item reads the source it has without one: its show&#39;s type for an episode, and &#x60;local&#x60; for everything else. Idempotent - an item with no row answers 204 the same way.  &#x60;lock&#x60; defaults **true** here, and it is what makes the clear stick: the row came from evidence that is still in the file, so the next full scan re-derives it. &#x60;writeBack&#x60; is the durable half, stripping those tags outright, after which the origin stays gone with no lock holding it.  A write-back that fails on some files is **not** reported: the catalog row is gone either way, and a 204 carries no body to name them in. It is logged server-side, and the tags that stayed are what a later full rescan would re-derive from - so &#x60;PUT&#x60; back with &#x60;writeBack&#x60; if the clear has to be durable and this one did not take. The &#x60;PUT&#x60; reports its own write-back failures in &#x60;MetadataEditResult&#x60;. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [writeBack] - Strip the origin tags from the item's files too.
+  /// * [lock] - Lock `acquisition` so a rescan cannot re-derive the row from tags still in the file. 
+  /// * [force] - Clear through a standing lock.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> clearItemAcquisition({ 
+    required String pid,
+    bool? writeBack = false,
+    bool? lock = true,
+    bool? force = false,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/acquisition'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'DELETE',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (writeBack != null) r'writeBack': encodeQueryParameter(_serializers, writeBack, const FullType(bool)),
+      if (lock != null) r'lock': encodeQueryParameter(_serializers, lock, const FullType(bool)),
+      if (force != null) r'force': encodeQueryParameter(_serializers, force, const FullType(bool)),
     };
 
     final _response = await _dio.request<Object>(
@@ -835,11 +907,12 @@ class MetadataApi {
   }
 
   /// Read an entity&#39;s artwork lock
-  /// Whether an album, artist, release group, genre, or podcast&#39;s front cover is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says \&quot;do not refill this\&quot; rather than \&quot;this has no cover yet\&quot;. Administrators only, like every other catalog-entity curation read, except the podcast pin, which &#x60;managePodcasts&#x60; holders read too. 
+  /// Whether one of an album, artist, release group, genre, or podcast&#39;s artwork slots is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says \&quot;do not refill this\&quot; rather than \&quot;this has no cover yet\&quot;. Administrators only, like every other catalog-entity curation read, except the podcast pin, which &#x60;managePodcasts&#x60; holders read too.  The reading for an auxiliary role is the **effective** lock - the whole-artwork pin or that role&#39;s own - so a &#x60;true&#x60; there does not say which of the two set it. &#x60;ArtRoleInfo.locked&#x60; on the artwork read reports the same thing. 
   ///
   /// Parameters:
   /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [role] - Which artwork slot to read. Defaults to `front`.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -852,6 +925,7 @@ class MetadataApi {
   Future<Response<ArtworkLock>> getEntityArtworkLock({ 
     required String entityType,
     required String entityPid,
+    ArtRole? role,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -883,9 +957,14 @@ class MetadataApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (role != null) r'role': encodeQueryParameter(_serializers, role, const FullType(ArtRole)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -1689,12 +1768,13 @@ class MetadataApi {
   }
 
   /// Pin or unpin an entity&#39;s artwork
-  /// Sets or clears the front-cover pin without touching the cover itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only, except the podcast pin, which &#x60;managePodcasts&#x60; holders set too - the pin is what keeps a hand-set show cover from being refetched on the next feed sync, so it belongs to whoever may set the cover.  &#x60;playlist&#x60; is refused with &#x60;invalid-request&#x60;. A playlist&#39;s cover authority is its own custom/generated origin marker rather than this pin, and a pin left standing on one would make the mosaic the server builds from the members unwritable - which the read path retries on every read, forever. 
+  /// Sets or clears one slot&#39;s pin without touching the image itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only, except the podcast pin, which &#x60;managePodcasts&#x60; holders set too - the pin is what keeps a hand-set show cover from being refetched on the next feed sync, so it belongs to whoever may set the cover.  &#x60;role&#x60; decides the reach. The default &#x60;front&#x60; writes the entity&#39;s whole-artwork pin, which gates the front cover and also enrichment&#39;s fills in every other role; a named auxiliary role writes that slot&#39;s own pin alone. Unpinning one auxiliary role therefore does not lift a whole-artwork pin standing over it, and the read reports the effective lock either way.  &#x60;playlist&#x60; is refused with &#x60;invalid-request&#x60;. A playlist&#39;s cover authority is its own custom/generated origin marker rather than this pin, and a pin left standing on one would make the mosaic the server builds from the members unwritable - which the read path retries on every read, forever. 
   ///
   /// Parameters:
   /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [artworkLock] 
+  /// * [role] - Which artwork slot to pin. Defaults to `front`.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1708,6 +1788,7 @@ class MetadataApi {
     required String entityType,
     required String entityPid,
     required ArtworkLock artworkLock,
+    ArtRole? role,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -1740,6 +1821,10 @@ class MetadataApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (role != null) r'role': encodeQueryParameter(_serializers, role, const FullType(ArtRole)),
+    };
+
     dynamic _bodyData;
 
     try {
@@ -1751,6 +1836,7 @@ class MetadataApi {
          requestOptions: _options.compose(
           _dio.options,
           _path,
+          queryParameters: _queryParameters,
         ),
         type: DioExceptionType.unknown,
         error: error,
@@ -1762,6 +1848,7 @@ class MetadataApi {
       _path,
       data: _bodyData,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -1787,6 +1874,114 @@ class MetadataApi {
     }
 
     return Response<ArtworkLock>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Correct an item&#39;s recorded origin
+  /// Replaces the item&#39;s origin row - how and where it entered the library - and locks &#x60;acquisition&#x60; by default. It exists because the automatic recorder is merge-wise and never lowers a field: an event with an empty url leaves a standing one alone, so a wrong url, id or provider can only come off through here or through a clear.  **The editable columns are replaced as sent**: &#x60;sourceType&#x60;, &#x60;sourceId&#x60; and &#x60;provider&#x60;. An absent one is cleared, not kept, which is what makes correcting a wrong value possible at all. Two things the body cannot express are carried forward from the standing row instead of being lost - the provider version and the acquisition&#39;s stored options - and so is the acquired-at stamp when &#x60;acquiredAt&#x60; is absent.  &#x60;sourceUrl&#x60; is the exception, and has to be: the read **redacts** it (see &#x60;ItemAcquisition.sourceUrl&#x60;), so a client that echoed back what it was shown would replace a stored &#x60;?v&#x3D;XYZ&#x60; with the truncated form it could see. An absent &#x60;sourceUrl&#x60; therefore **keeps** what stands, and an explicit empty string clears it. Send it only when somebody typed one.  &#x60;writeBack&#x60; mirrors the correction into the files&#39; &#x60;SOURCE_URL&#x60;/&#x60;SOURCE_ID&#x60;/&#x60;ACQUISITION_DATE&#x60; tags, which is what makes it survive a rescan without leaning on the lock. The stamp only reaches a file when someone actually knows it: a brand-new row&#39;s acquired-at is scan time, an approximation the catalog holds honestly and a file cannot, so it is not written.  A locked origin answers &#x60;field-locked&#x60; unless &#x60;force&#x60; is set. Administrators, or the user whose upload brought the item in. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [itemAcquisitionEdit] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [MetadataEditResult] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<MetadataEditResult>> setItemAcquisition({ 
+    required String pid,
+    required ItemAcquisitionEdit itemAcquisitionEdit,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/acquisition'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'PUT',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(ItemAcquisitionEdit);
+      _bodyData = _serializers.serialize(itemAcquisitionEdit, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    MetadataEditResult? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(MetadataEditResult),
+      ) as MetadataEditResult;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<MetadataEditResult>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -1920,7 +2115,7 @@ class MetadataApi {
   }
 
   /// Replace one credit role
-  /// Replaces the named people for one contributor role (composer, lyricist, producer, narrator, and the rest of the per-kind role vocabulary from the fields endpoint). Names resolve to artist entities and deduplicate. An empty list clears the role. &#x60;writeBack&#x60; writes the role&#39;s tag keys where a round-trippable key exists (book translator and editor roles are database-only by upstream design; the response says so rather than failing). 
+  /// Replaces the named people for one contributor role (composer, lyricist, producer, narrator, and the rest of the per-kind role vocabulary from the fields endpoint). Names resolve to artist entities and deduplicate. An empty list clears the role. &#x60;writeBack&#x60; writes the role&#39;s tag keys where a round-trippable key exists (book translator and editor roles are database-only by upstream design; the response says so rather than failing).  An artist whose **every** credit in the library this call moves is **renamed in place**, keeping its pid along with its artwork, curation and stars, rather than being left behind while a fresh artist takes the credit. Naming several people renames onto the first of them and forks the rest onto new artists; a first name already taken by another artist merges the old one into it instead. An artist with credits this call does not touch is not renamed - the credit simply moves. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -2028,7 +2223,7 @@ class MetadataApi {
   }
 
   /// Lock or unlock fields
-  /// Locks or unlocks the named fields against scans, enrichment, and organize. Field names are the scalar vocabulary plus the namespaced artifacts: &#x60;lyrics&#x60;, &#x60;chapters&#x60;, &#x60;art&#x60;, &#x60;credit.ROLE&#x60;, and &#x60;tag.KEY&#x60;. 
+  /// Locks or unlocks the named fields against scans, enrichment, and organize. Field names are the scalar vocabulary plus the namespaced artifacts: &#x60;lyrics&#x60;, &#x60;chapters&#x60;, &#x60;art&#x60;, &#x60;art.ROLE&#x60;, &#x60;acquisition&#x60;, &#x60;credit.ROLE&#x60;, and &#x60;tag.KEY&#x60;.  The two artwork spellings differ in reach. &#x60;art&#x60; is the whole pin: it gates the front cover and also enrichment&#39;s fills in every other role. &#x60;art.ROLE&#x60; (&#x60;art.back&#x60;, &#x60;art.disc&#x60;, &#x60;art.booklet&#x60;, &#x60;art.background&#x60;) gates that one slot, so a hand-set booklet scan can be held while the rest stay open. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

@@ -11,22 +11,22 @@ part 'art_role.g.dart';
 
 class ArtRole extends EnumClass {
 
-  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans and enrichment; `back`, `disc`, `booklet`, and `background` are set explicitly and resolve at the entity's own level. Defaults to `front`. 
+  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans; `back`, `disc`, `booklet`, and `background` resolve at the entity's own level and are set explicitly or filled by an enrichment pass that fetched art and found the slot empty. Defaults to `front`. 
   @BuiltValueEnumConst(wireName: r'front')
   static const ArtRole front = _$front;
-  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans and enrichment; `back`, `disc`, `booklet`, and `background` are set explicitly and resolve at the entity's own level. Defaults to `front`. 
+  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans; `back`, `disc`, `booklet`, and `background` resolve at the entity's own level and are set explicitly or filled by an enrichment pass that fetched art and found the slot empty. Defaults to `front`. 
   @BuiltValueEnumConst(wireName: r'back')
   static const ArtRole back = _$back;
-  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans and enrichment; `back`, `disc`, `booklet`, and `background` are set explicitly and resolve at the entity's own level. Defaults to `front`. 
+  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans; `back`, `disc`, `booklet`, and `background` resolve at the entity's own level and are set explicitly or filled by an enrichment pass that fetched art and found the slot empty. Defaults to `front`. 
   @BuiltValueEnumConst(wireName: r'disc')
   static const ArtRole disc = _$disc;
-  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans and enrichment; `back`, `disc`, `booklet`, and `background` are set explicitly and resolve at the entity's own level. Defaults to `front`. 
+  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans; `back`, `disc`, `booklet`, and `background` resolve at the entity's own level and are set explicitly or filled by an enrichment pass that fetched art and found the slot empty. Defaults to `front`. 
   @BuiltValueEnumConst(wireName: r'booklet')
   static const ArtRole booklet = _$booklet;
-  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans and enrichment; `back`, `disc`, `booklet`, and `background` are set explicitly and resolve at the entity's own level. Defaults to `front`. 
+  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans; `back`, `disc`, `booklet`, and `background` resolve at the entity's own level and are set explicitly or filled by an enrichment pass that fetched art and found the slot empty. Defaults to `front`. 
   @BuiltValueEnumConst(wireName: r'background')
   static const ArtRole background = _$background;
-  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans and enrichment; `back`, `disc`, `booklet`, and `background` are set explicitly and resolve at the entity's own level. Defaults to `front`. 
+  /// One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans; `back`, `disc`, `booklet`, and `background` resolve at the entity's own level and are set explicitly or filled by an enrichment pass that fetched art and found the slot empty. Defaults to `front`. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const ArtRole unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

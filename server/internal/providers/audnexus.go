@@ -73,14 +73,12 @@ func (a *Audnexus) Capabilities() enrich.Capability {
 // Enrich answers a book lookup by ASIN: narrators, publisher, release
 // year, a tag-stripped description, genre names, and the cover image.
 // Requests without an ASIN are clean misses.
+//
+// The work is restricted to what the request says the pass will read: a
+// book-metadata ask skips the cover download, which no current consumer
+// of a TargetBook candidate reads anyway. A zero Want means everything,
+// which is the whole-library pass's shape.
 func (a *Audnexus) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
-	return a.EnrichScoped(ctx, req, a.Capabilities())
-}
-
-// EnrichScoped is Enrich restricted to what the caller will read: a
-// book-metadata ask skips the cover download, which no current
-// consumer of a TargetBook candidate reads anyway.
-func (a *Audnexus) EnrichScoped(ctx context.Context, req enrich.Request, want enrich.Capability) (*enrich.Candidate, error) {
 	if req.Type != enrich.TargetBook || req.ASIN == "" {
 		return nil, nil
 	}
@@ -140,7 +138,7 @@ func (a *Audnexus) EnrichScoped(ctx context.Context, req enrich.Request, want en
 			cand.Genres = append(cand.Genres, g.Name)
 		}
 	}
-	if want.Has(enrich.CapCover) && book.Image != "" {
+	if req.Wants(enrich.CapCover) && book.Image != "" {
 		data, mediaType, err := fetchImage(ctx, a.core, book.Image)
 		if err != nil {
 			return nil, err

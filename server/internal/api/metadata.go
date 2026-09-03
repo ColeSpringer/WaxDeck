@@ -107,8 +107,14 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 		if a.SourceURL != "" {
 			acq.SourceUrl = ptr(a.SourceURL)
 		}
+		if a.SourceID != "" {
+			acq.SourceId = ptr(a.SourceID)
+		}
 		if a.Provider != "" {
 			acq.Provider = ptr(a.Provider)
+		}
+		if a.Locked {
+			acq.Locked = ptr(true)
 		}
 		out.Acquisition = &acq
 	}
@@ -687,7 +693,7 @@ func (s *Server) GetEntityArtworkLock(ctx context.Context, req GetEntityArtworkL
 	if !entityArtworkPermitted(uc, string(req.EntityType)) {
 		return GetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
 	}
-	locked, err := s.svc.EntityArtworkLock(ctx, string(req.EntityType), req.EntityPid)
+	locked, err := s.svc.EntityArtworkLock(ctx, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role))
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
@@ -711,7 +717,7 @@ func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkL
 	if req.Body == nil {
 		return SetEntityArtworkLock400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a locked body is required"))}, nil
 	}
-	locked, err := s.svc.SetEntityArtworkLock(ctx, string(req.EntityType), req.EntityPid, req.Body.Locked)
+	locked, err := s.svc.SetEntityArtworkLock(ctx, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), req.Body.Locked)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
@@ -768,6 +774,81 @@ func (s *Server) ClearItemTag(ctx context.Context, req ClearItemTagRequestObject
 		return nil, err
 	}
 	return ClearItemTag204Response{}, nil
+}
+
+// --- acquisition ------------------------------------------------------------------
+
+// The origin verbs mirror the custom-tag pair beside them: the same
+// curate gate, the same not-found sentence, and the same field-locked
+// arm, because the origin is one more curated field with a lock of its
+// own. What differs is the replacement rule the schema documents - the
+// four editable columns are written as sent, absent meaning cleared -
+// which is the whole reason a correction is possible at all.
+
+func (s *Server) SetItemAcquisition(ctx context.Context, req SetItemAcquisitionRequestObject) (SetItemAcquisitionResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+		return SetItemAcquisition403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+	}
+	if req.Body == nil {
+		return SetItemAcquisition400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a sourceType body is required"))}, nil
+	}
+	edit := service.AcquisitionEdit{
+		SourceType: req.Body.SourceType,
+		SourceURL:  req.Body.SourceUrl,
+		SourceID:   deref(req.Body.SourceId),
+		Provider:   deref(req.Body.Provider),
+	}
+	if req.Body.AcquiredAt != nil {
+		edit.AcquiredAt = *req.Body.AcquiredAt
+	}
+	out, err := s.svc.SetItemAcquisition(ctx, uc, req.Pid, edit, service.MetadataEditParams{
+		WriteBack: derefBool(req.Body.WriteBack),
+		Lock:      boolOr(req.Body.Lock, true),
+		Force:     derefBool(req.Body.Force),
+	})
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return SetItemAcquisition400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindNotFound:
+			return SetItemAcquisition404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		case service.KindLocked:
+			return SetItemAcquisition409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return SetItemAcquisition200JSONResponse(editResultJSON(out)), nil
+}
+
+func (s *Server) ClearItemAcquisition(ctx context.Context, req ClearItemAcquisitionRequestObject) (ClearItemAcquisitionResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+		return ClearItemAcquisition403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+	}
+	err = s.svc.ClearItemAcquisition(ctx, uc, req.Pid, service.MetadataEditParams{
+		WriteBack: derefBool(req.Params.WriteBack),
+		Lock:      boolOr(req.Params.Lock, true),
+		Force:     derefBool(req.Params.Force),
+	})
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return ClearItemAcquisition400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindNotFound:
+			return ClearItemAcquisition404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		case service.KindLocked:
+			return ClearItemAcquisition409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return ClearItemAcquisition204Response{}, nil
 }
 
 // --- locks ------------------------------------------------------------------------

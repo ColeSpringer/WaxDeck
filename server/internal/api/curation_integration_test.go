@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1189,4 +1190,207 @@ func TestAcquireFromURL(t *testing.T) {
 		!strings.Contains(nmErr.Message, "managed") {
 		t.Fatalf("no-managed-root error = %+v (%v)", nmErr, err)
 	}
+}
+
+// TestApprovedMatchIsAttributedToMusicBrainz is the provenance half of
+// an apply. The values come off a MusicBrainz release, so an approval
+// is an enrichment write from that service - it used to record a user
+// edit, which showed every approved field in the metadata editor as
+// something the reviewer had typed.
+//
+// The revert is the other half: it restores where each value came from,
+// not only what it was. Without that, undoing an apply would leave
+// three fields attributed to the person who undid them.
+func TestApprovedMatchIsAttributedToMusicBrainz(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: []*match.Release{nightfallRelease()}}
+	})
+	if _, err := fixtures.Generate(h.library, messyNightfallSpecs()...); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+
+	var seedPid string
+	for _, it := range h.items(t, "?limit=100").Items {
+		if it.Title == "Harbor Lights" {
+			seedPid = it.Pid
+		}
+	}
+	if seedPid == "" {
+		t.Fatal("the messy album track did not scan")
+	}
+	// A scanned file has no provenance rows for its scalar fields at
+	// all: a row is written when something edits a field, and nothing
+	// has. That is the state the revert restores toward.
+	if got, ok := provenanceOf(t, h, seedPid)["artist"]; ok {
+		t.Fatalf("a freshly scanned item carries artist provenance %+v", got)
+	}
+
+	resp := h.postJSON(t, "/api/v1/items/"+seedPid+"/rematch", nil)
+	if resp.StatusCode != 202 {
+		t.Fatalf("rematch status = %d", resp.StatusCode)
+	}
+	entryID := decode[RematchResult](t, resp).ReviewEntryId
+	drainMatches(t, h)
+	if entry := getReview(t, h, entryID); entry.Status != "auto-applied" {
+		t.Fatalf("entry status = %q, want auto-applied", entry.Status)
+	}
+
+	after := provenanceOf(t, h, seedPid)
+	for _, field := range []string{"artist", "album", "album_artist"} {
+		got := after[field]
+		if got.source != "enrichment" || got.provider != "musicbrainz" {
+			t.Errorf("%s provenance after the apply = %+v, want enrichment/musicbrainz", field, got)
+		}
+		if !got.locked {
+			t.Errorf("%s is not locked after the apply", field)
+		}
+	}
+
+	// The revert puts the fields back under the attribution they had,
+	// which for a scanned file is the tag row the values came from.
+	resp = h.postJSON(t, "/api/v1/review/queue/"+entryID+"/revert", nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("revert status = %d", resp.StatusCode)
+	}
+	reverted := provenanceOf(t, h, seedPid)
+	for _, field := range []string{"artist", "album", "album_artist"} {
+		got := reverted[field]
+		// `tag` rather than nothing: the row cannot be un-written, and
+		// the value it now describes did come off the file. What
+		// matters is that it no longer claims MusicBrainz supplied it,
+		// or that the person who pressed revert typed it.
+		if got.source != "tag" {
+			t.Errorf("%s provenance after the revert = %+v, want a tag row", field, got)
+		}
+		if got.provider != "" {
+			t.Errorf("%s kept provider %q through the revert", field, got.provider)
+		}
+		if got.locked {
+			t.Errorf("%s stayed locked through the revert", field)
+		}
+	}
+}
+
+// TestRevertKeepsTheAlbumWhole is the coverage half of a revert. The
+// restored fields include the three that key a release, and the rename
+// pre-pass keeps an album's pid only when a batch covers every member -
+// so a revert that split the unit into more than one edit (to restore
+// each field under its own prior attribution, say) would fork the album
+// in two on the way back.
+//
+// The mixed-provenance setup is the case that would do it: one track
+// hand-edited before the match, the rest straight off the scan.
+func TestRevertKeepsTheAlbumWhole(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: []*match.Release{nightfallRelease()}}
+	})
+	if _, err := fixtures.Generate(h.library, messyNightfallSpecs()...); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+
+	// The demo library scans alongside the fixture album, so the unit is
+	// named rather than taken as "every track".
+	unit := []string{"Harbor Lights", "Copper Sky", "Meridian Line"}
+	pids := map[string]string{}
+	for _, it := range h.items(t, "?limit=100").Items {
+		if slices.Contains(unit, it.Title) {
+			pids[it.Title] = it.Pid
+		}
+	}
+	if len(pids) != len(unit) {
+		t.Fatalf("messy album did not scan as three tracks: %v", pids)
+	}
+	seedPid := pids["Harbor Lights"]
+	members := make([]string, 0, len(unit))
+	for _, title := range unit {
+		members = append(members, pids[title])
+	}
+	// One member carries a user edit going in, so the unit's prior
+	// provenance is mixed rather than uniform.
+	resp := h.patchJSON(t, "/api/v1/items/"+pids["Copper Sky"]+"/metadata", map[string]any{
+		"fields": map[string]string{"comment": "hand-noted"},
+	})
+	if resp.StatusCode != 200 {
+		t.Fatalf("seeding a user edit: status %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	resp = h.postJSON(t, "/api/v1/items/"+seedPid+"/rematch", nil)
+	if resp.StatusCode != 202 {
+		t.Fatalf("rematch status = %d", resp.StatusCode)
+	}
+	entryID := decode[RematchResult](t, resp).ReviewEntryId
+	drainMatches(t, h)
+	if entry := getReview(t, h, entryID); entry.Status != "auto-applied" {
+		t.Fatalf("entry status = %q, want auto-applied", entry.Status)
+	}
+	applied := albumOfEvery(t, h, members)
+
+	resp = h.postJSON(t, "/api/v1/review/queue/"+entryID+"/revert", nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("revert status = %d", resp.StatusCode)
+	}
+	reverted := albumOfEvery(t, h, members)
+	if reverted == "" {
+		t.Fatal("the revert split the unit across albums")
+	}
+	// Full coverage renames in place, so the pid stands through both
+	// the apply and the way back.
+	if reverted != applied {
+		t.Errorf("album pid = %s after the revert, %s after the apply", reverted, applied)
+	}
+}
+
+// albumOfEvery returns the one album pid every named item sits on, or
+// "" when they are spread across more than one.
+func albumOfEvery(t *testing.T, h *harness, pids []string) string {
+	t.Helper()
+	byPID := map[string]string{}
+	for _, it := range h.items(t, "?limit=100").Items {
+		if it.AlbumPid != nil {
+			byPID[it.Pid] = *it.AlbumPid
+		}
+	}
+	album := ""
+	for _, pid := range pids {
+		got, ok := byPID[pid]
+		if !ok {
+			t.Fatalf("item %s carries no album", pid)
+		}
+		if album == "" {
+			album = got
+			continue
+		}
+		if got != album {
+			return ""
+		}
+	}
+	return album
+}
+
+// provenanceRow is one field's recorded origin, as the metadata read
+// answers it.
+type provenanceRow struct {
+	source, provider string
+	locked           bool
+}
+
+// provenanceOf indexes an item's field provenance rows by field name. A
+// field with no row is absent from the map, which is the ordinary state
+// of a scanned file nothing has edited.
+func provenanceOf(t *testing.T, h *harness, pid string) map[string]provenanceRow {
+	t.Helper()
+	out := map[string]provenanceRow{}
+	for _, r := range h.itemMeta(t, pid).Provenance {
+		row := provenanceRow{source: r.Source, locked: r.Locked}
+		if r.Provider != nil {
+			row.provider = *r.Provider
+		}
+		out[r.Field] = row
+	}
+	return out
 }

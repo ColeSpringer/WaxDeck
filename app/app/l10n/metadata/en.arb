@@ -462,6 +462,26 @@
   "@metadataOpenReleaseGroup": {
     "description": "Door from the metadata editor to the release group this item belongs to: the album across its editions."
   },
+  "metadataOriginClear": "Remove origin",
+  "@metadataOriginClear": {
+    "description": "Button in the origin sheet that takes the recorded origin off entirely."
+  },
+  "metadataOriginEditHelp": "Every box is saved as you leave it, so clearing one clears the value. The date the item was acquired is kept as it stands.",
+  "@metadataOriginEditHelp": {
+    "description": "Help under the origin sheet's title. The replacement rule matters: the server writes every editable column as sent, so an empty box is a clear rather than a no-op."
+  },
+  "metadataOriginEditTitle": "Where this came from",
+  "@metadataOriginEditTitle": {
+    "description": "Title of the sheet that corrects an item's recorded origin."
+  },
+  "metadataOriginEditable": "Recorded evidence of how this arrived. Tap to correct it.",
+  "@metadataOriginEditable": {
+    "description": "Caption under the origin line for someone who may curate the item, replacing the read-only wording."
+  },
+  "metadataOriginId": "Identifier",
+  "@metadataOriginId": {
+    "description": "Field in the origin sheet: the origin's own id in the provider's namespace, such as a feed guid or a video id."
+  },
   "metadataOriginLine": "Origin: {source}",
   "@metadataOriginLine": {
     "description": "Caption in the metadata editor header naming where the item came from. Read-only: origin is derived from what the import saw.",
@@ -494,13 +514,53 @@
   "@metadataOriginManual": {
     "description": "How an item arrived, as it reads inside the origin caption (\"Origin: an unnamed source\"): the catalog recorded that it came from somewhere but not how. Much the commonest value, so it must read sensibly both alone and followed by a web address."
   },
+  "metadataOriginProvider": "Provider",
+  "@metadataOriginProvider": {
+    "description": "Field in the origin sheet: the service the item was acquired from."
+  },
   "metadataOriginRecorded": "Recorded evidence of how this arrived, not an editable field.",
   "@metadataOriginRecorded": {
     "description": "Caption under the origin line, saying why the origin has no form control beside it."
   },
+  "metadataOriginRemoved": "Origin removed",
+  "@metadataOriginRemoved": {
+    "description": "Confirmation after taking an item's recorded origin off."
+  },
   "metadataOriginRss": "a podcast feed",
   "@metadataOriginRss": {
     "description": "How an item arrived, as it reads inside the origin caption: downloaded from a podcast feed."
+  },
+  "metadataOriginSaved": "Origin updated",
+  "@metadataOriginSaved": {
+    "description": "Confirmation after correcting an item's recorded origin."
+  },
+  "metadataOriginSourceType": "How it arrived",
+  "@metadataOriginSourceType": {
+    "description": "Label over the source-type choice in the origin sheet."
+  },
+  "metadataOriginTypeManual": "Unnamed",
+  "@metadataOriginTypeManual": {
+    "description": "Source-type choice in the origin sheet: the item came from somewhere the catalog did not record. Short, because it sits in a segmented control beside two others; the origin sentence uses the longer metadataOriginManual."
+  },
+  "metadataOriginTypeRss": "Podcast feed",
+  "@metadataOriginTypeRss": {
+    "description": "Source-type choice in the origin sheet. Short, for the same reason as metadataOriginTypeManual."
+  },
+  "metadataOriginUrl": "Address",
+  "@metadataOriginUrl": {
+    "description": "Field in the origin sheet: where the item came from."
+  },
+  "metadataOriginUrlHelp": "Shown without any sign-in details it carried",
+  "@metadataOriginUrlHelp": {
+    "description": "Help under the origin address field. The server redacts the stored URL before sending it, so saving this box replaces the stored value with what is visible here."
+  },
+  "metadataOriginWriteBack": "Write into the files",
+  "@metadataOriginWriteBack": {
+    "description": "Switch in the origin sheet: mirror the origin into the files' own tags."
+  },
+  "metadataOriginWriteBackHelp": "Keeps the correction through a full rescan",
+  "@metadataOriginWriteBackHelp": {
+    "description": "Help under the origin write-back switch."
   },
   "metadataPendingChip": "Unsaved",
   "@metadataPendingChip": {

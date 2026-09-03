@@ -135,7 +135,7 @@
       }
     }
   },
-  "musicAlbumRewriteConfirmBody": "The edited fields are rewritten on every track, and the release regroups under a new album entry. Locks on those fields are overridden, then set again by the rewrite.",
+  "musicAlbumRewriteConfirmBody": "The edited fields are rewritten on every track. Because every member moves at once, the release keeps its entry - artwork, pins and play history with it - unless the new name already belongs to another release, in which case the two merge. Locks on those fields are overridden, then set again by the rewrite.",
   "@musicAlbumRewriteConfirmBody": {
     "description": "Body of that confirmation: the regroup and the lock behavior, both pinned by the server's own semantics."
   },
@@ -143,7 +143,7 @@
   "@musicAlbumRewriteConfirmTitle": {
     "description": "Title of the confirmation the rewrite asks before writing."
   },
-  "musicAlbumRewriteHelp": "These live on the tracks rather than the release. Saving rewrites them on every member and regroups the release under a new entry; this page follows it there.",
+  "musicAlbumRewriteHelp": "These live on the tracks rather than the release. Saving rewrites them on every member, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.",
   "@musicAlbumRewriteHelp": {
     "description": "Blurb under the rewrite heading, stating the regroup up front: the album pid changes, it is not renamed in place."
   },

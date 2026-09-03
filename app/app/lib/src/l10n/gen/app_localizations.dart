@@ -2862,7 +2862,7 @@ abstract class AppLocalizations {
   /// Help under the cover pin switch. The second sentence is the whole reason the pin is visible: a cleared-and-pinned cover refuses every later write.
   ///
   /// In en, this message translates to:
-  /// **'Keeps this cover through scans and enrichment runs. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.'**
+  /// **'Keeps this cover through scans and enrichment runs, and holds the other slots against automatic fills too. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.'**
   String get artworkLockHelp;
 
   /// Confirmation after pinning a cover.
@@ -2901,6 +2901,12 @@ abstract class AppLocalizations {
   /// **'Image'**
   String get artworkPickLabel;
 
+  /// Toggle over one auxiliary artwork slot: hold the picture through scans and enrichment runs. {slot} is the slot's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin {slot}'**
+  String artworkPinSlot(String slot);
+
   /// Accessible name of the control that replaces a filled artwork slot. {slot} is the slot's inline form.
   ///
   /// In en, this message translates to:
@@ -2919,11 +2925,23 @@ abstract class AppLocalizations {
   /// **'Set the {slot}'**
   String artworkSetSlot(String slot);
 
+  /// Confirmation after pinning one auxiliary artwork slot. {slot} is the slot's name.
+  ///
+  /// In en, this message translates to:
+  /// **'{slot} pinned'**
+  String artworkSlotPinned(String slot);
+
   /// One artwork tile read as a whole: the slot's name, then what is in it.
   ///
   /// In en, this message translates to:
   /// **'{slot}: {state}'**
   String artworkSlotSpoken(String slot, String state);
+
+  /// Confirmation after unpinning one auxiliary artwork slot. {slot} is the slot's name.
+  ///
+  /// In en, this message translates to:
+  /// **'{slot} unpinned'**
+  String artworkSlotUnpinned(String slot);
 
   /// Caution over the artwork grid when the slot listing failed. Inherited means the image belongs to the album or artist rather than to this item.
   ///
@@ -2978,6 +2996,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{file} is larger than the 16 MB an image may be'**
   String artworkTooLarge(String file);
+
+  /// Toggle over one auxiliary artwork slot that is already pinned. {slot} is the slot's inline form.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin {slot}'**
+  String artworkUnpinSlot(String slot);
 
   /// Refusal for a picked image whose bytes could not be opened.
   ///
@@ -6021,6 +6045,36 @@ abstract class AppLocalizations {
   /// **'Open release group'**
   String get metadataOpenReleaseGroup;
 
+  /// Button in the origin sheet that takes the recorded origin off entirely.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove origin'**
+  String get metadataOriginClear;
+
+  /// Help under the origin sheet's title. The replacement rule matters: the server writes every editable column as sent, so an empty box is a clear rather than a no-op.
+  ///
+  /// In en, this message translates to:
+  /// **'Every box is saved as you leave it, so clearing one clears the value. The date the item was acquired is kept as it stands.'**
+  String get metadataOriginEditHelp;
+
+  /// Title of the sheet that corrects an item's recorded origin.
+  ///
+  /// In en, this message translates to:
+  /// **'Where this came from'**
+  String get metadataOriginEditTitle;
+
+  /// Caption under the origin line for someone who may curate the item, replacing the read-only wording.
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded evidence of how this arrived. Tap to correct it.'**
+  String get metadataOriginEditable;
+
+  /// Field in the origin sheet: the origin's own id in the provider's namespace, such as a feed guid or a video id.
+  ///
+  /// In en, this message translates to:
+  /// **'Identifier'**
+  String get metadataOriginId;
+
   /// Caption in the metadata editor header naming where the item came from. Read-only: origin is derived from what the import saw.
   ///
   /// In en, this message translates to:
@@ -6045,17 +6099,77 @@ abstract class AppLocalizations {
   /// **'an unnamed source'**
   String get metadataOriginManual;
 
+  /// Field in the origin sheet: the service the item was acquired from.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider'**
+  String get metadataOriginProvider;
+
   /// Caption under the origin line, saying why the origin has no form control beside it.
   ///
   /// In en, this message translates to:
   /// **'Recorded evidence of how this arrived, not an editable field.'**
   String get metadataOriginRecorded;
 
+  /// Confirmation after taking an item's recorded origin off.
+  ///
+  /// In en, this message translates to:
+  /// **'Origin removed'**
+  String get metadataOriginRemoved;
+
   /// How an item arrived, as it reads inside the origin caption: downloaded from a podcast feed.
   ///
   /// In en, this message translates to:
   /// **'a podcast feed'**
   String get metadataOriginRss;
+
+  /// Confirmation after correcting an item's recorded origin.
+  ///
+  /// In en, this message translates to:
+  /// **'Origin updated'**
+  String get metadataOriginSaved;
+
+  /// Label over the source-type choice in the origin sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'How it arrived'**
+  String get metadataOriginSourceType;
+
+  /// Source-type choice in the origin sheet: the item came from somewhere the catalog did not record. Short, because it sits in a segmented control beside two others; the origin sentence uses the longer metadataOriginManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Unnamed'**
+  String get metadataOriginTypeManual;
+
+  /// Source-type choice in the origin sheet. Short, for the same reason as metadataOriginTypeManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcast feed'**
+  String get metadataOriginTypeRss;
+
+  /// Field in the origin sheet: where the item came from.
+  ///
+  /// In en, this message translates to:
+  /// **'Address'**
+  String get metadataOriginUrl;
+
+  /// Help under the origin address field. The server redacts the stored URL before sending it, so saving this box replaces the stored value with what is visible here.
+  ///
+  /// In en, this message translates to:
+  /// **'Shown without any sign-in details it carried'**
+  String get metadataOriginUrlHelp;
+
+  /// Switch in the origin sheet: mirror the origin into the files' own tags.
+  ///
+  /// In en, this message translates to:
+  /// **'Write into the files'**
+  String get metadataOriginWriteBack;
+
+  /// Help under the origin write-back switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeps the correction through a full rescan'**
+  String get metadataOriginWriteBackHelp;
 
   /// Chip on a staged change (a tag added to the form, say) that the save bar has not committed yet.
   ///
@@ -6564,7 +6678,7 @@ abstract class AppLocalizations {
   /// Body of that confirmation: the regroup and the lock behavior, both pinned by the server's own semantics.
   ///
   /// In en, this message translates to:
-  /// **'The edited fields are rewritten on every track, and the release regroups under a new album entry. Locks on those fields are overridden, then set again by the rewrite.'**
+  /// **'The edited fields are rewritten on every track. Because every member moves at once, the release keeps its entry - artwork, pins and play history with it - unless the new name already belongs to another release, in which case the two merge. Locks on those fields are overridden, then set again by the rewrite.'**
   String get musicAlbumRewriteConfirmBody;
 
   /// Title of the confirmation the rewrite asks before writing.
@@ -6576,7 +6690,7 @@ abstract class AppLocalizations {
   /// Blurb under the rewrite heading, stating the regroup up front: the album pid changes, it is not renamed in place.
   ///
   /// In en, this message translates to:
-  /// **'These live on the tracks rather than the release. Saving rewrites them on every member and regroups the release under a new entry; this page follows it there.'**
+  /// **'These live on the tracks rather than the release. Saving rewrites them on every member, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.'**
   String get musicAlbumRewriteHelp;
 
   /// Refusal when the member list would not finish loading: rewriting only the loaded part would regroup those tracks and strand the rest, splitting the release.

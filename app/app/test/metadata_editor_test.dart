@@ -278,7 +278,7 @@ void main() {
     expect(find.text('musicbrainz'), findsNothing);
   });
 
-  testWidgets('the header states a recorded origin and that it is read-only', (
+  testWidgets('the header states a recorded origin and offers to correct it', (
     tester,
   ) async {
     final repo = _repo()
@@ -295,6 +295,24 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      find.text('Recorded evidence of how this arrived. Tap to correct it.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('an unconfirmed permission draws the origin as read-only', (
+    tester,
+  ) async {
+    // The server omits mayCurate when the lookup behind it failed, and
+    // the pane still renders (only an explicit false forbids). The
+    // header must not offer a correction it cannot promise, so it falls
+    // back to the read-only wording.
+    final repo = _repo()
+      ..mayCurateItems = null
+      ..itemAcquisition['tr-1'] = ItemAcquisition(sourceType: 'rss');
+    await _pump(tester, _host(_container(repo)));
+
     expect(
       find.text(
         'Recorded evidence of how this arrived, not an editable field.',
@@ -318,12 +336,141 @@ void main() {
     expect(find.text('Origin: a podcast feed'), findsOneWidget);
   });
 
-  testWidgets('an item with no recorded origin draws no origin line', (
+  testWidgets('an item with no recorded origin still offers a curator one', (
     tester,
   ) async {
+    // Stating an origin is the same write as correcting one, and there
+    // is nowhere else to say where a file came from - so the row is
+    // drawn, reading as the local file the absent row means.
     await _pump(tester, _host(_container(_repo())));
 
+    expect(find.text('Origin: a local file'), findsOneWidget);
+  });
+
+  testWidgets('no origin and no curate permission draws no origin line', (
+    tester,
+  ) async {
+    await _pump(tester, _host(_container(_repo()..mayCurateItems = null)));
+
     expect(find.textContaining('Origin: '), findsNothing);
+  });
+
+  testWidgets('correcting the origin sends every column as it stands', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..itemAcquisition['tr-1'] = ItemAcquisition(
+        sourceType: 'manual',
+        sourceUrl: 'https://wrong.example.test/ep-99.mp3',
+        sourceId: 'ep-99',
+      );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.tap(
+      find.text(
+        'Origin: an unnamed source - https://wrong.example.test/ep-99.mp3',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Where this came from'), findsOneWidget);
+
+    // Retype the address and empty the identifier: an absent column is
+    // cleared, which is what makes lowering a wrong value possible.
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.originUrl),
+      'https://right.example.test/ep-1.mp3',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.originId),
+      '',
+    );
+    await tester.tap(find.text('Podcast feed'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.originSave));
+    await tester.pumpAndSettle();
+
+    expect(repo.setItemAcquisitionCalls, hasLength(1));
+    final sent = repo.setItemAcquisitionCalls.single;
+    expect(sent.sourceType, 'rss');
+    expect(sent.sourceUrl, 'https://right.example.test/ep-1.mp3');
+    expect(sent.sourceId, isNull);
+    expect(sent.writeBack, isFalse);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Origin updated',
+    );
+  });
+
+  testWidgets('an untouched address is left alone rather than resent', (
+    tester,
+  ) async {
+    // The read redacts, so the box holds what the server was willing to
+    // show and not what it stored. Resending that would replace a
+    // ?v=XYZ with the truncated form - and with write-back on, in the
+    // file's tags too. Only a typed change is authoritative.
+    final repo = _repo()
+      ..itemAcquisition['tr-1'] = ItemAcquisition(
+        sourceType: 'youtube',
+        sourceUrl: 'https://www.youtube.test/watch',
+        sourceId: 'XYZ',
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.tap(
+      find.text('Origin: YouTube - https://www.youtube.test/watch'),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.originProvider),
+      'waxtap',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.originSave));
+    await tester.pumpAndSettle();
+
+    expect(repo.setItemAcquisitionCalls.single.sourceUrl, isNull);
+    expect(repo.setItemAcquisitionCalls.single.provider, 'waxtap');
+  });
+
+  testWidgets('emptying the address box is how it comes off', (tester) async {
+    final repo = _repo()
+      ..itemAcquisition['tr-1'] = ItemAcquisition(
+        sourceType: 'rss',
+        sourceUrl: 'https://feeds.example.test/ep.mp3',
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.tap(
+      find.text('Origin: a podcast feed - https://feeds.example.test/ep.mp3'),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.originUrl),
+      '',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.originSave));
+    await tester.pumpAndSettle();
+
+    expect(repo.setItemAcquisitionCalls.single.sourceUrl, '');
+  });
+
+  testWidgets('the origin sheet can take the row off entirely', (tester) async {
+    final repo = _repo()
+      ..itemAcquisition['tr-1'] = ItemAcquisition(sourceType: 'rss');
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.tap(find.text('Origin: a podcast feed'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.originClear));
+    await tester.pumpAndSettle();
+
+    expect(repo.clearItemAcquisitionCalls, hasLength(1));
+    expect(repo.setItemAcquisitionCalls, isEmpty);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Origin removed',
+    );
   });
 
   testWidgets('an embedded lyric is not called art', (tester) async {
@@ -1549,6 +1696,48 @@ void main() {
       findsNothing,
     );
     expect(find.bySemanticsIdentifier(SemanticsIds.artLock), findsNothing);
+    // The per-role pins go with it. The catalog curates art on tracks
+    // and books, so `art.<role>` on an episode is refused outright -
+    // offering four toggles that each answer 400 is worse than
+    // offering none. The grid is drawn either way, which is what keeps
+    // the assertions below from passing on an absent manager.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.artSlot('back')),
+      findsOneWidget,
+    );
+    for (final role in <String>['back', 'disc', 'booklet', 'background']) {
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.artLockRole(role)),
+        findsNothing,
+        reason: 'an episode offered the $role pin',
+      );
+    }
+  });
+
+  testWidgets('an auxiliary pin stays offered on a slot the cover pin holds', (
+    tester,
+  ) async {
+    // The wire reports the effective lock and cannot say which pin set
+    // it, so a slot held by the whole-artwork pin looks identical to
+    // one holding its own. Guessing disabled the toggle on exactly the
+    // cleared-and-pinned slot it exists to release, so it does not
+    // guess: the control is live, and unpinning writes this slot's own
+    // lock off whatever else stands over it.
+    final repo = _repo()
+      ..artRoles.add(const ArtRoleInfo(role: 'back', locked: true));
+    await _pump(tester, _host(_container(repo)));
+
+    final pin = find.bySemanticsIdentifier(SemanticsIds.artLockRole('back'));
+    await tester.ensureVisible(pin);
+    await tester.pumpAndSettle();
+    await tester.tap(pin);
+    await tester.pumpAndSettle();
+
+    expect(repo.setItemLocksCalls, isNotEmpty);
+    expect(repo.setItemLocksCalls.last.fields, const <String>[
+      'art.back',
+    ], reason: 'the pin wrote a different field');
+    expect(repo.setItemLocksCalls.last.locked, isFalse);
   });
 
   test('a saved value settles onto its normalized echo', () {

@@ -1361,7 +1361,10 @@ func TestPlaylistNspImportReportDedupesAndBounds(t *testing.T) {
 		t.Errorf("bitrate reported %d times, want once", n)
 	}
 
-	// Distinct problems are still distinct, up to the cap.
+	// Distinct problems are still distinct, up to the cap. bpm rides
+	// along as the control: the converter imports it now, so a document
+	// mixing it with unsupported fields must leave it out of the report
+	// rather than counting it as a gap.
 	nodes = nodes[:0]
 	for _, field := range []string{"bitrate", "size", "bpm", "channels"} {
 		nodes = append(nodes, map[string]any{"gt": map[string]any{field: 1}})
@@ -1371,10 +1374,13 @@ func TestPlaylistNspImportReportDedupesAndBounds(t *testing.T) {
 		t.Fatalf("report status = %d", resp.StatusCode)
 	}
 	rep = decode[NspReport](t, resp)
-	for _, field := range []string{"bitrate", "size", "bpm", "channels"} {
+	for _, field := range []string{"bitrate", "size", "channels"} {
 		if countGapsNaming(*rep.Gaps, field) != 1 {
 			t.Errorf("%s is not reported once in %v", field, *rep.Gaps)
 		}
+	}
+	if n := countGapsNaming(*rep.Gaps, "bpm"); n != 0 {
+		t.Errorf("bpm reported as a gap %d times; it imports now", n)
 	}
 }
 

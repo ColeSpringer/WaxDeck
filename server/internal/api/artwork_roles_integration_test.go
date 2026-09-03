@@ -196,3 +196,95 @@ func TestArtCacheHeaders(t *testing.T) {
 		t.Errorf("If-None-Match across the rung status = %d, want 304", shared.StatusCode)
 	}
 }
+
+// TestArtworkRolePins covers pinning one slot at a time. The two
+// spellings differ in reach: the whole-artwork pin is the front cover's
+// and also gates enrichment's fills in every other role, while a role's
+// own pin holds that one slot. A read reports the effective lock, which
+// is why an auxiliary slot can read pinned with nothing of its own set.
+func TestArtworkRolePins(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	page := h.items(t, "")
+	var albumPid string
+	for _, it := range page.Items {
+		if it.AlbumPid != nil && *it.AlbumPid != "" {
+			albumPid = *it.AlbumPid
+			break
+		}
+	}
+	if albumPid == "" {
+		t.Fatal("no demo item carries an album entity")
+	}
+	lock := "/api/v1/entities/album/" + albumPid + "/artwork/lock"
+
+	// A clean slate: setting an album cover pins the whole artwork, and
+	// this test is about the roles under it.
+	wantStatus(t, putJSON(t, h.ts, lock, h.token, map[string]any{"locked": false}),
+		200, "start unpinned")
+	if entityPinned(t, h, lock+"?role=back") {
+		t.Fatal("the back slot starts pinned")
+	}
+
+	// One auxiliary role alone: pinned, while its neighbours and the
+	// front cover stay open.
+	wantStatus(t, putJSON(t, h.ts, lock+"?role=back", h.token, map[string]any{"locked": true}),
+		200, "pin the back slot")
+	if !entityPinned(t, h, lock+"?role=back") {
+		t.Fatal("the back slot did not pin")
+	}
+	for _, role := range []string{"disc", "booklet", "background"} {
+		if entityPinned(t, h, lock+"?role="+role) {
+			t.Errorf("pinning back also pinned %s", role)
+		}
+	}
+	if entityPinned(t, h, lock) {
+		t.Error("pinning an auxiliary role pinned the whole artwork")
+	}
+
+	// The whole-artwork pin reaches every role, which is the reach a
+	// caller cannot get by pinning them one at a time.
+	wantStatus(t, putJSON(t, h.ts, lock, h.token, map[string]any{"locked": true}),
+		200, "pin the whole artwork")
+	for _, role := range []string{"front", "back", "disc", "booklet", "background"} {
+		if !entityPinned(t, h, lock+"?role="+role) {
+			t.Errorf("the whole-artwork pin does not reach %s", role)
+		}
+	}
+
+	// And lifting one role under it changes nothing: the effective lock
+	// is still the whole-artwork one. The write's own answer has to say
+	// so too - a client that recorded the requested value would show
+	// the slot open while enrichment is still held off it, and the very
+	// next read would contradict it.
+	resp := putJSON(t, h.ts, lock+"?role=disc", h.token, map[string]any{"locked": false})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("unpin one role under the whole pin: status %d", resp.StatusCode)
+	}
+	if !decode[ArtworkLock](t, resp).Locked {
+		t.Error("the write answered unlocked for a slot the whole pin still holds")
+	}
+	if !entityPinned(t, h, lock+"?role=disc") {
+		t.Error("unpinning one role escaped the whole-artwork pin")
+	}
+
+	// An unknown role is a refusal on both verbs rather than a silent
+	// fall back to the front, which would pin the wrong slot.
+	wantStatus(t, get(t, h.ts, lock+"?role=sleeve", h.token), 400, "read an unknown role")
+	wantStatus(t, putJSON(t, h.ts, lock+"?role=sleeve", h.token, map[string]any{"locked": true}),
+		400, "pin an unknown role")
+
+	// The item branch spells the same thing through the field-lock
+	// surface: `art` is the whole pin, `art.<role>` one slot.
+	pid := page.Items[0].Pid
+	resp = putJSON(t, h.ts, "/api/v1/items/"+pid+"/locks", h.token,
+		map[string]any{"fields": []string{"art.booklet"}, "locked": true})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("locking one item art role: status %d", resp.StatusCode)
+	}
+	if fields := decode[LocksResult](t, resp).LockedFields; !containsString(fields, "art.booklet") {
+		t.Errorf("locked fields = %v, want art.booklet", fields)
+	}
+}

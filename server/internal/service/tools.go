@@ -538,10 +538,7 @@ func (l *Library) runBookSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskP
 	// Pieces of an mp4-family split keep the .m4b extension so the
 	// rescan classifies them as audiobook parts; other codecs rely on
 	// the narrator tag stamped below.
-	ext := "." + p.Format
-	if p.Format == "aac" || p.Format == "alac" {
-		ext = ".m4b"
-	}
+	ext := "." + toolSplitExt(p.Format, true)
 	pieces := make([]string, 0, outs)
 	for i := 0; i < outs; i++ {
 		pieceTitle := chapterTitle("", i)
@@ -643,7 +640,8 @@ func (l *Library) runCueSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskPa
 			}
 			artist = firstNonEmpty(sibs[i].Artist, artist)
 		}
-		dst := filepath.Join(albumDir, fmt.Sprintf("%02d - %s.%s", i+1, safeFileName(title), p.Format))
+		dst := filepath.Join(albumDir, fmt.Sprintf("%02d - %s.%s",
+			i+1, safeFileName(title), toolSplitExt(p.Format, false)))
 		if err := l.flowJobs.DownloadJobResult(ctx, jobID, i, dst); err != nil {
 			return nil, err
 		}
@@ -888,8 +886,14 @@ func (l *Library) executeToolTagPlan(ctx context.Context, ed *waxlabel.Editor, p
 // importToolFile moves one finished file into the library through the
 // acquired-import path and resolves the item it produced.
 func (l *Library) importToolFile(ctx context.Context, path string, kind model.Kind) (model.PID, error) {
+	// No SourceType: this call knows the file arrived, not how. The
+	// store writes manual when it first records the row and leaves a
+	// standing origin alone on a re-record, so a track a download
+	// acquired keeps its rss or youtube provenance through the tool
+	// that split or merged it. Passing manual here would be a claim,
+	// and it would overwrite one.
 	res, err := l.lib.ImportAcquired(ctx, waxbin.AcquiredFile{Path: path}, kind, waxbin.AcquiredMeta{
-		SourceType: model.SourceManual, Copy: false, DupPolicy: model.DupAllow,
+		Copy: false, DupPolicy: model.DupAllow,
 	})
 	if err != nil {
 		return "", classify(err)
@@ -1275,12 +1279,37 @@ func chapterTitle(title string, index int) string {
 // toolSplitFormat picks the engine output format that keeps a split as
 // faithful as possible: the source codec when the engine can write it,
 // else FLAC (lossless in the decoded samples for any source).
+//
+// WavPack and Monkey's Audio are here even though neither streams: a
+// split is a job that writes a file, and APE's want of a live form only
+// rules it out of the delivery ladder.
 func toolSplitFormat(codec string) string {
 	switch c := strings.ToLower(codec); c {
-	case "flac", "alac", "aac", "mp3", "opus", "wav":
+	case "flac", "alac", "aac", "mp3", "opus", "wav", "wavpack", "ape":
 		return c
 	default:
 		return "flac"
+	}
+}
+
+// toolSplitExt is the file extension a split piece takes for one output
+// format. Most format names are the extension, but not all - WavPack
+// writes .wv - and a piece named for the format instead lands outside
+// the scanner's extension set, so the import that follows finds nothing
+// and the whole job fails permanently after encoding every piece.
+//
+// The mp4 family is the other exception, in the other direction: aac
+// and alac pieces of a book take .m4b so the rescan classifies them as
+// audiobook parts. Callers splitting a track pass that off.
+func toolSplitExt(format string, mp4AsBook bool) string {
+	if mp4AsBook && (format == "aac" || format == "alac") {
+		return "m4b"
+	}
+	switch format {
+	case "wavpack":
+		return "wv"
+	default:
+		return format
 	}
 }
 

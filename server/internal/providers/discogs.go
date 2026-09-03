@@ -87,14 +87,12 @@ func (d *Discogs) Capabilities() enrich.Capability {
 // artist and title, take the first hit whose names match, and return
 // its genres and styles as one provider-ordered list plus its primary
 // image. Requests without a token or a title are clean misses.
-func (d *Discogs) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
-	return d.EnrichScoped(ctx, req, d.Capabilities())
-}
-
-// EnrichScoped is Enrich restricted to what the caller will read: a
+//
+// The work is restricted to what the request says the pass will read: a
 // genres ask skips the image download entirely, which on a genre-less
-// library is one saved cover-sized fetch per item.
-func (d *Discogs) EnrichScoped(ctx context.Context, req enrich.Request, want enrich.Capability) (*enrich.Candidate, error) {
+// library is one saved cover-sized fetch per item. A zero Want means
+// everything, which is the whole-library pass's shape.
+func (d *Discogs) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
 	if d.token == "" {
 		return nil, nil
 	}
@@ -139,13 +137,13 @@ func (d *Discogs) EnrichScoped(ctx context.Context, req enrich.Request, want enr
 		// Genres first, styles after: Discogs's genre is the broad bucket
 		// ("Electronic") and style the one worth reading ("House"), but
 		// the broad one is what the vocabulary tree folds reliably.
-		if want.Has(enrich.CapGenres) {
+		if req.Wants(enrich.CapGenres) {
 			cand.Genres = append(cand.Genres, hit.Genre...)
 			cand.Genres = append(cand.Genres, hit.Style...)
 		}
 		// Spacer images stand in where a master has no photo; skip the
 		// fetch rather than store a placeholder as somebody's cover.
-		if want.Has(enrich.CapCover) && hit.CoverImage != "" && !strings.Contains(hit.CoverImage, "spacer.gif") {
+		if req.Wants(enrich.CapCover) && hit.CoverImage != "" && !strings.Contains(hit.CoverImage, "spacer.gif") {
 			data, mediaType, err := fetchImage(ctx, d.core, hit.CoverImage)
 			switch {
 			case err == nil:

@@ -12,8 +12,9 @@ import 'file_picker_impl.dart' as impl;
 /// group so anything the filter missed stays reachable; the server's
 /// session create is the real gate.
 const kAcceptedAudioExtensions = {
-  'flac', 'mp3', 'm4a', 'm4b', 'aac', 'ogg', 'oga', 'opus', //
-  'wav', 'aif', 'aiff', 'mka', 'webm',
+  'mp3', 'mpga', 'flac', 'wav', 'wave', 'ogg', 'oga', 'opus', //
+  'm4a', 'm4b', 'm4r', 'mp4', 'alac', 'aac', 'adts', 'wma', //
+  'aiff', 'aif', 'aifc', 'afc', 'ape', 'wv', 'mpc', 'mp+', 'mka',
 };
 
 /// Extensions the server refuses outright rather than merely not

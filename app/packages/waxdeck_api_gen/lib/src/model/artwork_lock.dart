@@ -8,13 +8,13 @@ import 'package:built_value/serializer.dart';
 
 part 'artwork_lock.g.dart';
 
-/// Whether an entity's front cover is pinned against enrichment and scan re-derives. 
+/// Whether one of an entity's artwork slots is pinned against enrichment and scan re-derives. 
 ///
 /// Properties:
-/// * [locked] - True when the cover is pinned.
+/// * [locked] - True when the slot is pinned. On a write this is what the request asks for; on a read, and in a write's response, it is the **effective** lock - so pinning an auxiliary role answers true, and unpinning one under a standing whole-artwork pin answers true as well, because that pin still holds the slot.  The role is the query parameter's, not a field here: one schema serves the request body and the response, and a role in the body would be a second spelling the server ignores. 
 @BuiltValue()
 abstract class ArtworkLock implements Built<ArtworkLock, ArtworkLockBuilder> {
-  /// True when the cover is pinned.
+  /// True when the slot is pinned. On a write this is what the request asks for; on a read, and in a write's response, it is the **effective** lock - so pinning an auxiliary role answers true, and unpinning one under a standing whole-artwork pin answers true as well, because that pin still holds the slot.  The role is the query parameter's, not a field here: one schema serves the request body and the response, and a role in the body would be a second spelling the server ignores. 
   @BuiltValueField(wireName: r'locked')
   bool get locked;
 

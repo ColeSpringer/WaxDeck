@@ -286,24 +286,40 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
   /// cover cleared and left pinned: setting artwork cannot express
   /// "stop refusing", and clearing it again does nothing. An entity's
   /// pin is its own endpoint; an item's rides the field-lock surface
-  /// under the `art` name.
-  Future<void> _setLock(bool locked) async {
+  /// under the `art` name. Either spelling is the whole-artwork pin,
+  /// which gates the auxiliary slots' automatic fills as well.
+  Future<void> _setLock(bool locked) => _writeLock(ArtSlot.front, locked);
+
+  /// Pins or unpins one auxiliary slot's own lock. The whole-artwork
+  /// pin above gates every role's automatic fill as well, so a slot can
+  /// read pinned with nothing set here - and the wire cannot say which
+  /// pin a reading came from, so this stays offered either way rather
+  /// than guessing.
+  Future<void> _setSlotLock(ArtSlot slot, bool locked) =>
+      _writeLock(slot, locked);
+
+  /// The one lock writer, keyed by slot. The front takes the
+  /// whole-artwork spelling on both branches (`art`, or the entity
+  /// endpoint's default role); every other slot takes its own.
+  Future<void> _writeLock(ArtSlot slot, bool locked) async {
+    final front = slot == ArtSlot.front;
     final entity = widget.entityType;
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    setState(() => _busyRole = ArtSlot.front.role);
+    setState(() => _busyRole = slot.role);
     try {
       final repository = ref.read(repositoryProvider);
       if (entity == null) {
         await repository.setItemLocks(
           widget.pid,
-          fields: const ['art'],
+          fields: <String>[front ? 'art' : 'art.${slot.role}'],
           locked: locked,
         );
       } else {
         await repository.setEntityArtworkLock(
           entity,
           widget.pid,
+          role: slot.role,
           locked: locked,
         );
       }
@@ -318,9 +334,12 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
       }
       ref.invalidate(itemArtRolesProvider(widget.pid));
       widget.onChanged?.call();
-      messenger.show(
-        locked ? l10n.artworkLockPinned : l10n.artworkLockUnpinned,
-      );
+      messenger.show(switch ((front, locked)) {
+        (true, true) => l10n.artworkLockPinned,
+        (true, false) => l10n.artworkLockUnpinned,
+        (false, true) => l10n.artworkSlotPinned(slot.labelOf(l10n)),
+        (false, false) => l10n.artworkSlotUnpinned(slot.labelOf(l10n)),
+      });
     } on WaxDeckApiException catch (e) {
       if (mounted) messenger.show(explainError(l10n, e));
     } finally {
@@ -337,6 +356,10 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
     };
     final picker = ref.watch(filePickerProvider);
     final l10n = context.l10n;
+    // The same gate the whole-artwork switch below uses. An entity
+    // always takes pins; an item takes them only where the catalog
+    // curates art at all, which is tracks and books but not episodes.
+    final offersPins = widget.entityType != null || widget.pinnable;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -373,13 +396,23 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
                 artUrl: _urlFor(slot),
                 busy: _busyRole == slot.role,
                 canPick: picker != null,
+                // Null on the front, whose pin is the whole-artwork one
+                // and gets its own switch under the grid; drawing it
+                // twice would offer the same write in two places. Null
+                // also wherever no pin is offered at all - a podcast
+                // episode, where the catalog refuses an art lock
+                // outright, is what `pinnable` is false for.
+                locked: slot == ArtSlot.front || !offersPins
+                    ? null
+                    : own[slot.role]?.locked ?? false,
+                onTogglePin: (locked) => _setSlotLock(slot, locked),
                 onPick: () => _pick(slot),
                 onClear: () => _clear(slot),
                 onDropped: (files) => _uploadDropped(slot, files),
               ),
           ],
         ),
-        if (widget.entityType != null || widget.pinnable) ...<Widget>[
+        if (offersPins) ...<Widget>[
           const SizedBox(height: WaxSpace.s12),
           Builder(
             builder: (context) {
@@ -434,6 +467,8 @@ class _SlotTile extends ConsumerWidget {
     required this.artUrl,
     required this.busy,
     required this.canPick,
+    required this.locked,
+    required this.onTogglePin,
     required this.onPick,
     required this.onClear,
     required this.onDropped,
@@ -459,6 +494,22 @@ class _SlotTile extends ConsumerWidget {
   final String artUrl;
   final bool busy;
   final bool canPick;
+
+  /// Whether this slot is pinned, or null where no pin is offered on
+  /// this slot at all: the front cover, whose pin is the entity's whole
+  /// one and gets its own switch under the grid, and every slot on an
+  /// item whose kind the catalog does not curate art for.
+  ///
+  /// The reading is the **effective** lock - this slot's own pin, or
+  /// the whole-artwork pin standing over it - and the wire cannot say
+  /// which. So the toggle is always live: unpinning a slot held by the
+  /// whole pin writes this slot's own lock off and truthfully still
+  /// reads pinned. Guessing at the difference is worse, and was: an
+  /// earlier reading of it disabled the toggle on exactly the
+  /// cleared-and-pinned slot the control exists to release.
+  final bool? locked;
+
+  final ValueChanged<bool> onTogglePin;
   final VoidCallback onPick;
   final VoidCallback onClear;
   final Future<void> Function(List<PickedAudioFile> files) onDropped;
@@ -584,6 +635,16 @@ class _SlotTile extends ConsumerWidget {
                     // off through the field's own lock, not here.
                     onPressed: busy || !holdsImage ? null : onClear,
                   ),
+                  if (locked case final pinned?)
+                    WaxIconButton(
+                      glyph: pinned ? WaxIcons.lock : WaxIcons.lockOpen,
+                      label: pinned
+                          ? l10n.artworkUnpinSlot(slot.inlineOf(l10n))
+                          : l10n.artworkPinSlot(slot.inlineOf(l10n)),
+                      size: 16,
+                      semanticsId: SemanticsIds.artLockRole(slot.role),
+                      onPressed: busy ? null : () => onTogglePin(!pinned),
+                    ),
                 ],
               ),
             ],

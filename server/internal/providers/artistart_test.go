@@ -6,75 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 	"time"
 )
-
-// artistArtStub serves both rungs' endpoints and the picture, counting
-// per-path hits so a chain test can assert which rungs were asked.
-func artistArtStub(t *testing.T, deezerHits string) (*httptest.Server, *atomic.Int64, *atomic.Int64) {
-	t.Helper()
-	data := testPNG(t)
-	fanartAsks, deezerAsks := &atomic.Int64{}, &atomic.Int64{}
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/v3/music/mbid-known":
-			fanartAsks.Add(1)
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"name":"Daft Punk","artistthumb":[{"url":"https://%s/face.png"}]}`, r.Host)
-		case "/search/artist":
-			deezerAsks.Add(1)
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, deezerHits)
-		case "/face.png":
-			w.Header().Set("Content-Type", "image/png")
-			w.Write(data)
-		default:
-			// Unknown MBIDs answer 404, which is fanart.tv's clean miss.
-			if len(r.URL.Path) > len("/v3/music/") && r.URL.Path[:10] == "/v3/music/" {
-				fanartAsks.Add(1)
-			}
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	return srv, fanartAsks, deezerAsks
-}
-
-func artistChain(srv *httptest.Server, fanartKey string) ArtistArtChain {
-	chain := ArtistArtChain{
-		Deezer: NewDeezer(DeezerConfig{
-			BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
-		}),
-	}
-	if fanartKey != "" {
-		chain.Fanart = NewFanartTV(FanartTVConfig{
-			BaseURL: srv.URL, APIKey: fanartKey, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
-		})
-	}
-	return chain
-}
-
-func TestArtistArtChainPrefersTheMBIDKeyedRung(t *testing.T) {
-	t.Parallel()
-	srv, _, deezerAsks := artistArtStub(t, `{"data":[]}`)
-	chain := artistChain(srv, "fkey")
-
-	res, err := chain.ArtistImage(context.Background(), "Daft Punk", "mbid-known")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Provider != "fanarttv" {
-		t.Errorf("provider = %q, want fanarttv first", res.Provider)
-	}
-	if len(res.Data) == 0 || res.SourceURL == "" {
-		t.Errorf("result carries no image or source URL: %+v", res)
-	}
-	if deezerAsks.Load() != 0 {
-		t.Errorf("deezer was asked %d times behind a fanart.tv hit", deezerAsks.Load())
-	}
-}
 
 // TestDeezerArtistImageGatesOnTheName is the by-name risk pinned: a
 // near-miss name is no answer, while case, spacing, and punctuation
@@ -182,12 +116,15 @@ func TestDeezerArtistImageWalksPastAnUnusablePicture(t *testing.T) {
 	}
 }
 
-func TestArtistArtChainMissesFallThroughAndFailuresDoNot(t *testing.T) {
+// The chain holds one rung now: fanart.tv is keyed strictly on the
+// MusicBrainz artist id, and the artists the sweep still walks are the
+// ones without one, so its rung could never answer. What still has to
+// hold is the failure vocabulary the sweep's miss memory keys on - a
+// clean miss is durable, a reachability failure is not - and that an
+// unconfigured chain answers rather than dialing anything.
+func TestArtistArtChainDegradesToACleanMiss(t *testing.T) {
 	t.Parallel()
 	data := testPNG(t)
-
-	// Fanart.tv answers 404 (a miss); Deezer holds the face: the chain
-	// falls through and answers.
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/search/artist":
@@ -201,50 +138,35 @@ func TestArtistArtChainMissesFallThroughAndFailuresDoNot(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	chain := artistChain(srv, "fkey")
-	res, err := chain.ArtistImage(context.Background(), "Daft Punk", "mbid-unknown")
+	chain := ArtistArtChain{Deezer: NewDeezer(DeezerConfig{
+		BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
+	})}
+	// The mbid is ignored: it stays in the signature for the sweep's
+	// miss memory, which keys on one.
+	res, err := chain.ArtistImage(context.Background(), "Daft Punk", "mbid-anything")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Provider != "deezer" {
-		t.Errorf("provider = %q, want the fallback rung", res.Provider)
+		t.Errorf("provider = %q, want the by-name rung", res.Provider)
 	}
 
-	// A keyless chain with no configured rungs at all is a clean miss.
+	// A chain with no configured rungs at all is a clean miss.
 	empty := ArtistArtChain{}
 	if _, err := empty.ArtistImage(context.Background(), "Anyone", "any"); !errors.Is(err, ErrNoArtistImage) {
 		t.Errorf("empty chain = %v, want ErrNoArtistImage", err)
 	}
 
-	// Fanart.tv failing to answer ends the walk: Deezer's "no" must not
-	// be recorded as a durable miss the failed rung might contradict.
-	deezerAsked := &atomic.Int64{}
-	srv3 := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/search/artist" {
-			deezerAsked.Add(1)
-		}
+	// A rung that cannot answer is a reachability error, never a
+	// durable miss: the sweep records the second and retries the first.
+	srv2 := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer srv3.Close()
-	chain3 := artistChain(srv3, "fkey")
-	if _, err := chain3.ArtistImage(context.Background(), "Daft Punk", "mbid-known"); err == nil || errors.Is(err, ErrNoArtistImage) {
+	defer srv2.Close()
+	chain2 := ArtistArtChain{Deezer: NewDeezer(DeezerConfig{
+		BaseURL: srv2.URL, HTTPClient: srv2.Client(), MinInterval: time.Nanosecond,
+	})}
+	if _, err := chain2.ArtistImage(context.Background(), "Daft Punk", ""); err == nil || errors.Is(err, ErrNoArtistImage) {
 		t.Errorf("failed rung = %v, want a reachability error", err)
-	}
-	if deezerAsked.Load() != 0 {
-		t.Errorf("deezer was asked %d times behind a fanart.tv failure", deezerAsked.Load())
-	}
-}
-
-// TestFanartArtistThumbWithoutAKeyIsAMissWithoutANetworkCall mirrors
-// the Enrich rule: unkeyed means unconfigured, never an error.
-func TestFanartArtistThumbWithoutAKeyIsAMissWithoutANetworkCall(t *testing.T) {
-	t.Parallel()
-	f := NewFanartTV(FanartTVConfig{BaseURL: "https://never-dialed.invalid"})
-	if _, err := f.ArtistThumb(context.Background(), "mbid"); !errors.Is(err, ErrNoArtistImage) {
-		t.Errorf("keyless ArtistThumb = %v, want ErrNoArtistImage", err)
-	}
-	fkeyed := NewFanartTV(FanartTVConfig{BaseURL: "https://never-dialed.invalid", APIKey: "k"})
-	if _, err := fkeyed.ArtistThumb(context.Background(), ""); !errors.Is(err, ErrNoArtistImage) {
-		t.Errorf("no-MBID ArtistThumb = %v, want ErrNoArtistImage", err)
 	}
 }

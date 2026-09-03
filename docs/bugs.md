@@ -8,10 +8,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 - [8-28-2026] When you click on an artist from the artist section in music, their informational page shows a track name instead of just their artist name? Check related screenshots in bug_screenshots.
 
-- [8-28-2026] Metadata source still appears to not able to be manually changed.
-
-- [8-28-2026] After a metadata approval, the source claims to come from you even though its from an online source (musicbrainz in the case i tested).
-
 - [8-28-2026] when review an album metadata search, there is not a clear seperator between the tracks you have and the tracks you dont. all the missing tracks appear to be in the same container as the last track you actually have. (see screenshot)
 
 - [8-28-2026] The menu and star that show over radio stations that you have added don't seem aligned properly. They look out of place / bad. (see screenshot)

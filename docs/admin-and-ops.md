@@ -165,6 +165,19 @@ startup scan re-indexes them. Library roots added at runtime rather
 than through configuration are the part startup will not put back -
 the reset report names them.
 
+Two things worth knowing before you take the upgrade this note is
+attached to:
+
+- **A byte-copy backup taken before the upgrade carries the old
+  baseline**, so restoring one under the new build hits the same
+  refusal the reset exists for. Restore it under the version it was
+  taken with. WaxDeck's own backup archives are not affected.
+- **The rebuild runs longer on some libraries.** This baseline's scan
+  decodes HE-AAC, WavPack, Monkey's Audio, WMA, and Musepack files that
+  earlier builds either skipped or only fingerprinted, so a library
+  holding many of those spends real time on them that it did not
+  before.
+
 ## Scheduled jobs
 
 Four schedules, each a five-field cron expression in server-local

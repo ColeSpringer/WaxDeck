@@ -13,7 +13,7 @@ part 'enrichment_provider.g.dart';
 ///
 /// Properties:
 /// * [name] - Stable provider id.
-/// * [capabilities] - What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`. Strings, not a closed enum. 
+/// * [capabilities] - What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer. 
 /// * [configured] - Whether the provider can run (key-free providers always; keyed ones once their key is set). 
 /// * [builtin] - True for the catalog's built-ins.
 @BuiltValue()
@@ -22,7 +22,7 @@ abstract class EnrichmentProvider implements Built<EnrichmentProvider, Enrichmen
   @BuiltValueField(wireName: r'name')
   String get name;
 
-  /// What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`. Strings, not a closed enum. 
+  /// What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer. 
   @BuiltValueField(wireName: r'capabilities')
   BuiltList<String> get capabilities;
 

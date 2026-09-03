@@ -936,6 +936,11 @@ func (l *Library) artRef(ctx context.Context, uc *UserCtx, apiPID string) (model
 // with where its image came from and whether it is pinned. An entry with
 // Locked set and no Format is a pin with nothing behind it - a cleared
 // and pinned cover, which is the state that used to be invisible.
+//
+// Locked is the effective pin on the slot: the entity's whole-artwork
+// pin, which gates the front cover and enrichment's fills in every other
+// role, or the role's own. It is passed through as upstream reports it,
+// so which of the two set it is not distinguishable here.
 type ArtRoleInfoDTO struct {
 	Role      string
 	Format    string

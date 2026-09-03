@@ -117,7 +117,13 @@ components:
           type: array
           description: >
             What it supplies: `identity`, `genres`, `cover`,
-            `lyrics`, `book`. Strings, not a closed enum.
+            `lyrics`, `book`, `aux-art`, `artist-art`. Strings, not a
+            closed enum. `cover` is the front cover of a release group;
+            `aux-art` its other slots (back, disc, booklet,
+            background); `artist-art` an artist's own images. The three
+            are separate because they gate separate passes - a provider
+            that only knows front covers must not pull the whole artist
+            catalogue into a walk it cannot answer.
           items:
             type: string
         configured:

@@ -1631,7 +1631,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get artworkLockHelp =>
-      'Keeps this cover through scans and enrichment runs. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.';
+      'Keeps this cover through scans and enrichment runs, and holds the other slots against automatic fills too. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.';
 
   @override
   String get artworkLockPinned => 'Cover pinned';
@@ -1654,6 +1654,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get artworkPickLabel => 'Image';
 
   @override
+  String artworkPinSlot(String slot) {
+    return 'Pin $slot';
+  }
+
+  @override
   String artworkReplaceSlot(String slot) {
     return 'Replace the $slot';
   }
@@ -1669,8 +1674,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String artworkSlotPinned(String slot) {
+    return '$slot pinned';
+  }
+
+  @override
   String artworkSlotSpoken(String slot, String state) {
     return '$slot: $state';
+  }
+
+  @override
+  String artworkSlotUnpinned(String slot) {
+    return '$slot unpinned';
   }
 
   @override
@@ -1703,6 +1718,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String artworkTooLarge(String file) {
     return '$file is larger than the 16 MB an image may be';
+  }
+
+  @override
+  String artworkUnpinSlot(String slot) {
+    return 'Unpin $slot';
   }
 
   @override
@@ -3672,6 +3692,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataOpenReleaseGroup => 'Open release group';
 
   @override
+  String get metadataOriginClear => 'Remove origin';
+
+  @override
+  String get metadataOriginEditHelp =>
+      'Every box is saved as you leave it, so clearing one clears the value. The date the item was acquired is kept as it stands.';
+
+  @override
+  String get metadataOriginEditTitle => 'Where this came from';
+
+  @override
+  String get metadataOriginEditable =>
+      'Recorded evidence of how this arrived. Tap to correct it.';
+
+  @override
+  String get metadataOriginId => 'Identifier';
+
+  @override
   String metadataOriginLine(String source) {
     return 'Origin: $source';
   }
@@ -3688,11 +3725,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataOriginManual => 'an unnamed source';
 
   @override
+  String get metadataOriginProvider => 'Provider';
+
+  @override
   String get metadataOriginRecorded =>
       'Recorded evidence of how this arrived, not an editable field.';
 
   @override
+  String get metadataOriginRemoved => 'Origin removed';
+
+  @override
   String get metadataOriginRss => 'a podcast feed';
+
+  @override
+  String get metadataOriginSaved => 'Origin updated';
+
+  @override
+  String get metadataOriginSourceType => 'How it arrived';
+
+  @override
+  String get metadataOriginTypeManual => 'Unnamed';
+
+  @override
+  String get metadataOriginTypeRss => 'Podcast feed';
+
+  @override
+  String get metadataOriginUrl => 'Address';
+
+  @override
+  String get metadataOriginUrlHelp =>
+      'Shown without any sign-in details it carried';
+
+  @override
+  String get metadataOriginWriteBack => 'Write into the files';
+
+  @override
+  String get metadataOriginWriteBackHelp =>
+      'Keeps the correction through a full rescan';
 
   @override
   String get metadataPendingChip => 'Unsaved';
@@ -4019,14 +4088,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicAlbumRewriteConfirmBody =>
-      'The edited fields are rewritten on every track, and the release regroups under a new album entry. Locks on those fields are overridden, then set again by the rewrite.';
+      'The edited fields are rewritten on every track. Because every member moves at once, the release keeps its entry - artwork, pins and play history with it - unless the new name already belongs to another release, in which case the two merge. Locks on those fields are overridden, then set again by the rewrite.';
 
   @override
   String get musicAlbumRewriteConfirmTitle => 'Regroup this release?';
 
   @override
   String get musicAlbumRewriteHelp =>
-      'These live on the tracks rather than the release. Saving rewrites them on every member and regroups the release under a new entry; this page follows it there.';
+      'These live on the tracks rather than the release. Saving rewrites them on every member, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.';
 
   @override
   String get musicAlbumRewriteIncomplete =>

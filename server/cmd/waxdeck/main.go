@@ -132,7 +132,7 @@ func run() error {
 		enrichURLs = flag.String("enrich-provider-urls", envOr("WAXDECK_ENRICH_PROVIDER_URLS", ""), "custom enrichment providers as name=url pairs, comma separated, each implementing the contract in docs/custom-provider-api/. Validated at startup (the capabilities document must answer and advertise a name) and registered ahead of every built-in provider")
 		enrichAuth = flag.String("enrich-provider-auth", envOr("WAXDECK_ENRICH_PROVIDER_AUTH", ""), "bearer tokens for custom enrichment providers as name=token pairs, comma separated; names must match -enrich-provider-urls")
 
-		artistArtOn = flag.Bool("artist-art", envOr("WAXDECK_ARTIST_ART", "true") == "true", "fill missing artist portraits in a daily background sweep, from fanart.tv when its key is set (keyed on the MBID) and from Deezer's name-matched artist search otherwise. On by default; set WAXDECK_ARTIST_ART=false and the server never asks either service for one")
+		artistArtOn = flag.Bool("artist-art", envOr("WAXDECK_ARTIST_ART", "true") == "true", "fill missing artist portraits. Artists MusicBrainz matched are filled by the catalog's own enrichment pass, from fanart.tv when its key is set and from Deezer otherwise; the artists it cannot reach, which are the ones with no MusicBrainz id, are filled by a daily background sweep asking Deezer by name. On by default; set WAXDECK_ARTIST_ART=false and the server never asks either service for one, on either path")
 
 		enrichContact = flag.String("enrichment-contact", envOr("WAXDECK_ENRICHMENT_CONTACT", ""), "MusicBrainz contact (an email or a URL) the catalog's whole-library enrichment pass identifies itself with. MusicBrainz requires an identifying agent, so empty leaves that pass disabled and /admin/enrichment/run refuses")
 		enrichMatch   = flag.Bool("enrichment-match-releases", envOr("WAXDECK_ENRICHMENT_MATCH_RELEASES", "true") == "true", "during enrichment, resolve which pressing of a record the library holds from its barcode or catalog number, deciding ties on medium and country. On by default; needs -enrichment-contact to have any effect")
@@ -323,8 +323,19 @@ func run() error {
 	// the artist portrait sweep all go at api.deezer.com, and more
 	// would be that many unpaced callers.
 	deezer := waxproviders.NewDeezer(waxproviders.DeezerConfig{})
+	// The artist-art switch reaches the enrichment port, not just the
+	// sweep goroutine: both Deezer and fanart.tv answer the artist
+	// target now, so leaving them advertising it would make "the server
+	// never asks either service for one" false the moment the catalog
+	// ran its own artist pass.
+	hideArtistArt := func(p enrich.Provider) enrich.Provider {
+		if *artistArtOn {
+			return p
+		}
+		return waxproviders.WithoutArtistArt(p)
+	}
 	enrichProviders := []enrich.Provider{
-		deezer,
+		hideArtistArt(deezer),
 		waxproviders.NewITunes(waxproviders.ITunesConfig{}),
 	}
 	if *discogsToken != "" {
@@ -342,14 +353,24 @@ func run() error {
 		waxproviders.NewGoogleBooks(waxproviders.GoogleBooksConfig{APIKey: *googleBooksKey}),
 		waxproviders.NewOpenLibrary(waxproviders.OpenLibraryConfig{}),
 	)
-	// The artist portrait chain: fanart.tv first when keyed (an MBID hit
-	// cannot be the wrong artist), Deezer's name match as the fallback.
-	// One fanart.tv client for the same pacing reason as Deezer's.
+	// The sweep's chain: fanart.tv first when keyed (an mbid hit cannot
+	// be the wrong artist), Deezer's name match as the fallback. Both
+	// rungs matter, because the sweep covers whatever the catalog's own
+	// artist pass leaves - and with no enrichment contact that pass
+	// does not run at all, so mbid-carrying artists are the sweep's too.
+	//
+	// fanart.tv also rides ahead of everything else that answers art on
+	// the port: the engine stops asking once every slot is held, so
+	// registration order is precedence, and it is the only provider
+	// that answers per role. One client for the same pacing reason as
+	// Deezer's.
 	artistArt := waxproviders.ArtistArtChain{Deezer: deezer}
 	if *fanartKey != "" {
 		fanart := waxproviders.NewFanartTV(waxproviders.FanartTVConfig{APIKey: *fanartKey})
-		enrichProviders = append([]enrich.Provider{fanart}, enrichProviders...)
-		artistArt.Fanart = fanart
+		enrichProviders = append([]enrich.Provider{hideArtistArt(fanart)}, enrichProviders...)
+		if *artistArtOn {
+			artistArt.Fanart = fanart
+		}
 	}
 	// Custom providers ride ahead of everything: an operator who wired a
 	// regional service wants its answers to win. Each is validated at

@@ -165,7 +165,7 @@
       }
     }
   },
-  "artworkLockHelp": "Keeps this cover through scans and enrichment runs. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.",
+  "artworkLockHelp": "Keeps this cover through scans and enrichment runs, and holds the other slots against automatic fills too. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.",
   "@artworkLockHelp": {
     "description": "Help under the cover pin switch. The second sentence is the whole reason the pin is visible: a cleared-and-pinned cover refuses every later write."
   },
@@ -203,6 +203,16 @@
   "@artworkPickLabel": {
     "description": "What the file picker calls the image it is asking for."
   },
+  "artworkPinSlot": "Pin {slot}",
+  "@artworkPinSlot": {
+    "description": "Toggle over one auxiliary artwork slot: hold the picture through scans and enrichment runs. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "the disc art"
+      }
+    }
+  },
   "artworkReplaceSlot": "Replace the {slot}",
   "@artworkReplaceSlot": {
     "description": "Accessible name of the control that replaces a filled artwork slot. {slot} is the slot's inline form.",
@@ -233,6 +243,16 @@
       }
     }
   },
+  "artworkSlotPinned": "{slot} pinned",
+  "@artworkSlotPinned": {
+    "description": "Confirmation after pinning one auxiliary artwork slot. {slot} is the slot's name.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Disc art"
+      }
+    }
+  },
   "artworkSlotSpoken": "{slot}: {state}",
   "@artworkSlotSpoken": {
     "description": "One artwork tile read as a whole: the slot's name, then what is in it.",
@@ -244,6 +264,16 @@
       "state": {
         "type": "String",
         "example": "jpeg, 1000 x 1000"
+      }
+    }
+  },
+  "artworkSlotUnpinned": "{slot} unpinned",
+  "@artworkSlotUnpinned": {
+    "description": "Confirmation after unpinning one auxiliary artwork slot. {slot} is the slot's name.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Disc art"
       }
     }
   },
@@ -296,6 +326,16 @@
       "file": {
         "type": "String",
         "example": "scan.png"
+      }
+    }
+  },
+  "artworkUnpinSlot": "Unpin {slot}",
+  "@artworkUnpinSlot": {
+    "description": "Toggle over one auxiliary artwork slot that is already pinned. {slot} is the slot's inline form.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "the disc art"
       }
     }
   },

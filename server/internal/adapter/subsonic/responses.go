@@ -370,7 +370,8 @@ func (al *album) id3() albumID3 {
 // container, over the one normalized mime table (flow.ContainerMime).
 // The suffix is the extension a file of the family wears - the stored
 // labels that are container names rather than extensions get spelled
-// back ("matroska" is a .mka, "wavpack" a .wv, "asf" a .wma) - and
+// back ("matroska" is a .mka, "wavpack" a .wv, "asf" a .wma,
+// "musepack" a .mpc) - and
 // contentType is never omitted: Feishin's tracks index dereferences it
 // on every row without checking, so one unknown-format file would
 // otherwise hold the whole listing at a skeleton forever, retrying a
@@ -383,6 +384,8 @@ func formatFacts(container string) (suffix, mime string) {
 		suffix = "wv"
 	case "asf":
 		suffix = "wma"
+	case "musepack":
+		suffix = "mpc"
 	default:
 		suffix = key
 	}

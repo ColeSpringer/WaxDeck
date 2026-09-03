@@ -1308,9 +1308,16 @@ components:
         nothing behind it: the cover was cleared and pinned cleared, which
         means "do not refill this" rather than "this has no cover yet". It
         is the one artwork state that was previously invisible, and it is
-        why an entity can list a role at all while holding no image. Only
-        `front` can be locked; the auxiliary slots have no producer to
-        guard against, so they always report false.
+        why an entity can list a role at all while holding no image.
+
+
+        Every role can be locked. `locked` is the **effective** lock on
+        this slot: the entity's whole-artwork pin, which is the front
+        cover's own and also gates enrichment's fills in every other
+        role, or the role's own pin, which gates that slot alone. So a
+        `true` on an auxiliary role does not say which of the two put it
+        there, and a hand-set image in that role answers to the role's
+        own pin regardless.
       required: [role]
       properties:
         role:
@@ -1362,8 +1369,9 @@ components:
         locked:
           type: boolean
           description: >
-            Whether the entity's front cover is pinned against enrichment
-            and scan re-derives. False on every non-front role.
+            Whether this slot is pinned against enrichment and scan
+            re-derives, under the whole-artwork pin or its own. See the
+            schema description for which.
 
     ArtRoles:
       type: object

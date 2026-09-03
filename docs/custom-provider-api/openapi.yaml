@@ -96,10 +96,16 @@ components:
           example: regionaldb
         capabilities:
           type: array
-          description: The enrichment kinds this provider supplies.
+          description: >
+            The enrichment kinds this provider supplies. `cover` is a
+            release group's front cover, `aux-art` its other slots
+            (back, disc, booklet, background), and `artist-art` an
+            artist's own images; the three are separate because each
+            gates a separate pass, and a provider that only knows front
+            covers must not be walked over every artist in a library.
           items:
             type: string
-            enum: [identity, genres, cover, lyrics, book]
+            enum: [identity, genres, cover, lyrics, book, aux-art, artist-art]
 
     EnrichRequest:
       type: object
@@ -112,8 +118,8 @@ components:
             genres and cover art; `release` is one specific pressing
             (answer nothing rather than the group's picture if you only
             know groups); `recording` asks for lyrics; `book` for
-            audiobook metadata; `artist` is reserved for identity
-            resolution.
+            audiobook metadata; `artist` asks for an artist's own art
+            (and is also the identity spine's own target).
           enum: [artist, release_group, release, recording, book]
         force:
           type: boolean

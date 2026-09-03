@@ -129,6 +129,7 @@ import 'package:waxdeck_api_gen/src/model/invite_created.dart';
 import 'package:waxdeck_api_gen/src/model/invite_list.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
 import 'package:waxdeck_api_gen/src/model/item_acquisition.dart';
+import 'package:waxdeck_api_gen/src/model/item_acquisition_edit.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
 import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
@@ -497,6 +498,7 @@ part 'serializers.g.dart';
   InviteList,
   Item,
   ItemAcquisition,
+  ItemAcquisitionEdit,
   ItemMetadata,
   ItemPage,
   ItemPermissions,

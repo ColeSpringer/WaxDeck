@@ -1636,7 +1636,7 @@ export interface paths {
         put?: never;
         /**
          * Edit fields on many items
-         * @description Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). `skipLocked` skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with `field-locked`. Write-back failures are reported per item and never undo the catalog batch. Every edited field is locked on every edited item, so a repeat edit of the same field needs `force` or `skipLocked`. Editing a release-keying field (`album`, `album_artist`, `year`) regroups the edited tracks onto a fresh album entity rather than renaming the release in place; `resultingAlbumPid` reports where they landed.
+         * @description Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). `skipLocked` skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with `field-locked`. Write-back failures are reported per item and never undo the catalog batch. Every edited field is locked on every edited item, so a repeat edit of the same field needs `force` or `skipLocked`. Editing a release-keying field (`album`, `album_artist`, `year`) moves the edited tracks to a new release identity, and where they land depends on coverage: a batch holding **every** member of the album renames the release in place, so the album keeps its pid along with its artwork, curation and play state, while a batch holding only **some** of them forks those onto a fresh album entity and leaves the rest behind. A rename onto a name another release already owns merges into it. `resultingAlbumPid` reports where the edited items sit either way.
          */
         post: operations["bulkEditMetadata"];
         delete?: never;
@@ -1659,6 +1659,8 @@ export interface paths {
         /**
          * Replace one credit role
          * @description Replaces the named people for one contributor role (composer, lyricist, producer, narrator, and the rest of the per-kind role vocabulary from the fields endpoint). Names resolve to artist entities and deduplicate. An empty list clears the role. `writeBack` writes the role's tag keys where a round-trippable key exists (book translator and editor roles are database-only by upstream design; the response says so rather than failing).
+         *
+         *     An artist whose **every** credit in the library this call moves is **renamed in place**, keeping its pid along with its artwork, curation and stars, rather than being left behind while a fresh artist takes the credit. Naming several people renames onto the first of them and forks the rest onto new artists; a first name already taken by another artist merges the old one into it instead. An artist with credits this call does not touch is not renamed - the credit simply moves.
          */
         put: operations["setItemCredits"];
         post?: never;
@@ -1761,18 +1763,61 @@ export interface paths {
         };
         /**
          * Read an entity's artwork lock
-         * @description Whether an album, artist, release group, genre, or podcast's front cover is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says "do not refill this" rather than "this has no cover yet". Administrators only, like every other catalog-entity curation read, except the podcast pin, which `managePodcasts` holders read too.
+         * @description Whether one of an album, artist, release group, genre, or podcast's artwork slots is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says "do not refill this" rather than "this has no cover yet". Administrators only, like every other catalog-entity curation read, except the podcast pin, which `managePodcasts` holders read too.
+         *
+         *     The reading for an auxiliary role is the **effective** lock - the whole-artwork pin or that role's own - so a `true` there does not say which of the two set it. `ArtRoleInfo.locked` on the artwork read reports the same thing.
          */
         get: operations["getEntityArtworkLock"];
         /**
          * Pin or unpin an entity's artwork
-         * @description Sets or clears the front-cover pin without touching the cover itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only, except the podcast pin, which `managePodcasts` holders set too - the pin is what keeps a hand-set show cover from being refetched on the next feed sync, so it belongs to whoever may set the cover.
+         * @description Sets or clears one slot's pin without touching the image itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only, except the podcast pin, which `managePodcasts` holders set too - the pin is what keeps a hand-set show cover from being refetched on the next feed sync, so it belongs to whoever may set the cover.
+         *
+         *     `role` decides the reach. The default `front` writes the entity's whole-artwork pin, which gates the front cover and also enrichment's fills in every other role; a named auxiliary role writes that slot's own pin alone. Unpinning one auxiliary role therefore does not lift a whole-artwork pin standing over it, and the read reports the effective lock either way.
          *
          *     `playlist` is refused with `invalid-request`. A playlist's cover authority is its own custom/generated origin marker rather than this pin, and a pin left standing on one would make the mosaic the server builds from the members unwritable - which the read path retries on every read, forever.
          */
         put: operations["setEntityArtworkLock"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{pid}/acquisition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Correct an item's recorded origin
+         * @description Replaces the item's origin row - how and where it entered the library - and locks `acquisition` by default. It exists because the automatic recorder is merge-wise and never lowers a field: an event with an empty url leaves a standing one alone, so a wrong url, id or provider can only come off through here or through a clear.
+         *
+         *     **The editable columns are replaced as sent**: `sourceType`, `sourceId` and `provider`. An absent one is cleared, not kept, which is what makes correcting a wrong value possible at all. Two things the body cannot express are carried forward from the standing row instead of being lost - the provider version and the acquisition's stored options - and so is the acquired-at stamp when `acquiredAt` is absent.
+         *
+         *     `sourceUrl` is the exception, and has to be: the read **redacts** it (see `ItemAcquisition.sourceUrl`), so a client that echoed back what it was shown would replace a stored `?v=XYZ` with the truncated form it could see. An absent `sourceUrl` therefore **keeps** what stands, and an explicit empty string clears it. Send it only when somebody typed one.
+         *
+         *     `writeBack` mirrors the correction into the files' `SOURCE_URL`/`SOURCE_ID`/`ACQUISITION_DATE` tags, which is what makes it survive a rescan without leaning on the lock. The stamp only reaches a file when someone actually knows it: a brand-new row's acquired-at is scan time, an approximation the catalog holds honestly and a file cannot, so it is not written.
+         *
+         *     A locked origin answers `field-locked` unless `force` is set. Administrators, or the user whose upload brought the item in.
+         */
+        put: operations["setItemAcquisition"];
+        post?: never;
+        /**
+         * Remove an item's recorded origin
+         * @description Takes the origin row off, so the item reads the source it has without one: its show's type for an episode, and `local` for everything else. Idempotent - an item with no row answers 204 the same way.
+         *
+         *     `lock` defaults **true** here, and it is what makes the clear stick: the row came from evidence that is still in the file, so the next full scan re-derives it. `writeBack` is the durable half, stripping those tags outright, after which the origin stays gone with no lock holding it.
+         *
+         *     A write-back that fails on some files is **not** reported: the catalog row is gone either way, and a 204 carries no body to name them in. It is logged server-side, and the tags that stayed are what a later full rescan would re-derive from - so `PUT` back with `writeBack` if the clear has to be durable and this one did not take. The `PUT` reports its own write-back failures in `MetadataEditResult`.
+         */
+        delete: operations["clearItemAcquisition"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1820,7 +1865,9 @@ export interface paths {
         get?: never;
         /**
          * Lock or unlock fields
-         * @description Locks or unlocks the named fields against scans, enrichment, and organize. Field names are the scalar vocabulary plus the namespaced artifacts: `lyrics`, `chapters`, `art`, `credit.ROLE`, and `tag.KEY`.
+         * @description Locks or unlocks the named fields against scans, enrichment, and organize. Field names are the scalar vocabulary plus the namespaced artifacts: `lyrics`, `chapters`, `art`, `art.ROLE`, `acquisition`, `credit.ROLE`, and `tag.KEY`.
+         *
+         *     The two artwork spellings differ in reach. `art` is the whole pin: it gates the front cover and also enrichment's fills in every other role. `art.ROLE` (`art.back`, `art.disc`, `art.booklet`, `art.background`) gates that one slot, so a hand-set booklet scan can be held while the rest stay open.
          */
         put: operations["setItemLocks"];
         post?: never;
@@ -2842,7 +2889,7 @@ export interface paths {
          * Import a Navidrome smart playlist (NSP)
          * @description Creates a **smart** playlist from an NSP document, which is the request body itself. The document's `name` names the playlist (the `name` parameter overrides it, and is what lets a nameless document be imported) and `public` sets its visibility; `comment` is read and discarded, since a WaxDeck playlist has no comment.
          *
-         *     Fields map onto the rule vocabulary (`GET /playlists/rule-fields`): `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `playCount` by name, plus `dateAdded` to `addedAt`, `lastPlayed` to `lastPlayedAt`, `filepath` to `path`, `loved` to `starred`, `duration` to `durationMs`, and `rating`. Two of those carry different units on each side and are **rescaled**: NSP counts duration in seconds where WaxDeck counts milliseconds, and rates 0 to 5 where WaxDeck rates 0 to 100, so an unscaled `rating gt 3` would mean "rated above 3 out of 100", which is every rated track.
+         *     Fields map onto the rule vocabulary (`GET /playlists/rule-fields`): `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `trackNumber`, `discNumber`, `bpm`, `playCount` by name, plus `dateAdded` to `addedAt`, `lastPlayed` to `lastPlayedAt`, `filepath` to `path`, `loved` to `starred`, `duration` to `durationMs`, and `rating`. Two of those carry different units on each side and are **rescaled**: NSP counts duration in seconds where WaxDeck counts milliseconds, and rates 0 to 5 where WaxDeck rates 0 to 100, so an unscaled `rating gt 3` would mean "rated above 3 out of 100", which is every rated track.
          *
          *     `notContains` imports as a `not` node wrapping `contains`; every other operator has a WaxDeck spelling of the same name.
          *
@@ -4813,7 +4860,7 @@ export interface components {
          */
         MediaType: "music" | "podcast" | "audiobook";
         /**
-         * @description One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans and enrichment; `back`, `disc`, `booklet`, and `background` are set explicitly and resolve at the entity's own level. Defaults to `front`.
+         * @description One artwork slot on an item or entity. Only `front` walks the album/artist fallback chain and is filled by scans; `back`, `disc`, `booklet`, and `background` resolve at the entity's own level and are set explicitly or filled by an enrichment pass that fetched art and found the slot empty. Defaults to `front`.
          * @default front
          * @enum {string}
          */
@@ -5795,7 +5842,7 @@ export interface components {
              * @example fanarttv
              */
             name: string;
-            /** @description What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`. Strings, not a closed enum. */
+            /** @description What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer. */
             capabilities: string[];
             /** @description Whether the provider can run (key-free providers always; keyed ones once their key is set). */
             configured: boolean;
@@ -6586,7 +6633,9 @@ export interface components {
         /**
          * @description One artwork slot an entity holds at its own level, with where its image came from and whether it is pinned.
          *
-         *     A slot that reports `locked: true` and no `format` is a lock with nothing behind it: the cover was cleared and pinned cleared, which means "do not refill this" rather than "this has no cover yet". It is the one artwork state that was previously invisible, and it is why an entity can list a role at all while holding no image. Only `front` can be locked; the auxiliary slots have no producer to guard against, so they always report false.
+         *     A slot that reports `locked: true` and no `format` is a lock with nothing behind it: the cover was cleared and pinned cleared, which means "do not refill this" rather than "this has no cover yet". It is the one artwork state that was previously invisible, and it is why an entity can list a role at all while holding no image.
+         *
+         *     Every role can be locked. `locked` is the **effective** lock on this slot: the entity's whole-artwork pin, which is the front cover's own and also gates enrichment's fills in every other role, or the role's own pin, which gates that slot alone. So a `true` on an auxiliary role does not say which of the two put it there, and a hand-set image in that role answers to the role's own pin regardless.
          */
         ArtRoleInfo: {
             role: components["schemas"]["ArtRole"];
@@ -6610,7 +6659,7 @@ export interface components {
              * @description When this slot was last written.
              */
             updatedAt?: string;
-            /** @description Whether the entity's front cover is pinned against enrichment and scan re-derives. False on every non-front role. */
+            /** @description Whether this slot is pinned against enrichment and scan re-derives, under the whole-artwork pin or its own. See the schema description for which. */
             locked?: boolean;
         };
         /** @description The artwork slots an entity holds at its own level, and the provenance of the cover a front-cover read would actually answer with. */
@@ -6717,13 +6766,13 @@ export interface components {
             acquisition?: components["schemas"]["ItemAcquisition"];
         };
         /**
-         * @description How and where the item entered the library: recorded evidence, not a field. It is derived from what the import saw - an acquisition the server performed, or the file's own `SOURCE_URL`/`SOURCE_ID` tags - and no endpoint edits it, so a client draws it as a read-only caption rather than a form line.
+         * @description How and where the item entered the library: recorded evidence first, and a field only where somebody has corrected it. It is derived from what the import saw - an acquisition the server performed, or the file's own `SOURCE_URL`/`SOURCE_ID` tags - and `PUT`/`DELETE /items/{pid}/acquisition` are what put a wrong one right, under the same curate gate as the rest of the editor.
          *
          *     Present whenever the catalog holds an origin row, which includes a scanned file carrying acquisition tags; absent means no evidence of origin was ever seen. Absence is the ordinary state of a locally ripped file and is not an error.
          */
         ItemAcquisition: {
             /**
-             * @description How the item arrived: `manual` (acquired by means the catalog did not record - which is what a tag-derived row reads, and what an import that named no provider stamps), `rss`, `youtube`, or whatever an acquisition provider stamped. Open set; treat an unknown value as opaque and show it as it stands. `manual` is much the commonest value and says only that origin evidence exists, so read `sourceUrl` for the substance.
+             * @description How the item arrived: `manual` (acquired by means the catalog did not record - which is what a tag-derived row reads, and what an import that named no provider stamps), `rss`, or `youtube`. Those three are what the catalog stores, and the write surface refuses anything else - but treat an unknown value as opaque and show it as it stands rather than as an error, since a value can arrive from a catalog another host wrote. `manual` is much the commonest and says only that origin evidence exists, so read `sourceUrl` for the substance.
              *
              *     `local` is defined upstream for an item with no remote origin, and this server never writes it: such an item has no acquisition row at all, and so no block here. A client should still handle it, because the value can arrive from a catalog another host wrote.
              * @example rss
@@ -6737,6 +6786,11 @@ export interface components {
              */
             sourceUrl?: string;
             /**
+             * @description The origin's own identifier in the provider's namespace - a feed's guid, a video id. Emitted verbatim rather than redacted like `sourceUrl`: an id is not a URL and carries no credentials, and it is the field a correction most often needs to see before rewriting.
+             * @example ep-12
+             */
+            sourceId?: string;
+            /**
              * @description The acquisition provider that answered, when one did.
              * @example rss
              */
@@ -6746,6 +6800,42 @@ export interface components {
              * @description When the item was acquired, as the catalog recorded it. Optional rather than required because a row whose time the catalog does not hold is better described by its absence than by a timestamp at the start of the era, which a client would render as a confident wrong date.
              */
             acquiredAt?: string;
+            /** @description Whether the origin is locked against automatic rewrites - an import re-recording over it, or a scan re-deriving it from tags still in the file. Set by a correction through `PUT`/`DELETE /items/{pid}/acquisition` by default, and by nothing else; `acquisition` on `/items/{pid}/locks` is the same lock under its field name. */
+            locked?: boolean;
+        };
+        /** @description A replacement origin row. The four columns below are written as sent - an absent one is **cleared**, since the whole point of this surface is lowering a value the merge-wise recorder cannot. Two the body cannot express (the provider's version string and the acquisition's stored options) carry forward from the standing row. */
+        ItemAcquisitionEdit: {
+            /**
+             * @description How the item arrived. The set is closed - `manual`, `rss`, `youtube` - and anything else is refused with `invalid-request` rather than stored. `local` is refused too, for a different reason: it means "no remote origin", which is spelled by having no row at all, so clear the origin instead of asking for it.
+             * @example rss
+             */
+            sourceType: string;
+            /** @description Where it came from, stored verbatim. **Absent keeps the standing value; `""` clears it.** The one column that works that way, because it is the one the read redacts: a client is never shown the stored string in full, so treating a resent value as authoritative would let a round trip through this form destroy a query string or a path segment nobody saw. A corrected URL cannot be confirmed by reading it back either, for the same reason. */
+            sourceUrl?: string;
+            /** @description The origin's identifier in the provider's namespace. */
+            sourceId?: string;
+            /** @description The acquisition provider that supplied the item. */
+            provider?: string;
+            /**
+             * Format: date-time
+             * @description When it was acquired. Absent keeps the stamp the row already carries rather than restamping it, so correcting a URL does not rewrite the date as well.
+             */
+            acquiredAt?: string;
+            /**
+             * @description Mirror the origin into the files' acquisition tags, which is what makes the correction survive a rescan.
+             * @default false
+             */
+            writeBack: boolean;
+            /**
+             * @description Lock `acquisition` against automatic rewrites.
+             * @default true
+             */
+            lock: boolean;
+            /**
+             * @description Write through a standing lock.
+             * @default false
+             */
+            force: boolean;
         };
         /** @description The caller's permissions on one item. */
         ItemPermissions: {
@@ -6780,9 +6870,13 @@ export interface components {
              */
             updatedAt?: string;
         };
-        /** @description Whether an entity's front cover is pinned against enrichment and scan re-derives. */
+        /** @description Whether one of an entity's artwork slots is pinned against enrichment and scan re-derives. */
         ArtworkLock: {
-            /** @description True when the cover is pinned. */
+            /**
+             * @description True when the slot is pinned. On a write this is what the request asks for; on a read, and in a write's response, it is the **effective** lock - so pinning an auxiliary role answers true, and unpinning one under a standing whole-artwork pin answers true as well, because that pin still holds the slot.
+             *
+             *     The role is the query parameter's, not a field here: one schema serves the request body and the response, and a role in the body would be a second spelling the server ignores.
+             */
             locked: boolean;
         };
         /** @description One credit role with its people. */
@@ -6995,7 +7089,7 @@ export interface components {
             skipped: string[];
             /** @description Files whose tags could not be updated. */
             writeBackFailures?: components["schemas"]["WriteBackFailure"][];
-            /** @description The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. Rewriting those fields regroups the members onto a fresh album pid instead of renaming the release in place, so a caller showing the old album follows this to the new one. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. */
+            /** @description The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. It answers "where is the release now", not "did it move": a batch covering every member renames the album in place and this is the pid the caller already had, while a partial batch forks the edited members onto a fresh pid and this is how a caller showing the old album follows them. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. */
             resultingAlbumPid?: string;
         };
         /** @description Replacement people for one credit role. */
@@ -13425,7 +13519,10 @@ export interface operations {
     };
     getEntityArtworkLock: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Which artwork slot to read. Defaults to `front`. */
+                role?: components["schemas"]["ArtRole"];
+            };
             header?: never;
             path: {
                 /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
@@ -13455,7 +13552,10 @@ export interface operations {
     };
     setEntityArtworkLock: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Which artwork slot to pin. Defaults to `front`. */
+                role?: components["schemas"]["ArtRole"];
+            };
             header?: never;
             path: {
                 /** @description The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. `podcast` is a show's channel cover, whose operations accept the accounts that already curate shows: `managePodcasts` holders as well as administrators. */
@@ -13484,6 +13584,73 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    setItemAcquisition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemAcquisitionEdit"];
+            };
+        };
+        responses: {
+            /** @description The edit outcome. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetadataEditResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["FieldLocked"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    clearItemAcquisition: {
+        parameters: {
+            query?: {
+                /** @description Strip the origin tags from the item's files too. */
+                writeBack?: boolean;
+                /** @description Lock `acquisition` so a rescan cannot re-derive the row from tags still in the file. */
+                lock?: boolean;
+                /** @description Clear through a standing lock. */
+                force?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared, or there was nothing to clear. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["FieldLocked"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };

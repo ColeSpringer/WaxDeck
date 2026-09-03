@@ -16,7 +16,7 @@ part 'bulk_edit_result.g.dart';
 /// * [edited] - Items whose catalog rows updated.
 /// * [skipped] - Items skipped for locks.
 /// * [writeBackFailures] - Files whose tags could not be updated.
-/// * [resultingAlbumPid] - The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. Rewriting those fields regroups the members onto a fresh album pid instead of renaming the release in place, so a caller showing the old album follows this to the new one. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. 
+/// * [resultingAlbumPid] - The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. It answers \"where is the release now\", not \"did it move\": a batch covering every member renames the album in place and this is the pid the caller already had, while a partial batch forks the edited members onto a fresh pid and this is how a caller showing the old album follows them. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. 
 @BuiltValue()
 abstract class BulkEditResult implements Built<BulkEditResult, BulkEditResultBuilder> {
   /// Items whose catalog rows updated.
@@ -31,7 +31,7 @@ abstract class BulkEditResult implements Built<BulkEditResult, BulkEditResultBui
   @BuiltValueField(wireName: r'writeBackFailures')
   BuiltList<WriteBackFailure>? get writeBackFailures;
 
-  /// The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. Rewriting those fields regroups the members onto a fresh album pid instead of renaming the release in place, so a caller showing the old album follows this to the new one. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. 
+  /// The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. It answers \"where is the release now\", not \"did it move\": a batch covering every member renames the album in place and this is the pid the caller already had, while a partial batch forks the edited members onto a fresh pid and this is how a caller showing the old album follows them. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. 
   @BuiltValueField(wireName: r'resultingAlbumPid')
   String? get resultingAlbumPid;
 

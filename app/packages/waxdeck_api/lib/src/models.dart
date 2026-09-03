@@ -3312,8 +3312,10 @@ class ItemAcquisition {
   const ItemAcquisition({
     required this.sourceType,
     this.sourceUrl,
+    this.sourceId,
     this.provider,
     this.acquiredAt,
+    this.locked = false,
   });
 
   /// `local`, `rss`, `youtube`, `manual`, or whatever an acquisition
@@ -3325,12 +3327,22 @@ class ItemAcquisition {
   /// a shareable web address, which is not the same as unknown.
   final String? sourceUrl;
 
+  /// The origin's identifier in the provider's namespace - a feed's
+  /// guid, a video id. Unredacted, unlike [sourceUrl]: an id carries no
+  /// credentials.
+  final String? sourceId;
+
   final String? provider;
 
   /// When the catalog recorded the acquisition. Null where it holds no
   /// time, which is better said by absence than by a date at the start
   /// of the era.
   final DateTime? acquiredAt;
+
+  /// Whether the origin is held against automatic rewrites - an import
+  /// re-recording over it, a scan re-deriving it from tags still in the
+  /// file. A correction sets it by default.
+  final bool locked;
 }
 
 /// One file a write-back could not update.

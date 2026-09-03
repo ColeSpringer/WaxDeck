@@ -3586,7 +3586,26 @@ class FakeRepository implements WaxDeckRepository {
   /// caption. Absent is the ordinary state of a plainly ripped item.
   final Map<String, ItemAcquisition> itemAcquisition = {};
 
-  /// Entity front-cover pins, by "entityType/entityPid".
+  /// Every origin correction, so a test can assert what the sheet sent
+  /// rather than only what it drew afterwards.
+  final List<
+    ({
+      String pid,
+      String sourceType,
+      String? sourceUrl,
+      String? sourceId,
+      String? provider,
+      bool writeBack,
+    })
+  >
+  setItemAcquisitionCalls = [];
+
+  /// Every origin clear, likewise.
+  final List<({String pid, bool writeBack})> clearItemAcquisitionCalls = [];
+
+  /// Entity artwork pins, by "entityType/entityPid/role". The fake
+  /// keys each role separately, where the server reports an effective
+  /// lock; a test that cares about that distinction drives the real one.
   final Map<String, bool> entityArtworkLocks = {};
 
   /// Every slot write, so a test can see which role got which bytes.
@@ -3654,19 +3673,74 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<bool> getEntityArtworkLock(
     String entityType,
-    String entityPid,
-  ) async => entityArtworkLocks['$entityType/$entityPid'] ?? false;
+    String entityPid, {
+    String role = 'front',
+  }) async => entityArtworkLocks['$entityType/$entityPid/$role'] ?? false;
 
   @override
   Future<bool> setEntityArtworkLock(
     String entityType,
     String entityPid, {
     required bool locked,
+    String role = 'front',
   }) async {
     final error = metadataError;
     if (error != null) throw error;
-    entityArtworkLocks['$entityType/$entityPid'] = locked;
+    entityArtworkLocks['$entityType/$entityPid/$role'] = locked;
     return locked;
+  }
+
+  @override
+  Future<MetadataEditResult> setItemAcquisition(
+    String pid, {
+    required String sourceType,
+    String? sourceUrl,
+    String? sourceId,
+    String? provider,
+    DateTime? acquiredAt,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    setItemAcquisitionCalls.add((
+      pid: pid,
+      sourceType: sourceType,
+      sourceUrl: sourceUrl,
+      sourceId: sourceId,
+      provider: provider,
+      writeBack: writeBack,
+    ));
+    // The server replaces every editable column as sent, so the fake
+    // does too: a test asserting that an absent field cleared would
+    // otherwise pass against a merge the real one does not do. The
+    // address is the documented exception - absent keeps, because the
+    // read redacts it and a client is never shown the stored string in
+    // full - and the fake keeps it too, for the same reason in reverse.
+    final standing = itemAcquisition[pid];
+    itemAcquisition[pid] = ItemAcquisition(
+      sourceType: sourceType,
+      sourceUrl: sourceUrl ?? standing?.sourceUrl,
+      sourceId: sourceId,
+      provider: provider,
+      acquiredAt: acquiredAt ?? standing?.acquiredAt,
+      locked: lock,
+    );
+    return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<void> clearItemAcquisition(
+    String pid, {
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    clearItemAcquisitionCalls.add((pid: pid, writeBack: writeBack));
+    itemAcquisition.remove(pid);
   }
 
   @override

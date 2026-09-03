@@ -325,10 +325,11 @@ here waits on upstream.
   real device to verify against. Blocked on hardware access.
 - `[in-repo]` **An artist screen has no biography.** "Appears on" landed
   on the `credit-artist` browse dimension. The biography still needs an
-  enrichment field nothing writes yet: the artist portrait sweep filled
-  the artwork half of that gap, but no provider supplies prose and no
-  catalog field holds it, so this stays sequenced behind that rather
-  than behind a query.
+  enrichment field nothing writes yet: artist art filled the pictures
+  half of that gap (the catalog's enrichment pass for matched artists,
+  the name-matched sweep for the rest), but no provider supplies prose
+  and no catalog field holds it, so this stays sequenced behind that
+  rather than behind a query.
 - `[in-repo]` **A browse sort this client predates is erased by the
   next preference write.** `Prefs.browseSorts` values are a closed enum
   in the spec, so an order only a newer server knows deserializes to
@@ -731,15 +732,6 @@ here waits on upstream.
 
 ## Curation and metadata
 
-- `[upstream]` **The provider chain fills only the front artwork slot.**
-  The art-role model (front, back, disc, booklet, background) ships on
-  the read and write surfaces, but enrichment still fills the front
-  cover alone: a provider candidate carries a single cover image, so
-  fanning providers out to the auxiliary slots (a fanart.tv artist
-  background, disc art) needs the candidate/provider model extended to
-  carry per-role art first - the "per-role candidate art on the
-  enrichment port" ask in `upstream-requests.md` (WaxBin). The slots
-  are readable and hand-settable meanwhile.
 - `[in-repo]` **A matched binding can only be made at import, as
   `mirror`, and never afterwards.** The import dialog's keep-matched
   switch is the only client path to one: it binds the playlist it just
@@ -801,8 +793,10 @@ here waits on upstream.
 - `[in-repo]` **A has-art signal on `FacetBucket`.** Kept for the
   reasoning, because the next agent tempted by a `hasArt` field needs
   the probe rulings below. The situation it was sequenced on has
-  arrived: the artist portrait sweep writes artist-level art now, the
-  artists index asks per row like the album one, and the misses land in
+  arrived: artist-level art is written now - by the catalog's
+  enrichment pass for a matched artist and by the name-matched sweep
+  for the rest - the artists index asks per row like the album one, and
+  the misses land in
   `ArtworkStore`'s negative cache - asked once, drawn as a monogram
   from then on. What a contract field would still buy is trimming the
   first-session 404 per artless artist, which the negative cache

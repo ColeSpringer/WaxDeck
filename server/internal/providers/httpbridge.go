@@ -58,11 +58,13 @@ type HTTPBridge struct {
 // remote built against a newer contract still serves what this build
 // understands.
 var bridgeCapabilities = map[string]enrich.Capability{
-	"identity": enrich.CapIdentity,
-	"genres":   enrich.CapGenres,
-	"cover":    enrich.CapCover,
-	"lyrics":   enrich.CapLyrics,
-	"book":     enrich.CapBookMeta,
+	"identity":   enrich.CapIdentity,
+	"genres":     enrich.CapGenres,
+	"cover":      enrich.CapCover,
+	"lyrics":     enrich.CapLyrics,
+	"book":       enrich.CapBookMeta,
+	"aux-art":    enrich.CapAuxArt,
+	"artist-art": enrich.CapArtistArt,
 }
 
 const (

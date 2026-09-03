@@ -227,6 +227,7 @@ var ruleFieldSpecs = []ruleFieldSpec{
 	{api: "year", engine: "year", kind: ruleKindNumber, sortable: true, desc: "release or publication year"},
 	{api: "trackNumber", engine: "track_no", kind: ruleKindNumber, sortable: true, desc: "track number (music)"},
 	{api: "discNumber", engine: "disc_no", kind: ruleKindNumber, sortable: true, desc: "disc number (music)"},
+	{api: "bpm", engine: "bpm", kind: ruleKindNumber, sortable: true, desc: "tempo in beats per minute (music); 0 when untagged"},
 	{api: "season", engine: "season", kind: ruleKindNumber, sortable: true, desc: "season number (episodes)"},
 	{api: "publishedAt", engine: "published", kind: ruleKindDate, sortable: true, desc: "episode publication time"},
 	{api: "durationMs", engine: "duration_ms", kind: ruleKindNumber, sortable: true, desc: "duration in milliseconds"},

@@ -144,3 +144,75 @@ func TestArtistArtSweepRespectsAStandingPin(t *testing.T) {
 		t.Errorf("sweep over a pinned slot = %+v with %d asks, want neither", res, fake.askCount())
 	}
 }
+
+// TestArtistArtSweepCoversWhatTheCatalogPassDoesNot is the boundary
+// between the two passes that fill artist art, and the boundary moves.
+//
+// An artist carrying a MusicBrainz id belongs to the catalog's own
+// enrichment pass, which asks fanart.tv and Deezer by that id through
+// the port - so the sweep leaves it alone rather than racing a
+// name-matched face against an identity-matched one. But that pass
+// needs an enrichment contact and does not run without one, while a
+// library tagged by Picard or beets carries artist mbids straight off
+// the files. Skipping them unconditionally is how a stock install ends
+// up fetching no portraits at all with the flag still reporting on.
+func TestArtistArtSweepCoversWhatTheCatalogPassDoesNot(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name             string
+		contact          string
+		sweptWhenMatched bool
+	}{
+		{name: "no contact", contact: "", sweptWhenMatched: true},
+		{name: "enrichment configured", contact: "waxdeck@example.test", sweptWhenMatched: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &fakeArtistArt{img: tinyPNG(t)}
+			h := newHarnessWith(t, func(cfg *service.Config) {
+				cfg.ArtistArtProvider = fake
+				cfg.EnrichmentContact = tc.contact
+			})
+			pid := demoArtistPID(t, h)
+
+			// Unmatched, which is how the fixture library scans: the
+			// sweep's business either way.
+			res, err := h.svc.ArtistArtSweep(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Scanned == 0 || fake.askCount() == 0 {
+				t.Fatalf("an mbid-less artist was not swept: %+v, asks=%d", res, fake.askCount())
+			}
+
+			// Give the artist an identity and clear the portrait the
+			// first pass stored, so the only thing that can keep the
+			// next one away is the id.
+			resp := h.patchJSON(t, "/api/v1/entities/artist/"+pid, map[string]any{
+				"edits": map[string]string{"mbid": "11111111-2222-3333-4444-555555555555"},
+			})
+			if resp.StatusCode != 200 {
+				t.Fatalf("setting the artist mbid: status %d", resp.StatusCode)
+			}
+			resp.Body.Close()
+			wantStatus(t, h.deleteReq(t, "/api/v1/entities/artist/"+pid+"/artwork?force=true"), 204,
+				"clearing the swept portrait")
+			// The clear leaves the pin as it stood, and this artist was
+			// never pinned; unpinning explicitly would test the pin,
+			// not the filter.
+
+			before := fake.askCount()
+			res, err = h.svc.ArtistArtSweep(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			asked := fake.askCount() != before
+			if asked != tc.sweptWhenMatched {
+				t.Errorf("matched artist asked = %v, want %v", asked, tc.sweptWhenMatched)
+			}
+			if scanned := res.Scanned > 0; scanned != tc.sweptWhenMatched {
+				t.Errorf("matched artist counted as scanned = %v, want %v", scanned, tc.sweptWhenMatched)
+			}
+		})
+	}
+}

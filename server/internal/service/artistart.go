@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/colespringer/waxbin"
@@ -14,18 +13,36 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/providers"
 )
 
-// The artist portrait sweep. Nothing upstream ever writes artist-level
-// artwork - every art-bearing enrichment provider targets the release
-// group - so this is WaxDeck's own pass: walk the artists, and for each
-// one that has no portrait, no standing pin, and no fresh miss on
-// record, ask the provider chain and store what comes back at `front`,
-// which is the slot both the artist screen and the index tiles resolve.
-// The auxiliary slots (a scenic fanart.tv background) wait on the
-// per-role candidate model recorded in upstream-requests.md.
+// The artist portrait sweep, for the artists the catalog's own pass
+// cannot reach. Upstream fills artist art now - fanart.tv and Deezer
+// both answer the artist target through the enrichment port - but its
+// backfill queue selects on `artist.mbid`, which the identity phase
+// fills only for artists MusicBrainz matched. An artist that never
+// matched is never asked about, and those are exactly the artists most
+// likely to be missing a picture.
+//
+// So this covers what that pass leaves, which is decided by whether the
+// pass runs at all. Enrichment needs a contact and is off without one
+// (Config.EnrichmentContact), and a library tagged by Picard or beets
+// carries artist mbids straight off the files - so on a stock install
+// every artist has an id and nothing enriches them. Handing those to a
+// pass that is not running is how the flag ends up reporting on while
+// no portrait is ever fetched. With a contact set, the mbid-carrying
+// artists are the catalog's and this walks the remainder; without one,
+// this walks the lot.
+//
+// Fills are fill-when-empty, pin-respecting, provenance-stamped, and
+// stored at `front`, the slot both the artist screen and the index
+// tiles resolve. Auxiliary roles are the port's and are not attempted
+// here.
+//
+// This whole file retires when the name-keyed artist walk in
+// docs/upstream-requests.md lands, at which point the catalog pass
+// covers the unmatched artists too - and covers them whether or not a
+// contact is configured, which is the other half of what retires it.
 
-// ArtistArtProvider answers a portrait for one artist. The composite of
-// the fanart.tv and Deezer rungs implements it; nil disables the sweep.
-// The narrow interface keeps the service free of the upstream
+// ArtistArtProvider answers a portrait for one artist; nil disables the
+// sweep. The narrow interface keeps the service free of the upstream
 // vocabularies, the same shape RadioArtResolver takes, and it
 // distinguishes its two failures the same way: ErrNoArtistImage is
 // answered-and-empty, anything else is "could not ask".
@@ -85,12 +102,22 @@ func (l *Library) ArtistArtSweep(ctx context.Context) (ArtistArtSweepResult, err
 			if err := ctx.Err(); err != nil {
 				return res, err
 			}
+			// An artist MusicBrainz matched belongs to the catalog's
+			// own artist-art pass, which asks by mbid on the
+			// enrichment port; asking again here would put a
+			// name-matched face beside an identity-matched one and
+			// race it for the slot. Only when that pass is actually
+			// running, though - without a contact it is not, and
+			// skipping these would leave them with no pass at all.
+			if ent.MBID != "" && l.enrichmentConfigured {
+				continue
+			}
 			res.Scanned++
 			// Cheapest guards first: a placeholder name is never one
 			// artist (a portrait for "Various Artists" is somebody
 			// else's face on every compilation), and the miss map is
 			// already in memory.
-			if artistArtPlaceholder(ent.Name) {
+			if providers.ArtistNamePlaceholder(ent.Name) {
 				continue
 			}
 			if m, ok := misses[string(ent.PID)]; ok && m.MBID == ent.MBID &&
@@ -113,7 +140,7 @@ func (l *Library) ArtistArtSweep(ctx context.Context) (ArtistArtSweepResult, err
 			// respects - and a failed read must not read as "unpinned",
 			// because this check is the only thing between that intent
 			// and a write.
-			locked, err := l.lib.ArtLocked(ctx, model.ArtArtist, ent.PID)
+			locked, err := l.lib.ArtLocked(ctx, model.ArtArtist, ent.PID, model.ArtRoleFront)
 			if err != nil {
 				l.log.Warn("artist art: reading pin", "artist", ent.Name, "err", err)
 				continue
@@ -178,19 +205,6 @@ func (l *Library) ArtistArtSweep(ctx context.Context) (ArtistArtSweepResult, err
 		l.noteArtworkChanged(ctx)
 	}
 	return res, nil
-}
-
-// artistArtPlaceholder reports whether a display name is a compilation
-// or unknown-artist stand-in rather than one artist. Deezer holds real
-// pages under several of these, so an exact name match would put a
-// stranger's portrait on every compilation in the library.
-func artistArtPlaceholder(name string) bool {
-	switch strings.ToLower(strings.Join(strings.Fields(name), " ")) {
-	case "various artists", "various", "va", "unknown artist", "unknown",
-		"soundtrack", "original soundtrack", "ost":
-		return true
-	}
-	return false
 }
 
 // recordArtistArtMiss writes the miss row; a failure to remember costs

@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/colespringer/waxbin/scan"
 )
 
 // The format gate at session create: the allow-list refuses with a
@@ -77,9 +79,28 @@ func TestUploadFormatsReporting(t *testing.T) {
 	if got := widened.UploadFormats(); !slices.Equal(got, []string{"flac"}) {
 		t.Fatalf("a widened set must not report deny-listed formats as accepted; got %v", got)
 	}
+	// The default set is the scanner's own, so an upload that lands is
+	// one the next scan catalogs. It is a hand transcription of an
+	// unexported table upstream, so it is pinned against the predicate
+	// that table backs rather than against its length: a format added
+	// or dropped upstream shows up here instead of drifting.
 	def := &Library{}
 	def.setUploadFormats(nil)
-	if got := def.UploadFormats(); len(got) != 13 || !slices.Contains(got, "flac") || !slices.IsSorted(got) {
+	got := def.UploadFormats()
+	if len(got) == 0 || !slices.IsSorted(got) {
 		t.Fatalf("default UploadFormats() = %v", got)
+	}
+	for _, ext := range got {
+		if !scan.IsAudio("upload." + ext) {
+			t.Errorf("default set accepts .%s, which the scanner ignores", ext)
+		}
+	}
+	// The other direction has no enumerable source - audioExts is
+	// unexported - so the two entries the change was about are named.
+	if !slices.Contains(got, "mka") {
+		t.Errorf("default set omits mka, which the scanner catalogs")
+	}
+	if slices.Contains(got, "webm") {
+		t.Errorf("default set accepts webm, which the scanner excludes")
 	}
 }

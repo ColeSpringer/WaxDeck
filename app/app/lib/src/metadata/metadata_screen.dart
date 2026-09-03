@@ -6,10 +6,12 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/art_source_label.dart';
 import '../l10n/l10n.dart';
 import '../music/music_controllers.dart';
+import '../providers.dart';
 import '../shell/forbidden_page.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import 'acquisition_sheet.dart';
 import 'artwork_manager.dart';
 import 'chapter_section.dart';
 import 'enrich_preview_sheet.dart';
@@ -404,7 +406,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        _Header(state: state),
+        _Header(pid: widget.pid, state: state),
         const SizedBox(height: WaxSpace.s24),
         // Embedded keeps one column whatever the window says: the pane
         // is the narrow half of a split, and the size class describes
@@ -602,9 +604,10 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
 /// The item as it stands: what it is called, and where its values came
 /// from. The provenance summary is one line rather than a chip per
 /// field, which the fields themselves already carry.
-class _Header extends StatelessWidget {
-  const _Header({required this.state});
+class _Header extends ConsumerWidget {
+  const _Header({required this.pid, required this.state});
 
+  final String pid;
   final MetadataEditorState state;
 
   /// "5 from tags, 2 from you, 1 from MusicBrainz", commonest first.
@@ -672,12 +675,14 @@ class _Header extends StatelessWidget {
   /// "Origin: a podcast feed - https://feeds.example.com/show/ep-12",
   /// or null when the catalog recorded no origin for the item.
   ///
-  /// Read-only by nature: origin is evidence the import left behind
-  /// (an acquisition the server ran, or the file's own `SOURCE_URL`
-  /// tag) rather than a field, so there is nothing to edit and the
-  /// line below says so. The URL arrives already redacted - the read
-  /// answers everyone who can see the item, and the stored value can
-  /// carry credentials - so what is here is what may be shown.
+  /// Evidence first: origin is what the import left behind (an
+  /// acquisition the server ran, or the file's own `SOURCE_URL` tag)
+  /// rather than something anyone typed, which is why it sits in the
+  /// header rather than the form. A curator can still correct it,
+  /// through the sheet the caption points at. The URL arrives already
+  /// redacted - the read answers everyone who can see the item, and
+  /// the stored value can carry credentials - so what is here is what
+  /// may be shown.
   static String? originLine(AppLocalizations l10n, ItemMetadata metadata) {
     final acq = metadata.acquisition;
     if (acq == null) return null;
@@ -701,14 +706,71 @@ class _Header extends StatelessWidget {
         _ => sourceType,
       };
 
+  /// Opens the correction sheet and applies what it asks for.
+  ///
+  /// The two verbs are separate endpoints because the origin is one row
+  /// with its own clear semantics, and the sheet reports which by
+  /// returning a request rather than by having two callbacks.
+  Future<void> _editOrigin(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final request = await showAcquisitionSheet(
+      context,
+      acquisition: state.metadata.acquisition,
+    );
+    if (request == null || !context.mounted) return;
+    final repository = ref.read(repositoryProvider);
+    try {
+      if (request.clear) {
+        await repository.clearItemAcquisition(
+          pid,
+          writeBack: request.writeBack,
+          force: true,
+        );
+      } else {
+        await repository.setItemAcquisition(
+          pid,
+          sourceType: request.sourceType,
+          // Null leaves the stored address alone, which is what an
+          // untouched box means: the read redacts it, so the sheet was
+          // never holding the whole value to resend. Every other column
+          // is replaced as sent, empty included.
+          sourceUrl: request.sourceUrl,
+          sourceId: request.sourceId.isEmpty ? null : request.sourceId,
+          provider: request.provider.isEmpty ? null : request.provider,
+          writeBack: request.writeBack,
+          // Correcting a correction is the ordinary second attempt, and
+          // the first one locked the row: refusing it would leave the
+          // sheet unable to fix its own typo.
+          force: true,
+        );
+      }
+      // The sheet is an await away from here and this is a stateless
+      // widget with no mounted of its own, so the ref may be reading a
+      // disposed container by now - invalidating through one throws,
+      // and the throw escapes into a discarded future. The messenger
+      // was read before the gaps for the same reason.
+      if (!context.mounted) return;
+      ref.invalidate(metadataControllerProvider(pid));
+      messenger.show(
+        request.clear ? l10n.metadataOriginRemoved : l10n.metadataOriginSaved,
+      );
+    } on WaxDeckApiException catch (e) {
+      // A refusal of what was just typed keeps the server's own
+      // sentence; anything else gets the client's wording.
+      messenger.show(explainRefusal(l10n, e));
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final metadata = state.metadata;
     final title = metadata.fields['title'] ?? l10n.metadataUntitled;
     final artist = metadata.fields['artist'];
     final origin = originLine(l10n, metadata);
+    final mayEditOrigin = metadata.mayCurate ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -731,18 +793,72 @@ class _Header extends StatelessWidget {
             line,
             style: WaxType.caption.copyWith(color: colors.textTertiary),
           ),
-        if (origin != null) ...<Widget>[
+        if (origin != null || mayEditOrigin) ...<Widget>[
           const SizedBox(height: WaxSpace.s8),
-          Text(
-            origin,
-            style: WaxType.caption.copyWith(color: colors.textTertiary),
-          ),
-          Text(
-            l10n.metadataOriginRecorded,
-            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          // An item with no recorded origin still offers the row to a
+          // curator: stating one is the same write as correcting one,
+          // and there is nowhere else to say where a file came from.
+          _OriginBlock(
+            line: origin ?? l10n.metadataOriginLine(l10n.metadataOriginLocal),
+            caption: mayEditOrigin
+                ? l10n.metadataOriginEditable
+                : l10n.metadataOriginRecorded,
+            onEdit: mayEditOrigin ? () => _editOrigin(context, ref) : null,
           ),
         ],
       ],
+    );
+  }
+}
+
+/// The origin line and its caption, tappable for a curator.
+///
+/// A row rather than a button: the line is a fact worth reading on its
+/// own, and most people looking at it are not about to change it. The
+/// affordance is the caption and the tap target around both, which is
+/// what keeps a two-line caption from turning into a control that
+/// dominates the header.
+class _OriginBlock extends StatelessWidget {
+  const _OriginBlock({
+    required this.line,
+    required this.caption,
+    required this.onEdit,
+  });
+
+  final String line;
+  final String caption;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(line, style: WaxType.caption.copyWith(color: colors.textTertiary)),
+        Text(
+          caption,
+          style: WaxType.caption.copyWith(color: colors.textTertiary),
+        ),
+      ],
+    );
+    if (onEdit == null) return text;
+    final radius = BorderRadius.circular(WaxRadius.r6);
+    return WaxTappable(
+      label: line,
+      semanticsId: SemanticsIds.originEdit,
+      onPressed: onEdit,
+      borderRadius: radius,
+      // WaxTappable adds no gesture by design, so the ink is ours or
+      // the row announces as a button and answers no pointer.
+      child: InkWell(
+        onTap: onEdit,
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: WaxSpace.s4),
+          child: text,
+        ),
+      ),
     );
   }
 }

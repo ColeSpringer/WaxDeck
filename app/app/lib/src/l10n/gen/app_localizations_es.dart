@@ -1663,7 +1663,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get artworkLockHelp =>
-      'Mantiene esta portada a través de los análisis y los enriquecimientos. Fijada con el hueco vacío significa \"déjalo sin portada\" en lugar de \"no se encontró ninguna\", que es el estado que si no rechaza cualquier portada sin explicar por qué.';
+      'Mantiene esta portada a través de los escaneos y los enriquecimientos, y también retiene los demás huecos frente a los rellenos automáticos. Fijada con el hueco vacío significa \"déjalo sin ninguna\" en lugar de \"no se ha encontrado ninguna\", que es el estado que si no rechaza cualquier portada sin explicación.';
 
   @override
   String get artworkLockPinned => 'Portada fijada';
@@ -1686,6 +1686,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get artworkPickLabel => 'Imagen';
 
   @override
+  String artworkPinSlot(String slot) {
+    return 'Fijar $slot';
+  }
+
+  @override
   String artworkReplaceSlot(String slot) {
     return 'Reemplazar $slot';
   }
@@ -1701,8 +1706,18 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String artworkSlotPinned(String slot) {
+    return '$slot fijada';
+  }
+
+  @override
   String artworkSlotSpoken(String slot, String state) {
     return '$slot: $state';
+  }
+
+  @override
+  String artworkSlotUnpinned(String slot) {
+    return '$slot desfijada';
   }
 
   @override
@@ -1735,6 +1750,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String artworkTooLarge(String file) {
     return '$file supera los 16 MB que puede ocupar una imagen';
+  }
+
+  @override
+  String artworkUnpinSlot(String slot) {
+    return 'Desfijar $slot';
   }
 
   @override
@@ -3720,6 +3740,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataOpenReleaseGroup => 'Abrir el grupo de lanzamiento';
 
   @override
+  String get metadataOriginClear => 'Quitar el origen';
+
+  @override
+  String get metadataOriginEditHelp =>
+      'Cada casilla se guarda tal como queda, así que vaciar una borra su valor. La fecha de adquisición se conserva.';
+
+  @override
+  String get metadataOriginEditTitle => 'De dónde ha salido';
+
+  @override
+  String get metadataOriginEditable =>
+      'Constancia de cómo llegó esto. Toca para corregirlo.';
+
+  @override
+  String get metadataOriginId => 'Identificador';
+
+  @override
   String metadataOriginLine(String source) {
     return 'Procedencia: $source';
   }
@@ -3736,11 +3773,43 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataOriginManual => 'una fuente no identificada';
 
   @override
+  String get metadataOriginProvider => 'Proveedor';
+
+  @override
   String get metadataOriginRecorded =>
       'Evidencia registrada de cómo llegó esto; no es un campo editable.';
 
   @override
+  String get metadataOriginRemoved => 'Origen quitado';
+
+  @override
   String get metadataOriginRss => 'un feed de pódcast';
+
+  @override
+  String get metadataOriginSaved => 'Origen actualizado';
+
+  @override
+  String get metadataOriginSourceType => 'Cómo llegó';
+
+  @override
+  String get metadataOriginTypeManual => 'Sin nombrar';
+
+  @override
+  String get metadataOriginTypeRss => 'Pódcast';
+
+  @override
+  String get metadataOriginUrl => 'Dirección';
+
+  @override
+  String get metadataOriginUrlHelp =>
+      'Se muestra sin los datos de acceso que llevara';
+
+  @override
+  String get metadataOriginWriteBack => 'Escribir en los archivos';
+
+  @override
+  String get metadataOriginWriteBackHelp =>
+      'Mantiene la corrección tras un reescaneo completo';
 
   @override
   String get metadataPendingChip => 'Sin guardar';
@@ -4068,14 +4137,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicAlbumRewriteConfirmBody =>
-      'Los campos editados se reescriben en todas las pistas y el lanzamiento se reagrupa bajo una nueva entrada de álbum. Los bloqueos de esos campos se ignoran y la reescritura los vuelve a establecer.';
+      'Los campos editados se reescriben en todas las pistas. Como todos los miembros se mueven a la vez, el lanzamiento conserva su entrada - y con ella las ilustraciones, las fijaciones y el historial - salvo que el nombre nuevo ya sea de otro lanzamiento, en cuyo caso se fusionan. Los bloqueos de esos campos se ignoran y la reescritura los vuelve a establecer.';
 
   @override
   String get musicAlbumRewriteConfirmTitle => '¿Reagrupar este lanzamiento?';
 
   @override
   String get musicAlbumRewriteHelp =>
-      'Estos datos viven en las pistas, no en el lanzamiento. Guardar los reescribe en cada miembro y reagrupa el lanzamiento bajo una entrada nueva; esta página lo sigue hasta allí.';
+      'Estos datos viven en las pistas, no en el lanzamiento. Guardar los reescribe en cada miembro, lo que renombra el lanzamiento sin moverlo y mantiene esta página en él; si el nombre ya es de otro lanzamiento, los dos se fusionan y esta página lo sigue.';
 
   @override
   String get musicAlbumRewriteIncomplete =>

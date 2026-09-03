@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/enrich"
+	"github.com/colespringer/waxbin/model"
 )
 
 // DeezerConfig configures the Deezer cover provider. Zero values take
@@ -27,7 +29,11 @@ type DeezerConfig struct {
 	CacheTTL time.Duration
 }
 
-// Deezer supplies release-group cover art from the Deezer album search.
+// Deezer supplies release-group cover art from the Deezer album search
+// and artist portraits from its artist search. Neither is keyed on an
+// identifier - Deezer knows nothing of MusicBrainz - so both are gated
+// on a name match, which is what keeps a by-name face off the wrong
+// artist.
 type Deezer struct {
 	base string
 	ttl  time.Duration
@@ -63,14 +69,40 @@ func NewDeezer(cfg DeezerConfig) *Deezer {
 // Name is the stable provenance id.
 func (d *Deezer) Name() string { return "deezer" }
 
-// Capabilities reports cover art only.
-func (d *Deezer) Capabilities() enrich.Capability { return enrich.CapCover }
+// Capabilities reports the front cover and artist art. Not CapAuxArt:
+// Deezer serves one picture per album and one per artist, so it has
+// nothing to put in a back, disc, or booklet slot.
+func (d *Deezer) Capabilities() enrich.Capability {
+	return enrich.CapCover | enrich.CapArtistArt
+}
 
-// Enrich answers a release-group cover lookup: search Deezer albums by
-// artist and title, take the first hit whose names match, and fetch its
-// extra-large cover.
+// Enrich answers a release-group cover or an artist portrait, each from
+// its own search and each gated on a name match.
 func (d *Deezer) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
-	if req.Type != enrich.TargetReleaseGroup || req.Title == "" {
+	switch req.Type {
+	case enrich.TargetReleaseGroup:
+		if !req.Wants(capabilityForArtRole(req.Type, model.ArtRoleFront)) {
+			return nil, nil
+		}
+		return d.enrichReleaseGroup(ctx, req)
+	case enrich.TargetArtist:
+		// The front mask, not CapArtistArt alone: the identity phase
+		// asks about an artist through the cover pass, so reading only
+		// the backfill's own bit would answer nothing on the path a
+		// stock install actually runs.
+		if !req.Wants(capabilityForArtRole(req.Type, model.ArtRoleFront)) {
+			return nil, nil
+		}
+		return d.enrichArtist(ctx, req)
+	default:
+		return nil, nil
+	}
+}
+
+// enrichReleaseGroup searches Deezer albums by artist and title, takes
+// the first hit whose names match, and fetches its extra-large cover.
+func (d *Deezer) enrichReleaseGroup(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	if req.Title == "" {
 		return nil, nil
 	}
 	query := `album:"` + req.Title + `"`
@@ -116,6 +148,42 @@ func (d *Deezer) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candid
 		}, nil
 	}
 	return nil, nil
+}
+
+// enrichArtist answers an artist portrait by name. The engine puts the
+// artist's name in Artist rather than Title for this target, and the
+// match is the same exact-ish fold the sweep uses: a by-name face lands
+// catalog-wide, so a near miss is no answer at all. Compilation and
+// unknown-artist stand-ins are refused outright, because Deezer holds
+// real pages under several of them and a stranger's portrait would end
+// up on every compilation in the library.
+//
+// The portrait lands under the front role. Upstream's art model gives
+// an artist no separate portrait slot, and front is what both artist
+// read surfaces resolve.
+func (d *Deezer) enrichArtist(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	name := req.Artist
+	if name == "" {
+		name = req.Title
+	}
+	if name == "" || ArtistNamePlaceholder(name) {
+		return nil, nil
+	}
+	res, err := d.ArtistImage(ctx, name)
+	if err != nil {
+		if errors.Is(err, ErrNoArtistImage) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	img := coverImage(res.Data, res.MIME, res.SourceURL)
+	if img == nil {
+		return nil, nil
+	}
+	return &enrich.Candidate{
+		Confidence: 0.7,
+		Art:        map[model.ArtRole]*model.ArtImage{model.ArtRoleFront: img},
+	}, nil
 }
 
 // maxTitleCoverBytes bounds one cover fetched for an announced title.

@@ -193,7 +193,8 @@ paths:
 
         Fields map onto the rule vocabulary
         (`GET /playlists/rule-fields`): `title`, `album`, `artist`,
-        `albumartist`, `genre`, `year`, `playCount` by name, plus
+        `albumartist`, `genre`, `year`, `trackNumber`, `discNumber`,
+        `bpm`, `playCount` by name, plus
         `dateAdded` to `addedAt`, `lastPlayed` to `lastPlayedAt`,
         `filepath` to `path`, `loved` to `starred`, `duration` to
         `durationMs`, and `rating`. Two of those carry different units

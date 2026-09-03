@@ -194,6 +194,10 @@ var containerMime = map[string]string{
 	"ape":      "audio/x-ape",
 	"wavpack":  "audio/x-wavpack",
 	"wv":       "audio/x-wavpack",
+	"musepack": "audio/x-musepack",
+	"mpc":      "audio/x-musepack",
+	"mp+":      "audio/x-musepack",
+	"mpga":     "audio/mpeg",
 }
 
 // NormalizeContainer folds a stored container label onto the family key
@@ -385,10 +389,11 @@ func DeviceFormat(src Source, shape Shape, caps *client.Caps, accepts []string, 
 }
 
 // lossless reports whether a codec can be transcoded without
-// generation loss.
+// generation loss. The labels are the scan's, which lowercases
+// WaxLabel's own names and folds Monkey's Audio onto "ape".
 func lossless(codec string) bool {
 	switch codec {
-	case "pcm", "flac", "alac":
+	case "pcm", "flac", "alac", "wavpack", "ape":
 		return true
 	}
 	return false

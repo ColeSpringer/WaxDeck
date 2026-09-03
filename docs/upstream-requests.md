@@ -11,131 +11,88 @@ note.
 
 ## WaxBin
 
-- **Album rename-in-place.** Editing a release-keying field (`album`,
-  `album_artist`, `year`) on an unidentified album's members re-resolves
-  each member's entities in the edit transaction, so the release regroups
-  onto a fresh `al-` pid and the old entity is left as a ghost until the
-  orphan GC sweeps it. Track pids and playlist membership survive, but
-  everything hung on the album pid - entity curation, artwork and its pin,
-  a client's open route - is orphaned. Wanted: a facade verb that renames
-  a release in place (rewrite the members' keying fields and the entity's
-  identity together, keeping the pid and moving curation/art), or an
-  album-key recompute that reuses an existing entity row when every member
-  moves at once. Shipped workaround: the release workbench is built to the
-  regroup - the bulk-edit response reports the album the edited members
-  landed on (`resultingAlbumPid`), the rewrite section warns before it
-  writes, and the workbench follows the tracks to the new entry -
-  and `TestBulkEditAlbumFieldsRegroupsTheRelease` pins the behavior it is
-  built to. Entity curation, artwork and pins on the old entity are still
-  orphaned by the move, which is what rename-in-place would keep.
+- **A name-keyed artist-art walk.** The artist-art backfill queue picks
+  its subjects with a predicate that requires `artist.mbid`, which the
+  identity phase fills only for artists MusicBrainz matched. An artist
+  that never matched - a local band, a mis-tagged name, anything the
+  library holds that the database does not - is never asked about, so
+  the pass that exists to fill artist portraits skips exactly the
+  artists most likely to be missing one. Wanted: the queue widened to
+  artists without an mbid, asking capable providers by name the way the
+  release-group passes already fall back to title and artist text.
+  Shipped workaround: WaxDeck keeps its own artist-art sweep, narrowed
+  to mbid-less artists and asking Deezer by name, with a 30-day miss
+  memory; the catalog pass covers the matched rest. The sweep retires
+  the day this lands, and its header comment says so.
 
-- **Per-role candidate art on the enrichment port.** `enrich.Candidate`
-  carries one `Cover *model.ArtImage`, so a provider can only ever
-  answer with a front cover, even though the art model has five roles
-  (`front`, `back`, `disc`, `booklet`, `background`) on both the read
-  and write surfaces. fanart.tv serves per-role assets natively - an
-  artist thumb against a scenic artist background, cdart for the disc
-  slot - and a provider holding all of them has one field to put one
-  of them in. Wanted: the candidate model extended to carry role-tagged
-  art (a `map[model.ArtRole]*model.ArtImage`, or a role field on a
-  repeated image), with the engine's apply pass filling each offered
-  role under the same fill-when-empty, lock-respecting,
-  provenance-stamped rules the front cover gets; `Cover` can stay as
-  the front alias so existing providers are untouched. Shipped
-  workaround: enrichment fills `front` only, and the auxiliary slots
-  are readable and hand-settable through the artwork endpoints. The
-  planned artist-image sweep is unaffected - it writes portraits at
-  `front` through the entity-artwork surface, which is the slot both
-  artist read surfaces resolve - so this ask gates only the auxiliary
-  roles (backgrounds, disc art), which sit empty unless a person fills
-  them.
+- **Engine application of `Candidate.Fields`.** A provider can return
+  scalar fields on a candidate, and the engine ignores them: the slot
+  is documented as reserved for injected providers, and only WaxDeck's
+  own per-item propose/commit path reads it. That leaves any field a
+  provider knows unreachable from the catalog's own passes - a
+  recording-target BPM from Deezer is the case that wants it, since
+  the tempo is per track and no capability bit asks for one. Wanted: a
+  `CapFields` bit and an apply pass for `Candidate.Fields` under the
+  same fill-when-empty, lock-respecting, provenance-stamped rules the
+  other capabilities get. Shipped workaround: WaxDeck reads
+  `Candidate.Fields` itself in its per-item propose/commit path, which
+  is how an Audnexus book gets its publisher and year, so a field
+  reaches an item somebody asked about and nowhere else. BPM arrives
+  from tags instead.
 
-- **Capability-scoped provider calls on the enrichment port.**
-  `enrich.Request` never says which capability the caller is
-  gathering, so a multi-capability provider must answer everything on
-  every call: the engine's separate `gatherCover` and `gatherGenres`
-  passes each invoke a Discogs-shaped provider (CapCover|CapGenres) in
-  full, and the genres pass downloads a cover image nobody reads -
-  once per genre-less release group, up to 8 MiB each, twice per group
-  when both passes run. Wanted: an additive want field on `Request`
-  (an `enrich.Capability`, zero meaning everything so existing
-  providers and embedders are untouched), set by the engine in each
-  gather pass, so a provider skips work whose result only other
-  capabilities would read. Shipped workaround: WaxDeck's own per-item
-  paths type-assert a `ScopedEnricher` refinement
-  (`EnrichScoped(ctx, req, want)`, implemented by Discogs and
-  Audnexus) and pass the want themselves; the catalog's whole-library
-  pass cannot, and keeps the wasted fetches until this lands. The
-  refinement retires into a plain `req.Want` read the day it does.
+- **`ArtRoleInfo.locked` cannot say which pin set it.** The field is the
+  effective lock on a slot: the entity's whole-artwork pin, which gates
+  the front cover and enrichment's fills in every other role, or that
+  role's own `art.<role>` pin. A reader cannot tell the two apart, and
+  neither can `ArtLocked`, which reports the same effective value. So a
+  client drawing per-role pin controls cannot say whether unpinning one
+  will do anything, and cannot caption a slot as held by the cover pin
+  rather than its own. Wanted: the role's own lock beside the effective
+  one - a second bool on `ArtRoleInfo`, or the effective one plus its
+  source. Shipped workaround: WaxDeck offers the per-role toggle
+  unconditionally and lets the read tell the truth afterwards. An
+  earlier attempt to infer the distinction from an empty slot was worse
+  than not knowing: it disabled the toggle on exactly the
+  cleared-and-pinned slot the control exists to release.
 
-- **An empty acquisition event clobbers tag-derived provenance.** The
-  import path stamps origin provenance twice: `ScanFileAs` records the
-  file's own `SOURCE_URL`/`SOURCE_ID` tags via
-  `insertAcquisitionIfAbsentTx` (DO NOTHING, deliberately, so a rescan
-  cannot degrade a real origin), and `inbox.importOne` then calls
-  `PutAcquisitionForFile` with the caller's `AcquiredMeta`, whose
-  upsert DO UPDATEs `source_type`, `source_url`, and `source_id`
-  unconditionally. The store's contract says "evidence from an event
-  always wins over evidence from a tag" - sound when the event carries
-  evidence, but a host that passes a bare meta (WaxDeck's review-queue
-  import sends `SourceManual` with empty ids, because the settle path
-  is generic over uploads and acquisitions) has its event replace the
-  correct tag-derived row with `source_type='manual'`, empty
-  `source_url`, empty `source_id`. Every acquired-then-reviewed track
-  ends up recorded as manual, so the `source` query field misreports
-  how the item arrived - the exact degradation the DO NOTHING on the
-  tag side was written to prevent, arriving through the other door.
-  Wanted: the event stamp made merge-wise so emptiness never wins - a
-  field-level COALESCE-style upsert, or skipping the DO UPDATE when
-  the incoming input carries no source URL, id, or provider and a row
-  already stands. Threading real meta through every host caller is not
-  the fix: any embedder importing a tagged file with a generic meta
-  hits this, so the hazard belongs to the port. Shipped workaround:
-  none needed for playlist sync (its entry-to-item map in `waxdeck.db`
-  is the dedup and self-heal truth, independent of the acquisition
-  row); the `source` facet simply misreads reviewed acquisitions as
-  `manual` until this lands.
+## WaxTap
 
-- **An acquisition-edit facade.** An item's origin is an
-  evidence-derived acquisitions table: `Library.Acquisition` reads it,
-  and nothing on the facade writes one outside an acquisition or import
-  the library itself performed (`Acquire` stamps the episode row,
-  `inbox.importOne` stamps the placed file's, and the scan inserts a
-  tag-derived row when the file carries `SOURCE_URL`/`SOURCE_ID`).
-  `source` is not a metadata field either, so the editor's field
-  vocabulary cannot reach it. That leaves a wrong origin permanently
-  wrong: a mis-tagged rip reads as acquired from wherever its
-  `SOURCE_URL` pointed, and every acquired-then-reviewed item reads
-  `manual` with an empty URL (see the clobber entry above). Wanted: a
-  curate verb on the facade - `SetAcquisition(ctx, itemPID, input)`, or
-  a clear - so a host can correct or remove a recorded origin, with the
-  same evidence-wins rules applying to later automatic writes. Shipped
-  workaround: WaxDeck surfaces the recorded origin read-only in the
-  metadata editor (a caption saying it is recorded evidence rather than
-  a field), which answers "why can I not edit this" without pretending
-  it is editable. The editor follow-up this unlocks is a small one: the
-  caption becomes an editable line under the same curate gate the rest
-  of the form uses.
+- **A bounded enrich option on `EnumerateOptions`.** Enumeration runs
+  its own enrichment internally, and that loop is the only place the
+  metadata-throttle rotation happens - a throttled response there is
+  minted as `ErrTemporarilyUnavailable` and retried against a rotated
+  identity. A caller that wants the same protection for its own budget
+  ("enrich the first n entries") has no way to ask: it must call `Info`
+  per entry outside enumeration, where a throttle arrives as a plain
+  `ErrVideoUnavailable` indistinguishable from a removed video, with no
+  rotation behind it. Wanted: a bounded enrich option on
+  `EnumerateOptions` (enrich the first n entries) so a caller's budget
+  runs inside the loop that already knows how to rotate, without
+  exporting identity rotation itself. Shipped workaround: none yet.
+  WaxDeck's own enrichment loop takes the throttle verdict at face
+  value and marks a perfectly good video unavailable for good; the fix
+  in flight is to mirror the unexported throttle shape (a
+  `*waxerr.PlayabilityError` with status `UNPLAYABLE` wrapping
+  `ErrVideoUnavailable`), keep such an entry unenriched, and stop
+  spending the run's budget - which recovers the entry but still costs
+  the rotation this ask would give it.
+
+## WaxSeal
+
+- **A keyed daemon fails its own image healthcheck.** `/ping` is
+  tenant-gated, and `waxseal ping` has no key flag, so the image's own
+  healthcheck (`waxseal ping --addr 127.0.0.1:4416 --strict`) is
+  refused the moment the daemon is started with `--tenant-keys`. The
+  choice a compose file is left with is a keyless daemon that anyone on
+  the network can drive, or a keyed one that reports unhealthy forever.
+  Wanted: either a key flag on `ping`, or a loopback exemption on the
+  `/ping` route so a local liveness probe needs no tenant. Shipped
+  workaround: none yet. WaxDeck's compose runs the sidecar keyless
+  today (it sets `WAXSEAL_API_KEYS`, which WaxSeal has never read), so
+  the healthcheck passes because nothing is gated; keying the daemon
+  means disabling the container healthcheck with a comment naming this
+  ask, which is the fix in flight.
 
 ## WaxLabel
 
-- **Map the MP4 `rtng` advisory atom to a tag.** iTunes stores the
-  explicit/clean advisory in the structured `rtng` atom (one byte:
-  1 explicit, 2 clean, 0 none; a legacy 4 also meant explicit), and
-  the mp4 codec never projects it: `mp4Text` has no entry, nothing
-  decodes it, and the atom survives only as a preserved unknown item
-  on rewrite (the verbatim carry in `internal/mp4/encode.go`). ID3 and
-  Vorbis files carry the same fact as an `ITUNESADVISORY` custom tag,
-  which reaches the catalog through the freeform/TXXX long tail - so
-  an iTunes-bought M4A is the one common case where the advisory is in
-  the file and never leaves it. Wanted: decode `rtng` into the
-  `ITUNESADVISORY` custom tag on read, keeping the numeric values as
-  they stand (consumers parse `1` and the legacy `4` as explicit and
-  treat everything else as unasserted), and write it back from that
-  tag on MP4 where the edit surface allows. Landed upstream: WaxLabel
-  HEAD (9a3ec23, "Project iTunes structured MP4 atoms as canonical
-  tags") does exactly this; the residue here is adopting a newer pin
-  (go.mod holds v1.4.2), and until that bump `rtng`-only files stay
-  uncovered. The OpenSubsonic `explicitStatus` emission for music keys
-  on the `ITUNESADVISORY` tag; emission is positive-only, so that
-  absence reads as unasserted rather than wrongly clean.
+(nothing outstanding)

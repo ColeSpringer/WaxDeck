@@ -167,13 +167,13 @@ func TestEnrichCommitRefusesAnIdentifierlessBook(t *testing.T) {
 	}
 }
 
-// scopedGenreProvider records how it was asked, proving the propose
-// loops dispatch through the ScopedEnricher refinement rather than the
-// plain port call - the seam that keeps a multi-capability provider
-// (Discogs) from downloading a cover on every genre ask.
+// scopedGenreProvider records the want each ask carried, proving the
+// propose loops stamp Request.Want rather than leaving it zero - the
+// seam that keeps a multi-capability provider (Discogs) from
+// downloading a cover on every genre ask. A zero want is the
+// everything contract, so an unstamped ask is the failure to catch.
 type scopedGenreProvider struct {
 	mu    sync.Mutex
-	plain int
 	wants []enrich.Capability
 }
 
@@ -181,20 +181,14 @@ func (s *scopedGenreProvider) Name() string { return "scopey" }
 func (s *scopedGenreProvider) Capabilities() enrich.Capability {
 	return enrich.CapGenres | enrich.CapCover
 }
-func (s *scopedGenreProvider) Enrich(context.Context, enrich.Request) (*enrich.Candidate, error) {
+func (s *scopedGenreProvider) Enrich(_ context.Context, req enrich.Request) (*enrich.Candidate, error) {
 	s.mu.Lock()
-	s.plain++
-	s.mu.Unlock()
-	return nil, nil
-}
-func (s *scopedGenreProvider) EnrichScoped(_ context.Context, _ enrich.Request, want enrich.Capability) (*enrich.Candidate, error) {
-	s.mu.Lock()
-	s.wants = append(s.wants, want)
+	s.wants = append(s.wants, req.Want)
 	s.mu.Unlock()
 	return &enrich.Candidate{Genres: []string{"House"}}, nil
 }
 
-func TestEnrichAsksScopedProvidersWithTheWant(t *testing.T) {
+func TestEnrichStampsTheWantOnTheRequest(t *testing.T) {
 	t.Parallel()
 	p := &scopedGenreProvider{}
 	h := newHarnessWith(t, func(c *service.Config) {
@@ -211,11 +205,8 @@ func TestEnrichAsksScopedProvidersWithTheWant(t *testing.T) {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.plain != 0 {
-		t.Errorf("the plain Enrich ran %d times; the scoped refinement was bypassed", p.plain)
-	}
 	if len(p.wants) != 1 || p.wants[0] != enrich.CapGenres {
-		t.Errorf("scoped wants = %v, want one CapGenres ask", p.wants)
+		t.Errorf("stamped wants = %v, want one CapGenres ask", p.wants)
 	}
 }
 

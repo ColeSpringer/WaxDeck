@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
+
+	"github.com/colespringer/waxbin/enrich"
+	"github.com/colespringer/waxbin/model"
 )
 
 // ErrNoArtistImage reports that every configured rung answered and none
@@ -15,50 +19,6 @@ import (
 // retrying on a later pass.
 var ErrNoArtistImage = errors.New("providers: no image for this artist")
 
-// ArtistThumb answers an artist portrait by MusicBrainz artist id.
-// Requests without an MBID (or without an API key) are clean misses:
-// fanart.tv is keyed strictly on identity, which is what makes it the
-// first rung - a hit cannot be the wrong artist.
-func (f *FanartTV) ArtistThumb(ctx context.Context, mbid string) (TitleCoverResult, error) {
-	if f.apiKey == "" || mbid == "" {
-		return TitleCoverResult{}, ErrNoArtistImage
-	}
-	q := url.Values{}
-	q.Set("api_key", f.apiKey)
-	u := f.base + "/v3/music/" + url.PathEscape(mbid) + "?" + q.Encode()
-	body, status, err := f.core.get(ctx, u, f.ttl)
-	if err != nil {
-		return TitleCoverResult{}, err
-	}
-	switch status {
-	case http.StatusOK:
-	case http.StatusNotFound:
-		return TitleCoverResult{}, ErrNoArtistImage
-	default:
-		return TitleCoverResult{}, fmt.Errorf("providers: fanarttv artist: status %d", status)
-	}
-	var parsed struct {
-		ArtistThumb []struct {
-			URL string `json:"url"`
-		} `json:"artistthumb"`
-	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return TitleCoverResult{}, fmt.Errorf("providers: decode fanarttv artist: %w", err)
-	}
-	if len(parsed.ArtistThumb) == 0 || parsed.ArtistThumb[0].URL == "" {
-		return TitleCoverResult{}, ErrNoArtistImage
-	}
-	data, mediaType, err := fetchImage(ctx, f.core, parsed.ArtistThumb[0].URL)
-	if err != nil {
-		return TitleCoverResult{}, err
-	}
-	return TitleCoverResult{
-		Data: data, MIME: mediaType,
-		Provider:  f.Name(),
-		SourceURL: parsed.ArtistThumb[0].URL,
-	}, nil
-}
-
 // artistNameMatch compares two artist display names on the
 // punctuation-folded form both sides of a cover match use: "AC/DC" and
 // "AC - DC" are one artist, spacing and case aside. Folded-empty names
@@ -66,6 +26,20 @@ func (f *FanartTV) ArtistThumb(ctx context.Context, mbid string) (TitleCoverResu
 func artistNameMatch(a, b string) bool {
 	fa, fb := foldCoverName(a), foldCoverName(b)
 	return fa != "" && fa == fb
+}
+
+// ArtistNamePlaceholder reports whether a display name is a compilation
+// or unknown-artist stand-in rather than one artist. It gates every
+// by-name artist lookup here: Deezer holds real pages under several of
+// these, so an exact name match would put a stranger's portrait on
+// every compilation in a library.
+func ArtistNamePlaceholder(name string) bool {
+	switch strings.ToLower(strings.Join(strings.Fields(name), " ")) {
+	case "various artists", "various", "va", "unknown artist", "unknown",
+		"soundtrack", "original soundtrack", "ost":
+		return true
+	}
+	return false
 }
 
 // ArtistImage answers an artist portrait by name from the Deezer artist
@@ -121,9 +95,17 @@ func (d *Deezer) ArtistImage(ctx context.Context, name string) (TitleCoverResult
 }
 
 // ArtistArtChain answers an artist portrait from the configured rungs:
-// fanart.tv first, keyed on the MBID, then Deezer by exact-ish name
-// match. A nil rung is simply absent, so the chain always exists and
-// degrades to a clean miss when nothing is configured.
+// fanart.tv first when the artist has a MusicBrainz id (a hit cannot be
+// the wrong artist), then Deezer by exact-ish name match. A nil rung is
+// simply absent, so the chain always exists and degrades to a clean
+// miss when nothing is configured.
+//
+// The mbid rung is here rather than only on the enrichment port because
+// the sweep covers whatever the catalog's own artist pass does not, and
+// on an install with no enrichment contact that is every artist,
+// mbid-carrying ones included. Asking fanart.tv through its Enrich
+// keeps one implementation of the lookup rather than a second one for
+// this caller.
 type ArtistArtChain struct {
 	Fanart *FanartTV
 	Deezer *Deezer
@@ -134,8 +116,8 @@ type ArtistArtChain struct {
 // "no" would be recorded as a durable miss the failed rung might have
 // contradicted.
 func (c ArtistArtChain) ArtistImage(ctx context.Context, name, mbid string) (TitleCoverResult, error) {
-	if c.Fanart != nil {
-		res, err := c.Fanart.ArtistThumb(ctx, mbid)
+	if c.Fanart != nil && mbid != "" {
+		res, err := c.Fanart.artistPortrait(ctx, mbid)
 		if err == nil {
 			return res, nil
 		}
@@ -153,4 +135,27 @@ func (c ArtistArtChain) ArtistImage(ctx context.Context, name, mbid string) (Tit
 		}
 	}
 	return TitleCoverResult{}, ErrNoArtistImage
+}
+
+// artistPortrait asks the provider's own port for an artist front and
+// renders the answer in the chain's vocabulary. It goes through Enrich
+// so the endpoint, the role mapping and the download policy have one
+// implementation; what differs here is only the miss shape the sweep's
+// memory keys on.
+func (f *FanartTV) artistPortrait(ctx context.Context, mbid string) (TitleCoverResult, error) {
+	cand, err := f.Enrich(ctx, enrich.Request{
+		Type: enrich.TargetArtist, MBID: mbid, Want: enrich.CapArtistArt,
+	})
+	if err != nil {
+		return TitleCoverResult{}, err
+	}
+	img := candidateArt(cand, model.ArtRoleFront)
+	if img == nil {
+		return TitleCoverResult{}, ErrNoArtistImage
+	}
+	return TitleCoverResult{
+		Data: img.Data, MIME: img.Format,
+		Provider:  f.Name(),
+		SourceURL: img.SourceURL,
+	}, nil
 }

@@ -91,9 +91,10 @@ func TestDiscogsScopedGenresAskSkipsTheImage(t *testing.T) {
 		BaseURL: srv.URL, Token: "dg-token", HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
 	})
 
-	cand, err := d.EnrichScoped(context.Background(), enrich.Request{
+	cand, err := d.Enrich(context.Background(), enrich.Request{
 		Type: enrich.TargetReleaseGroup, Title: "Discovery", Artist: "Daft Punk",
-	}, enrich.CapGenres)
+		Want: enrich.CapGenres,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

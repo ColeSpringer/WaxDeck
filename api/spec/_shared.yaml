@@ -171,9 +171,10 @@ components:
       type: string
       description: >
         One artwork slot on an item or entity. Only `front` walks the
-        album/artist fallback chain and is filled by scans and enrichment;
-        `back`, `disc`, `booklet`, and `background` are set explicitly and
-        resolve at the entity's own level. Defaults to `front`.
+        album/artist fallback chain and is filled by scans; `back`,
+        `disc`, `booklet`, and `background` resolve at the entity's own
+        level and are set explicitly or filled by an enrichment pass
+        that fetched art and found the slot empty. Defaults to `front`.
       enum: [front, back, disc, booklet, background]
       default: front
 

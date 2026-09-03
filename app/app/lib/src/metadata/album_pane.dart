@@ -17,12 +17,16 @@ import '../shell/shell_messages.dart';
 import 'artwork_manager.dart';
 import 'metadata_form.dart';
 
-/// The fields whose values key a release. Editing any of them on the
-/// members regroups them onto a fresh album pid rather than renaming
-/// this one in place - the server's own behavior, pinned by
-/// `TestBulkEditAlbumFieldsRegroupsTheRelease` - which is why the
-/// rewrite section warns before it writes and the workbench follows the
-/// tracks afterwards.
+/// The fields whose values key a release. Editing any of them moves the
+/// members to a new release identity, and where they land depends on
+/// coverage: this section edits every member at once, which renames the
+/// album in place and keeps its pid, while a partial batch would fork
+/// the edited members onto a fresh one - the server's own behavior,
+/// pinned by `TestBulkEditAlbumFieldsRenamesInPlaceOnFullCoverage` and
+/// `...RegroupsOnPartialCoverage`. The rewrite section still warns
+/// before it writes, because a rename onto a name another release owns
+/// merges the two, and the workbench still follows the pid the response
+/// reports.
 const albumRewriteFields = ['album', 'album_artist', 'year'];
 
 /// The release-keying fields as the first member's tags carry them,

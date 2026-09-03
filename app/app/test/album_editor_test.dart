@@ -342,7 +342,7 @@ void main() {
     await tester.tap(_byId(SemanticsIds.artLock));
     await tester.pumpAndSettle();
 
-    expect(repo.entityArtworkLocks['album/$_album'], isTrue);
+    expect(repo.entityArtworkLocks['album/$_album/front'], isTrue);
   });
 
   testWidgets('a member gets the refusal rather than an editable form', (

@@ -154,9 +154,9 @@ func TestAudnexusScopedBookAskSkipsTheCover(t *testing.T) {
 		BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
 	})
 
-	cand, err := a.EnrichScoped(context.Background(), enrich.Request{
-		Type: enrich.TargetBook, ASIN: "B000002L5R",
-	}, enrich.CapBookMeta)
+	cand, err := a.Enrich(context.Background(), enrich.Request{
+		Type: enrich.TargetBook, ASIN: "B000002L5R", Want: enrich.CapBookMeta,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

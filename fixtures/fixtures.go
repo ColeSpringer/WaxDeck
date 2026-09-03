@@ -42,6 +42,12 @@ const (
 	CodecALAC   Codec = "alac"
 	CodecOpus   Codec = "opus"
 	CodecVorbis Codec = "vorbis"
+	// CodecHEAAC is HE-AAC v1: SBR over a half-rate AAC-LC core. It is
+	// reached by naming the format, since .m4a and .aac resolve to the
+	// plain AAC-LC row; a scan reads it back as its own codec.
+	CodecHEAAC   Codec = "he-aac"
+	CodecWavPack Codec = "wavpack"
+	CodecAPE     Codec = "ape"
 )
 
 // Container names the file container a Spec's codec is muxed into.
@@ -60,6 +66,8 @@ const (
 	ContainerADTS     Container = "adts"
 	ContainerOgg      Container = "ogg"
 	ContainerMatroska Container = "mka"
+	ContainerWavPack  Container = "wv"
+	ContainerAPE      Container = "ape"
 )
 
 // Corruption selects a deliberately malformed flavor of a Spec, for
@@ -180,17 +188,30 @@ var routes = map[Codec]map[Container]route{
 	CodecVorbis: {
 		ContainerOgg: {ext: "ogg", format: "vorbis"},
 	},
+	CodecHEAAC: {
+		ContainerADTS: {ext: "aac", format: "he-aac", variant: "adts"},
+		ContainerMP4:  {ext: "m4a", format: "he-aac", variant: "progressive", canonicalKeys: true},
+	},
+	CodecWavPack: {
+		ContainerWavPack: {ext: "wv", format: "wavpack"},
+	},
+	CodecAPE: {
+		ContainerAPE: {ext: "ape", format: "ape"},
+	},
 }
 
 // defaultContainers maps each codec to its native container.
 var defaultContainers = map[Codec]Container{
-	CodecPCM:    ContainerWAV,
-	CodecFLAC:   ContainerFLAC,
-	CodecMP3:    ContainerMP3,
-	CodecAAC:    ContainerADTS,
-	CodecALAC:   ContainerMP4,
-	CodecOpus:   ContainerOgg,
-	CodecVorbis: ContainerOgg,
+	CodecPCM:     ContainerWAV,
+	CodecFLAC:    ContainerFLAC,
+	CodecMP3:     ContainerMP3,
+	CodecAAC:     ContainerADTS,
+	CodecALAC:    ContainerMP4,
+	CodecOpus:    ContainerOgg,
+	CodecVorbis:  ContainerOgg,
+	CodecHEAAC:   ContainerADTS,
+	CodecWavPack: ContainerWavPack,
+	CodecAPE:     ContainerAPE,
 }
 
 // withDefaults fills a Spec's zero values with the documented defaults.
@@ -247,7 +268,29 @@ func (s Spec) validate() error {
 	if s.Channels < 1 || s.Channels > 8 {
 		return fmt.Errorf("fixtures: %d channels outside 1..8", s.Channels)
 	}
+	if n := tagBytes(s.Tags); n > MaxTagBytes {
+		return fmt.Errorf("fixtures: %s carries %d bytes of tags, over the %d-byte muxer budget",
+			s.Filename(), n, MaxTagBytes)
+	}
 	return nil
+}
+
+// MaxTagBytes bounds a Spec's tag block. Tags go to WaxFlow's muxers
+// verbatim, and every muxer that bounds its tag block now fails the
+// transcode rather than dropping what will not fit - Ogg at 48 KiB for
+// the whole comment header, the tightest of them. Checking here means an
+// over-budget fixture is named by its own filename instead of surfacing
+// as a muxer's complaint about one tag key several frames down.
+const MaxTagBytes = 48 * 1024
+
+// tagBytes is the wire size of a tag block: each key and value plus the
+// separator a comment field carries between them.
+func tagBytes(m map[string]string) int {
+	n := 0
+	for k, v := range m {
+		n += len(k) + len(v) + 1
+	}
+	return n
 }
 
 // Filename is the deterministic base name Generate writes the spec to,
@@ -286,9 +329,14 @@ func (s Spec) Filename() string {
 // DefaultLibrary is the preset covering the full supported
 // codec/container matrix (PCM in WAV and AIFF, FLAC in its stream form
 // and in Matroska, MP3, AAC in ADTS and MP4, ALAC in MP4, Opus in Ogg,
-// and Vorbis in Ogg), plus one truncated and one garbage flavor. Specs
-// are fully spelled out (no zero-value defaults) so callers can read
-// expected properties off them.
+// Vorbis in Ogg, HE-AAC in ADTS and MP4, WavPack, and Monkey's Audio),
+// plus one truncated and one garbage flavor. Specs are fully spelled
+// out (no zero-value defaults) so callers can read expected properties
+// off them.
+//
+// The two formats WaxFlow decodes but cannot encode, WMA and Musepack,
+// are not here; they are the vendored exotics under testdata/exotics
+// that Vendored serves.
 func DefaultLibrary() []Spec {
 	full := func(codec Codec, c Container, corrupt Corruption) Spec {
 		rate := 44100
@@ -318,6 +366,10 @@ func DefaultLibrary() []Spec {
 		full(CodecALAC, ContainerMP4, CorruptNone),
 		full(CodecOpus, ContainerDefault, CorruptNone),
 		full(CodecVorbis, ContainerDefault, CorruptNone),
+		full(CodecHEAAC, ContainerADTS, CorruptNone),
+		full(CodecHEAAC, ContainerMP4, CorruptNone),
+		full(CodecWavPack, ContainerDefault, CorruptNone),
+		full(CodecAPE, ContainerDefault, CorruptNone),
 		full(CodecFLAC, ContainerDefault, CorruptTruncated),
 		full(CodecFLAC, ContainerDefault, CorruptGarbage),
 	}

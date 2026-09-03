@@ -20,19 +20,16 @@ import (
 	waxlabel "github.com/colespringer/waxlabel"
 
 	"github.com/colespringer/waxdeck/server/internal/genre"
-	waxproviders "github.com/colespringer/waxdeck/server/internal/providers"
 )
 
 // enrichAsk dispatches one provider lookup, naming the capability the
-// caller will read when the provider can honor it (the ScopedEnricher
-// refinement) so a multi-capability provider stops fetching what will
-// be discarded. The port's own Request cannot carry the want; the
-// "capability-scoped provider calls" ask in upstream-requests.md is
-// what would let the catalog's whole-library pass say the same.
+// caller will read on the request itself so a multi-capability provider
+// stops fetching what would be discarded. The port carries the want
+// now, so this is a one-field stamp rather than the type assertion it
+// used to be, and the catalog's own whole-library pass stamps its
+// passes the same way.
 func enrichAsk(ctx context.Context, p enrich.Provider, req enrich.Request, want enrich.Capability) (*enrich.Candidate, error) {
-	if s, ok := p.(waxproviders.ScopedEnricher); ok {
-		return s.EnrichScoped(ctx, req, want)
-	}
+	req.Want = want
 	return p.Enrich(ctx, req)
 }
 
@@ -130,6 +127,12 @@ func capabilityStrings(c enrich.Capability) []string {
 	}
 	if c.Has(enrich.CapBookMeta) {
 		out = append(out, "book")
+	}
+	if c.Has(enrich.CapAuxArt) {
+		out = append(out, "aux-art")
+	}
+	if c.Has(enrich.CapArtistArt) {
+		out = append(out, "artist-art")
 	}
 	return out
 }

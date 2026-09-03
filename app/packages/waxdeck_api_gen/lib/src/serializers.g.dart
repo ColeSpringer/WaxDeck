@@ -132,6 +132,7 @@ Serializers _$serializers =
           ..add(InviteList.serializer)
           ..add(Item.serializer)
           ..add(ItemAcquisition.serializer)
+          ..add(ItemAcquisitionEdit.serializer)
           ..add(ItemMetadata.serializer)
           ..add(ItemPage.serializer)
           ..add(ItemPermissions.serializer)

@@ -213,14 +213,18 @@ provider.
 - `WAXDECK_ACOUSTID_KEY`: AcoustID API key; empty disables fingerprint
   evidence in matching.
 - `WAXDECK_FANARTTV_KEY`: fanart.tv API key; empty leaves that artwork
-  provider unconfigured. Also the first rung of the artist portrait
-  sweep, which fills missing artist images in the background (Deezer's
-  name match is the key-free fallback rung).
-- `WAXDECK_ARTIST_ART` (default `true`): fill missing artist portraits
-  in a daily background sweep, from fanart.tv when its key is set
-  (keyed on the MBID) and from Deezer's name-matched artist search
-  otherwise. Set `false` and the server never asks either service for
-  one.
+  provider unconfigured. It is the only provider that answers art by
+  role, so it supplies disc art and artist backgrounds as well as front
+  covers, and it is registered ahead of the others because the
+  enrichment engine stops asking once every slot is held.
+- `WAXDECK_ARTIST_ART` (default `true`): fill missing artist portraits.
+  Artists MusicBrainz matched are filled by the catalog's own
+  enrichment pass, from fanart.tv when its key is set (keyed on the
+  MusicBrainz artist id) and from Deezer otherwise; the artists that
+  pass cannot reach, which are the ones with no MusicBrainz id, are
+  filled by a daily background sweep asking Deezer by name. Set `false`
+  and the server never asks either service for a portrait on either
+  path.
 - `WAXDECK_DISCOGS_TOKEN`: Discogs personal access token; empty leaves
   that artwork and genre provider unconfigured.
 - `WAXDECK_HARDCOVER_KEY`: Hardcover API token; empty leaves that

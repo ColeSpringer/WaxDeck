@@ -82,13 +82,18 @@ var drmFormats = map[string]bool{"aax": true, "aaxc": true}
 var drmFormatsList = slices.Sorted(maps.Keys(drmFormats))
 
 // uploadFormatSet builds the accepted-extension set (lowercase, no
-// dot). The default is every format the catalog scans and the decode
-// stack reads.
+// dot). The default is the scanner's own extension set, so an upload
+// that lands is an upload the next scan catalogs. Two entries moved
+// with it: .mka is in the scanner's set now and comes alive here, and
+// .webm leaves - the scanner has always excluded it (a WebM routinely
+// carries video), so accepting one only ever wrote a file nothing
+// would pick up.
 func uploadFormatSet(formats []string) map[string]bool {
 	if len(formats) == 0 {
 		formats = []string{
-			"flac", "mp3", "m4a", "m4b", "aac", "ogg", "oga", "opus",
-			"wav", "aif", "aiff", "mka", "webm",
+			"mp3", "mpga", "flac", "wav", "wave", "ogg", "oga", "opus",
+			"m4a", "m4b", "m4r", "mp4", "alac", "aac", "adts", "wma",
+			"aiff", "aif", "aifc", "afc", "ape", "wv", "mpc", "mp+", "mka",
 		}
 	}
 	out := make(map[string]bool, len(formats))
@@ -680,8 +685,12 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 	tags := flatTags(doc)
 	kind, _ := kindForMediaType(u.MediaType)
 	if kind != model.KindEpisode {
+		// No SourceType, for the reason importToolFile gives: an
+		// upload knows the bytes arrived, not where they came from,
+		// and a standing origin is left alone rather than claimed as
+		// manual.
 		if res, err := l.lib.ImportAcquired(ctx, waxbin.AcquiredFile{Path: final}, kind, waxbin.AcquiredMeta{
-			SourceType: model.SourceManual, Copy: true, DupPolicy: model.DupAllow,
+			Copy: true, DupPolicy: model.DupAllow,
 		}); err == nil && res.AlreadyPresent && res.AlreadyPresentPID != "" {
 			u.DuplicatePID = string(res.AlreadyPresentPID)
 			u.DuplicateKind = "content"
@@ -848,7 +857,7 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 		}
 		kind, _ := kindForMediaType(entry.MediaType)
 		res, err := l.lib.ImportAcquired(ctx, waxbin.AcquiredFile{Path: doc.Path}, kind, waxbin.AcquiredMeta{
-			SourceType: model.SourceManual, Copy: false, DupPolicy: model.DupAllow,
+			Copy: false, DupPolicy: model.DupAllow,
 		})
 		if err != nil {
 			return fail(classify(err))

@@ -1522,8 +1522,10 @@ ItemMetadata itemMetadataFromGen(gen.ItemMetadata meta) {
         : ItemAcquisition(
             sourceType: acq.sourceType,
             sourceUrl: acq.sourceUrl,
+            sourceId: acq.sourceId,
             provider: acq.provider,
             acquiredAt: acq.acquiredAt?.toUtc(),
+            locked: acq.locked ?? false,
           ),
   );
 }

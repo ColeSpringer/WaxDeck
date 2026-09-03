@@ -114,8 +114,12 @@ into review entries when the transfer finishes - or within a day,
 with whatever arrived, if the client vanished. Files shared to the
 Android app group by auto-detection without asking.
 
-Uploads accept flac, mp3, m4a, m4b, aac, ogg, oga, opus, wav, aif,
-aiff, mka, and webm by default; `WAXDECK_UPLOAD_FORMATS` swaps in an
+Uploads accept the same extensions the scanner catalogs by default -
+mp3, mpga, flac, wav, wave, ogg, oga, opus, m4a, m4b, m4r, mp4, alac,
+aac, adts, wma, aiff, aif, aifc, afc, ape, wv, mpc, mp+, and mka - so
+a file that uploads is a file the next scan picks up. That rules webm
+out: the scanner has always skipped it, because a WebM routinely
+carries video. `WAXDECK_UPLOAD_FORMATS` swaps in an
 operator's own list (replacing that set, not extending it). Audible's
 DRM containers (aax, aaxc) are refused by name whatever the set says -
 the files are encrypted, so no format list can make them playable -
@@ -311,11 +315,14 @@ derived, and says that editing the tracks is what changes it.
 
 The album title, album artist, and year live on the tracks rather
 than the release, so the album form ends with a rewrite section that
-applies them to every member in one batch. Rewriting any of them
-regroups the members onto a fresh album entry rather than renaming
-the release in place - the workbench says so, asks first, and then
-follows the tracks to their new entry; the old one keeps answering
-reads, empty, until cleanup sweeps it.
+applies them to every member in one batch. Because every member moves
+at once, the release is renamed in place: it keeps its entry, and its
+artwork, pins, curation and play history with it. A name another
+release already owns merges the two instead, and the workbench
+follows the pid the response reports either way. Editing only some of
+a release's members is the other case - those fork onto a new entry
+and the rest stay behind - which is what the bulk form over a checked
+subset does.
 
 The bulk form works over any checked set of tracks. A field the
 selection agrees on opens on that value; one it disagrees on opens
@@ -445,16 +452,21 @@ services implementing the contract in `docs/custom-provider-api/`. The
 editor's per-item fetch uses the same providers for one item at a
 time.
 
-Artist portraits are WaxDeck's own sweep rather than the catalog
-pass's, because the enrichment providers target release groups: a
-daily background pass (also kicked by each admin-run enrichment) walks
-artists without a portrait and fills the slot from fanart.tv by MBID,
-falling back to Deezer under an exact-ish name match. It writes
+Artist portraits come from two passes, split by whether the artist has
+a MusicBrainz id. An artist matching one rides the catalog's own
+enrichment pass, which asks fanart.tv and Deezer for artist art
+through the same provider port everything else goes through; fanart.tv
+also supplies a scenic background there, and disc art on a release
+group, since it is the one provider that answers per role.
+
+An artist with no MusicBrainz id is invisible to that pass, so a daily
+background sweep (also kicked by each admin-run enrichment) covers the
+remainder, asking Deezer under an exact-ish name match. It writes
 fill-when-empty and pin-respecting like every enrichment write,
 remembers artists with no findable image so they are not refetched
-every pass (a forced enrichment run drops that memory), skips
-compilation stand-ins like Various Artists, and turns off entirely
-with `WAXDECK_ARTIST_ART=false`.
+every pass (a forced enrichment run drops that memory), and skips
+compilation stand-ins like Various Artists. `WAXDECK_ARTIST_ART=false`
+turns off both.
 
 That fetch previews before it applies. The editor's Fetch button asks
 `POST /items/{pid}/enrich/preview` what the providers would change -

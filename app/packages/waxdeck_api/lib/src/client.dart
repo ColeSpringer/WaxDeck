@@ -1180,19 +1180,62 @@ abstract interface class WaxDeckRepository {
     String role = 'front',
   });
 
-  /// `GET /entities/{entityType}/{entityPid}/artwork/lock`: whether a
-  /// catalog entity's front cover is pinned against enrichment and scan
-  /// re-derives. Refuses `playlist`.
-  Future<bool> getEntityArtworkLock(String entityType, String entityPid);
+  /// `GET /entities/{entityType}/{entityPid}/artwork/lock`: whether one
+  /// of a catalog entity's artwork slots is pinned against enrichment
+  /// and scan re-derives. An auxiliary role reads the effective pin -
+  /// the whole-artwork one or its own. Refuses `playlist`.
+  Future<bool> getEntityArtworkLock(
+    String entityType,
+    String entityPid, {
+    String role = 'front',
+  });
 
   /// `PUT /entities/{entityType}/{entityPid}/artwork/lock`: pins or
-  /// unpins a catalog entity's front cover without touching the cover.
-  /// Unpinning is the way out of a cover cleared and left pinned, which
-  /// setting artwork cannot express. Refuses `playlist`.
+  /// unpins one of a catalog entity's artwork slots without touching the
+  /// image. Unpinning is the way out of a cover cleared and left pinned,
+  /// which setting artwork cannot express. The default `front` writes
+  /// the whole-artwork pin, which also gates enrichment's fills in every
+  /// other role; a named auxiliary role writes that slot alone. Refuses
+  /// `playlist`.
   Future<bool> setEntityArtworkLock(
     String entityType,
     String entityPid, {
     required bool locked,
+    String role = 'front',
+  });
+
+  /// `PUT /items/{pid}/acquisition`: replaces the item's recorded
+  /// origin. [sourceType], [sourceId] and [provider] are written as
+  /// sent - a null one is **cleared** - because the automatic recorder
+  /// is merge-wise and never lowers a field, so this is the only way a
+  /// wrong value comes off. An absent [acquiredAt] keeps the stamp the
+  /// row already carries.
+  ///
+  /// [sourceUrl] is the exception and works the other way: null keeps
+  /// the stored address and `''` clears it. It is the one column the
+  /// read redacts, so a caller is never shown the stored string in full
+  /// and cannot faithfully resend it.
+  Future<MetadataEditResult> setItemAcquisition(
+    String pid, {
+    required String sourceType,
+    String? sourceUrl,
+    String? sourceId,
+    String? provider,
+    DateTime? acquiredAt,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  });
+
+  /// `DELETE /items/{pid}/acquisition`: takes the origin row off, so
+  /// the item reads the source it has without one. Idempotent. [lock]
+  /// defaults true because the row came from evidence still in the
+  /// file; [writeBack] strips those tags, which is the durable half.
+  Future<void> clearItemAcquisition(
+    String pid, {
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
   });
 
   /// `PUT /items/{pid}/tags/{key}`: replaces one custom tag's values.
@@ -3913,27 +3956,77 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<bool> getEntityArtworkLock(String entityType, String entityPid) =>
-      _guard(() async {
-        final response = await _gen.getMetadataApi().getEntityArtworkLock(
-          entityType: entityType,
-          entityPid: entityPid,
-        );
-        return _require(response.data).locked;
-      });
+  Future<bool> getEntityArtworkLock(
+    String entityType,
+    String entityPid, {
+    String role = 'front',
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().getEntityArtworkLock(
+      entityType: entityType,
+      entityPid: entityPid,
+      role: gen.ArtRole.valueOf(role),
+    );
+    return _require(response.data).locked;
+  });
 
   @override
   Future<bool> setEntityArtworkLock(
     String entityType,
     String entityPid, {
     required bool locked,
+    String role = 'front',
   }) => _guard(() async {
     final response = await _gen.getMetadataApi().setEntityArtworkLock(
       entityType: entityType,
       entityPid: entityPid,
+      role: gen.ArtRole.valueOf(role),
       artworkLock: gen.ArtworkLock((b) => b.locked = locked),
     );
     return _require(response.data).locked;
+  });
+
+  @override
+  Future<MetadataEditResult> setItemAcquisition(
+    String pid, {
+    required String sourceType,
+    String? sourceUrl,
+    String? sourceId,
+    String? provider,
+    DateTime? acquiredAt,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setItemAcquisition(
+      pid: pid,
+      itemAcquisitionEdit: gen.ItemAcquisitionEdit(
+        (b) => b
+          ..sourceType = sourceType
+          ..sourceUrl = sourceUrl
+          ..sourceId = sourceId
+          ..provider = provider
+          ..acquiredAt = acquiredAt?.toUtc()
+          ..writeBack = writeBack
+          ..lock = lock
+          ..force = force,
+      ),
+    );
+    return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> clearItemAcquisition(
+    String pid, {
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) => _guard(() async {
+    await _gen.getMetadataApi().clearItemAcquisition(
+      pid: pid,
+      writeBack: writeBack,
+      lock: lock,
+      force: force,
+    );
   });
 
   @override

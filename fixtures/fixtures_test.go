@@ -31,6 +31,11 @@ var wantCodecID = map[fixtures.Codec]codec.ID{
 	fixtures.CodecALAC:   codec.ALAC,
 	fixtures.CodecOpus:   codec.Opus,
 	fixtures.CodecVorbis: codec.Vorbis,
+	// A plain AAC route stays AAC-LC; only the he-aac routes decode back
+	// as HE-AAC, which is what makes them worth generating separately.
+	fixtures.CodecHEAAC:   codec.HEAAC,
+	fixtures.CodecWavPack: codec.WavPack,
+	fixtures.CodecAPE:     codec.APE,
 }
 
 // wantContainerName maps fixture containers to format registry names.
@@ -43,6 +48,8 @@ var wantContainerName = map[fixtures.Container]string{
 	fixtures.ContainerADTS:     "adts",
 	fixtures.ContainerOgg:      "ogg",
 	fixtures.ContainerMatroska: "mka",
+	fixtures.ContainerWavPack:  "wavpack",
+	fixtures.ContainerAPE:      "ape",
 }
 
 // openFixture opens a generated file through WaxFlow's format registry.
@@ -403,5 +410,75 @@ func TestTagAliasesReachEveryContainer(t *testing.T) {
 				t.Error("flac lost the caller's own spelling")
 			}
 		})
+	}
+}
+
+// TestVendoredExotics covers the one binary-media exception: WMA and
+// Musepack cannot be synthesized (WaxFlow decodes both and encodes
+// neither), so they are checked in. The point of keeping them is that
+// they decode and carry chapters, so that is what this asserts - a
+// sample that stopped opening would otherwise sit in the tree looking
+// fine.
+func TestVendoredExotics(t *testing.T) {
+	dir := t.TempDir()
+	paths, err := fixtures.WriteVendored(dir, fixtures.AllExotics...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != len(fixtures.AllExotics) {
+		t.Fatalf("got %d paths for %d samples", len(paths), len(fixtures.AllExotics))
+	}
+	wantContainer := map[string]string{
+		fixtures.ExoticMusepack: "musepack",
+		fixtures.ExoticWMA:      "wma",
+	}
+	for _, path := range paths {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			med := openFixture(t, path)
+			info := med.Info()
+			if want := wantContainer[filepath.Base(path)]; info.Container != want {
+				t.Errorf("container = %q, want %q", info.Container, want)
+			}
+			if frames, err := decodeFrames(med); err != nil {
+				t.Errorf("decoding: %v", err)
+			} else if frames == 0 {
+				t.Error("decoded 0 frames")
+			}
+			doc, err := waxlabel.ParseFile(context.Background(), path)
+			if err != nil {
+				t.Fatalf("reading tags: %v", err)
+			}
+			if chapters := doc.Chapters(); len(chapters) < 2 {
+				t.Errorf("chapters = %d, want the vendored markers", len(chapters))
+			}
+		})
+	}
+}
+
+// TestVendoredUnknownName pins that a typo fails where it is written
+// rather than handing back empty bytes.
+func TestVendoredUnknownName(t *testing.T) {
+	if _, err := fixtures.Vendored("nope.wma"); err == nil {
+		t.Fatal("Vendored accepted an unknown name")
+	}
+}
+
+// TestOversizeTagsRefusedByName pins that a tag block no muxer will take
+// is refused before any encoding, with the fixture's own name in the
+// sentence. Upstream now fails the transcode on an over-budget tag block
+// instead of dropping it, and a muxer's complaint names a tag key, not
+// the spec that produced it.
+func TestOversizeTagsRefusedByName(t *testing.T) {
+	spec := fixtures.Spec{
+		Codec:    fixtures.CodecFLAC,
+		Duration: time.Second,
+		Tags:     map[string]string{"COMMENT": strings.Repeat("x", fixtures.MaxTagBytes)},
+	}
+	_, err := fixtures.Generate(t.TempDir(), spec)
+	if err == nil {
+		t.Fatal("Generate accepted an over-budget tag block")
+	}
+	if !strings.Contains(err.Error(), spec.Filename()) {
+		t.Errorf("error does not name the fixture: %v", err)
 	}
 }

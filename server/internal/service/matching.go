@@ -161,6 +161,13 @@ type reviewSnapshot struct {
 	Items map[string]map[string]string `json:"items"`
 }
 
+// reviewMatchProvider names what an approved match's values came from.
+// Every value the apply writes is off a MusicBrainz release - the
+// candidates are release documents, and AcoustID only ever picks
+// recordings to look them up by - so an approval is an enrichment write
+// from that service, not the reviewer's own typing.
+const reviewMatchProvider = "musicbrainz"
+
 func newReviewID() string { return "rv-" + ulid.Make().String() }
 
 // notifyReview fans a review marker to every administrator plus the
@@ -1107,7 +1114,15 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 		for _, pid := range order {
 			batch = append(batch, model.ItemFieldEdit{ItemPID: pid, Fields: editByPID[pid]})
 		}
-		if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{Lock: model.LockOn, Force: true}); err != nil {
+		// Stamped, not left to default to a user edit: the values are
+		// MusicBrainz's, and a reviewer approving them is not the same
+		// as a reviewer typing them. Without this the metadata editor
+		// shows every approved field as "you", which is both wrong and
+		// the reason nobody can tell an approval from a hand edit.
+		if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{
+			Lock: model.LockOn, Force: true,
+			Source: model.SourceEnrichment, Provider: reviewMatchProvider,
+		}); err != nil {
 			return warnings, classify(err)
 		}
 	}
@@ -1155,11 +1170,29 @@ func (l *Library) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decid
 	for pid, fields := range snap.Items {
 		batch = append(batch, model.ItemFieldEdit{ItemPID: model.PID(pid), Fields: fields})
 	}
-	// Restore the whole unit atomically, mirroring the apply. Catalog-only
-	// (no WriteBack, like the apply), so the batch does no on-disk tag sync
-	// and reports no per-item write-back failures; revert surfaces only a
-	// hard error, not the warnings the apply collects.
-	if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{Lock: model.LockOff, Force: true}); err != nil {
+	// One batch for the whole unit, mirroring the apply, and that is
+	// load-bearing rather than tidy: the restored fields include the
+	// three that key a release, and the rename pre-pass only keeps an
+	// album's pid when a batch covers every member. Splitting the unit
+	// - to restore each field under the exact attribution it carried,
+	// say - would hand the pre-pass partial coverage and fork the album
+	// in two.
+	//
+	// So the whole unit restores as `tag`, which is where these values
+	// came from in the overwhelming case: the snapshot is what a scan
+	// read off the files, and a scanned field carries no provenance row
+	// at all until something edits it. A prior value someone had typed
+	// reads as `tag` afterwards, which is the trade - and the better
+	// side of it, since the alternative said "you" for every field an
+	// approval had taken off a file.
+	//
+	// Catalog-only (no WriteBack, like the apply), so the batch does no
+	// on-disk tag sync and reports no per-item write-back failures;
+	// revert surfaces only a hard error, not the warnings the apply
+	// collects.
+	if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{
+		Lock: model.LockOff, Force: true, Source: model.SourceTag,
+	}); err != nil {
 		return classify(err)
 	}
 	for pid, fields := range snap.Items {

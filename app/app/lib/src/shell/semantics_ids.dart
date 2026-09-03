@@ -356,6 +356,7 @@ abstract final class SemanticsIds {
   static String albumRewriteField(Object name) => 'album-rewrite-field-$name';
   static const String albumRewriteWriteBack = 'album-rewrite-writeback';
   static const String artLock = 'art-lock';
+  static String artLockRole(Object role) => 'art-lock-$role';
   static String artSlot(Object role) => 'art-slot-$role';
   static String artSlotClear(Object role) => 'art-slot-clear-$role';
   static String artSlotDrop(Object role) => 'art-slot-drop-$role';
@@ -401,6 +402,16 @@ abstract final class SemanticsIds {
   static const String metadataWorkbench = 'metadata-workbench';
   static const String metadataWriteback = 'metadata-writeback';
   static const String metadataWritebackWarning = 'metadata-writeback-warning';
+  static const String originCancel = 'origin-cancel';
+  static const String originClear = 'origin-clear';
+  static const String originEdit = 'origin-edit';
+  static const String originId = 'origin-id';
+  static const String originProvider = 'origin-provider';
+  static const String originSave = 'origin-save';
+  static const String originSheet = 'origin-sheet';
+  static const String originSourceType = 'origin-source-type';
+  static const String originUrl = 'origin-url';
+  static const String originWriteBack = 'origin-writeback';
   static const String tagAdd = 'tag-add';
   static const String tagKey = 'tag-key';
   static String tagRemove(Object key) => 'tag-remove-$key';
