@@ -82,19 +82,25 @@ func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) 
 			return flow.Source{}, err
 		}
 	}
+	l.attachFile(ctx, &src, f)
+	return src, nil
+}
+
+// attachFile fills the half of a source that comes off the backing
+// file row, and the loudness voice boost derives its gain from.
+//
+// Read here only for the content voice boost is for. Every stream
+// request runs through this, and a caller that wants music loudness
+// (timeline leveling) is rare enough to ask for it by hash rather than
+// to make the whole library pay a second query per play.
+func (l *Library) attachFile(ctx context.Context, src *flow.Source, f *model.File) {
 	src.Size = f.Size
 	src.MTimeNS = f.MTimeNS
 	src.EssenceHash = f.EssenceHash
 	src.BitrateKbps = f.Bitrate
-
-	// Read here only for the content voice boost is for. Every stream
-	// request runs through this, and a caller that wants music loudness
-	// (timeline leveling) is rare enough to ask for it by hash rather
-	// than to make the whole library pay a second query per play.
 	if src.SpokenWord && f.EssenceHash != "" {
-		l.fillLoudness(ctx, &src)
+		l.fillLoudness(ctx, src)
 	}
-	return src, nil
 }
 
 // FillLoudness attaches the stored measurements for a source's essence,
@@ -139,56 +145,138 @@ func bookPartByFile(bd *model.BookDetail, filePID string) (model.BookPart, bool)
 	return model.BookPart{}, false
 }
 
-// PlayPart is play-info's part resolution for multi-file books.
+// PlayPart is play-info's part resolution for multi-file books: one
+// backing file placed on the book's own timeline.
 type PlayPart struct {
-	FilePID   string
-	Index     int
-	Count     int
-	StartMS   int64
-	MultiPart bool
+	FilePID    string
+	Index      int
+	Count      int
+	StartMS    int64
+	DurationMS int64
+	MultiPart  bool
+}
+
+// playParts lays a book's backing files out on the book timeline, one
+// PlayPart per file with its cumulative start. Fewer than two files is
+// not a multi-part book and lays out as nothing, which is what every
+// caller reads as "stream the item as itself".
+func playParts(bd *model.BookDetail) []PlayPart {
+	if bd == nil || len(bd.Files) < 2 {
+		return nil
+	}
+	out := make([]PlayPart, len(bd.Files))
+	var offset int64
+	for i, f := range bd.Files {
+		out[i] = PlayPart{
+			FilePID:    string(f.FilePID),
+			Index:      i,
+			Count:      len(bd.Files),
+			StartMS:    offset,
+			DurationMS: f.DurationMS,
+			MultiPart:  true,
+		}
+		offset += f.DurationMS
+	}
+	return out
+}
+
+// BookParts is the whole part layout of a multi-file book, in reading
+// order, for callers that load every part at once - a device endpoint
+// fetches its own URLs and steps through them itself.
+//
+// A pid that is not a book, or names one this catalog does not hold,
+// lays out as nil without an error: every caller reads that as "stream
+// the item as itself", which is what a track, an episode, and a
+// single-file book all are. A catalog that could not answer is a real
+// error and travels as one - swallowing it would render a fifteen-hour
+// book as one item that is really its first forty minutes.
+func (l *Library) BookParts(ctx context.Context, apiItemPID string) ([]PlayPart, error) {
+	prefix, pid, ok := parseAPIPID(apiItemPID)
+	if !ok || prefix != PrefixBook {
+		return nil, nil
+	}
+	bd, err := l.lib.Book(ctx, pid)
+	if err != nil {
+		if out := classify(err); KindOf(out) == KindNotFound {
+			return nil, nil
+		}
+		return nil, classify(err)
+	}
+	return playParts(bd), nil
+}
+
+// PlayPiece is one fetchable piece of a multi-file audiobook: where
+// the part sits on the book's own timeline, the streaming engine's
+// view of its bytes, and the original file for a server running
+// without the engine. Both views come off one file row, so which of
+// them a server can use costs it nothing.
+type PlayPiece struct {
+	Part PlayPart
+	Src  flow.Source
+	File DownloadFile
+}
+
+// BookPieces resolves every part of a multi-file audiobook for
+// delivery, in one pass.
+//
+// The item and the book are read once between them and each backing
+// file once. Resolving the parts one at a time through StreamSource or
+// DirectPlayInfo re-reads both for every part - a thirty-part book
+// handed to a cast device is ninety reads that way, on the synchronous
+// path a load runs on, repeated per advertise base and again on every
+// chapter jump.
+//
+// Nil for anything that is not a multi-file book: a track, an episode,
+// and a single-file book are served whole and resolve as themselves.
+func (l *Library) BookPieces(ctx context.Context, uc *UserCtx, apiItemPID string) ([]PlayPiece, error) {
+	parts, err := l.BookParts(ctx, apiItemPID)
+	if err != nil || len(parts) == 0 {
+		return nil, err
+	}
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PlayPiece, 0, len(parts))
+	for _, part := range parts {
+		f, err := l.lib.File(ctx, model.PID(part.FilePID))
+		if err != nil {
+			return nil, classify(err)
+		}
+		// The item's codec and container, as StreamSource reads them:
+		// a book is catalogued as one item however many files carry it.
+		src := flow.Source{
+			Codec:      it.Codec,
+			Container:  it.Container,
+			DurationMS: part.DurationMS,
+			SpokenWord: true,
+			Path:       string(f.Path),
+		}
+		l.attachFile(ctx, &src, f)
+		out = append(out, PlayPiece{Part: part, Src: src, File: downloadFileOf(f)})
+	}
+	return out, nil
 }
 
 // ResolvePlayPart maps a book-timeline position to the backing part.
 // Single-file items (and every non-book) resolve to a zero PlayPart
 // with MultiPart false.
 func (l *Library) ResolvePlayPart(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64) (PlayPart, error) {
-	prefix, pid, ok := parseAPIPID(apiItemPID)
-	if !ok || prefix != PrefixBook {
-		return PlayPart{}, nil
-	}
-	bd, err := l.lib.Book(ctx, pid)
+	parts, err := l.BookParts(ctx, apiItemPID)
 	if err != nil {
-		// Not a resolvable book (or not a book at all): stream the item
-		// as itself.
-		return PlayPart{}, nil
+		return PlayPart{}, err
 	}
-	if len(bd.Files) < 2 {
+	if len(parts) == 0 {
 		return PlayPart{}, nil
 	}
 	// The part whose half-open window holds the position; anything at
 	// or past the end resolves to the last part.
-	var offset int64
-	chosen := -1
-	var chosenStart int64
-	for i, part := range bd.Files {
-		if positionMS < offset+part.DurationMS {
-			chosen = i
-			chosenStart = offset
-			break
+	for _, part := range parts {
+		if positionMS < part.StartMS+part.DurationMS {
+			return part, nil
 		}
-		offset += part.DurationMS
 	}
-	if chosen < 0 {
-		chosen = len(bd.Files) - 1
-		chosenStart = offset - bd.Files[chosen].DurationMS
-	}
-	return PlayPart{
-		FilePID:   string(bd.Files[chosen].FilePID),
-		Index:     chosen,
-		Count:     len(bd.Files),
-		StartMS:   chosenStart,
-		MultiPart: true,
-	}, nil
+	return parts[len(parts)-1], nil
 }
 
 // DirectPlayResolution is direct playback of original bytes, the

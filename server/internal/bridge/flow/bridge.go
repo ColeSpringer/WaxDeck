@@ -260,6 +260,23 @@ func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts 
 	if err != nil {
 		return PlayInfo{}, err
 	}
+	return b.PlayInfoForSource(ctx, user, apiItemPID, src, opts)
+}
+
+// PlayInfoForSource is PlayInfoFor with the source already in hand.
+//
+// Everything the mint decides - the format policy, voice boost, the
+// bitrate cap, the URL - reads the source and nothing else, so a
+// caller that resolved a batch of them in one pass mints from those
+// rather than asking for each one back. A multi-file audiobook loaded
+// onto a device is the case: resolving its parts one at a time re-reads
+// the item and the book for every one of them.
+//
+// The source must be the one apiItemPID and opts.FilePID resolve to.
+// Nothing here re-checks that, because the fetch side does: the URL
+// carries the pid and the part, and /media/stream resolves both again
+// against the token before it serves a byte.
+func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string, src Source, opts PlayOptions) (PlayInfo, error) {
 	_, boost := VoiceBoostParams(src, b.caps, opts.VoiceBoost)
 	shape := ShapeFor(src, b.caps, boost)
 	force := opts.ForceFormat

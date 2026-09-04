@@ -27,6 +27,18 @@ export class Cast extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.preflightBase(index)));
   }
 
+  /// The device half of the check: what a real speaker made of each
+  /// address, which the server checking itself cannot see. Empty on a
+  /// stack with no cast device or renderer on its network.
+  noDevicesToTest(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.preflightDevices));
+  }
+
+  /// A device the check offers to run against.
+  testDevice(id: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.preflightDevice(id)));
+  }
+
   /// Open the picker from the deck bar's cast control.
   async openPicker(): Promise<void> {
     await clickThrough(

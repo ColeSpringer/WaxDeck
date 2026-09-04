@@ -323,4 +323,13 @@ test('the device picker lists this device and checks the cast bases', async ({ a
   // least one candidate and it is drawn with its verdict.
   await expect(app.cast.base(0)).toBeVisible();
   await expect(app.cast.preflight()).toContainText('localhost:4420');
+
+  // The other half, which needs a speaker: this stack has no cast
+  // device and no renderer on its network, so the section says what is
+  // missing rather than offering nothing at all. The verdicts
+  // themselves are pinned against wire-honest fakes in
+  // cast_integration_test.go, which is where a device can be made to
+  // refuse.
+  await expect(app.cast.noDevicesToTest()).toBeVisible();
+  await expect(app.cast.preflight()).toContainText('No devices to test');
 });

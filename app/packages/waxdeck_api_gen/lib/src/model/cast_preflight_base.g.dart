@@ -15,6 +15,8 @@ class _$CastPreflightBase extends CastPreflightBase {
   final bool reachable;
   @override
   final BuiltList<String> notes;
+  @override
+  final CastDeviceVerdict? device;
 
   factory _$CastPreflightBase([
     void Function(CastPreflightBaseBuilder)? updates,
@@ -25,6 +27,7 @@ class _$CastPreflightBase extends CastPreflightBase {
     required this.source_,
     required this.reachable,
     required this.notes,
+    this.device,
   }) : super._();
   @override
   CastPreflightBase rebuild(void Function(CastPreflightBaseBuilder) updates) =>
@@ -41,7 +44,8 @@ class _$CastPreflightBase extends CastPreflightBase {
         base_ == other.base_ &&
         source_ == other.source_ &&
         reachable == other.reachable &&
-        notes == other.notes;
+        notes == other.notes &&
+        device == other.device;
   }
 
   @override
@@ -51,6 +55,7 @@ class _$CastPreflightBase extends CastPreflightBase {
     _$hash = $jc(_$hash, source_.hashCode);
     _$hash = $jc(_$hash, reachable.hashCode);
     _$hash = $jc(_$hash, notes.hashCode);
+    _$hash = $jc(_$hash, device.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -61,7 +66,8 @@ class _$CastPreflightBase extends CastPreflightBase {
           ..add('base_', base_)
           ..add('source_', source_)
           ..add('reachable', reachable)
-          ..add('notes', notes))
+          ..add('notes', notes)
+          ..add('device', device))
         .toString();
   }
 }
@@ -86,6 +92,11 @@ class CastPreflightBaseBuilder
   ListBuilder<String> get notes => _$this._notes ??= ListBuilder<String>();
   set notes(ListBuilder<String>? notes) => _$this._notes = notes;
 
+  CastDeviceVerdictBuilder? _device;
+  CastDeviceVerdictBuilder get device =>
+      _$this._device ??= CastDeviceVerdictBuilder();
+  set device(CastDeviceVerdictBuilder? device) => _$this._device = device;
+
   CastPreflightBaseBuilder() {
     CastPreflightBase._defaults(this);
   }
@@ -97,6 +108,7 @@ class CastPreflightBaseBuilder
       _source_ = $v.source_;
       _reachable = $v.reachable;
       _notes = $v.notes.toBuilder();
+      _device = $v.device?.toBuilder();
       _$v = null;
     }
     return this;
@@ -137,12 +149,15 @@ class CastPreflightBaseBuilder
               'reachable',
             ),
             notes: notes.build(),
+            device: _device?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'notes';
         notes.build();
+        _$failedField = 'device';
+        _device?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'CastPreflightBase',

@@ -9,6 +9,7 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:waxdeck_api_gen/src/api_util.dart';
+import 'package:waxdeck_api_gen/src/model/cast_device_probe.dart';
 import 'package:waxdeck_api_gen/src/model/cast_preflight.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/job.dart';
@@ -30,7 +31,7 @@ class PlayerApi {
   const PlayerApi(this._dio, this._serializers);
 
   /// Start playback on an endpoint
-  /// Loads a queue onto an endpoint and starts a server-tracked playback session there (\&quot;play on the kitchen speaker\&quot;). An endpoint plays at most one session: starting a new session on an endpoint that already has one ends the old session first, whoever owned it (physical outputs are last-writer-wins, like the speaker itself). Item pids must all be visible to the caller; the server shapes stream delivery for the target endpoint&#39;s capabilities, re-minting URLs as needed, so the same queue plays on a phone, a cast device, or a renderer without the caller caring about formats. Sessions on device endpoints are server-authoritative; a session created on one of the caller&#39;s own client endpoints is loaded onto that client and then mirrors the client&#39;s local playback. Conflict with code &#x60;endpoint-offline&#x60; means the target endpoint is not connected right now, and &#x60;timeout&#x60; means it is connected but did not answer in time. A queue the target cannot play answers &#x60;feature-unavailable&#x60; naming the pid - a multi-part audiobook or a windowed track sent to a device endpoint, say - which a controller can turn into an offer to play it somewhere that can, rather than a bare failure. When the target is a client endpoint, that client&#39;s own refusal code and message are what arrive here - &#x60;endpoint-failed&#x60; where it took the load and could not carry it out. Starting playback somewhere else from a device that is playing is a handoff, and a device plays one thing: the queue, index, position, rate, and repeat move to the target, and the source silences itself. The order in &#x60;itemPids&#x60; is the play order, so a shuffled queue arrives shuffled whatever &#x60;shuffle&#x60; says. A caller that holds a mirror session&#39;s id transfers it instead; one that does not passes &#x60;handoffFrom&#x60; here and stops its own playback when this call answers. 
+  /// Loads a queue onto an endpoint and starts a server-tracked playback session there (\&quot;play on the kitchen speaker\&quot;). An endpoint plays at most one session: starting a new session on an endpoint that already has one ends the old session first, whoever owned it (physical outputs are last-writer-wins, like the speaker itself). Item pids must all be visible to the caller; the server shapes stream delivery for the target endpoint&#39;s capabilities, re-minting URLs as needed, so the same queue plays on a phone, a cast device, or a renderer without the caller caring about formats. Sessions on device endpoints are server-authoritative; a session created on one of the caller&#39;s own client endpoints is loaded onto that client and then mirrors the client&#39;s local playback. Conflict with code &#x60;endpoint-offline&#x60; means the target endpoint is not connected right now, and &#x60;timeout&#x60; means it is connected but did not answer in time. A queue the target cannot play answers &#x60;feature-unavailable&#x60; naming the pid - a windowed track sent to a device endpoint on a server running without the streaming engine, say - which a controller can turn into an offer to play it somewhere that can, rather than a bare failure. When the target is a client endpoint, that client&#39;s own refusal code and message are what arrive here - &#x60;endpoint-failed&#x60; where it took the load and could not carry it out. Starting playback somewhere else from a device that is playing is a handoff, and a device plays one thing: the queue, index, position, rate, and repeat move to the target, and the source silences itself. The order in &#x60;itemPids&#x60; is the play order, so a shuffled queue arrives shuffled whatever &#x60;shuffle&#x60; says. A caller that holds a mirror session&#39;s id transfers it instead; one that does not passes &#x60;handoffFrom&#x60; here and stops its own playback when this call answers. 
   ///
   /// Parameters:
   /// * [playbackSessionCreate] 
@@ -710,6 +711,92 @@ class PlayerApi {
     }
 
     return Response<PlayerEndpointList>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Play a probe on a cast device or renderer
+  /// The other half of the connection check: instead of the server reaching itself through each candidate address, the device reaches the server through them. A second of silence is loaded onto the endpoint from each base in turn, and what settles the verdict is the request arriving back at this server - not what the device says about itself, which a receiver reports as playing while it is still resolving a name it will never resolve. This is what catches the failures a server-side check cannot see, because they are the device&#39;s: DNS it resolves differently, a certificate authority it does not trust, a route it does not have. Bases are tried in the order sessions try them, and the answer stops at the point the device stopped answering: a row per address that was actually put to it. A POST because it drives a physical output. Loading media replaces whatever the device is showing - on a Chromecast it launches the default media receiver over the running app - so the probe first asks the device what it is doing and refuses rather than interrupting: &#x60;conflict&#x60; with code &#x60;endpoint-busy&#x60;, naming what is playing, for a foreign application on a cast device, a stock receiver already playing for somebody else, a renderer playing or holding something paused, a WaxDeck session on the endpoint, or a check already running on it. A device being probed is held for the run, so a queue started onto it meanwhile is refused the same way rather than loaded over. &#x60;endpoint-offline&#x60; means it could not be dialed at all. Only cast and DLNA endpoints can be probed; anything else answers &#x60;not-found&#x60;. 
+  ///
+  /// Parameters:
+  /// * [endpointId] - Player endpoint PID (e.g. `pe-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [CastDeviceProbe] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<CastDeviceProbe>> probeCastEndpoint({ 
+    required String endpointId,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/player/cast/preflight/{endpointId}'.replaceAll('{' r'endpointId' '}', encodeQueryParameter(_serializers, endpointId, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    CastDeviceProbe? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(CastDeviceProbe),
+      ) as CastDeviceProbe;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<CastDeviceProbe>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

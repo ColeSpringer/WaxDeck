@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,75 +39,54 @@ func (r *ConnectResolver) Entries(ctx context.Context, userID string, pids []str
 	return entries, nil
 }
 
-// multiPartRefusal is what a device endpoint gets for a book the server
-// cannot yet split for it. Coded so a controller can offer "play here
-// instead" rather than rendering a dead end: client endpoints handle
-// books fully, and this is the only thing wrong.
-//
-// `feature-unavailable` is the umbrella code for everything a target
-// cannot play - a windowed track sent to a device answers it too - so
-// the params are what say which refusal this is, and a controller keys
-// on `feature` to turn this one into that offer.
-//
-// The phrase stays load-bearing anyway: it is what a client that
-// predates params reads, and the app's device picker still falls back
-// to matching it (app/app/lib/src/connect/device_picker.dart).
-// TestMultiPartRefusalWording pins both channels, so rewording the
-// message without moving that fallback fails there rather than turning
-// the offer back into a dead end in the field.
-func multiPartRefusal(pid string) connect.InvalidError {
-	return connect.InvalidError{
-		Msg:    "multi-part audiobooks cannot play on this endpoint yet: " + pid,
-		Code:   "feature-unavailable",
-		Params: map[string]string{"feature": "multi-part-audiobook", "pid": pid},
-	}
+// delivery is what one endpoint's render needs beyond the queue
+// itself: where its URLs hang off, how long the tokens on them have to
+// live, and the format floor its kind imposes.
+type delivery struct {
+	base    string
+	ttl     time.Duration
+	force   string
+	formats []string
 }
 
 // StreamItems builds absolute media URLs for a device endpoint. The
 // jukebox gets wav, cast devices get the derived shape, and renderers
 // get the best format they and the engine agree on, falling back to the
-// mp3 floor. Multi-part books and, without the engine, span tracks are
-// refused: partial support that loses positions is worse than a clear
-// error.
+// mp3 floor. Without the engine, span tracks are refused: partial
+// support that loses positions is worse than a clear error.
+//
+// A multi-file audiobook is one entry rendered as one item per part,
+// because a device fetches whole files and steps through them itself.
+// The session manager reads the parts back as one book from `Entry` and
+// `PartStartMS`, so every position that crosses this boundary - what
+// watchers see, what the listener resumes at - stays in book
+// milliseconds.
 func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entries []connect.QueueEntry, target connect.EndpointTarget, base string, ttl time.Duration) ([]connect.MediaItem, error) {
 	uc, err := r.Svc.UserCtxByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	force := ""
-	// deviceFormats is what the endpoint said it accepts, handed to the
+	d := delivery{base: base, ttl: ttl}
+	// formats is what the endpoint said it accepts, handed to the
 	// bridge rather than resolved here: picking well needs the source
 	// (whether the renderer already plays these bytes, whether the
 	// source is lossy), and the bridge is where the source is resolved.
 	// The jukebox declares nothing on purpose: it reads a wav preamble
 	// off its input and fails on anything else, so there is nothing to
 	// negotiate.
-	var deviceFormats []string
 	switch target.Kind {
 	case connect.KindDLNA:
 		// mp3 is the floor rather than the answer: every renderer plays
 		// it, so it is what a renderer that declared nothing (or nothing
 		// the engine can produce) gets.
-		force = "mp3"
-		deviceFormats = target.Formats
+		d.force = "mp3"
+		d.formats = target.Formats
 	case connect.KindJukebox:
-		force = "wav"
+		d.force = "wav"
 	}
 	out := make([]connect.MediaItem, 0, len(entries))
-	for _, e := range entries {
-		part, err := r.Svc.ResolvePlayPart(ctx, uc, e.PID, 0)
-		if err != nil {
-			return nil, err
-		}
-		if part.MultiPart {
-			return nil, multiPartRefusal(e.PID)
-		}
-		item := connect.MediaItem{
-			PID:        e.PID,
-			Title:      e.Title,
-			Artist:     e.Artist,
-			DurationMS: e.DurationMS,
-		}
+	for i, e := range entries {
+		art := ""
 		if r.Media != nil {
 			// The art token takes the ttl this call was handed, which
 			// connect sizes to the whole queue's duration plus a margin.
@@ -122,58 +102,143 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 			// URL that 404s draws no art, which is what it would have
 			// done without the URL.
 			token, _ := r.Media.MintFor(userID, e.PID, ttl)
-			item.ArtURL = base + mediaArtURL(e.PID, token, castArtSize)
+			art = base + mediaArtURL(e.PID, token, castArtSize)
 		}
-		if r.Bridge != nil {
-			// The stored voice boost setting routes here exactly as it
-			// does at play-info: a device endpoint has no local DSP, so
-			// the engine applies it server side when the user asked.
-			info, err := r.Bridge.PlayInfoFor(ctx, userID, e.PID, flow.PlayOptions{
-				TTL:           ttl,
-				ForceFormat:   force,
-				DeviceFormats: deviceFormats,
-				VoiceBoost:    r.Svc.EffectiveVoiceBoost(ctx, uc, e.PID),
-			})
+		// A multi-file audiobook lays out as one item per part,
+		// resolved together: the item and the book are read once
+		// between them however many parts there are.
+		pieces, err := r.Svc.BookPieces(ctx, uc, e.PID)
+		if err != nil {
+			return nil, err
+		}
+		if len(pieces) == 0 {
+			item, err := r.wholeItem(ctx, uc, userID, e, d)
 			if err != nil {
-				if u, mime, ok := r.enclosureItem(ctx, userID, e.PID, ttl, force, err); ok {
-					item.URL, item.MimeType = base+u, mime
-					out = append(out, item)
-					continue
-				}
 				return nil, err
 			}
-			item.URL = base + info.URL
-			item.MimeType = info.MimeType
-		} else {
-			res, err := r.Svc.DirectPlayInfo(ctx, uc, e.PID, "")
+			item.ArtURL, item.Entry = art, i
+			out = append(out, item)
+			continue
+		}
+		// Resolved once for the book rather than once per part: it is
+		// the listener's setting for the book, not for a file in it.
+		voiceBoost := r.Svc.EffectiveVoiceBoost(ctx, uc, e.PID)
+		for _, piece := range pieces {
+			item, err := r.partItem(ctx, userID, e, piece, d, voiceBoost)
 			if err != nil {
-				if u, mime, ok := r.enclosureItem(ctx, userID, e.PID, ttl, force, err); ok {
-					item.URL, item.MimeType = base+u, mime
-					out = append(out, item)
-					continue
-				}
 				return nil, err
 			}
-			if res.HasSpan {
-				return nil, connect.InvalidError{
-					Msg:    "this track is a window into a larger file and needs the streaming engine to cast: " + e.PID,
-					Code:   "feature-unavailable",
-					Params: map[string]string{"feature": "windowed-track", "pid": e.PID},
-				}
-			}
-			token, _ := r.Media.MintFor(userID, e.PID, ttl)
-			item.URL = base + "/media/download?pid=" + url.QueryEscape(e.PID) +
-				"&mt=" + url.QueryEscape(token) + "&id=" + url.QueryEscape(res.File.ETag)
-			item.MimeType = res.File.MimeType
+			item.ArtURL, item.Entry = art, i
+			out = append(out, item)
 		}
-		out = append(out, item)
 	}
 	return out, nil
+}
+
+// wholeItem renders one queue entry served as itself: a track, an
+// episode, or a single-file book.
+//
+// This is where the awkward cases live, and they are all properties of
+// a whole item: an episode whose audio was never fetched relays from
+// the feed, and a track carved out of a larger file is refused where
+// there is no engine to cut it. A book's parts are neither, which is
+// why they take their own path.
+func (r *ConnectResolver) wholeItem(ctx context.Context, uc *service.UserCtx, userID string, e connect.QueueEntry, d delivery) (connect.MediaItem, error) {
+	item := connect.MediaItem{PID: e.PID, Title: e.Title, Artist: e.Artist, DurationMS: e.DurationMS}
+	if r.Bridge != nil {
+		// The stored voice boost setting routes here exactly as it does
+		// at play-info: a device endpoint has no local DSP, so the
+		// engine applies it server side when the user asked.
+		info, err := r.Bridge.PlayInfoFor(ctx, userID, e.PID, flow.PlayOptions{
+			TTL:           d.ttl,
+			ForceFormat:   d.force,
+			DeviceFormats: d.formats,
+			VoiceBoost:    r.Svc.EffectiveVoiceBoost(ctx, uc, e.PID),
+		})
+		if err != nil {
+			if u, mime, ok := r.enclosureItem(ctx, userID, e.PID, d.ttl, d.force, err); ok {
+				item.URL, item.MimeType = d.base+u, mime
+				return item, nil
+			}
+			return connect.MediaItem{}, err
+		}
+		item.URL, item.MimeType = d.base+info.URL, info.MimeType
+		return item, nil
+	}
+	res, err := r.Svc.DirectPlayInfo(ctx, uc, e.PID, "")
+	if err != nil {
+		if u, mime, ok := r.enclosureItem(ctx, userID, e.PID, d.ttl, d.force, err); ok {
+			item.URL, item.MimeType = d.base+u, mime
+			return item, nil
+		}
+		return connect.MediaItem{}, err
+	}
+	if res.HasSpan {
+		return connect.MediaItem{}, connect.InvalidError{
+			Msg:    "this track is a window into a larger file and needs the streaming engine to cast: " + e.PID,
+			Code:   "feature-unavailable",
+			Params: map[string]string{"feature": "windowed-track", "pid": e.PID},
+		}
+	}
+	item.URL = r.downloadURL(userID, e.PID, res.File.ETag, "", d)
+	item.MimeType = res.File.MimeType
+	return item, nil
+}
+
+// partItem renders one part of a multi-file audiobook from the
+// resolution BookPieces already did: everything the mint reads is in
+// the piece, so nothing here goes back to the catalog for it.
+func (r *ConnectResolver) partItem(ctx context.Context, userID string, e connect.QueueEntry, piece service.PlayPiece, d delivery, voiceBoost bool) (connect.MediaItem, error) {
+	item := connect.MediaItem{
+		PID:         e.PID,
+		Title:       e.Title,
+		Artist:      e.Artist,
+		DurationMS:  piece.Part.DurationMS,
+		PartStartMS: piece.Part.StartMS,
+	}
+	if r.Bridge != nil {
+		info, err := r.Bridge.PlayInfoForSource(ctx, userID, e.PID, piece.Src, flow.PlayOptions{
+			TTL:           d.ttl,
+			ForceFormat:   d.force,
+			DeviceFormats: d.formats,
+			FilePID:       piece.Part.FilePID,
+			VoiceBoost:    voiceBoost,
+		})
+		if err != nil {
+			return connect.MediaItem{}, err
+		}
+		item.URL, item.MimeType = d.base+info.URL, info.MimeType
+		return item, nil
+	}
+	item.URL = r.downloadURL(userID, e.PID, piece.File.ETag, piece.Part.FilePID, d)
+	item.MimeType = piece.File.MimeType
+	return item, nil
+}
+
+// downloadURL builds the original-bytes URL a device fetches on a
+// server running without the engine. filePID names one file of a
+// multi-file book, the same selector play-info hangs on a download
+// URL: the pid names the book, and this names the file inside it.
+func (r *ConnectResolver) downloadURL(userID, pid, etag, filePID string, d delivery) string {
+	token, _ := r.Media.MintFor(userID, pid, d.ttl)
+	u := d.base + "/media/download?pid=" + url.QueryEscape(pid) +
+		"&mt=" + url.QueryEscape(token) + "&id=" + url.QueryEscape(etag)
+	if filePID != "" {
+		u += "&f=" + url.QueryEscape(filePID)
+	}
+	return u
 }
 
 // Timeline renders the queue as one gapless HLS stream when the engine
 // supports timelines and every entry is a whole file. A nil result
 // means "use StreamItems".
+//
+// A multi-file audiobook in the queue is one of the things that means
+// it. Such a book is several files with a reading order, which a
+// timeline has no way to carry: the boundary table places one member
+// per entry. The queue then loads per item, and the music in it loses
+// the seamless render until the book leaves - a queue mixing the two is
+// rare, and its crossfade would be zeroed at the book anyway.
 func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries []connect.QueueEntry, base string) (*connect.TimelineMedia, error) {
 	if r.Bridge == nil || !r.Bridge.TimelinesSupported() {
 		return nil, nil
@@ -188,6 +253,13 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 	}
 	members := make([]flow.TimelineMember, 0, len(entries))
 	for _, e := range entries {
+		parts, err := r.Svc.BookParts(ctx, e.PID)
+		if err != nil {
+			return nil, err
+		}
+		if len(parts) > 0 {
+			return nil, nil
+		}
 		src, err := r.Svc.StreamSource(ctx, e.PID, "")
 		if err != nil {
 			return nil, nil
@@ -364,6 +436,11 @@ func connectHTTP(err error) (status int, body Error, ok bool) {
 		return http.StatusNotFound, errObj("not-found", "no such endpoint or session is visible to you"), true
 	case errors.Is(err, connect.ErrEndpointOffline):
 		return http.StatusConflict, errObj("endpoint-offline", err.Error()), true
+	case errors.Is(err, connect.ErrEndpointBusy):
+		// The server's to say, not an endpoint's, and so not routed
+		// through the refusal whitelist: the device answered a question
+		// about what it was doing and this is that answer.
+		return http.StatusConflict, errObj("endpoint-busy", err.Error()), true
 	case errors.Is(err, connect.ErrForbidden):
 		return http.StatusForbidden, errObj("forbidden", err.Error()), true
 	case errors.Is(err, connect.ErrTimeout):
@@ -638,28 +715,50 @@ func (s *Server) GetCastPreflight(ctx context.Context, _ GetCastPreflightRequest
 	if _, _, err := s.requireUserCtx(ctx); err != nil {
 		return nil, err
 	}
-	type candidate struct {
-		base   string
-		source string
-	}
-	var candidates []candidate
+	var bases []string
 	if s.bases.Public != "" {
-		candidates = append(candidates, candidate{base: s.bases.Public, source: "configured"})
+		bases = append(bases, s.bases.Public)
 	}
 	if s.bases.LAN != "" && s.bases.LAN != s.bases.Public {
-		candidates = append(candidates, candidate{base: s.bases.LAN, source: "detected"})
+		bases = append(bases, s.bases.LAN)
 	}
-	// The probes are independent and each waits up to its timeout;
-	// they run concurrently so two dead bases cost one timeout, not
-	// two stacked.
-	out := GetCastPreflight200JSONResponse{Bases: make([]CastPreflightBase, len(candidates))}
+	return GetCastPreflight200JSONResponse{Bases: s.reachability(ctx, bases)}, nil
+}
+
+// baseSource says where a candidate advertise base came from, in the
+// vocabulary the preflight schema documents.
+func (s *Server) baseSource(base string) string {
+	switch base {
+	case s.bases.Public:
+		return "configured"
+	case s.bases.LAN:
+		return "detected"
+	case s.bases.Loopback:
+		return "loopback"
+	}
+	return "unknown"
+}
+
+// reachability builds one server-side verdict per base: whether this
+// server can fetch itself through the address, plus the plain-language
+// caveats a device would run into.
+//
+// The fetches are independent and each waits up to its timeout, so
+// they run concurrently: two dead bases cost one timeout rather than
+// two stacked.
+func (s *Server) reachability(ctx context.Context, bases []string) []CastPreflightBase {
+	out := make([]CastPreflightBase, len(bases))
 	client := &http.Client{Timeout: 3 * time.Second}
-	done := make(chan struct{}, len(candidates))
-	for i, c := range candidates {
-		s.group.GoOnce(ctx, "cast-preflight-probe", func(context.Context) error {
+	done := make(chan struct{}, len(bases))
+	for i, base := range bases {
+		// The bool matters: a cancelled context makes GoOnce refuse to
+		// spawn, and a worker that never runs never signals - so
+		// ignoring it is a handler that waits forever on a request
+		// nobody is listening to any more.
+		if !s.group.GoOnce(ctx, "cast-preflight-probe", func(context.Context) error {
 			defer func() { done <- struct{}{} }()
-			entry := CastPreflightBase{Base: c.base, Source: c.source, Notes: []string{}}
-			resp, err := client.Get(strings.TrimRight(c.base, "/") + "/api/v1/health")
+			entry := CastPreflightBase{Base: base, Source: s.baseSource(base), Notes: []string{}}
+			resp, err := client.Get(strings.TrimRight(base, "/") + "/api/v1/health")
 			if err != nil {
 				entry.Reachable = false
 				entry.Notes = append(entry.Notes, "the server could not reach itself through this address: "+err.Error())
@@ -670,7 +769,7 @@ func (s *Server) GetCastPreflight(ctx context.Context, _ GetCastPreflightRequest
 					entry.Notes = append(entry.Notes, fmt.Sprintf("this address answered status %d instead of the health check", resp.StatusCode))
 				}
 			}
-			if u, err := url.Parse(c.base); err == nil {
+			if u, err := url.Parse(base); err == nil {
 				if u.Scheme == "https" {
 					entry.Notes = append(entry.Notes, "cast devices require a publicly trusted certificate for HTTPS addresses; private or self-signed authorities fail silently")
 				} else {
@@ -681,12 +780,119 @@ func (s *Server) GetCastPreflight(ctx context.Context, _ GetCastPreflightRequest
 					entry.Notes = append(entry.Notes, "the device must resolve this name itself; many cast devices ignore LAN DNS, so an IP address is more reliable")
 				}
 			}
-			out.Bases[i] = entry
+			out[i] = entry
 			return nil
-		})
+		}) {
+			out[i] = CastPreflightBase{
+				Base:      base,
+				Source:    s.baseSource(base),
+				Reachable: false,
+				Notes:     []string{"the check was cancelled before this address was tried"},
+			}
+			done <- struct{}{}
+		}
 	}
-	for range candidates {
+	for range bases {
 		<-done
+	}
+	return out
+}
+
+// probeTokenTTL covers a whole probe run - every base, each with its
+// own wait - and the slack a device takes to actually fetch.
+const probeTokenTTL = 5 * time.Minute
+
+// probeMimeFor picks how to describe the probe to the endpoint about
+// to fetch it.
+//
+// Renderers refuse a resource whose type is absent from the sink they
+// advertised, and they disagree about how to spell wav, so a renderer
+// that named one of its spellings is handed that one - the same
+// courtesy the stream resolver pays a declared format. A renderer that
+// declared nothing, or nothing wav-shaped, gets the plain type: it may
+// still take it, and where it does not the fault it answers with says
+// so in the verdict.
+func probeMimeFor(target connect.EndpointTarget) string {
+	for _, f := range target.Formats {
+		switch strings.ToLower(strings.TrimSpace(f)) {
+		case "audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave":
+			return f
+		}
+	}
+	return "audio/wav"
+}
+
+// ProbeCastEndpoint is the device half of the connection check: the
+// device fetches a second of silence through each advertise base and
+// says what happened, which is the failure mode a server checking
+// itself is blind to.
+func (s *Server) ProbeCastEndpoint(ctx context.Context, req ProbeCastEndpointRequestObject) (ProbeCastEndpointResponseObject, error) {
+	_, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.connect == nil {
+		return ProbeCastEndpoint404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such endpoint or session is visible to you"))}, nil
+	}
+	if s.media == nil {
+		return nil, errors.New("media tokens are not configured on this server")
+	}
+	// One token for the whole run: it names the probe rather than any
+	// item, so it opens nothing in the library whichever base the
+	// device fetches it from. Each address gets its own marker on the
+	// URL, so a request arriving back here says which one the device
+	// could reach.
+	token, _ := s.media.MintFor(p.User.ID, probePID, probeTokenTTL)
+	s.probes.begin(token)
+	defer s.probes.end(token)
+	markers := map[string]string{}
+	media := connect.ProbeMedia{
+		Item: func(target connect.EndpointTarget, base string) connect.MediaItem {
+			marker := strconv.Itoa(len(markers))
+			markers[base] = marker
+			return connect.MediaItem{
+				PID:        probePID,
+				URL:        base + mediaProbeURL(token, marker),
+				MimeType:   probeMimeFor(target),
+				Title:      "WaxDeck connection check",
+				DurationMS: probeSeconds * 1000,
+			}
+		},
+		Fetched: func(base string) bool { return s.probes.fetched(token, markers[base]) },
+	}
+	res, err := s.connect.Probe(ctx, p.User.ID, req.EndpointId, media)
+	if err != nil {
+		if status, body, ok := connectHTTP(err); ok {
+			switch status {
+			case http.StatusNotFound:
+				return ProbeCastEndpoint404JSONResponse{NotFoundJSONResponse(body)}, nil
+			case http.StatusForbidden:
+				return ProbeCastEndpoint403JSONResponse{ForbiddenJSONResponse(body)}, nil
+			case http.StatusConflict:
+				return ProbeCastEndpoint409JSONResponse{PlaybackConflictJSONResponse(body)}, nil
+			}
+		}
+		return nil, err
+	}
+	// The bases the device was actually tried against, in that order,
+	// each carrying the server-side row beside the device's verdict:
+	// one row saying both halves is what makes an answer readable.
+	bases := make([]string, len(res.Bases))
+	for i, v := range res.Bases {
+		bases[i] = v.Base
+	}
+	out := ProbeCastEndpoint200JSONResponse{
+		EndpointId: res.EndpointID,
+		Name:       res.Name,
+		Kind:       res.Kind,
+		Bases:      s.reachability(ctx, bases),
+	}
+	for i, v := range res.Bases {
+		verdict := CastDeviceVerdict{Verdict: v.Verdict, LatencyMs: v.LatencyMS}
+		if v.Detail != "" {
+			verdict.Detail = &v.Detail
+		}
+		out.Bases[i].Device = &verdict
 	}
 	return out, nil
 }

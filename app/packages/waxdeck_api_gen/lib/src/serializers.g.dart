@@ -49,6 +49,8 @@ Serializers _$serializers =
           ..add(CandidateComponent.serializer)
           ..add(CandidatePairing.serializer)
           ..add(CandidateSummary.serializer)
+          ..add(CastDeviceProbe.serializer)
+          ..add(CastDeviceVerdict.serializer)
           ..add(CastPreflight.serializer)
           ..add(CastPreflightBase.serializer)
           ..add(CatalogSyncEntry.serializer)
@@ -449,6 +451,12 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(int)]),
             () => ListBuilder<int>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(CastPreflightBase),
+            ]),
+            () => ListBuilder<CastPreflightBase>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [

@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/cast_device_verdict.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -13,16 +14,17 @@ part 'cast_preflight_base.g.dart';
 ///
 /// Properties:
 /// * [base_] - The base URL a cast device would fetch media from.
-/// * [source_] - Where the candidate came from: `configured` (the public base) or `detected` (the auto-detected LAN address). Open string. 
+/// * [source_] - Where the candidate came from: `configured` (the public base), `detected` (the auto-detected LAN address), or `loopback` (this server's own interface, which only the endpoints running beside it can fetch). Open string. 
 /// * [reachable] - Whether the server could fetch its own health endpoint through this base. 
 /// * [notes] - Plain-language observations: scheme and certificate caveats, name-resolution warnings, why a base is likely or unlikely to work from a cast device. 
+/// * [device] - What a real device made of this base. Present only in a device probe's answer; the server-side check has no device to ask. 
 @BuiltValue()
 abstract class CastPreflightBase implements Built<CastPreflightBase, CastPreflightBaseBuilder> {
   /// The base URL a cast device would fetch media from.
   @BuiltValueField(wireName: r'base')
   String get base_;
 
-  /// Where the candidate came from: `configured` (the public base) or `detected` (the auto-detected LAN address). Open string. 
+  /// Where the candidate came from: `configured` (the public base), `detected` (the auto-detected LAN address), or `loopback` (this server's own interface, which only the endpoints running beside it can fetch). Open string. 
   @BuiltValueField(wireName: r'source')
   String get source_;
 
@@ -33,6 +35,10 @@ abstract class CastPreflightBase implements Built<CastPreflightBase, CastPreflig
   /// Plain-language observations: scheme and certificate caveats, name-resolution warnings, why a base is likely or unlikely to work from a cast device. 
   @BuiltValueField(wireName: r'notes')
   BuiltList<String> get notes;
+
+  /// What a real device made of this base. Present only in a device probe's answer; the server-side check has no device to ask. 
+  @BuiltValueField(wireName: r'device')
+  CastDeviceVerdict? get device;
 
   CastPreflightBase._();
 
@@ -77,6 +83,13 @@ class _$CastPreflightBaseSerializer implements PrimitiveSerializer<CastPreflight
       object.notes,
       specifiedType: const FullType(BuiltList, [FullType(String)]),
     );
+    if (object.device != null) {
+      yield r'device';
+      yield serializers.serialize(
+        object.device,
+        specifiedType: const FullType(CastDeviceVerdict),
+      );
+    }
   }
 
   @override
@@ -127,6 +140,13 @@ class _$CastPreflightBaseSerializer implements PrimitiveSerializer<CastPreflight
             specifiedType: const FullType(BuiltList, [FullType(String)]),
           ) as BuiltList<String>;
           result.notes.replace(valueDes);
+          break;
+        case r'device':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(CastDeviceVerdict),
+          ) as CastDeviceVerdict;
+          result.device.replace(valueDes);
           break;
         default:
           unhandled.add(key);

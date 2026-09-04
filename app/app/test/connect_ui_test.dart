@@ -955,19 +955,158 @@ void main() {
     expect(find.text('Detected on this network, reachable'), findsOneWidget);
   });
 
-  testWidgets('a multi-part book refused by a device offers a way out', (
+  testWidgets('the check tests on a device and renders both verdicts', (
     tester,
   ) async {
-    final repo = FakeRepository(items: [testItem('bk-1')])
+    final repo = FakeRepository(items: [testItem('tr-current')])
       ..playerEndpoints = [_endpoint]
-      ..createSessionError = const WaxDeckApiException(
-        code: 'feature-unavailable',
-        message: 'multi-part audiobooks cannot play on this endpoint yet: bk-1',
+      ..preflightBases = const [
+        CastPreflightBase(
+          base: 'http://192.168.1.20:4420',
+          source: 'detected',
+          reachable: true,
+          notes: [],
+        ),
+      ]
+      ..deviceProbes = const <String, CastDeviceProbe>{
+        'pe-speaker': CastDeviceProbe(
+          endpointId: 'pe-speaker',
+          name: 'Kitchen speaker',
+          kind: 'cast',
+          bases: [
+            CastPreflightBase(
+              base: 'https://waxdeck.example',
+              source: 'configured',
+              reachable: true,
+              notes: [],
+              device: CastDeviceVerdict(
+                verdict: 'failed',
+                latencyMs: 120,
+                detail: 'LOAD_FAILED',
+              ),
+            ),
+            CastPreflightBase(
+              base: 'http://192.168.1.20:4420',
+              source: 'detected',
+              reachable: true,
+              notes: [],
+              device: CastDeviceVerdict(verdict: 'played', latencyMs: 420),
+            ),
+          ],
+        ),
+      };
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: _container(repo: repo),
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerCheck));
+    await tester.pumpAndSettle();
+
+    // Nothing is driven until somebody asks: the sheet opens without
+    // taking a speaker over.
+    expect(repo.probedEndpoints, isEmpty);
+
+    final row = find.bySemanticsIdentifier(
+      SemanticsIds.preflightDevice('pe-speaker'),
+    );
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(repo.probedEndpoints, ['pe-speaker']);
+
+    // The device's answer per base, its own words included, beside the
+    // server-side row the sheet already had.
+    expect(find.text('The device refused this address'), findsOneWidget);
+    expect(find.text('LOAD_FAILED'), findsOneWidget);
+    expect(find.text('Played, after 420 ms'), findsOneWidget);
+  });
+
+  testWidgets('a device that is busy says so rather than being taken over', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_endpoint]
+      ..preflightBases = const []
+      ..deviceProbeError = const WaxDeckApiException(
+        code: 'endpoint-busy',
+        message: 'YouTube is running on this device',
+        statusCode: 409,
       );
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: _container(repo: repo),
-        child: routedHost(const _PickerHost(currentPid: 'bk-1')),
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerCheck));
+    await tester.pumpAndSettle();
+    final row = find.bySemanticsIdentifier(
+      SemanticsIds.preflightDevice('pe-speaker'),
+    );
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    // The server's own sentence, because the code exists to name what
+    // is playing and a listener has to know what to go and stop.
+    expect(
+      find.textContaining('YouTube is running on this device'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('with no device on the network the check says what is missing', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = const []
+      ..preflightBases = const [];
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: _container(repo: repo),
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerCheck));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.preflightDevices),
+      findsOneWidget,
+    );
+    expect(find.text('No devices to test'), findsOneWidget);
+  });
+
+  testWidgets('a refusal from a device is worded as a way out', (tester) async {
+    final repo = FakeRepository(items: [testItem('tr-1')])
+      ..playerEndpoints = [_endpoint]
+      ..createSessionError = const WaxDeckApiException(
+        code: 'feature-unavailable',
+        message:
+            'this track is a window into a larger file and needs the '
+            'streaming engine to cast: tr-1',
+        params: <String, String>{'feature': 'windowed-track', 'pid': 'tr-1'},
+      );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: _container(repo: repo),
+        child: routedHost(const _PickerHost(currentPid: 'tr-1')),
       ),
     );
     await tester.tap(find.text('open'));
@@ -977,15 +1116,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The server's typed refusal, rendered as the thing to do about it
-    // rather than as the sentence a server logs.
-    expect(
-      find.textContaining("can't play on Kitchen speaker yet"),
-      findsOneWidget,
-    );
-    expect(
-      find.textContaining('Play it on this device instead'),
-      findsOneWidget,
-    );
+    // The refusal's params, rendered as the thing to do about it rather
+    // than as the sentence a server logs.
+    expect(find.textContaining('Play it on this one instead'), findsOneWidget);
   });
 }

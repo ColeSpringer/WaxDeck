@@ -118,6 +118,32 @@ type driver struct {
 	pollDone   chan struct{}
 }
 
+// Idle reports whether the renderer is free to be taken over. Setting
+// a transport URI replaces what a renderer is playing and loses where
+// it was, so anything doing that for a diagnosis rather than for a
+// listener asks first: playing, starting, or paused is somebody's
+// music, whether it came from WaxDeck or from the phone that was here
+// before it.
+//
+// A transport read that fails answers idle: the load about to fail
+// with the device's own fault says more than a refusal invented here.
+func (d *driver) Idle(ctx context.Context) (bool, string) {
+	state, err := d.cl.transportState(ctx)
+	if err != nil {
+		return true, ""
+	}
+	switch state {
+	case statePlaying, stateTransitioning:
+		return false, "this renderer is already playing something"
+	case statePaused:
+		// Paused is the commonest way a device sits in the middle of
+		// something: a film somebody walked away from is still theirs,
+		// and replacing the transport URI loses where they were.
+		return false, "this renderer has something paused"
+	}
+	return true, ""
+}
+
 // Load replaces the renderer's queue with items starting at index. The
 // item's mime type is used as given: the caller already applied the
 // transcode floor policy, so by here every URL is device-playable.

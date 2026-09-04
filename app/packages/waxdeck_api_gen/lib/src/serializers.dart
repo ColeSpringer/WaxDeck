@@ -49,6 +49,8 @@ import 'package:waxdeck_api_gen/src/model/bulk_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/candidate_component.dart';
 import 'package:waxdeck_api_gen/src/model/candidate_pairing.dart';
 import 'package:waxdeck_api_gen/src/model/candidate_summary.dart';
+import 'package:waxdeck_api_gen/src/model/cast_device_probe.dart';
+import 'package:waxdeck_api_gen/src/model/cast_device_verdict.dart';
 import 'package:waxdeck_api_gen/src/model/cast_preflight.dart';
 import 'package:waxdeck_api_gen/src/model/cast_preflight_base.dart';
 import 'package:waxdeck_api_gen/src/model/catalog_sync_entry.dart';
@@ -424,6 +426,8 @@ part 'serializers.g.dart';
   CandidateComponent,
   CandidatePairing,
   CandidateSummary,
+  CastDeviceProbe,
+  CastDeviceVerdict,
   CastPreflight,
   CastPreflightBase,
   CatalogSyncEntry,

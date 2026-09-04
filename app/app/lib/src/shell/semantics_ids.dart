@@ -206,6 +206,10 @@ abstract final class SemanticsIds {
   static const String pickerThisDevice = 'device-picker-this-device';
   static const String preflight = 'cast-preflight';
   static String preflightBase(Object index) => 'cast-preflight-base-$index';
+  static String preflightDevice(Object id) => 'cast-preflight-device-$id';
+  static String preflightDeviceBase(Object index) =>
+      'cast-preflight-device-base-$index';
+  static const String preflightDevices = 'cast-preflight-devices';
   static const String preflightRetry = 'cast-preflight-retry';
   static const String remoteLeave = 'remote-leave';
   static const String remoteNext = 'remote-next';

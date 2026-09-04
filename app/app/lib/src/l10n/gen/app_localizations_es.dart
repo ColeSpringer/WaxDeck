@@ -2435,16 +2435,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get devicesMore => 'Más';
 
   @override
-  String devicesMultiPartAudiobook(String endpoint) {
-    return 'Los audiolibros de varias partes todavía no se pueden reproducir en $endpoint. Reprodúcelo en este dispositivo.';
-  }
-
-  @override
   String get devicesNoAddresses => 'No hay ninguna dirección que probar';
 
   @override
   String get devicesNoAddressesMessage =>
       'A este servidor no se le ha indicado una dirección pública y no ha podido detectar ninguna en la red. La transmisión necesita una; configúrala en los ajustes del servidor.';
+
+  @override
+  String get devicesNoDevicesToTest => 'No hay dispositivos que probar';
+
+  @override
+  String get devicesNoDevicesToTestMessage =>
+      'No ha aparecido ningún Chromecast ni reproductor en esta red. La detección necesita multidifusión, que no atraviesa la red predeterminada de Docker.';
 
   @override
   String get devicesNothingElsewhere => 'No hay nada sonando en otro sitio';
@@ -2486,6 +2488,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get devicesPlayingRadioHere => 'Aquí suena la radio';
 
   @override
+  String get devicesProbeFailed => 'El dispositivo ha rechazado esta dirección';
+
+  @override
+  String devicesProbePlayed(int latency) {
+    return 'Ha sonado, tras $latency ms';
+  }
+
+  @override
+  String get devicesProbeTimeout =>
+      'El dispositivo no ha empezado a reproducir';
+
+  @override
   String get devicesRadioStaysHere =>
       'Las emisoras suenan en el dispositivo que las sintonizó';
 
@@ -2508,6 +2522,16 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get devicesTakeOverOrLeave => 'Toma el control o déjalo sonando';
+
+  @override
+  String get devicesTestOnDevice => 'Probar en un dispositivo';
+
+  @override
+  String get devicesTestOnDeviceBlurb =>
+      'La comprobación de arriba es este servidor accediéndose a sí mismo. Elige un altavoz y buscará un segundo de silencio por cada dirección y dirá qué ha pasado.';
+
+  @override
+  String get devicesTesting => 'Probando. Tarda unos segundos por dirección.';
 
   @override
   String get devicesThisDevice => 'Este dispositivo';
@@ -2761,6 +2785,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Los archivos de Audible con DRM no se pueden reproducir.';
 
   @override
+  String get errorEndpointBusy =>
+      'Ese dispositivo está ocupado con otra cosa. Deténlo allí e inténtalo de nuevo.';
+
+  @override
   String get errorEndpointFailed =>
       'Ese dispositivo no ha podido hacerlo. Sigue conectado, así que merece la pena intentarlo de nuevo.';
 
@@ -2802,10 +2830,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get errorLocalUnregistered =>
       'Este dispositivo todavía no está listo como reproductor. Inténtalo de nuevo en un momento.';
-
-  @override
-  String get errorMultiPartAudiobook =>
-      'Los audiolibros de varias partes todavía no se pueden reproducir en otro dispositivo. Reprodúcelo en este.';
 
   @override
   String get errorNetwork =>

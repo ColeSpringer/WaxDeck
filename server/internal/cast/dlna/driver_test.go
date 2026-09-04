@@ -2,6 +2,7 @@ package dlna
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -207,6 +208,54 @@ func TestDriverSelfAdvanceAndFinish(t *testing.T) {
 	r.Advance(31 * time.Second)
 	ev := waitEvent(t, d, "finished", func(ev connect.DriverEvent) bool { return ev.Finished })
 	if ev.Playing || ev.Index != 1 {
+		t.Errorf("finished event = %+v", ev)
+	}
+}
+
+// TestDriverAdvancesAcrossParts is a multi-file audiobook on a
+// renderer: one entry handed over as one item per part, of the unequal
+// lengths real parts have. The driver has nothing to know about books -
+// it walks whatever it was handed - and this is what says so.
+func TestDriverAdvancesAcrossParts(t *testing.T) {
+	r := testrenderer.Start(t)
+	d := dialDriver(t, r)
+	parts := []time.Duration{4 * time.Second, 5 * time.Second, 6 * time.Second}
+	items := make([]connect.MediaItem, len(parts))
+	var start int64
+	for i, dur := range parts {
+		items[i] = connect.MediaItem{
+			PID:         "bk-one",
+			URL:         fmt.Sprintf("http://media.local/bk-one.mp3?f=fl-%d", i),
+			MimeType:    "audio/mpeg",
+			Title:       "A Book",
+			Artist:      "A Narrator",
+			DurationMS:  dur.Milliseconds(),
+			Entry:       0,
+			PartStartMS: start,
+		}
+		start += dur.Milliseconds()
+		r.SetDuration(items[i].URL, dur)
+	}
+
+	if err := d.Load(context.Background(), items, 0, 0, true); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	waitEvent(t, d, "playing part one", func(ev connect.DriverEvent) bool { return ev.Playing && ev.Index == 0 })
+
+	// Each part ends at its own length, and the driver starts the next
+	// file. Positions stay part-relative on the wire; reading them as
+	// one book is the session manager's job.
+	r.Advance(5 * time.Second)
+	waitEvent(t, d, "advance to part two", func(ev connect.DriverEvent) bool { return ev.Playing && ev.Index == 1 })
+	r.Advance(6 * time.Second)
+	waitEvent(t, d, "advance to part three", func(ev connect.DriverEvent) bool { return ev.Playing && ev.Index == 2 })
+	if uris := r.URIsSet(); len(uris) != 3 || uris[2] != items[2].URL {
+		t.Fatalf("uris set = %v, want one per part in reading order", uris)
+	}
+
+	r.Advance(7 * time.Second)
+	ev := waitEvent(t, d, "finished", func(ev connect.DriverEvent) bool { return ev.Finished })
+	if ev.Playing || ev.Index != 2 {
 		t.Errorf("finished event = %+v", ev)
 	}
 }

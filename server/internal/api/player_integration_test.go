@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"github.com/colespringer/waxdeck/fixtures"
+	"github.com/colespringer/waxdeck/server/internal/cast/castv2/testreceiver"
 )
 
 // wsClient is a test-side command-bus client: one socket, a reader
@@ -737,12 +740,11 @@ func TestCastPreflight(t *testing.T) {
 		t.Fatalf("bases %+v", out.Bases)
 	}
 	b := out.Bases[0]
-	if b.Source != "detected" || b.Reachable {
-		// The harness LAN base is a documentation address; unreachable
-		// is the honest verdict, with notes saying why.
-		if b.Reachable {
-			t.Fatalf("documentation address reachable: %+v", b)
-		}
+	// The harness advertises its own address, which is the reachable
+	// case: the server fetching its own health check through the
+	// address a device would use is what this endpoint answers.
+	if b.Base != h.lanBase || b.Source != "detected" || !b.Reachable {
+		t.Fatalf("base %+v, want the advertise address reachable", b)
 	}
 	if len(b.Notes) == 0 {
 		t.Fatalf("no notes: %+v", b)
@@ -787,35 +789,76 @@ func pGet(t *testing.T, h *harness, path, token string, out any) {
 	}
 }
 
-// The multi-part refusal's phrase is a contract with the client's device
-// picker, which turns this one `feature-unavailable` into an offer to play
-// the book here. The code cannot carry that on its own - a windowed track
-// answers the same code - so the phrase is what the picker keys on, and
-// this is what makes rewording it a build failure rather than a silently
-// restored dead end. See app/app/lib/src/connect/device_picker.dart.
-func TestMultiPartRefusalWording(t *testing.T) {
+// TestBookPlaysOnDeviceEndpoint is the multi-file audiobook reaching a
+// cast device: one queue entry, one media item per part on the
+// receiver, and positions on the book's own timeline in both
+// directions - a seek is read as book milliseconds and the session
+// reports them back the same way.
+func TestBookPlaysOnDeviceEndpoint(t *testing.T) {
 	t.Parallel()
-	const pid = "bk-01HZZZZZZZZZZZZZZZZZZZZZZZ"
-	refusal := multiPartRefusal(pid)
-	if refusal.Code != "feature-unavailable" {
-		t.Errorf("code = %q, want feature-unavailable", refusal.Code)
+	h := newHarness(t)
+	ctx := context.Background()
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
 	}
-	// The params are what a controller keys on: `feature-unavailable`
-	// covers every reason a target cannot play something, so the code
-	// alone does not say which refusal this is.
-	if got := refusal.Params["feature"]; got != "multi-part-audiobook" {
-		t.Errorf("params[feature] = %q, want multi-part-audiobook", got)
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) != 1 {
+		t.Fatalf("audiobooks = %d, want the fixture's one", len(books.Items))
 	}
-	if got := refusal.Params["pid"]; got != pid {
-		t.Errorf("params[pid] = %q, want %q", got, pid)
+	book := books.Items[0]
+
+	recv := testreceiver.Start(t)
+	dev := recv.Device()
+	ep, err := h.connect.EndpointOnline(ctx, "cast", dev.Key(), "Kitchen speaker", recv.Addr(), true, false,
+		dev.Dial(h.group, nil))
+	if err != nil {
+		t.Fatal(err)
 	}
-	// The phrase stays pinned beside them: it is what a client that
-	// predates params reads, and the picker's fallback still matches it.
-	if !strings.Contains(refusal.Msg, "multi-part audiobook") {
-		t.Errorf("message = %q, must contain %q for the picker to recognise it",
-			refusal.Msg, "multi-part audiobook")
+
+	var sess struct {
+		Id         string
+		Index      int
+		PositionMs int64
+		Entries    []struct{ Pid string }
 	}
-	if !strings.Contains(refusal.Msg, pid) {
-		t.Errorf("message = %q, must name the pid the spec says it names", refusal.Msg)
+	pPost(t, h, "/api/v1/player/sessions", h.token, map[string]any{
+		"endpointId": ep.ID,
+		"itemPids":   []string{book.Pid},
+	}, http.StatusCreated, &sess)
+	if len(sess.Entries) != 1 || sess.Entries[0].Pid != book.Pid {
+		t.Fatalf("a book is one queue entry: %+v", sess.Entries)
+	}
+	loaded := recv.LoadedItems()
+	if len(loaded) != 3 {
+		t.Fatalf("receiver got %d items, want one per part of the fixture book", len(loaded))
+	}
+	for _, it := range loaded {
+		if it.Title != book.Title {
+			t.Fatalf("a part names itself %q rather than the book: %+v", it.Title, it)
+		}
+	}
+	if loaded[0].ContentID == loaded[1].ContentID {
+		t.Fatalf("every part fetched the same bytes: %s", loaded[0].ContentID)
+	}
+
+	// The fixture's parts are 4s, 5s and 6s, so eight seconds into the
+	// book is four into part two.
+	controller := dialWS(t, h, h.token)
+	controller.send(map[string]any{"type": "cmd", "id": "s1", "sessionId": sess.Id, "verb": "seek", "positionMs": 8000})
+	controller.expect("ack")
+	waitFor2(t, func() bool { return len(recv.Loads()) >= 2 })
+	last := recv.Loads()[len(recv.Loads())-1]
+	if last.StartIndex != 1 || last.CurrentTimeSeconds < 3.5 || last.CurrentTimeSeconds > 4.5 {
+		t.Fatalf("seek to 8s of the book reloaded at item %d/%.1fs, want part two at 4s", last.StartIndex, last.CurrentTimeSeconds)
+	}
+
+	var after struct {
+		Index      int
+		PositionMs int64
+	}
+	pGet(t, h, "/api/v1/player/sessions/"+sess.Id, h.token, &after)
+	if after.Index != 0 || after.PositionMs < 8000 || after.PositionMs > 9000 {
+		t.Fatalf("session reads entry %d at %dms, want the book entry near 8000", after.Index, after.PositionMs)
 	}
 }

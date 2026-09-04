@@ -21,7 +21,7 @@ part 'playback_session.g.dart';
 /// * [authority] - `remote` or `mirror` (open string).
 /// * [playing] - Whether playback is running right now.
 /// * [index] - Zero-based index of the current entry.
-/// * [positionMs] - Position within the current entry at `positionAt`.
+/// * [positionMs] - Position within the current entry at `positionAt`, on that entry's own timeline. A multi-file audiobook is one entry whatever it is playing on, so this is the book position even where the device is fetching one part at a time. 
 /// * [positionAt] - Server-clock instant `positionMs` was true, millisecond precision. Extrapolate against the WebSocket clock offset. 
 /// * [rate] - Playback rate. 1.0 is normal speed.
 /// * [volume] - Endpoint volume, 0 to 1. Absent on endpoints without volume control. 
@@ -65,7 +65,7 @@ abstract class PlaybackSession implements Built<PlaybackSession, PlaybackSession
   @BuiltValueField(wireName: r'index')
   int get index;
 
-  /// Position within the current entry at `positionAt`.
+  /// Position within the current entry at `positionAt`, on that entry's own timeline. A multi-file audiobook is one entry whatever it is playing on, so this is the book position even where the device is fetching one part at a time. 
   @BuiltValueField(wireName: r'positionMs')
   int get positionMs;
 

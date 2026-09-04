@@ -444,7 +444,7 @@ class _DevicePickerSheet extends ConsumerWidget {
         SnackBar(content: Text(l10n.devicesPlayingOn(endpoint.name))),
       );
     } on WaxDeckApiException catch (e) {
-      _explain(l10n, messenger, e, endpoint: endpoint);
+      _explain(l10n, messenger, e);
     }
   }
 
@@ -524,38 +524,17 @@ class _DevicePickerSheet extends ConsumerWidget {
     unawaited(showCastPreflight(handles.rootContext));
   }
 
-  /// Says why a command was refused, in words that name a way out.
-  ///
-  /// [explainError] words every code, and this adds the one refinement
-  /// only the picker can make: a multi-part audiobook cannot play on a
-  /// cast device or a renderer, and naming the device it was sent to
-  /// turns a dead end into an offer.
-  ///
-  /// The refusal is keyed on the params the server now carries. The
-  /// phrase match beside it is the fallback for a server older than
-  /// those params; both die together when part-aware playback lands.
+  /// Says why a command was refused, replacing whatever is on screen:
+  /// a picker taps through several devices, and the last answer is the
+  /// one being read.
   static void _explain(
     AppLocalizations l10n,
     ScaffoldMessengerState messenger,
-    WaxDeckApiException error, {
-    PlayerEndpoint? endpoint,
-  }) {
-    final multiPart =
-        error.code == 'feature-unavailable' &&
-        (error.params?['feature'] == 'multi-part-audiobook' ||
-            error.message.contains('multi-part audiobook'));
-    // Named where there is a device to name, and general on the
-    // leave-and-transfer path, which has none. Without the second arm a
-    // pre-params server's refusal - recognised only by the phrase - would
-    // fall through to the umbrella sentence and lose the way out.
-    final message = switch ((multiPart, endpoint)) {
-      (true, final target?) => l10n.devicesMultiPartAudiobook(target.name),
-      (true, null) => l10n.errorMultiPartAudiobook,
-      _ => explainError(l10n, error),
-    };
+    WaxDeckApiException error,
+  ) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: Text(explainError(l10n, error))));
   }
 }
 

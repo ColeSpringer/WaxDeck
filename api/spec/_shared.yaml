@@ -159,8 +159,8 @@ components:
             same thing in prose, so a client that ignores this reads what
             it always read. Clients must ignore keys they do not know.
           example:
-            feature: multi-part-audiobook
-            pid: bk-01JZX5N8QW3F4V9T2B7KD3M9R6
+            feature: windowed-track
+            pid: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     MediaType:
       type: string

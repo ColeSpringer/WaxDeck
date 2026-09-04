@@ -1159,11 +1159,28 @@ PlayerEndpoint playerEndpointFromGen(gen.PlayerEndpoint ep) {
 // The generated names carry trailing underscores: `base` and `source`
 // collide with built_value's own members, so the generator escapes them.
 CastPreflightBase castPreflightBaseFromGen(gen.CastPreflightBase b) {
+  final device = b.device;
   return CastPreflightBase(
     base: b.base_,
     source: b.source_,
     reachable: b.reachable,
     notes: b.notes.toList(growable: false),
+    device: device == null
+        ? null
+        : CastDeviceVerdict(
+            verdict: device.verdict,
+            latencyMs: device.latencyMs,
+            detail: device.detail,
+          ),
+  );
+}
+
+CastDeviceProbe castDeviceProbeFromGen(gen.CastDeviceProbe p) {
+  return CastDeviceProbe(
+    endpointId: p.endpointId,
+    name: p.name,
+    kind: p.kind,
+    bases: p.bases.map(castPreflightBaseFromGen).toList(growable: false),
   );
 }
 

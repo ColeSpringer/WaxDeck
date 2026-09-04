@@ -1316,6 +1316,10 @@ func run() error {
 	// receiver or a DLNA renderer fetches the URL it was handed, and the
 	// only credential it can carry is the one in that URL.
 	mux.Handle("GET /media/art", httpm.instrument("media-art", srv.ServeMediaArt))
+	// A second of silence for the device half of the cast connection
+	// check, fetched by the device under the token in its URL like the
+	// art beside it.
+	mux.Handle("GET /media/probe.wav", httpm.instrument("media-probe", srv.ServeProbeAudio))
 	// Radio streams proxy through this origin under a media token,
 	// like /media/stream; the guarded client owns the URL policy.
 	mux.Handle("GET /media/radio/{pid}", httpm.instrumentStream("media-stream", srv.ServeRadio))

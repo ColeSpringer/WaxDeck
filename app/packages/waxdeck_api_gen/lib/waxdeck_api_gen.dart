@@ -71,6 +71,8 @@ export 'package:waxdeck_api_gen/src/model/bulk_edit_result.dart';
 export 'package:waxdeck_api_gen/src/model/candidate_component.dart';
 export 'package:waxdeck_api_gen/src/model/candidate_pairing.dart';
 export 'package:waxdeck_api_gen/src/model/candidate_summary.dart';
+export 'package:waxdeck_api_gen/src/model/cast_device_probe.dart';
+export 'package:waxdeck_api_gen/src/model/cast_device_verdict.dart';
 export 'package:waxdeck_api_gen/src/model/cast_preflight.dart';
 export 'package:waxdeck_api_gen/src/model/cast_preflight_base.dart';
 export 'package:waxdeck_api_gen/src/model/catalog_sync_entry.dart';

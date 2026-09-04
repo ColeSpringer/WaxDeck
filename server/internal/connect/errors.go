@@ -8,6 +8,10 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrEndpointOffline: the target endpoint is not connected.
 	ErrEndpointOffline = errors.New("endpoint offline")
+	// ErrEndpointBusy: the target device is in the middle of something
+	// the request would take it over from. Wrapped with what is
+	// playing, because "busy" without a name is not actionable.
+	ErrEndpointBusy = errors.New("endpoint busy")
 	// ErrForbidden: the caller may see this but not do that.
 	ErrForbidden = errors.New("forbidden")
 	// ErrTimeout: a routed command's target did not answer in time.

@@ -91,16 +91,6 @@
   "@devicesMore": {
     "description": "Accessible name of the overflow menu in the device sheet."
   },
-  "devicesMultiPartAudiobook": "Multi-part audiobooks can't play on {endpoint} yet. Play it on this device instead.",
-  "@devicesMultiPartAudiobook": {
-    "description": "Snackbar when handing a multi-part audiobook to a device that cannot play one. {endpoint} is that device's user-chosen name.",
-    "placeholders": {
-      "endpoint": {
-        "type": "String",
-        "example": "Kitchen speaker"
-      }
-    }
-  },
   "devicesNoAddresses": "No addresses to try",
   "@devicesNoAddresses": {
     "description": "Empty state of the connection check."
@@ -108,6 +98,14 @@
   "devicesNoAddressesMessage": "This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.",
   "@devicesNoAddressesMessage": {
     "description": "Empty state of the connection check, saying what to do about it."
+  },
+  "devicesNoDevicesToTest": "No devices to test",
+  "@devicesNoDevicesToTest": {
+    "description": "Empty state in the connection check when no cast device or renderer has been found."
+  },
+  "devicesNoDevicesToTestMessage": "No Chromecast or renderer has turned up on this network. Discovery needs multicast, which does not cross Docker's default network.",
+  "@devicesNoDevicesToTestMessage": {
+    "description": "Body of the empty state when the connection check has no device to run against."
   },
   "devicesNothingElsewhere": "Nothing playing elsewhere",
   "@devicesNothingElsewhere": {
@@ -165,6 +163,24 @@
   "@devicesPlayingRadioHere": {
     "description": "Under this device's row while live radio holds the engine."
   },
+  "devicesProbeFailed": "The device refused this address",
+  "@devicesProbeFailed": {
+    "description": "Verdict line when the device took the probe URL and could not play it."
+  },
+  "devicesProbePlayed": "Played, after {latency} ms",
+  "@devicesProbePlayed": {
+    "description": "Verdict line when the device fetched the probe and started playing. {latency} is how long that took, in milliseconds.",
+    "placeholders": {
+      "latency": {
+        "type": "int",
+        "example": "420"
+      }
+    }
+  },
+  "devicesProbeTimeout": "The device never started playing",
+  "@devicesProbeTimeout": {
+    "description": "Verdict line when the device never reported playing the probe."
+  },
   "devicesRadioStaysHere": "Stations play on the device that tuned them",
   "@devicesRadioStaysHere": {
     "description": "Under every device row while live radio plays here: a station is not a session and cannot be sent anywhere."
@@ -200,6 +216,18 @@
   "devicesTakeOverOrLeave": "Take over, or leave it playing",
   "@devicesTakeOverOrLeave": {
     "description": "Under this device's row while something is playing elsewhere."
+  },
+  "devicesTestOnDevice": "Test on a device",
+  "@devicesTestOnDevice": {
+    "description": "Section header in the connection check for the half a real device runs."
+  },
+  "devicesTestOnDeviceBlurb": "The check above is this server reaching itself. Pick a speaker and it will fetch a second of silence through each address and say what happened.",
+  "@devicesTestOnDeviceBlurb": {
+    "description": "Explains what the device half of the connection check does."
+  },
+  "devicesTesting": "Testing. This takes a few seconds per address.",
+  "@devicesTesting": {
+    "description": "Subtitle on a device row while its connection test runs, which is slow enough to say so."
   },
   "devicesThisDevice": "This device",
   "@devicesThisDevice": {

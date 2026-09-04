@@ -109,7 +109,11 @@ info:
       such as the streaming engine's queue timelines or a cast
       integration, that this server is not running),
       `endpoint-offline` (the target player endpoint is not currently
-      connected; refresh the endpoint list), `endpoint-failed` (the
+      connected; refresh the endpoint list), `endpoint-busy` (the
+      target device is in the middle of something that is not
+      WaxDeck's - a foreign app on a cast device, a renderer already
+      playing - and the request would have taken it over; the message
+      names what is playing), `endpoint-failed` (the
       target player endpoint accepted a routed command and could not
       carry it out - a part it could not load, a start that did not
       take; the request was well formed and the endpoint is connected,
@@ -143,11 +147,11 @@ info:
       params as a refinement and never require them. Under
       `feature-unavailable` - the umbrella for anything this server cannot
       do for a request - the defined keys are `feature`, the missing
-      capability, and `pid`, the subject it was asked about; the values
-      defined for `feature` so far are `multi-part-audiobook` (a book this
-      server cannot yet split across a device endpoint) and
-      `windowed-track` (a track that is a window into a larger file), and
-      other refusals under that code carry no params yet. Values are
+      capability, and `pid`, the subject it was asked about; the value
+      defined for `feature` so far is `windowed-track` (a track that is a
+      window into a larger file, sent to a device endpoint on a server
+      running without the streaming engine), and other refusals under
+      that code carry no params yet. Values are
       strings even when they read as numbers. Clients must ignore keys
       they do not know, and an absent `params` means the plain code.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
@@ -156,12 +160,17 @@ info:
       `/media/stream` (the streaming engine's output), `/media/download`
       (original bytes, ranged), `/media/enclosure` (a podcast episode's
       feed enclosure, relayed), `/media/radio/{pid}` (a station
-      stream, relayed), and `/media/art` (an item's artwork, the same
-      bytes and the same fallback chain as `/items/{pid}/art`). All of
+      stream, relayed), `/media/art` (an item's artwork, the same
+      bytes and the same fallback chain as `/items/{pid}/art`), and
+      `/media/probe.wav` (a second of generated silence, the stream a
+      device probe plays). All of
       them authenticate by media token in the query
       string rather than by session or bearer credential, so bare `<audio>`
       elements, cast devices, and DLNA renderers that cannot send headers
-      can fetch them. A media token binds one user to one item pid; expiry
+      can fetch them. A media token binds one user to one subject, which
+      is an item pid everywhere but the probe: that one binds `probe`,
+      which is not a pid and which no item can be named by, so a probe
+      token opens the probe and nothing in the library. Expiry
       gates new opens rather than cutting a stream already running.
       `/media/enclosure` takes only that pid and token, never a target
       URL: the enclosure is read from the episode in the catalog, so a
@@ -6369,13 +6378,13 @@ paths:
         `endpoint-offline` means the target endpoint is not connected
         right now, and `timeout` means it is connected but did not
         answer in time. A queue the target cannot play answers
-        `feature-unavailable` naming the pid - a multi-part audiobook
-        or a windowed track sent to a device endpoint, say - which a
-        controller can turn into an offer to play it somewhere that
-        can, rather than a bare failure. When the target is a client
-        endpoint, that client's own refusal code and message are what
-        arrive here - `endpoint-failed` where it took the load and
-        could not carry it out.
+        `feature-unavailable` naming the pid - a windowed track sent to
+        a device endpoint on a server running without the streaming
+        engine, say - which a controller can turn into an offer to play
+        it somewhere that can, rather than a bare failure. When the
+        target is a client endpoint, that client's own refusal code and
+        message are what arrive here - `endpoint-failed` where it took
+        the load and could not carry it out.
 
         Starting playback somewhere else from a device that is playing
         is a handoff, and a device plays one thing: the queue, index,
@@ -6657,6 +6666,60 @@ paths:
                 $ref: "#/components/schemas/CastPreflight"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+
+  /player/cast/preflight/{endpointId}:
+    post:
+      operationId: probeCastEndpoint
+      summary: Play a probe on a cast device or renderer
+      description: >
+        The other half of the connection check: instead of the server
+        reaching itself through each candidate address, the device
+        reaches the server through them. A second of silence is loaded
+        onto the endpoint from each base in turn, and what settles the
+        verdict is the request arriving back at this server - not what
+        the device says about itself, which a receiver reports as
+        playing while it is still resolving a name it will never
+        resolve. This is what catches the failures a server-side check
+        cannot see, because they are the device's: DNS it resolves
+        differently, a certificate authority it does not trust, a route
+        it does not have.
+
+        Bases are tried in the order sessions try them, and the answer
+        stops at the point the device stopped answering: a row per
+        address that was actually put to it.
+
+        A POST because it drives a physical output. Loading media
+        replaces whatever the device is showing - on a Chromecast it
+        launches the default media receiver over the running app - so
+        the probe first asks the device what it is doing and refuses
+        rather than interrupting: `conflict` with code `endpoint-busy`,
+        naming what is playing, for a foreign application on a cast
+        device, a stock receiver already playing for somebody else, a
+        renderer playing or holding something paused, a WaxDeck session
+        on the endpoint, or a check already running on it. A device
+        being probed is held for the run, so a queue started onto it
+        meanwhile is refused the same way rather than loaded over.
+        `endpoint-offline` means it could not be dialed at all. Only
+        cast and DLNA endpoints can be probed; anything else answers
+        `not-found`.
+      tags: [player]
+      parameters:
+        - $ref: "#/components/parameters/PlayerEndpointId"
+      responses:
+        "200":
+          description: What the device made of each candidate base.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CastDeviceProbe"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PlaybackConflict"
 
   /playlists:
     get:
@@ -11379,6 +11442,14 @@ components:
         type: string
         pattern: "^nt-[0-9A-HJKMNP-TV-Z]{26}$"
 
+    PlayerEndpointId:
+      name: endpointId
+      in: path
+      required: true
+      description: Player endpoint PID (e.g. `pe-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^pe-[0-9A-HJKMNP-TV-Z]{26}$"
     PlaybackSessionId:
       name: sessionId
       in: path
@@ -11591,18 +11662,22 @@ components:
       description: >
         The command could not be completed on the target player
         endpoint. Read `code` rather than the status: this answer
-        carries four, and they call for different things.
+        carries five, and they call for different things.
         `endpoint-offline` means the endpoint is not connected - refresh
         the endpoint list; the device may have left the network or the
         client may have disconnected. `timeout` means it is connected
         but did not answer within the routing deadline, so retrying
         beats refreshing. `conflict` is the endpoint itself refusing
         because of something it is in the middle of, and the message
-        says what. `endpoint-failed` is that endpoint taking the command
-        and failing at it - a part it could not load, a start that did
-        not take - so nothing about the request or the endpoint list
-        needs changing and retrying is reasonable; the message carries
-        whatever the endpoint could say about it.
+        says what. `endpoint-busy` is the server refusing on the
+        device's behalf, and only where the request would have taken it
+        over rather than played for somebody: the device probe, which
+        names what is playing instead of interrupting it. Stop that and
+        retry, or leave it alone. `endpoint-failed` is that endpoint
+        taking the command and failing at it - a part it could not load,
+        a start that did not take - so nothing about the request or the
+        endpoint list needs changing and retrying is reasonable; the
+        message carries whatever the endpoint could say about it.
       content:
         application/json:
           schema:
@@ -11674,8 +11749,8 @@ components:
             same thing in prose, so a client that ignores this reads what
             it always read. Clients must ignore keys they do not know.
           example:
-            feature: multi-part-audiobook
-            pid: bk-01JZX5N8QW3F4V9T2B7KD3M9R6
+            feature: windowed-track
+            pid: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     MediaType:
       type: string
@@ -13729,8 +13804,8 @@ components:
             client can hit over either transport says the same thing on
             both.
           example:
-            feature: multi-part-audiobook
-            pid: bk-01JZX5N8QW3F4V9T2B7KD3M9R6
+            feature: windowed-track
+            pid: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     WsRegisterEndpointFrame:
       type: object
@@ -17426,7 +17501,11 @@ components:
         positionMs:
           type: integer
           format: int64
-          description: Position within the current entry at `positionAt`.
+          description: >
+            Position within the current entry at `positionAt`, on that
+            entry's own timeline. A multi-file audiobook is one entry
+            whatever it is playing on, so this is the book position
+            even where the device is fetching one part at a time.
         positionAt:
           type: string
           format: date-time
@@ -17785,8 +17864,9 @@ components:
           type: string
           description: >
             Where the candidate came from: `configured` (the public
-            base) or `detected` (the auto-detected LAN address). Open
-            string.
+            base), `detected` (the auto-detected LAN address), or
+            `loopback` (this server's own interface, which only the
+            endpoints running beside it can fetch). Open string.
         reachable:
           type: boolean
           description: >
@@ -17800,6 +17880,71 @@ components:
             unlikely to work from a cast device.
           items:
             type: string
+        device:
+          allOf:
+            - $ref: "#/components/schemas/CastDeviceVerdict"
+          description: >
+            What a real device made of this base. Present only in a
+            device probe's answer; the server-side check has no device
+            to ask.
+
+    CastDeviceVerdict:
+      type: object
+      description: >
+        One device's trial run against one advertise base: a second of
+        silence loaded onto it, and what it did.
+      required: [verdict, latencyMs]
+      properties:
+        verdict:
+          type: string
+          description: >
+            `played` (the device fetched the probe through this
+            address), `failed` (it refused the load or the stream, and
+            `detail` carries what it said), or `timeout` (it never
+            fetched it, which is what an address the device cannot
+            reach looks like). Open string.
+          example: "played"
+        detail:
+          type: string
+          description: >
+            What the device or the protocol said, verbatim where there
+            is anything to quote: a cast idle reason, a UPnP fault.
+        latencyMs:
+          type: integer
+          format: int64
+          description: >
+            Milliseconds from handing the device the URL to its answer,
+            which is roughly what a listener waits before the first
+            sound. On a verdict that is not `played` it is how long the
+            device was given.
+
+    CastDeviceProbe:
+      type: object
+      description: >
+        A device probe's answer: the endpoint it ran against, and one
+        row per candidate base carrying both verdicts - the server's own
+        reachability check and what the device did.
+      required: [endpointId, name, kind, bases]
+      properties:
+        endpointId:
+          type: string
+          description: The endpoint that was probed.
+          example: pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: Its display name, for a one-call rendering.
+        kind:
+          type: string
+          description: "`cast` or `dlna` (open string)."
+          example: cast
+        bases:
+          type: array
+          description: >
+            The addresses the device was put to, in the order sessions
+            try them. Short of the full candidate list where the device
+            stopped answering partway through.
+          items:
+            $ref: "#/components/schemas/CastPreflightBase"
 
     CastPreflight:
       type: object

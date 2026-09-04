@@ -102,6 +102,15 @@ type receiverApp struct {
 	AppID       string `json:"appId"`
 	SessionID   string `json:"sessionId"`
 	TransportID string `json:"transportId"`
+	// DisplayName is the app's own name for itself, which is what a
+	// person recognises the thing on their television by. Devices send
+	// it; the app id is the fallback when one does not.
+	DisplayName string `json:"displayName"`
+	// IsIdleScreen marks the ambient app a device runs when nothing is
+	// casting - Backdrop on a Chromecast, the photo screensaver on a
+	// television. It is an application in the status like any other,
+	// and reading it as one is reading an idle device as busy.
+	IsIdleScreen bool `json:"isIdleScreen"`
 }
 
 type receiverVolume struct {

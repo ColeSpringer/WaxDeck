@@ -72,11 +72,11 @@ void main() {
       final e = apiExceptionFromDio(
         _dioError({
           'code': 'feature-unavailable',
-          'message': 'multi-part audiobooks cannot play on this endpoint yet',
-          'params': {'feature': 'multi-part-audiobook', 'pid': 'bk-1'},
+          'message': 'this track is a window into a larger file',
+          'params': {'feature': 'windowed-track', 'pid': 'tr-1'},
         }),
       );
-      expect(e.params, {'feature': 'multi-part-audiobook', 'pid': 'bk-1'});
+      expect(e.params, {'feature': 'windowed-track', 'pid': 'tr-1'});
     });
 
     test('an error without params reports null, not an empty map', () {
@@ -102,7 +102,7 @@ void main() {
         _dioError({
           'code': 'feature-unavailable',
           'message': 'nope',
-          'params': 'multi-part-audiobook',
+          'params': 'windowed-track',
         }),
       );
       expect(e.params, isNull);

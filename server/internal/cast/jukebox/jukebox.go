@@ -114,10 +114,19 @@ func (d *driver) playLoop(ctx context.Context, gen int) {
 		d.mu.Lock()
 		if d.gen != gen || d.closed || d.index >= len(d.items) {
 			finished := d.gen == gen && d.index >= len(d.items)
+			last := len(d.items) - 1
+			// Where the load actually ran out, which is the end of the
+			// last item. A zero here would be read as the start of it,
+			// and for one entry rendered as several - a multi-file
+			// audiobook - that is a listener sent back a chapter.
+			endMS := int64(0)
+			if finished && last >= 0 {
+				endMS = d.items[last].DurationMS
+			}
 			d.playing = false
 			d.mu.Unlock()
 			if finished {
-				d.emit(connect.DriverEvent{At: time.Now(), Playing: false, Index: len(d.items) - 1, Finished: true})
+				d.emit(connect.DriverEvent{At: time.Now(), Playing: false, Index: last, PositionMS: endMS, Finished: true})
 			}
 			return
 		}
@@ -142,8 +151,14 @@ func (d *driver) playLoop(ctx context.Context, gen int) {
 		}
 		d.index++
 		d.posMS = 0
+		next, loaded := d.index, len(d.items)
 		d.mu.Unlock()
-		d.emit(connect.DriverEvent{At: time.Now(), Playing: true, Index: d.index, PositionMS: 0})
+		// Only where there is a next item: past the end the index names
+		// nothing loaded, and the loop's own finished event above is
+		// what says the queue ran out.
+		if next < loaded {
+			d.emit(connect.DriverEvent{At: time.Now(), Playing: true, Index: next, PositionMS: 0})
+		}
 	}
 }
 

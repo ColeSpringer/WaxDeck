@@ -1870,7 +1870,7 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   /// Thrown by [createPlaybackSession] when set, for the refusals a
-  /// picker has to explain (a multi-part book on a cast device).
+  /// picker has to explain (a windowed track sent to a cast device).
   WaxDeckApiException? createSessionError;
 
   @override
@@ -2186,6 +2186,31 @@ class FakeRepository implements WaxDeckRepository {
     final error = preflightError;
     if (error != null) throw error;
     return preflightBases;
+  }
+
+  /// What [probeCastEndpoint] answers, keyed by endpoint id.
+  Map<String, CastDeviceProbe> deviceProbes = const <String, CastDeviceProbe>{};
+
+  /// Thrown by [probeCastEndpoint] when set, for the refusals a probe
+  /// answers with rather than a verdict.
+  WaxDeckApiException? deviceProbeError;
+
+  /// The endpoints [probeCastEndpoint] was asked about, in order.
+  final List<String> probedEndpoints = <String>[];
+
+  @override
+  Future<CastDeviceProbe> probeCastEndpoint(String endpointId) async {
+    probedEndpoints.add(endpointId);
+    final error = deviceProbeError;
+    if (error != null) throw error;
+    final probe = deviceProbes[endpointId];
+    if (probe == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such endpoint',
+      );
+    }
+    return probe;
   }
 
   /// Scrobbler slots served by [listScrobblers]; connect and disconnect

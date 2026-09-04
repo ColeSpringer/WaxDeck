@@ -42,6 +42,7 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   'service-unreachable' => l.errorServiceUnreachable,
   'feature-unavailable' => _featureUnavailable(l, e),
   'endpoint-offline' => l.errorEndpointOffline,
+  'endpoint-busy' => l.errorEndpointBusy,
   'endpoint-failed' => l.errorEndpointFailed,
   'quota-exceeded' => l.errorQuotaExceeded,
   'storage-full' => l.errorStorageFull,
@@ -95,7 +96,15 @@ String explainRefusal(AppLocalizations l10n, Object error) {
   if (error is! WaxDeckApiException || error.message.trim().isEmpty) {
     return explainError(l10n, error);
   }
-  if (const {'invalid-request', 'conflict'}.contains(error.code)) {
+  if (const {
+    'invalid-request',
+    'conflict',
+    // `endpoint-busy` exists to name what is playing, and the contract
+    // says the message carries it. The table's sentence can only say
+    // "something else" - which leaves a listener looking at a device
+    // they were about to test with nothing to go and stop.
+    'endpoint-busy',
+  }.contains(error.code)) {
     return error.message;
   }
   if (error.code == 'feature-unavailable' && error.params?['feature'] == null) {
@@ -118,7 +127,6 @@ String explainRefusal(AppLocalizations l10n, Object error) {
 /// sentence rather than guessing.
 String _featureUnavailable(AppLocalizations l, WaxDeckApiException e) =>
     switch (e.params?['feature']) {
-      'multi-part-audiobook' => l.errorMultiPartAudiobook,
       'windowed-track' => l.errorWindowedTrack,
       _ => l.errorFeatureUnavailable,
     };

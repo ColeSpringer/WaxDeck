@@ -103,7 +103,11 @@ Conventions:
   such as the streaming engine's queue timelines or a cast
   integration, that this server is not running),
   `endpoint-offline` (the target player endpoint is not currently
-  connected; refresh the endpoint list), `endpoint-failed` (the
+  connected; refresh the endpoint list), `endpoint-busy` (the
+  target device is in the middle of something that is not
+  WaxDeck's - a foreign app on a cast device, a renderer already
+  playing - and the request would have taken it over; the message
+  names what is playing), `endpoint-failed` (the
   target player endpoint accepted a routed command and could not
   carry it out - a part it could not load, a start that did not
   take; the request was well formed and the endpoint is connected,
@@ -137,11 +141,11 @@ Conventions:
   params as a refinement and never require them. Under
   `feature-unavailable` - the umbrella for anything this server cannot
   do for a request - the defined keys are `feature`, the missing
-  capability, and `pid`, the subject it was asked about; the values
-  defined for `feature` so far are `multi-part-audiobook` (a book this
-  server cannot yet split across a device endpoint) and
-  `windowed-track` (a track that is a window into a larger file), and
-  other refusals under that code carry no params yet. Values are
+  capability, and `pid`, the subject it was asked about; the value
+  defined for `feature` so far is `windowed-track` (a track that is a
+  window into a larger file, sent to a device endpoint on a server
+  running without the streaming engine), and other refusals under
+  that code carry no params yet. Values are
   strings even when they read as numbers. Clients must ignore keys
   they do not know, and an absent `params` means the plain code.
 - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
@@ -150,12 +154,17 @@ Conventions:
   `/media/stream` (the streaming engine's output), `/media/download`
   (original bytes, ranged), `/media/enclosure` (a podcast episode's
   feed enclosure, relayed), `/media/radio/{pid}` (a station
-  stream, relayed), and `/media/art` (an item's artwork, the same
-  bytes and the same fallback chain as `/items/{pid}/art`). All of
+  stream, relayed), `/media/art` (an item's artwork, the same
+  bytes and the same fallback chain as `/items/{pid}/art`), and
+  `/media/probe.wav` (a second of generated silence, the stream a
+  device probe plays). All of
   them authenticate by media token in the query
   string rather than by session or bearer credential, so bare `<audio>`
   elements, cast devices, and DLNA renderers that cannot send headers
-  can fetch them. A media token binds one user to one item pid; expiry
+  can fetch them. A media token binds one user to one subject, which
+  is an item pid everywhere but the probe: that one binds `probe`,
+  which is not a pid and which no item can be named by, so a probe
+  token opens the probe and nothing in the library. Expiry
   gates new opens rather than cutting a stream already running.
   `/media/enclosure` takes only that pid and token, never a target
   URL: the enclosure is read from the episode in the catalog, so a
@@ -498,6 +507,7 @@ Class | Method | HTTP request | Description
 [*PlayerApi*](doc/PlayerApi.md) | [**listPlaybackSessionHistory**](doc/PlayerApi.md#listplaybacksessionhistory) | **GET** /player/sessions/history | List the caller&#39;s ended playback sessions
 [*PlayerApi*](doc/PlayerApi.md) | [**listPlaybackSessions**](doc/PlayerApi.md#listplaybacksessions) | **GET** /player/sessions | List playback sessions
 [*PlayerApi*](doc/PlayerApi.md) | [**listPlayerEndpoints**](doc/PlayerApi.md#listplayerendpoints) | **GET** /player/endpoints | List player endpoints
+[*PlayerApi*](doc/PlayerApi.md) | [**probeCastEndpoint**](doc/PlayerApi.md#probecastendpoint) | **POST** /player/cast/preflight/{endpointId} | Play a probe on a cast device or renderer
 [*PlayerApi*](doc/PlayerApi.md) | [**transferPlaybackSession**](doc/PlayerApi.md#transferplaybacksession) | **POST** /player/sessions/{sessionId}/transfer | Transfer a session to another endpoint
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**addPlaylistItems**](doc/PlaylistsApi.md#addplaylistitems) | **POST** /playlists/{pid}/items | Append items to a static playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**createPlaylist**](doc/PlaylistsApi.md#createplaylist) | **POST** /playlists | Create a playlist
@@ -657,6 +667,8 @@ Class | Method | HTTP request | Description
  - [CandidateComponent](doc/CandidateComponent.md)
  - [CandidatePairing](doc/CandidatePairing.md)
  - [CandidateSummary](doc/CandidateSummary.md)
+ - [CastDeviceProbe](doc/CastDeviceProbe.md)
+ - [CastDeviceVerdict](doc/CastDeviceVerdict.md)
  - [CastPreflight](doc/CastPreflight.md)
  - [CastPreflightBase](doc/CastPreflightBase.md)
  - [CatalogSyncEntry](doc/CatalogSyncEntry.md)

@@ -192,8 +192,8 @@ components:
             client can hit over either transport says the same thing on
             both.
           example:
-            feature: multi-part-audiobook
-            pid: bk-01JZX5N8QW3F4V9T2B7KD3M9R6
+            feature: windowed-track
+            pid: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     WsRegisterEndpointFrame:
       type: object

@@ -21,6 +21,10 @@
   "@errorDrmProtected": {
     "description": "Error sentence for the spec code `drm-protected`: an encrypted container (Audible aax/aaxc) was refused. Permanent, unlike `unsupported-format` - no server setting makes the file playable - and the sentence says so instead of implying a codec gap."
   },
+  "errorEndpointBusy": "That device is in the middle of something else. Stop it there and try again.",
+  "@errorEndpointBusy": {
+    "description": "Error sentence for `endpoint-busy`: the target device is playing something the request would have taken it over from."
+  },
   "errorEndpointFailed": "That device could not carry that out. It is still connected, so it is worth trying again.",
   "@errorEndpointFailed": {
     "description": "Error sentence for the spec code `endpoint-failed`: the other device took the command and failed at it, unlike `endpoint-offline`, where it never got it."
@@ -64,10 +68,6 @@
   "errorLocalUnregistered": "This device is not set up as a player yet. Try again in a moment.",
   "@errorLocalUnregistered": {
     "description": "Error sentence for the client's own `local-unregistered` code: playback was asked to move here before this device finished announcing itself as a player."
-  },
-  "errorMultiPartAudiobook": "Multi-part audiobooks can't play on another device yet. Play it on this one instead.",
-  "@errorMultiPartAudiobook": {
-    "description": "Error sentence for `feature-unavailable` when the params name the feature as multi-part-audiobook: a book this server cannot yet split across a device."
   },
   "errorNetwork": "Could not reach the server. Check the connection and try again.",
   "@errorNetwork": {

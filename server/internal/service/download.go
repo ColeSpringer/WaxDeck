@@ -133,6 +133,12 @@ func (l *Library) downloadFile(ctx context.Context, filePID model.PID) (Download
 	if err != nil {
 		return DownloadFile{}, classify(err)
 	}
+	return downloadFileOf(f), nil
+}
+
+// downloadFileOf projects one file row onto the download surface, for
+// the callers that already hold the row.
+func downloadFileOf(f *model.File) DownloadFile {
 	// The one container-to-mime table, normalized: the stored label is
 	// a probe name ("aac (adts)"), not a key, and a raw lookup floored
 	// every AAC download to octet-stream.
@@ -149,5 +155,5 @@ func (l *Library) downloadFile(ctx context.Context, filePID model.PID) (Download
 		DurationMS:  f.DurationMS,
 		EssenceHash: f.EssenceHash,
 		ETag:        fmt.Sprintf("%d-%d", f.Size, f.MTimeNS),
-	}, nil
+	}
 }

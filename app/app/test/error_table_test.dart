@@ -120,23 +120,13 @@ void main() {
       );
       expect(explainError(en, umbrella), en.errorFeatureUnavailable);
 
-      const book = WaxDeckApiException(
-        code: 'feature-unavailable',
-        message: _serverMessage,
-        params: <String, String>{
-          'feature': 'multi-part-audiobook',
-          'pid': 'bk-1',
-        },
-      );
-      expect(explainError(en, book), en.errorMultiPartAudiobook);
-      expect(explainError(es, book), es.errorMultiPartAudiobook);
-
       const window = WaxDeckApiException(
         code: 'feature-unavailable',
         message: _serverMessage,
-        params: <String, String>{'feature': 'windowed-track'},
+        params: <String, String>{'feature': 'windowed-track', 'pid': 'tr-1'},
       );
       expect(explainError(en, window), en.errorWindowedTrack);
+      expect(explainError(es, window), es.errorWindowedTrack);
 
       // A feature named by a newer server is still a feature-unavailable.
       const later = WaxDeckApiException(

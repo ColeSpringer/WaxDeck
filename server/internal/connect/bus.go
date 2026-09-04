@@ -238,21 +238,7 @@ func (s *Service) applyRemoteCommand(ctx context.Context, sess *session, driver 
 		})
 		s.checkpointRemote(ctx, sess)
 	case "seek":
-		target := *args.PositionMS
-		abs := target
-		if tm != nil {
-			s.mu.Lock()
-			idx := sess.q.Index
-			s.mu.Unlock()
-			abs = timelineAbsoluteMS(tm, idx, target)
-		}
-		if err := driver.SeekTo(ctx, abs); err != nil {
-			return commandFailed(err)
-		}
-		s.updateSession(sess, func() {
-			sess.q.PositionMS = target
-			sess.q.PositionAt = now
-		})
+		return s.remoteSeek(ctx, sess, driver, tm, *args.PositionMS)
 	case "next", "previous":
 		return s.remoteSkip(ctx, sess, driver, tm, verb == "next")
 	case "set-volume":
@@ -278,6 +264,41 @@ func (s *Service) applyRemoteCommand(ctx context.Context, sess *session, driver 
 	case "set-shuffle":
 		return s.remoteSetShuffle(ctx, sess, *args.Shuffle)
 	}
+	return nil
+}
+
+// remoteSeek moves within the entry the session is on. A queue loaded
+// as one timeline seeks that stream; a queue loaded per item seeks
+// inside the loaded item, unless the target lies in another part of a
+// multi-file audiobook - a different file, so the device is reloaded at
+// it and the chapter jump costs a brief gap.
+func (s *Service) remoteSeek(ctx context.Context, sess *session, driver Driver, tm *TimelineMedia, target int64) error {
+	s.mu.Lock()
+	index := sess.q.Index
+	mediaIdx, inMediaMS := place(sess.slots, index, target)
+	loaded := sess.mediaIndex
+	playing := sess.q.Playing
+	s.mu.Unlock()
+
+	switch {
+	case tm != nil:
+		if err := driver.SeekTo(ctx, timelineAbsoluteMS(tm, index, target)); err != nil {
+			return commandFailed(err)
+		}
+	case mediaIdx != loaded:
+		if err := s.reloadRemote(ctx, sess, index, target, playing); err != nil {
+			return err
+		}
+	default:
+		if err := driver.SeekTo(ctx, inMediaMS); err != nil {
+			return commandFailed(err)
+		}
+	}
+	now := s.cfg.Now()
+	s.updateSession(sess, func() {
+		sess.q.PositionMS = target
+		sess.q.PositionAt = now
+	})
 	return nil
 }
 
@@ -412,39 +433,33 @@ func (s *Service) reloadRemote(ctx context.Context, sess *session, index int, po
 	ttl := mediaTTL(entries)
 	var lastErr error
 	for _, base := range bases {
-		var tm *TimelineMedia
-		var err error
-		if ep.Kind == KindCast && len(entries) > 1 {
-			tm, err = s.cfg.Resolver.Timeline(ctx, ownerID, entries, base)
-			if err != nil {
-				tm = nil
-			}
+		rendered, err := s.renderQueue(ctx, ownerID, ep, driver, entries, base, ttl)
+		if err != nil {
+			s.forgetLoad(sess)
+			return err
 		}
-		if tm != nil {
-			abs := timelineAbsoluteMS(tm, index, positionMS)
-			if err := driver.Load(ctx, []MediaItem{tm.Item}, 0, abs, play); err != nil {
-				lastErr = err
-				continue
-			}
-			s.mu.Lock()
-			sess.timeline = tm
-			s.mu.Unlock()
-		} else {
-			items, err := s.cfg.Resolver.StreamItems(ctx, ownerID, entries, TargetFor(ep.Kind, driver), base, ttl)
-			if err != nil {
-				return err
-			}
-			if err := driver.Load(ctx, items, index, positionMS, play); err != nil {
-				lastErr = err
-				continue
-			}
-			s.mu.Lock()
-			sess.timeline = nil
-			s.mu.Unlock()
+		if err := s.driveLoad(ctx, sess, driver, rendered, index, positionMS, play); err != nil {
+			lastErr = err
+			continue
 		}
 		return nil
 	}
+	// Nothing loaded, so nothing on the device answers to the mapping
+	// the session was holding - and after a queue edit the entries it
+	// spoke for are gone too. Reports stop being read as positions
+	// until a load lands, and the queue carries on from where it was
+	// rather than adopting a number in units it no longer knows.
+	s.forgetLoad(sess)
 	return commandFailed(lastErr)
+}
+
+// forgetLoad drops the mapping a failed load leaves behind.
+func (s *Service) forgetLoad(sess *session) {
+	s.mu.Lock()
+	sess.timeline = nil
+	sess.slots = nil
+	sess.mediaIndex = 0
+	s.mu.Unlock()
 }
 
 // HandleCommandResult resolves a routed command's waiter.
@@ -780,14 +795,43 @@ func (s *Service) onDriverEvent(sessionID string, gen int, ev DriverEvent) {
 	if now.IsZero() {
 		now = s.cfg.Now()
 	}
-	index := sess.q.Index
-	posMS := ev.PositionMS
-	if sess.timeline != nil {
+	// The driver reports where it is in what it was handed, which is
+	// one stream for a timeline and one item per slot otherwise; both
+	// map back to a queue entry and a position on that entry's own
+	// timeline, so a book's parts read as one book.
+	//
+	// The default carries on from where the session was rather than
+	// adopting the report: an observation the load's mapping cannot
+	// explain is in units this session does not know - a part-relative
+	// position where the table is gone, an index into a render the
+	// queue has since replaced - and publishing it moves a listener's
+	// place in a book by hours.
+	index, posMS := sess.q.Index, sess.q.extrapolate(now)
+	switch {
+	case sess.timeline != nil:
 		index, posMS = timelineLocate(sess.timeline, ev.PositionMS)
-	} else if ev.Index >= 0 && ev.Index < len(sess.q.Entries) {
-		index = ev.Index
+	case ev.Index >= 0 && ev.Index < len(sess.slots):
+		sess.mediaIndex = ev.Index
+		index, posMS = locate(sess.slots, ev.Index, ev.PositionMS)
+	case len(sess.slots) == 0 && ev.Index >= 0 && ev.Index < len(sess.q.Entries):
+		// No table, which means a reload failed and the device is
+		// playing something this session can no longer describe. One
+		// item per entry is what it was before books could split, and
+		// reading it that way keeps a queue of whole tracks tracking
+		// until a load lands.
+		index, posMS = ev.Index, ev.PositionMS
+	}
+	// Bounded against the queue as it is now, not as the render saw it:
+	// a queue edit swaps the entries before the reload that follows it,
+	// and a report landing in that gap resolves through the old table.
+	if index < 0 || index >= len(sess.q.Entries) {
+		index, posMS = sess.q.Index, sess.q.extrapolate(now)
 	}
 
+	// Entry indices, so stepping from one part of a book to the next is
+	// not a track change: no listen flushed, no checkpoint, and the
+	// listen accumulator's delta across the seam is the ordinary
+	// forward motion it looks like.
 	indexChanged := index != sess.q.Index
 	pauseEdge := sess.q.Playing && !ev.Playing
 

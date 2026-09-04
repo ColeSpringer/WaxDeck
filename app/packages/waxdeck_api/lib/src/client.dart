@@ -723,6 +723,15 @@ abstract interface class WaxDeckRepository {
   /// server's.
   Future<List<CastPreflightBase>> getCastPreflight();
 
+  /// `POST /player/cast/preflight/{endpointId}`: the device half of the
+  /// same check. A second of silence is loaded onto a cast device or a
+  /// renderer from each advertise base in turn, and each row carries
+  /// what the device did with it beside the server's own verdict.
+  ///
+  /// It drives a physical output, so it refuses rather than interrupts:
+  /// `endpoint-busy` names what is playing, on the device or in WaxDeck.
+  Future<CastDeviceProbe> probeCastEndpoint(String endpointId);
+
   /// `POST /radio/stations`: adds a station.
   Future<RadioStation> createRadioStation({
     required String name,
@@ -3156,6 +3165,21 @@ class WaxDeckClient implements WaxDeckRepository {
       response.data,
     ).bases.map(castPreflightBaseFromGen).toList(growable: false);
   });
+
+  @override
+  Future<CastDeviceProbe> probeCastEndpoint(String endpointId) =>
+      _guard(() async {
+        final response = await _gen.getPlayerApi().probeCastEndpoint(
+          // The server drives a real device through every candidate
+          // address before it answers, and each one gets ten seconds
+          // to fetch: the whole job happens before the response line,
+          // and the ordinary receive budget would call a healthy check
+          // dead at exactly the moment it had something to say.
+          extra: const {_longOperation: true},
+          endpointId: endpointId,
+        );
+        return castDeviceProbeFromGen(_require(response.data));
+      });
 
   @override
   Future<RadioStation> createRadioStation({

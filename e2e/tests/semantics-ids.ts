@@ -201,6 +201,9 @@ export const SemanticsIds = {
   pickerThisDevice: 'device-picker-this-device',
   preflight: 'cast-preflight',
   preflightBase: (index: string | number) => `cast-preflight-base-${index}`,
+  preflightDevice: (id: string | number) => `cast-preflight-device-${id}`,
+  preflightDeviceBase: (index: string | number) => `cast-preflight-device-base-${index}`,
+  preflightDevices: 'cast-preflight-devices',
   preflightRetry: 'cast-preflight-retry',
   remoteLeave: 'remote-leave',
   remoteNext: 'remote-next',
@@ -926,6 +929,8 @@ export const SemanticsIdPrefixes = {
   // connect: Connect: the device picker, the disconnect triad, cast preflight, remote sessions, and cast controls.
   endpoint: 'endpoint-',
   preflightBase: 'cast-preflight-base-',
+  preflightDevice: 'cast-preflight-device-',
+  preflightDeviceBase: 'cast-preflight-device-base-',
   session: 'session-',
 
   // deck: The deck bar, the side panel it opens, and the shell's lifecycle banners.

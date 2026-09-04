@@ -2400,12 +2400,14 @@ class CastPreflightBase {
     required this.source,
     required this.reachable,
     required this.notes,
+    this.device,
   });
 
   final String base;
 
-  /// `configured` (the public base) or `detected` (the auto-detected LAN
-  /// address); open vocabulary.
+  /// `configured` (the public base), `detected` (the auto-detected LAN
+  /// address), or `loopback` (the server's own interface); open
+  /// vocabulary.
   final String source;
 
   /// Whether the server could fetch its own health endpoint through this
@@ -2417,6 +2419,47 @@ class CastPreflightBase {
   /// Plain-language observations: scheme and certificate caveats, name
   /// resolution warnings, why a base is likely or unlikely to work.
   final List<String> notes;
+
+  /// What a real device made of this base. Null on the server-side
+  /// check, which has no device to ask.
+  final CastDeviceVerdict? device;
+}
+
+/// One device's trial run against one advertise base.
+class CastDeviceVerdict {
+  const CastDeviceVerdict({
+    required this.verdict,
+    required this.latencyMs,
+    this.detail,
+  });
+
+  /// `played`, `failed`, or `timeout`; open vocabulary.
+  final String verdict;
+
+  /// Milliseconds from handing the device the URL to its answer.
+  final int latencyMs;
+
+  /// What the device or the protocol said, where there was anything to
+  /// quote.
+  final String? detail;
+}
+
+/// A device probe's answer: an endpoint, and one row per candidate base
+/// carrying both the server's reachability verdict and the device's.
+class CastDeviceProbe {
+  const CastDeviceProbe({
+    required this.endpointId,
+    required this.name,
+    required this.kind,
+    required this.bases,
+  });
+
+  final String endpointId;
+  final String name;
+
+  /// `cast` or `dlna`; open vocabulary.
+  final String kind;
+  final List<CastPreflightBase> bases;
 }
 
 /// One queue entry of a playback session, hydrated for display.

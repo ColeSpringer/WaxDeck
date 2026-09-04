@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -53,6 +54,10 @@ type harness struct {
 	// one of their own.
 	bridge  *flow.Bridge
 	connect *connect.Service
+	// lanBase is the advertise base the session manager was configured
+	// with, which is this server's own address: a device handed a URL
+	// on it can actually fetch it.
+	lanBase string
 	backups *service.Backups
 	group   *supervise.Group
 	flowReq struct{ apiKey, format, dynamics, gain, bitrate string } // captured by the fake sidecar
@@ -104,6 +109,14 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	if os.Getenv("HARNESS_LOG") != "" {
 		log = slog.New(slog.NewTextHandler(os.Stderr, nil))
 	}
+
+	// Opened before anything is configured, because the advertise base
+	// the session manager casts with has to be an address that answers.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.lanBase = "http://" + ln.Addr().String()
 
 	h.library = t.TempDir()
 	generateDemoLibrary(t, h.library)
@@ -166,7 +179,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 		Group:            group,
 		Resolver:         &ConnectResolver{Svc: svc, Bridge: bridge, Media: media},
 		Sink:             &ConnectSink{Svc: svc},
-		Bases:            connect.Bases{LAN: "http://192.0.2.10:4420", Loopback: "http://127.0.0.1:4420"},
+		Bases:            connect.Bases{LAN: h.lanBase, Loopback: h.lanBase},
 		InvalidatePlayer: hub.MarkPlayerAll,
 	})
 	if err != nil {
@@ -183,8 +196,11 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 		Media:    media,
 		Connect:  connectSvc,
 		Group:    group,
-		Bases:    connect.Bases{LAN: "http://192.0.2.10:4420"},
-		Backups:  h.backups,
+		// The same value the session manager got, as main.go passes it:
+		// the two disagreeing would let a base a session tries turn up
+		// unlabelled in a preflight answer.
+		Bases:   connect.Bases{LAN: h.lanBase, Loopback: h.lanBase},
+		Backups: h.backups,
 		// A real server always mints share tokens from its secret
 		// (main.go), and the share endpoints reach for them without a
 		// guard: leaving this unset made the harness the only place a
@@ -209,6 +225,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	mux.HandleFunc("GET /media/download", srv.ServeDownload)
 	mux.HandleFunc("GET /media/enclosure", srv.ServeEnclosure)
 	mux.HandleFunc("GET /media/art", srv.ServeMediaArt)
+	mux.HandleFunc("GET /media/probe.wav", srv.ServeProbeAudio)
 	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
 	// The public share surface, mounted as main.go mounts it (minus the
 	// metrics wrapper, which is main.go's own): the landing page reads
@@ -222,7 +239,16 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 		mux.HandleFunc("/media/stream", bridge.ServeStream)
 		mux.HandleFunc("/media/hls/", bridge.ServeHLS)
 	}
-	h.ts = httptest.NewServer(mux)
+	// The listener was opened before connect was configured, so the
+	// advertise base is this server's own address: a fake device
+	// pointed at it fetches what it is handed, exactly as a real one
+	// would. An advertise base nothing can resolve is what let a
+	// connection check pass a base no device could ever reach.
+	ts := httptest.NewUnstartedServer(mux)
+	ts.Listener.Close()
+	ts.Listener = ln
+	ts.Start()
+	h.ts = ts
 	t.Cleanup(h.ts.Close)
 
 	h.media = media

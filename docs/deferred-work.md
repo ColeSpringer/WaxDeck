@@ -523,47 +523,6 @@ here waits on upstream.
   standard audio path as default and fallback. Deferred rather than
   rushed; the standard web path keeps working, and the recorded gate
   posture is that this attempt may miss without slipping anything.
-- `[in-repo]` **AirPlay sender.** The experimental RAOP/AirPlay-1 push endpoint
-  is not built. Go's AirPlay-sender ecosystem is weak, OS-level
-  routing on Apple hardware is the blessed path, and the roadmap
-  explicitly allows this to miss without slipping. The endpoint
-  registry takes a new kind without schema changes when it lands.
-- `[in-repo]` **Multi-part audiobooks refuse device endpoints.** Casting a
-  multi-part book to a cast, DLNA, or jukebox endpoint answers a
-  clear error instead of playing file one and losing the reader's
-  place mid-book. The refusal carries code `feature-unavailable`
-  naming the pid, so a picker can offer "play here instead" rather
-  than a dead end (P14's refusal explanations); client endpoints
-  handle books fully. Needs part-aware loading and part-advance in
-  the session manager. When it lands, delete the client's special
-  case with it: `feature-unavailable` is the umbrella code for
-  everything a target cannot play (a windowed track answers it too),
-  so the refusal carries `params` (`feature: multi-part-audiobook`
-  plus the `pid`) as the machine key a picker reads -
-  `multiPartRefusal` in `server/internal/api/player.go`, `_explain`
-  in `app/app/lib/src/connect/device_picker.dart` (still matching the
-  message's phrase, which stays as the fallback for a server older
-  than params), and `TestMultiPartRefusalWording` holding both
-  channels together. A `cmd-result` from a client endpoint carries no
-  params by decision: its codes are whitelisted before they reach the
-  wire and an arbitrary map would need the same treatment designed
-  for it. The other refusals under `feature-unavailable` - queue
-  timelines, sonic paths, the file tools, the share surface, every
-  service `KindFeature` - carry no params either; the spec calls them
-  best-effort per refusal for that reason, and each gains a `feature`
-  value when something needs to tell it apart.
-- `[in-repo]` **Cast preflight verifies server-side only.** The
-  reachability verdict is the server fetching itself through each
-  candidate base; true device-side verification (loading a probe URL
-  on the device and watching status) would catch DNS and cert
-  failures the server cannot see.
-- `[hardware]` **The real-device cast checklist has not run.** The
-  protocol suites drive wire-honest fakes (a TLS CASTV2 receiver, a
-  SOAP renderer), but a real Chromecast, a speaker group, and a real
-  renderer on a real LAN, including the zero-TLS path end to end,
-  need hardware this environment lacks. Speaker groups are handled
-  by construction (they announce like devices); that claim is
-  exactly what the checklist verifies.
 
 ## Localization
 

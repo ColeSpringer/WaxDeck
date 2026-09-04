@@ -112,9 +112,9 @@ func TestBothSeamsCarryRefusalCodes(t *testing.T) {
 func TestBothSeamsCarryRefusalParams(t *testing.T) {
 	t.Parallel()
 	err := connect.InvalidError{
-		Msg:    "multi-part audiobooks cannot play on this endpoint yet: bk-1",
+		Msg:    "this track is a window into a larger file and needs the streaming engine to cast: tr-1",
 		Code:   "feature-unavailable",
-		Params: map[string]string{"feature": "multi-part-audiobook", "pid": "bk-1"},
+		Params: map[string]string{"feature": "windowed-track", "pid": "tr-1"},
 	}
 
 	_, body, ok := connectHTTP(err)
@@ -124,15 +124,15 @@ func TestBothSeamsCarryRefusalParams(t *testing.T) {
 	if body.Params == nil {
 		t.Fatal("connectHTTP dropped the refusal's params")
 	}
-	if got := (*body.Params)["feature"]; got != "multi-part-audiobook" {
-		t.Errorf("params[feature] = %q, want multi-part-audiobook", got)
+	if got := (*body.Params)["feature"]; got != "windowed-track" {
+		t.Errorf("params[feature] = %q, want windowed-track", got)
 	}
-	if got := (*body.Params)["pid"]; got != "bk-1" {
-		t.Errorf("params[pid] = %q, want bk-1", got)
+	if got := (*body.Params)["pid"]; got != "tr-1" {
+		t.Errorf("params[pid] = %q, want tr-1", got)
 	}
 
 	frame := wsErrorFrame{Code: wsErrorCode(err), Message: err.Error(), Params: refusalParams(err)}
-	if frame.Params["feature"] != "multi-part-audiobook" || frame.Params["pid"] != "bk-1" {
+	if frame.Params["feature"] != "windowed-track" || frame.Params["pid"] != "tr-1" {
 		t.Errorf("ws frame params = %v, want the refusal's", frame.Params)
 	}
 

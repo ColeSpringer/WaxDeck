@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -97,6 +98,10 @@ func (d *fakeDriver) lastLoad(t *testing.T) fakeLoad {
 // endpoint target each load resolved against.
 type fakeResolver struct {
 	entries map[string]QueueEntry
+	// books holds part durations for the multi-file audiobooks in the
+	// catalog, which render the way the real resolver renders them: one
+	// media item per part, every one naming the entry it belongs to.
+	books map[string][]int64
 
 	mu      sync.Mutex
 	targets []EndpointTarget
@@ -119,8 +124,25 @@ func (r *fakeResolver) StreamItems(_ context.Context, _ string, entries []QueueE
 	r.targets = append(r.targets, target)
 	r.mu.Unlock()
 	out := make([]MediaItem, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, MediaItem{PID: e.PID, URL: base + "/media/" + e.PID, MimeType: "audio/flac", Title: e.Title, DurationMS: e.DurationMS})
+	for i, e := range entries {
+		parts := r.books[e.PID]
+		if len(parts) == 0 {
+			out = append(out, MediaItem{PID: e.PID, URL: base + "/media/" + e.PID, MimeType: "audio/flac", Title: e.Title, DurationMS: e.DurationMS, Entry: i})
+			continue
+		}
+		var start int64
+		for p, dur := range parts {
+			out = append(out, MediaItem{
+				PID:         e.PID,
+				URL:         fmt.Sprintf("%s/media/%s?f=%d", base, e.PID, p),
+				MimeType:    "audio/flac",
+				Title:       e.Title,
+				DurationMS:  dur,
+				Entry:       i,
+				PartStartMS: start,
+			})
+			start += dur
+		}
 	}
 	return out, nil
 }
@@ -177,11 +199,18 @@ func newTestService(t *testing.T) (*Service, *fakeSink, *fakeDriver) {
 	seedUser(t, store, "us-bob", "bob")
 
 	sink := &fakeSink{}
-	resolver := &fakeResolver{entries: map[string]QueueEntry{
-		"tr-one":   {PID: "tr-one", Title: "One", DurationMS: 60000},
-		"tr-two":   {PID: "tr-two", Title: "Two", DurationMS: 90000},
-		"tr-three": {PID: "tr-three", Title: "Three", DurationMS: 30000},
-	}}
+	resolver := &fakeResolver{
+		entries: map[string]QueueEntry{
+			"tr-one":   {PID: "tr-one", Title: "One", DurationMS: 60000},
+			"tr-two":   {PID: "tr-two", Title: "Two", DurationMS: 90000},
+			"tr-three": {PID: "tr-three", Title: "Three", DurationMS: 30000},
+			// A three-part book carries its whole duration as one
+			// entry, which is what a queue and every position on it
+			// speak in.
+			"bk-one": {PID: "bk-one", Title: "A Book", DurationMS: 15000},
+		},
+		books: map[string][]int64{"bk-one": {4000, 5000, 6000}},
+	}
 	group := supervise.NewGroup(nil)
 	svc, err := New(ctx, Config{
 		Store:    store,
@@ -1103,5 +1132,210 @@ func TestPersistedEndpointsRestoreAtBoot(t *testing.T) {
 	}
 	if _, err := svc2.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one"}, Play: true}); !errors.Is(err, ErrEndpointOffline) {
 		t.Fatalf("undialable restored endpoint accepted a session: %v", err)
+	}
+}
+
+// TestBookPartsPlayAsOneEntry is the multi-file audiobook on a device
+// endpoint: the device is handed one file per part and steps through
+// them itself, and every position that leaves this package is on the
+// book's own timeline. Crossing a part is not crossing a track, so
+// nothing checkpoints, nothing flushes a listen, and the queue index
+// does not move.
+func TestBookPartsPlayAsOneEntry(t *testing.T) {
+	svc, sink, driver := newTestService(t)
+	ctx := context.Background()
+	epID := deviceEndpointID(t, svc, "us-alice")
+
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"bk-one", "tr-one"}, Play: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Entries) != 2 {
+		t.Fatalf("a book is one entry however many files it has: %+v", snap.Entries)
+	}
+	load := driver.lastLoad(t)
+	if len(load.items) != 4 {
+		t.Fatalf("device got %d items, want three book parts plus the track", len(load.items))
+	}
+	if load.index != 0 || load.positionMS != 0 {
+		t.Fatalf("load started at media %d/%dms", load.index, load.positionMS)
+	}
+	if load.items[3].PID != "tr-one" {
+		t.Fatalf("the track follows the parts: %+v", load.items)
+	}
+
+	// The device is a second into part two. That is 5s on the book's
+	// timeline, and it is still entry zero.
+	driver.events <- DriverEvent{At: time.Now(), Playing: true, Index: 1, PositionMS: 1000}
+	waitFor(t, func() bool {
+		s, err := svc.Session("us-alice", snap.ID)
+		return err == nil && s.PositionMS >= 5000
+	})
+	got, err := svc.Session("us-alice", snap.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Extrapolated forward from the observation, so a band rather than
+	// the instant: what is being pinned is the part offset, not the
+	// clock.
+	if got.Index != 0 || got.PositionMS < 5000 || got.PositionMS > 5500 {
+		t.Fatalf("part two of the book reads as entry %d at %dms, want entry 0 just past 5000", got.Index, got.PositionMS)
+	}
+	// Still inside part two, far enough along to have a listen worth
+	// flushing when the book is finally left.
+	driver.events <- DriverEvent{At: time.Now(), Playing: true, Index: 1, PositionMS: 3500}
+	waitFor(t, func() bool {
+		s, err := svc.Session("us-alice", snap.ID)
+		return err == nil && s.PositionMS >= 8500
+	})
+	sink.mu.Lock()
+	checkpoints, listens := len(sink.checkpoints), len(sink.listens)
+	sink.mu.Unlock()
+	if checkpoints != 0 || listens != 0 {
+		t.Fatalf("stepping a part checkpointed %d and flushed %d listens; it is not a track change", checkpoints, listens)
+	}
+
+	// A seek inside the loaded part is a seek; a seek into another part
+	// is a different file, so the device is reloaded at it.
+	link := NewClientLink("us-alice", "Alice", "se-controller", "Phone", func(any) bool { return true })
+	inPart := int64(6000)
+	if _, err := svc.HandleCommand(ctx, link, snap.ID, "seek", CommandArgs{PositionMS: &inPart}); err != nil {
+		t.Fatal(err)
+	}
+	driver.mu.Lock()
+	seeks := append([]int64(nil), driver.seeks...)
+	loads := len(driver.loads)
+	driver.mu.Unlock()
+	if len(seeks) != 1 || seeks[0] != 2000 {
+		t.Fatalf("a seek inside the loaded part = %v, want one seek to 2000 within it", seeks)
+	}
+	if loads != 1 {
+		t.Fatalf("a seek inside the loaded part reloaded the device (%d loads)", loads)
+	}
+
+	crossPart := int64(10000)
+	if _, err := svc.HandleCommand(ctx, link, snap.ID, "seek", CommandArgs{PositionMS: &crossPart}); err != nil {
+		t.Fatal(err)
+	}
+	load = driver.lastLoad(t)
+	if load.index != 2 || load.positionMS != 1000 {
+		t.Fatalf("seek to 10s of the book loaded media %d at %dms, want part three at 1000", load.index, load.positionMS)
+	}
+	if got, _ := svc.Session("us-alice", snap.ID); got.PositionMS < crossPart || got.PositionMS > crossPart+500 {
+		t.Fatalf("the session reads %dms after a chapter jump, want the book position %d", got.PositionMS, crossPart)
+	}
+
+	// next leaves the book for the track, which is the entry change the
+	// parts were not.
+	if _, err := svc.HandleCommand(ctx, link, snap.ID, "next", CommandArgs{}); err != nil {
+		t.Fatal(err)
+	}
+	load = driver.lastLoad(t)
+	if load.index != 3 || load.positionMS != 0 {
+		t.Fatalf("next loaded media %d at %dms, want the track at 0", load.index, load.positionMS)
+	}
+	got, _ = svc.Session("us-alice", snap.ID)
+	if got.Index != 1 {
+		t.Fatalf("index %d after next, want the track", got.Index)
+	}
+	sink.mu.Lock()
+	flushed := append([]string(nil), sink.listens...)
+	sink.mu.Unlock()
+	// One listen for the whole book, accumulated across its parts,
+	// rather than one per file.
+	if len(flushed) != 1 || flushed[0] != "bk-one" {
+		t.Fatalf("listens after leaving the book = %v, want one for bk-one", flushed)
+	}
+}
+
+// TestBookFinishesOnItsOwnTimeline covers the end of the load: the
+// device runs out after the last part, and what is written down is the
+// book at the book's end rather than a part at a part's end.
+func TestBookFinishesOnItsOwnTimeline(t *testing.T) {
+	svc, sink, driver := newTestService(t)
+	ctx := context.Background()
+	epID := deviceEndpointID(t, svc, "us-alice")
+
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"bk-one"}, Play: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	driver.events <- DriverEvent{At: time.Now(), Playing: false, Index: 2, PositionMS: 6000, Finished: true}
+	waitFor(t, func() bool {
+		s, err := svc.Session("us-alice", snap.ID)
+		return err == nil && !s.Playing
+	})
+	got, err := svc.Session("us-alice", snap.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PositionMS != 15000 {
+		t.Fatalf("the finished book reads %dms, want the whole book's 15000", got.PositionMS)
+	}
+	waitFor(t, func() bool {
+		sink.mu.Lock()
+		defer sink.mu.Unlock()
+		return len(sink.checkpoints) > 0 && sink.checkpoints[len(sink.checkpoints)-1] == "bk-one"
+	})
+}
+
+// TestProbeRefusesWhatItWouldInterrupt: a probe replaces what a device
+// is playing, so the ones it must not run against refuse before
+// anything is loaded.
+func TestProbeRefusesWhatItWouldInterrupt(t *testing.T) {
+	svc, _, driver := newTestService(t)
+	ctx := context.Background()
+	epID := deviceEndpointID(t, svc, "us-alice")
+	media := ProbeMedia{
+		Item: func(_ EndpointTarget, base string) MediaItem {
+			return MediaItem{PID: "probe", URL: base + "/media/probe.wav", MimeType: "audio/wav"}
+		},
+	}
+
+	// A live session is somebody listening.
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one"}, Play: true}); err != nil {
+		t.Fatal(err)
+	}
+	loadsBefore := func() int {
+		driver.mu.Lock()
+		defer driver.mu.Unlock()
+		return len(driver.loads)
+	}()
+	if _, err := svc.Probe(ctx, "us-alice", epID, media); !errors.Is(err, ErrEndpointBusy) {
+		t.Fatalf("probing an endpoint mid-session = %v, want endpoint busy", err)
+	}
+	if got := func() int {
+		driver.mu.Lock()
+		defer driver.mu.Unlock()
+		return len(driver.loads)
+	}(); got != loadsBefore {
+		t.Fatal("the refused probe still loaded media over the session")
+	}
+
+	// An endpoint that has left the network cannot be dialed.
+	if err := svc.End(ctx, "us-alice", svc.Sessions("us-alice")[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	svc.EndpointOffline(ctx, epID)
+	if _, err := svc.Probe(ctx, "us-alice", epID, media); !errors.Is(err, ErrEndpointOffline) {
+		t.Fatalf("probing an offline endpoint = %v, want endpoint offline", err)
+	}
+}
+
+// TestProbeOnlyDrivesFetchingEndpoints: a probe measures whether a
+// device can fetch this server, so the endpoints that fetch nothing
+// are not probe targets at all rather than ones that always pass.
+func TestProbeOnlyDrivesFetchingEndpoints(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+	link := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	clientEP := svc.HandleRegister(link, "Phone", true, true)
+
+	_, err := svc.Probe(ctx, "us-alice", clientEP, ProbeMedia{})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("probing a client endpoint = %v, want not found", err)
+	}
+	if _, err := svc.Probe(ctx, "us-alice", "pe-nothing", ProbeMedia{}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("probing an unknown endpoint = %v, want not found", err)
 	}
 }

@@ -64,7 +64,8 @@ func enclosureURL(pid, token string) string {
 // its input and fails on anything else, and a renderer given the mp3
 // floor was given it because that is what it accepts. Handing either a
 // raw enclosure trades a clear refusal for a failure inside the driver,
-// which is the trade the multi-part refusal above already declines.
+// which is the same trade the windowed-track refusal beside it
+// declines.
 func (r *ConnectResolver) enclosureItem(ctx context.Context, userID, pid string, ttl time.Duration, force string, cause error) (string, string, bool) {
 	if r.Media == nil || force != "" || !errors.Is(cause, service.ErrEpisodeNotFetched) {
 		return "", "", false

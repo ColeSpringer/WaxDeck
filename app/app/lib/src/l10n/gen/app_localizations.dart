@@ -4059,12 +4059,6 @@ abstract class AppLocalizations {
   /// **'More'**
   String get devicesMore;
 
-  /// Snackbar when handing a multi-part audiobook to a device that cannot play one. {endpoint} is that device's user-chosen name.
-  ///
-  /// In en, this message translates to:
-  /// **'Multi-part audiobooks can\'t play on {endpoint} yet. Play it on this device instead.'**
-  String devicesMultiPartAudiobook(String endpoint);
-
   /// Empty state of the connection check.
   ///
   /// In en, this message translates to:
@@ -4076,6 +4070,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.'**
   String get devicesNoAddressesMessage;
+
+  /// Empty state in the connection check when no cast device or renderer has been found.
+  ///
+  /// In en, this message translates to:
+  /// **'No devices to test'**
+  String get devicesNoDevicesToTest;
+
+  /// Body of the empty state when the connection check has no device to run against.
+  ///
+  /// In en, this message translates to:
+  /// **'No Chromecast or renderer has turned up on this network. Discovery needs multicast, which does not cross Docker\'s default network.'**
+  String get devicesNoDevicesToTestMessage;
 
   /// Empty state of the remote playback screen.
   ///
@@ -4143,6 +4149,24 @@ abstract class AppLocalizations {
   /// **'Playing radio here'**
   String get devicesPlayingRadioHere;
 
+  /// Verdict line when the device took the probe URL and could not play it.
+  ///
+  /// In en, this message translates to:
+  /// **'The device refused this address'**
+  String get devicesProbeFailed;
+
+  /// Verdict line when the device fetched the probe and started playing. {latency} is how long that took, in milliseconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Played, after {latency} ms'**
+  String devicesProbePlayed(int latency);
+
+  /// Verdict line when the device never reported playing the probe.
+  ///
+  /// In en, this message translates to:
+  /// **'The device never started playing'**
+  String get devicesProbeTimeout;
+
   /// Under every device row while live radio plays here: a station is not a session and cannot be sent anywhere.
   ///
   /// In en, this message translates to:
@@ -4178,6 +4202,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Take over, or leave it playing'**
   String get devicesTakeOverOrLeave;
+
+  /// Section header in the connection check for the half a real device runs.
+  ///
+  /// In en, this message translates to:
+  /// **'Test on a device'**
+  String get devicesTestOnDevice;
+
+  /// Explains what the device half of the connection check does.
+  ///
+  /// In en, this message translates to:
+  /// **'The check above is this server reaching itself. Pick a speaker and it will fetch a second of silence through each address and say what happened.'**
+  String get devicesTestOnDeviceBlurb;
+
+  /// Subtitle on a device row while its connection test runs, which is slow enough to say so.
+  ///
+  /// In en, this message translates to:
+  /// **'Testing. This takes a few seconds per address.'**
+  String get devicesTesting;
 
   /// The row for the device the listener is holding, in the device sheet.
   ///
@@ -4503,6 +4545,12 @@ abstract class AppLocalizations {
   /// **'Audible DRM files can\'t be played.'**
   String get errorDrmProtected;
 
+  /// Error sentence for `endpoint-busy`: the target device is playing something the request would have taken it over from.
+  ///
+  /// In en, this message translates to:
+  /// **'That device is in the middle of something else. Stop it there and try again.'**
+  String get errorEndpointBusy;
+
   /// Error sentence for the spec code `endpoint-failed`: the other device took the command and failed at it, unlike `endpoint-offline`, where it never got it.
   ///
   /// In en, this message translates to:
@@ -4568,12 +4616,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This device is not set up as a player yet. Try again in a moment.'**
   String get errorLocalUnregistered;
-
-  /// Error sentence for `feature-unavailable` when the params name the feature as multi-part-audiobook: a book this server cannot yet split across a device.
-  ///
-  /// In en, this message translates to:
-  /// **'Multi-part audiobooks can\'t play on another device yet. Play it on this one instead.'**
-  String get errorMultiPartAudiobook;
 
   /// Error sentence for the client's own `transport` code: the request never reached a server that could answer it.
   ///

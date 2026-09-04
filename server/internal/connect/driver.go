@@ -15,6 +15,13 @@ import (
 // MediaItem is one device-fetchable stream: an absolute URL the
 // endpoint pulls itself, plus display metadata for the device's own
 // UI (cast receivers and renderers show it).
+//
+// One queue entry is usually one item, but not always: a multi-file
+// audiobook is one entry laid out over one item per part, because a
+// device fetches whole files and steps through them itself. Entry and
+// PartStartMS are what the session manager rebuilds queue positions
+// from, so a resolver that renders several items for one entry must
+// fill them; drivers never read either.
 type MediaItem struct {
 	PID        string
 	URL        string
@@ -23,6 +30,12 @@ type MediaItem struct {
 	Artist     string
 	ArtURL     string
 	DurationMS int64
+	// Entry is the index, in the queue this render was asked for, of
+	// the entry this item plays part or all of.
+	Entry int
+	// PartStartMS is where this item begins on its entry's own
+	// timeline; zero for an entry rendered whole.
+	PartStartMS int64
 }
 
 // DriverEvent is one state observation from a driven endpoint. Fields
@@ -72,6 +85,20 @@ func TargetFor(kind string, d Driver) EndpointTarget {
 		t.Formats = fs.AcceptedFormats()
 	}
 	return t
+}
+
+// Idler is the optional capability of a driver that can say whether
+// its device is in the middle of something. Loading media takes a
+// device over - on a Chromecast it launches the default media receiver
+// over whatever app is running - so anything that would do that for a
+// diagnosis rather than for a listener asks first. A driver that does
+// not implement it is treated as idle, which is what a device with
+// nothing to report would say.
+//
+// The detail names what is playing: "busy" a listener cannot place is
+// not something they can act on.
+type Idler interface {
+	Idle(ctx context.Context) (idle bool, detail string)
 }
 
 // Driver drives one physical output for one load at a time. Load

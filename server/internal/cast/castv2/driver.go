@@ -153,6 +153,84 @@ func findApp(st *receiverStatus, appID string) *receiverApp {
 	return nil
 }
 
+// Idle reports whether the device is free to be taken over. Loading
+// media launches the default media receiver over whatever app is
+// running, so anything doing that for a diagnosis rather than for a
+// listener asks this first.
+//
+// Two things count as busy and both have to be asked about separately.
+// A foreign application - somebody's film, somebody's music service -
+// is named as the device names it. The stock media receiver is not a
+// foreign app, because it is the one a WaxDeck load uses too; whether
+// it is idle or playing for another sender is a question only its own
+// media status answers, so that is asked. The ambient idle screen a
+// device runs when nothing is casting is an application in the status
+// like any other and is not busy at all.
+//
+// A status read that fails answers idle. The connection is then
+// broken, and a load about to fail with the device's own error says
+// more than a refusal invented here.
+func (d *driver) Idle(ctx context.Context) (bool, string) {
+	st, err := d.conn.getReceiverStatus(ctx)
+	if err != nil {
+		return true, ""
+	}
+	for _, app := range st.Applications {
+		if app.IsIdleScreen {
+			continue
+		}
+		if app.AppID != DefaultMediaReceiverApp {
+			name := app.DisplayName
+			if name == "" {
+				name = app.AppID
+			}
+			return false, name + " is running on this device"
+		}
+		if playing, what := d.receiverPlaying(ctx, app); playing {
+			return false, what
+		}
+	}
+	return true, ""
+}
+
+// receiverPlaying asks a running default media receiver what it is
+// doing. A receiver launched and then left alone reports no media
+// session at all, which is the idle a device sitting on the cast
+// screen is in; anything mid-item belongs to whoever put it there.
+func (d *driver) receiverPlaying(ctx context.Context, app receiverApp) (bool, string) {
+	if err := d.conn.connectTransport(app.TransportID); err != nil {
+		return false, ""
+	}
+	st, err := d.conn.mediaCall(ctx, app.TransportID, func(id int) any {
+		return getStatusRequest{Type: "GET_STATUS", RequestID: id}
+	})
+	if err != nil || st == nil {
+		return false, ""
+	}
+	switch st.PlayerState {
+	case statePlaying, stateBuffering, statePaused:
+		if title := currentTitle(st); title != "" {
+			return true, title + " is playing on this device"
+		}
+		return true, "this device is already playing something"
+	}
+	return false, ""
+}
+
+// currentTitle names what a receiver has loaded, where its metadata
+// says: what is on the screen is what a listener recognises.
+func currentTitle(st *mediaStatus) string {
+	for _, it := range st.Items {
+		if it.ItemID != st.CurrentItemID {
+			continue
+		}
+		if it.Media.Metadata != nil {
+			return it.Media.Metadata.Title
+		}
+	}
+	return ""
+}
+
 // Load replaces whatever is playing: one item goes over LOAD, more
 // over QUEUE_LOAD. QUEUE_LOAD has no autoplay knob, so a paused queue
 // load pauses right after the receiver starts.

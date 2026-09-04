@@ -44,6 +44,9 @@ type Server struct {
 	group *supervise.Group
 	// bases are the advertise bases cast preflight reports.
 	bases connect.Bases
+	// probes records which addresses a device probe's target actually
+	// fetched through, which is what its verdicts are built on.
+	probes *probeFetches
 	// cookieSecure marks session cookies Secure; set whenever the
 	// deployed origin is HTTPS, never on the plain-HTTP LAN default.
 	cookieSecure bool
@@ -152,6 +155,7 @@ func NewServer(version string, opts Options) *Server {
 		connect:      opts.Connect,
 		group:        opts.Group,
 		bases:        opts.Bases,
+		probes:       newProbeFetches(),
 		log:          opts.Logger,
 		cookieSecure: opts.CookieSecure,
 		publicBase:   opts.PublicBase,

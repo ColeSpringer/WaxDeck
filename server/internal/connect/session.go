@@ -38,6 +38,65 @@ type TimelineMedia struct {
 	Boundaries   []TimelineBoundary
 }
 
+// mediaSlot is one loaded media item's place in the queue: the entry
+// it belongs to and where on that entry's own timeline it begins. A
+// queue of whole items is one slot per entry starting at zero; a
+// multi-file audiobook is one entry over one slot per part.
+//
+// Starts rather than windows, so the table reads the way the timeline
+// boundaries do: a slot runs until the next slot of the same entry
+// begins, and the last runs to the end. A part whose duration the
+// catalog never learned is then a slot nothing can land in rather than
+// a hole a seek falls through.
+type mediaSlot struct {
+	Entry   int
+	StartMS int64
+}
+
+// slotsFor maps a rendered media list back to the queue it was
+// rendered for.
+func slotsFor(items []MediaItem) []mediaSlot {
+	slots := make([]mediaSlot, len(items))
+	for i, it := range items {
+		slots[i] = mediaSlot{Entry: it.Entry, StartMS: it.PartStartMS}
+	}
+	return slots
+}
+
+// locate maps a driver observation - which loaded item it is playing
+// and how far into it - onto the queue: the entry, and the position on
+// that entry's own timeline. An item the table does not cover reads as
+// the entry of the same number, which is what a queue of whole items
+// means.
+func locate(slots []mediaSlot, mediaIdx int, posMS int64) (int, int64) {
+	if mediaIdx < 0 || mediaIdx >= len(slots) {
+		return mediaIdx, posMS
+	}
+	sl := slots[mediaIdx]
+	return sl.Entry, sl.StartMS + posMS
+}
+
+// place inverts locate: the loaded item holding a position on an
+// entry's timeline, and the position inside that item. The last slot
+// of the entry that begins at or before the position, so a position
+// past the end lands in the final part - which is where seeking to the
+// end of a book belongs.
+func place(slots []mediaSlot, entry int, entryMS int64) (int, int64) {
+	found := -1
+	for i, sl := range slots {
+		if sl.Entry != entry {
+			continue
+		}
+		if found < 0 || sl.StartMS <= entryMS {
+			found = i
+		}
+	}
+	if found < 0 {
+		return entry, entryMS
+	}
+	return found, max(entryMS-slots[found].StartMS, 0)
+}
+
 // queueState is a session's playback state. Position is an
 // observation: PositionMS was true at PositionAt; snapshots
 // extrapolate forward with Rate while Playing.
@@ -64,10 +123,14 @@ type session struct {
 	q          queueState
 
 	// Remote plumbing: the live driver and, when the whole queue plays
-	// as one stream, the timeline that maps positions.
+	// as one stream, the timeline that maps positions. Loaded per item
+	// instead, slots map the loaded media back to queue entries and
+	// mediaIndex is the item the device last reported playing.
 	driver       Driver
 	driverCancel func()
 	timeline     *TimelineMedia
+	slots        []mediaSlot
+	mediaIndex   int
 
 	createdAt time.Time
 	updatedAt time.Time

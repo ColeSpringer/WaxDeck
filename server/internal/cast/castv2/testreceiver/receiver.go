@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/http"
 	"strconv"
 	"sync"
 	"testing"
@@ -128,6 +129,20 @@ type Receiver struct {
 	mu       sync.Mutex
 	conns    map[*senderConn]struct{}
 	launched string
+	// foreign stands in for somebody else's app on the television:
+	// when set, RECEIVER_STATUS reports it instead of the WaxDeck load
+	// that would otherwise be running.
+	foreignApp  string
+	foreignName string
+	foreignIdle bool
+	// loadFailure makes the next LOAD answer LOAD_FAILED with this
+	// reason, the way a device refusing a URL does.
+	loadFailure string
+	// fetch makes the receiver pull each loaded contentId, which a real
+	// device does before it can play anything. Off by default: most
+	// suites load URLs that resolve nowhere, and the wait would be
+	// theirs to pay for a byte nothing asserts on.
+	fetch    bool
 	volume   float64
 	muted    bool
 	clock    float64
@@ -264,6 +279,12 @@ func (r *Receiver) handleReceiver(sc *senderConn, msg castv2.Message, req reques
 	case "GET_STATUS":
 	case "LAUNCH":
 		r.launched = req.AppID
+		// The ambient screen yields to a launched app, the way a real
+		// device's does. A foreign app of somebody's own is left
+		// standing: nothing here launches over one.
+		if r.foreignIdle {
+			r.foreignApp, r.foreignName, r.foreignIdle = "", "", false
+		}
 	case "SET_VOLUME":
 		if req.Volume != nil {
 			if req.Volume.Level != nil {
@@ -287,7 +308,17 @@ func (r *Receiver) receiverStatusLocked(requestID int) string {
 	status := map[string]any{
 		"volume": map[string]any{"level": r.volume, "muted": r.muted, "controlType": "attenuation"},
 	}
-	if r.launched != "" {
+	switch {
+	case r.foreignApp != "":
+		status["applications"] = []any{map[string]any{
+			"appId":        r.foreignApp,
+			"sessionId":    sessionID,
+			"transportId":  transportID,
+			"displayName":  r.foreignName,
+			"statusText":   "Playing",
+			"isIdleScreen": r.foreignIdle,
+		}}
+	case r.launched != "":
 		status["applications"] = []any{map[string]any{
 			"appId":       r.launched,
 			"sessionId":   sessionID,
@@ -305,6 +336,14 @@ func (r *Receiver) handleMedia(sc *senderConn, msg castv2.Message, req request) 
 	r.actions = append(r.actions, req.Type)
 	switch req.Type {
 	case "LOAD":
+		if r.loadFailure != "" {
+			reason := r.loadFailure
+			r.loadFailure = ""
+			r.mu.Unlock()
+			sc.send(reply(msg, castv2.NamespaceMedia,
+				fmt.Sprintf(`{"type":"LOAD_FAILED","requestId":%d,"reason":%q}`, req.RequestID, reason)))
+			return
+		}
 		r.media.sessionID++
 		var ct float64
 		if req.CurrentTime != nil {
@@ -381,7 +420,26 @@ func (r *Receiver) handleMedia(sc *senderConn, msg castv2.Message, req request) 
 	case "GET_STATUS":
 	}
 	payload := r.mediaStatusLocked(req.RequestID)
+	fetch := r.fetch
+	var urls []string
+	if fetch {
+		for _, it := range r.media.items {
+			urls = append(urls, it.media.ContentID)
+		}
+	}
 	r.mu.Unlock()
+	// Off the lock and before the reply, which is the order a device
+	// works in: it opens the stream, and only then has anything to say
+	// about playing it.
+	if fetch {
+		client := &http.Client{Timeout: 2 * time.Second}
+		for _, u := range urls {
+			resp, err := client.Get(u)
+			if err == nil {
+				resp.Body.Close()
+			}
+		}
+	}
 	sc.send(reply(msg, castv2.NamespaceMedia, payload))
 }
 
@@ -460,6 +518,42 @@ func (r *Receiver) broadcast() {
 			PayloadUTF8:   payload,
 		})
 	}
+}
+
+// FetchMedia makes the receiver pull each loaded URL, the way a device
+// has to before it can play one. Tests that assert on what reached the
+// server through a given address need it; the rest would only be
+// waiting on hosts that do not exist.
+func (r *Receiver) FetchMedia() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.fetch = true
+}
+
+// RunForeignApp makes the device report somebody else's application
+// as the one running, which is what a television in the middle of a
+// film looks like over RECEIVER_STATUS.
+func (r *Receiver) RunForeignApp(appID, displayName string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.foreignApp, r.foreignName, r.foreignIdle = appID, displayName, false
+}
+
+// RunIdleScreen makes the device report its ambient app - Backdrop on
+// a Chromecast - which is an application in the status like any other
+// and is what an idle device is running.
+func (r *Receiver) RunIdleScreen() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.foreignApp, r.foreignName, r.foreignIdle = "E8C28D3C", "Backdrop", true
+}
+
+// FailNextLoad makes the next LOAD answer LOAD_FAILED with reason, the
+// way a device that cannot fetch a URL refuses it.
+func (r *Receiver) FailNextLoad(reason string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.loadFailure = reason
 }
 
 // FinishCurrent ends playback the way a real receiver does when the

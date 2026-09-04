@@ -2399,16 +2399,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get devicesMore => 'More';
 
   @override
-  String devicesMultiPartAudiobook(String endpoint) {
-    return 'Multi-part audiobooks can\'t play on $endpoint yet. Play it on this device instead.';
-  }
-
-  @override
   String get devicesNoAddresses => 'No addresses to try';
 
   @override
   String get devicesNoAddressesMessage =>
       'This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.';
+
+  @override
+  String get devicesNoDevicesToTest => 'No devices to test';
+
+  @override
+  String get devicesNoDevicesToTestMessage =>
+      'No Chromecast or renderer has turned up on this network. Discovery needs multicast, which does not cross Docker\'s default network.';
 
   @override
   String get devicesNothingElsewhere => 'Nothing playing elsewhere';
@@ -2450,6 +2452,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get devicesPlayingRadioHere => 'Playing radio here';
 
   @override
+  String get devicesProbeFailed => 'The device refused this address';
+
+  @override
+  String devicesProbePlayed(int latency) {
+    return 'Played, after $latency ms';
+  }
+
+  @override
+  String get devicesProbeTimeout => 'The device never started playing';
+
+  @override
   String get devicesRadioStaysHere =>
       'Stations play on the device that tuned them';
 
@@ -2472,6 +2485,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get devicesTakeOverOrLeave => 'Take over, or leave it playing';
+
+  @override
+  String get devicesTestOnDevice => 'Test on a device';
+
+  @override
+  String get devicesTestOnDeviceBlurb =>
+      'The check above is this server reaching itself. Pick a speaker and it will fetch a second of silence through each address and say what happened.';
+
+  @override
+  String get devicesTesting => 'Testing. This takes a few seconds per address.';
 
   @override
   String get devicesThisDevice => 'This device';
@@ -2724,6 +2747,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get errorDrmProtected => 'Audible DRM files can\'t be played.';
 
   @override
+  String get errorEndpointBusy =>
+      'That device is in the middle of something else. Stop it there and try again.';
+
+  @override
   String get errorEndpointFailed =>
       'That device could not carry that out. It is still connected, so it is worth trying again.';
 
@@ -2765,10 +2792,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get errorLocalUnregistered =>
       'This device is not set up as a player yet. Try again in a moment.';
-
-  @override
-  String get errorMultiPartAudiobook =>
-      'Multi-part audiobooks can\'t play on another device yet. Play it on this one instead.';
 
   @override
   String get errorNetwork =>

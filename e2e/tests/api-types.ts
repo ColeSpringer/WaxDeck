@@ -2759,7 +2759,7 @@ export interface paths {
         put?: never;
         /**
          * Start playback on an endpoint
-         * @description Loads a queue onto an endpoint and starts a server-tracked playback session there ("play on the kitchen speaker"). An endpoint plays at most one session: starting a new session on an endpoint that already has one ends the old session first, whoever owned it (physical outputs are last-writer-wins, like the speaker itself). Item pids must all be visible to the caller; the server shapes stream delivery for the target endpoint's capabilities, re-minting URLs as needed, so the same queue plays on a phone, a cast device, or a renderer without the caller caring about formats. Sessions on device endpoints are server-authoritative; a session created on one of the caller's own client endpoints is loaded onto that client and then mirrors the client's local playback. Conflict with code `endpoint-offline` means the target endpoint is not connected right now, and `timeout` means it is connected but did not answer in time. A queue the target cannot play answers `feature-unavailable` naming the pid - a multi-part audiobook or a windowed track sent to a device endpoint, say - which a controller can turn into an offer to play it somewhere that can, rather than a bare failure. When the target is a client endpoint, that client's own refusal code and message are what arrive here - `endpoint-failed` where it took the load and could not carry it out.
+         * @description Loads a queue onto an endpoint and starts a server-tracked playback session there ("play on the kitchen speaker"). An endpoint plays at most one session: starting a new session on an endpoint that already has one ends the old session first, whoever owned it (physical outputs are last-writer-wins, like the speaker itself). Item pids must all be visible to the caller; the server shapes stream delivery for the target endpoint's capabilities, re-minting URLs as needed, so the same queue plays on a phone, a cast device, or a renderer without the caller caring about formats. Sessions on device endpoints are server-authoritative; a session created on one of the caller's own client endpoints is loaded onto that client and then mirrors the client's local playback. Conflict with code `endpoint-offline` means the target endpoint is not connected right now, and `timeout` means it is connected but did not answer in time. A queue the target cannot play answers `feature-unavailable` naming the pid - a windowed track sent to a device endpoint on a server running without the streaming engine, say - which a controller can turn into an offer to play it somewhere that can, rather than a bare failure. When the target is a client endpoint, that client's own refusal code and message are what arrive here - `endpoint-failed` where it took the load and could not carry it out.
          *     Starting playback somewhere else from a device that is playing is a handoff, and a device plays one thing: the queue, index, position, rate, and repeat move to the target, and the source silences itself. The order in `itemPids` is the play order, so a shuffled queue arrives shuffled whatever `shuffle` says. A caller that holds a mirror session's id transfers it instead; one that does not passes `handoffFrom` here and stops its own playback when this call answers.
          */
         post: operations["createPlaybackSession"];
@@ -2870,6 +2870,28 @@ export interface paths {
         get: operations["getCastPreflight"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/player/cast/preflight/{endpointId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Play a probe on a cast device or renderer
+         * @description The other half of the connection check: instead of the server reaching itself through each candidate address, the device reaches the server through them. A second of silence is loaded onto the endpoint from each base in turn, and what settles the verdict is the request arriving back at this server - not what the device says about itself, which a receiver reports as playing while it is still resolving a name it will never resolve. This is what catches the failures a server-side check cannot see, because they are the device's: DNS it resolves differently, a certificate authority it does not trust, a route it does not have.
+         *     Bases are tried in the order sessions try them, and the answer stops at the point the device stopped answering: a row per address that was actually put to it.
+         *     A POST because it drives a physical output. Loading media replaces whatever the device is showing - on a Chromecast it launches the default media receiver over the running app - so the probe first asks the device what it is doing and refuses rather than interrupting: `conflict` with code `endpoint-busy`, naming what is playing, for a foreign application on a cast device, a stock receiver already playing for somebody else, a renderer playing or holding something paused, a WaxDeck session on the endpoint, or a check already running on it. A device being probed is held for the run, so a queue started onto it meanwhile is refused the same way rather than loaded over. `endpoint-offline` means it could not be dialed at all. Only cast and DLNA endpoints can be probed; anything else answers `not-found`.
+         */
+        post: operations["probeCastEndpoint"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4930,8 +4952,8 @@ export interface components {
             /**
              * @description Machine-readable detail, where one code covers several causes a client has to tell apart. `code` names which keys can appear (see the API-level description); values are always strings. Best-effort per refusal, never guaranteed by code: an error of the same code with no params is an ordinary one, so read this as a refinement rather than requiring it. `message` says the same thing in prose, so a client that ignores this reads what it always read. Clients must ignore keys they do not know.
              * @example {
-             *       "feature": "multi-part-audiobook",
-             *       "pid": "bk-01JZX5N8QW3F4V9T2B7KD3M9R6"
+             *       "feature": "windowed-track",
+             *       "pid": "tr-01JZX5N8QW3F4V9T2B7KD3M9R6"
              *     }
              */
             params?: {
@@ -6116,8 +6138,8 @@ export interface components {
             /**
              * @description Machine-readable detail keyed per code, the same shape and rules as the REST `Error` schema's `params`: a refusal a client can hit over either transport says the same thing on both.
              * @example {
-             *       "feature": "multi-part-audiobook",
-             *       "pid": "bk-01JZX5N8QW3F4V9T2B7KD3M9R6"
+             *       "feature": "windowed-track",
+             *       "pid": "tr-01JZX5N8QW3F4V9T2B7KD3M9R6"
              *     }
              */
             params?: {
@@ -8116,7 +8138,7 @@ export interface components {
             index: number;
             /**
              * Format: int64
-             * @description Position within the current entry at `positionAt`.
+             * @description Position within the current entry at `positionAt`, on that entry's own timeline. A multi-file audiobook is one entry whatever it is playing on, so this is the book position even where the device is fetching one part at a time.
              */
             positionMs: number;
             /**
@@ -8320,12 +8342,46 @@ export interface components {
              * @example http://192.168.1.20:4420
              */
             base: string;
-            /** @description Where the candidate came from: `configured` (the public base) or `detected` (the auto-detected LAN address). Open string. */
+            /** @description Where the candidate came from: `configured` (the public base), `detected` (the auto-detected LAN address), or `loopback` (this server's own interface, which only the endpoints running beside it can fetch). Open string. */
             source: string;
             /** @description Whether the server could fetch its own health endpoint through this base. */
             reachable: boolean;
             /** @description Plain-language observations: scheme and certificate caveats, name-resolution warnings, why a base is likely or unlikely to work from a cast device. */
             notes: string[];
+            /** @description What a real device made of this base. Present only in a device probe's answer; the server-side check has no device to ask. */
+            device?: components["schemas"]["CastDeviceVerdict"];
+        };
+        /** @description One device's trial run against one advertise base: a second of silence loaded onto it, and what it did. */
+        CastDeviceVerdict: {
+            /**
+             * @description `played` (the device fetched the probe through this address), `failed` (it refused the load or the stream, and `detail` carries what it said), or `timeout` (it never fetched it, which is what an address the device cannot reach looks like). Open string.
+             * @example played
+             */
+            verdict: string;
+            /** @description What the device or the protocol said, verbatim where there is anything to quote: a cast idle reason, a UPnP fault. */
+            detail?: string;
+            /**
+             * Format: int64
+             * @description Milliseconds from handing the device the URL to its answer, which is roughly what a listener waits before the first sound. On a verdict that is not `played` it is how long the device was given.
+             */
+            latencyMs: number;
+        };
+        /** @description A device probe's answer: the endpoint it ran against, and one row per candidate base carrying both verdicts - the server's own reachability check and what the device did. */
+        CastDeviceProbe: {
+            /**
+             * @description The endpoint that was probed.
+             * @example pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            endpointId: string;
+            /** @description Its display name, for a one-call rendering. */
+            name: string;
+            /**
+             * @description `cast` or `dlna` (open string).
+             * @example cast
+             */
+            kind: string;
+            /** @description The addresses the device was put to, in the order sessions try them. Short of the full candidate list where the device stopped answering partway through. */
+            bases: components["schemas"]["CastPreflightBase"][];
         };
         /** @description The advertise bases cast sessions will offer, in try order, each with a server-side reachability verdict. */
         CastPreflight: {
@@ -10886,7 +10942,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The command could not be completed on the target player endpoint. Read `code` rather than the status: this answer carries four, and they call for different things. `endpoint-offline` means the endpoint is not connected - refresh the endpoint list; the device may have left the network or the client may have disconnected. `timeout` means it is connected but did not answer within the routing deadline, so retrying beats refreshing. `conflict` is the endpoint itself refusing because of something it is in the middle of, and the message says what. `endpoint-failed` is that endpoint taking the command and failing at it - a part it could not load, a start that did not take - so nothing about the request or the endpoint list needs changing and retrying is reasonable; the message carries whatever the endpoint could say about it. */
+        /** @description The command could not be completed on the target player endpoint. Read `code` rather than the status: this answer carries five, and they call for different things. `endpoint-offline` means the endpoint is not connected - refresh the endpoint list; the device may have left the network or the client may have disconnected. `timeout` means it is connected but did not answer within the routing deadline, so retrying beats refreshing. `conflict` is the endpoint itself refusing because of something it is in the middle of, and the message says what. `endpoint-busy` is the server refusing on the device's behalf, and only where the request would have taken it over rather than played for somebody: the device probe, which names what is playing instead of interrupting it. Stop that and retry, or leave it alone. `endpoint-failed` is that endpoint taking the command and failing at it - a part it could not load, a start that did not take - so nothing about the request or the endpoint list needs changing and retrying is reasonable; the message carries whatever the endpoint could say about it. */
         PlaybackConflict: {
             headers: {
                 [name: string]: unknown;
@@ -10948,6 +11004,8 @@ export interface components {
         EntityPid: string;
         /** @description Notification target PID (e.g. `nt-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         TargetId: string;
+        /** @description Player endpoint PID (e.g. `pe-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+        PlayerEndpointId: string;
         /** @description Playback session PID (e.g. `ps-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         PlaybackSessionId: string;
         /** @description Review entry PID (e.g. `rv-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -15503,6 +15561,33 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    probeCastEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Player endpoint PID (e.g. `pe-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                endpointId: components["parameters"]["PlayerEndpointId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What the device made of each candidate base. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CastDeviceProbe"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["PlaybackConflict"];
         };
     };
     listPlaylists: {

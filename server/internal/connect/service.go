@@ -152,9 +152,15 @@ type Service struct {
 	// session is not installed yet; reports for them are dropped (the
 	// client re-reports within seconds) instead of creating ghosts.
 	pendingLoads map[string]string // endpoint id -> session id
-	driverGen    map[string]int    // session id -> driver generation
-	listen       map[string]*listenTrack
-	routeSeq     uint64
+	// probing marks endpoints a device probe is driving. A probe loads
+	// media, which replaces whatever the device has, so it holds the
+	// endpoint for its run: a queue started onto it midway would be
+	// loaded over by the next base and silenced when the probe tidied
+	// up, while the session went on reporting that it was playing.
+	probing   map[string]bool
+	driverGen map[string]int // session id -> driver generation
+	listen    map[string]*listenTrack
+	routeSeq  uint64
 }
 
 // watchState tracks one connection's watch and the queue version it
@@ -218,6 +224,7 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		routes:       make(map[string]*route),
 		recentEnds:   make(map[string]endMark),
 		pendingLoads: make(map[string]string),
+		probing:      make(map[string]bool),
 		driverGen:    make(map[string]int),
 		listen:       make(map[string]*listenTrack),
 	}
@@ -646,6 +653,16 @@ func entryPIDs(entries []QueueEntry) []string {
 // accepts wins; a cast device that cannot fetch HTTPS falls to the
 // LAN base).
 func (s *Service) loadOnDevice(ctx context.Context, sess *session, ep Endpoint, entries []QueueEntry, index int, positionMS int64, play bool) error {
+	// A probe already has the device and is about to load over
+	// anything put there now, then silence it. Both paths that reach
+	// here - a fresh session and a transfer - are refused for the few
+	// seconds it lasts rather than colliding with it.
+	s.mu.Lock()
+	probing := s.probing[ep.ID]
+	s.mu.Unlock()
+	if probing {
+		return fmt.Errorf("%w: a connection check is running on %s", ErrEndpointBusy, ep.Name)
+	}
 	dial, ok := s.reg.dialer(ep.ID)
 	if !ok {
 		return ErrEndpointOffline
@@ -662,39 +679,18 @@ func (s *Service) loadOnDevice(ctx context.Context, sess *session, ep Endpoint, 
 		return InvalidError{Msg: "no advertise base is configured for casting"}
 	}
 	ttl := mediaTTL(entries)
-	ownerID := sess.ownerID
 	var lastErr error
 	for _, base := range bases {
-		var tm *TimelineMedia
-		if ep.Kind == KindCast && len(entries) > 1 {
-			tm, err = s.cfg.Resolver.Timeline(ctx, ownerID, entries, base)
-			if err != nil {
-				s.cfg.Logger.Warn("timeline mint failed; loading per item", "err", err)
-				tm = nil
-			}
+		rendered, err := s.renderQueue(ctx, sess.ownerID, ep, driver, entries, base, ttl)
+		if err != nil {
+			// The queue itself is unplayable here, which no other base
+			// would change.
+			driver.Close()
+			return err
 		}
-		if tm != nil {
-			abs := timelineAbsoluteMS(tm, index, positionMS)
-			if err := driver.Load(ctx, []MediaItem{tm.Item}, 0, abs, play); err != nil {
-				lastErr = err
-				continue
-			}
-			s.mu.Lock()
-			sess.timeline = tm
-			s.mu.Unlock()
-		} else {
-			items, err := s.cfg.Resolver.StreamItems(ctx, ownerID, entries, TargetFor(ep.Kind, driver), base, ttl)
-			if err != nil {
-				driver.Close()
-				return err
-			}
-			if err := driver.Load(ctx, items, index, positionMS, play); err != nil {
-				lastErr = err
-				continue
-			}
-			s.mu.Lock()
-			sess.timeline = nil
-			s.mu.Unlock()
+		if err := s.driveLoad(ctx, sess, driver, rendered, index, positionMS, play); err != nil {
+			lastErr = err
+			continue
 		}
 		lastErr = nil
 		break
@@ -705,6 +701,61 @@ func (s *Service) loadOnDevice(ctx context.Context, sess *session, ep Endpoint, 
 	}
 	s.attachDriver(sess, driver)
 	return nil
+}
+
+// deviceLoad is one advertise base's rendering of a queue: either the
+// whole queue as one gapless stream, or the media items the device
+// fetches one by one with the table that maps them back to entries.
+type deviceLoad struct {
+	items []MediaItem
+	slots []mediaSlot
+	tm    *TimelineMedia
+}
+
+// renderQueue renders the queue for one base: a gapless timeline where
+// the endpoint and the queue both allow one, per-item media otherwise.
+// An error is the queue's, not the base's - the caller stops rather
+// than trying the next address.
+func (s *Service) renderQueue(ctx context.Context, ownerID string, ep Endpoint, driver Driver, entries []QueueEntry, base string, ttl time.Duration) (deviceLoad, error) {
+	if ep.Kind == KindCast && len(entries) > 1 {
+		tm, err := s.cfg.Resolver.Timeline(ctx, ownerID, entries, base)
+		if err != nil {
+			s.cfg.Logger.Warn("timeline mint failed; loading per item", "err", err)
+		} else if tm != nil {
+			return deviceLoad{tm: tm}, nil
+		}
+	}
+	items, err := s.cfg.Resolver.StreamItems(ctx, ownerID, entries, TargetFor(ep.Kind, driver), base, ttl)
+	if err != nil {
+		return deviceLoad{}, err
+	}
+	return deviceLoad{items: items, slots: slotsFor(items)}, nil
+}
+
+// driveLoad hands a rendering to the device at a queue position and,
+// when the device takes it, records how to read that device's reports
+// back as queue positions.
+func (s *Service) driveLoad(ctx context.Context, sess *session, driver Driver, d deviceLoad, index int, positionMS int64, play bool) error {
+	items, mediaIdx, inMediaMS := d.at(index, positionMS)
+	if err := driver.Load(ctx, items, mediaIdx, inMediaMS, play); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	sess.timeline = d.tm
+	sess.slots = d.slots
+	sess.mediaIndex = mediaIdx
+	s.mu.Unlock()
+	return nil
+}
+
+// at resolves the driver arguments for a position in queue terms: what
+// to load, which item of it, and how far into that item.
+func (d deviceLoad) at(index int, positionMS int64) ([]MediaItem, int, int64) {
+	if d.tm != nil {
+		return []MediaItem{d.tm.Item}, 0, timelineAbsoluteMS(d.tm, index, positionMS)
+	}
+	mediaIdx, inMediaMS := place(d.slots, index, positionMS)
+	return d.items, mediaIdx, inMediaMS
 }
 
 // markLoadPending and clearLoadPending bracket a routed load: while
@@ -969,7 +1020,11 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 		sess.authority = AuthorityMirror
 		sess.driver = nil
 		sess.driverCancel = nil
+		// The mapping described media on the device this queue just
+		// left; the client reports in queue terms of its own.
 		sess.timeline = nil
+		sess.slots = nil
+		sess.mediaIndex = 0
 		// Fence the old device driver: a buffered trailing status from
 		// its pump must not clobber the position the transfer carried.
 		s.driverGen[sess.id]++

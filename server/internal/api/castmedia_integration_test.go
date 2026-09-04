@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colespringer/waxdeck/fixtures"
 	"github.com/colespringer/waxdeck/server/internal/connect"
 )
 
@@ -236,5 +237,153 @@ func TestStreamItemsMintsFetchableArt(t *testing.T) {
 	resp3.Body.Close()
 	if resp3.StatusCode != 401 {
 		t.Fatalf("art without a token = %d, want 401", resp3.StatusCode)
+	}
+}
+
+// TestStreamItemsSplitsAMultiPartBook pins the resolver's half of
+// playing a book on a device: one media item per backing file, each
+// naming the entry it belongs to and where it starts on the book's own
+// timeline. The session manager reads positions back through exactly
+// those two fields, so a wrong one is a listener losing their place
+// mid-book rather than anything that fails to compile.
+func TestStreamItemsSplitsAMultiPartBook(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) != 1 {
+		t.Fatalf("audiobooks = %d, want the fixture's one", len(books.Items))
+	}
+	book := books.Items[0]
+	entries := []connect.QueueEntry{
+		{PID: book.Pid, Title: book.Title, DurationMS: book.DurationMs},
+	}
+
+	r := castResolver(h)
+	items, err := r.StreamItems(context.Background(), adminUserID(t, h), entries,
+		connect.EndpointTarget{Kind: connect.KindCast}, h.ts.URL, 30*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("a three-part book rendered %d items", len(items))
+	}
+	var start int64
+	seen := map[string]bool{}
+	for i, item := range items {
+		if item.PID != book.Pid {
+			t.Fatalf("item %d names %q rather than the book", i, item.PID)
+		}
+		if item.Entry != 0 {
+			t.Fatalf("item %d belongs to entry %d; the book is entry 0", i, item.Entry)
+		}
+		if item.PartStartMS != start {
+			t.Fatalf("part %d starts at %dms, want %d on the book timeline", i, item.PartStartMS, start)
+		}
+		if item.DurationMS <= 0 {
+			t.Fatalf("part %d has no duration", i)
+		}
+		start += item.DurationMS
+		if seen[item.URL] {
+			t.Fatalf("part %d fetches the same bytes as an earlier one: %s", i, item.URL)
+		}
+		seen[item.URL] = true
+
+		// A device fetches these itself, with nothing but the URL.
+		resp, err := http.Get(item.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("part %d answered %d", i, resp.StatusCode)
+		}
+	}
+	// The parts add up to the entry the queue holds, which is what
+	// every position on this session is expressed in.
+	if start != book.DurationMs {
+		t.Fatalf("the parts cover %dms of a %dms book", start, book.DurationMs)
+	}
+
+	// The timeline is off for such a queue: parts have a reading order
+	// one continuous stream cannot carry.
+	tm, err := r.Timeline(context.Background(), adminUserID(t, h), entries, h.ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tm != nil {
+		t.Fatal("a queue holding a multi-file book still minted a timeline")
+	}
+}
+
+// TestBookPiecesResolveInOnePass pins the shape that keeps a book's
+// parts off the catalog one at a time: one call answers for every
+// part, and both views of a part - the engine's source and the
+// original file - come off the same row, so which one a server can use
+// costs it nothing. A regression to per-part resolution has to delete
+// this call to happen.
+func TestBookPiecesResolveInOnePass(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) != 1 {
+		t.Fatalf("audiobooks = %d, want the fixture's one", len(books.Items))
+	}
+	book := books.Items[0]
+	uc, err := h.svc.UserCtxByID(ctx, adminUserID(t, h))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pieces, err := h.svc.BookPieces(ctx, uc, book.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pieces) != 3 {
+		t.Fatalf("pieces = %d, want one per part of the fixture book", len(pieces))
+	}
+	var start int64
+	seen := map[string]bool{}
+	for i, p := range pieces {
+		if p.Part.StartMS != start || p.Part.DurationMS <= 0 {
+			t.Fatalf("part %d sits at %d for %dms, want it to start at %d", i, p.Part.StartMS, p.Part.DurationMS, start)
+		}
+		start += p.Part.DurationMS
+		if p.Src.Path == "" || p.Src.Path != p.File.Path {
+			t.Fatalf("part %d: the source and the file disagree (%q vs %q), so they came off different reads",
+				i, p.Src.Path, p.File.Path)
+		}
+		if seen[p.Src.Path] {
+			t.Fatalf("part %d resolves to a file an earlier part already had: %s", i, p.Src.Path)
+		}
+		seen[p.Src.Path] = true
+		if p.Src.DurationMS != p.Part.DurationMS {
+			t.Fatalf("part %d streams %dms of a %dms part", i, p.Src.DurationMS, p.Part.DurationMS)
+		}
+		// Spoken word, which is what voice boost derives its gain from
+		// and what StreamSource sets for a book.
+		if !p.Src.SpokenWord {
+			t.Fatalf("part %d is not marked spoken word", i)
+		}
+		if p.File.ETag == "" || p.File.MimeType == "" {
+			t.Fatalf("part %d has no fetchable identity: %+v", i, p.File)
+		}
+	}
+	if start != book.DurationMs {
+		t.Fatalf("the parts cover %dms of a %dms book", start, book.DurationMs)
+	}
+
+	// Nothing else lays out as pieces: a track is served whole.
+	track := h.items(t, "?mediaType=music").Items[0]
+	if got, err := h.svc.BookPieces(ctx, uc, track.Pid); err != nil || got != nil {
+		t.Fatalf("a track laid out as %+v (err %v), want nothing", got, err)
 	}
 }

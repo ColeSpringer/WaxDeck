@@ -49,10 +49,19 @@ type Renderer struct {
 	gapless      bool
 	durations    map[string]int64
 	defaultDurMS int64
-	sink         []string
-	actions      []Action
-	uris         []string
-	metaByURI    map[string]string
+	// uriFault makes the next SetAVTransportURI answer a UPnP fault,
+	// the way a renderer refusing a URL does.
+	uriFaultCode int
+	uriFaultDesc string
+	// fetch makes the renderer pull each URI it is handed, which a real
+	// one does before it can play anything. Off by default: most suites
+	// set URIs that resolve nowhere, and the wait would be theirs to
+	// pay for a byte nothing asserts on.
+	fetch     bool
+	sink      []string
+	actions   []Action
+	uris      []string
+	metaByURI map[string]string
 }
 
 // Start serves a renderer for the test's lifetime.
@@ -104,6 +113,33 @@ func (r *Renderer) SetDuration(uri string, d time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.durations[uri] = d.Milliseconds()
+}
+
+// FetchMedia makes the renderer pull each URI it is set to, the way a
+// device has to before it can play one. Tests that assert on what
+// reached the server through a given address need it; the rest would
+// only be waiting on hosts that do not exist.
+func (r *Renderer) FetchMedia() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.fetch = true
+}
+
+// ForceState puts the renderer in a transport state directly, for the
+// tests that need a device already busy with something nothing here
+// started.
+func (r *Renderer) ForceState(state string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.state = state
+}
+
+// FaultNextSetURI makes the next SetAVTransportURI answer a UPnP
+// fault, which is how a renderer refuses a URL it cannot fetch.
+func (r *Renderer) FaultNextSetURI(code int, desc string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.uriFaultCode, r.uriFaultDesc = code, desc
 }
 
 // SetSink replaces the protocolInfo entries GetProtocolInfo reports.
@@ -249,6 +285,20 @@ func (r *Renderer) serveControl(w http.ResponseWriter, req *http.Request, servic
 		writeFault(w, code, desc)
 		return
 	}
+	// After the state change and before the answer, which is the order
+	// a renderer works in: it opens the URI it was handed, and only
+	// then has anything to say about playing it.
+	if action == "SetAVTransportURI" {
+		r.mu.Lock()
+		fetch, uri := r.fetch, r.currentURI
+		r.mu.Unlock()
+		if fetch && uri != "" {
+			client := &http.Client{Timeout: 2 * time.Second}
+			if resp, err := client.Get(uri); err == nil {
+				resp.Body.Close()
+			}
+		}
+	}
 	writeResponse(w, serviceType, action, out)
 }
 
@@ -259,6 +309,11 @@ func (r *Renderer) dispatch(service, action string, args map[string]string) (out
 	defer r.mu.Unlock()
 	switch service + "#" + action {
 	case "AVTransport#SetAVTransportURI":
+		if r.uriFaultCode != 0 {
+			code, desc := r.uriFaultCode, r.uriFaultDesc
+			r.uriFaultCode, r.uriFaultDesc = 0, ""
+			return nil, code, desc
+		}
 		uri := args["CurrentURI"]
 		r.currentURI, r.currentMeta = uri, args["CurrentURIMetaData"]
 		r.nextURI, r.nextMeta = "", ""

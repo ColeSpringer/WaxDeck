@@ -41,9 +41,19 @@ A few rules follow from "a device plays one thing":
   it; set on a track it lasts as long as a local one does, which is
   until the next track.
 
+Audiobooks play on a Chromecast, a renderer, and the jukebox like
+anything else, including the ones held as several files. The device is
+handed the files and steps through them, so a chapter boundary that
+falls on one of them has the device's own gap at it, and jumping to a
+chapter in another file takes a moment to load; where you are is the
+place in the book throughout, and it is what a resume anywhere picks up.
+
 Albums and queues cast to a Chromecast play gapless when the
 streaming engine is configured: the whole queue renders as one
-continuous stream with sample-exact seams.
+continuous stream with sample-exact seams. A queue holding a
+multi-file audiobook is the exception - the parts have a reading order
+that one continuous stream cannot express - so such a queue plays file
+by file until the book leaves it.
 
 Two settings shape that stream, both under Settings, Playback, and both
 on your account rather than on one device - the server re-renders a cast
@@ -73,9 +83,28 @@ casting needs is an address the device can reach:
   publicly trusted certificate and often ignore LAN DNS; when in
   doubt, the LAN address is the reliable path.
 
-`GET /api/v1/player/cast/preflight` (or the diagnostics surface that
-fronts it) checks each candidate address server-side and explains, in
-plain language, what a cast device would likely make of it.
+The connection check, behind the device picker's overflow, is where
+this is read. It has two halves. The first is this server reaching
+itself through each candidate address and saying, in plain language,
+what a cast device would likely make of it
+(`GET /api/v1/player/cast/preflight`). The second is a real device
+doing the reaching: pick a speaker under "Test on a device" and it is
+handed a second of silence at each address in turn
+(`POST /api/v1/player/cast/preflight/{endpointId}`). What counts is the
+speaker actually coming and fetching it - not what it says about
+itself, since a Chromecast reports that it is playing while it is
+still looking up a name it will never find. That half is what catches
+the failures the server cannot see, because they are the device's: a
+name it resolves differently, a certificate authority it does not
+trust, a route it does not have.
+
+Testing takes the speaker over for a second, so it asks first. A
+Chromecast running somebody else's app or playing for another sender,
+a renderer playing or holding something paused, a speaker with a
+WaxDeck queue on it, and one already being tested all refuse and say
+what is there rather than interrupting it. The speaker is held for the
+few seconds the test runs, so sending a queue to it meanwhile is
+refused the same way instead of colliding with the test.
 
 Discovery uses mDNS and SSDP, which are multicast and do not cross
 Docker's default bridge network. Options, most common first:
