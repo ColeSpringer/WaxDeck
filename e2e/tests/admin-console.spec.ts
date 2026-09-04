@@ -54,10 +54,13 @@ test('the transcoding limits say what the engine is running', async ({ app }) =>
   // with it.
   const line = app.admin.control(SemanticsIds.transcodingActivity);
   await expect(line).toBeVisible();
-  await expect(line).toContainText(/\d+ engine-backed streams? right now\./);
-  await expect(line).toContainText('HLS timelines are admitted separately');
+  await expect(line).toContainText(/\d+ engine-backed sessions? right now\./);
+  // A gapless queue rides the same limiter, and the row says how much
+  // of its count is that rather than leaving it out of the number.
+  await expect(line).toContainText(/(None|One|\d+) of them (is|are) (a )?gapless queue/);
+  await expect(line).toContainText('holds one slot');
 
   // Refreshing is the freshness story: no timer, one affordance.
   await app.admin.control(SemanticsIds.transcodingActivityRefresh).click();
-  await expect(line).toContainText(/\d+ engine-backed streams? right now\./);
+  await expect(line).toContainText(/\d+ engine-backed sessions? right now\./);
 });

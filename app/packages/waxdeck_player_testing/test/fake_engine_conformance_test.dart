@@ -21,6 +21,36 @@ class FakeEngineHarness extends AudioEngineHarness {
     // Let broadcast stream events reach their listeners.
     await Future<void>.delayed(Duration.zero);
   }
+
+  @override
+  TimelineMedia get timeline {
+    const rate = 48000;
+    var offset = 0;
+    final members = <TimelineMember>[];
+    for (var i = 0; i < 3; i++) {
+      final samples = (mediaDuration.inMilliseconds * rate) ~/ 1000;
+      members.add(
+        TimelineMember(
+          pid: 'tr-$i',
+          offsetSamples: offset,
+          durationSamples: samples,
+        ),
+      );
+      offset += samples;
+    }
+    return TimelineMedia(
+      url: '/media/hls/master.m3u8?tl=fake&mt=token',
+      mimeType: 'application/vnd.apple.mpegurl',
+      durationMs: mediaDuration.inMilliseconds * 3,
+      envelopeRate: rate,
+      expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+      members: members,
+    );
+  }
+
+  @override
+  Future<void> loseTimeline(AudioEnginePort engine) async =>
+      (engine as FakeEngine).loseTimeline();
 }
 
 void main() {

@@ -103,6 +103,7 @@ class SettingEntry {
     this.nativeOnly = false,
     this.desktopOnly = false,
     this.mobileOnly = false,
+    this.webOnly = false,
   });
 
   /// A stable handle, also this setting's e2e identifier suffix. Renaming
@@ -152,6 +153,12 @@ class SettingEntry {
   /// tell a metered connection apart; everywhere else the per-network
   /// split collapses to one setting.
   final bool mobileOnly;
+
+  /// Present only in a browser. The mirror of [nativeOnly], for the one
+  /// thing every other platform already does: crossing a track boundary
+  /// without a gap. Offering it elsewhere would be a switch between two
+  /// identical outcomes.
+  final bool webOnly;
 }
 
 /// The search words for one setting, out of the comma-separated string
@@ -290,6 +297,13 @@ List<SettingEntry> settingsEntries(AppLocalizations l10n) => <SettingEntry>[
     section: SettingsSection.playback,
     keywords: _words(l10n.settingsPreloadWifiKeywords),
     nativeOnly: true,
+  ),
+  SettingEntry(
+    id: 'web-gapless',
+    title: l10n.settingsWebGaplessTitle,
+    section: SettingsSection.playback,
+    keywords: _words(l10n.settingsWebGaplessKeywords),
+    webOnly: true,
   ),
   SettingEntry(
     id: 'stream-quality-wifi',
@@ -533,6 +547,7 @@ List<SettingEntry> searchSettings(
     if (entry.nativeOnly && !isNative) continue;
     if (entry.desktopOnly && !isDesktop) continue;
     if (entry.mobileOnly && !isMobile) continue;
+    if (entry.webOnly && isNative) continue;
     final title = foldForSearch(entry.title);
     if (title.startsWith(needle)) {
       starts.add(entry);

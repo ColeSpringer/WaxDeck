@@ -325,13 +325,31 @@ without their own. Direct-played originals never count. An over-limit
 stream answers `transcode-limited` (HTTP 429); the streaming engine's
 own admission control remains the hard backstop.
 
+A queue playing gaplessly - a cast speaker, or a browser with the
+gapless switch on - is a rendering the engine holds open, and it counts
+too. One slot per listener rather than one per rendering: a queue edit
+mints a replacement while the one playing is still being fetched, and
+charging both would refuse the edit's own music. The slot is taken when
+a timeline is minted, so a listener over the cap is told before anything
+plays, and given back once every timeline of theirs has gone unfetched
+for a minute. Resuming a paused listen takes it again on the next
+fragment, which can be refused in turn - the player says so rather than
+falling back, since the ordinary path sits under the same cap. The
+admin console's activity line says how much of its count is this.
+
+A per-account bitrate ceiling applies to a rendered queue too: with one
+set, the queue is rendered in a lossy format even when the player asks
+for lossless first, the same way a single track is capped. What a player
+asks for says what it can decode, not what it is allowed.
+
 ## Prometheus metrics
 
 Set `WAXDECK_METRICS_TOKEN` to enable `GET /metrics` (Prometheus text
 format), authenticated by that bearer token; without the token the
 endpoint stays disabled. Metrics cover Go runtime health, accounts and
 sessions, pending signup requests, listen sessions, active background
-tasks, outbox depths, and in-flight transcode sessions.
+tasks, outbox depths, in-flight transcode sessions, and how many of
+those are gapless queues.
 
 ```yaml
 scrape_configs:

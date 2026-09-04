@@ -95,20 +95,43 @@ void main() {
   testWidgets('the limits say what the engine is running right now', (
     tester,
   ) async {
-    final repo = FakeRepository()..activeTranscodeSessions = 3;
+    final repo = FakeRepository()
+      ..activeTranscodeSessions = 3
+      ..activeTranscodeTimelines = 1;
     await _pump(tester, _host(_container(repo)));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.transcodingActivity),
       findsOneWidget,
     );
-    expect(find.text('3 engine-backed streams right now.'), findsOneWidget);
+    expect(find.text('3 engine-backed sessions right now.'), findsOneWidget);
     // The copy says what the number is not, because it both under- and
-    // over-counts what somebody means by "transcoding".
-    expect(find.textContaining('HLS timelines are admitted'), findsOneWidget);
+    // over-counts what somebody means by "transcoding" - and says how
+    // much of it is a listener playing a queue gaplessly, which is one
+    // slot however many renderings they hold.
+    expect(
+      find.textContaining('One of them is a gapless queue.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('holds one slot'), findsOneWidget);
     // Read once when the screen opened. A settings form is not a
     // monitor, and nothing here polls.
     expect(repo.transcodingActivityReads, 1);
+  });
+
+  // An older server does not separate the two, and the row says the
+  // less rather than a number it was never given.
+  testWidgets('a server that does not split them says only the caveat', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..activeTranscodeSessions = 2
+      ..activeTranscodeTimelines = null;
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('2 engine-backed sessions right now.'), findsOneWidget);
+    expect(find.textContaining('gapless queue'), findsNothing);
+    expect(find.textContaining('holds one slot'), findsOneWidget);
   });
 
   testWidgets('the running count refreshes when asked, and only then', (
@@ -116,7 +139,7 @@ void main() {
   ) async {
     final repo = FakeRepository()..activeTranscodeSessions = 1;
     await _pump(tester, _host(_container(repo)));
-    expect(find.text('1 engine-backed stream right now.'), findsOneWidget);
+    expect(find.text('1 engine-backed session right now.'), findsOneWidget);
 
     repo.activeTranscodeSessions = 5;
     await tester.pump(const Duration(seconds: 30));
@@ -133,7 +156,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.transcodingActivityReads, 2);
-    expect(find.text('5 engine-backed streams right now.'), findsOneWidget);
+    expect(find.text('5 engine-backed sessions right now.'), findsOneWidget);
   });
 
   // Refused outright rather than silently stored as the old value while

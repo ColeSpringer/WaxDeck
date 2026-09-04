@@ -473,17 +473,6 @@ here waits on upstream.
   only, which is the honest half - "listening to" is a claim about this
   machine's ears - and a remote session is what the deck bar names.
 
-- `[hardware]` **The low-end validation pass has not run.** The overhaul's
-  performance section asks for one pass on a low-end Android device
-  profile and one against a Raspberry-Pi-class server before the work is
-  called done - startup, listing scroll, player open, palette extraction
-  timings. Neither device exists here: there is no Android hardware in
-  this environment and no ARM single-board machine, and an emulator on a
-  workstation prices the workstation. It is the same gate as the
-  real-device cast checklist and waits on the same thing. Whoever runs it
-  should take the web perf gate's corpus with them, since the two answer
-  adjacent questions.
-
 - `[in-repo]` **Switching servers leaves the old server's downloads
   behind.** Adopting a new address on the connect screen drops the
   bearer token and lets the mirror heal itself - sync cursors are
@@ -513,16 +502,6 @@ here waits on upstream.
 
 ## Connect and casting
 
-- `[in-repo]` **Web gapless over hls.js stayed a gated attempt and did not ship.**
-  The engine port grew everything it needs (a fourth implementation
-  slot behind the same conformance suite), and the server side is
-  complete: queue timelines mint over `POST /player/timeline` and the
-  proxied HLS tree serves them today (cast rides them already). What
-  is missing is the client half: a vendored hls.js MSE engine behind
-  `AudioEnginePort` via `dart:js_interop`, feature-flagged with the
-  standard audio path as default and fallback. Deferred rather than
-  rushed; the standard web path keeps working, and the recorded gate
-  posture is that this attempt may miss without slipping anything.
 
 ## Localization
 
@@ -697,28 +676,6 @@ here waits on upstream.
   alone, which rejects web devices outright. If the flag does go, these
   two suites move to `flutter drive` plus chromedriver, or into the
   Playwright suite under `e2e/`.
-- `[in-repo]` **The web has no gapless crossing, and a preload window
-  is not the way to get one.** just_audio's web platform is a single
-  `HTMLAudioElement` whose `src` is re-pointed on every source change,
-  so a boundary there is a load and an audible gap no matter how the
-  window is arranged. WaxDeck preloaded into it anyway until
-  `JustAudioEngine.canPreload` was set false on the web, and that cost
-  rather than bought: `concatenatingInsertAll` awaits
-  `_currentAudioSourcePlayer.load()` unconditionally - even for an
-  insert past the current index - which resets the playing item to
-  zero, never fetches the appended one, and leaves a player that can
-  never end, so the queue stopped dead on the track it was on and the
-  listen was never reported. Two separate things could change, and only
-  one of them is about gapless. The bug is a plausible upstream fix
-  (reload only when the insert moved the current index, which is the
-  `if` the call already sits outside of); real gapless needs a
-  different web backend - two elements swapped at the boundary, or
-  MSE/Web Audio - which is a plugin-sized piece of work and the only
-  thing that would make `canPreload` worth flipping back. Do not flip
-  it for the bug fix alone: without a backend that can cross without
-  reloading, a working window still delivers a gap and still costs
-  three round trips and a stream token a track. `now_playing_test.dart`'s
-  no-window case and `ui.spec.ts:16` are what say whether a flip took.
 
 ## Curation and metadata
 
@@ -862,11 +819,6 @@ here waits on upstream.
   backdated idempotent listen ingest, dry runs, task reports) is
   built; Jellyfin, Last.fm and ListenBrainz history, and the Spotify
   GDPR export ride it as fast-follows, as the roadmap allows.
-- `[in-repo]` **The transcode session limiter gates progressive
-  streams only.** HLS timeline segment fetches are too granular to
-  count as sessions; they ride the streaming engine's own liveSlots
-  admission control (the documented backstop). A per-timeline
-  session notion would close the gap.
 - `[in-repo]` **Forcing the source's own format still spends an
   admission slot.** A client that pins `fmt=X` on a whole file already
   in format X (some Subsonic clients always pin a format) is routed
@@ -885,6 +837,21 @@ here waits on upstream.
   mp4/adts/aac) so a real encode never escapes admission. Conservative
   today (it over-counts sessions, never under-counts); worth doing only
   if concurrent-session limits get tight.
+- `[in-repo]` **A gapless listener's slot outlives the listening by up
+  to a minute.** A queue rendered as one stream takes one transcode slot
+  per listener, counted into the same caps a progressive stream is, and
+  it is given back by an idle sweep: sixty seconds with none of that
+  listener's renderings fetched, checked on a fifteen-second ticker.
+  There is no "the listener left" signal - a browser that closed its tab
+  says nothing, and hls.js never re-fetches the master, so the fetch that
+  would say otherwise is a fragment. That is fine at a generous cap and
+  sharp at a tight one: with `maxConcurrentPerUser` at 1, a gapless music
+  run that reaches a podcast asks for a progressive stream and is refused
+  for as long as the sweep takes, because the run it just left is still
+  holding the listener's only slot. Closing it properly wants a release
+  the client sends when it stops playing a timeline, which is a contract
+  change (a DELETE on the mint, or a field on the existing session
+  teardown) rather than a tuning of the window.
 - `[in-repo]` **Notification provider niceties.** The provider
   surface ships deliberately plain: no webhook custom headers or
   HMAC request signing (receivers that must authenticate WaxDeck can

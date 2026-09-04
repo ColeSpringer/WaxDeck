@@ -10,6 +10,7 @@ import '../connect/connect_providers.dart';
 import '../connectivity/connectivity_port.dart';
 import '../providers.dart';
 import '../settings/client_prefs.dart';
+import '../settings/prefs_controller.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_state.dart';
 import '../radio/radio_controller.dart';
@@ -17,6 +18,7 @@ import '../shell/shell_messages.dart';
 import '../sync/sync_providers.dart';
 import 'playback_session.dart';
 import 'session_registry.dart';
+import 'timeline_feeder.dart';
 import 'sleep_timer.dart';
 import 'stream_quality.dart';
 
@@ -88,6 +90,13 @@ class NowPlayingController extends Notifier<NowPlaying> {
   Future<void>? _inFlight;
 
   StreamSubscription<void>? _boundarySub;
+  StreamSubscription<void>? _lostSub;
+  StreamSubscription<String>? _refusedSub;
+
+  /// Keeps the queue rendered as one stream where a browser needs that
+  /// to cross a boundary at all. Inert everywhere else: the flag is off
+  /// and the engine plays no timelines.
+  late final TimelineFeeder _feeder;
   StreamSubscription<void>? _completedSub;
   StreamSubscription<Object>? _failedSub;
   StreamSubscription<Duration>? _positionFeed;
@@ -163,6 +172,34 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _connect = ref.read(connectControllerProvider);
     _registry = ref.read(currentSessionRegistryProvider);
     _boundarySub = _engine.itemBoundary.listen((_) => _onBoundary());
+    _feeder = TimelineFeeder(
+      repository: ref.read(repositoryProvider),
+      engine: _engine,
+      enabled: () => ref.read(webGaplessProvider),
+      crossfadeSeconds: () =>
+          ref.read(prefsControllerProvider).value?.crossfadeSeconds,
+      maxBitrateKbps: () => ref.read(streamMaxBitrateKbpsProvider),
+      resolve: (pid) async {
+        try {
+          return await _resolve(pid);
+        } on Object {
+          return null;
+        }
+      },
+      onStatus: (reason) {
+        if (ref.mounted) {
+          ref.read(webGaplessStatusProvider.notifier).set(reason);
+        }
+      },
+    );
+    final engine = _engine;
+    if (engine is TimelineAudioEngine) {
+      // A timeline that stopped being servable is the one thing that
+      // reloads mid-track; a refusal met on a fetch is not, since the
+      // ordinary path sits under the same server limit.
+      _lostSub = engine.timelineLost.listen(_onTimelineLost);
+      _refusedSub = engine.timelineRefused.listen(_feeder.onRefused);
+    }
     ref.listen(queueControllerProvider, _onQueueChanged);
     // Radio drives the engine itself, so the item playing has to let go
     // of it rather than keep counting the station's stream as its own.
@@ -195,6 +232,9 @@ class NowPlayingController extends Notifier<NowPlaying> {
     }
     ref.onDispose(() {
       unawaited(_boundarySub?.cancel());
+      unawaited(_lostSub?.cancel());
+      unawaited(_refusedSub?.cancel());
+      _feeder.dispose();
       unawaited(_release(_session, _Farewell.stop));
       // Not through _setSession: the container is going away, and there
       // is nothing left for Connect to report to.
@@ -626,7 +666,21 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // checkpoint the line above just declined to honour, so a music
       // start that failed would retry into the middle of the track.
       _entryPositionMs = positionMs;
-      final session = _build(item, initialPositionMs: positionMs);
+      // Minted here rather than inside the session: the queue is what
+      // gets rendered, and the queue is this layer's. Null everywhere
+      // the ordinary per-item path applies, which is everywhere but a
+      // browser playing music with the switch on.
+      final slot = await _feeder.slotFor(
+        entry,
+        item,
+        ref.read(queueControllerProvider),
+      );
+      if (_superseded(token)) return;
+      final session = _build(
+        item,
+        initialPositionMs: positionMs,
+        timeline: slot,
+      );
       // The engine's owner changes as start() begins, so the outgoing
       // session flushes its final checkpoint and listen report without
       // stopping media it no longer owns.
@@ -683,7 +737,21 @@ class NowPlayingController extends Notifier<NowPlaying> {
         if (_superseded(token)) return;
       }
       _entryPositionMs = null;
-      final session = _build(item);
+      // A replacement timeline minted while the outgoing one played is
+      // swapped in here, at the seam that is happening now, before the
+      // session that will own the stream exists. Nothing to do in the
+      // ordinary case, where the crossing was inside the timeline
+      // already loaded.
+      final swapped = await _feeder.settleSwap(entry);
+      if (_superseded(token)) return;
+      if (!swapped) {
+        // A replacement always carries a new URL, so the swap tore the
+        // outgoing stream down before it failed. There is nothing left
+        // to adopt: this is a start.
+        await _start(entry);
+        return;
+      }
+      final session = _build(item, timeline: _feeder.slotAt(entry));
       final adopting = session.adopt(info);
       _install(session, entry);
       // Published as soon as the session exists rather than once it
@@ -729,6 +797,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
   void _handOverToRadio() {
     _startToken++;
     _adopting = null;
+    _feeder.clear();
     unawaited(_dropPreload());
     final session = _session;
     if (session == null) return;
@@ -742,6 +811,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _startToken++;
     _adopting = null;
     _sessionEntryId = null;
+    _feeder.clear();
     unawaited(_dropPreload());
     unawaited(_release(_session, _Farewell.stop));
     _setSession(null);
@@ -772,6 +842,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _startToken++;
     _adopting = null;
     _sessionEntryId = null;
+    _feeder.clear();
     unawaited(_dropPreload());
     if (session == null) return;
     // The one release that is awaited, and awaited through the release
@@ -787,27 +858,31 @@ class NowPlayingController extends Notifier<NowPlaying> {
     await farewell;
   }
 
-  PlaybackSession _build(ItemSummary item, {int? initialPositionMs}) =>
-      PlaybackSession(
-        repository: ref.read(repositoryProvider),
-        engine: _engine,
-        item: item,
-        clientId: listenClientId,
-        sync: ref.read(syncEngineProvider),
-        downloads: ref.read(downloadManagerProvider),
-        initialPositionMs: initialPositionMs,
-        // Read at build, so a default changed mid-book does not re-rate
-        // what is playing. The two domains keep separate defaults
-        // because they are listened to differently: 1.5x is ordinary for
-        // a podcast and unusual for a novel.
-        defaultSpeed: item.mediaType == MediaType.audiobook
-            ? ref.read(bookSpeedProvider)
-            : ref.read(podcastSpeedProvider),
-        defaultTrimSilence: ref.read(trimSilenceDefaultProvider),
-        defaultVoiceBoost: ref.read(voiceBoostDefaultProvider),
-        smartRewind: ref.read(smartRewindProvider),
-        maxBitrateKbps: ref.read(streamMaxBitrateKbpsProvider),
-      );
+  PlaybackSession _build(
+    ItemSummary item, {
+    int? initialPositionMs,
+    TimelineSlot? timeline,
+  }) => PlaybackSession(
+    repository: ref.read(repositoryProvider),
+    engine: _engine,
+    item: item,
+    clientId: listenClientId,
+    sync: ref.read(syncEngineProvider),
+    downloads: ref.read(downloadManagerProvider),
+    initialPositionMs: initialPositionMs,
+    // Read at build, so a default changed mid-book does not re-rate
+    // what is playing. The two domains keep separate defaults
+    // because they are listened to differently: 1.5x is ordinary for
+    // a podcast and unusual for a novel.
+    defaultSpeed: item.mediaType == MediaType.audiobook
+        ? ref.read(bookSpeedProvider)
+        : ref.read(podcastSpeedProvider),
+    defaultTrimSilence: ref.read(trimSilenceDefaultProvider),
+    defaultVoiceBoost: ref.read(voiceBoostDefaultProvider),
+    smartRewind: ref.read(smartRewindProvider),
+    maxBitrateKbps: ref.read(streamMaxBitrateKbpsProvider),
+    timeline: timeline,
+  );
 
   /// Makes [session] the live one: the previous session lets go, Connect
   /// and the session registry are pointed here, and the feeds this layer
@@ -1016,6 +1091,13 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // has nowhere to go, that item plays on and the log is the only
       // record of it.
       debugPrint('playback: crossed into an item the queue had let go');
+      // Inside a timeline the stream did not stop, it ran on into the
+      // member after this one - which on repeat one is the head of a
+      // track the listener did not ask for, playing under the restart
+      // that is about to happen.
+      if (ref.read(queueControllerProvider).repeat == QueueRepeat.one) {
+        _feeder.rewindMember();
+      }
       unawaited(_release(_session, _Farewell.boundary));
       _setSession(null);
       _recoverFromStray();
@@ -1129,6 +1211,15 @@ class NowPlayingController extends Notifier<NowPlaying> {
     // engine while the record here goes on claiming it.
     if (session == null || !session.isLoaded) return;
     if (!_admitsPreload(session.item)) return;
+    // A timeline holds the next member in the stream already playing,
+    // so there is nothing to fetch and nothing to gate: no lead, since
+    // the media is here, and no metered check, since arming spends no
+    // bytes. Ahead of the window check because a timeline engine has no
+    // window - crossing is the server's arrangement, not a caller's.
+    if (_feeder.holds(session)) {
+      _preload = await _feeder.armNext(ref.read(queueControllerProvider));
+      return;
+    }
     // An engine with no window drops whatever this prepares, and
     // preparing it is three round trips and a minted stream token per
     // track. It advances on `completed` instead, which is the same path
@@ -1208,6 +1299,32 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// not start at its own head at all. Books roll their parts inside one
   /// session besides, which is not a queue boundary.
   bool _admitsPreload(ItemSummary item) => item.mediaType == MediaType.music;
+
+  /// The loaded timeline stopped being servable: its token aged out, or
+  /// the server let the render go. Re-minted and reloaded where the
+  /// listener stands, keeping the listen session, which is the one
+  /// mid-track reload this path allows.
+  void _onTimelineLost(bool wasPlaying) {
+    if (_radioOwnsEngine) return;
+    _inFlight = _recoverTimeline(wasPlaying);
+  }
+
+  /// Re-mints where the listener stands, and starts the item the
+  /// ordinary way when nothing could be re-minted.
+  ///
+  /// The fallback is the point: the stream that was playing is gone
+  /// whatever happens next, so a mint that a 409, a transport failure
+  /// or the server's cap turned down leaves nothing playing, no error
+  /// pane, and a queue that never advances - a deck that has simply
+  /// stopped, with nothing on screen to say so.
+  Future<void> _recoverTimeline(bool wasPlaying) async {
+    final queue = ref.read(queueControllerProvider);
+    final recovered = await _feeder.onLost(_session, queue, resume: wasPlaying);
+    if (recovered || _radioOwnsEngine) return;
+    final entry = queue.currentEntry;
+    if (entry == null) return;
+    await _start(entry, useSavedPosition: true);
+  }
 
   Future<void> _dropPreload() async {
     if (_preload == null) return;

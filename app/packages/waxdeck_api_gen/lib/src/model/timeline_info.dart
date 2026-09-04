@@ -19,6 +19,7 @@ part 'timeline_info.g.dart';
 /// * [expiresAt] - When the embedded media token stops being accepted.
 /// * [envelopeRate] - Sample rate the boundary offsets are measured at (the maximum member rate). 
 /// * [crossfadeSeconds] - The crossfade the timeline was minted with, when nonzero.
+/// * [format] - The audio format the timeline was rendered in, named as `formats` on the request names them. A string rather than that closed set: a server whose engine offers something else falls back to its own ladder and reports what it actually rendered. Absent from an older server. 
 /// * [boundaries] - Per-member placement, in queue order.
 @BuiltValue()
 abstract class TimelineInfo implements Built<TimelineInfo, TimelineInfoBuilder> {
@@ -45,6 +46,10 @@ abstract class TimelineInfo implements Built<TimelineInfo, TimelineInfoBuilder> 
   /// The crossfade the timeline was minted with, when nonzero.
   @BuiltValueField(wireName: r'crossfadeSeconds')
   double? get crossfadeSeconds;
+
+  /// The audio format the timeline was rendered in, named as `formats` on the request names them. A string rather than that closed set: a server whose engine offers something else falls back to its own ladder and reports what it actually rendered. Absent from an older server. 
+  @BuiltValueField(wireName: r'format')
+  String? get format;
 
   /// Per-member placement, in queue order.
   @BuiltValueField(wireName: r'boundaries')
@@ -103,6 +108,13 @@ class _$TimelineInfoSerializer implements PrimitiveSerializer<TimelineInfo> {
       yield serializers.serialize(
         object.crossfadeSeconds,
         specifiedType: const FullType(double),
+      );
+    }
+    if (object.format != null) {
+      yield r'format';
+      yield serializers.serialize(
+        object.format,
+        specifiedType: const FullType(String),
       );
     }
     yield r'boundaries';
@@ -174,6 +186,13 @@ class _$TimelineInfoSerializer implements PrimitiveSerializer<TimelineInfo> {
             specifiedType: const FullType(double),
           ) as double;
           result.crossfadeSeconds = valueDes;
+          break;
+        case r'format':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.format = valueDes;
           break;
         case r'boundaries':
           final valueDes = serializers.deserialize(

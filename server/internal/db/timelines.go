@@ -5,10 +5,12 @@ import (
 	"fmt"
 )
 
-// TimelineStash is one minted gapless timeline: the digest a client
-// presents on the HLS surface, the signed upstream master URL the proxy
-// reconstructs from it, and the instant both stop being useful (the
-// media token minted alongside expires with the row).
+// TimelineStash is one minted gapless timeline: the key a client
+// presents on the HLS surface (the sidecar's digest and the rendering
+// asked of it, since one queue can be live in two formats at once), the
+// signed upstream master URL the proxy reconstructs from it, and the
+// instant both stop being useful (the media token minted alongside
+// expires with the row).
 //
 // SignedMaster is a bearer credential, so persisting it widens where one
 // lives, and that is a deliberate trade rather than an oversight. What
@@ -28,7 +30,7 @@ import (
 // rest, the way shares already derive their capability tokens rather
 // than storing them.
 type TimelineStash struct {
-	Digest       string
+	Key          string
 	SignedMaster string
 	ExpiresAtNS  int64
 }
@@ -53,14 +55,14 @@ func (d *DB) LoadTimelineStash(ctx context.Context, nowNS int64) ([]TimelineStas
 		return nil, fmt.Errorf("db: pruning the timeline stash: %w", err)
 	}
 	rows, err := tx.QueryContext(ctx,
-		`SELECT digest, signed_master, expires_at_ns FROM timeline_stash`)
+		`SELECT tl_key, signed_master, expires_at_ns FROM timeline_stash`)
 	if err != nil {
 		return nil, fmt.Errorf("db: reading the timeline stash: %w", err)
 	}
 	var out []TimelineStash
 	for rows.Next() {
 		var t TimelineStash
-		if err := rows.Scan(&t.Digest, &t.SignedMaster, &t.ExpiresAtNS); err != nil {
+		if err := rows.Scan(&t.Key, &t.SignedMaster, &t.ExpiresAtNS); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("db: reading the timeline stash: %w", err)
 		}
@@ -87,12 +89,12 @@ func (d *DB) PutTimelineStash(ctx context.Context, t TimelineStash, nowNS int64)
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO timeline_stash (digest, signed_master, expires_at_ns)
+		INSERT INTO timeline_stash (tl_key, signed_master, expires_at_ns)
 		VALUES (?, ?, ?)
-		ON CONFLICT (digest) DO UPDATE SET
+		ON CONFLICT (tl_key) DO UPDATE SET
 			signed_master = excluded.signed_master,
 			expires_at_ns = excluded.expires_at_ns`,
-		t.Digest, t.SignedMaster, t.ExpiresAtNS); err != nil {
+		t.Key, t.SignedMaster, t.ExpiresAtNS); err != nil {
 		return fmt.Errorf("db: writing the timeline stash: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -105,11 +107,11 @@ func (d *DB) PutTimelineStash(ctx context.Context, t TimelineStash, nowNS int64)
 	return nil
 }
 
-// ForgetTimelineStash drops one mint, for a digest the sidecar no longer
-// serves.
-func (d *DB) ForgetTimelineStash(ctx context.Context, digest string) error {
+// ForgetTimelineStash drops one mint, for a rendering the sidecar no
+// longer serves.
+func (d *DB) ForgetTimelineStash(ctx context.Context, key string) error {
 	if _, err := d.w.ExecContext(ctx,
-		`DELETE FROM timeline_stash WHERE digest = ?`, digest); err != nil {
+		`DELETE FROM timeline_stash WHERE tl_key = ?`, key); err != nil {
 		return fmt.Errorf("db: deleting from the timeline stash: %w", err)
 	}
 	return nil

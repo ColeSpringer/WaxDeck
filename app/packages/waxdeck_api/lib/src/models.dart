@@ -788,6 +788,71 @@ class PlayInfo {
   final int? spanEndMs;
 }
 
+/// One member's place on a minted [QueueTimeline].
+///
+/// Offsets and durations are in samples at the timeline's envelope
+/// rate. Without crossfade members tile exactly; with one, consecutive
+/// members overlap, so a position maps by offset and never by summing
+/// durations.
+class QueueTimelineMember {
+  const QueueTimelineMember({
+    required this.pid,
+    required this.offsetSamples,
+    required this.durationSamples,
+  });
+
+  final String pid;
+
+  /// Where this member starts on the combined timeline.
+  final int offsetSamples;
+
+  /// The member's own length on the timeline.
+  final int durationSamples;
+}
+
+/// A whole queue rendered as one gapless stream.
+///
+/// One HLS URL plays every member end to end with sample-exact seams;
+/// [members] is what maps a position on it back to the item playing.
+/// Timelines are immutable, so editing the queue means minting another.
+class QueueTimeline {
+  const QueueTimeline({
+    required this.url,
+    required this.mimeType,
+    required this.durationMs,
+    required this.expiresAt,
+    required this.envelopeRate,
+    required this.members,
+    this.crossfadeSeconds,
+    this.format,
+  });
+
+  /// HLS playlist URL for the whole queue, already resolved against the
+  /// client base URL the way [PlayInfo.url] is.
+  final String url;
+
+  final String mimeType;
+
+  /// The combined timeline's duration.
+  final int durationMs;
+
+  /// When the embedded media token stops being accepted.
+  final DateTime expiresAt;
+
+  /// Sample rate the member offsets are measured at.
+  final int envelopeRate;
+
+  /// Per-member placement, in queue order.
+  final List<QueueTimelineMember> members;
+
+  /// The crossfade the timeline was minted with, when nonzero.
+  final double? crossfadeSeconds;
+
+  /// The audio format it was rendered in; null from a server that does
+  /// not say.
+  final String? format;
+}
+
 /// The calling user's playback state for one item.
 class PlayState {
   const PlayState({
@@ -4546,10 +4611,17 @@ class TranscodingLimits {
 /// What the transcoder is doing right now, read beside the limits that
 /// bound it.
 class TranscodingActivity {
-  const TranscodingActivity({required this.activeSessions});
+  const TranscodingActivity({
+    required this.activeSessions,
+    this.activeTimelines,
+  });
 
-  /// Engine-backed streams in flight: what the concurrent caps count.
+  /// Engine-backed sessions in flight: what the concurrent caps count.
   final int activeSessions;
+
+  /// How much of [activeSessions] is listeners playing a queue as one
+  /// gapless rendering; null from a server that does not separate them.
+  final int? activeTimelines;
 }
 
 /// The server-level Last.fm API credential state (administrators).

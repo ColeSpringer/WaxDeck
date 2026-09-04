@@ -29,6 +29,11 @@ dependencies:
   just_audio_media_kit: 2.1.0
   media_kit_libs_linux: 1.2.1
   media_kit_libs_windows_audio: 1.0.9
+  # Browser bindings for the timeline engine, which drives an <audio>
+  # element and MSE directly. Not a plugin: this is the generated DOM
+  # interop the SDK points at, and it is pinned here for the same reason
+  # everything above it is.
+  web: 1.1.1
 
 # The FakeEngine and the conformance suite live in waxdeck_player_testing,
 # keeping test doubles and flutter_test out of this package's release

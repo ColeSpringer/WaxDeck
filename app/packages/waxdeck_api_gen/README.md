@@ -955,6 +955,7 @@ Class | Method | HTTP request | Description
  - [ThumbnailRung](doc/ThumbnailRung.md)
  - [TimelineBoundary](doc/TimelineBoundary.md)
  - [TimelineCreate](doc/TimelineCreate.md)
+ - [TimelineFormat](doc/TimelineFormat.md)
  - [TimelineInfo](doc/TimelineInfo.md)
  - [ToolTask](doc/ToolTask.md)
  - [ToolTaskPage](doc/ToolTaskPage.md)

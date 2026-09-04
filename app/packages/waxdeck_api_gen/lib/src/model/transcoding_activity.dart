@@ -11,12 +11,17 @@ part 'transcoding_activity.g.dart';
 /// What the transcoder is doing right now, for context beside the limits. 
 ///
 /// Properties:
-/// * [activeSessions] - Engine-backed streams in flight: what the concurrent caps are counting. Both a floor and a ceiling on what is \"really\" being transcoded - a client that forced the source's own format is routed through the engine and counted here though nothing is re-encoded, and HLS timeline segments are admitted by the streaming engine's own control and are not counted at all. 
+/// * [activeSessions] - Engine-backed sessions in flight: what the concurrent caps are counting. Both a floor and a ceiling on what is \"really\" being transcoded - a client that forced the source's own format is routed through the engine and counted here though nothing is re-encoded. 
+/// * [activeTimelines] - How much of `activeSessions` is listeners playing a queue as one gapless rendering. One slot a listener, however many timelines they hold live at once, released when every one of them has gone unfetched for a minute. Absent from a server that does not separate them. 
 @BuiltValue()
 abstract class TranscodingActivity implements Built<TranscodingActivity, TranscodingActivityBuilder> {
-  /// Engine-backed streams in flight: what the concurrent caps are counting. Both a floor and a ceiling on what is \"really\" being transcoded - a client that forced the source's own format is routed through the engine and counted here though nothing is re-encoded, and HLS timeline segments are admitted by the streaming engine's own control and are not counted at all. 
+  /// Engine-backed sessions in flight: what the concurrent caps are counting. Both a floor and a ceiling on what is \"really\" being transcoded - a client that forced the source's own format is routed through the engine and counted here though nothing is re-encoded. 
   @BuiltValueField(wireName: r'activeSessions')
   int get activeSessions;
+
+  /// How much of `activeSessions` is listeners playing a queue as one gapless rendering. One slot a listener, however many timelines they hold live at once, released when every one of them has gone unfetched for a minute. Absent from a server that does not separate them. 
+  @BuiltValueField(wireName: r'activeTimelines')
+  int? get activeTimelines;
 
   TranscodingActivity._();
 
@@ -46,6 +51,13 @@ class _$TranscodingActivitySerializer implements PrimitiveSerializer<Transcoding
       object.activeSessions,
       specifiedType: const FullType(int),
     );
+    if (object.activeTimelines != null) {
+      yield r'activeTimelines';
+      yield serializers.serialize(
+        object.activeTimelines,
+        specifiedType: const FullType(int),
+      );
+    }
   }
 
   @override
@@ -75,6 +87,13 @@ class _$TranscodingActivitySerializer implements PrimitiveSerializer<Transcoding
             specifiedType: const FullType(int),
           ) as int;
           result.activeSessions = valueDes;
+          break;
+        case r'activeTimelines':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.activeTimelines = valueDes;
           break;
         default:
           unhandled.add(key);

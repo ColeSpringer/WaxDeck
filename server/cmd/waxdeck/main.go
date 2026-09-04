@@ -655,6 +655,23 @@ func run() error {
 		svc.SetFlowJobs(bridge)
 		svc.SetFlowRoots(bridge)
 		bridge.SetTranscodeGate(svc.TranscodeGate())
+		// A gapless queue holds a transcode slot the way a stream does,
+		// and there is no end-of-response to give it back at: the slot
+		// goes back once every one of a listener's timelines has gone
+		// quiet. Supervised like every other periodic sweep here, and
+		// cheap when nobody is listening.
+		group.Go(ctx, "timeline-slots", func(ctx context.Context) error {
+			tick := time.NewTicker(15 * time.Second)
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-tick.C:
+					bridge.SweepTimelineSlots()
+				}
+			}
+		})
 	} else {
 		log.Warn("WAXDECK_FLOW_URL is not set; playing original files directly (no transcoding, gapless timelines, or voice boost)")
 	}
@@ -1730,8 +1747,10 @@ func newMetricsRegistry(version string, store *db.DB, svc *service.Library) *met
 		count(`SELECT COUNT(*) FROM scrobble_outbox`))
 	reg.GaugeFunc("waxdeck_notify_outbox_depth", "Undelivered notifications.",
 		count(`SELECT COUNT(*) FROM notify_outbox`))
-	reg.GaugeFunc("waxdeck_transcode_sessions_active", "Engine-backed streams in flight.",
-		func() float64 { return float64(svc.ActiveTranscodeSessions()) })
+	reg.GaugeFunc("waxdeck_transcode_sessions_active", "Engine-backed sessions in flight.",
+		func() float64 { return float64(svc.ActiveTranscodeSessions().Sessions) })
+	reg.GaugeFunc("waxdeck_transcode_timelines_active", "Listeners playing a queue as one gapless rendering.",
+		func() float64 { return float64(svc.ActiveTranscodeSessions().Timelines) })
 	return reg
 }
 

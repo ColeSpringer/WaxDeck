@@ -159,8 +159,14 @@ final oidcFlowProvider = Provider<OidcLoginFlow>(
 );
 
 /// The one audio engine. Tests override this with a [FakeEngine].
+///
+/// In a browser the standard engine is wrapped so a music queue can
+/// play as one server-rendered stream, which is the only way a browser
+/// crosses a track boundary without a gap; the wrapper is inert until
+/// something asks it for a timeline, and off the web it is not a
+/// wrapper at all.
 final audioEngineProvider = Provider<AudioEnginePort>((ref) {
-  final engine = JustAudioEngine();
+  final engine = createWebGaplessEngine(JustAudioEngine());
   ref.onDispose(engine.dispose);
   return engine;
 });

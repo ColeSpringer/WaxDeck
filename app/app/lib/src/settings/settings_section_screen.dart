@@ -298,9 +298,13 @@ class _PlaybackBody extends ConsumerWidget {
         ),
         _Group(
           // Named for what it applies to rather than for what it is.
-          // Nothing local reads either value yet, and a "Crossfade"
-          // heading over a control that does nothing on this device is
-          // the kind of promise a settings screen must not make.
+          // Nothing local reads either value yet on the platforms that
+          // play item by item, and a "Crossfade" heading over a control
+          // that does nothing on this device is the kind of promise a
+          // settings screen must not make. A browser playing gaplessly
+          // rides the same server render a cast queue does, so there
+          // both values apply here too - which is why the help lines
+          // say what they apply to rather than where.
           title: l10n.settingsGroupCasting,
           children: <Widget>[
             SettingAnchor(
@@ -346,6 +350,40 @@ class _PlaybackBody extends ConsumerWidget {
                 ),
               ),
             ),
+            // Browsers only, and here rather than under the player
+            // because it is the same rendering the two settings above
+            // shape: a queue the server cuts into one stream. Every
+            // other platform crosses a boundary without a gap already,
+            // so elsewhere this would be a switch between two identical
+            // outcomes.
+            if (kIsWeb)
+              SettingAnchor(
+                id: 'web-gapless',
+                child: WaxSettingRow(
+                  title: l10n.settingsWebGaplessTitle,
+                  // A switch that is on and doing nothing has to say
+                  // why, and which why: the server renders none at all,
+                  // it is momentarily too busy to, this browser cannot
+                  // play one, or nothing it renders is anything this
+                  // browser decodes. Only the second of those goes away
+                  // on its own, so one sentence for all four would send
+                  // somebody to change a setting that is not the
+                  // problem.
+                  help: switch (ref.watch(webGaplessStatusProvider)) {
+                    null => l10n.settingsWebGaplessHelp,
+                    'transcode-limited' => l10n.settingsWebGaplessBusy,
+                    'gapless-unsupported' => l10n.settingsWebGaplessBrowser,
+                    'gapless-format' => l10n.settingsWebGaplessFormat,
+                    _ => l10n.settingsWebGaplessUnavailable,
+                  },
+                  control: WaxSwitch(
+                    value: ref.watch(webGaplessProvider),
+                    label: l10n.settingsWebGaplessTitle,
+                    semanticsId: SemanticsIds.setting('web-gapless'),
+                    onChanged: ref.read(webGaplessProvider.notifier).set,
+                  ),
+                ),
+              ),
           ],
         ),
         _Group(

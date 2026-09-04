@@ -284,7 +284,17 @@ paths:
         measure member lengths (MP3 sources are scanned); the server
         absorbs short measurements into this request, and when one
         outlasts the request budget it answers 202 with a job to poll,
-        after which re-requesting answers 201 immediately. Requires
+        after which re-requesting answers 201 immediately. A rendering
+        counts against the concurrent transcode limits like a stream
+        does: one slot a listener, however many timelines they hold
+        live at once, taken at the mint and given back once every one
+        of them has gone unfetched for a minute - so a mint over the
+        cap answers `transcode-limited` before anything plays, and a
+        fetch resuming a listen whose slot was released can answer it
+        too. A caller
+        that can only decode some formats says so in `formats`; the
+        rendering format is part of a timeline's identity, so the
+        same queue asked for in two formats is two streams. Requires
         the streaming engine with timeline support
         (`feature-unavailable` otherwise). Items whose delivery cannot
         join a timeline (unfetched podcast episodes, unsupported
@@ -321,6 +331,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TranscodeLimited"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
 
@@ -865,6 +877,29 @@ components:
             same value by construction.
           minimum: 0
           maximum: 12
+        formats:
+          type: array
+          description: >
+            Audio formats this caller can decode, most preferred first.
+            The timeline is rendered in the first one the server can
+            produce; when none of them fit it falls back to its own
+            ladder, and `format` on the answer always says which was
+            chosen. Omit it when whatever the server picks will play.
+            The format is part of what identifies a timeline, so two
+            callers asking for different ones get different streams
+            over the same queue rather than one overwriting the other.
+          minItems: 1
+          maxItems: 4
+          items:
+            $ref: "#/components/schemas/TimelineFormat"
+
+    TimelineFormat:
+      type: string
+      description: >
+        An audio format a timeline can be rendered in. All four are
+        carried in fragmented MP4; which of them a server can produce
+        depends on its streaming engine build.
+      enum: [aac, flac, opus, alac]
 
     TimelineBoundary:
       type: object
@@ -926,6 +961,15 @@ components:
           type: number
           format: double
           description: The crossfade the timeline was minted with, when nonzero.
+        format:
+          type: string
+          description: >
+            The audio format the timeline was rendered in, named as
+            `formats` on the request names them. A string rather than
+            that closed set: a server whose engine offers something
+            else falls back to its own ladder and reports what it
+            actually rendered. Absent from an older server.
+          example: flac
         boundaries:
           type: array
           description: Per-member placement, in queue order.

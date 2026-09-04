@@ -14,9 +14,23 @@ import (
 type transcodeGate struct {
 	l  *Library
 	mu sync.Mutex
-	// active counts engine-backed streams per user id; total is the sum.
-	active map[string]int
-	total  int
+	// active counts engine-backed sessions per user id; total is the
+	// sum, and timelines is how much of it is gapless queue renderings
+	// rather than progressive streams. Split for reporting only: the
+	// caps count a slot, whatever took it.
+	active    map[string]int
+	total     int
+	timelines int
+}
+
+// TranscodeActivity is what the gate is holding right now, split by
+// what took it. Timelines are one slot a listener however many
+// renderings they hold live, so the two numbers answer different
+// questions: what the caps are counting, and how much of that is
+// somebody playing a queue gaplessly.
+type TranscodeActivity struct {
+	Sessions  int
+	Timelines int
 }
 
 // TranscodeGate returns the bridge-facing session gate. One instance
@@ -28,17 +42,17 @@ func (l *Library) TranscodeGate() flow.TranscodeGate {
 	return l.gate
 }
 
-// ActiveTranscodeSessions reports the engine-backed streams in flight.
-func (l *Library) ActiveTranscodeSessions() int {
+// ActiveTranscodeSessions reports the engine-backed sessions in flight.
+func (l *Library) ActiveTranscodeSessions() TranscodeActivity {
 	l.gateOnce.Do(func() {
 		l.gate = &transcodeGate{l: l, active: map[string]int{}}
 	})
 	l.gate.mu.Lock()
 	defer l.gate.mu.Unlock()
-	return l.gate.total
+	return TranscodeActivity{Sessions: l.gate.total, Timelines: l.gate.timelines}
 }
 
-func (g *transcodeGate) Acquire(ctx context.Context, user string) (func(), error) {
+func (g *transcodeGate) Acquire(ctx context.Context, user string, kind flow.TranscodeKind) (func(), error) {
 	lim := g.l.currentToggles().limits
 	admin := g.userIsAdmin(ctx, user)
 	g.mu.Lock()
@@ -51,6 +65,9 @@ func (g *transcodeGate) Acquire(ctx context.Context, user string) (func(), error
 	}
 	g.active[user]++
 	g.total++
+	if kind == flow.TranscodeTimeline {
+		g.timelines++
+	}
 	var once sync.Once
 	return func() {
 		once.Do(func() {
@@ -61,6 +78,9 @@ func (g *transcodeGate) Acquire(ctx context.Context, user string) (func(), error
 				delete(g.active, user)
 			}
 			g.total--
+			if kind == flow.TranscodeTimeline {
+				g.timelines--
+			}
 		})
 	}, nil
 }

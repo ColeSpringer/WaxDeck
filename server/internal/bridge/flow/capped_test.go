@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -16,11 +17,28 @@ import (
 type fakeGate struct {
 	ceiling  int
 	acquired int
+	// held counts admissions not yet released, and kinds records what
+	// each was taken for, which is what the timeline slot's whole
+	// lifetime is asserted through.
+	held    int
+	kinds   []TranscodeKind
+	refuse  bool
+	release func()
 }
 
-func (g *fakeGate) Acquire(context.Context, string) (func(), error) {
+func (g *fakeGate) Acquire(_ context.Context, _ string, kind TranscodeKind) (func(), error) {
+	if g.refuse {
+		return nil, ErrTranscodeLimited
+	}
 	g.acquired++
-	return func() {}, nil
+	g.held++
+	g.kinds = append(g.kinds, kind)
+	var once sync.Once
+	release := func() {
+		once.Do(func() { g.held-- })
+	}
+	g.release = release
+	return release, nil
 }
 
 func (g *fakeGate) MaxBitrateKbps(context.Context, string) int { return g.ceiling }

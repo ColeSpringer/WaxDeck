@@ -342,6 +342,11 @@ class JustAudioEngine implements AudioEnginePort {
   /// queue stopped dead on the track it was on and the listen went
   /// unreported. Same defect [load] stops first for, one call on. Every
   /// other engine here keeps its window and its gapless crossing.
+  ///
+  /// The browser gets its gapless crossing another way, and not through
+  /// this window: `WebGaplessEngine` puts a whole queue on one
+  /// server-rendered stream and crosses members inside it, where a
+  /// boundary is a position passing a number rather than a media swap.
   @override
   bool get canPreload => !kIsWeb;
 

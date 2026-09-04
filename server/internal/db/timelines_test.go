@@ -9,11 +9,11 @@ func TestTimelineStashPrunesOnLoadAndPut(t *testing.T) {
 	d := openTest(t)
 	ctx := context.Background()
 
-	live := TimelineStash{Digest: "live", SignedMaster: "/hls/master.m3u8?sig=a", ExpiresAtNS: 2000}
-	dead := TimelineStash{Digest: "dead", SignedMaster: "/hls/master.m3u8?sig=b", ExpiresAtNS: 500}
+	live := TimelineStash{Key: "live/flac~off~0", SignedMaster: "/hls/master.m3u8?sig=a", ExpiresAtNS: 2000}
+	dead := TimelineStash{Key: "dead/flac~off~0", SignedMaster: "/hls/master.m3u8?sig=b", ExpiresAtNS: 500}
 	for _, row := range []TimelineStash{live, dead} {
 		if err := d.PutTimelineStash(ctx, row, 100); err != nil {
-			t.Fatalf("put %s: %v", row.Digest, err)
+			t.Fatalf("put %s: %v", row.Key, err)
 		}
 	}
 
@@ -24,7 +24,7 @@ func TestTimelineStashPrunesOnLoadAndPut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 || rows[0].Digest != "live" || rows[0].SignedMaster != live.SignedMaster {
+	if len(rows) != 1 || rows[0].Key != "live/flac~off~0" || rows[0].SignedMaster != live.SignedMaster {
 		t.Fatalf("load = %+v, want only the live row", rows)
 	}
 	if rows[0].ExpiresAtNS != live.ExpiresAtNS {
@@ -32,20 +32,20 @@ func TestTimelineStashPrunesOnLoadAndPut(t *testing.T) {
 	}
 
 	// A mint sweeps too, so rows do not pile up across a long uptime.
-	if err := d.PutTimelineStash(ctx, TimelineStash{Digest: "next", SignedMaster: "/c", ExpiresAtNS: 9000}, 3000); err != nil {
+	if err := d.PutTimelineStash(ctx, TimelineStash{Key: "next/aac~off~0", SignedMaster: "/c", ExpiresAtNS: 9000}, 3000); err != nil {
 		t.Fatal(err)
 	}
 	rows, err = d.LoadTimelineStash(ctx, 3000)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 || rows[0].Digest != "next" {
+	if len(rows) != 1 || rows[0].Key != "next/aac~off~0" {
 		t.Fatalf("load after the sweeping put = %+v, want only next", rows)
 	}
 
-	// Re-minting the same digest replaces the signed URL rather than
+	// Re-minting the same rendering replaces the signed URL rather than
 	// conflicting: the digest is content-addressed, the signature is not.
-	again := TimelineStash{Digest: "next", SignedMaster: "/c2", ExpiresAtNS: 9500}
+	again := TimelineStash{Key: "next/aac~off~0", SignedMaster: "/c2", ExpiresAtNS: 9500}
 	if err := d.PutTimelineStash(ctx, again, 3000); err != nil {
 		t.Fatal(err)
 	}
@@ -54,10 +54,45 @@ func TestTimelineStashPrunesOnLoadAndPut(t *testing.T) {
 		t.Fatalf("re-mint = %+v, want the replaced row", rows)
 	}
 
-	if err := d.ForgetTimelineStash(ctx, "next"); err != nil {
+	if err := d.ForgetTimelineStash(ctx, "next/aac~off~0"); err != nil {
 		t.Fatal(err)
 	}
 	if rows, _ = d.LoadTimelineStash(ctx, 3000); len(rows) != 0 {
 		t.Fatalf("load after forget = %+v, want empty", rows)
+	}
+}
+
+// Two renderings of one queue are two rows. The digest names the
+// sources and the seams and nothing about the encoder, so a cast mint
+// in AAC and a browser mint in FLAC over the same queue arrive with the
+// same digest; keyed by digest alone the second would overwrite the
+// first and hand one of the two a stream it cannot decode.
+func TestTimelineStashHoldsRenderingsApart(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+
+	for _, row := range []TimelineStash{
+		{Key: "digest1/aac~off~0", SignedMaster: "/a", ExpiresAtNS: 9000},
+		{Key: "digest1/flac~off~0", SignedMaster: "/f", ExpiresAtNS: 9000},
+	} {
+		if err := d.PutTimelineStash(ctx, row, 100); err != nil {
+			t.Fatalf("put %s: %v", row.Key, err)
+		}
+	}
+	rows, err := d.LoadTimelineStash(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("load = %+v, want both renderings", rows)
+	}
+
+	// And dropping one dead rendering leaves the other serving.
+	if err := d.ForgetTimelineStash(ctx, "digest1/aac~off~0"); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ = d.LoadTimelineStash(ctx, 100)
+	if len(rows) != 1 || rows[0].Key != "digest1/flac~off~0" {
+		t.Fatalf("load after forget = %+v, want only the flac rendering", rows)
 	}
 }

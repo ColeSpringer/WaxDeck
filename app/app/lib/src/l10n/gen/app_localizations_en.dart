@@ -822,15 +822,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminServerActivityCaveat =>
-      'Counts streams the engine is transcoding or remuxing, including a client that forced the source\'s own format; HLS timelines are admitted separately and are not counted here.';
+      'Counts what the engine is transcoding or remuxing, including a client that forced the source\'s own format, and a listener playing a queue gaplessly holds one slot however many renderings they have live.';
 
   @override
   String adminServerActivityCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count engine-backed streams right now.',
-      one: '1 engine-backed stream right now.',
+      other: '$count engine-backed sessions right now.',
+      one: '1 engine-backed session right now.',
     );
     return '$_temp0';
   }
@@ -844,6 +844,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String adminServerActivitySpoken(String headline, String caveat) {
     return '$headline $caveat';
+  }
+
+  @override
+  String adminServerActivityTimelines(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count of them are gapless queues.',
+      one: 'One of them is a gapless queue.',
+      zero: 'None of them is a gapless queue.',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -8066,13 +8078,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsCrossfadeHelp =>
-      'Fades one track into the next when casting a queue';
+      'Fades one track into the next wherever the server renders the queue: a cast speaker, and gapless playback in a browser';
 
   @override
-  String get settingsCrossfadeKeywords => 'fade, gapless, seam, chromecast';
+  String get settingsCrossfadeKeywords =>
+      'fade, gapless, seam, chromecast, casting';
 
   @override
-  String get settingsCrossfadeTitle => 'Casting crossfade';
+  String get settingsCrossfadeTitle => 'Crossfade';
 
   @override
   String get settingsDensityComfortable => 'Comfortable';
@@ -8243,7 +8256,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGroupBrowsing => 'Browsing';
 
   @override
-  String get settingsGroupCasting => 'Casting';
+  String get settingsGroupCasting => 'Casting and gapless';
 
   @override
   String get settingsGroupData => 'Data';
@@ -8623,14 +8636,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsReplayGainHelp =>
-      'Plays a cast queue at one loudness, where the files have been analyzed';
+      'Plays a server-rendered queue at one loudness, where the files have been analyzed';
 
   @override
   String get settingsReplayGainKeywords =>
-      'replaygain, loudness, normalize, gain';
+      'replaygain, loudness, normalize, gain, casting';
 
   @override
-  String get settingsReplayGainTitle => 'Level casting volume';
+  String get settingsReplayGainTitle => 'Level the volume';
 
   @override
   String get settingsScreenReaderBlurb =>
@@ -8994,6 +9007,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsVisualizerIdleTitle => 'Open the visualizer when idle';
+
+  @override
+  String get settingsWebGaplessBrowser =>
+      'This browser cannot play a queue as one stream, so tracks play one at a time';
+
+  @override
+  String get settingsWebGaplessBusy =>
+      'The server is at its transcoding limit, so tracks play one at a time for now';
+
+  @override
+  String get settingsWebGaplessFormat =>
+      'This server renders no format this browser can play, so tracks play one at a time';
+
+  @override
+  String get settingsWebGaplessHelp =>
+      'Plays a music queue as one stream, so tracks run into each other the way they were mastered';
+
+  @override
+  String get settingsWebGaplessKeywords =>
+      'gapless, crossfade, seam, stream, browser';
+
+  @override
+  String get settingsWebGaplessTitle => 'Gapless playback';
+
+  @override
+  String get settingsWebGaplessUnavailable =>
+      'This server cannot render a queue as one stream, so tracks play one at a time';
 
   @override
   String get sharingAllowDownload => 'Allow download';

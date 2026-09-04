@@ -1,6 +1,8 @@
 /// The WaxDeck-owned audio engine contract.
 library;
 
+import 'timeline/timeline_media.dart';
+
 /// Coarse lifecycle of the loaded media.
 enum EngineProcessingState {
   /// Nothing loaded, or playback was stopped.
@@ -230,4 +232,85 @@ abstract interface class AudioEnginePort {
   /// Replays the current level to a new listener. A surface built after the
   /// level moved would otherwise draw full until somebody changed it.
   Stream<double> get volumeStream;
+}
+
+/// An engine that can also play a whole queue as one continuous stream.
+///
+/// The ordinary port loads one item at a time and crosses into a
+/// preloaded next; a timeline engine is handed the queue already
+/// rendered, so the crossing happens inside media that never stops.
+/// Everything on [AudioEnginePort] keeps its meaning while a timeline
+/// is loaded, read against the member playing: [position] and
+/// [duration] are that member's own, [itemBoundary] fires as playback
+/// crosses a seam, and [completed] fires only when the last member
+/// ends.
+///
+/// The two are not exclusive. An engine implementing this still loads
+/// single items through [load] - a podcast, a book, a station - and
+/// says so by answering false to [canPreload] while a timeline is what
+/// it holds, since the seams are the server's to arrange and there is
+/// no window for a caller to fill.
+abstract interface class TimelineAudioEngine implements AudioEnginePort {
+  /// Loads [media] and positions at [position] into [member].
+  ///
+  /// The same URL already loaded is not reloaded: it pauses and seeks,
+  /// which is what a skip inside a loaded timeline is. [play] is for
+  /// the one case that must not pause first - swapping to a freshly
+  /// minted timeline at the seam that is happening now.
+  ///
+  /// Throws [MediaLoadException] and nothing else, like [load].
+  Future<void> loadTimeline(
+    TimelineMedia media, {
+    int member = 0,
+    Duration? position,
+    bool play = false,
+  });
+
+  /// Moves to [position] into [member] of the loaded timeline.
+  ///
+  /// A seek, not a crossing: [duration] and [position] republish for
+  /// the member landed on and [itemBoundary] does not fire, because
+  /// nothing played its way over. The caller moved the queue and
+  /// already knows.
+  Future<void> seekToMember(int member, Duration position);
+
+  /// Formats this engine can actually decode, most preferred first, as
+  /// the mint names them. What comes back is asked for by name because
+  /// a rendering the engine cannot decode is silence with nothing to
+  /// explain it: better to say so before the queue is rendered.
+  List<String> get supportedTimelineFormats;
+
+  /// Whether this engine can play a timeline at all, having done
+  /// whatever one-time preparation the answer needs - fetching a
+  /// player library, probing the media source.
+  ///
+  /// Asked before a queue is rendered, because a render costs the
+  /// server real work and a transcode slot: an engine that answers
+  /// false here has cost the listener nothing but the ordinary path.
+  /// [supportedTimelineFormats] answers about codecs and can be read
+  /// at any time; this answers about the machinery around them.
+  Future<bool> prepareTimelines();
+
+  /// The timeline currently loaded, or null when [load] holds the
+  /// engine instead.
+  TimelineMedia? get loadedTimeline;
+
+  /// Which member of [loadedTimeline] is playing.
+  int get currentMember;
+
+  /// Fires when the loaded timeline stops being servable: its token
+  /// expired, the server aged it out, or the files moved underneath it.
+  /// Nothing is playing by then; the caller mints another and reloads.
+  ///
+  /// Carries whether it was playing when it was lost, which is the one
+  /// thing the reload cannot read back off the engine: silencing the
+  /// stream is part of losing it, so by the time anybody hears about
+  /// it [playing] is false whatever the listener had asked for.
+  Stream<bool> get timelineLost;
+
+  /// Fires with a refusal code met mid-stream (`transcode-limited` when
+  /// the server's session cap is reached on a fetch). Distinct from
+  /// [timelineLost] because re-minting does not help: the answer is to
+  /// tell the listener what the server said.
+  Stream<String> get timelineRefused;
 }

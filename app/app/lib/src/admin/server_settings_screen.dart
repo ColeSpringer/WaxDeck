@@ -275,13 +275,14 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
 
 /// What the caps are bounding right now, above the caps themselves.
 ///
-/// The copy is careful because the number is: it both under- and
-/// over-counts what a person means by "transcoding". A client that pins
-/// the source's own format is routed through the engine and charged a
-/// session though nothing is re-encoded, and HLS timeline segments are
-/// admitted by the streaming engine's own control and never counted
-/// here. Saying so is cheaper than an operator drawing the wrong
-/// conclusion from a number that looks exact.
+/// The copy is careful because the number is: it over-counts what a
+/// person means by "transcoding". A client that pins the source's own
+/// format is routed through the engine and charged a session though
+/// nothing is re-encoded, and a listener playing a queue gaplessly is
+/// charged one session however many renderings they hold live, so the
+/// split below says how much of the count is that. Saying so is cheaper
+/// than an operator drawing the wrong conclusion from a number that
+/// looks exact.
 class _TranscodingActivityLine extends ConsumerWidget {
   const _TranscodingActivityLine();
 
@@ -296,7 +297,14 @@ class _TranscodingActivityLine extends ConsumerWidget {
       _ when count == null => l10n.adminServerActivityReading,
       _ => l10n.adminServerActivityCount(count),
     };
-    final caveat = l10n.adminServerActivityCaveat;
+    // A gapless queue is one slot however many renderings a listener
+    // holds live, so the split is worth saying: the same number means
+    // something different depending on which it is.
+    final timelines = activity.value?.activeTimelines;
+    final caveat = timelines == null
+        ? l10n.adminServerActivityCaveat
+        : '${l10n.adminServerActivityTimelines(timelines)} '
+              '${l10n.adminServerActivityCaveat}';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[

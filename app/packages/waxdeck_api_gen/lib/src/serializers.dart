@@ -337,6 +337,7 @@ import 'package:waxdeck_api_gen/src/model/thumbnail_prune_result.dart';
 import 'package:waxdeck_api_gen/src/model/thumbnail_rung.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_boundary.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_create.dart';
+import 'package:waxdeck_api_gen/src/model/timeline_format.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_info.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task_page.dart';
@@ -714,6 +715,7 @@ part 'serializers.g.dart';
   ThumbnailRung,
   TimelineBoundary,
   TimelineCreate,
+  TimelineFormat,
   TimelineInfo,
   ToolTask,
   ToolTaskPage,

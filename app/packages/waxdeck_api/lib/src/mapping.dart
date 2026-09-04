@@ -344,6 +344,26 @@ PlayInfo playInfoFromGen(gen.PlayInfo info, {String baseUrl = ''}) {
   );
 }
 
+QueueTimeline queueTimelineFromGen(gen.TimelineInfo tl, {String baseUrl = ''}) {
+  return QueueTimeline(
+    url: resolveMediaUrl(baseUrl, tl.url),
+    mimeType: tl.mimeType,
+    durationMs: tl.durationMs,
+    expiresAt: tl.expiresAt,
+    envelopeRate: tl.envelopeRate,
+    crossfadeSeconds: tl.crossfadeSeconds,
+    format: tl.format,
+    members: <QueueTimelineMember>[
+      for (final b in tl.boundaries)
+        QueueTimelineMember(
+          pid: b.pid,
+          offsetSamples: b.offsetSamples,
+          durationSamples: b.durationSamples,
+        ),
+    ],
+  );
+}
+
 PlayState playStateFromGen(gen.PlayState state) {
   return PlayState(
     pid: state.pid,
@@ -2244,7 +2264,10 @@ TranscodingLimits transcodingLimitsFromGen(gen.TranscodingLimits limits) {
 }
 
 TranscodingActivity transcodingActivityFromGen(gen.TranscodingActivity a) {
-  return TranscodingActivity(activeSessions: a.activeSessions);
+  return TranscodingActivity(
+    activeSessions: a.activeSessions,
+    activeTimelines: a.activeTimelines,
+  );
 }
 
 gen.TranscodingLimits transcodingLimitsToGen(TranscodingLimits limits) {

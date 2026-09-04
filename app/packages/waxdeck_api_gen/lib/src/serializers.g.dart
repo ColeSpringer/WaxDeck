@@ -359,6 +359,7 @@ Serializers _$serializers =
           ..add(ThumbnailRung.serializer)
           ..add(TimelineBoundary.serializer)
           ..add(TimelineCreate.serializer)
+          ..add(TimelineFormat.serializer)
           ..add(TimelineInfo.serializer)
           ..add(ToolTask.serializer)
           ..add(ToolTaskPage.serializer)
@@ -1149,10 +1150,6 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(String)]),
-            () => ListBuilder<String>(),
-          )
-          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
           )
@@ -1186,6 +1183,14 @@ Serializers _$serializers =
               const FullType(PrefsBrowseSortsEnum),
             ]),
             () => MapBuilder<String, PrefsBrowseSortsEnum>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TimelineFormat)]),
+            () => ListBuilder<TimelineFormat>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

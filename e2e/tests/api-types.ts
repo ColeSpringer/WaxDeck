@@ -2847,7 +2847,7 @@ export interface paths {
         put?: never;
         /**
          * Mint a gapless queue timeline
-         * @description Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response's single HLS URL plays the whole queue; `boundaries` map each item onto the combined timeline (offsets in samples at `envelopeRate`; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline's duration plus margin (`expiresAt` reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as `stream-stale`, and a timeline aged out of the engine's store answers `not-found` on fetch. Re-request this endpoint in either case. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. Requires the streaming engine with timeline support (`feature-unavailable` otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer `conflict` naming the pid, and a `crossfadeSeconds` longer than the shortest queue member can carry answers `invalid-request` naming it.
+         * @description Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response's single HLS URL plays the whole queue; `boundaries` map each item onto the combined timeline (offsets in samples at `envelopeRate`; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline's duration plus margin (`expiresAt` reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as `stream-stale`, and a timeline aged out of the engine's store answers `not-found` on fetch. Re-request this endpoint in either case. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. A rendering counts against the concurrent transcode limits like a stream does: one slot a listener, however many timelines they hold live at once, taken at the mint and given back once every one of them has gone unfetched for a minute - so a mint over the cap answers `transcode-limited` before anything plays, and a fetch resuming a listen whose slot was released can answer it too. A caller that can only decode some formats says so in `formats`; the rendering format is part of a timeline's identity, so the same queue asked for in two formats is two streams. Requires the streaming engine with timeline support (`feature-unavailable` otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer `conflict` naming the pid, and a `crossfadeSeconds` longer than the shortest queue member can carry answers `invalid-request` naming it.
          */
         post: operations["createQueueTimeline"];
         delete?: never;
@@ -5235,8 +5235,10 @@ export interface components {
         };
         /** @description What the transcoder is doing right now, for context beside the limits. */
         TranscodingActivity: {
-            /** @description Engine-backed streams in flight: what the concurrent caps are counting. Both a floor and a ceiling on what is "really" being transcoded - a client that forced the source's own format is routed through the engine and counted here though nothing is re-encoded, and HLS timeline segments are admitted by the streaming engine's own control and are not counted at all. */
+            /** @description Engine-backed sessions in flight: what the concurrent caps are counting. Both a floor and a ceiling on what is "really" being transcoded - a client that forced the source's own format is routed through the engine and counted here though nothing is re-encoded. */
             activeSessions: number;
+            /** @description How much of `activeSessions` is listeners playing a queue as one gapless rendering. One slot a listener, however many timelines they hold live at once, released when every one of them has gone unfetched for a minute. Absent from a server that does not separate them. */
+            activeTimelines?: number;
         };
         /**
          * @description A schedulable job kind. A shared named schema on purpose (the path parameter and the schedule object both use it): identical inline enums make the Dart generator emit one enum class into two files, which does not compile.
@@ -8287,7 +8289,14 @@ export interface components {
              * @description Equal-power crossfade applied at every seam, in seconds, 0 to 12. Omit or 0 for a gapless butt join. The value shapes the returned boundaries; the served stream applies the same value by construction.
              */
             crossfadeSeconds?: number;
+            /** @description Audio formats this caller can decode, most preferred first. The timeline is rendered in the first one the server can produce; when none of them fit it falls back to its own ladder, and `format` on the answer always says which was chosen. Omit it when whatever the server picks will play. The format is part of what identifies a timeline, so two callers asking for different ones get different streams over the same queue rather than one overwriting the other. */
+            formats?: components["schemas"]["TimelineFormat"][];
         };
+        /**
+         * @description An audio format a timeline can be rendered in. All four are carried in fragmented MP4; which of them a server can produce depends on its streaming engine build.
+         * @enum {string}
+         */
+        TimelineFormat: "aac" | "flac" | "opus" | "alac";
         /** @description One queue item's place on the combined timeline. Offsets and durations are in samples at the timeline's `envelopeRate`. Without crossfade, members tile exactly; with crossfade, consecutive members overlap, so map positions by offset, never by summing durations. */
         TimelineBoundary: {
             /** @description The queue item this boundary describes. */
@@ -8332,6 +8341,11 @@ export interface components {
              * @description The crossfade the timeline was minted with, when nonzero.
              */
             crossfadeSeconds?: number;
+            /**
+             * @description The audio format the timeline was rendered in, named as `formats` on the request names them. A string rather than that closed set: a server whose engine offers something else falls back to its own ladder and reports what it actually rendered. Absent from an older server.
+             * @example flac
+             */
+            format?: string;
             /** @description Per-member placement, in queue order. */
             boundaries: components["schemas"]["TimelineBoundary"][];
         };
@@ -10917,6 +10931,15 @@ export interface components {
         };
         /** @description Too many requests from this caller (code `rate-limited`): the sign-in limiter's lockout, or the upload surface's per-account request ceiling. Back off and retry later; nothing was done. */
         RateLimited: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The server's or the caller's concurrent transcode session limit is reached (code `transcode-limited`). Nothing was rendered; retry when a session ends, or play something that direct-plays. */
+        TranscodeLimited: {
             headers: {
                 [name: string]: unknown;
             };
@@ -15539,6 +15562,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TranscodeLimited"];
             501: components["responses"]["FeatureUnavailable"];
         };
     };

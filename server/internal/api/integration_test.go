@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,9 +33,15 @@ import (
 // synthesized fixture library, streaming through a fake WaxFlow that
 // serves files from the same root.
 type harness struct {
-	ts      *httptest.Server
-	token   string
-	library string
+	ts    *httptest.Server
+	token string
+	// refuseTimeline makes the fake sidecar turn a render down, which
+	// is what a source it cannot put in one continuous stream does.
+	// breakTimeline is the other failure the mint has to tell apart: the
+	// engine being unwell rather than the queue being unrenderable.
+	refuseTimeline atomic.Bool
+	breakTimeline  atomic.Bool
+	library        string
 	// srv is the API server behind ts, for the few tests whose subject
 	// is a bound the server holds in memory rather than an endpoint's
 	// answer (the upload pacer's clock).
@@ -167,6 +174,11 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	if !noBridge {
 		bridge = newFakeFlowBridge(t, ctx, h, cfg, media, svc, log)
 		svc.SetFlowJobs(bridge)
+		// As the process wires it: the limits are unset here, so nothing
+		// is refused, but the counting is real - which is what the
+		// admin activity surface reads and what a timeline slot's whole
+		// life runs through.
+		bridge.SetTranscodeGate(svc.TranscodeGate())
 	}
 	h.bridge = bridge
 
@@ -289,6 +301,24 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 				Srcs []struct{ Src string } `json:"srcs"`
 			}
 			json.NewDecoder(r.Body).Decode(&req)
+			// The real engine refuses a render it cannot do - a source
+			// it will not decode into a continuous stream is the usual
+			// one - and there is no way to provoke that through a fake
+			// that renders everything, so the switch stands in for it.
+			if h.breakTimeline.Load() {
+				w.WriteHeader(http.StatusInternalServerError)
+				io.WriteString(w, `{"code":"internal","error":"the encoder died"}`)
+				return
+			}
+			if h.refuseTimeline.Load() {
+				// The engine's own envelope and its own vocabulary: the
+				// bridge tells a queue it will not render from a sidecar
+				// that is unwell by the code, so a fake speaking some
+				// other word would exercise the wrong branch.
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				io.WriteString(w, `{"code":"unsupported-source","error":"this queue will not render"}`)
+				return
+			}
 			w.WriteHeader(http.StatusCreated)
 			boundaries := make([]map[string]int64, 0, len(req.Srcs))
 			var off int64

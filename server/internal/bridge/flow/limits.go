@@ -6,14 +6,29 @@ import (
 	"net/http"
 )
 
-// TranscodeGate admits or refuses engine-backed stream sessions. The
+// TranscodeKind names what a slot is being held for, so the activity
+// read can say how much of a count is one thing or the other. The caps
+// do not distinguish: a slot is a slot, and this is only ever reporting.
+type TranscodeKind string
+
+const (
+	// TranscodeStream is one engine-backed progressive stream.
+	TranscodeStream TranscodeKind = "stream"
+	// TranscodeTimeline is one listener's gapless queue rendering. One
+	// slot covers every timeline they hold live at once, because a queue
+	// edit mints another while the one playing is still being fetched
+	// and refusing that would stall the music the edit was made in.
+	TranscodeTimeline TranscodeKind = "timeline"
+)
+
+// TranscodeGate admits or refuses engine-backed sessions. The
 // implementation lives with the service layer, which knows the acting
 // user's permissions and the admin-set limits; the bridge only asks.
 type TranscodeGate interface {
 	// Acquire reserves a session slot for the user, returning a release
-	// the caller runs when the stream ends. ErrTranscodeLimited when a
-	// limit is reached. The context is the stream request's.
-	Acquire(ctx context.Context, user string) (release func(), err error)
+	// the caller runs when the session ends. ErrTranscodeLimited when a
+	// limit is reached. The context is the request's.
+	Acquire(ctx context.Context, user string, kind TranscodeKind) (release func(), err error)
 	// MaxBitrateKbps reports the user's transcode bitrate ceiling in
 	// kbit/s; 0 means none.
 	MaxBitrateKbps(ctx context.Context, user string) int
@@ -36,7 +51,7 @@ func (b *Bridge) admit(ctx context.Context, w http.ResponseWriter, user string) 
 	if b.gate == nil {
 		return func() {}, true
 	}
-	release, err := b.gate.Acquire(ctx, user)
+	release, err := b.gate.Acquire(ctx, user, TranscodeStream)
 	if err != nil {
 		writeJSONError(w, http.StatusTooManyRequests, "transcode-limited",
 			"the server's transcode session limit is reached; retry when a stream ends, or play a direct-play format")

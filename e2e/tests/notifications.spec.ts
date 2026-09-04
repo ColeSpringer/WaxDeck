@@ -113,15 +113,19 @@ test('the bell reports what happened while the app was open', async ({
     // Arriving is what deals with it. The bell held its rows until one
     // was tapped or the whole list was emptied, so a badge stood over
     // work that had already been done.
+    //
+    // Read back from home, which is the one app bar the bell hangs in:
+    // every screen draws its own chrome, so a row always sends you
+    // somewhere that has none. Walked rather than re-entered, here and
+    // below: the list is what this client saw while it was running, so
+    // a real page load would empty it first and prove nothing.
+    await app.nav.to('home');
     await app.shell.openNotificationsPanel();
     await expect(app.shell.notificationRow('upload')).toBeHidden();
     await app.shell.closeNotifications();
 
     // Clear still empties the bell rather than only unbadging it, on a
-    // second piece of news this test never opens. Walked rather than
-    // re-entered: the list is what this client saw while it was
-    // running, so a real page load would empty it first.
-    await app.nav.to('home');
+    // second piece of news this test never opens.
     second = (
       await app.api.post('/uploads', {
         data: { fileName: 'bell-2.mp3', sizeBytes: 1024, mediaType: 'music' },

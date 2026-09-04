@@ -20,6 +20,8 @@ class _$TimelineInfo extends TimelineInfo {
   @override
   final double? crossfadeSeconds;
   @override
+  final String? format;
+  @override
   final BuiltList<TimelineBoundary> boundaries;
 
   factory _$TimelineInfo([void Function(TimelineInfoBuilder)? updates]) =>
@@ -32,6 +34,7 @@ class _$TimelineInfo extends TimelineInfo {
     required this.expiresAt,
     required this.envelopeRate,
     this.crossfadeSeconds,
+    this.format,
     required this.boundaries,
   }) : super._();
   @override
@@ -51,6 +54,7 @@ class _$TimelineInfo extends TimelineInfo {
         expiresAt == other.expiresAt &&
         envelopeRate == other.envelopeRate &&
         crossfadeSeconds == other.crossfadeSeconds &&
+        format == other.format &&
         boundaries == other.boundaries;
   }
 
@@ -63,6 +67,7 @@ class _$TimelineInfo extends TimelineInfo {
     _$hash = $jc(_$hash, expiresAt.hashCode);
     _$hash = $jc(_$hash, envelopeRate.hashCode);
     _$hash = $jc(_$hash, crossfadeSeconds.hashCode);
+    _$hash = $jc(_$hash, format.hashCode);
     _$hash = $jc(_$hash, boundaries.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -77,6 +82,7 @@ class _$TimelineInfo extends TimelineInfo {
           ..add('expiresAt', expiresAt)
           ..add('envelopeRate', envelopeRate)
           ..add('crossfadeSeconds', crossfadeSeconds)
+          ..add('format', format)
           ..add('boundaries', boundaries))
         .toString();
   }
@@ -111,6 +117,10 @@ class TimelineInfoBuilder
   set crossfadeSeconds(double? crossfadeSeconds) =>
       _$this._crossfadeSeconds = crossfadeSeconds;
 
+  String? _format;
+  String? get format => _$this._format;
+  set format(String? format) => _$this._format = format;
+
   ListBuilder<TimelineBoundary>? _boundaries;
   ListBuilder<TimelineBoundary> get boundaries =>
       _$this._boundaries ??= ListBuilder<TimelineBoundary>();
@@ -130,6 +140,7 @@ class TimelineInfoBuilder
       _expiresAt = $v.expiresAt;
       _envelopeRate = $v.envelopeRate;
       _crossfadeSeconds = $v.crossfadeSeconds;
+      _format = $v.format;
       _boundaries = $v.boundaries.toBuilder();
       _$v = null;
     }
@@ -181,6 +192,7 @@ class TimelineInfoBuilder
               'envelopeRate',
             ),
             crossfadeSeconds: crossfadeSeconds,
+            format: format,
             boundaries: boundaries.build(),
           );
     } catch (_) {

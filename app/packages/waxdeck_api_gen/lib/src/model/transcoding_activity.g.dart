@@ -9,12 +9,15 @@ part of 'transcoding_activity.dart';
 class _$TranscodingActivity extends TranscodingActivity {
   @override
   final int activeSessions;
+  @override
+  final int? activeTimelines;
 
   factory _$TranscodingActivity([
     void Function(TranscodingActivityBuilder)? updates,
   ]) => (TranscodingActivityBuilder()..update(updates))._build();
 
-  _$TranscodingActivity._({required this.activeSessions}) : super._();
+  _$TranscodingActivity._({required this.activeSessions, this.activeTimelines})
+    : super._();
   @override
   TranscodingActivity rebuild(
     void Function(TranscodingActivityBuilder) updates,
@@ -28,22 +31,25 @@ class _$TranscodingActivity extends TranscodingActivity {
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
     return other is TranscodingActivity &&
-        activeSessions == other.activeSessions;
+        activeSessions == other.activeSessions &&
+        activeTimelines == other.activeTimelines;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, activeSessions.hashCode);
+    _$hash = $jc(_$hash, activeTimelines.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'TranscodingActivity',
-    )..add('activeSessions', activeSessions)).toString();
+    return (newBuiltValueToStringHelper(r'TranscodingActivity')
+          ..add('activeSessions', activeSessions)
+          ..add('activeTimelines', activeTimelines))
+        .toString();
   }
 }
 
@@ -56,6 +62,11 @@ class TranscodingActivityBuilder
   set activeSessions(int? activeSessions) =>
       _$this._activeSessions = activeSessions;
 
+  int? _activeTimelines;
+  int? get activeTimelines => _$this._activeTimelines;
+  set activeTimelines(int? activeTimelines) =>
+      _$this._activeTimelines = activeTimelines;
+
   TranscodingActivityBuilder() {
     TranscodingActivity._defaults(this);
   }
@@ -64,6 +75,7 @@ class TranscodingActivityBuilder
     final $v = _$v;
     if ($v != null) {
       _activeSessions = $v.activeSessions;
+      _activeTimelines = $v.activeTimelines;
       _$v = null;
     }
     return this;
@@ -91,6 +103,7 @@ class TranscodingActivityBuilder
             r'TranscodingActivity',
             'activeSessions',
           ),
+          activeTimelines: activeTimelines,
         );
     replace(_$result);
     return _$result;

@@ -170,8 +170,11 @@ func (s *Server) GetTranscodingActivity(ctx context.Context, _ GetTranscodingAct
 	if !ok || !p.IsAdmin() {
 		return GetTranscodingActivity403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
+	activity := s.svc.ActiveTranscodeSessions()
+	timelines := activity.Timelines
 	return GetTranscodingActivity200JSONResponse(TranscodingActivity{
-		ActiveSessions: s.svc.ActiveTranscodeSessions(),
+		ActiveSessions:  activity.Sessions,
+		ActiveTimelines: &timelines,
 	}), nil
 }
 

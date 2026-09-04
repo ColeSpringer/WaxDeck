@@ -657,9 +657,20 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 	// timeline is deciding this queue's presentation. Leveling is not on
 	// the request at all: it says whether this listener wants a level
 	// playing field, which is a fact about them and not about a queue.
+	var formats []string
+	if body.Formats != nil {
+		formats = make([]string, 0, len(*body.Formats))
+		for _, f := range *body.Formats {
+			if !f.Valid() {
+				return CreateQueueTimeline400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown timeline format "+string(f)))}, nil
+			}
+			formats = append(formats, string(f))
+		}
+	}
 	opts := flow.TimelineOptions{
 		CrossfadeSeconds: crossfade,
 		ReplayGain:       s.svc.PrefsForUser(ctx, p.User.ID).ReplayGain,
+		Formats:          formats,
 	}
 	members := make([]flow.TimelineMember, 0, len(body.ItemPids))
 	for _, pid := range body.ItemPids {
@@ -680,10 +691,27 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 	}
 	res, err := s.bridge.TimelineFor(ctx, p.User.ID, members, opts)
 	if err != nil {
+		if errors.Is(err, flow.ErrTranscodeLimited) {
+			return CreateQueueTimeline429JSONResponse{TranscodeLimitedJSONResponse(errObj("transcode-limited",
+				"the server's transcode session limit is reached; retry when a session ends"))}, nil
+		}
 		msg := err.Error()
 		if strings.Contains(msg, "crossfade") {
 			return CreateQueueTimeline400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", msg))}, nil
 		}
+		// The engine would not render this queue. Every member was
+		// visible and resolvable, so this is not an internal fault: it
+		// is the same "these items cannot join a timeline" the checks
+		// above answer, discovered by the renderer rather than by us,
+		// and a caller's move is the same either way - play per item.
+		if errors.Is(err, flow.ErrTimelineUnrenderable) {
+			return CreateQueueTimeline409JSONResponse{ConflictJSONResponse(errObj("conflict", msg))}, nil
+		}
+		// Everything else is the server being broken - the sidecar down,
+		// a signature that would not sign - and belongs in the error
+		// rate rather than in a refusal. Returned rather than worded,
+		// because the wording would carry an internal host, port or
+		// library path back to whoever asked.
 		return nil, err
 	}
 	if res.JobPID != "" {
@@ -696,6 +724,10 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		DurationMs:   res.DurationMS,
 		ExpiresAt:    res.ExpiresAt,
 		EnvelopeRate: res.EnvelopeRate,
+	}
+	if res.Format != "" {
+		format := res.Format
+		out.Format = &format
 	}
 	if res.CrossfadeSeconds > 0 {
 		cf := res.CrossfadeSeconds

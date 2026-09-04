@@ -7,6 +7,24 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 
 import 'smart_rewind.dart';
 
+/// One member of a minted timeline: the stream and which item of it
+/// this session is.
+///
+/// A session handed one of these skips play-info resolution entirely -
+/// the URL is already minted, and the member's own duration is already
+/// known - and loads through the timeline engine, which crosses into
+/// the next member without stopping.
+class TimelineSlot {
+  const TimelineSlot(this.media, this.member);
+
+  final TimelineMedia media;
+  final int member;
+
+  /// The member's own duration, which is what this item reports and
+  /// what a finished listen is credited with.
+  int get durationMs => media.memberDurationMs(member);
+}
+
 /// Drives one item's playback through the engine port and owns the server
 /// bookkeeping around it: resume on open, position checkpoints, and listen
 /// session accounting.
@@ -37,12 +55,17 @@ class PlaybackSession {
     this.defaultVoiceBoost = false,
     this.smartRewind = SmartRewind.off,
     this.maxBitrateKbps,
+    this.timeline,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
   final WaxDeckRepository repository;
   final AudioEnginePort engine;
   final ItemSummary item;
+
+  /// The timeline member this item is, when a whole queue is playing as
+  /// one stream. Null is the ordinary path: one item, one stream URL.
+  final TimelineSlot? timeline;
   final String clientId;
 
   /// The sync engine, when this platform runs one: offline mutations
@@ -335,7 +358,7 @@ class PlaybackSession {
               .catchError((Object e) {
                 stateFailure = e;
               }),
-        if (!_isBook)
+        if (!_isBook && timeline == null)
           repository
               .getPlayInfo(item.pid, maxBitrateKbps: maxBitrateKbps)
               .then<void>((v) {
@@ -379,7 +402,25 @@ class PlaybackSession {
       if (_isBook) {
         await _loadPartFor(resumeMs, autoplay: false);
       } else {
-        final info = playInfo!;
+        // A timeline member needs nothing resolved: the URL is minted,
+        // the duration is the member's own, and the stream is
+        // passthrough by construction. Synthesized into the same
+        // PlayInfo the ordinary path builds so everything below - the
+        // end-of-media guard, the outro cutoff, the reported duration -
+        // reads one shape.
+        final slot = timeline;
+        final info =
+            playInfo ??
+            (slot == null
+                ? null
+                : PlayInfo(
+                    pid: item.pid,
+                    url: slot.media.url,
+                    mimeType: slot.media.mimeType,
+                    durationMs: slot.durationMs,
+                    seekable: true,
+                    expiresAt: slot.media.expiresAt,
+                  ))!;
         _loadedDurationMs = info.durationMs;
         _applyOutroCutoff(info.durationMs);
         // The same guard against a checkpoint the media outgrew: a
@@ -389,20 +430,24 @@ class PlaybackSession {
         if (info.durationMs > 0 && resumeMs >= info.durationMs) resumeMs = 0;
         resumeMs = _applyIntroSkip(resumeMs);
         final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
-        // A span means the URL carries the whole backing file (direct
-        // playback of a carved track); the engine clips to the window
-        // and every position stays track-relative.
-        await _loadMedia(
-          info.url,
-          mimeType: info.mimeType,
-          initialPosition: resumeAt,
-          clipStart: info.spanStartMs == null
-              ? null
-              : Duration(milliseconds: info.spanStartMs!),
-          clipEnd: info.spanEndMs == null
-              ? null
-              : Duration(milliseconds: info.spanEndMs!),
-        );
+        if (slot != null) {
+          await _loadTimelineMedia(slot, resumeAt);
+        } else {
+          // A span means the URL carries the whole backing file (direct
+          // playback of a carved track); the engine clips to the window
+          // and every position stays track-relative.
+          await _loadMedia(
+            info.url,
+            mimeType: info.mimeType,
+            initialPosition: resumeAt,
+            clipStart: info.spanStartMs == null
+                ? null
+                : Duration(milliseconds: info.spanStartMs!),
+            clipEnd: info.spanEndMs == null
+                ? null
+                : Duration(milliseconds: info.spanEndMs!),
+          );
+        }
         if (trimEnabled.value) unawaited(_loadSkipMap());
       }
     } on WaxDeckApiException catch (e) {
@@ -574,6 +619,51 @@ class PlaybackSession {
     } on Object catch (error) {
       throw MediaLoadException(MediaFault.transport, error);
     }
+  }
+
+  /// The timeline half of [_loadMedia], holding the same promise. Never
+  /// asks the engine to play: [start] owns the speed write and the
+  /// first play, in that order, and a timeline that started itself
+  /// would be audible at the wrong speed for a frame.
+  Future<void> _loadTimelineMedia(TimelineSlot slot, Duration? at) async {
+    final engine = this.engine;
+    if (engine is! TimelineAudioEngine) {
+      throw MediaLoadException(
+        MediaFault.transport,
+        StateError('this engine plays no timelines'),
+      );
+    }
+    try {
+      await engine.loadTimeline(
+        slot.media,
+        member: slot.member,
+        position: at ?? Duration.zero,
+      );
+    } on MediaLoadException {
+      rethrow;
+    } on Object catch (error) {
+      throw MediaLoadException(MediaFault.transport, error);
+    }
+  }
+
+  /// Re-opens the same item on a freshly minted timeline, at the
+  /// position it stands at.
+  ///
+  /// The one mid-track reload a timeline listener can hear, and only
+  /// for a stream that stopped being servable underneath them. Modelled
+  /// on the effects re-open: same listen session, same accounting, same
+  /// resume, and the transport left as it was found.
+  /// [resume] rather than the engine's own `playing`, which by this
+  /// point always reads false: silencing the stream is part of losing
+  /// it, so what the listener had asked for only survives in the loss
+  /// itself.
+  Future<void> reloadTimeline(TimelineSlot slot, {required bool resume}) async {
+    final at = displayPosition;
+    await _loadTimelineMedia(slot, at);
+    if (_disposed) return;
+    _loadedDurationMs = slot.durationMs;
+    _lastPosition = engine.position;
+    if (resume) await engine.play();
   }
 
   /// Fetches the per-show or per-book playback config; playback works

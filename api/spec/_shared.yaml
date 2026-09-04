@@ -117,6 +117,16 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
 
+    TranscodeLimited:
+      description: >
+        The server's or the caller's concurrent transcode session limit
+        is reached (code `transcode-limited`). Nothing was rendered;
+        retry when a session ends, or play something that direct-plays.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
     StorageFull:
       description: >
         The server has no room to stage what the request declared

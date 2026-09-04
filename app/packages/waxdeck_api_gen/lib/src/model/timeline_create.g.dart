@@ -11,12 +11,17 @@ class _$TimelineCreate extends TimelineCreate {
   final BuiltList<String> itemPids;
   @override
   final double? crossfadeSeconds;
+  @override
+  final BuiltList<TimelineFormat>? formats;
 
   factory _$TimelineCreate([void Function(TimelineCreateBuilder)? updates]) =>
       (TimelineCreateBuilder()..update(updates))._build();
 
-  _$TimelineCreate._({required this.itemPids, this.crossfadeSeconds})
-    : super._();
+  _$TimelineCreate._({
+    required this.itemPids,
+    this.crossfadeSeconds,
+    this.formats,
+  }) : super._();
   @override
   TimelineCreate rebuild(void Function(TimelineCreateBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -29,7 +34,8 @@ class _$TimelineCreate extends TimelineCreate {
     if (identical(other, this)) return true;
     return other is TimelineCreate &&
         itemPids == other.itemPids &&
-        crossfadeSeconds == other.crossfadeSeconds;
+        crossfadeSeconds == other.crossfadeSeconds &&
+        formats == other.formats;
   }
 
   @override
@@ -37,6 +43,7 @@ class _$TimelineCreate extends TimelineCreate {
     var _$hash = 0;
     _$hash = $jc(_$hash, itemPids.hashCode);
     _$hash = $jc(_$hash, crossfadeSeconds.hashCode);
+    _$hash = $jc(_$hash, formats.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -45,7 +52,8 @@ class _$TimelineCreate extends TimelineCreate {
   String toString() {
     return (newBuiltValueToStringHelper(r'TimelineCreate')
           ..add('itemPids', itemPids)
-          ..add('crossfadeSeconds', crossfadeSeconds))
+          ..add('crossfadeSeconds', crossfadeSeconds)
+          ..add('formats', formats))
         .toString();
   }
 }
@@ -64,6 +72,12 @@ class TimelineCreateBuilder
   set crossfadeSeconds(double? crossfadeSeconds) =>
       _$this._crossfadeSeconds = crossfadeSeconds;
 
+  ListBuilder<TimelineFormat>? _formats;
+  ListBuilder<TimelineFormat> get formats =>
+      _$this._formats ??= ListBuilder<TimelineFormat>();
+  set formats(ListBuilder<TimelineFormat>? formats) =>
+      _$this._formats = formats;
+
   TimelineCreateBuilder() {
     TimelineCreate._defaults(this);
   }
@@ -73,6 +87,7 @@ class TimelineCreateBuilder
     if ($v != null) {
       _itemPids = $v.itemPids.toBuilder();
       _crossfadeSeconds = $v.crossfadeSeconds;
+      _formats = $v.formats?.toBuilder();
       _$v = null;
     }
     return this;
@@ -99,12 +114,16 @@ class TimelineCreateBuilder
           _$TimelineCreate._(
             itemPids: itemPids.build(),
             crossfadeSeconds: crossfadeSeconds,
+            formats: _formats?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'itemPids';
         itemPids.build();
+
+        _$failedField = 'formats';
+        _formats?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'TimelineCreate',

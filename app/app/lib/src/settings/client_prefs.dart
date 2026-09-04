@@ -314,6 +314,41 @@ final preloadOnWifiOnlyProvider = NotifierProvider<PreloadOnWifiOnly, bool>(
   PreloadOnWifiOnly.new,
 );
 
+/// Whether a music queue plays through one server-rendered stream in
+/// this browser.
+///
+/// Off by default, and the one playback switch that is a real choice
+/// rather than a preference: the gapless path asks the server to render
+/// the whole queue, which costs it work an ordinary listen does not,
+/// and the standard path plays everything this one does with a gap at
+/// each seam. Web only - every other platform crosses a boundary
+/// gaplessly already.
+class WebGapless extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.webGapless;
+
+  @override
+  bool get defaultValue => false;
+}
+
+final webGaplessProvider = NotifierProvider<WebGapless, bool>(WebGapless.new);
+
+/// What the gapless switch's help says beyond the copy: null while
+/// nothing has gone wrong, an error code when the server or the browser
+/// turned the feature down. Written by the feeder and the engine, read
+/// by the settings row, so a switch that is on and doing nothing says
+/// why.
+class WebGaplessStatus extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String? code) => state = code;
+}
+
+final webGaplessStatusProvider = NotifierProvider<WebGaplessStatus, String?>(
+  WebGaplessStatus.new,
+);
+
 /// A streaming quality level. Words, not numbers: the number is a
 /// detail the help copy carries.
 enum StreamQuality { auto, high, normal, low }

@@ -100,12 +100,18 @@ gen-notices:
 
 # Rarely regenerated assets; not in `generate` because they hit the
 # network and take minutes. Run them when the design changes.
-.PHONY: fonts icons brand goldens-linux
+.PHONY: fonts icons brand hlsjs goldens-linux
 fonts:
 	tools/fetch-fonts.sh
 
 icons:
 	tools/fetch-icons.sh
+
+# The hls.js build the web app serves for gapless playback. Its license
+# travels beside it and rides `make gen-notices` into the binary's
+# notices, so re-vendoring and regenerating go together.
+hlsjs:
+	tools/fetch-hlsjs.sh
 
 brand:
 	python3 tools/generate-brand.py

@@ -145,7 +145,9 @@ export class Shell extends Surface {
     return this.ctx.page.getByRole('button', { name });
   }
 
-  /// The bell in the top app bar.
+  /// The bell in home's app bar, and only there: every screen draws its
+  /// own chrome, and the rest carry a sidebar destination to the full
+  /// list instead. Open it from home or the click lands on nothing.
   notificationsBell(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.notificationsBell));
   }

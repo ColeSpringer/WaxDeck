@@ -253,9 +253,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      for (final entry in entries.where((e) => e.section == section)) {
+      for (final entry in entries.where(
         // Native-only settings are drawn on this platform: the widget
-        // test runs on the VM, where `kIsWeb` is false.
+        // test runs on the VM, where `kIsWeb` is false. Which is also
+        // why a web-only row cannot be checked from here at all - it is
+        // drawn by the browser suite, where the same assertion runs.
+        (e) => e.section == section && !e.webOnly,
+      )) {
         expect(
           find.bySemanticsIdentifier(entry.semanticsId),
           findsWidgets,
@@ -288,7 +292,9 @@ void main() {
       sessions: [testSession('se-1', current: true)],
     );
 
-    for (final entry in entries) {
+    // Web-only rows are not drawn on the VM; the browser suite anchors
+    // them.
+    for (final entry in entries.where((e) => !e.webOnly)) {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [

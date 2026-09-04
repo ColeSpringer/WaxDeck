@@ -3,6 +3,7 @@ package flow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -143,8 +144,11 @@ func TestTimelineForMintsProxiedURL(t *testing.T) {
 	if res.JobPID != "" {
 		t.Fatal("unexpected job")
 	}
-	if !strings.HasPrefix(res.URL, "/media/hls/master.m3u8?tl=digest123&mt=") {
+	if !strings.HasPrefix(res.URL, "/media/hls/master.m3u8?tl=digest123&rk=aac~off~0&mt=") {
 		t.Fatalf("url %q", res.URL)
+	}
+	if res.Format != "aac" {
+		t.Fatalf("format %q, want the ladder's first", res.Format)
 	}
 	if res.DurationMS != 150000 || res.EnvelopeRate != 44100 {
 		t.Fatalf("duration %d rate %d", res.DurationMS, res.EnvelopeRate)
@@ -159,6 +163,185 @@ func TestTimelineForMintsProxiedURL(t *testing.T) {
 	if _, err := b.TimelineFor(context.Background(), "us-alice",
 		[]TimelineMember{{PID: "tr-v", Src: Source{Path: path, Virtual: true}}}, TimelineOptions{}); err == nil {
 		t.Fatal("virtual member accepted")
+	}
+}
+
+// TestTimelineForHonoursRequestedFormats pins that a caller's decodable
+// formats decide the rendering, that two renderings of one queue stay
+// live at once, and that a preference the engine cannot produce falls
+// back to the ladder rather than to silence.
+func TestTimelineForHonoursRequestedFormats(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	members := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
+	mint := func(formats ...string) *TimelineResult {
+		t.Helper()
+		res, err := b.TimelineFor(context.Background(), "us-alice", members,
+			TimelineOptions{Formats: formats})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+
+	// The sidecar offers aac and flac. A browser that cannot decode aac
+	// asks for flac and gets it, on its own URL.
+	flac := mint("flac")
+	if flac.Format != "flac" || !strings.Contains(flac.URL, "rk=flac~off~0") {
+		t.Fatalf("flac mint: format %q url %q", flac.Format, flac.URL)
+	}
+
+	// Preferences are tried in order, and one the engine cannot produce
+	// is skipped rather than refused.
+	if got := mint("opus", "flac"); got.Format != "flac" {
+		t.Fatalf("second preference: %q", got.Format)
+	}
+	if got := mint("opus"); got.Format != "aac" {
+		t.Fatalf("unproducible preference did not fall back to the ladder: %q", got.Format)
+	}
+
+	// The cast mint of the same queue arrives with the same digest and
+	// must not take the browser's URL away from it: both renderings
+	// stay live and each serves what it was minted for.
+	aac := mint()
+	if aac.Format != "aac" || aac.URL == flac.URL {
+		t.Fatalf("cast mint: format %q url %q", aac.Format, aac.URL)
+	}
+	b.tl.mu.Lock()
+	stashed := len(b.tl.stash)
+	b.tl.mu.Unlock()
+	if stashed != 2 {
+		t.Fatalf("stashed %d renderings, want both", stashed)
+	}
+	for _, res := range []*TimelineResult{flac, aac} {
+		rec := httptest.NewRecorder()
+		b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, res.URL, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s master: status %d: %s", res.Format, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// TestTimelineSlotsRideTheLimiter pins the whole life of a listener's
+// timeline slot: taken at the mint, shared by every rendering they hold
+// live, given back once all of them go quiet, and taken again by the
+// fragment fetch that resumes the listen.
+func TestTimelineSlotsRideTheLimiter(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	members := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
+
+	first, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gate.acquired != 1 || gate.held != 1 {
+		t.Fatalf("acquired %d held %d, want one slot", gate.acquired, gate.held)
+	}
+	if len(gate.kinds) != 1 || gate.kinds[0] != TranscodeTimeline {
+		t.Fatalf("kinds %v, want one timeline", gate.kinds)
+	}
+
+	// A second rendering of the same queue - which is what a browser
+	// asking for a format the cast mint did not is - rides the slot the
+	// listener already holds rather than taking another. Refusing it
+	// would stall the music at the seam a queue edit was made in.
+	if _, err := b.TimelineFor(context.Background(), "us-alice", members,
+		TimelineOptions{Formats: []string{"flac"}}); err != nil {
+		t.Fatal(err)
+	}
+	if gate.acquired != 1 || gate.held != 1 {
+		t.Fatalf("acquired %d held %d, want the one slot shared", gate.acquired, gate.held)
+	}
+
+	// Quiet: a sweep with every rendering unfetched for longer than the
+	// idle window gives the slot back.
+	ts := b.timelines()
+	ageTimelines(b, 2*timelineIdle)
+	b.SweepTimelineSlots()
+	if gate.held != 0 {
+		t.Fatalf("held %d after the sweep, want the slot back", gate.held)
+	}
+
+	// A fetch resuming the listen takes it again. hls.js never
+	// re-fetches the master, so this is the fragment path.
+	rec := httptest.NewRecorder()
+	b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, first.URL, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("master after the sweep: %d: %s", rec.Code, rec.Body.String())
+	}
+	if gate.acquired != 2 || gate.held != 1 {
+		t.Fatalf("acquired %d held %d, want the slot taken again", gate.acquired, gate.held)
+	}
+
+	// A rendering past its expiry is not a listener: the sweep drops the
+	// row and the slot with it, however recently it was fetched.
+	ts.mu.Lock()
+	for key, st := range ts.stash {
+		st.expires = time.Now().Add(-time.Minute)
+		ts.stash[key] = st
+	}
+	for user, slot := range ts.slots {
+		slot.taken = slot.taken.Add(-2 * timelineIdle)
+		ts.slots[user] = slot
+	}
+	ts.mu.Unlock()
+	b.SweepTimelineSlots()
+	if gate.held != 0 {
+		t.Fatalf("held %d after expiry, want the slot back", gate.held)
+	}
+	ts.mu.Lock()
+	left := len(ts.stash)
+	ts.mu.Unlock()
+	if left != 0 {
+		t.Fatalf("stash holds %d expired rows", left)
+	}
+}
+
+// TestTimelineMintRefusedByTheLimiter pins that a listener over the cap
+// is told before the server renders anything, and that the refusal
+// carries the same error a progressive stream's does.
+func TestTimelineMintRefusedByTheLimiter(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{refuse: true}
+	b.SetTranscodeGate(gate)
+
+	_, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
+		TimelineOptions{})
+	if !errors.Is(err, ErrTranscodeLimited) {
+		t.Fatalf("mint error %v, want the limiter refusal", err)
+	}
+	if gate.acquired != 0 {
+		t.Fatalf("acquired %d, want nothing spent on a refused listener", gate.acquired)
+	}
+}
+
+// TestTimelineFetchRefusedByTheLimiter pins the other half: a listen
+// resuming into a full server is refused on the fetch, with the code
+// the web engine turns into an explanation rather than a re-mint.
+func TestTimelineFetchRefusedByTheLimiter(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	res, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
+		TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ageTimelines(b, 2*timelineIdle)
+	b.SweepTimelineSlots()
+	gate.refuse = true
+
+	rec := httptest.NewRecorder()
+	b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, res.URL, nil))
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status %d, want 429", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "transcode-limited") {
+		t.Fatalf("body %q", rec.Body.String())
 	}
 }
 
@@ -320,19 +503,19 @@ func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 	}
 
 	// A missing or foreign token is refused.
-	rec = get("/media/hls/master.m3u8?tl=digest123")
+	rec = get("/media/hls/master.m3u8?tl=digest123&rk=aac~off~0")
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("tokenless master status %d", rec.Code)
 	}
 	otherTokens := auth.NewMediaTokens([]byte("other-secret"), 0)
-	tok, _ := otherTokens.Mint("us-alice", "tl-digest123")
-	rec = get("/media/hls/master.m3u8?tl=digest123&mt=" + url.QueryEscape(tok))
+	tok, _ := otherTokens.Mint("us-alice", "tl-digest123/aac~off~0")
+	rec = get("/media/hls/master.m3u8?tl=digest123&rk=aac~off~0&mt=" + url.QueryEscape(tok))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("forged token status %d", rec.Code)
 	}
 	// A token for a plain item pid does not open the HLS surface.
 	itemTok, _ := b.tokens.Mint("us-alice", "tr-one")
-	rec = get("/media/hls/master.m3u8?tl=digest123&mt=" + url.QueryEscape(itemTok))
+	rec = get("/media/hls/master.m3u8?tl=digest123&rk=aac~off~0&mt=" + url.QueryEscape(itemTok))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("item token accepted on HLS: %d", rec.Code)
 	}
@@ -487,7 +670,7 @@ func TestTimelineForCarriesCrossfadeAndGain(t *testing.T) {
 		{PID: "tr-two", Src: Source{Path: path, DurationMS: 60000, IntegratedLUFS: &quiet, TruePeakDB: &peak}},
 	}
 
-	signedFor := func(opts TimelineOptions) string {
+	signedFor := func(opts TimelineOptions, gain string) string {
 		t.Helper()
 		res, err := b.TimelineFor(context.Background(), "us-alice", members, opts)
 		if err != nil {
@@ -498,21 +681,21 @@ func TestTimelineForCarriesCrossfadeAndGain(t *testing.T) {
 		}
 		b.tl.mu.Lock()
 		defer b.tl.mu.Unlock()
-		st, ok := b.tl.stash["digest123"]
+		st, ok := b.tl.stash[timelineKey("digest123", renderKey("aac", gain, opts.CrossfadeSeconds))]
 		if !ok {
-			t.Fatal("nothing stashed for the minted digest")
+			t.Fatalf("nothing stashed for the minted rendering (%+v)", b.tl.stash)
 		}
 		return st.signedMaster
 	}
 
-	off := signedFor(TimelineOptions{})
+	off := signedFor(TimelineOptions{}, "off")
 	if !strings.Contains(off, "gain=off") || strings.Contains(off, "crossfadeSeconds") {
 		t.Fatalf("plain mint: %s", off)
 	}
 
 	// -24 LUFS against the -18 target is a 6 dB lift, and -12 dBTP has
 	// room for it.
-	on := signedFor(TimelineOptions{CrossfadeSeconds: 4.5, ReplayGain: true})
+	on := signedFor(TimelineOptions{CrossfadeSeconds: 4.5, ReplayGain: true}, "6")
 	if !strings.Contains(on, "gain=6") {
 		t.Fatalf("levelled mint did not carry the derived gain: %s", on)
 	}
@@ -531,9 +714,162 @@ func TestTimelineForCarriesCrossfadeAndGain(t *testing.T) {
 		t.Fatal("unexpected job")
 	}
 	b.tl.mu.Lock()
-	st := b.tl.stash["digest123"]
+	st := b.tl.stash[timelineKey("digest123", renderKey("aac", "off", 0))]
 	b.tl.mu.Unlock()
 	if !strings.Contains(st.signedMaster, "gain=off") {
 		t.Fatalf("unmeasured queue levelled anyway: %s", st.signedMaster)
+	}
+}
+
+// ageTimelines backdates every listener's last fetch and every slot's
+// acquire time, which is how a test reaches the state a quiet minute
+// produces without waiting one.
+func ageTimelines(b *Bridge, by time.Duration) {
+	ts := b.timelines()
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	for key, st := range ts.stash {
+		for user, at := range st.listeners {
+			st.listeners[user] = at.Add(-by)
+		}
+		ts.stash[key] = st
+	}
+	for user, slot := range ts.slots {
+		slot.taken = slot.taken.Add(-by)
+		ts.slots[user] = slot
+	}
+}
+
+// TestTimelineSlotsAreHeldPerListener pins that two accounts playing the
+// same queue in the same rendering share the row without sharing a
+// listen: the key is a content digest, so one listener's mint used to
+// take the row over and the other's fetches then counted for nobody -
+// the sweep took her slot back a minute into a track she was still
+// fetching.
+func TestTimelineSlotsAreHeldPerListener(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	members := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
+
+	alice, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.TimelineFor(context.Background(), "us-bob", members, TimelineOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if gate.held != 2 {
+		t.Fatalf("held %d, want a slot each", gate.held)
+	}
+
+	// Only Alice is still fetching. Bob's went quiet, so his goes back
+	// and hers does not.
+	ageTimelines(b, 2*timelineIdle)
+	rec := httptest.NewRecorder()
+	b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, alice.URL, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("alice's master: %d: %s", rec.Code, rec.Body.String())
+	}
+	b.SweepTimelineSlots()
+	if gate.held != 1 {
+		t.Fatalf("held %d, want only the listener still fetching", gate.held)
+	}
+
+	// And hers still serves, which is the thing the sweep must not have
+	// broken: a released slot is re-acquired on the next fetch, so a
+	// wrongly released one shows up as a second acquire rather than an
+	// error.
+	acquired := gate.acquired
+	rec = httptest.NewRecorder()
+	b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, alice.URL, nil))
+	if rec.Code != http.StatusOK || gate.acquired != acquired {
+		t.Fatalf("status %d, acquired %d->%d: alice never lost her slot",
+			rec.Code, acquired, gate.acquired)
+	}
+}
+
+// TestTimelineFailedMintKeepsALiveSlot pins that a mint that fails
+// beside one that worked hands back nothing. Both ride the one slot the
+// listener holds, so an unconditional give-back left the good rendering
+// streaming outside the cap and outside what the console reports.
+func TestTimelineFailedMintKeepsALiveSlot(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+
+	if _, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
+		TimelineOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if gate.held != 1 {
+		t.Fatalf("held %d, want the one slot", gate.held)
+	}
+
+	// A member outside every root: refused, and refused as a queue the
+	// engine cannot render rather than as the server being broken.
+	_, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-two", Src: Source{Path: filepath.Join(t.TempDir(), "elsewhere.flac"), DurationMS: 1000}}},
+		TimelineOptions{})
+	if !errors.Is(err, ErrTimelineUnrenderable) {
+		t.Fatalf("mint error %v, want the unrenderable refusal", err)
+	}
+	if gate.held != 1 {
+		t.Fatalf("held %d after a failed mint, want the live one kept", gate.held)
+	}
+}
+
+// TestTimelineFetchForADeadRenderingTakesNoSlot pins that a player
+// looping on a URL this server no longer holds costs nothing: it used to
+// take a fresh slot per retry and get its not-found anyway, so one dead
+// client refused other listeners' live mints a minute at a time.
+func TestTimelineFetchForADeadRenderingTakesNoSlot(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	res, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
+		TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ageTimelines(b, 2*timelineIdle)
+	ts := b.timelines()
+	ts.mu.Lock()
+	for key := range ts.stash {
+		delete(ts.stash, key)
+	}
+	ts.mu.Unlock()
+	b.SweepTimelineSlots()
+
+	acquired := gate.acquired
+	rec := httptest.NewRecorder()
+	b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, res.URL, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status %d, want the not-found that says re-request", rec.Code)
+	}
+	if gate.acquired != acquired || gate.held != 0 {
+		t.Fatalf("acquired %d->%d held %d, want nothing spent on a dead URL",
+			acquired, gate.acquired, gate.held)
+	}
+}
+
+// TestTimelineFormatHonoursTheBitrateCeiling pins that an account with a
+// quality ceiling is not handed a lossless rendering of a whole queue by
+// the same server that caps its single tracks - including when the
+// caller asked for lossless first, which says what it can decode and not
+// what it is allowed.
+func TestTimelineFormatHonoursTheBitrateCeiling(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	b.SetTranscodeGate(&fakeGate{ceiling: 192})
+	res, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
+		TimelineOptions{Formats: []string{"flac", "aac"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Format != "aac" {
+		t.Fatalf("format %q, want the lossy one a ceiling leaves", res.Format)
 	}
 }

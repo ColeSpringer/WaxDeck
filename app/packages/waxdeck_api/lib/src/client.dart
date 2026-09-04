@@ -210,6 +210,21 @@ abstract interface class WaxDeckRepository {
     int? maxBitrateKbps,
   });
 
+  /// `POST /player/timeline`: mints one gapless HLS stream over a whole
+  /// queue, in play order. [crossfadeSeconds] shapes the seams and the
+  /// returned member offsets alike; [formats] names what the caller can
+  /// decode, most preferred first, and the answer says what was
+  /// actually rendered.
+  ///
+  /// Throws `timeline-measuring` (202) while member lengths are still
+  /// being measured: its `params['job']` is the job to poll, after
+  /// which the same request answers immediately.
+  Future<QueueTimeline> createQueueTimeline(
+    List<String> pids, {
+    double? crossfadeSeconds,
+    List<String>? formats,
+  });
+
   /// `GET /items/{pid}/play-state`: the caller's resume state for one item.
   Future<PlayState> getPlayState(String pid);
 
@@ -2172,6 +2187,55 @@ class WaxDeckClient implements WaxDeckRepository {
     );
     return playInfoFromGen(_require(response.data), baseUrl: _baseUrl);
   });
+
+  @override
+  Future<QueueTimeline> createQueueTimeline(
+    List<String> pids, {
+    double? crossfadeSeconds,
+    List<String>? formats,
+  }) => _guard(() async {
+    try {
+      final response = await _gen.getPlayerApi().createQueueTimeline(
+        timelineCreate: gen.TimelineCreate(
+          (b) => b
+            ..itemPids.addAll(pids)
+            ..crossfadeSeconds = crossfadeSeconds
+            ..formats = formats == null
+                ? null
+                : ListBuilder<gen.TimelineFormat>(
+                    formats.map(gen.TimelineFormat.valueOf),
+                  ),
+        ),
+        // A 202 carries a job, not a timeline, and the generated call
+        // deserializes the success shape whatever the status is - which
+        // would surface "still measuring" as a parse failure. Rejecting
+        // it here keeps the answer intact on the exception.
+        validateStatus: (status) => status == 201,
+      );
+      return queueTimelineFromGen(_require(response.data), baseUrl: _baseUrl);
+    } on DioException catch (e) {
+      final measuring = _measuringJob(e);
+      if (measuring == null) rethrow;
+      throw WaxDeckApiException(
+        code: 'timeline-measuring',
+        message: 'the server is still measuring this queue',
+        statusCode: 202,
+        params: <String, String>{'job': measuring},
+      );
+    }
+  });
+
+  /// The job pid from a 202 answer to a timeline mint, or null for any
+  /// other failure. A 202 with no readable job is still a 202: the
+  /// caller's move is to fall back to per-item playback either way,
+  /// and an empty pid says only that polling is not on offer.
+  static String? _measuringJob(DioException e) {
+    final response = e.response;
+    if (response?.statusCode != 202) return null;
+    final body = response?.data;
+    if (body is Map && body['pid'] is String) return body['pid'] as String;
+    return '';
+  }
 
   @override
   Future<PlayState> getPlayState(String pid) => _guard(() async {

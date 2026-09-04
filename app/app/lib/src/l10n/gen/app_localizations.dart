@@ -1527,16 +1527,16 @@ abstract class AppLocalizations {
   /// **'Access'**
   String get adminServerAccessGroup;
 
-  /// The caveat under the running-stream count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it; HLS is a streaming format.
+  /// The caveat under the running-session count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it.
   ///
   /// In en, this message translates to:
-  /// **'Counts streams the engine is transcoding or remuxing, including a client that forced the source\'s own format; HLS timelines are admitted separately and are not counted here.'**
+  /// **'Counts what the engine is transcoding or remuxing, including a client that forced the source\'s own format, and a listener playing a queue gaplessly holds one slot however many renderings they have live.'**
   String get adminServerActivityCaveat;
 
-  /// How many streams the audio engine is serving at this moment.
+  /// How many sessions the audio engine is serving at this moment.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 engine-backed stream right now.} other{{count} engine-backed streams right now.}}'**
+  /// **'{count, plural, =1{1 engine-backed session right now.} other{{count} engine-backed sessions right now.}}'**
   String adminServerActivityCount(int count);
 
   /// Drawn in place of the running-stream count while it is being read.
@@ -1556,6 +1556,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{headline} {caveat}'**
   String adminServerActivitySpoken(String headline, String caveat);
+
+  /// How many of the running sessions are listeners playing a whole queue as one continuous stream.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{None of them is a gapless queue.} =1{One of them is a gapless queue.} other{{count} of them are gapless queues.}}'**
+  String adminServerActivityTimelines(int count);
 
   /// Drawn in place of the running-stream count when that read failed.
   ///
@@ -12511,22 +12517,22 @@ abstract class AppLocalizations {
   /// **'Connection check'**
   String get settingsCastCheckTitle;
 
-  /// The line under the casting crossfade setting.
+  /// The line under the crossfade setting.
   ///
   /// In en, this message translates to:
-  /// **'Fades one track into the next when casting a queue'**
+  /// **'Fades one track into the next wherever the server renders the queue: a cast speaker, and gapless playback in a browser'**
   String get settingsCrossfadeHelp;
 
-  /// Comma-separated search keywords for the "Casting crossfade" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  /// Comma-separated search keywords for the "Crossfade" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
-  /// **'fade, gapless, seam, chromecast'**
+  /// **'fade, gapless, seam, chromecast, casting'**
   String get settingsCrossfadeKeywords;
 
-  /// Name of the "Casting crossfade" setting, drawn on its own row and in settings search.
+  /// Name of the "Crossfade" setting, drawn on its own row and in settings search.
   ///
   /// In en, this message translates to:
-  /// **'Casting crossfade'**
+  /// **'Crossfade'**
   String get settingsCrossfadeTitle;
 
   /// Density option: rows with room around them.
@@ -12823,10 +12829,10 @@ abstract class AppLocalizations {
   /// **'Browsing'**
   String get settingsGroupBrowsing;
 
-  /// Heading over the settings rows about playing on another device.
+  /// Heading over the settings rows that shape a queue the server renders for playback: on a cast device, and as one gapless stream in a browser.
   ///
   /// In en, this message translates to:
-  /// **'Casting'**
+  /// **'Casting and gapless'**
   String get settingsGroupCasting;
 
   /// Heading over the settings rows about what the app does on a metered connection.
@@ -13471,22 +13477,22 @@ abstract class AppLocalizations {
   /// **'Reduce motion'**
   String get settingsReduceMotionTitle;
 
-  /// The line under the level-casting-volume switch.
+  /// The line under the level-the-volume switch.
   ///
   /// In en, this message translates to:
-  /// **'Plays a cast queue at one loudness, where the files have been analyzed'**
+  /// **'Plays a server-rendered queue at one loudness, where the files have been analyzed'**
   String get settingsReplayGainHelp;
 
-  /// Comma-separated search keywords for the "Level casting volume" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  /// Comma-separated search keywords for the "Level the volume" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
-  /// **'replaygain, loudness, normalize, gain'**
+  /// **'replaygain, loudness, normalize, gain, casting'**
   String get settingsReplayGainKeywords;
 
-  /// Name of the "Level casting volume" setting, drawn on its own row and in settings search.
+  /// Name of the "Level the volume" setting, drawn on its own row and in settings search.
   ///
   /// In en, this message translates to:
-  /// **'Level casting volume'**
+  /// **'Level the volume'**
   String get settingsReplayGainTitle;
 
   /// The line under the screen reader row.
@@ -14064,6 +14070,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open the visualizer when idle'**
   String get settingsVisualizerIdleTitle;
+
+  /// The line under the gapless switch when the browser itself cannot play a rendered queue - no media source, or no format it decodes.
+  ///
+  /// In en, this message translates to:
+  /// **'This browser cannot play a queue as one stream, so tracks play one at a time'**
+  String get settingsWebGaplessBrowser;
+
+  /// The line under the gapless switch when the server refused to render the queue because its transcode session limit is reached. Temporary, unlike the other refusals.
+  ///
+  /// In en, this message translates to:
+  /// **'The server is at its transcoding limit, so tracks play one at a time for now'**
+  String get settingsWebGaplessBusy;
+
+  /// The line under the gapless switch when the server rendered the queue in a format this browser cannot decode.
+  ///
+  /// In en, this message translates to:
+  /// **'This server renders no format this browser can play, so tracks play one at a time'**
+  String get settingsWebGaplessFormat;
+
+  /// The line under the gapless-playback switch, on the web.
+  ///
+  /// In en, this message translates to:
+  /// **'Plays a music queue as one stream, so tracks run into each other the way they were mastered'**
+  String get settingsWebGaplessHelp;
+
+  /// Comma-separated search keywords for the "Gapless playback" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'gapless, crossfade, seam, stream, browser'**
+  String get settingsWebGaplessKeywords;
+
+  /// Name of the "Gapless playback" setting, drawn on its own row and in settings search. Web only.
+  ///
+  /// In en, this message translates to:
+  /// **'Gapless playback'**
+  String get settingsWebGaplessTitle;
+
+  /// Replaces the gapless help text when the server has answered that it renders no timelines.
+  ///
+  /// In en, this message translates to:
+  /// **'This server cannot render a queue as one stream, so tracks play one at a time'**
+  String get settingsWebGaplessUnavailable;
 
   /// The switch letting the shared page offer the original file, and its accessible name.
   ///

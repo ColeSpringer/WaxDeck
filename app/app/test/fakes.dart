@@ -764,6 +764,74 @@ class FakeRepository implements WaxDeckRepository {
   /// Pids served with spoken-word loudness normalization applied.
   final Set<String> voiceBoostPids = {};
 
+  @override
+  Future<QueueTimeline> createQueueTimeline(
+    List<String> pids, {
+    double? crossfadeSeconds,
+    List<String>? formats,
+  }) async {
+    timelineCalls.add((
+      pids: pids,
+      crossfadeSeconds: crossfadeSeconds,
+      formats: formats,
+    ));
+    final error = timelineError;
+    if (error != null) throw error;
+    final made = timelines?.call(pids);
+    if (made != null) return made;
+    // One member per pid, tiling exactly at 48 kHz: the shape a queue of
+    // whole tracks mints, so a test that only cares that a timeline
+    // exists does not have to build one.
+    var offset = 0;
+    final members = <QueueTimelineMember>[];
+    for (final pid in pids) {
+      final ms = libraryItems
+          .where((i) => i.pid == pid)
+          .map((i) => i.durationMs)
+          .firstOrNull;
+      final samples = ((ms ?? 214000) * 48000) ~/ 1000;
+      members.add(
+        QueueTimelineMember(
+          pid: pid,
+          offsetSamples: offset,
+          durationSamples: samples,
+        ),
+      );
+      offset += samples;
+    }
+    return QueueTimeline(
+      // A fresh token per mint, the way the real one signs one: a
+      // re-mint that answered the same URL byte for byte let every
+      // engine take its "already loaded, just seek" path, so the reload
+      // a lost timeline actually performs went untested.
+      url:
+          '/media/hls/master.m3u8?tl=${pids.join('.')}'
+          '&rk=${formats?.firstOrNull ?? 'aac'}&mt=test-token-${timelineCalls.length}',
+      mimeType: 'application/vnd.apple.mpegurl',
+      durationMs: offset * 1000 ~/ 48000,
+      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 30)),
+      envelopeRate: 48000,
+      crossfadeSeconds: crossfadeSeconds,
+      format: formats?.firstOrNull ?? 'aac',
+      members: members,
+    );
+  }
+
+  /// Every timeline mint, in order.
+  final List<
+    ({List<String> pids, double? crossfadeSeconds, List<String>? formats})
+  >
+  timelineCalls = [];
+
+  /// Thrown by [createQueueTimeline] when set; a
+  /// `WaxDeckApiException(code: 'feature-unavailable', statusCode: 501)`
+  /// is the server with no streaming engine.
+  Object? timelineError;
+
+  /// Overrides what [createQueueTimeline] answers, for a test that needs
+  /// particular seams. Null falls back to one member per pid.
+  QueueTimeline? Function(List<String> pids)? timelines;
+
   EpisodeSummary? _findEpisode(String pid) {
     for (final episodes in episodesByShow.values) {
       for (final episode in episodes) {
@@ -4771,10 +4839,12 @@ class FakeRepository implements WaxDeckRepository {
     return limits;
   }
 
-  /// Engine-backed streams the server reports in flight, and how many
-  /// times it has been asked (the screen reads once and again on
-  /// demand, never on a timer).
+  /// Engine-backed sessions the server reports in flight, how many of
+  /// them are gapless queues, and how many times it has been asked (the
+  /// screen reads once and again on demand, never on a timer). A null
+  /// timeline count is the older server that does not separate them.
   int activeTranscodeSessions = 0;
+  int? activeTranscodeTimelines = 0;
   int transcodingActivityReads = 0;
 
   @override
@@ -4782,7 +4852,10 @@ class FakeRepository implements WaxDeckRepository {
     transcodingActivityReads++;
     final error = adminError;
     if (error != null) throw error;
-    return TranscodingActivity(activeSessions: activeTranscodeSessions);
+    return TranscodingActivity(
+      activeSessions: activeTranscodeSessions,
+      activeTimelines: activeTranscodeTimelines,
+    );
   }
 
   /// Maintenance schedules by kind.

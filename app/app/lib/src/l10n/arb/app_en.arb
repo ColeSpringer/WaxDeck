@@ -1092,13 +1092,13 @@
   "@adminServerAccessGroup": {
     "description": "Heading over the settings deciding who may reach this server and what they may change."
   },
-  "adminServerActivityCaveat": "Counts streams the engine is transcoding or remuxing, including a client that forced the source's own format; HLS timelines are admitted separately and are not counted here.",
+  "adminServerActivityCaveat": "Counts what the engine is transcoding or remuxing, including a client that forced the source's own format, and a listener playing a queue gaplessly holds one slot however many renderings they have live.",
   "@adminServerActivityCaveat": {
-    "description": "The caveat under the running-stream count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it; HLS is a streaming format."
+    "description": "The caveat under the running-session count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it."
   },
-  "adminServerActivityCount": "{count, plural, =1{1 engine-backed stream right now.} other{{count} engine-backed streams right now.}}",
+  "adminServerActivityCount": "{count, plural, =1{1 engine-backed session right now.} other{{count} engine-backed sessions right now.}}",
   "@adminServerActivityCount": {
-    "description": "How many streams the audio engine is serving at this moment.",
+    "description": "How many sessions the audio engine is serving at this moment.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -1125,6 +1125,15 @@
       "caveat": {
         "type": "String",
         "example": "Counts streams the engine is transcoding..."
+      }
+    }
+  },
+  "adminServerActivityTimelines": "{count, plural, =0{None of them is a gapless queue.} =1{One of them is a gapless queue.} other{{count} of them are gapless queues.}}",
+  "@adminServerActivityTimelines": {
+    "description": "How many of the running sessions are listeners playing a whole queue as one continuous stream.",
+    "placeholders": {
+      "count": {
+        "type": "int"
       }
     }
   },
@@ -10732,17 +10741,17 @@
   "@settingsCastCheckTitle": {
     "description": "Name of the \"Connection check\" setting, drawn on its own row and in settings search."
   },
-  "settingsCrossfadeHelp": "Fades one track into the next when casting a queue",
+  "settingsCrossfadeHelp": "Fades one track into the next wherever the server renders the queue: a cast speaker, and gapless playback in a browser",
   "@settingsCrossfadeHelp": {
-    "description": "The line under the casting crossfade setting."
+    "description": "The line under the crossfade setting."
   },
-  "settingsCrossfadeKeywords": "fade, gapless, seam, chromecast",
+  "settingsCrossfadeKeywords": "fade, gapless, seam, chromecast, casting",
   "@settingsCrossfadeKeywords": {
-    "description": "Comma-separated search keywords for the \"Casting crossfade\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+    "description": "Comma-separated search keywords for the \"Crossfade\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
   },
-  "settingsCrossfadeTitle": "Casting crossfade",
+  "settingsCrossfadeTitle": "Crossfade",
   "@settingsCrossfadeTitle": {
-    "description": "Name of the \"Casting crossfade\" setting, drawn on its own row and in settings search."
+    "description": "Name of the \"Crossfade\" setting, drawn on its own row and in settings search."
   },
   "settingsDensityComfortable": "Comfortable",
   "@settingsDensityComfortable": {
@@ -10968,9 +10977,9 @@
   "@settingsGroupBrowsing": {
     "description": "Heading over the settings rows about what the library listings show."
   },
-  "settingsGroupCasting": "Casting",
+  "settingsGroupCasting": "Casting and gapless",
   "@settingsGroupCasting": {
-    "description": "Heading over the settings rows about playing on another device."
+    "description": "Heading over the settings rows that shape a queue the server renders for playback: on a cast device, and as one gapless stream in a browser."
   },
   "settingsGroupData": "Data",
   "@settingsGroupData": {
@@ -11445,17 +11454,17 @@
   "@settingsReduceMotionTitle": {
     "description": "Name of the \"Reduce motion\" setting, drawn on its own row and in settings search."
   },
-  "settingsReplayGainHelp": "Plays a cast queue at one loudness, where the files have been analyzed",
+  "settingsReplayGainHelp": "Plays a server-rendered queue at one loudness, where the files have been analyzed",
   "@settingsReplayGainHelp": {
-    "description": "The line under the level-casting-volume switch."
+    "description": "The line under the level-the-volume switch."
   },
-  "settingsReplayGainKeywords": "replaygain, loudness, normalize, gain",
+  "settingsReplayGainKeywords": "replaygain, loudness, normalize, gain, casting",
   "@settingsReplayGainKeywords": {
-    "description": "Comma-separated search keywords for the \"Level casting volume\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+    "description": "Comma-separated search keywords for the \"Level the volume\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
   },
-  "settingsReplayGainTitle": "Level casting volume",
+  "settingsReplayGainTitle": "Level the volume",
   "@settingsReplayGainTitle": {
-    "description": "Name of the \"Level casting volume\" setting, drawn on its own row and in settings search."
+    "description": "Name of the \"Level the volume\" setting, drawn on its own row and in settings search."
   },
   "settingsScreenReaderBlurb": "Every control is named, the queue reorders from the keyboard, and the deck bar is one landmark",
   "@settingsScreenReaderBlurb": {
@@ -11896,6 +11905,34 @@
   "settingsVisualizerIdleTitle": "Open the visualizer when idle",
   "@settingsVisualizerIdleTitle": {
     "description": "Name of the \"Open the visualizer when idle\" setting, drawn on its own row and in settings search."
+  },
+  "settingsWebGaplessBrowser": "This browser cannot play a queue as one stream, so tracks play one at a time",
+  "@settingsWebGaplessBrowser": {
+    "description": "The line under the gapless switch when the browser itself cannot play a rendered queue - no media source, or no format it decodes."
+  },
+  "settingsWebGaplessBusy": "The server is at its transcoding limit, so tracks play one at a time for now",
+  "@settingsWebGaplessBusy": {
+    "description": "The line under the gapless switch when the server refused to render the queue because its transcode session limit is reached. Temporary, unlike the other refusals."
+  },
+  "settingsWebGaplessFormat": "This server renders no format this browser can play, so tracks play one at a time",
+  "@settingsWebGaplessFormat": {
+    "description": "The line under the gapless switch when the server rendered the queue in a format this browser cannot decode."
+  },
+  "settingsWebGaplessHelp": "Plays a music queue as one stream, so tracks run into each other the way they were mastered",
+  "@settingsWebGaplessHelp": {
+    "description": "The line under the gapless-playback switch, on the web."
+  },
+  "settingsWebGaplessKeywords": "gapless, crossfade, seam, stream, browser",
+  "@settingsWebGaplessKeywords": {
+    "description": "Comma-separated search keywords for the \"Gapless playback\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsWebGaplessTitle": "Gapless playback",
+  "@settingsWebGaplessTitle": {
+    "description": "Name of the \"Gapless playback\" setting, drawn on its own row and in settings search. Web only."
+  },
+  "settingsWebGaplessUnavailable": "This server cannot render a queue as one stream, so tracks play one at a time",
+  "@settingsWebGaplessUnavailable": {
+    "description": "Replaces the gapless help text when the server has answered that it renders no timelines."
   },
   "sharingAllowDownload": "Allow download",
   "@sharingAllowDownload": {

@@ -104,6 +104,23 @@ void main() {
     expect(_location(router), before);
   });
 
+  testWidgets('a bell with nothing in it still opens and says so', (
+    tester,
+  ) async {
+    await _pump(tester);
+
+    // The state a visit leaves behind once it has dealt with the only
+    // row there was, and the one a reader is most likely to open into.
+    // Empty is not a broken bell: the trigger stays live and the menu
+    // draws a line of its own, which is the handle the e2e reads to
+    // tell an opened bell from a click that never landed.
+    await tester.tap(_byId(SemanticsIds.notificationsBell));
+    await tester.pumpAndSettle();
+
+    expect(_byId(SemanticsIds.notificationsEmpty), findsOneWidget);
+    expect(_byId(SemanticsIds.notificationsClear), findsNothing);
+  });
+
   testWidgets('the count is in the name, and opening is what reads it', (
     tester,
   ) async {

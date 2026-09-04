@@ -1017,13 +1017,13 @@
   "@adminServerAccessGroup": {
     "description": "Heading over the settings deciding who may reach this server and what they may change."
   },
-  "adminServerActivityCaveat": "Counts streams the engine is transcoding or remuxing, including a client that forced the source's own format; HLS timelines are admitted separately and are not counted here.",
+  "adminServerActivityCaveat": "Counts what the engine is transcoding or remuxing, including a client that forced the source's own format, and a listener playing a queue gaplessly holds one slot however many renderings they have live.",
   "@adminServerActivityCaveat": {
-    "description": "The caveat under the running-stream count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it; HLS is a streaming format."
+    "description": "The caveat under the running-session count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it."
   },
-  "adminServerActivityCount": "{count, plural, =1{1 engine-backed stream right now.} other{{count} engine-backed streams right now.}}",
+  "adminServerActivityCount": "{count, plural, =1{1 engine-backed session right now.} other{{count} engine-backed sessions right now.}}",
   "@adminServerActivityCount": {
-    "description": "How many streams the audio engine is serving at this moment.",
+    "description": "How many sessions the audio engine is serving at this moment.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -1050,6 +1050,15 @@
       "caveat": {
         "type": "String",
         "example": "Counts streams the engine is transcoding..."
+      }
+    }
+  },
+  "adminServerActivityTimelines": "{count, plural, =0{None of them is a gapless queue.} =1{One of them is a gapless queue.} other{{count} of them are gapless queues.}}",
+  "@adminServerActivityTimelines": {
+    "description": "How many of the running sessions are listeners playing a whole queue as one continuous stream.",
+    "placeholders": {
+      "count": {
+        "type": "int"
       }
     }
   },

@@ -359,6 +359,7 @@ export 'package:waxdeck_api_gen/src/model/thumbnail_prune_result.dart';
 export 'package:waxdeck_api_gen/src/model/thumbnail_rung.dart';
 export 'package:waxdeck_api_gen/src/model/timeline_boundary.dart';
 export 'package:waxdeck_api_gen/src/model/timeline_create.dart';
+export 'package:waxdeck_api_gen/src/model/timeline_format.dart';
 export 'package:waxdeck_api_gen/src/model/timeline_info.dart';
 export 'package:waxdeck_api_gen/src/model/tool_task.dart';
 export 'package:waxdeck_api_gen/src/model/tool_task_page.dart';

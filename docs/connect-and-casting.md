@@ -59,14 +59,37 @@ Two settings shape that stream, both under Settings, Playback, and both
 on your account rather than on one device - the server re-renders a cast
 queue whenever you edit it, and it does that from what it holds.
 
-- **Casting crossfade** fades each seam instead of butting the tracks
+- **Crossfade** fades each seam instead of butting the tracks
   together. Zero is the gapless default.
-- **Level casting volume** plays the whole queue at one loudness. It
+- **Level the volume** plays the whole queue at one loudness. It
   reads the measurements the analyze pass stores per file, so a library
   that has never been analyzed plays unlevelled whatever this says; run
   the analyze pass first if you want it. One level applies to the whole
   queue, because there is no seam in a rendered stream at which it could
   change.
+
+## Gapless in the browser
+
+Every WaxDeck app crosses from one track to the next without a gap
+except one: a browser, where an audio element takes a single source and
+changing it is a load however it is arranged. Settings, Playback,
+**Gapless playback** closes that, and it is a browser-only switch
+because nothing else needs it.
+
+What it does is play a music queue through the same rendering a cast
+speaker gets: one stream for the whole queue, seams the server cut,
+crossfade and levelling from the two settings above. So the switch
+needs the streaming engine, and says so on its own row when a server
+has none. Off by default, because it asks the server for work an
+ordinary listen does not.
+
+Only music, and only what follows it: a podcast or an audiobook in the
+queue plays the ordinary way and ends the rendered run there. Editing
+the queue never interrupts what is playing - a replacement is rendered
+behind it and swapped in at the next seam. And a rendering counts
+against the server's transcode limits, as one slot per listener; when
+the server is full the browser says so rather than quietly playing with
+gaps.
 
 ## Casting setup
 

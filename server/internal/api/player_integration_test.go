@@ -690,6 +690,7 @@ func TestQueueTimelineEndpoint(t *testing.T) {
 
 	var tl struct {
 		Url, MimeType string
+		Format        string
 		DurationMs    int64
 		EnvelopeRate  int
 		Boundaries    []struct {
@@ -702,6 +703,67 @@ func TestQueueTimelineEndpoint(t *testing.T) {
 	}, http.StatusCreated, &tl)
 	if tl.MimeType != "application/vnd.apple.mpegurl" || tl.EnvelopeRate != 44100 {
 		t.Fatalf("timeline %+v", tl)
+	}
+	if tl.Format != "aac" {
+		t.Fatalf("format %q, want the default ladder's choice", tl.Format)
+	}
+
+	// A caller that cannot decode aac names what it can, and the answer
+	// says what it actually rendered. A different rendering is a
+	// different URL, so the two live side by side.
+	var flac struct {
+		Url, Format string
+	}
+	pPost(t, h, "/api/v1/player/timeline", h.token, map[string]any{
+		"itemPids": []string{pidA, pidB},
+		"formats":  []string{"flac", "aac"},
+	}, http.StatusCreated, &flac)
+	if flac.Format != "flac" || flac.Url == tl.Url {
+		t.Fatalf("flac mint %+v against %+v", flac, tl)
+	}
+
+	// A format name outside the contract is refused rather than quietly
+	// ignored: a client asking for something is asking for a reason.
+	pPost(t, h, "/api/v1/player/timeline", h.token, map[string]any{
+		"itemPids": []string{pidA},
+		"formats":  []string{"mp3"},
+	}, http.StatusBadRequest, nil)
+
+	// A queue the engine will not render as one stream is a conflict
+	// naming what happened, not an internal fault: every member was
+	// visible and resolvable, and the caller's move - play per item - is
+	// the same as for the members this handler refuses itself.
+	h.refuseTimeline.Store(true)
+	pPost(t, h, "/api/v1/player/timeline", h.token, map[string]any{
+		"itemPids": []string{pidA, pidB},
+	}, http.StatusConflict, nil)
+	h.refuseTimeline.Store(false)
+
+	// A sidecar that is unwell is the other answer, and it has to stay
+	// the other answer: a 409 would tell the caller its queue is at
+	// fault, hand back whatever the transport said - an internal host
+	// and port, a library path - and take a live outage out of the
+	// error rate the operator watches.
+	h.breakTimeline.Store(true)
+	var broken struct{ Code, Message string }
+	pPost(t, h, "/api/v1/player/timeline", h.token, map[string]any{
+		"itemPids": []string{pidA, pidB},
+	}, http.StatusInternalServerError, &broken)
+	if strings.Contains(broken.Message, "http://") || strings.Contains(broken.Message, "encoder died") {
+		t.Fatalf("the refusal repeats what the engine said: %q", broken.Message)
+	}
+	h.breakTimeline.Store(false)
+
+	// A listener playing a queue gaplessly is holding a transcode slot
+	// the same way a stream does, and the admin surface says how much of
+	// its count is that.
+	var activity struct {
+		ActiveSessions  int
+		ActiveTimelines int
+	}
+	pGet(t, h, "/api/v1/admin/transcoding/activity", h.token, &activity)
+	if activity.ActiveTimelines < 1 || activity.ActiveSessions < activity.ActiveTimelines {
+		t.Fatalf("activity %+v, want the live timelines counted", activity)
 	}
 	if len(tl.Boundaries) != 2 || tl.Boundaries[0].Pid != pidA || tl.Boundaries[1].OffsetSamples == 0 {
 		t.Fatalf("boundaries %+v", tl.Boundaries)

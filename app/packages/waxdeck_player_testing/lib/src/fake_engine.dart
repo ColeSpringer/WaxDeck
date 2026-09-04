@@ -6,7 +6,7 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 ///
 /// Time never passes on its own: tests drive playback with [advance], so
 /// every assertion about position, accounting, and completion is exact.
-class FakeEngine implements AudioEnginePort {
+class FakeEngine implements TimelineAudioEngine {
   FakeEngine({this.mediaDuration = const Duration(minutes: 3)});
 
   /// Duration assigned to whatever gets loaded next.
@@ -29,6 +29,19 @@ class FakeEngine implements AudioEnginePort {
   String? preloadedMimeType;
   Duration? preloadedClipStart;
   Duration? preloadedClipEnd;
+
+  /// The timeline [loadTimeline] holds, or null when a single item does.
+  @override
+  TimelineMedia? loadedTimeline;
+
+  /// Which member of [loadedTimeline] is playing.
+  @override
+  int currentMember = 0;
+
+  /// Where the loaded timeline stands as a whole, which is what a real
+  /// timeline engine actually reads off its media element; the member
+  /// and the position within it are derived from it.
+  int _timelineAbsMs = 0;
 
   /// Whether [dispose] has run.
   bool disposed = false;
@@ -205,8 +218,12 @@ class FakeEngine implements AudioEnginePort {
     // in that window, which is where a checkpoint fired off the pause
     // has to read the old timeline and not a half-updated one.
     _setPlaying(false);
-    // A fresh load starts a fresh window, preload included.
+    // A fresh load starts a fresh window, preload included, and takes
+    // the engine off any timeline it was on.
     await clearPreload();
+    loadedTimeline = null;
+    currentMember = 0;
+    _timelineAbsMs = 0;
     loadedUrl = url;
     loadedMimeType = mimeType;
     loadedClipStart = clipStart;
@@ -257,6 +274,140 @@ class FakeEngine implements AudioEnginePort {
     _preloadedDuration = null;
   }
 
+  /// What [supportedTimelineFormats] answers; a test narrows it to
+  /// stand in for a browser that decodes only some of them.
+  List<String> timelineFormats = const <String>['flac', 'aac'];
+
+  @override
+  List<String> get supportedTimelineFormats => timelineFormats;
+
+  final _timelineLosses = StreamController<bool>.broadcast();
+  final _timelineRefusals = StreamController<String>.broadcast();
+
+  @override
+  Stream<bool> get timelineLost => _timelineLosses.stream;
+
+  /// Whether [prepareTimelines] answers true; a test sets it false to
+  /// stand in for a browser that cannot play one at all.
+  bool timelinesReady = true;
+
+  @override
+  Future<bool> prepareTimelines() async => timelinesReady;
+
+  @override
+  Stream<String> get timelineRefused => _timelineRefusals.stream;
+
+  @override
+  Future<void> loadTimeline(
+    TimelineMedia media, {
+    int member = 0,
+    Duration? position,
+    bool play = false,
+  }) async {
+    if (failNextLoad || failEveryLoad) {
+      failNextLoad = false;
+      throw MediaLoadException(loadFault, const MediaWillNotOpen());
+    }
+    final same = loadedTimeline?.url == media.url;
+    if (!same) {
+      _setPlaying(false);
+      await clearPreload();
+      loadedUrl = media.url;
+      loadedMimeType = media.mimeType;
+      loadedClipStart = null;
+      loadedClipEnd = null;
+      loadedTimeline = media;
+      _setState(EngineProcessingState.loading);
+    } else if (!play) {
+      // Already loaded: a move inside this stream is a seek, and the
+      // caller starts playback itself.
+      _setPlaying(false);
+    }
+    loadedTimeline = media;
+    _seekWithinTimeline(member, position ?? Duration.zero);
+    _setState(EngineProcessingState.ready);
+    if (play) _setPlaying(true);
+    final gate = loadGate;
+    loadGate = null;
+    if (gate != null) await gate.future;
+  }
+
+  @override
+  Future<void> seekToMember(int member, Duration position) async {
+    if (loadedTimeline == null) return;
+    timelineSeeks.add(member);
+    _seekWithinTimeline(member, position);
+  }
+
+  /// Every member a caller seeked to through the port, in order. A load
+  /// positions itself and is not one of these: what this records is
+  /// somebody moving inside a stream that was already playing.
+  final List<int> timelineSeeks = <int>[];
+
+  void _seekWithinTimeline(int member, Duration position) {
+    final media = loadedTimeline!;
+    final at = member.clamp(0, media.members.length - 1);
+    currentMember = at;
+    _timelineAbsMs = media.absolute(at, position.inMilliseconds);
+    _duration = Duration(milliseconds: media.memberDurationMs(at));
+    if (!_durations.isClosed) _durations.add(_duration);
+    _setPosition(position);
+  }
+
+  /// Fires [timelineLost] the way an expired token or an aged-out
+  /// timeline does: the stream stops where it stood, and says whether
+  /// it was playing when it did.
+  void loseTimeline() {
+    final wasPlaying = playing;
+    _setPlaying(false);
+    if (!_timelineLosses.isClosed) _timelineLosses.add(wasPlaying);
+  }
+
+  /// Fires [timelineRefused] with a server refusal met mid-stream.
+  void refuseTimeline(String code) {
+    _setPlaying(false);
+    if (!_timelineRefusals.isClosed) _timelineRefusals.add(code);
+  }
+
+  /// Walks a loaded timeline forward, crossing seams as they arrive.
+  /// Split from [advance] because a timeline has no preload window and
+  /// no per-item media to swap: one stream runs and the member playing
+  /// is a function of where it stands.
+  void _advanceTimeline(Duration amount) {
+    final media = loadedTimeline!;
+    final last = media.members.length - 1;
+    var remaining = (amount * _speed).inMilliseconds;
+    while (true) {
+      final seam = media.seamMs(currentMember);
+      final target = _timelineAbsMs + remaining;
+      if (target < seam) {
+        _timelineAbsMs = target;
+        _setPosition(
+          Duration(milliseconds: media.memberPosition(currentMember, target)),
+        );
+        return;
+      }
+      if (currentMember >= last) {
+        // Off the end of the whole timeline: the queue ended.
+        _timelineAbsMs = seam;
+        _setPosition(Duration(milliseconds: media.memberDurationMs(last)));
+        _setPlaying(false);
+        _setState(EngineProcessingState.completed);
+        if (!_completions.isClosed) _completions.add(null);
+        return;
+      }
+      remaining = target - seam;
+      _timelineAbsMs = seam;
+      currentMember++;
+      _duration = Duration(milliseconds: media.memberDurationMs(currentMember));
+      if (!_durations.isClosed) _durations.add(_duration);
+      _setPosition(
+        Duration(milliseconds: media.memberPosition(currentMember, seam)),
+      );
+      if (!_boundaries.isClosed) _boundaries.add(null);
+    }
+  }
+
   /// Duration an item plays for: its clip window, or the whole media.
   Duration _windowDuration(Duration? clipStart, Duration? clipEnd) {
     if (clipStart == null && clipEnd == null) return mediaDuration;
@@ -294,11 +445,14 @@ class FakeEngine implements AudioEnginePort {
   @override
   Future<void> seek(Duration position) async {
     final max = _duration ?? position;
-    _setPosition(
-      position < Duration.zero
-          ? Duration.zero
-          : (position > max ? max : position),
-    );
+    final at = position < Duration.zero
+        ? Duration.zero
+        : (position > max ? max : position);
+    final media = loadedTimeline;
+    if (media != null) {
+      _timelineAbsMs = media.absolute(currentMember, at.inMilliseconds);
+    }
+    _setPosition(at);
   }
 
   @override
@@ -309,7 +463,11 @@ class FakeEngine implements AudioEnginePort {
     }
     _setPlaying(false);
     _setState(EngineProcessingState.idle);
-    // Stopping releases the media, and the window with it.
+    // Stopping releases the media, and the window and the timeline with
+    // it.
+    loadedTimeline = null;
+    currentMember = 0;
+    _timelineAbsMs = 0;
     await clearPreload();
   }
 
@@ -329,6 +487,8 @@ class FakeEngine implements AudioEnginePort {
     unawaited(_refusals.close());
     unawaited(_speeds.close());
     unawaited(_volumes.close());
+    unawaited(_timelineLosses.close());
+    unawaited(_timelineRefusals.close());
   }
 
   /// Advances the manual clock by [amount] of wall time.
@@ -341,6 +501,10 @@ class FakeEngine implements AudioEnginePort {
   /// leaves the engine in the completed state with playback stopped.
   void advance(Duration amount) {
     if (!_playing || _state != EngineProcessingState.ready) return;
+    if (loadedTimeline != null) {
+      _advanceTimeline(amount);
+      return;
+    }
     var remaining = amount * _speed;
     while (true) {
       final end = _duration;

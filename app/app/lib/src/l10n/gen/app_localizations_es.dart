@@ -836,15 +836,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminServerActivityCaveat =>
-      'Cuenta las transmisiones que el motor está transcodificando o remultiplexando, incluidas las de un cliente que forzó el formato original; las líneas de tiempo HLS se admiten aparte y no se cuentan aquí.';
+      'Cuenta lo que el motor está transcodificando o remultiplexando, incluido un cliente que forzó el formato original, y quien reproduce una cola sin pausas ocupa una plaza por muchas representaciones que tenga activas.';
 
   @override
   String adminServerActivityCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count transmisiones servidas por el motor ahora mismo.',
-      one: '1 transmisión servida por el motor ahora mismo.',
+      other: '$count sesiones con motor ahora mismo.',
+      one: '1 sesión con motor ahora mismo.',
     );
     return '$_temp0';
   }
@@ -860,6 +860,18 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String adminServerActivitySpoken(String headline, String caveat) {
     return '$headline $caveat';
+  }
+
+  @override
+  String adminServerActivityTimelines(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de ellas son colas sin pausas.',
+      one: 'Una de ellas es una cola sin pausas.',
+      zero: 'Ninguna de ellas es una cola sin pausas.',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -8162,14 +8174,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsCrossfadeHelp =>
-      'Funde una pista con la siguiente al transmitir una cola';
+      'Encadena una pista con la siguiente allí donde el servidor renderiza la cola: un altavoz de transmisión y la reproducción sin pausas en el navegador';
 
   @override
   String get settingsCrossfadeKeywords =>
-      'fundido, sin pausas, unión, chromecast';
+      'fundido, sin pausas, unión, chromecast, transmisión';
 
   @override
-  String get settingsCrossfadeTitle => 'Fundido al transmitir';
+  String get settingsCrossfadeTitle => 'Fundido encadenado';
 
   @override
   String get settingsDensityComfortable => 'Cómoda';
@@ -8347,7 +8359,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsGroupBrowsing => 'Navegación';
 
   @override
-  String get settingsGroupCasting => 'Transmisión';
+  String get settingsGroupCasting => 'Transmisión y sin pausas';
 
   @override
   String get settingsGroupData => 'Datos';
@@ -8734,14 +8746,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsReplayGainHelp =>
-      'Reproduce una cola transmitida a una sola sonoridad, cuando los archivos se han analizado';
+      'Reproduce una cola renderizada por el servidor a un solo volumen, donde los archivos se han analizado';
 
   @override
   String get settingsReplayGainKeywords =>
-      'replaygain, sonoridad, normalizar, ganancia';
+      'replaygain, sonoridad, normalizar, ganancia, transmisión';
 
   @override
-  String get settingsReplayGainTitle => 'Igualar el volumen al transmitir';
+  String get settingsReplayGainTitle => 'Igualar el volumen';
 
   @override
   String get settingsScreenReaderBlurb =>
@@ -9115,6 +9127,33 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get settingsVisualizerIdleTitle =>
       'Abrir el visualizador al estar inactivo';
+
+  @override
+  String get settingsWebGaplessBrowser =>
+      'Este navegador no puede reproducir una cola como una sola transmisión, así que las pistas se reproducen una a una';
+
+  @override
+  String get settingsWebGaplessBusy =>
+      'El servidor alcanzó su límite de transcodificación, así que por ahora las pistas se reproducen una a una';
+
+  @override
+  String get settingsWebGaplessFormat =>
+      'Este servidor no renderiza ningún formato que este navegador pueda reproducir, así que las pistas se reproducen una a una';
+
+  @override
+  String get settingsWebGaplessHelp =>
+      'Reproduce una cola de música como una sola transmisión, para que las pistas se encadenen como fueron masterizadas';
+
+  @override
+  String get settingsWebGaplessKeywords =>
+      'sin pausas, encadenado, unión, transmisión, navegador';
+
+  @override
+  String get settingsWebGaplessTitle => 'Reproducción sin pausas';
+
+  @override
+  String get settingsWebGaplessUnavailable =>
+      'Este servidor no puede renderizar una cola como una sola transmisión, así que las pistas se reproducen una a una';
 
   @override
   String get sharingAllowDownload => 'Permitir la descarga';

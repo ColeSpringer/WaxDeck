@@ -57,6 +57,16 @@ abstract class AudioEngineHarness {
   /// time, seeking ahead first when the amount is large.
   Future<void> advance(AudioEnginePort engine, Duration amount);
 
+  /// A timeline this harness's engine can actually play, or null for an
+  /// engine that only ever holds one item. Non-null selects the
+  /// timeline group, so the members here must line up with real media:
+  /// the suite plays across their seams.
+  TimelineMedia? get timeline => null;
+
+  /// Makes the loaded timeline unservable, the way an expired token or
+  /// an aged-out mint does. Only called when [timeline] is non-null.
+  Future<void> loseTimeline(AudioEnginePort engine) async {}
+
   Future<void> disposeEngine(AudioEnginePort engine) => engine.dispose();
 }
 
@@ -611,6 +621,138 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       expect(queueEnded, 1);
       await b.cancel();
       await c.cancel();
+    });
+  });
+
+  final timeline = harness.timeline;
+  if (timeline == null) return;
+
+  // A timeline engine crosses items inside media that never stops, so
+  // the gapless contract above is met by an entirely different
+  // mechanism. These assert that the seam still reads the same from
+  // outside: same stream order, same accounting, same silence about a
+  // move the caller made itself.
+  group('$name timeline', () {
+    late TimelineAudioEngine engine;
+
+    setUp(() async {
+      engine = await harness.createEngine() as TimelineAudioEngine;
+    });
+
+    tearDown(() => harness.disposeEngine(engine));
+
+    test('a timeline loads at the member it was asked for', () async {
+      await engine.loadTimeline(timeline, member: 1);
+      expect(engine.processingState, EngineProcessingState.ready);
+      expect(engine.loadedTimeline?.url, timeline.url);
+      expect(engine.currentMember, 1);
+      expectNear(engine.position, Duration.zero, 'position');
+      expectNear(
+        engine.duration ?? Duration.zero,
+        Duration(milliseconds: timeline.memberDurationMs(1)),
+        'the member\'s own duration',
+      );
+    });
+
+    test(
+      'crossing a seam reports the new member and then the boundary',
+      () async {
+        await engine.loadTimeline(timeline);
+        final order = <String>[];
+        final d = engine.durationStream.listen((_) => order.add('duration'));
+        final b = engine.itemBoundary.listen((_) => order.add('boundary'));
+        var queueEnded = 0;
+        final c = engine.completed.listen((_) => queueEnded++);
+        await engine.play();
+        await harness.advance(
+          engine,
+          Duration(milliseconds: timeline.seamMs(0) + 200),
+        );
+
+        expect(engine.currentMember, 1);
+        expect(order.contains('boundary'), isTrue);
+        expect(
+          order.indexOf('duration'),
+          lessThan(order.indexOf('boundary')),
+          reason: 'the new member\'s duration lands before the crossing',
+        );
+        expect(engine.playing, isTrue, reason: 'a seam does not stop playback');
+        expect(queueEnded, 0, reason: 'the queue has not ended at a seam');
+        await d.cancel();
+        await b.cancel();
+        await c.cancel();
+      },
+    );
+
+    test('seekToMember moves without a crossing', () async {
+      await engine.loadTimeline(timeline);
+      var crossings = 0;
+      final b = engine.itemBoundary.listen((_) => crossings++);
+      await engine.seekToMember(1, Duration.zero);
+      await harness.advance(engine, Duration.zero);
+
+      expect(engine.currentMember, 1);
+      expect(
+        crossings,
+        0,
+        reason: 'nothing played its way over, so nothing crossed',
+      );
+      await b.cancel();
+    });
+
+    test('the last member ends the queue', () async {
+      final last = timeline.members.length - 1;
+      await engine.loadTimeline(timeline, member: last);
+      var queueEnded = 0;
+      final c = engine.completed.listen((_) => queueEnded++);
+      await engine.play();
+      await harness.advance(
+        engine,
+        Duration(milliseconds: timeline.memberDurationMs(last)) +
+            const Duration(seconds: 1),
+      );
+
+      expect(queueEnded, 1);
+      expect(engine.processingState, EngineProcessingState.completed);
+      await c.cancel();
+    });
+
+    test('a timeline that stops being servable is announced', () async {
+      await engine.loadTimeline(timeline);
+      final losses = <bool>[];
+      final l = engine.timelineLost.listen(losses.add);
+      await engine.play();
+      // Read before the loss rather than assumed: a harness whose
+      // browser refuses a play no gesture led to never got there, and
+      // the contract is that a loss reports the state it interrupted -
+      // not that there was always one to interrupt.
+      final wasPlaying = engine.playing;
+      await harness.loseTimeline(engine);
+      await harness.advance(engine, Duration.zero);
+
+      expect(losses, hasLength(1));
+      // The one thing a reload cannot read back: silencing the stream
+      // is part of losing it, so `playing` is already false by the time
+      // anybody is told, and a recovery that consulted it would bring
+      // the music back stopped.
+      expect(
+        losses.single,
+        wasPlaying,
+        reason: 'a loss says whether it was playing when it happened',
+      );
+      expect(engine.playing, isFalse);
+      await l.cancel();
+    });
+
+    test('a lost timeline that was not playing says so', () async {
+      await engine.loadTimeline(timeline);
+      final losses = <bool>[];
+      final l = engine.timelineLost.listen(losses.add);
+      await harness.loseTimeline(engine);
+      await harness.advance(engine, Duration.zero);
+
+      expect(losses, <bool>[false]);
+      await l.cancel();
     });
   });
 }
