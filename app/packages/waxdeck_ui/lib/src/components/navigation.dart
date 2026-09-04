@@ -11,6 +11,7 @@ import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
+import 'tooltip.dart';
 
 /// One place the shell can send a visitor, as plain data.
 ///
@@ -254,7 +255,7 @@ class _NavItemState extends State<_NavItem> {
   /// the name. Everywhere else the label is right there, and a tooltip
   /// repeating it is noise.
   Widget _maybeTooltip(Widget child) => widget.form == _NavForm.rail
-      ? Tooltip(message: widget.label, child: child)
+      ? WaxTooltip(message: widget.label, child: child)
       : child;
 
   @override

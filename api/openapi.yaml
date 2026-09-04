@@ -6376,6 +6376,15 @@ paths:
         endpoint, that client's own refusal code and message are what
         arrive here - `endpoint-failed` where it took the load and
         could not carry it out.
+
+        Starting playback somewhere else from a device that is playing
+        is a handoff, and a device plays one thing: the queue, index,
+        position, rate, and repeat move to the target, and the source
+        silences itself. The order in `itemPids` is the play order, so
+        a shuffled queue arrives shuffled whatever `shuffle` says. A caller that holds a mirror
+        session's id transfers it instead; one that does not passes
+        `handoffFrom` here and stops its own playback when this call
+        answers.
       tags: [player]
       requestBody:
         required: true
@@ -6518,6 +6527,16 @@ paths:
         a `forbidden`, not a `not-found`: the session is one the caller
         can see and control, and it is the target endpoint that is out
         of bounds.
+
+        The routed `stop` this sends to the source is what silences a
+        client somebody else moved the session away from: it stops
+        local playback, forgets the session, and stops reporting under
+        it. A client transferring its *own* playback away silences
+        itself as this call answers instead, since it is the one that
+        knows the handoff happened. Live radio is not a session and
+        does not travel - a station plays on the device that tuned it,
+        and a client whose engine radio has taken ends its item session
+        rather than moving it.
       tags: [player]
       parameters:
         - $ref: "#/components/parameters/PlaybackSessionId"
@@ -13750,6 +13769,23 @@ components:
         play-info itself). The client executes against its local
         engine and answers exactly once with a `cmd-result`, then
         reports state.
+
+        `sessionId` says which session the command is for, and a
+        client honours a transport verb only for the session it is
+        currently mirroring: `play`, `pause`, `stop`, `next`,
+        `previous`, `seek`, `set-volume`, `set-rate`, `set-repeat`,
+        and `set-shuffle` naming any other session are answered with a
+        `cmd-result` carrying code `no-session`. `load` and `set-queue`
+        install the session they name, so they are the two that arrive
+        for a session the client is not yet mirroring. A matching
+        `stop` ends the mirror: the client stops local playback,
+        forgets the session, and stops reporting under it.
+
+        A routed change is the listener's own tap, and persists the
+        way the local control does: `set-rate` is written to the
+        show's or book's stored speed, so the next episode reads it
+        back, while music has no stored speed and a rate set on a
+        track lapses at the next track exactly as a local one does.
       required: [type, id, sessionId, verb]
       properties:
         type:
@@ -17581,6 +17617,61 @@ components:
           description: >
             Start playing immediately. Defaults to true; false loads
             paused.
+        rate:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 5
+          description: >
+            Playback rate to start at. Defaults to 1.0. A client
+            handing its own playback over carries the rate it was
+            playing at, so a book being read at 1.5x goes on at 1.5x -
+            on a target that has a rate to set. An endpoint reporting
+            `rateControl: false` plays at 1.0 and the session says so,
+            rather than refusing the queue over a mode the room cannot
+            have: `positionMs` is extrapolated with this rate, so
+            recording one the device is not playing at would run every
+            controller's scrubber fast.
+        repeat:
+          type: string
+          description: "`off`, `all`, or `one` (open string). Defaults to `off`."
+          example: "off"
+        shuffle:
+          type: boolean
+          description: >
+            Whether the queue is already shuffled. `itemPids` is the
+            play order either way, so this changes nothing about what
+            plays next; it records what the listener turned on, so a
+            controller draws the mode the queue is in.
+        handoffFrom:
+          type: string
+          description: >
+            A client endpoint of the caller's whose session this
+            create replaces. One the caller can see that is not a
+            client endpoint of their own answers `forbidden`, because
+            silencing it would be silencing somebody else's device; one
+            they cannot see is nothing to end, and ends nothing.
+
+            That last case is not a refusal on purpose. The field is
+            for a client whose command bus is down, and a bus that is
+            down is a connection the server has already dropped -
+            which unregisters the endpoint and ends its session. The
+            precondition already holds, so answering `not-found` would
+            refuse to start the queue in the room over work that was
+            already done.
+
+            For a client that is playing and cannot transfer: the
+            ordinary handoff is `POST
+            /player/sessions/{sessionId}/transfer`, which needs the
+            mirror session's id. A client that never learned one - the
+            command bus was down, its first report went unanswered,
+            the server restarted - creates the session here from its
+            whole local snapshot instead and names itself, so the
+            server can end the session it holds for that endpoint. The
+            client silences itself once this call succeeds rather than
+            waiting for a routed `stop`, which by definition cannot
+            reach it.
+          example: pe-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     PlaybackSessionTransfer:
       type: object

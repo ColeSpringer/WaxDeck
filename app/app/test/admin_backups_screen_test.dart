@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/backups_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
@@ -106,7 +107,9 @@ void main() {
     );
     await _pump(tester, repo);
 
-    await tester.tap(find.byKey(const Key('backup-menu-ba-1')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.backupMenu('ba-1')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Stage restore...'));
     await tester.pumpAndSettle();

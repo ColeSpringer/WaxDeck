@@ -86,6 +86,29 @@ func (s *Service) HandleCommand(ctx context.Context, link *ClientLink, sessionID
 		if err := s.routeCommandToClient(ctx, sess.id, endpointID, verb, args); err != nil {
 			return nil, err
 		}
+		if verb == "stop" {
+			// A stop is the end of a mirror session, because that is
+			// what it is on the client: it clears the queue as well as
+			// silencing the engine, and forgets the session it was
+			// reporting under. Left standing here, the row would keep
+			// the endpoint looking busy in every picker while its
+			// client reported into a session it could no longer be
+			// told about - and every later routed verb would come back
+			// `no-session`. Not another routed stop: the client has
+			// already done it.
+			snap, err := s.Session(link.UserID, sessionID)
+			if err != nil {
+				return nil, err
+			}
+			s.mu.Lock()
+			if live, ok := s.sessions[sessionID]; ok {
+				s.endSessionLocked(ctx, live, false)
+			}
+			s.mu.Unlock()
+			s.cfg.InvalidatePlayer()
+			snap.Playing = false
+			return &snap, nil
+		}
 		// The client's own report updates the mirror; ack with the
 		// current snapshot (slightly stale is honest here).
 		snap, err := s.Session(link.UserID, sessionID)
@@ -118,7 +141,7 @@ func validateCommand(verb string, args CommandArgs) error {
 			return InvalidError{Msg: "set-volume needs volume between 0 and 1"}
 		}
 	case "set-rate":
-		if args.Rate == nil || *args.Rate < 0.25 || *args.Rate > 5 {
+		if args.Rate == nil || *args.Rate < minRate || *args.Rate > maxRate {
 			return InvalidError{Msg: "set-rate needs a rate between 0.25 and 5"}
 		}
 	case "set-queue":

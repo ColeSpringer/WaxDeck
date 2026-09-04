@@ -507,16 +507,15 @@ class _InvitesTab extends ConsumerWidget {
     final invites = ref.watch(invitesProvider);
     final l10n = context.l10n;
     return Scaffold(
-      floatingActionButton: Semantics(
-        identifier: SemanticsIds.inviteCreate,
+      // The design system's own, not Material's: a `FloatingActionButton`
+      // given a tooltip mounts a Material one, and those share a single
+      // open set - once any has shown, the next control a pointer
+      // touches opens with no delay at all.
+      floatingActionButton: WaxFab(
+        glyph: WaxIcons.addPerson,
         label: l10n.adminInviteCreate,
-        button: true,
-        child: FloatingActionButton(
-          key: const Key(SemanticsIds.inviteCreate),
-          tooltip: l10n.adminInviteCreate,
-          onPressed: () => _create(context, ref),
-          child: const WaxIcon(WaxIcons.addPerson),
-        ),
+        semanticsId: SemanticsIds.inviteCreate,
+        onPressed: () => _create(context, ref),
       ),
       body: switch (invites) {
         AsyncData(:final value) when value.isEmpty => Center(

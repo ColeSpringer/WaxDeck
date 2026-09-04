@@ -164,12 +164,20 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
 
   void _open(FacetBucket bucket) {
     // A bucket is a place: its listing is rebuildable from the URL alone,
-    // so it goes rather than pushes and the address bar follows.
+    // so it goes rather than pushes and the address bar follows. The
+    // label rides along as a hint - the bucket is the one thing on this
+    // screen that holds the entity's own name, and a screen that has to
+    // work it out from the items it loads gets a track credit instead.
+    //
+    // Except for the bucket that is the absence of a value, whose label
+    // is the server's own sentinel ("[No Genre]"). Passed on, it would
+    // title the page in a string no locale has and file it into the
+    // queue's stored source label, which is what the destination's
+    // localized fallback is there to prevent.
+    final segment = musicBucketSegment(widget.dimension, bucket);
     context.go(
-      WaxRoute.musicBucket(
-        widget.dimension,
-        musicBucketSegment(widget.dimension, bucket),
-      ),
+      WaxRoute.musicBucket(widget.dimension, segment),
+      extra: segment == musicUnknownSegment ? null : bucket.label,
     );
   }
 

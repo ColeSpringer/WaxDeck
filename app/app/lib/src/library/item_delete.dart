@@ -113,23 +113,23 @@ class ItemDeleteAction extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!canDeleteItems(ref)) return const SizedBox.shrink();
     final l10n = context.l10n;
-    return Semantics(
-      identifier: SemanticsIds.itemDelete,
+    // The design system's own menu, not Material's. A `PopupMenuButton`
+    // mounts a Material `Tooltip` whatever it is given, and Material's
+    // tooltips share one open set: once any of them has shown, the next
+    // control a pointer touches opens with no delay at all, which is
+    // the aggression this app stopped doing everywhere else.
+    return WaxMenuButton<String>(
+      glyph: WaxIcons.moreVertical,
       label: l10n.libraryDeleteFilesLabel,
-      button: true,
-      child: PopupMenuButton<String>(
-        key: const Key(SemanticsIds.itemDelete),
-        tooltip: l10n.libraryDeleteMore,
-        onSelected: (_) =>
-            confirmDeleteItem(context, pid: pid, onDeleted: onDeleted),
-        itemBuilder: (context) => [
-          PopupMenuItem(
-            key: const Key('item-delete-open'),
-            value: 'delete',
-            child: Text(l10n.libraryDeleteFilesMenu),
-          ),
-        ],
-      ),
+      semanticsId: SemanticsIds.itemDelete,
+      items: <WaxMenuItem<String>>[
+        WaxMenuItem<String>(
+          value: 'delete',
+          label: l10n.libraryDeleteFilesMenu,
+        ),
+      ],
+      onSelected: (_) =>
+          confirmDeleteItem(context, pid: pid, onDeleted: onDeleted),
     );
   }
 }

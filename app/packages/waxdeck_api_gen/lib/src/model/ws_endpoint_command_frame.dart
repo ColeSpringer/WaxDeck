@@ -9,7 +9,7 @@ import 'package:built_value/serializer.dart';
 
 part 'ws_endpoint_command_frame.g.dart';
 
-/// Server-to-client command routed to a registered client endpoint. Verbs are the command verbs plus `load` (adopt this queue at this index and position; the client resolves play-info itself). The client executes against its local engine and answers exactly once with a `cmd-result`, then reports state. 
+/// Server-to-client command routed to a registered client endpoint. Verbs are the command verbs plus `load` (adopt this queue at this index and position; the client resolves play-info itself). The client executes against its local engine and answers exactly once with a `cmd-result`, then reports state. `sessionId` says which session the command is for, and a client honours a transport verb only for the session it is currently mirroring: `play`, `pause`, `stop`, `next`, `previous`, `seek`, `set-volume`, `set-rate`, `set-repeat`, and `set-shuffle` naming any other session are answered with a `cmd-result` carrying code `no-session`. `load` and `set-queue` install the session they name, so they are the two that arrive for a session the client is not yet mirroring. A matching `stop` ends the mirror: the client stops local playback, forgets the session, and stops reporting under it. A routed change is the listener's own tap, and persists the way the local control does: `set-rate` is written to the show's or book's stored speed, so the next episode reads it back, while music has no stored speed and a rate set on a track lapses at the next track exactly as a local one does. 
 ///
 /// Properties:
 /// * [type] - Always `endpoint-cmd`.

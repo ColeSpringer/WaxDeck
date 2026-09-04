@@ -161,6 +161,14 @@
       }
     }
   },
+  "devicesPlayingRadioHere": "Playing radio here",
+  "@devicesPlayingRadioHere": {
+    "description": "Under this device's row while live radio holds the engine."
+  },
+  "devicesRadioStaysHere": "Stations play on the device that tuned them",
+  "@devicesRadioStaysHere": {
+    "description": "Under every device row while live radio plays here: a station is not a session and cannot be sent anywhere."
+  },
   "devicesRemoteTitle": "Remote playback",
   "@devicesRemoteTitle": {
     "description": "Title of the screen controlling playback running on another device."

@@ -33,6 +33,7 @@ class NotificationsBell extends ConsumerWidget {
       semanticsId: SemanticsIds.notificationsBell,
       badge: unseen == 0 ? null : '$unseen',
       emptyLabel: l10n.bellEmpty,
+      emptySemanticsId: SemanticsIds.notificationsEmpty,
       onOpen: ref.read(notificationsProvider.notifier).markSeen,
       items: <WaxMenuItem<String>>[
         for (final row in rows)

@@ -154,6 +154,35 @@ class NotificationsController extends Notifier<List<WaxNotification>> {
   /// first launch with three notifications badges three.
   DateTime? _seenAt;
 
+  /// Where the visitor is, as the router last reported it. Null before
+  /// the first navigation, which is a launch that has not been anywhere
+  /// yet.
+  String? _here;
+
+  /// Whether standing at [location] deals with news pointing at
+  /// [target]: the same place, or somewhere inside it.
+  ///
+  /// The prefix half is what makes one rule cover every kind. Review
+  /// news points at the queue and is dealt with by opening an entry in
+  /// it; a show's news is dealt with by opening one of its episodes.
+  /// Neither is the row's own location, and both are unmistakably "I
+  /// went and looked".
+  static bool _under(String location, String target) =>
+      location == target || location.startsWith('$target/');
+
+  /// Whether the visitor is already looking at exactly what [target]
+  /// names.
+  ///
+  /// Exact, where [dismissUnder] is a prefix. The two rules are asking
+  /// different questions: "I went and looked" is answered by arriving
+  /// anywhere inside the thing, while "this is not news, it is the
+  /// screen in front of me" is only true of the screen itself. Matching
+  /// downward on insert would swallow news about a show while its
+  /// reader was looking at a different one, since a row with no pid
+  /// points at the bare surface those all sit under - and swallowed is
+  /// worse than a badge, because nothing brings it back.
+  bool _dealtWith(String target) => _here == target;
+
   /// How many rows arrived since the bell was last opened.
   int get unseen {
     final seen = _seenAt;
@@ -163,6 +192,11 @@ class NotificationsController extends Notifier<List<WaxNotification>> {
 
   void record(NotificationKind kind, {required DateTime at, String? pid}) {
     final row = WaxNotification(kind: kind, at: at, targetPid: pid);
+    // News about the screen in front of you is not news. Recording it
+    // would badge the bell with a row whose only instruction is "go
+    // where you already are", and there is nothing the reader could do
+    // to make it go away.
+    if (_dealtWith(row.location)) return;
     // Deduplicated on the target too: two shows whose feeds both failed
     // say the same sentence and must stay two rows.
     final kept = <WaxNotification>[
@@ -185,6 +219,26 @@ class NotificationsController extends Notifier<List<WaxNotification>> {
   void clear() {
     _seenAt = null;
     state = const <WaxNotification>[];
+  }
+
+  /// Drops the rows [location] deals with, and remembers where the
+  /// visitor now is.
+  ///
+  /// A notification is dealt with when its destination is visited. That
+  /// is the whole rule, and it is the router that knows when it
+  /// happens - which is what makes it hold for every way of getting
+  /// there: a row in the bell, a row on the notifications screen, a
+  /// link, the sidebar, or a search result. Rows the visit does not
+  /// answer stay, and a later event for the same thing arrives as a new
+  /// row, because news arriving after you looked is news.
+  void dismissUnder(String location) {
+    _here = location;
+    final kept = <WaxNotification>[
+      for (final row in state)
+        if (!_under(location, row.location)) row,
+    ];
+    if (kept.length == state.length) return;
+    state = kept;
   }
 
   /// Records what one server-state change means, or nothing: the

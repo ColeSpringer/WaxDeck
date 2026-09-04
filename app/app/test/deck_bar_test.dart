@@ -987,6 +987,51 @@ void main() {
       harness.container.read(remoteSessionProvider.notifier).release();
       await harness.endPlayback(tester);
     });
+
+    testWidgets('and follows the sound the moment a handoff silences this '
+        'device', (tester) async {
+      // The precedence rests on an assumption: handing a session away
+      // stops local playback. It is the picker that makes it true -
+      // this device silences itself as the call answers, rather than
+      // waiting for a routed stop, which never arrives at all for a
+      // client whose command bus is down. Without that the bar went on
+      // naming the album here while the sound came out of the kitchen.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+      expect(find.text('Prancing Pony Blues'), findsOneWidget);
+
+      await harness.container.read(connectControllerProvider).handedOff();
+      harness.container
+          .read(remoteSessionProvider.notifier)
+          .adopt(
+            PlaybackSessionInfo(
+              id: 'ps-kitchen',
+              endpointId: 'pe-kitchen',
+              endpointName: 'Kitchen speaker',
+              mine: true,
+              authority: 'remote',
+              playing: false,
+              index: 0,
+              positionMs: 0,
+              positionAt: DateTime.now().toUtc(),
+              rate: 1,
+              queueVersion: 1,
+              entries: const [
+                PlaybackSessionEntry(pid: 'tr-A', title: 'Prancing Pony Blues'),
+              ],
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      expect(engine.playing, isFalse);
+      expect(find.textContaining('on Kitchen speaker'), findsOneWidget);
+
+      harness.container.read(remoteSessionProvider.notifier).release();
+      await harness.endPlayback(tester);
+    });
   });
 
   group('opening the player', () {

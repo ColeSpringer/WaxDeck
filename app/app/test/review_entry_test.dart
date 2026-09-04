@@ -206,15 +206,83 @@ void main() {
       ),
       findsOneWidget,
     );
+    // A band between the two groups, once and only where there is a
+    // second group: the missing rows sat in the same bordered box with
+    // nothing between them and the last file that is actually here.
+    final band = find.bySemanticsIdentifier(SemanticsIds.diffMissingBand);
+    expect(band, findsOneWidget);
+    expect(
+      find.descendant(of: band, matching: find.text('Not in your library (1)')),
+      findsOneWidget,
+    );
     final missingRow = find.bySemanticsIdentifier(SemanticsIds.diffMissing(0));
     expect(
       find.descendant(of: missingRow, matching: find.text('Closing Tide')),
       findsOneWidget,
     );
+    expect(
+      tester.getTopLeft(band).dy,
+      greaterThan(tester.getTopLeft(extraRow).dy),
+    );
+    expect(
+      tester.getTopLeft(missingRow).dy,
+      greaterThan(tester.getTopLeft(band).dy),
+    );
     // Cataloged tracks get the metadata menu; loose files do not.
     expect(
       find.bySemanticsIdentifier(SemanticsIds.trackMenu('tr-1')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('a one-file unit is not told eleven files are missing', (
+    tester,
+  ) async {
+    // The rest of the release is context for a single rip, not absence:
+    // the rows already say "On the release" in a neutral colour, and a
+    // band over them reading "Not in your library" turns a perfect
+    // match into a wall of defects.
+    final full = _detail();
+    final repo = _repoWith(
+      ReviewEntryDetail(
+        id: full.id,
+        kind: full.kind,
+        status: full.status,
+        mediaType: full.mediaType,
+        origin: full.origin,
+        title: full.title,
+        artist: full.artist,
+        trackCount: 1,
+        createdAt: full.createdAt,
+        candidates: full.candidates,
+        tracks: full.tracks.take(1).toList(),
+      ),
+    );
+    await _pump(tester, _host(repo, 'rv-1'));
+
+    final band = find.bySemanticsIdentifier(SemanticsIds.diffMissingBand);
+    expect(band, findsOneWidget);
+    expect(
+      find.descendant(of: band, matching: find.text('Also on the release (1)')),
+      findsOneWidget,
+    );
+    expect(find.text('Not in your library (1)'), findsNothing);
+  });
+
+  testWidgets('nothing missing draws no band', (tester) async {
+    // The second candidate proposes nothing this unit does not already
+    // have, so there is no second group and nothing to separate.
+    final repo = _repoWith(_detail());
+    await _pump(tester, _host(repo, 'rv-1'));
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.candidate('mb-2')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.diffMissingBand),
+      findsNothing,
     );
   });
 

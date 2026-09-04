@@ -20,6 +20,27 @@ opens a remote control with live position, play and pause, seek,
 skip, volume where the device supports it, and a "Play here" button
 that pulls the audio onto the device in your hand.
 
+A few rules follow from "a device plays one thing":
+
+- Sending your audio somewhere else is a handoff, not a copy. The whole
+  queue goes - the running order, where you are in it, the speed, repeat
+  and shuffle - the target picks it up where you left off, and the
+  device you sent it from goes quiet.
+- A remote control reaches the session it is showing and nothing else.
+  A device that has moved on since the list was drawn ignores what
+  arrives for a session it is no longer playing, rather than pausing
+  whatever it happens to be playing now.
+- Live radio stays on the device that tuned it. A station is a stream
+  rather than a queue, so there is nothing to hand over; the picker
+  says so while one is playing, and sessions on your other devices stay
+  controllable from there. Sending something to a device that is
+  playing a station still works - the station stops and the queue
+  starts.
+- A speed change from another device is your own. Set on a show or a
+  book it is remembered like any other, so the next episode plays at
+  it; set on a track it lasts as long as a local one does, which is
+  until the next track.
+
 Albums and queues cast to a Chromecast play gapless when the
 streaming engine is configured: the whole queue renders as one
 continuous stream with sample-exact seams.

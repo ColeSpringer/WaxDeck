@@ -12,6 +12,7 @@
     "notificationRowPlain": "notification-row-{kind}-none",
     "notificationsBell": "notifications-bell",
     "notificationsClear": "notifications-clear",
+    "notificationsEmpty": "notifications-empty",
     "notificationsScreen": "notifications-screen",
     "pinSheetTarget": "pin-sheet-target-{pid}",
     "shelf": "shelf-{shelf}",

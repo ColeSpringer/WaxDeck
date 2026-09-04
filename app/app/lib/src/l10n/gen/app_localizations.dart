@@ -4137,6 +4137,18 @@ abstract class AppLocalizations {
   /// **'Playing on {endpoint}'**
   String devicesPlayingOn(String endpoint);
 
+  /// Under this device's row while live radio holds the engine.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing radio here'**
+  String get devicesPlayingRadioHere;
+
+  /// Under every device row while live radio plays here: a station is not a session and cannot be sent anywhere.
+  ///
+  /// In en, this message translates to:
+  /// **'Stations play on the device that tuned them'**
+  String get devicesRadioStaysHere;
+
   /// Title of the screen controlling playback running on another device.
   ///
   /// In en, this message translates to:
@@ -11455,11 +11467,23 @@ abstract class AppLocalizations {
   /// **'Missing locally'**
   String get reviewDiffMissing;
 
+  /// Band between the tracks a unit holds and the candidate tracks it does not, so the second group does not read as more rows of the first.
+  ///
+  /// In en, this message translates to:
+  /// **'Not in your library ({count})'**
+  String reviewDiffMissingBand(int count);
+
   /// A candidate track a one-file unit never asked for: shown for orientation, costs the score nothing, so it must not read as a defect.
   ///
   /// In en, this message translates to:
   /// **'On the release'**
   String get reviewDiffOnRelease;
+
+  /// The same band over a one-file unit's rows, where the rest of the release is context rather than absence and costs the score nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Also on the release ({count})'**
+  String reviewDiffOnReleaseBand(int count);
 
   /// Column heading over what the chosen candidate would make them say.
   ///

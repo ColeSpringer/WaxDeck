@@ -67,15 +67,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       return l10n.musicBucketUnknownTitle(dimension.name);
     }
     if (dimension == MusicDimension.years) return widget.segment;
-    final first = items.firstOrNull;
-    final derived = switch (dimension) {
-      MusicDimension.artists => first?.artist,
-      // A release group is named for the record, and every edition of it
-      // carries that name, so the first row has it.
-      MusicDimension.albums || MusicDimension.releaseGroups => first?.album,
-      _ => null,
-    };
-    return derived ?? l10n.musicDimensionSingularTitle(dimension.name);
+    return _derived(items) ?? l10n.musicDimensionSingularTitle(dimension.name);
   }
 
   /// The bucket's own name, and nothing else: a source label is stored
@@ -84,16 +76,39 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
   String _sourceName(List<ItemSummary> items) {
     final given = widget.label;
     if (given != null && given.isNotEmpty) return given;
-    final dimension = widget.dimension;
-    if (dimension == MusicDimension.years) return widget.segment;
-    final first = items.firstOrNull;
-    return switch (dimension) {
-          MusicDimension.artists => first?.artist,
-          MusicDimension.albums || MusicDimension.releaseGroups => first?.album,
-          _ => null,
-        } ??
-        '';
+    if (widget.dimension == MusicDimension.years) return widget.segment;
+    // The bucket that is the absence of a value has no name of its own
+    // and no entity behind it to ask: the title's localized fallback is
+    // the only answer, and a stored source label takes none of it.
+    if (widget.segment == musicUnknownSegment) return '';
+    return _derived(items) ?? '';
   }
+
+  /// The bucket's name worked out from what is in it.
+  ///
+  /// Never from an item for an artist: a track's artist field is its
+  /// *credit* ("Dom Kennedy feat. Ty Dolla $ign"), so the first row of a
+  /// catalogue names the artist no better than any other row does. The
+  /// entity's own card answers instead, which is what the artist screen
+  /// one level up does with the same handle.
+  String? _derived(List<ItemSummary> items) {
+    final first = items.firstOrNull;
+    return switch (widget.dimension) {
+      MusicDimension.artists => _entityName,
+      // A release group is named for the record, and every edition of it
+      // carries that name, so the first row has it.
+      MusicDimension.albums || MusicDimension.releaseGroups => first?.album,
+      _ => null,
+    };
+  }
+
+  /// The artist's own name, resolved in [build] and held here.
+  ///
+  /// Held rather than watched where it is read: [_sourceName] runs from
+  /// a row tap and from a shuffle that has already awaited something,
+  /// and a watch from either would register a rebuild subscription
+  /// outside the reconciliation window that granted it.
+  String? _entityName;
 
   /// What the queue this screen builds is a window over.
   ///
@@ -248,6 +263,14 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
     final state = ref.watch(musicItemsProvider(_listing));
     final dimension = widget.dimension;
     final items = state.value?.items ?? const <ItemSummary>[];
+    // Watched here and nowhere else. Only for an artist bucket that is
+    // one: the absent-value bucket travels as a sentinel, and resolving
+    // that as a pid is a request for something that cannot exist.
+    _entityName =
+        dimension == MusicDimension.artists &&
+            widget.segment != musicUnknownSegment
+        ? ref.watch(entityCardProvider(widget.segment)).value?.title
+        : null;
 
     return NotificationListener<ScrollNotification>(
       // Paging belongs to the scroll, not to the item builder: asking a

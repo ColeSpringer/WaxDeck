@@ -387,6 +387,11 @@ void main() {
     // An empty key is a real bucket and an empty path segment is not a
     // location, so the sentinel carries it there and back.
     expect(repository.facetDrills.last, ('genre', ''));
+    // And the page is titled in the reader's own language, not in the
+    // server's sentinel: that string has no translation and would file
+    // into the queue's stored source label as well as onto the header.
+    expect(find.text('[No Genre]'), findsNothing);
+    expect(find.text('No genre'), findsOneWidget);
   });
 
   testWidgets('the unknown bucket goes where the preference says', (

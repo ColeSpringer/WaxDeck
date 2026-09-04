@@ -227,6 +227,17 @@ abstract final class WaxIcons {
     IconData(0xE30C, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
+  /// Phosphor `fingerprint`.
+  ///
+  /// Naming a recording from the sound of it, which is a different act
+  /// from looking a title up: the magnifying glass is a search of what
+  /// is already here, and drawing both with it left two rows on the
+  /// same song saying the same thing.
+  static const fingerprint = WaxGlyph(
+    IconData(0xE23E, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE23E, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   /// Phosphor `download-simple`.
   static const downloads = WaxGlyph(
     IconData(0xE20C, fontFamily: _regularFamily, fontPackage: _fontPackage),
@@ -592,6 +603,7 @@ abstract final class WaxIcons {
     'audiobooks': audiobooks,
     'radio': radio,
     'search': search,
+    'fingerprint': fingerprint,
     'downloads': downloads,
     'settings': settings,
     'admin': admin,

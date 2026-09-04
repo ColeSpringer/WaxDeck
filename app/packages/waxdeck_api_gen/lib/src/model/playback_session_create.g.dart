@@ -17,6 +17,14 @@ class _$PlaybackSessionCreate extends PlaybackSessionCreate {
   final int? positionMs;
   @override
   final bool? play;
+  @override
+  final double? rate;
+  @override
+  final String? repeat;
+  @override
+  final bool? shuffle;
+  @override
+  final String? handoffFrom;
 
   factory _$PlaybackSessionCreate([
     void Function(PlaybackSessionCreateBuilder)? updates,
@@ -28,6 +36,10 @@ class _$PlaybackSessionCreate extends PlaybackSessionCreate {
     this.index,
     this.positionMs,
     this.play,
+    this.rate,
+    this.repeat,
+    this.shuffle,
+    this.handoffFrom,
   }) : super._();
   @override
   PlaybackSessionCreate rebuild(
@@ -46,7 +58,11 @@ class _$PlaybackSessionCreate extends PlaybackSessionCreate {
         itemPids == other.itemPids &&
         index == other.index &&
         positionMs == other.positionMs &&
-        play == other.play;
+        play == other.play &&
+        rate == other.rate &&
+        repeat == other.repeat &&
+        shuffle == other.shuffle &&
+        handoffFrom == other.handoffFrom;
   }
 
   @override
@@ -57,6 +73,10 @@ class _$PlaybackSessionCreate extends PlaybackSessionCreate {
     _$hash = $jc(_$hash, index.hashCode);
     _$hash = $jc(_$hash, positionMs.hashCode);
     _$hash = $jc(_$hash, play.hashCode);
+    _$hash = $jc(_$hash, rate.hashCode);
+    _$hash = $jc(_$hash, repeat.hashCode);
+    _$hash = $jc(_$hash, shuffle.hashCode);
+    _$hash = $jc(_$hash, handoffFrom.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -68,7 +88,11 @@ class _$PlaybackSessionCreate extends PlaybackSessionCreate {
           ..add('itemPids', itemPids)
           ..add('index', index)
           ..add('positionMs', positionMs)
-          ..add('play', play))
+          ..add('play', play)
+          ..add('rate', rate)
+          ..add('repeat', repeat)
+          ..add('shuffle', shuffle)
+          ..add('handoffFrom', handoffFrom))
         .toString();
   }
 }
@@ -98,6 +122,22 @@ class PlaybackSessionCreateBuilder
   bool? get play => _$this._play;
   set play(bool? play) => _$this._play = play;
 
+  double? _rate;
+  double? get rate => _$this._rate;
+  set rate(double? rate) => _$this._rate = rate;
+
+  String? _repeat;
+  String? get repeat => _$this._repeat;
+  set repeat(String? repeat) => _$this._repeat = repeat;
+
+  bool? _shuffle;
+  bool? get shuffle => _$this._shuffle;
+  set shuffle(bool? shuffle) => _$this._shuffle = shuffle;
+
+  String? _handoffFrom;
+  String? get handoffFrom => _$this._handoffFrom;
+  set handoffFrom(String? handoffFrom) => _$this._handoffFrom = handoffFrom;
+
   PlaybackSessionCreateBuilder() {
     PlaybackSessionCreate._defaults(this);
   }
@@ -110,6 +150,10 @@ class PlaybackSessionCreateBuilder
       _index = $v.index;
       _positionMs = $v.positionMs;
       _play = $v.play;
+      _rate = $v.rate;
+      _repeat = $v.repeat;
+      _shuffle = $v.shuffle;
+      _handoffFrom = $v.handoffFrom;
       _$v = null;
     }
     return this;
@@ -143,6 +187,10 @@ class PlaybackSessionCreateBuilder
             index: index,
             positionMs: positionMs,
             play: play,
+            rate: rate,
+            repeat: repeat,
+            shuffle: shuffle,
+            handoffFrom: handoffFrom,
           );
     } catch (_) {
       late String _$failedField;

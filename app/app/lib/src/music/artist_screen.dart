@@ -65,7 +65,12 @@ class ArtistScreen extends ConsumerWidget {
     // catalogue is audiobooks gets their books here rather than an empty
     // page under their own name.
     final items = state.value?.items ?? const <ItemSummary>[];
-    final artist = items.firstOrNull?.artist ?? label;
+    // Never from an item. A track's artist field is its *credit* - "Dom
+    // Kennedy feat. Ty Dolla $ign" - and the first row of a catalogue
+    // is no more this artist's name than any other row is. The caller's
+    // label where there is one; the entity's own card where a link
+    // arrived without it.
+    final artist = label ?? ref.watch(entityCardProvider(pid)).value?.title;
     final name = artist ?? l10n.musicArtistUnknownName;
 
     return WaxScaffold(
@@ -380,7 +385,13 @@ class _Body extends ConsumerWidget {
             // that pushed this artist. The location stays declared, so
             // a stranger opening it still gets the list.
             onAction: items.length > top.length
-                ? () => context.push(WaxRoute.artistTracks(pid), extra: name)
+                // The artist's own name, never the localized fallback:
+                // the listing stores what it is given as the queue's
+                // source label.
+                ? () => context.push(
+                    WaxRoute.artistTracks(pid),
+                    extra: sourceName.isEmpty ? null : sourceName,
+                  )
                 : null,
             semanticsId: SemanticsIds.entityAllTracks,
           ),

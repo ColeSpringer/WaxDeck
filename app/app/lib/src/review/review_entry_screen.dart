@@ -779,6 +779,27 @@ class _DiffTable extends StatelessWidget {
                     extra: extra.contains(i),
                     striped: i.isOdd,
                   ),
+                // A band, not a caption. The two groups sat in one
+                // bordered box with nothing between them, so the rows
+                // for tracks nobody has ran straight on from the rows
+                // for the files that are here and read as more of them.
+                //
+                // Worded by the same distinction the rows are: a
+                // one-file unit is not charged for the rest of the
+                // release, and a band announcing eleven files missing
+                // over eleven neutral "on the release" rows would read
+                // as a perfect match rejected.
+                if ((candidate?.missingTitles.length ?? 0) > 0)
+                  _bandRow(
+                    detail.tracks.length == 1
+                        ? l10n.reviewDiffOnReleaseBand(
+                            candidate!.missingTitles.length,
+                          )
+                        : l10n.reviewDiffMissingBand(
+                            candidate!.missingTitles.length,
+                          ),
+                    colors,
+                  ),
                 for (var i = 0; i < (candidate?.missingTitles.length ?? 0); i++)
                   _MissingRow(
                     index: i,
@@ -787,6 +808,9 @@ class _DiffTable extends StatelessWidget {
                     // rest of the release is context, not absence - so
                     // the rows must not read as a wall of defects.
                     contextOnly: detail.tracks.length == 1,
+                    // Restarted under the band, as the table's own rows
+                    // restart under its header.
+                    striped: i.isOdd,
                   ),
               ],
             ),
@@ -795,6 +819,24 @@ class _DiffTable extends StatelessWidget {
       ),
     );
   }
+
+  /// A full-width strip that names the group under it, on the header's
+  /// own surface so the two read as the same kind of thing.
+  Widget _bandRow(String label, WaxColors colors) => Semantics(
+    identifier: SemanticsIds.diffMissingBand,
+    container: true,
+    child: Container(
+      color: colors.surface2,
+      padding: const EdgeInsets.symmetric(
+        horizontal: WaxSpace.s12,
+        vertical: WaxSpace.s8,
+      ),
+      child: Text(
+        label,
+        style: WaxType.overline.copyWith(color: colors.textSecondary),
+      ),
+    ),
+  );
 
   Widget _headerRow(AppLocalizations l10n, WaxColors colors) {
     final style = WaxType.overline.copyWith(color: colors.textSecondary);
@@ -934,10 +976,15 @@ class _MissingRow extends StatelessWidget {
     required this.index,
     required this.title,
     this.contextOnly = false,
+    this.striped = false,
   });
 
   final int index;
   final String title;
+
+  /// The zebra stripe, so these rows read as a table like the ones
+  /// above rather than as an unbanded run of captions.
+  final bool striped;
 
   /// True for a one-file unit, where the rest of the release is shown
   /// for orientation and costs the score nothing: a neutral caption
@@ -951,6 +998,7 @@ class _MissingRow extends StatelessWidget {
       identifier: SemanticsIds.diffMissing(index),
       container: true,
       child: Container(
+        color: striped ? colors.surface1 : Colors.transparent,
         padding: const EdgeInsets.symmetric(
           horizontal: WaxSpace.s12,
           vertical: WaxSpace.s4,

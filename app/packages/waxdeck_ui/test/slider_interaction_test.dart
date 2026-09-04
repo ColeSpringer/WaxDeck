@@ -20,6 +20,51 @@ Future<void> _pump(WidgetTester tester, Widget child) async {
 
 void main() {
   group('slider', () {
+    testWidgets('balanced puts the track on the row\'s own centre line', (
+      tester,
+    ) async {
+      // The row is a glyph box then a track, laid out from the left, so
+      // its midpoint sits half a glyph box right of the track's. A
+      // caller that centres this row under something else centred - the
+      // full-screen player's transport - drew a level visibly shifted.
+      await _pump(
+        tester,
+        WaxSlider(
+          value: 0.5,
+          trackWidth: 200,
+          label: 'Volume',
+          glyph: WaxIcons.volume,
+          mutedGlyph: WaxIcons.volumeMuted,
+          onChanged: (_) {},
+          onMute: () {},
+        ),
+      );
+      final plain = tester.getCenter(find.byType(WaxSlider)).dx;
+      final track = tester.getCenter(find.byType(CustomPaint).last).dx;
+      expect(plain, isNot(moreOrLessEquals(track, epsilon: 1)));
+
+      await _pump(
+        tester,
+        WaxSlider(
+          value: 0.5,
+          trackWidth: 200,
+          label: 'Volume',
+          glyph: WaxIcons.volume,
+          mutedGlyph: WaxIcons.volumeMuted,
+          balanced: true,
+          onChanged: (_) {},
+          onMute: () {},
+        ),
+      );
+      expect(
+        tester.getCenter(find.byType(WaxSlider)).dx,
+        moreOrLessEquals(
+          tester.getCenter(find.byType(CustomPaint).last).dx,
+          epsilon: 0.5,
+        ),
+      );
+    });
+
     testWidgets('a drag reports the level while the finger moves', (
       tester,
     ) async {

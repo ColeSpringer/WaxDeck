@@ -12,6 +12,7 @@ import '../tokens/motion.dart';
 import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import 'secondary_tap.dart';
+import 'tooltip.dart';
 import '../tokens/typography.dart';
 import '../theme/wax_layout.dart';
 
@@ -560,7 +561,7 @@ class WaxIconButton extends StatelessWidget {
       onPressed: onPressed,
       semanticsId: semanticsId,
       borderRadius: WaxRadius.pill,
-      child: Tooltip(
+      child: WaxTooltip(
         message: label,
         child: InkResponse(
           onTap: onPressed,
@@ -613,7 +614,7 @@ class WaxFab extends StatelessWidget {
       onPressed: onPressed,
       semanticsId: semanticsId,
       borderRadius: WaxRadius.pill,
-      child: Tooltip(
+      child: WaxTooltip(
         message: label,
         child: Material(
           color: enabled ? colors.accent : colors.surface2,
@@ -975,6 +976,7 @@ class WaxSlider extends StatefulWidget {
     this.step = 0.05,
     this.trackWidth = 96,
     this.endSlop = defaultEndSlop,
+    this.balanced = false,
     this.semanticsId,
     this.muteSemanticsId,
     super.key,
@@ -986,6 +988,22 @@ class WaxSlider extends StatefulWidget {
 
   /// The ordinary [endSlop].
   static const double defaultEndSlop = 12;
+
+  /// The leading glyph, drawn at one size whether it is a control or a
+  /// label. Named because [balanced] measures a gap against it.
+  static const double _glyphSize = 18;
+
+  /// Reserves a trailing gap as wide as the leading glyph, so the drawn
+  /// track sits on the row's own centre line.
+  ///
+  /// For a caller that centres this row under something else centred.
+  /// The row is a glyph box and a track laid out from the left, so its
+  /// midpoint is half a glyph box right of the track's - which put the
+  /// full-screen player's level a touch-target's half-width off the
+  /// transport it sits under. A deck bar's level is packed into a
+  /// cluster and wants no such gap, which is why this is a caller's
+  /// answer rather than the component's.
+  final bool balanced;
 
   /// How far the gesture surface extends past each end of the drawn
   /// track. A level is grabbed at its ends more than anywhere else -
@@ -1259,7 +1277,7 @@ class _WaxSliderState extends State<WaxSlider> {
               label: _muted
                   ? context.waxL10n.controlsUnmute
                   : context.waxL10n.controlsMute,
-              size: 18,
+              size: WaxSlider._glyphSize,
               active: _muted,
               onPressed: widget.onMute,
               semanticsId: widget.muteSemanticsId,
@@ -1273,11 +1291,20 @@ class _WaxSliderState extends State<WaxSlider> {
             ExcludeSemantics(
               child: WaxIcon(
                 glyph,
-                size: 18,
+                size: WaxSlider._glyphSize,
                 color: enabled ? colors.textSecondary : colors.textDisabled,
               ),
             ),
         SizedBox(width: widget.trackWidth + 2 * widget.endSlop, child: track),
+        // The counterweight, and nothing else: as wide as whichever
+        // leading box was drawn, so the track's centre and the row's
+        // centre are one point.
+        if (widget.balanced && glyph != null)
+          SizedBox(
+            width: widget.onMute != null
+                ? WaxSpace.touchTarget
+                : WaxSlider._glyphSize,
+          ),
       ],
     );
   }
@@ -1420,6 +1447,7 @@ Future<T?> showWaxMenu<T>(
   BuildContext context,
   List<WaxMenuItem<T>> items, {
   String? emptyLabel,
+  String? emptySemanticsId,
 }) async {
   final colors = WaxColors.of(context);
   final trigger = context.findRenderObject()! as RenderBox;
@@ -1443,9 +1471,15 @@ Future<T?> showWaxMenu<T>(
         if (items.isEmpty && emptyLabel != null)
           PopupMenuItem<T>(
             enabled: false,
-            child: Text(
-              emptyLabel,
-              style: WaxType.body.copyWith(color: colors.textTertiary),
+            // Addressable like every other row: "the menu is open and
+            // holds nothing" is a state a driver has to be able to see,
+            // and it is the only one with no row to look for.
+            child: Semantics(
+              identifier: emptySemanticsId,
+              child: Text(
+                emptyLabel,
+                style: WaxType.body.copyWith(color: colors.textTertiary),
+              ),
             ),
           ),
         for (final item in items)
@@ -1541,6 +1575,7 @@ class WaxMenuButton<T> extends StatelessWidget {
     this.badge,
     this.onOpen,
     this.emptyLabel,
+    this.emptySemanticsId,
     super.key,
   });
 
@@ -1567,8 +1602,17 @@ class WaxMenuButton<T> extends StatelessWidget {
   /// list that is legitimately empty and worth saying so.
   final String? emptyLabel;
 
+  /// A handle on [emptyLabel]'s row, for a menu whose empty state a test
+  /// has to be able to tell from a menu that never opened.
+  final String? emptySemanticsId;
+
   Future<void> _open(BuildContext context) async {
-    final chosen = await showWaxMenu<T>(context, items, emptyLabel: emptyLabel);
+    final chosen = await showWaxMenu<T>(
+      context,
+      items,
+      emptyLabel: emptyLabel,
+      emptySemanticsId: emptySemanticsId,
+    );
     if (chosen != null) onSelected(chosen);
   }
 

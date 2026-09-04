@@ -35,6 +35,8 @@
   "devicesPlayingElsewhere": "Sonando en otro sitio",
   "devicesPlayingHere": "Sonando aquí",
   "devicesPlayingOn": "Sonando en {endpoint}",
+  "devicesPlayingRadioHere": "Aquí suena la radio",
+  "devicesRadioStaysHere": "Las emisoras suenan en el dispositivo que las sintonizó",
   "devicesRemoteTitle": "Reproducción remota",
   "devicesStartedBy": "iniciada por {name}",
   "devicesStopOn": "Detener la reproducción en {endpoint}",

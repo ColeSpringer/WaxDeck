@@ -117,7 +117,12 @@ class PinnedShelf extends ConsumerWidget {
             onTapItem: (tile) {
               final at = tiles.indexOf(tile);
               if (at < 0) return;
-              unawaited(context.push(_locationOf(cards[at])));
+              // The card's own title rides along: it is the entity's
+              // name, which is the one thing the destination cannot
+              // work out from the items it loads.
+              unawaited(
+                context.push(_locationOf(cards[at]), extra: cards[at].title),
+              );
             },
             // The shelf is where somebody will try to unpin, so the card
             // carries the gesture: long press on touch, right-click with

@@ -226,7 +226,7 @@ func TestCreateSessionOnDevice(t *testing.T) {
 	ctx := context.Background()
 	epID := deviceEndpointID(t, svc, "us-alice")
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one", "tr-two"}, 1, 5000, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one", "tr-two"}, Index: 1, PositionMS: 5000, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestEndpointTargetCarriesDeclaredFormats(t *testing.T) {
 		byName[ep.Name] = ep.ID
 	}
 
-	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", byName["Talkative renderer"], []string{"tr-one"}, 0, 0, true); err != nil {
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: byName["Talkative renderer"], PIDs: []string{"tr-one"}, Play: true}); err != nil {
 		t.Fatal(err)
 	}
 	target, ok := resolver.lastTarget()
@@ -319,7 +319,7 @@ func TestEndpointTargetCarriesDeclaredFormats(t *testing.T) {
 		t.Fatalf("declared formats did not reach the resolver: %v", target.Formats)
 	}
 
-	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", byName["Silent renderer"], []string{"tr-one"}, 0, 0, true); err != nil {
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: byName["Silent renderer"], PIDs: []string{"tr-one"}, Play: true}); err != nil {
 		t.Fatal(err)
 	}
 	target, _ = resolver.lastTarget()
@@ -333,16 +333,16 @@ func TestCreateSessionValidation(t *testing.T) {
 	ctx := context.Background()
 	epID := deviceEndpointID(t, svc, "us-alice")
 
-	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, nil, 0, 0, true); err == nil {
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: nil, Play: true}); err == nil {
 		t.Fatal("empty queue accepted")
 	}
-	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one"}, 3, 0, true); err == nil {
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one"}, Index: 3, Play: true}); err == nil {
 		t.Fatal("out-of-range index accepted")
 	}
-	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", "pe-missing", []string{"tr-one"}, 0, 0, true); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: "pe-missing", PIDs: []string{"tr-one"}, Play: true}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing endpoint error %v", err)
 	}
-	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-unknown"}, 0, 0, true); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-unknown"}, Play: true}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("invisible item error %v", err)
 	}
 }
@@ -352,11 +352,11 @@ func TestSessionReplacesOnSameEndpoint(t *testing.T) {
 	ctx := context.Background()
 	epID := deviceEndpointID(t, svc, "us-alice")
 
-	first, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one"}, 0, 0, true)
+	first, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := svc.CreateSession(ctx, "us-bob", "Bob", epID, []string{"tr-two"}, 0, 0, true)
+	second, err := svc.CreateSession(ctx, "us-bob", "Bob", SessionRequest{EndpointID: epID, PIDs: []string{"tr-two"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +374,7 @@ func TestDriverEventsAdvanceSession(t *testing.T) {
 	ctx := context.Background()
 	epID := deviceEndpointID(t, svc, "us-alice")
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one", "tr-two"}, 0, 0, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one", "tr-two"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +412,7 @@ func TestRemoteCommands(t *testing.T) {
 	ctx := context.Background()
 	epID := deviceEndpointID(t, svc, "us-alice")
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one", "tr-two"}, 0, 0, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one", "tr-two"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,7 +476,7 @@ func TestRepeatReloadFailureSettlesStopped(t *testing.T) {
 	ctx := context.Background()
 	epID := deviceEndpointID(t, svc, "us-alice")
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one", "tr-two"}, 0, 0, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one", "tr-two"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -503,7 +503,7 @@ func TestCommandVisibility(t *testing.T) {
 	ctx := context.Background()
 	epID := deviceEndpointID(t, svc, "us-alice")
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one"}, 0, 0, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,6 +519,231 @@ func TestCommandVisibility(t *testing.T) {
 	}
 	if s.OwnerName != "Alice" {
 		t.Fatalf("owner name %q", s.OwnerName)
+	}
+}
+
+// Casting from a device that is playing is a handoff, and the client
+// that cannot name its own mirror session - bus down, first report
+// unanswered, server restarted - names itself instead.
+func ptr[T any](v T) *T { return &v }
+
+func TestCreateSessionHandsOffSource(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+
+	link := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	phone := svc.HandleRegister(link, "Alice's phone", true, true)
+	mirror, answer := svc.HandleSessionReport(ctx, link, SessionReport{
+		Playing: true, PositionMS: 1000, Index: 0, ItemPids: []string{"tr-one", "tr-two"},
+	})
+	if !answer || mirror == nil {
+		t.Fatal("creating report unanswered")
+	}
+
+	speaker := deviceEndpointID(t, svc, "us-alice")
+	started, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID:  speaker,
+		PIDs:        []string{"tr-one", "tr-two"},
+		Index:       1,
+		PositionMS:  4000,
+		Play:        true,
+		Rate:        ptr(1.5),
+		Repeat:      "all",
+		Shuffle:     true,
+		HandoffFrom: phone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.Repeat != "all" || !started.Shuffle {
+		t.Fatalf("modes not carried: %+v", started)
+	}
+	// The rate is not, because this speaker cannot change it. Recording
+	// it anyway would run every watcher's scrubber half again too fast:
+	// the published position is extrapolated with this number.
+	if started.Rate != 1 {
+		t.Fatalf("rate recorded on an endpoint that cannot play at it: %v", started.Rate)
+	}
+	// And the source's session is gone, though nobody could name it.
+	if _, err := svc.Session("us-alice", mirror.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("source session survived the handoff: %v", err)
+	}
+}
+
+// A source with nothing playing is the ordinary case for a controller
+// that names itself out of habit: the create succeeds and ends nothing.
+func TestCreateHandoffWithoutSession(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+
+	link := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	phone := svc.HandleRegister(link, "Alice's phone", true, true)
+
+	speaker := deviceEndpointID(t, svc, "us-alice")
+	started, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID:  speaker,
+		PIDs:        []string{"tr-one"},
+		Play:        true,
+		HandoffFrom: phone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.Rate != 1 || started.Repeat != "off" {
+		t.Fatalf("defaults not applied: %+v", started)
+	}
+	if got := len(svc.Sessions("us-alice")); got != 1 {
+		t.Fatalf("sessions after handoff = %d", got)
+	}
+}
+
+// Naming somebody else's device as the source must not end their
+// playback, and naming one the server has forgotten must not refuse the
+// music.
+func TestHandoffFromSourcesThatAreNotTheCallers(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+
+	bobLink := NewClientLink("us-bob", "Bob", "se-bob", "Bob's phone", func(any) bool { return true })
+	bobPhone := svc.HandleRegister(bobLink, "Bob's phone", true, true)
+	bobSession, answered := svc.HandleSessionReport(ctx, bobLink, SessionReport{
+		Playing: true, Index: 0, ItemPids: []string{"tr-one"},
+	})
+	if !answered || bobSession == nil {
+		t.Fatal("Bob's creating report unanswered")
+	}
+
+	speaker := deviceEndpointID(t, svc, "us-alice")
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID:  speaker,
+		PIDs:        []string{"tr-one"},
+		Play:        true,
+		HandoffFrom: bobPhone,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Bob's private client endpoint is invisible to Alice, so naming it
+	// says nothing to the server about a session it holds - and above
+	// all does not end it.
+	if _, err := svc.Session("us-bob", bobSession.ID); err != nil {
+		t.Fatalf("Alice's handoff ended Bob's session: %v", err)
+	}
+
+	// A device endpoint is not a handoff source: only a client can be
+	// playing something this call is taking over from, and a shared
+	// speaker is a room rather than one person's connection.
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID:  speaker,
+		PIDs:        []string{"tr-one"},
+		Play:        true,
+		HandoffFrom: speaker,
+	}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("device endpoint accepted as a handoff source: %v", err)
+	}
+}
+
+// The field exists for the client whose command bus is down - and a
+// client whose bus is down is one the server has already dropped, which
+// unregisters its endpoint. Refusing the create over that would refuse
+// the music in the room in exactly the case the field was added for.
+func TestHandoffFromForgottenEndpointStillStarts(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+
+	link := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	phone := svc.HandleRegister(link, "Alice's phone", true, true)
+	svc.OnDisconnect(ctx, link)
+
+	speaker := deviceEndpointID(t, svc, "us-alice")
+	started, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID:  speaker,
+		PIDs:        []string{"tr-one"},
+		Play:        true,
+		HandoffFrom: phone,
+	})
+	if err != nil {
+		t.Fatalf("handoff from a dropped endpoint refused the create: %v", err)
+	}
+	if started.EndpointID != speaker {
+		t.Fatalf("unexpected session %+v", started)
+	}
+}
+
+// The common handoff is phone to laptop, and a client target takes its
+// queue over the command bus rather than through a driver: the modes
+// have to ride that frame or they are recorded and forgotten.
+func TestHandoffToClientCarriesTheModes(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+
+	var loaded wireEndpointCommand
+	var target *ClientLink
+	target = NewClientLink("us-alice", "Alice", "se-laptop", "Laptop", func(v any) bool {
+		cmd, ok := v.(wireEndpointCommand)
+		if !ok || cmd.Verb != "load" {
+			return true
+		}
+		loaded = cmd
+		svc.HandleCommandResult(cmd.ID, true, "", "")
+		return true
+	})
+	laptop := svc.HandleRegister(target, "Laptop", true, true)
+
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID: laptop,
+		PIDs:       []string{"tr-one"},
+		Play:       true,
+		Rate:       ptr(1.5),
+		Repeat:     "all",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Rate == nil || *loaded.Rate != 1.5 {
+		t.Fatalf("rate not on the load frame: %+v", loaded.Rate)
+	}
+	if loaded.Repeat != "all" {
+		t.Fatalf("repeat not on the load frame: %q", loaded.Repeat)
+	}
+}
+
+// A routed stop is the end of a mirror session: the client clears its
+// queue and forgets the id, so a row left standing here keeps the
+// endpoint looking busy and answers every later verb `no-session`.
+func TestRoutedStopEndsTheMirrorSession(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+
+	var link *ClientLink
+	link = NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(v any) bool {
+		if cmd, ok := v.(wireEndpointCommand); ok {
+			svc.HandleCommandResult(cmd.ID, true, "", "")
+		}
+		return true
+	})
+	svc.HandleRegister(link, "Phone", true, true)
+	mirror, _ := svc.HandleSessionReport(ctx, link, SessionReport{
+		Playing: true, Index: 0, ItemPids: []string{"tr-one"},
+	})
+	if mirror == nil {
+		t.Fatal("creating report unanswered")
+	}
+
+	controller := NewClientLink("us-alice", "Alice", "se-tablet", "Tablet", func(any) bool { return true })
+	if _, err := svc.HandleCommand(ctx, controller, mirror.ID, "stop", CommandArgs{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Session("us-alice", mirror.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("the session survived a routed stop: %v", err)
+	}
+	// And the client can introduce itself again: a report carrying the
+	// queue creates a fresh session and is answered with its id.
+	svc.cfg.Now = func() time.Time { return time.Now().Add(2 * reportGrace) }
+	next, answered := svc.HandleSessionReport(ctx, link, SessionReport{
+		Playing: true, Index: 0, ItemPids: []string{"tr-one"},
+	})
+	if !answered || next == nil || next.ID == mirror.ID {
+		t.Fatalf("the client could not re-introduce itself: %+v", next)
 	}
 }
 
@@ -677,7 +902,7 @@ func TestTransferDeviceKeepsPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one", "tr-two"}, 0, 10000, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one", "tr-two"}, PositionMS: 10000, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -726,7 +951,7 @@ func TestTransferAuthTightening(t *testing.T) {
 	svc.HandleRegister(bobLink, "Bob's tablet", true, true)
 	bobEndpoint := clientEndpointID("se-bob")
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one"}, 0, 0, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -741,7 +966,7 @@ func TestWatchSemantics(t *testing.T) {
 	ctx := context.Background()
 	epID := deviceEndpointID(t, svc, "us-alice")
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one"}, 0, 0, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -801,7 +1026,7 @@ func TestCreateOnClientEndpointNoGhost(t *testing.T) {
 	svc.HandleRegister(link, "Phone", true, true)
 	epID := clientEndpointID(link.SessionID)
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one"}, 0, 0, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -818,7 +1043,7 @@ func TestTransferToClientFencesStaleDeviceEvents(t *testing.T) {
 	ctx := context.Background()
 	epID := deviceEndpointID(t, svc, "us-alice")
 
-	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one", "tr-two"}, 0, 0, true)
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one", "tr-two"}, Play: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -876,7 +1101,7 @@ func TestPersistedEndpointsRestoreAtBoot(t *testing.T) {
 	if !found {
 		t.Fatalf("persisted endpoint missing after restart: %+v", restored)
 	}
-	if _, err := svc2.CreateSession(ctx, "us-alice", "Alice", epID, []string{"tr-one"}, 0, 0, true); !errors.Is(err, ErrEndpointOffline) {
+	if _, err := svc2.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-one"}, Play: true}); !errors.Is(err, ErrEndpointOffline) {
 		t.Fatalf("undialable restored endpoint accepted a session: %v", err)
 	}
 }

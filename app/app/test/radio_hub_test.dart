@@ -93,6 +93,17 @@ ProviderContainer _container(
   return container;
 }
 
+/// Opens a station tile's overflow the way a person does.
+///
+/// The tile has no button of its own any more: the card draws one chip
+/// row in its corner - the pin, and its own overflow on hover - so the
+/// menu is reached by the card's gesture, as it is on every other card
+/// in the app.
+Future<void> _openStationMenu(WidgetTester tester, String pid) async {
+  await tester.longPress(_byId(SemanticsIds.radio(pid)), warnIfMissed: false);
+  await tester.pumpAndSettle();
+}
+
 /// A repository whose account has [pids] pinned, and which is signed in -
 /// the prefs document is only fetched for an authenticated session.
 FakeRepository _repoWithFavorites(List<String> pids) {
@@ -566,8 +577,7 @@ void main() {
     await _pumpHub(tester, container);
     expect(container.read(radioDialProvider), hasLength(2));
 
-    await tester.tap(_byId(SemanticsIds.radioMenu('rs-1')));
-    await tester.pumpAndSettle();
+    await _openStationMenu(tester, 'rs-1');
     await tester.tap(find.text('Remove station').last);
     await tester.pumpAndSettle();
 
@@ -774,8 +784,7 @@ void main() {
     final repo = _repo();
     await _pumpHub(tester, _container(repo));
 
-    await tester.tap(_byId(SemanticsIds.radioMenu('rs-2')));
-    await tester.pumpAndSettle();
+    await _openStationMenu(tester, 'rs-2');
     await tester.tap(find.text('Edit station').last);
     await tester.pumpAndSettle();
 
@@ -797,8 +806,7 @@ void main() {
     final repo = _repo();
     await _pumpHub(tester, _container(repo));
 
-    await tester.tap(_byId(SemanticsIds.radioMenu('rs-2')));
-    await tester.pumpAndSettle();
+    await _openStationMenu(tester, 'rs-2');
     await tester.tap(find.text('Edit station').last);
     await tester.pumpAndSettle();
 
@@ -836,8 +844,7 @@ void main() {
       );
     await _pumpHub(tester, _container(repo));
 
-    await tester.tap(_byId(SemanticsIds.radioMenu('rs-2')));
-    await tester.pumpAndSettle();
+    await _openStationMenu(tester, 'rs-2');
     await tester.tap(find.text('Edit station').last);
     await tester.pumpAndSettle();
 
@@ -860,8 +867,7 @@ void main() {
     final artwork = FakeArtworkStore();
     await _pumpHub(tester, _container(repo, artwork: artwork));
 
-    await tester.tap(_byId(SemanticsIds.radioMenu('rs-2')));
-    await tester.pumpAndSettle();
+    await _openStationMenu(tester, 'rs-2');
     await tester.tap(find.text('Edit station').last);
     await tester.pumpAndSettle();
 

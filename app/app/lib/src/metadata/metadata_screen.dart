@@ -889,6 +889,9 @@ class _EntityDoors extends StatelessWidget {
             WaxPill(
               label: l10n.metadataOpenArtist,
               semanticsId: SemanticsIds.metadataOpenArtist,
+              // No label: this form holds the track's credit, not the
+              // artist entity's name, and the artist screen resolves
+              // its own card.
               onPressed: () => context.push(
                 WaxRoute.musicBucket(MusicDimension.artists, artistPid),
               ),

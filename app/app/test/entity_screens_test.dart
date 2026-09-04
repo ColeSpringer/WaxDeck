@@ -413,6 +413,59 @@ void main() {
   });
 
   group('the artist screen', () {
+    testWidgets('is titled by the artist, never by a track credit', (
+      tester,
+    ) async {
+      // A track's artist field is what the record credits, features and
+      // all. Naming the page from the first row it happened to load put
+      // "Dom Kennedy feat. Ty Dolla \$ign" over the whole catalogue.
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[
+          _track('One', artist: 'Dom Kennedy feat. Ty Dolla \$ign', track: 1),
+        ];
+      await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1', label: 'Dom Kennedy'),
+        repository,
+      );
+
+      expect(find.text('Dom Kennedy'), findsWidgets);
+      expect(find.textContaining('feat. Ty Dolla'), findsNothing);
+    });
+
+    testWidgets('a link with no name reads the artist off their own card', (
+      tester,
+    ) async {
+      // A shared link and a reload both drop the label the opener had,
+      // which is exactly when the old fallback took over.
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[
+          _track('One', artist: 'Dom Kennedy feat. Ty Dolla \$ign', track: 1),
+        ]
+        ..entityCards['ar-1'] = const EntityCard(
+          pid: 'ar-1',
+          kind: EntityCardKind.artist,
+          title: 'Dom Kennedy',
+        );
+      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
+
+      expect(repository.resolvedEntityPids, contains(equals(<String>['ar-1'])));
+      expect(find.text('Dom Kennedy'), findsWidgets);
+      expect(find.textContaining('feat. Ty Dolla'), findsNothing);
+    });
+
+    testWidgets('an artist with no card falls back to the placeholder', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[
+          _track('One', artist: 'Dom Kennedy feat. Ty Dolla \$ign', track: 1),
+        ];
+      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
+
+      expect(find.textContaining('feat. Ty Dolla'), findsNothing);
+    });
+
     testWidgets('a release opens over the artist, and back returns to it', (
       tester,
     ) async {

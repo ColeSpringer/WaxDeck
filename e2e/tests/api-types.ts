@@ -2760,6 +2760,7 @@ export interface paths {
         /**
          * Start playback on an endpoint
          * @description Loads a queue onto an endpoint and starts a server-tracked playback session there ("play on the kitchen speaker"). An endpoint plays at most one session: starting a new session on an endpoint that already has one ends the old session first, whoever owned it (physical outputs are last-writer-wins, like the speaker itself). Item pids must all be visible to the caller; the server shapes stream delivery for the target endpoint's capabilities, re-minting URLs as needed, so the same queue plays on a phone, a cast device, or a renderer without the caller caring about formats. Sessions on device endpoints are server-authoritative; a session created on one of the caller's own client endpoints is loaded onto that client and then mirrors the client's local playback. Conflict with code `endpoint-offline` means the target endpoint is not connected right now, and `timeout` means it is connected but did not answer in time. A queue the target cannot play answers `feature-unavailable` naming the pid - a multi-part audiobook or a windowed track sent to a device endpoint, say - which a controller can turn into an offer to play it somewhere that can, rather than a bare failure. When the target is a client endpoint, that client's own refusal code and message are what arrive here - `endpoint-failed` where it took the load and could not carry it out.
+         *     Starting playback somewhere else from a device that is playing is a handoff, and a device plays one thing: the queue, index, position, rate, and repeat move to the target, and the source silences itself. The order in `itemPids` is the play order, so a shuffled queue arrives shuffled whatever `shuffle` says. A caller that holds a mirror session's id transfers it instead; one that does not passes `handoffFrom` here and stops its own playback when this call answers.
          */
         post: operations["createPlaybackSession"];
         delete?: never;
@@ -2826,6 +2827,7 @@ export interface paths {
         /**
          * Transfer a session to another endpoint
          * @description Moves live playback to another endpoint, keeping the queue and the extrapolated position ("pick up where you left off"). The server snapshots the session, loads the target with stream URLs shaped for its capabilities, then stops playback on the source; the session keeps its id and changes `endpointId`, so controllers keep following the same session. Transferring to a client endpoint hands the queue to that client, which resumes local playback and reports back (`authority` becomes `mirror`); transferring to a device endpoint makes the session server-authoritative. A brief overlap or gap at the seam is inherent; position is carried, not resynthesized. Authorization follows control with one tightening: your own sessions may transfer to any endpoint you can see, while a session you do not own may only be transferred to a shared endpoint (moving someone's queue onto your private device would take it out of their sight). Transferring a session to the endpoint it is already on is a no-op answering 200. Conflict with code `endpoint-offline` means the target endpoint is not connected, and `timeout` means it is connected but did not answer in time. A queue the target cannot play answers `feature-unavailable` naming the pid, on the same terms as starting a session there; when the target is a client endpoint, that client's own refusal code and message are what arrive here - `endpoint-failed` where it took the transfer and could not carry it out. The tightening is a `forbidden`, not a `not-found`: the session is one the caller can see and control, and it is the target endpoint that is out of bounds.
+         *     The routed `stop` this sends to the source is what silences a client somebody else moved the session away from: it stops local playback, forgets the session, and stops reporting under it. A client transferring its *own* playback away silences itself as this call answers instead, since it is the one that knows the handoff happened. Live radio is not a session and does not travel - a station plays on the device that tuned it, and a client whose engine radio has taken ends its item session rather than moving it.
          */
         post: operations["transferPlaybackSession"];
         delete?: never;
@@ -6138,7 +6140,11 @@ export interface components {
             /** @description Whether this client can apply `set-rate`. */
             rateControl?: boolean;
         };
-        /** @description Server-to-client command routed to a registered client endpoint. Verbs are the command verbs plus `load` (adopt this queue at this index and position; the client resolves play-info itself). The client executes against its local engine and answers exactly once with a `cmd-result`, then reports state. */
+        /**
+         * @description Server-to-client command routed to a registered client endpoint. Verbs are the command verbs plus `load` (adopt this queue at this index and position; the client resolves play-info itself). The client executes against its local engine and answers exactly once with a `cmd-result`, then reports state.
+         *     `sessionId` says which session the command is for, and a client honours a transport verb only for the session it is currently mirroring: `play`, `pause`, `stop`, `next`, `previous`, `seek`, `set-volume`, `set-rate`, `set-repeat`, and `set-shuffle` naming any other session are answered with a `cmd-result` carrying code `no-session`. `load` and `set-queue` install the session they name, so they are the two that arrive for a session the client is not yet mirroring. A matching `stop` ends the mirror: the client stops local playback, forgets the session, and stops reporting under it.
+         *     A routed change is the listener's own tap, and persists the way the local control does: `set-rate` is written to the show's or book's stored speed, so the next episode reads it back, while music has no stored speed and a rate set on a track lapses at the next track exactly as a local one does.
+         */
         WsEndpointCommandFrame: {
             /**
              * @description Always `endpoint-cmd`.
@@ -8222,6 +8228,25 @@ export interface components {
             positionMs?: number;
             /** @description Start playing immediately. Defaults to true; false loads paused. */
             play?: boolean;
+            /**
+             * Format: double
+             * @description Playback rate to start at. Defaults to 1.0. A client handing its own playback over carries the rate it was playing at, so a book being read at 1.5x goes on at 1.5x - on a target that has a rate to set. An endpoint reporting `rateControl: false` plays at 1.0 and the session says so, rather than refusing the queue over a mode the room cannot have: `positionMs` is extrapolated with this rate, so recording one the device is not playing at would run every controller's scrubber fast.
+             */
+            rate?: number;
+            /**
+             * @description `off`, `all`, or `one` (open string). Defaults to `off`.
+             * @example off
+             */
+            repeat?: string;
+            /** @description Whether the queue is already shuffled. `itemPids` is the play order either way, so this changes nothing about what plays next; it records what the listener turned on, so a controller draws the mode the queue is in. */
+            shuffle?: boolean;
+            /**
+             * @description A client endpoint of the caller's whose session this create replaces. One the caller can see that is not a client endpoint of their own answers `forbidden`, because silencing it would be silencing somebody else's device; one they cannot see is nothing to end, and ends nothing.
+             *     That last case is not a refusal on purpose. The field is for a client whose command bus is down, and a bus that is down is a connection the server has already dropped - which unregisters the endpoint and ends its session. The precondition already holds, so answering `not-found` would refuse to start the queue in the room over work that was already done.
+             *     For a client that is playing and cannot transfer: the ordinary handoff is `POST /player/sessions/{sessionId}/transfer`, which needs the mirror session's id. A client that never learned one - the command bus was down, its first report went unanswered, the server restarted - creates the session here from its whole local snapshot instead and names itself, so the server can end the session it holds for that endpoint. The client silences itself once this call succeeds rather than waiting for a routed `stop`, which by definition cannot reach it.
+             * @example pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            handoffFrom?: string;
         };
         /** @description Move a session's live playback to another endpoint. */
         PlaybackSessionTransfer: {

@@ -44,6 +44,31 @@ double _offsetOf(WidgetTester tester) {
   return transform.transform.getTranslation().x;
 }
 
+/// Pumps until the line stops travelling, which is its hold at the far
+/// end of the run - the travel distance is the text's own width, so the
+/// timing cannot be arithmetic from the parameters alone.
+Future<void> _pumpToFarEnd(WidgetTester tester) async {
+  var previous = _offsetOf(tester);
+  for (var i = 0; i < 400; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+    final current = _offsetOf(tester);
+    if (previous < 0 && current == previous) return;
+    previous = current;
+  }
+  fail('the line never reached the end of its travel');
+}
+
+/// The soft edges the line is currently drawn with.
+({double start, double end}) _fadesOf(WidgetTester tester) {
+  final fade = tester.widget<EdgeFade>(
+    find.descendant(
+      of: find.byType(WaxMarqueeText),
+      matching: find.byType(EdgeFade),
+    ),
+  );
+  return (start: fade.start, end: fade.end);
+}
+
 void main() {
   testWidgets('a title that fits does not move, and holds no ticker', (
     tester,
@@ -103,6 +128,140 @@ void main() {
 
     // Stopped so the test does not end with a running ticker.
     await _pump(tester, const SizedBox.shrink());
+  });
+
+  testWidgets('the fade follows the travel, not the edges', (tester) async {
+    // A pair of fixed edges softened the first characters while the
+    // line was parked at its start and the last ones while it was
+    // parked at its end - the name looking clipped at exactly the two
+    // moments it is meant to be read.
+    await _pump(
+      tester,
+      const WaxMarqueeText(
+        _long,
+        velocity: 100,
+        pause: Duration(milliseconds: 200),
+      ),
+    );
+    await tester.pump();
+
+    // At rest at its start: nothing hidden on the reading side, and a
+    // fade only where the rest of the name is.
+    expect(_offsetOf(tester), 0);
+    expect(_fadesOf(tester).start, 0);
+    expect(_fadesOf(tester).end, 16);
+
+    // Mid-travel there is text on both sides, so both fade.
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(_offsetOf(tester), lessThan(0));
+    expect(_fadesOf(tester).start, 16);
+    expect(_fadesOf(tester).end, 16);
+
+    // Parked at the far end, where the last characters are the ones
+    // being read.
+    await _pumpToFarEnd(tester);
+    expect(_fadesOf(tester).start, 16);
+    expect(_fadesOf(tester).end, 0);
+
+    await _pump(tester, const SizedBox.shrink());
+  });
+
+  testWidgets('it rests between runs rather than parking for good', (
+    tester,
+  ) async {
+    // The old shape ran its cycles and then held at offset zero
+    // forever. On a station - one subtitle per song rather than one per
+    // track - that is a line parked for minutes with its end under a
+    // fade, which reads as a name that is cut off and not as one that
+    // has finished scrolling.
+    await _pump(
+      tester,
+      const WaxMarqueeText(
+        _long,
+        velocity: 100,
+        pause: Duration(milliseconds: 200),
+        cycles: 1,
+        rest: Duration(seconds: 2),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // One round trip done, and still: no frames are being scheduled
+    // for it, which is the whole point of resting rather than looping.
+    expect(_offsetOf(tester), 0);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+
+    // The rest elapses and it goes again.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(_offsetOf(tester), lessThan(0));
+
+    // And rests again after that pass rather than looping from here on.
+    await tester.pumpAndSettle();
+    expect(_offsetOf(tester), 0);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+
+    await _pump(tester, const SizedBox.shrink());
+  });
+
+  testWidgets('a slot that changes during a rest is picked up on the next '
+      'run', (tester) async {
+    // The pending distance is read at a cycle boundary, and a resting
+    // line has none: a window resized mid-rest would have run its next
+    // pass on the old tween, overshooting a slot that narrowed.
+    await _pump(
+      tester,
+      const WaxMarqueeText(
+        _long,
+        velocity: 100,
+        pause: Duration(milliseconds: 200),
+        cycles: 1,
+        rest: Duration(seconds: 2),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(_offsetOf(tester), 0);
+
+    // Narrower, so there is further to travel than the armed run knows.
+    await _pump(
+      tester,
+      const WaxMarqueeText(
+        _long,
+        velocity: 100,
+        pause: Duration(milliseconds: 200),
+        cycles: 1,
+        rest: Duration(seconds: 2),
+      ),
+      width: 120,
+    );
+    await tester.pump();
+
+    await tester.pump(const Duration(seconds: 2));
+    await _pumpToFarEnd(tester);
+    // The fade is computed from the same distance the tween runs, so a
+    // stale one leaves the far end soft.
+    expect(_fadesOf(tester).end, 0);
+
+    await _pump(tester, const SizedBox.shrink());
+  });
+
+  testWidgets('a line taken off screen leaves no timer behind', (tester) async {
+    // A resting line holds a pending timer; the test framework fails
+    // the test if one outlives the tree, which is the same leak that
+    // would fire `setState` on a disposed state in the app.
+    await _pump(
+      tester,
+      const WaxMarqueeText(
+        _long,
+        velocity: 100,
+        pause: Duration(milliseconds: 200),
+        cycles: 1,
+        rest: Duration(seconds: 2),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _pump(tester, const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 5));
   });
 
   testWidgets('reduced motion draws the still line instead', (tester) async {

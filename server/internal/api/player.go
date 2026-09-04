@@ -453,19 +453,31 @@ func (s *Server) CreatePlaybackSession(ctx context.Context, req CreatePlaybackSe
 		return nil, errors.New("connect is not wired")
 	}
 	body := req.Body
-	index := 0
+	create := connect.SessionRequest{
+		EndpointID: body.EndpointId,
+		PIDs:       body.ItemPids,
+		Play:       true,
+	}
 	if body.Index != nil {
-		index = *body.Index
+		create.Index = *body.Index
 	}
-	var positionMS int64
 	if body.PositionMs != nil {
-		positionMS = *body.PositionMs
+		create.PositionMS = *body.PositionMs
 	}
-	play := true
 	if body.Play != nil {
-		play = *body.Play
+		create.Play = *body.Play
 	}
-	snap, err := s.connect.CreateSession(ctx, p.User.ID, p.User.Username, body.EndpointId, body.ItemPids, index, positionMS, play)
+	create.Rate = body.Rate
+	if body.Repeat != nil {
+		create.Repeat = *body.Repeat
+	}
+	if body.Shuffle != nil {
+		create.Shuffle = *body.Shuffle
+	}
+	if body.HandoffFrom != nil {
+		create.HandoffFrom = *body.HandoffFrom
+	}
+	snap, err := s.connect.CreateSession(ctx, p.User.ID, p.User.Username, create)
 	if err != nil {
 		if status, body, ok := connectHTTP(err); ok {
 			switch status {

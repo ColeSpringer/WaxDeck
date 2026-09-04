@@ -527,3 +527,26 @@ final musicIndexCountProvider =
         atLeast: page.hasMore,
       );
     });
+
+/// One entity's card, for a screen that arrived at its pid without the
+/// name that goes with it.
+///
+/// A shared link and a reload both drop the label a caller had, and an
+/// artist page derived its title from the first track it loaded
+/// instead - which is a *credit* ("Dom Kennedy feat. Ty Dolla $ign"),
+/// not an artist. The card carries the entity's own title, which is the
+/// only thing that is right for every row underneath it.
+///
+/// Decoration, so a failure is final: the screen falls back to its
+/// localized placeholder rather than sitting through ten retries with
+/// the title blank.
+final entityCardProvider = FutureProvider.autoDispose
+    .family<EntityCard?, String>((ref, pid) async {
+      final resolution = await ref.watch(repositoryProvider).resolveEntities(
+        <String>[pid],
+      );
+      for (final card in resolution.cards) {
+        if (card.pid == pid) return card;
+      }
+      return null;
+    }, retry: (_, _) => null);

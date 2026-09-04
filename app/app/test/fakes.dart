@@ -203,7 +203,16 @@ class FakeRepository implements WaxDeckRepository {
   final List<String> fetchEpisodeCalls = [];
   final List<String> captureTranscriptCalls = [];
   final List<
-    ({String endpointId, List<String> itemPids, int index, int positionMs})
+    ({
+      String endpointId,
+      List<String> itemPids,
+      int index,
+      int positionMs,
+      double? rate,
+      String? repeat,
+      bool? shuffle,
+      String? handoffFrom,
+    })
   >
   createPlaybackSessionCalls = [];
   final List<({String sessionId, String endpointId})>
@@ -1871,6 +1880,10 @@ class FakeRepository implements WaxDeckRepository {
     int index = 0,
     int positionMs = 0,
     bool play = true,
+    double? rate,
+    String? repeat,
+    bool? shuffle,
+    String? handoffFrom,
   }) async {
     final error = createSessionError;
     if (error != null) throw error;
@@ -1879,6 +1892,10 @@ class FakeRepository implements WaxDeckRepository {
       itemPids: itemPids,
       index: index,
       positionMs: positionMs,
+      rate: rate,
+      repeat: repeat,
+      shuffle: shuffle,
+      handoffFrom: handoffFrom,
     ));
     return PlaybackSessionInfo(
       id: 'ps-created',
@@ -1889,7 +1906,9 @@ class FakeRepository implements WaxDeckRepository {
       index: index,
       positionMs: positionMs,
       positionAt: DateTime.now().toUtc(),
-      rate: 1,
+      rate: rate ?? 1,
+      repeat: repeat,
+      shuffle: shuffle ?? false,
       queueVersion: 1,
       entries: [
         for (final pid in itemPids) PlaybackSessionEntry(pid: pid, title: pid),
@@ -1915,6 +1934,10 @@ class FakeRepository implements WaxDeckRepository {
     deletePlaybackSessionCalls.add(sessionId);
   }
 
+  /// Thrown by [transferPlaybackSession] when set. `not-found` is the
+  /// one the picker treats as "start a fresh session instead".
+  WaxDeckApiException? transferSessionError;
+
   @override
   Future<PlaybackSessionInfo> transferPlaybackSession(
     String sessionId,
@@ -1924,6 +1947,8 @@ class FakeRepository implements WaxDeckRepository {
       sessionId: sessionId,
       endpointId: endpointId,
     ));
+    final error = transferSessionError;
+    if (error != null) throw error;
     return PlaybackSessionInfo(
       id: sessionId,
       endpointId: endpointId,

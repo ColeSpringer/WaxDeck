@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Override lives here rather than in the root library.
@@ -11,9 +10,13 @@ import 'package:waxdeck/src/connect/connect_providers.dart';
 import 'package:waxdeck/src/connect/device_picker.dart';
 import 'package:waxdeck/src/connect/remote_screen.dart';
 import 'package:waxdeck/src/connect/remote_session.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'player_host.dart';
@@ -173,6 +176,216 @@ void main() {
     expect(repo.createPlaybackSessionCalls.single.itemPids, ['tr-current']);
 
     container.read(remoteSessionProvider.notifier).release();
+  });
+
+  testWidgets('casting from a playing device hands the whole queue over, '
+      'and silences it', (tester) async {
+    // A device plays one thing. Casting from one that is playing is a
+    // handoff: the queue, index, position, and modes move to the target
+    // and this device goes quiet - it used to create a session for the
+    // one item the row named, leave everything after it behind, and go
+    // on playing the album into the room it had just left.
+    final repo = FakeRepository(items: [testItem('tr-one'), testItem('tr-two')])
+      ..playerEndpoints = [_endpoint];
+    final sent = <Map<String, Object?>>[];
+    final container = _container(
+      repo: repo,
+      extra: [
+        connectSenderProvider.overrideWithValue(
+          ConnectSender()
+            ..impl = (frame) {
+              sent.add(Map.of(frame));
+              return true;
+            },
+        ),
+      ],
+    );
+    final connect = container.read(connectControllerProvider);
+    final started = connect.start();
+    final register = sent.firstWhere((f) => f['type'] == 'register-endpoint');
+    container.read(connectBusProvider).handleFrame({
+      'type': 'ack',
+      'id': register['id'],
+      'endpointId': 'pe-me',
+    });
+    await started;
+
+    final harness = PlayerHarness(container);
+    harness.play([testItem('tr-one'), testItem('tr-two')], startIndex: 1);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const _PickerHost(currentPid: 'tr-two')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    container.read(queueControllerProvider.notifier).setRepeat(QueueRepeat.all);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-speaker')),
+    );
+    await tester.pumpAndSettle();
+
+    final call = repo.createPlaybackSessionCalls.single;
+    expect(call.itemPids, ['tr-one', 'tr-two']);
+    expect(call.index, 1);
+    expect(call.repeat, 'all');
+    expect(call.shuffle, isFalse);
+    expect(call.rate, 1.0);
+    // Named itself, so the server can end a mirror session this client
+    // never learned the id of.
+    expect(call.handoffFrom, 'pe-me');
+
+    // And it stopped: the bar's precedence puts local playback over the
+    // remote face, so a device still playing would go on naming its own
+    // queue while the sound came out of another room.
+    expect(container.read(queueControllerProvider).isEmpty, isTrue);
+    expect(connect.mirrorSessionId, isNull);
+    expect(container.read(remoteSessionProvider)?.id, 'ps-created');
+
+    container.read(remoteSessionProvider.notifier).release();
+  });
+
+  testWidgets('a transfer of a session the server has lost falls through to '
+      'a fresh one', (tester) async {
+    // The id is the client's memory of an answer, and the server can
+    // have moved on: a restart, a session ended from another controller.
+    // That is not a refusal to report, it is the create path.
+    final repo = FakeRepository(items: [testItem('tr-one')])
+      ..playerEndpoints = [_endpoint]
+      ..transferSessionError = const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such session',
+        statusCode: 404,
+      );
+    final container = _container(repo: repo);
+    container.read(connectControllerProvider).mirrorSessionId = 'ps-gone';
+
+    final harness = PlayerHarness(container);
+    harness.play([testItem('tr-one')]);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const _PickerHost(currentPid: 'tr-one')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-speaker')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.transferPlaybackSessionCalls, hasLength(1));
+    expect(repo.createPlaybackSessionCalls, hasLength(1));
+    expect(find.text('Playing on Kitchen speaker'), findsOneWidget);
+
+    container.read(remoteSessionProvider.notifier).release();
+  });
+
+  testWidgets('the picker during live radio says where a station stays', (
+    tester,
+  ) async {
+    // A station is not a session and does not travel. The rows say so
+    // rather than offering a handoff that would hand over silence, and
+    // the sessions running elsewhere stay controllable from here.
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_endpoint]
+      ..playbackSessions = [_session()];
+    final station = RadioStation(
+      pid: 'rs-1',
+      name: 'Nightjar FM',
+      streamUrl: 'https://stream.example/rs-1',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    repo.radioStationsByPid['rs-1'] = station;
+    final container = _container(repo: repo);
+    await container.read(radioPlaybackProvider.notifier).play(station);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Playing radio here'), findsOneWidget);
+    expect(
+      find.text('Stations play on the device that tuned them'),
+      findsOneWidget,
+    );
+    final row = tester.widget<WaxOptionRow>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-speaker')),
+        matching: find.byType(WaxOptionRow),
+      ),
+    );
+    expect(row.onTap, isNull);
+    expect(row.enabled, isFalse);
+
+    // A session somewhere else is still somewhere else, and still
+    // controllable from here.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.session('ps-remote')),
+      findsOneWidget,
+    );
+
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a station here says nothing about a session over there', (
+    tester,
+  ) async {
+    // The sheet opened over the kitchen's session is about the kitchen.
+    // What is playing on this device is beside the point, and refusing
+    // to move that session between two other endpoints - with a
+    // sentence about stations under every row - takes a control away
+    // for no reason and explains it with a non-sequitur.
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_endpoint];
+    final station = RadioStation(
+      pid: 'rs-1',
+      name: 'Nightjar FM',
+      streamUrl: 'https://stream.example/rs-1',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    repo.radioStationsByPid['rs-1'] = station;
+    final container = _container(repo: repo);
+    await container.read(radioPlaybackProvider.notifier).play(station);
+    container.read(remoteSessionProvider.notifier).adopt(_session());
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const _PickerHost(from: CastSource.elsewhere)),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Stations play on the device that tuned them'),
+      findsNothing,
+    );
+    final row = tester.widget<WaxOptionRow>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-speaker')),
+        matching: find.byType(WaxOptionRow),
+      ),
+    );
+    expect(row.enabled, isTrue);
+
+    container.read(remoteSessionProvider.notifier).release();
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
   });
 
   // The server answers a transfer to the current endpoint with a 200

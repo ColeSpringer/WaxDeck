@@ -42,6 +42,7 @@ export 'src/components/settings.dart';
 export 'src/components/splitter.dart';
 export 'src/components/states.dart';
 export 'src/components/station_dial.dart';
+export 'src/components/tooltip.dart';
 export 'src/components/view_data.dart';
 export 'src/components/visualizer.dart';
 export 'src/components/wordmark.dart';

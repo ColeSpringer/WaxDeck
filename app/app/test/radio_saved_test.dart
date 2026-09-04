@@ -184,6 +184,56 @@ void main() {
     expect(find.text('Add from URL'), findsOneWidget);
   });
 
+  testWidgets('finding a song and identifying one do not share a glyph', (
+    tester,
+  ) async {
+    // Two actions on the same row drawn with the same magnifying glass:
+    // the always-visible one searches the library for the title, and
+    // the menu's one works out what the recording is. A glance could
+    // not tell them apart.
+    final repo = FakeRepository()
+      ..seedSavedSong(
+        _song(
+          pid: 'rw-1',
+          line: 'Salt Harbour - The Bree Trio',
+          artist: 'Salt Harbour',
+          title: 'The Bree Trio',
+        ),
+      );
+    await _pump(tester, repo);
+
+    expect(
+      tester
+          .widget<WaxIconButton>(
+            find.ancestor(
+              of: find.bySemanticsIdentifier(
+                SemanticsIds.radioSavedFind('rw-1'),
+              ),
+              matching: find.byType(WaxIconButton),
+            ),
+          )
+          .glyph,
+      WaxIcons.search,
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedMore('rw-1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<WaxOptionRow>(
+            find.ancestor(
+              of: find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentify),
+              matching: find.byType(WaxOptionRow),
+            ),
+          )
+          .glyph,
+      WaxIcons.fingerprint,
+    );
+  });
+
   testWidgets('the identify handoff lists pending singles and hands the '
       'parse to the one picked', (tester) async {
     final repo = FakeRepository()

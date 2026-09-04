@@ -423,6 +423,10 @@ class RadioVolumeRow extends ConsumerWidget {
       glyph: WaxIcons.volume,
       mutedGlyph: WaxIcons.volumeMuted,
       trackWidth: 220,
+      // Centred under a centred transport: without the counterweight
+      // the row's midpoint sits half a glyph box right of the track's,
+      // which is the level looking shifted on the full-screen face.
+      balanced: true,
       semanticsId: SemanticsIds.radioVolume,
       muteSemanticsId: SemanticsIds.radioMute,
       onChanged: (value) => unawaited(volume.set(value)),

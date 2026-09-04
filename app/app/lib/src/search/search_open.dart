@@ -20,10 +20,18 @@ import '../shell/routes.dart';
 /// than being played as a track.
 void openSearchHit(BuildContext context, WidgetRef ref, SearchHit hit) {
   switch (hit.kind) {
+    // The hit's title is the entity's own name, which is the one thing
+    // the destination cannot work out from the items it loads.
     case 'artist':
-      context.push(WaxRoute.musicBucket(MusicDimension.artists, hit.pid));
+      context.push(
+        WaxRoute.musicBucket(MusicDimension.artists, hit.pid),
+        extra: hit.title,
+      );
     case 'album':
-      context.push(WaxRoute.musicBucket(MusicDimension.albums, hit.pid));
+      context.push(
+        WaxRoute.musicBucket(MusicDimension.albums, hit.pid),
+        extra: hit.title,
+      );
     case 'book':
       context.push(WaxRoute.book(hit.pid));
     case 'episode':

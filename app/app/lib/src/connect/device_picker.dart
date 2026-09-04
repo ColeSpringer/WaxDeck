@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../radio/radio_controller.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'cast_preflight.dart';
@@ -113,6 +114,17 @@ class _DevicePickerSheet extends ConsumerWidget {
     final endpoints = ref.watch(playerEndpointsProvider);
     final sessions = ref.watch(playbackSessionsProvider);
     final remote = ref.watch(remoteSessionProvider);
+    // A station is not a session and does not travel: it plays on the
+    // device that tuned it. So while radio holds the engine here there
+    // is nothing to send, and the rows say so rather than offering a
+    // handoff that would hand over silence.
+    //
+    // Only for the sheet opened over *this* device. Opened over a
+    // session running in the kitchen, what plays here is beside the
+    // point: refusing to move that session between two other endpoints,
+    // with a sentence about stations under every row, would be a
+    // non-sequitur and a control taken away for no reason.
+    final onRadio = _here && ref.watch(radioPlaybackProvider).station != null;
     final l10n = context.l10n;
     // This device's own endpoint id arrives with registration, which may
     // land after the sheet opens: listened to rather than read once, or
@@ -125,7 +137,15 @@ class _DevicePickerSheet extends ConsumerWidget {
           container: true,
           explicitChildNodes: true,
           label: l10n.devicesPlayOn,
-          child: _rows(context, ref, ownEndpoint, endpoints, sessions, remote),
+          child: _rows(
+            context,
+            ref,
+            ownEndpoint,
+            endpoints,
+            sessions,
+            remote,
+            onRadio: onRadio,
+          ),
         ),
       ),
     );
@@ -137,8 +157,9 @@ class _DevicePickerSheet extends ConsumerWidget {
     String? ownEndpoint,
     AsyncValue<List<PlayerEndpoint>> endpoints,
     AsyncValue<List<PlaybackSessionInfo>> sessions,
-    RemoteSession? remote,
-  ) {
+    RemoteSession? remote, {
+    required bool onRadio,
+  }) {
     final l10n = context.l10n;
     // Whatever was listed last stays listed while a refetch runs: both
     // lists are invalidated whenever any session anywhere starts, ends,
@@ -199,6 +220,7 @@ class _DevicePickerSheet extends ConsumerWidget {
         _ThisDevice(
           remote: remote,
           here: _here,
+          onRadio: onRadio,
           onSelect: () => unawaited(_leaveRemote(context, ref, remote!)),
         ),
         ...switch (devices) {
@@ -217,7 +239,14 @@ class _DevicePickerSheet extends ConsumerWidget {
               enabled: false,
             ),
           ],
-          final value => _deviceRows(context, ref, value, ownEndpoint, remote),
+          final value => _deviceRows(
+            context,
+            ref,
+            value,
+            ownEndpoint,
+            remote,
+            onRadio: onRadio,
+          ),
         },
         if (elsewhere.isNotEmpty) ...<Widget>[
           Padding(
@@ -253,8 +282,9 @@ class _DevicePickerSheet extends ConsumerWidget {
     WidgetRef ref,
     List<PlayerEndpoint> endpoints,
     String? ownEndpoint,
-    RemoteSession? remote,
-  ) {
+    RemoteSession? remote, {
+    required bool onRadio,
+  }) {
     final l10n = context.l10n;
     // Where the thing being sent already is. Null when it is here, which
     // [_ThisDevice] is the row for.
@@ -275,9 +305,14 @@ class _DevicePickerSheet extends ConsumerWidget {
         rows.add(
           WaxOptionRow(
             title: endpoint.name,
-            subtitle: _endpointLine(endpoint),
+            // The reason, where there is one that overrides the rest: a
+            // row saying "volume control" under a device nothing can be
+            // sent to is an offer, and this one is not on the table.
+            subtitle: onRadio
+                ? l10n.devicesRadioStaysHere
+                : _endpointLine(endpoint),
             glyph: group.glyph,
-            enabled: endpoint.online,
+            enabled: endpoint.online && !onRadio,
             // Active says sound is coming out here; selected says it is
             // where the thing being sent already is. Different rows.
             active: remote?.session.endpointId == endpoint.id,
@@ -285,7 +320,7 @@ class _DevicePickerSheet extends ConsumerWidget {
             semanticsId: SemanticsIds.endpoint(endpoint.id),
             // The server answers a transfer to the current endpoint with a
             // 200 no-op, so a live row there is one that does nothing.
-            onTap: endpoint.id == fromEndpoint
+            onTap: endpoint.id == fromEndpoint || onRadio
                 ? null
                 : () => unawaited(_playOn(context, ref, endpoint)),
           ),
@@ -316,10 +351,22 @@ class _DevicePickerSheet extends ConsumerWidget {
 
   /// Sends playback to [endpoint].
   ///
-  /// Three cases, and they are genuinely different: a session already in
-  /// hand transfers (queue and position intact), local playback with a
-  /// mirror session transfers too, and anything else starts fresh from the
-  /// item the caller named.
+  /// Casting from a device that is playing is a handoff, and a device
+  /// plays one thing: the whole queue moves - entries, index, position,
+  /// rate, repeat, shuffle - the target starts where this one stopped,
+  /// and this one goes quiet.
+  ///
+  /// Two ways to say it, and which one is available depends on whether
+  /// this client ever learned the id of the session it reports under. A
+  /// mirror id in hand is a transfer, which is the server's own move and
+  /// keeps the session. Without one - the command bus never came up, the
+  /// first report went unanswered, the server restarted - the create
+  /// carries the local snapshot and names this endpoint as the source,
+  /// so the server can end a session nobody here can name.
+  ///
+  /// Either way the silencing is this client's own: with the bus down no
+  /// routed stop can arrive, so waiting for one would leave two devices
+  /// playing the same queue.
   Future<void> _playOn(
     BuildContext context,
     WidgetRef ref,
@@ -328,22 +375,44 @@ class _DevicePickerSheet extends ConsumerWidget {
     final repository = ref.read(repositoryProvider);
     final messenger = handles.messenger;
     final remoteController = ref.read(remoteSessionProvider.notifier);
+    final connect = ref.read(connectControllerProvider);
     final l10n = context.l10n;
     final pid = currentPid;
     // The face decides, never which sessions exist: both can be live.
     final sessionId = _here
-        ? ref.read(connectControllerProvider).mirrorSessionId
+        ? connect.mirrorSessionId
         : ref.read(remoteSessionProvider)?.id;
+    // Read before the sheet closes and before anything is stopped: it is
+    // what the create sends, and by the time the call answers this
+    // device has already let the queue go.
+    final local = _here ? connect.queue.snapshot() : null;
+    // Only where there is playback to carry it. The engine's speed
+    // outlives what it was set for, so sending it with a fresh start
+    // would hand a listener a rate they set on something else.
+    final rate = local == null ? null : ref.read(audioEngineProvider).speed;
     Navigator.of(context).pop();
     try {
-      final PlaybackSessionInfo started;
+      PlaybackSessionInfo? started;
       if (sessionId != null) {
-        started = await repository.transferPlaybackSession(
-          sessionId,
-          endpoint.id,
-        );
-      } else {
-        if (pid == null) {
+        try {
+          started = await repository.transferPlaybackSession(
+            sessionId,
+            endpoint.id,
+          );
+        } on WaxDeckApiException catch (e) {
+          // A session the server no longer has is not a failure to
+          // report: it is the case the create path exists for. Only
+          // `not-found` means that - a media token gone stale answers
+          // `stream-stale`, and every other code is a real refusal.
+          if (e.code != 'not-found') rethrow;
+        }
+      }
+      if (started == null) {
+        // The whole local queue, not the one item the row named: what is
+        // being handed over is what is playing, and a queue that arrived
+        // as a bare pid would drop everything after it.
+        final pids = local?.pids ?? (pid == null ? null : <String>[pid]);
+        if (pids == null || pids.isEmpty) {
           // Said plainly rather than minted as an API failure: nothing
           // was refused, because nothing was ever sent.
           messenger
@@ -353,10 +422,21 @@ class _DevicePickerSheet extends ConsumerWidget {
         }
         started = await repository.createPlaybackSession(
           endpointId: endpoint.id,
-          itemPids: <String>[pid],
-          positionMs: positionMs,
+          itemPids: pids,
+          index: local?.index ?? 0,
+          positionMs: local?.positionMs ?? positionMs,
+          rate: rate,
+          repeat: local?.repeat.wireName,
+          shuffle: local?.shuffled,
+          handoffFrom: _here ? connect.endpointId.value : null,
         );
       }
+      // Silenced here, by this client, because the routed stop that
+      // would otherwise do it cannot reach a client whose bus is down -
+      // and because the bar's precedence puts local playback above the
+      // remote face, so a device still playing would go on naming its
+      // own queue while the sound came out of another room.
+      if (_here) await connect.handedOff();
       // The bar follows the sound: a session on another endpoint is what
       // it now shows, and the transport on it is routed there.
       remoteController.adopt(started);
@@ -488,6 +568,7 @@ class _ThisDevice extends StatelessWidget {
   const _ThisDevice({
     required this.remote,
     required this.here,
+    required this.onRadio,
     required this.onSelect,
   });
 
@@ -496,6 +577,9 @@ class _ThisDevice extends StatelessWidget {
   /// Whether the sheet is over playback on this device, which is what
   /// makes this row the one it is already on.
   final bool here;
+
+  /// Whether live radio holds the engine here.
+  final bool onRadio;
 
   final VoidCallback onSelect;
 
@@ -507,7 +591,9 @@ class _ThisDevice extends StatelessWidget {
     final elsewhere = remote != null;
     return WaxOptionRow(
       title: l10n.devicesThisDevice,
-      subtitle: elsewhere
+      subtitle: onRadio
+          ? l10n.devicesPlayingRadioHere
+          : elsewhere
           ? l10n.devicesTakeOverOrLeave
           : l10n.devicesPlayingHere,
       glyph: WaxIcons.home,

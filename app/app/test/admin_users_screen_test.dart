@@ -155,7 +155,7 @@ void main() {
 
     await tester.tap(find.text('Invites'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('invite-create')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.inviteCreate));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('invite-note')), 'For Samwise');
     await tester.tap(find.byKey(const Key('invite-create-confirm')));

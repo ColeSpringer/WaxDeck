@@ -34,6 +34,9 @@ abstract final class SemanticsIds {
   static String auditRow(Object id) => 'audit-row-$id';
   static const String backupCreate = 'backup-create';
   static const String backupImport = 'backup-import';
+  static String backupMenu(Object id) => 'backup-menu-$id';
+  static String backupMenuAction(Object action, Object id) =>
+      'backup-$action-$id';
   static String backupRow(Object id) => 'backup-row-$id';
   static const String confirmAccept = 'confirm-accept';
   static const String confirmCancel = 'confirm-cancel';
@@ -324,6 +327,7 @@ abstract final class SemanticsIds {
       'notification-row-$kind-none';
   static const String notificationsBell = 'notifications-bell';
   static const String notificationsClear = 'notifications-clear';
+  static const String notificationsEmpty = 'notifications-empty';
   static const String notificationsScreen = 'notifications-screen';
   static String pinSheetTarget(Object pid) => 'pin-sheet-target-$pid';
   static String shelf(Object shelf) => 'shelf-$shelf';
@@ -731,6 +735,7 @@ abstract final class SemanticsIds {
   static const String adminReviewEntry = 'admin-review-entry';
   static String candidate(Object mbid) => 'candidate-$mbid';
   static String diffMissing(Object index) => 'diff-missing-$index';
+  static const String diffMissingBand = 'diff-missing-band';
   static String diffRow(Object index) => 'diff-row-$index';
   static String editMetadata(Object pid) => 'edit-metadata-$pid';
   static const String matchingMenu = 'matching-menu';

@@ -152,6 +152,9 @@ Future<void> showItemMenuSheet(
                   subtitle: artist,
                   glyph: WaxIcons.artists,
                   semanticsId: SemanticsIds.itemMenuGoArtist,
+                  // No label: what this sheet holds is the item's
+                  // *credit*, which is not the artist entity's name.
+                  // The screen resolves the card instead.
                   onTap: () => open(
                     WaxRoute.musicBucket(MusicDimension.artists, artistPid),
                   ),

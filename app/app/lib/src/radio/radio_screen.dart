@@ -398,60 +398,42 @@ class _StationTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    return Stack(
-      children: <Widget>[
-        MediaCard(
-          data: MediaTileData(
-            title: station.name,
-            subtitle: stationLine(
-              l10n,
-              playing: playing,
-              starting: starting,
-              nowPlaying: nowPlaying,
-            ),
-            artwork: artwork,
-            domain: WaxDomain.radio,
-            shape: ArtworkShape.circle,
-            semanticsId: SemanticsIds.radio(station.pid),
-          ),
-          width: width,
+    // Both controls through the card's own corner. Hand-rolled, they
+    // were a 16-pixel star and a menu button stacked at (0, 0) over a
+    // circular card that draws its own overflow at (8, 8): two of the
+    // same glyph eight pixels apart on a pointer, and neither aligned
+    // to anything.
+    return MediaCard(
+      data: MediaTileData(
+        title: station.name,
+        subtitle: stationLine(
+          l10n,
           playing: playing,
-          onTap: () => unawaited(_tune(context, ref, station, playback)),
-          // The same menu the overflow button raises. Right-click on a
-          // pointer, long-press on touch: the tile is the surface
-          // somebody will try either on, and until now the only way in
-          // was a 16-pixel button in its corner.
-          onMore: () => unawaited(_openMenu(context, ref, l10n)),
+          starting: starting,
+          nowPlaying: nowPlaying,
         ),
-        // Beside the card rather than inside it: both are controls, and a
-        // card that swallowed them would announce one node for three
-        // things (the trap MediaListRow shipped once).
-        Positioned(
-          top: 0,
-          right: 0,
-          child: Row(
-            children: <Widget>[
-              WaxIconButton(
-                glyph: WaxIcons.star,
-                label: pinned
-                    ? l10n.radioUnpin(station.name)
-                    : l10n.radioPin(station.name),
-                size: 16,
-                active: pinned,
-                semanticsId: SemanticsIds.radioFavorite(station.pid),
-                onPressed: () => unawaited(_pin(context, ref)),
-              ),
-              WaxMenuButton<String>(
-                glyph: WaxIcons.more,
-                label: l10n.radioStationMore(station.name),
-                semanticsId: SemanticsIds.radioMenu(station.pid),
-                items: _menuItems(l10n),
-                onSelected: (choice) => unawaited(_menu(context, ref, choice)),
-              ),
-            ],
-          ),
-        ),
-      ],
+        artwork: artwork,
+        domain: WaxDomain.radio,
+        shape: ArtworkShape.circle,
+        semanticsId: SemanticsIds.radio(station.pid),
+      ),
+      width: width,
+      playing: playing,
+      onTap: () => unawaited(_tune(context, ref, station, playback)),
+      action: MediaCardAction(
+        glyph: WaxIcons.star,
+        label: pinned
+            ? l10n.radioUnpin(station.name)
+            : l10n.radioPin(station.name),
+        active: pinned,
+        semanticsId: SemanticsIds.radioFavorite(station.pid),
+        onPressed: () => unawaited(_pin(context, ref)),
+      ),
+      // The same menu the overflow button raises. Right-click on a
+      // pointer, long-press on touch: the tile is the surface somebody
+      // will try either on, and until now the only way in was a
+      // 16-pixel button in its corner.
+      onMore: () => unawaited(_openMenu(context, ref, l10n)),
     );
   }
 

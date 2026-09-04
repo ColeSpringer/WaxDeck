@@ -40,11 +40,16 @@ const _album = QueueSource(
   FakeRepository repo,
   FakeEngine engine,
 })
-_build({Prefs? prefs}) {
+_build({
+  Prefs? prefs,
+  List<ItemSummary>? items,
+  void Function(FakeRepository)? seed,
+}) {
   final sent = <Map<String, Object?>>[];
   final repo = FakeRepository(
-    items: [testItem(pidA), testItem(pidB), testItem(pidC)],
+    items: items ?? [testItem(pidA), testItem(pidB), testItem(pidC)],
   );
+  seed?.call(repo);
   final engine = FakeEngine(
     mediaDuration: const Duration(milliseconds: _trackMs),
   );
@@ -102,6 +107,33 @@ List<Map<String, Object?>> _queued(List<Map<String, Object?>> sent) => [
   for (final frame in _ofType(sent, 'session-report'))
     if (frame['itemPids'] != null) frame,
 ];
+
+/// Answers this client's session report the way the server does, so
+/// the controller knows which session its local playback reports
+/// under.
+///
+/// A transport verb is honoured only for that session, so a test that
+/// starts playback locally and then routes a command at it has to say
+/// what the server would have said. Without it the app itself would
+/// refuse: an unanswered report means a client that does not know what
+/// its own session is.
+void _mirroring(
+  ({
+    ProviderContainer container,
+    ConnectEndpointController controller,
+    ConnectBus bus,
+    List<Map<String, Object?>> sent,
+    FakeRepository repo,
+    FakeEngine engine,
+  })
+  h, {
+  String id = 'ps-1',
+}) {
+  h.bus.handleFrame({
+    'type': 'session',
+    'session': <String, Object?>{'id': id, 'mine': true, 'authority': 'mirror'},
+  });
+}
 
 /// Sends one routed endpoint command and lets it run.
 Future<void> _cmd(
@@ -323,6 +355,7 @@ void main() {
     final h = _build();
     h.container.playback.play([testItem(pidA), testItem(pidB)], source: _album);
     await pumpEventQueue();
+    _mirroring(h);
 
     await _cmd(h, 'next', id: 'e1');
     expect(h.engine.loadedUrl, contains(pidB));
@@ -370,6 +403,7 @@ void main() {
     final h = _build();
     h.container.playback.play([testItem(pidA), testItem(pidB)], source: _album);
     await pumpEventQueue();
+    _mirroring(h);
 
     await _cmd(h, 'set-repeat', id: 'e1', args: {'repeat': 'one'});
     expect(h.container.queue.repeat, QueueRepeat.one);
@@ -460,33 +494,18 @@ void main() {
     expect(_ofType(h.sent, 'session-report').length, before);
   });
 
-  test('a routed stop during live radio lets the station go', () async {
-    // The verbs used to go straight at the engine, which silences the
-    // stream but leaves the station tuned - so the face and the deck
-    // bar went on naming a station nothing was playing.
+  test('a station taking the engine ends the item session here', () async {
+    // A station is not a session and does not travel: it plays on the
+    // device that tuned it. The item session it displaces is ended
+    // rather than left standing, or another device would list a paused
+    // queue on this one as something to pull, and the picker here would
+    // offer to transfer a queue the engine no longer plays.
     final h = _build();
-    final station = RadioStation(
-      pid: 'rs-1',
-      name: 'Nightjar FM',
-      streamUrl: 'https://stream.example/rs-1',
-      createdAt: DateTime.utc(2026, 7, 1),
-    );
-    h.repo.radioStationsByPid['rs-1'] = station;
-    await h.container.read(radioPlaybackProvider.notifier).play(station);
+    h.container.playback.play([testItem(pidA), testItem(pidB)], source: _album);
     await pumpEventQueue();
-    expect(h.container.read(radioPlaybackProvider).station, isNotNull);
+    _mirroring(h);
+    expect(h.controller.mirrorSessionId, 'ps-1');
 
-    await _cmd(h, 'stop', id: 'e2');
-    await pumpEventQueue();
-
-    expect(h.container.read(radioPlaybackProvider).station, isNull);
-    expect(h.engine.playing, isFalse);
-  });
-
-  test('a routed pause during live radio lets the station go too', () async {
-    // A live stream has no pause worth the name: pausing it leaves the
-    // buffer to go stale, and resuming plays whatever was in it.
-    final h = _build();
     final station = RadioStation(
       pid: 'rs-1',
       name: 'Nightjar FM',
@@ -497,20 +516,36 @@ void main() {
     await h.container.read(radioPlaybackProvider.notifier).play(station);
     await pumpEventQueue();
 
-    await _cmd(h, 'pause', id: 'e2');
-    await pumpEventQueue();
+    expect(h.controller.mirrorSessionId, isNull);
+    expect(h.repo.deletePlaybackSessionCalls, ['ps-1']);
 
-    expect(h.container.read(radioPlaybackProvider).station, isNull);
+    // And they stay stopped, because there is nothing left here to
+    // report: the tune releases the item session
+    // (`NowPlayingController._handOverToRadio`), so the gateway has no
+    // local playback to describe. Pinned here because that is what
+    // holds the whole radio path together - every reporting path, the
+    // heartbeat included, asks this one question, and a report carrying
+    // a queue creates a session, so an answer would mint the album all
+    // over again moments after this deleted it.
+    expect(h.container.read(queueGatewayProvider).snapshot(), isNull);
+    final before = _ofType(h.sent, 'session-report').length;
+    await pumpEventQueue();
+    expect(_ofType(h.sent, 'session-report').length, before);
   });
 
   test(
-    'the play after that pause is refused rather than answered ok',
+    'the stop that ending it routes back leaves the station alone',
     () async {
-      // The other half of letting the station go: there is now no station,
-      // no session, and no queue, so the play has nothing to start. It
-      // used to fall through every rung and answer `ok` - a head unit
-      // whose pause then play left it in silence and told it that worked.
+      // The server ends a session by routing `stop` to the client whose
+      // session it is - back to this very client, moments after it tuned
+      // a station. Executed, that stop would release the station the
+      // listener just asked for. The session guard is what makes it fall
+      // on the floor: this device is no longer playing that session.
       final h = _build();
+      h.container.playback.play([testItem(pidA)], source: _album);
+      await pumpEventQueue();
+      _mirroring(h);
+
       final station = RadioStation(
         pid: 'rs-1',
         name: 'Nightjar FM',
@@ -520,7 +555,158 @@ void main() {
       h.repo.radioStationsByPid['rs-1'] = station;
       await h.container.read(radioPlaybackProvider.notifier).play(station);
       await pumpEventQueue();
-      await _cmd(h, 'pause', id: 'e2');
+
+      await _cmd(h, 'stop', id: 'e2');
+      await pumpEventQueue();
+
+      final result = _ofType(h.sent, 'cmd-result').last;
+      expect(result['id'], 'e2');
+      expect(result['ok'], isFalse);
+      expect(result['code'], 'no-session');
+      expect(h.container.read(radioPlaybackProvider).station, isNotNull);
+      expect(h.engine.playing, isTrue);
+    },
+  );
+
+  test('a routed rate is the listener\'s own tap, and persists', () async {
+    // A remote controller setting the speed means what the speed sheet
+    // on this device means: a show is read at that rate from now on.
+    // Applied without persisting it, the rate was thrown away at every
+    // gapless boundary, because the crossing re-applies the show's
+    // configured speed.
+    const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
+    const episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
+    final h = _build(
+      items: [testEpisode(episodePid)],
+      seed: (repo) => repo
+        ..addSubscription(testShow(showPid))
+        ..episodesByShow[showPid] = [testEpisode(episodePid)],
+    );
+    await _cmd(
+      h,
+      'load',
+      args: {
+        'itemPids': [episodePid],
+        'index': 0,
+      },
+    );
+
+    await _cmd(h, 'set-rate', id: 'e2', args: {'rate': 1.5});
+    await pumpEventQueue();
+
+    expect(_ofType(h.sent, 'cmd-result').last['ok'], isTrue);
+    expect(h.engine.speed, closeTo(1.5, 0.001));
+    expect(h.repo.putSubscriptionSettingsCalls, hasLength(1));
+    expect(h.repo.putSubscriptionSettingsCalls.single.pid, showPid);
+    expect(
+      h.repo.putSubscriptionSettingsCalls.single.settings.speed,
+      closeTo(1.5, 0.001),
+    );
+  });
+
+  test('a routed rate on music writes nothing back', () async {
+    // Music has no stored speed, so a rate set on a track lapses at the
+    // next track exactly as a locally set one does.
+    final h = _build();
+    await _cmd(
+      h,
+      'load',
+      args: {
+        'itemPids': [pidA],
+        'index': 0,
+      },
+    );
+
+    await _cmd(h, 'set-rate', id: 'e2', args: {'rate': 1.5});
+    await pumpEventQueue();
+
+    expect(h.engine.speed, closeTo(1.5, 0.001));
+    expect(h.repo.putSubscriptionSettingsCalls, isEmpty);
+    expect(h.repo.putBookSettingsCalls, isEmpty);
+  });
+
+  test('an unknown verb is answered as unknown, whatever session it '
+      'names', () async {
+    // The session guard covers the verbs the contract lists. A verb
+    // this build does not know is a version skew, and saying "not that
+    // session" would send whoever sent it looking in the wrong place.
+    final h = _build();
+    h.bus.handleFrame({
+      'type': 'endpoint-cmd',
+      'id': 'e9',
+      'sessionId': 'ps-whatever',
+      'verb': 'set-lighting',
+    });
+    await pumpEventQueue();
+
+    final result = _ofType(h.sent, 'cmd-result').last;
+    expect(result['ok'], isFalse);
+    expect(result['message'], contains('unknown verb'));
+  });
+
+  test('a verb for some other session is refused, not obeyed', () async {
+    // A controller acting on a stale list, or a device that moved on:
+    // either way the queue playing here is not the one being addressed,
+    // and a client that obeyed would pause music somebody is listening
+    // to on the strength of a wrong id.
+    final h = _build();
+    h.container.playback.play([testItem(pidA)], source: _album);
+    await pumpEventQueue();
+    _mirroring(h);
+
+    h.bus.handleFrame({
+      'type': 'endpoint-cmd',
+      'id': 'e9',
+      'sessionId': 'ps-somebody-else',
+      'verb': 'pause',
+    });
+    await pumpEventQueue();
+
+    final result = _ofType(h.sent, 'cmd-result').last;
+    expect(result['id'], 'e9');
+    expect(result['ok'], isFalse);
+    expect(result['code'], 'no-session');
+    expect(h.engine.playing, isTrue);
+  });
+
+  test('a matching stop ends the mirror as well as the playback', () async {
+    // A controller elsewhere moved this device's session away. The
+    // session is no longer this client's to report under, so the id
+    // goes with the playback - or a later handoff from here would aim a
+    // transfer at a session this device does not drive.
+    final h = _build();
+    await _cmd(
+      h,
+      'load',
+      args: {
+        'itemPids': [pidA],
+        'index': 0,
+      },
+    );
+    expect(h.controller.mirrorSessionId, 'ps-1');
+
+    await _cmd(h, 'stop', id: 'e2');
+    expect(h.controller.mirrorSessionId, isNull);
+    expect(h.container.queue.isEmpty, isTrue);
+  });
+
+  test(
+    'a play with nothing left behind it is refused, not answered ok',
+    () async {
+      // The queue drained under a session this device still reports: the
+      // play has nothing to start. It used to fall through every rung and
+      // answer `ok` - a head unit told that a button which did nothing
+      // worked.
+      final h = _build();
+      await _cmd(
+        h,
+        'load',
+        args: {
+          'itemPids': [pidA],
+          'index': 0,
+        },
+      );
+      h.container.read(queueControllerProvider.notifier).clear();
       await pumpEventQueue();
 
       await _cmd(h, 'play', id: 'e3');
@@ -564,6 +750,10 @@ void main() {
   test('a command that starts nothing is not blamed for an old '
       'failure', () async {
     final h = _build();
+    // Already mirroring: a load that fails never installs the session
+    // it names, and the verbs this is about are the ones a controller
+    // sends to a client that was playing something before.
+    _mirroring(h);
     await _cmd(
       h,
       'load',
@@ -587,6 +777,7 @@ void main() {
 
   test('a second failure that repeats the first is still answered', () async {
     final h = _build();
+    _mirroring(h);
     // One exception object for both attempts, which is the ordinary
     // case rather than a contrived one: the type is const-constructible
     // and a client that holds one hands back the same instance. Telling

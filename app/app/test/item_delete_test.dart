@@ -45,7 +45,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('item-delete')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.itemDelete));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete files...'));
     await tester.pumpAndSettle();
@@ -77,7 +77,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('item-delete')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.itemDelete));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete files...'));
     await tester.pumpAndSettle();
@@ -99,7 +99,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('item-delete')), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.itemDelete), findsNothing);
   });
 
   testWidgets('a delete-right holder sees the verb but never Permanent', (
@@ -129,7 +129,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('item-delete')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.itemDelete));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete files...'));
     await tester.pumpAndSettle();

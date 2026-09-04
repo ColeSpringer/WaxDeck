@@ -411,24 +411,114 @@ func (s *Service) Session(userID, sessionID string) (Session, error) {
 	return s.snapshotLocked(sess), nil
 }
 
+// The rate range the contract states, shared by the create path and
+// the routed set-rate so the two cannot drift.
+const (
+	minRate = 0.25
+	maxRate = 5
+)
+
+// SessionRequest is what starting a session asks for, beyond who is
+// asking for it.
+//
+// A struct rather than a dozen positional arguments: the modes a
+// handoff carries (rate, repeat, shuffle) are all optional, all the
+// same shape, and reading `false, 1, "", ""` at a call site says
+// nothing about which is which.
+type SessionRequest struct {
+	EndpointID string
+	PIDs       []string
+	Index      int
+	PositionMS int64
+	Play       bool
+
+	// Rate to start at. Nil is the ordinary 1.0; an explicit value is
+	// held to the contract's range rather than quietly corrected, which
+	// is why this is a pointer and not a zero-means-default double.
+	Rate *float64
+
+	// Repeat mode to start in; empty means "off".
+	Repeat  string
+	Shuffle bool
+
+	// HandoffFrom names a client endpoint of the caller's whose
+	// session this create replaces.
+	//
+	// The ordinary handoff is a transfer, which needs the mirror
+	// session's id. A client that never learned one - bus down, first
+	// report unanswered, server restarted - creates the session here
+	// and names itself, so the server can end the session it holds for
+	// that endpoint even though nobody can name it.
+	HandoffFrom string
+}
+
 // CreateSession loads a queue onto an endpoint and starts a session
 // there ("play on the kitchen speaker").
-func (s *Service) CreateSession(ctx context.Context, userID, userName, endpointID string, pids []string, index int, positionMS int64, play bool) (Session, error) {
+func (s *Service) CreateSession(ctx context.Context, userID, userName string, req SessionRequest) (Session, error) {
+	pids := req.PIDs
 	if len(pids) == 0 || len(pids) > maxQueueItems {
 		return Session{}, InvalidError{Msg: fmt.Sprintf("queue must hold 1 to %d items", maxQueueItems)}
 	}
-	if index < 0 || index >= len(pids) {
+	if req.Index < 0 || req.Index >= len(pids) {
 		return Session{}, InvalidError{Msg: "index is outside the queue"}
 	}
-	if positionMS < 0 {
+	if req.PositionMS < 0 {
 		return Session{}, InvalidError{Msg: "positionMs must not be negative"}
 	}
-	ep, ok := s.reg.Lookup(userID, endpointID)
+	rate := 1.0
+	if req.Rate != nil {
+		rate = *req.Rate
+	}
+	if rate < minRate || rate > maxRate {
+		return Session{}, InvalidError{Msg: "rate must be between 0.25 and 5"}
+	}
+	repeat := req.Repeat
+	if repeat == "" {
+		repeat = "off"
+	}
+	switch repeat {
+	case "off", "all", "one":
+	default:
+		return Session{}, InvalidError{Msg: "repeat must be off, all, or one"}
+	}
+	ep, ok := s.reg.Lookup(userID, req.EndpointID)
 	if !ok {
 		return Session{}, ErrNotFound
 	}
 	if ep.Shared && !s.sharedAllowed(userID) {
 		return Session{}, ErrForbidden
+	}
+	// Checked before anything is loaded: naming somebody else's device
+	// as the source would end their playback from here. A client
+	// endpoint is one connection of one person's, which is what makes
+	// it safe to silence; a shared speaker is a room, and the caller
+	// saying "I am handing this over" is not a claim on it.
+	//
+	// A source that resolves to nothing is not a refusal. The field
+	// exists for the client that could not transfer because its command
+	// bus was down - and a bus that is down is a connection the server
+	// has already dropped, which unregisters the endpoint and ends its
+	// session. There is then nothing to end, which is the request
+	// satisfied; answering `not-found` would refuse to start the music
+	// in the room over a precondition that already holds.
+	handoffSource := ""
+	if req.HandoffFrom != "" {
+		if src, ok := s.reg.Lookup(userID, req.HandoffFrom); ok {
+			if src.Kind != KindClient || src.Shared {
+				return Session{}, ErrForbidden
+			}
+			handoffSource = req.HandoffFrom
+		}
+	}
+	// Recorded only where the target can actually play at it. The
+	// published position is extrapolated with this rate, so a 1.5x book
+	// handed to a renderer that plays everything at 1.0 would run every
+	// watcher's scrubber half again too fast and "finish" the entry a
+	// third early. A routed set-rate refuses outright here, which is
+	// right for a direct instruction and wrong for a handoff: the queue
+	// should still start in the room.
+	if !ep.RateControl {
+		rate = 1
 	}
 	entries, err := s.cfg.Resolver.Entries(ctx, userID, pids)
 	if err != nil {
@@ -439,16 +529,17 @@ func (s *Service) CreateSession(ctx context.Context, userID, userName, endpointI
 		id:         newSessionID(),
 		ownerID:    userID,
 		ownerName:  userName,
-		endpointID: endpointID,
+		endpointID: req.EndpointID,
 		authority:  AuthorityRemote,
 		q: queueState{
 			Entries:      entries,
-			Index:        index,
-			PositionMS:   positionMS,
+			Index:        req.Index,
+			PositionMS:   req.PositionMS,
 			PositionAt:   s.cfg.Now(),
-			Playing:      play,
-			Rate:         1,
-			Repeat:       "off",
+			Playing:      req.Play,
+			Rate:         rate,
+			Repeat:       repeat,
+			Shuffle:      req.Shuffle,
 			QueueVersion: 1,
 		},
 		createdAt: s.cfg.Now(),
@@ -457,20 +548,69 @@ func (s *Service) CreateSession(ctx context.Context, userID, userName, endpointI
 
 	if ep.Kind == KindClient {
 		sess.authority = AuthorityMirror
-		s.markLoadPending(endpointID, sess.id)
-		err := s.loadOnClient(ctx, sess.id, pids, endpointID, index, positionMS, play)
+		s.markLoadPending(req.EndpointID, sess.id)
+		err := s.loadOnClient(ctx, sess.id, pids, req.EndpointID, req.Index, req.PositionMS, req.Play, sess.q.Rate, sess.q.Repeat)
 		if err != nil {
-			s.clearLoadPending(endpointID)
+			s.clearLoadPending(req.EndpointID)
 			return Session{}, err
 		}
 		snap := s.adoptSession(ctx, sess)
-		s.clearLoadPending(endpointID)
+		s.clearLoadPending(req.EndpointID)
+		s.endHandoffSource(ctx, userID, handoffSource, sess.id)
 		return snap, nil
 	}
-	if err := s.loadOnDevice(ctx, sess, ep, entries, index, positionMS, play); err != nil {
+	if err := s.loadOnDevice(ctx, sess, ep, entries, req.Index, req.PositionMS, req.Play); err != nil {
 		return Session{}, err
 	}
-	return s.adoptSession(ctx, sess), nil
+	// The rate is the driver's own setting rather than part of a load.
+	if rate != 1 && sess.driver != nil {
+		if err := sess.driver.SetRate(ctx, rate); err != nil {
+			s.cfg.Logger.Warn("applying handoff rate", "err", err)
+		}
+	}
+	snap := s.adoptSession(ctx, sess)
+	s.endHandoffSource(ctx, userID, handoffSource, sess.id)
+	return snap, nil
+}
+
+// endHandoffSource ends whatever session the named client endpoint
+// holds, once the target has taken the queue.
+//
+// After the load, not before: a create that fails leaves the source
+// playing rather than silencing a device on the way to nowhere. The
+// routed stop this sends is the one the source is entitled to ignore -
+// it has already forgotten the session and stopped itself, which is
+// what a client with no working bus must do.
+func (s *Service) endHandoffSource(ctx context.Context, userID, endpointID, keep string) {
+	if endpointID == "" {
+		return
+	}
+	s.mu.Lock()
+	oldID, ok := s.byEndpoint[endpointID]
+	if !ok || oldID == keep {
+		s.mu.Unlock()
+		return
+	}
+	old, ok := s.sessions[oldID]
+	// Owner-checked as well as endpoint-checked. The caller resolved
+	// this endpoint as a client endpoint of their own, so the session
+	// on it is theirs; ending somebody's playback is worth the second
+	// look anyway.
+	if !ok || old.ownerID != userID {
+		s.mu.Unlock()
+		return
+	}
+	s.endSessionLocked(ctx, old, true)
+	s.mu.Unlock()
+	// The same two the deliberate end does, and for the same reasons:
+	// the row leaves the live map synchronously while the teardown's
+	// own write is off on a supervised goroutine, and nothing else
+	// tells a picker standing open somewhere else that the session it
+	// is listing is gone. Without them a laptop went on offering the
+	// phone's queue as something to pull, and tapping it opened a
+	// remote for a session that no longer existed.
+	s.persist(ctx, old, false)
+	s.cfg.InvalidatePlayer()
 }
 
 // adoptSession installs a successfully loaded session as its
@@ -655,7 +795,7 @@ func (s *Service) attachDriver(sess *session, driver Driver) {
 }
 
 // loadOnClient routes a load command to the owning client endpoint.
-func (s *Service) loadOnClient(ctx context.Context, sessionID string, pids []string, endpointID string, index int, positionMS int64, play bool) error {
+func (s *Service) loadOnClient(ctx context.Context, sessionID string, pids []string, endpointID string, index int, positionMS int64, play bool, rate float64, repeat string) error {
 	link, ok := s.reg.link(endpointID)
 	if !ok {
 		return ErrEndpointOffline
@@ -668,6 +808,19 @@ func (s *Service) loadOnClient(ctx context.Context, sessionID string, pids []str
 		Index:      &index,
 		PositionMS: &positionMS,
 		Play:       &play,
+	}
+	// The modes ride the load rather than being recorded and forgotten.
+	// A book handed over at 1.5x and repeat-all otherwise arrives at
+	// 1.0 and off, and the target's first report writes those back over
+	// the server's own record - so the handoff loses them twice.
+	// Shuffle is not among them: `itemPids` is already the play order,
+	// and turning the target's toggle on would reorder the tail it was
+	// just handed.
+	if rate != 1 {
+		cmd.Rate = &rate
+	}
+	if repeat != "" && repeat != "off" {
+		cmd.Repeat = repeat
 	}
 	res, err := s.routeToLink(ctx, link, cmd)
 	if err != nil {
@@ -776,6 +929,8 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 	positionMS := sess.q.extrapolate(now)
 	play := sess.q.Playing
 	entries := sess.q.Entries
+	rate := sess.q.Rate
+	repeat := sess.q.Repeat
 	oldEndpoint := sess.endpointID
 	oldDriver := sess.driver
 	oldCancel := sess.driverCancel
@@ -784,7 +939,7 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 
 	if target.Kind == KindClient {
 		s.markLoadPending(target.ID, sessionID)
-		if err := s.loadOnClient(ctx, sessionID, entryPIDs(entries), target.ID, index, positionMS, play); err != nil {
+		if err := s.loadOnClient(ctx, sessionID, entryPIDs(entries), target.ID, index, positionMS, play, rate, repeat); err != nil {
 			s.clearLoadPending(target.ID)
 			return Session{}, err
 		}

@@ -100,6 +100,25 @@ class _ComponentsPageState extends State<ComponentsPage> {
         ),
         const SizedBox(height: WaxSpace.s24),
 
+        const SectionHeader(overline: 'Controls', title: 'Tooltips'),
+        // Three in a row, which is the case the component exists for:
+        // rest on one and its label appears after the wait; slide along
+        // and each of the others waits the same, rather than opening
+        // the instant the pointer arrives because a neighbour is still
+        // fading out.
+        Wrap(
+          spacing: WaxSpace.s12,
+          children: <Widget>[
+            for (final (glyph, label) in const <(WaxGlyph, String)>[
+              (WaxIcons.shuffle, 'Shuffle'),
+              (WaxIcons.repeatAll, 'Repeat'),
+              (WaxIcons.queue, 'Queue'),
+            ])
+              WaxIconButton(glyph: glyph, label: label, onPressed: () {}),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
         const SectionHeader(overline: 'Controls', title: 'Search and filters'),
         // The two shapes side by side: the field the search screen drives,
         // and the launcher the sidebar header holds.

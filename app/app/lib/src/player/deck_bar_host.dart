@@ -78,11 +78,13 @@ const _ids = DeckBarIds(
 /// the one ordering decision here worth its own paragraph. The bar's
 /// promise is "this is what you are listening to", and local playback is
 /// what is coming out of this device. Handing a session away stops local
-/// playback - the server routes a stop to the source client - so the
-/// remote face is what fills the silence, which is the case the entry
-/// scheduling this named. Opening someone else's session to skip a track
-/// while an album plays here does not take the bar away from the album;
-/// the remote screen that opened is where that session is driven.
+/// playback - the picker silences this device itself as the call
+/// answers, rather than waiting for the routed stop, which never arrives
+/// at all for a client whose command bus is down - so the remote face is
+/// what fills the silence, which is the case the entry scheduling this
+/// named. Opening someone else's session to skip a track while an album
+/// plays here does not take the bar away from the album; the remote
+/// screen that opened is where that session is driven.
 class DeckBarHost extends ConsumerWidget {
   const DeckBarHost({super.key});
 

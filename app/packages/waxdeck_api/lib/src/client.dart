@@ -684,12 +684,22 @@ abstract interface class WaxDeckRepository {
   Future<List<PlaybackSessionHistoryEntry>> listPlaybackSessionHistory();
 
   /// `POST /player/sessions`: start playback on an endpoint.
+  ///
+  /// [rate], [repeat], and [shuffle] are the modes the queue travels
+  /// with, so a handoff arrives playing the way it was playing.
+  /// [handoffFrom] names a client endpoint of the caller's whose
+  /// session this create replaces - what a client that never learned
+  /// its own mirror session id passes instead of transferring.
   Future<PlaybackSessionInfo> createPlaybackSession({
     required String endpointId,
     required List<String> itemPids,
     int index = 0,
     int positionMs = 0,
     bool play = true,
+    double? rate,
+    String? repeat,
+    bool? shuffle,
+    String? handoffFrom,
   });
 
   /// `GET /player/sessions/{sessionId}`: one session snapshot.
@@ -3089,6 +3099,10 @@ class WaxDeckClient implements WaxDeckRepository {
     int index = 0,
     int positionMs = 0,
     bool play = true,
+    double? rate,
+    String? repeat,
+    bool? shuffle,
+    String? handoffFrom,
   }) => _guard(() async {
     final response = await _gen.getPlayerApi().createPlaybackSession(
       playbackSessionCreate: gen.PlaybackSessionCreate(
@@ -3097,7 +3111,11 @@ class WaxDeckClient implements WaxDeckRepository {
           ..itemPids.replace(itemPids)
           ..index = index
           ..positionMs = positionMs
-          ..play = play,
+          ..play = play
+          ..rate = rate
+          ..repeat = repeat
+          ..shuffle = shuffle
+          ..handoffFrom = handoffFrom,
       ),
     );
     return playbackSessionFromGen(_require(response.data));

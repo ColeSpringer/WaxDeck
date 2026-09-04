@@ -75,6 +75,83 @@ test('a session mirrors to the server and relays remote control', async ({ app, 
     .toBe(false);
 });
 
+// The other direction: not "take that session over", but "send mine
+// there". A device plays one thing, so casting from one that is playing
+// is a handoff - the queue moves, the target starts, and the source goes
+// quiet rather than playing the same album into the room it just left.
+test('casting from a playing browser silences it and the bar follows', async ({
+  app,
+  device,
+}) => {
+  const mine = await app.seed.item('Alpha Song');
+  const parked = await app.seed.item('Bravo Song');
+
+  // B first: its endpoint id is read off the session it mirrors, which
+  // is the only way to tell one browser's client endpoint from another's
+  // on an account several of them are signed into.
+  const b = await device();
+  await b.nav.enter('tracks');
+  await b.music.play(parked.pid);
+  let bEndpoint = '';
+  await expect
+    .poll(
+      async () => {
+        const listed = await app.api.tryGet('/player/sessions');
+        const found = (listed?.sessions ?? []).find((s) =>
+          (s.entries ?? []).some((e) => e.pid === parked.pid),
+        );
+        if (found === undefined) return undefined;
+        bEndpoint = found.endpointId;
+        return found.authority;
+      },
+      { message: "B's session should mirror so its endpoint can be named" },
+    )
+    .toBe('mirror');
+
+  // A plays its own track, then sends it to B.
+  const a = await device();
+  await a.nav.enter('tracks');
+  await a.music.play(mine.pid);
+  let aEndpoint = '';
+  await expect
+    .poll(async () => {
+      const listed = await app.api.tryGet('/player/sessions');
+      const found = (listed?.sessions ?? []).find((s) =>
+        (s.entries ?? []).some((e) => e.pid === mine.pid),
+      );
+      if (found === undefined) return undefined;
+      aEndpoint = found.endpointId;
+      return found.authority;
+    })
+    .toBe('mirror');
+
+  await a.cast.openPicker();
+  await a.cast.playOn(bEndpoint);
+
+  // A's bar changed face: the local one carries a queue panel and the
+  // remote one, which drives another endpoint, does not.
+  await expect(a.cast.localFace()).toBeHidden({ timeout: T.nav });
+
+  // And the server agrees about where the sound is: A's track plays on
+  // B's endpoint, and A holds nothing.
+  await expect
+    .poll(
+      async () => {
+        const listed = await app.api.tryGet('/player/sessions');
+        const sessions = listed?.sessions ?? [];
+        const there = sessions.find((s) => s.endpointId === bEndpoint);
+        const here = sessions.find((s) => s.endpointId === aEndpoint);
+        if (there === undefined) return 'nothing on B';
+        if (here !== undefined) return 'A still holds a session';
+        return (there.entries ?? []).some((e) => e.pid === mine.pid)
+          ? 'handed over'
+          : "B is playing something that is not A's";
+      },
+      { message: 'the queue should have moved, and the source let go' },
+    )
+    .toBe('handed over');
+});
+
 // The gapless transcode path against the real engine: the timeline
 // mints over the API and its proxied HLS playlist serves, boundaries
 // mapping both queue members onto one continuous presentation.

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
@@ -252,6 +253,33 @@ void main() {
   // at a route of its own rather than over the shell, and the push it
   // tolerates is exactly the one production refuses - so a face-level
   // test there passes either way and saw none of this.
+  testWidgets('going where the news points is what clears it', (tester) async {
+    // The bell used to hold a row until it was tapped or the list was
+    // emptied, so dealing with the thing itself - opening the surface
+    // from anywhere else - left a badge standing over work that was
+    // done. The router is what sees an arrival, however it was reached.
+    final container = _container(_signedIn());
+    addTearDown(container.dispose);
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    final notifications = container.read(notificationsProvider.notifier);
+    notifications
+      ..record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9))
+      ..record(NotificationKind.task, at: DateTime(2026, 8, 12, 10));
+    await tester.pumpAndSettle();
+    expect(container.read(notificationsProvider), hasLength(2));
+
+    container.read(routerProvider).go(WaxRoute.uploads);
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(notificationsProvider).map((n) => n.kind),
+      <NotificationKind>[NotificationKind.task],
+      reason: 'the visit answers its own row and leaves the other',
+    );
+  });
+
   testWidgets('find-in-library leaves the player for search', (tester) async {
     const stationPid = 'rs-01JZX5N8QW3F4V9T2B7KDSTATN1';
     final station = RadioStation(

@@ -143,9 +143,29 @@
   "@reviewDiffMissing": {
     "description": "A candidate track with no local file to match it."
   },
+  "reviewDiffMissingBand": "Not in your library ({count})",
+  "@reviewDiffMissingBand": {
+    "description": "Band between the tracks a unit holds and the candidate tracks it does not, so the second group does not read as more rows of the first.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "reviewDiffOnRelease": "On the release",
   "@reviewDiffOnRelease": {
     "description": "A candidate track a one-file unit never asked for: shown for orientation, costs the score nothing, so it must not read as a defect."
+  },
+  "reviewDiffOnReleaseBand": "Also on the release ({count})",
+  "@reviewDiffOnReleaseBand": {
+    "description": "The same band over a one-file unit's rows, where the rest of the release is context rather than absence and costs the score nothing.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "11"
+      }
+    }
   },
   "reviewDiffProposed": "Proposed",
   "@reviewDiffProposed": {

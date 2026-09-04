@@ -229,7 +229,23 @@ class ConnectEndpointController {
   Future<void> _onEndpointCommand(Map<String, Object?> frame) async {
     final id = frame['id'] as String? ?? '';
     final verb = frame['verb'] as String? ?? '';
+    final forSession = frame['sessionId'] as String? ?? '';
     try {
+      // A transport verb is for the session this client is mirroring,
+      // and for no other. Two things route a command at a session this
+      // device has already let go of: the server's own teardown, which
+      // sends a `stop` back to the client whose session it is ending -
+      // so a station that just took the engine would be released by
+      // the end of the item session it replaced - and a controller
+      // acting on a stale list. `load` and `set-queue` are outside the
+      // rule by contract: they install the session they name, which is
+      // how a device with nothing playing is given something.
+      if (_transportVerbs.contains(verb) && forSession != mirrorSessionId) {
+        throw const _Refused(
+          'no-session',
+          'this device is not playing that session',
+        );
+      }
       switch (verb) {
         case 'load':
         case 'set-queue':
@@ -261,6 +277,24 @@ class ConnectEndpointController {
           mirrorSessionId = sessionId != null && sessionId.isNotEmpty
               ? sessionId
               : null;
+          // The modes the queue was playing at where it came from. A
+          // handoff that dropped them arrived at 1.0 and repeat-off,
+          // and the first report wrote that back over the server's own
+          // record - so a book being read at 1.5x lost it twice.
+          // Shuffle is not among them: the frame's order is already the
+          // play order, and turning the toggle on here would reorder
+          // the tail this device was just handed.
+          final repeat = frame['repeat'] as String?;
+          if (repeat != null && repeat.isNotEmpty) {
+            queue.setRepeat(QueueRepeat.fromWire(repeat));
+          }
+          final loadRate = (frame['rate'] as num?)?.toDouble();
+          if (loadRate != null && loadRate != 1) {
+            // Not persisted: the device that handed it over already
+            // wrote the show's or book's speed, and this is the
+            // carry-over for the item now playing.
+            await _applyRate(loadRate, persist: false);
+          }
         // The three transport verbs go through the gateway rather than
         // at the engine, which is what the gateway is for and what the
         // media session already does. Straight at the engine, `play`
@@ -285,6 +319,11 @@ class ConnectEndpointController {
           // gets there: on a slow link that is two round trips of audio
           // after the sender was told it stopped.
           await queue.stop();
+          // And the session is over here: a controller elsewhere moved
+          // it away, so there is nothing left for this device to report
+          // under and no id for it to aim a transfer at.
+          mirrorSessionId = null;
+          _stopReporting();
         case 'next':
           if (!await queue.next()) throw _nowhereToGo(forward: true);
         case 'previous':
@@ -297,13 +336,13 @@ class ConnectEndpointController {
             ((frame['volume'] as num?)?.toDouble() ?? 1).clamp(0.0, 1.0),
           );
         case 'set-rate':
-          final rate = (frame['rate'] as num?)?.toDouble() ?? 1;
-          final session = queue.session;
-          if (session != null) {
-            await session.setSpeed(rate, persist: false);
-          } else {
-            await engine.setSpeed(rate);
-          }
+          // Persisted, because a routed change is the listener's own
+          // tap: the speed sheet on this device writes the show's or
+          // book's stored speed, and a phone in another room setting
+          // the same thing must mean the same thing. Music has no
+          // stored speed, so a rate set on a track lapses at the next
+          // track exactly as a local one does.
+          await _applyRate((frame['rate'] as num?)?.toDouble() ?? 1);
         case 'set-repeat':
           queue.setRepeat(
             QueueRepeat.fromWire(frame['repeat'] as String? ?? 'off'),
@@ -368,6 +407,18 @@ class ConnectEndpointController {
     );
   }
 
+  /// Sets the speed through the session where there is one, so a book
+  /// timeline and the stored per-show speed are both accounted for, and
+  /// straight at the engine where there is not.
+  Future<void> _applyRate(double rate, {bool persist = true}) async {
+    final session = queue.session;
+    if (session == null) {
+      await engine.setSpeed(rate);
+      return;
+    }
+    await session.setSpeed(rate, persist: persist);
+  }
+
   List<String> _pids(Map<String, Object?> frame) =>
       (frame['itemPids'] as List<dynamic>? ?? const [])
           .whereType<String>()
@@ -390,6 +441,45 @@ class ConnectEndpointController {
     }
   }
 
+  /// This device handed its playback to another endpoint.
+  ///
+  /// Called by the picker once the create or the transfer has
+  /// answered. It does what a routed `stop` would, and does not wait
+  /// for one: the client that most needs a handoff is the one whose
+  /// command bus is down, and no stop can reach it at all.
+  Future<void> handedOff() async {
+    mirrorSessionId = null;
+    queue.clear();
+    await queue.stop();
+    _stopReporting();
+  }
+
+  /// Live radio took the engine.
+  ///
+  /// A station is not a session and does not travel: it plays on the
+  /// device that tuned it. The item session this replaces is ended
+  /// here rather than left standing, or another device would list a
+  /// paused queue on this one as something to pull, and the picker
+  /// would offer to transfer a queue the engine no longer plays.
+  ///
+  /// In this order: forget the id first, so the `stop` the server
+  /// routes back as it ends the session falls foul of the session
+  /// guard rather than releasing the station that just started.
+  Future<void> onRadioTookEngine(WaxDeckRepository repository) async {
+    final ending = mirrorSessionId;
+    mirrorSessionId = null;
+    _stopReporting();
+    if (ending == null) return;
+    try {
+      await repository.deletePlaybackSession(ending);
+    } on Exception {
+      // Best effort. A session the server has already forgotten, or one
+      // this client cannot reach, is not something a listener who just
+      // tuned a station needs to hear about; the disconnect teardown
+      // ends it either way.
+    }
+  }
+
   void dispose() {
     _disposed = true;
     _stopReporting();
@@ -398,6 +488,24 @@ class ConnectEndpointController {
     endpointId.dispose();
   }
 }
+
+/// The verbs that belong to a session, as the contract lists them.
+///
+/// Everything but `load` and `set-queue`, which install the session
+/// they name rather than acting on one already held - and an unknown
+/// verb, which is answered as unknown rather than as somebody else's.
+const _transportVerbs = <String>{
+  'play',
+  'pause',
+  'stop',
+  'next',
+  'previous',
+  'seek',
+  'set-volume',
+  'set-rate',
+  'set-repeat',
+  'set-shuffle',
+};
 
 /// A cmd-result this controller words itself: it knows both what
 /// refused and that a controller is reading it, so it names the wire

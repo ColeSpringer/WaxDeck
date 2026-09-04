@@ -77,6 +77,58 @@ void main() {
       });
     }
 
+    testWidgets('a station line too long for the strip scrolls, and keeps '
+        'coming back to it', (tester) async {
+      // The reported bug is a radio line that "does not scroll". The
+      // layout is not the reason - both bars bound the subtitle slot,
+      // so the marquee arms - and this is the case that says so: what
+      // it did was run its cycles and park with its end under a fade
+      // for the rest of the song, which is a station's subtitle for
+      // minutes at a time.
+      await _pumpAt(
+        tester,
+        const DeckBar(
+          now: NowPlayingData(
+            title: 'Coastal FM',
+            subtitle: 'Ora Lune - The Bell Tower on the Old Harbour Road',
+            domain: WaxDomain.radio,
+            position: Duration.zero,
+            duration: Duration.zero,
+            live: true,
+            playing: true,
+          ),
+          sizeClass: WaxSizeClass.compact,
+        ),
+        size: const Size(420, 600),
+      );
+      await tester.pump();
+
+      final line = find.ancestor(
+        of: find.text('Ora Lune - The Bell Tower on the Old Harbour Road'),
+        matching: find.byType(WaxMarqueeText),
+      );
+      expect(
+        find.descendant(of: line, matching: find.byType(Transform)),
+        findsOneWidget,
+        reason: 'the slot is bounded, so the line has somewhere to travel',
+      );
+
+      // Past every cycle and into the rest, where the old shape stopped
+      // for good.
+      await tester.pump(const Duration(minutes: 2));
+      await tester.pump(const Duration(seconds: 4));
+      final transform = tester.widget<Transform>(
+        find.descendant(of: line, matching: find.byType(Transform)),
+      );
+      expect(transform.transform.getTranslation().x, lessThan(0));
+
+      await _pumpAt(
+        tester,
+        const SizedBox.shrink(),
+        size: const Size(420, 600),
+      );
+    });
+
     testWidgets('shuffle and repeat run their own actions', (tester) async {
       var played = 0;
       var shuffled = 0;

@@ -2447,6 +2447,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get devicesPlayingRadioHere => 'Playing radio here';
+
+  @override
+  String get devicesRadioStaysHere =>
+      'Stations play on the device that tuned them';
+
+  @override
   String get devicesRemoteTitle => 'Remote playback';
 
   @override
@@ -7428,7 +7435,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewDiffMissing => 'Missing locally';
 
   @override
+  String reviewDiffMissingBand(int count) {
+    return 'Not in your library ($count)';
+  }
+
+  @override
   String get reviewDiffOnRelease => 'On the release';
+
+  @override
+  String reviewDiffOnReleaseBand(int count) {
+    return 'Also on the release ($count)';
+  }
 
   @override
   String get reviewDiffProposed => 'Proposed';

@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
+import '../connect/connect_providers.dart';
 import '../l10n/l10n.dart';
 import '../player/autoplay_gate.dart';
 import '../player/session_registry.dart';
@@ -389,6 +390,15 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
       // idempotent pause does not rest on it.
       final session = ref.read(currentSessionRegistryProvider).current;
       if (session != null && engine.playing) await engine.pause();
+      if (tuning != _tuning) return;
+      // The mirror session goes with the engine. A station is not a
+      // session and does not travel - it plays on the device that
+      // tuned it - so the item session this replaces is ended rather
+      // than left standing for another device to pull, or for the
+      // picker here to offer as a transfer of a queue nothing plays.
+      await ref
+          .read(connectControllerProvider)
+          .onRadioTookEngine(ref.read(repositoryProvider));
       if (tuning != _tuning) return;
       // The station being left goes quiet as the dial turns rather than
       // when the new stream opens: a stream that is down never gets that

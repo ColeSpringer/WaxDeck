@@ -5,6 +5,7 @@
     "adminReviewEntry": "admin-review-entry",
     "candidate": "candidate-{mbid}",
     "diffMissing": "diff-missing-{index}",
+    "diffMissingBand": "diff-missing-band",
     "diffRow": "diff-row-{index}",
     "editMetadata": "edit-metadata-{pid}",
     "matchingMenu": "matching-menu",

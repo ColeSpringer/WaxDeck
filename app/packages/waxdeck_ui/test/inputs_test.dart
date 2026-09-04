@@ -508,6 +508,110 @@ void main() {
     }
   });
 
+  group('MediaCard corner controls', () {
+    const tile = MediaTileData(
+      title: 'Coastal FM',
+      subtitle: 'Ambient',
+      shape: ArtworkShape.circle,
+    );
+
+    testWidgets('the pin and the overflow share one corner and one row', (
+      tester,
+    ) async {
+      // A station tile hand-rolled these over the card: a star and a
+      // menu button stacked at its (0, 0) while the card drew its own
+      // overflow at (8, 8) - two of the same glyph eight pixels apart.
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      var pinned = 0;
+      await tester.pumpWidget(
+        _host(
+          Align(
+            alignment: Alignment.topLeft,
+            child: MediaCard(
+              width: 120,
+              data: tile,
+              action: MediaCardAction(
+                glyph: WaxIcons.star,
+                label: 'Pin Coastal FM',
+                onPressed: () => pinned++,
+              ),
+              onMore: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The pin is a control a finger can reach with no pointer in the
+      // room: it answers "is this pinned?" as well as offering a verb,
+      // and a phone has no hover to reveal it with.
+      final star = find.bySemanticsLabel('Pin Coastal FM');
+      expect(star, findsOneWidget);
+      await tester.tap(star);
+      await tester.pump();
+      expect(pinned, 1);
+
+      // The buttons' own boxes, not the glyphs inside them: what is
+      // being asserted is where the discs sit.
+      Finder chip(WaxGlyph glyph) => find.ancestor(
+        of: find.byIcon(glyph.regular),
+        matching: find.byType(WaxIconButton),
+      );
+      // And the pin sits in the corner, not a chip's width inboard of
+      // it. A faded-out overflow still occupies its whole 44px box, so
+      // on a phone - where nothing ever hovers - the pin was pushed a
+      // third of the way across the card with dead space beside it,
+      // which is the misalignment this row was meant to fix.
+      final atRest = tester.getRect(chip(WaxIcons.star));
+      final card = tester.getRect(find.byType(MediaCard));
+      expect(
+        card.right - atRest.right,
+        moreOrLessEquals(WaxSpace.s8, epsilon: 0.5),
+      );
+      expect(find.byIcon(WaxIcons.more.regular), findsNothing);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await tester.pump();
+      await mouse.moveTo(tester.getCenter(find.byType(MediaCard)));
+      await tester.pumpAndSettle();
+
+      final starBox = tester.getRect(chip(WaxIcons.star));
+      final moreBox = tester.getRect(chip(WaxIcons.more));
+      expect(
+        starBox.top,
+        moreOrLessEquals(moreBox.top, epsilon: 0.5),
+        reason: 'one row, not two corners',
+      );
+      expect(
+        moreBox.right,
+        moreOrLessEquals(starBox.left, epsilon: 0.5),
+        reason: 'flush, so the two discs read as one capsule',
+      );
+      // The pin has not moved: the overflow grows inward from it, so
+      // nothing shifts under the pointer that revealed it.
+      expect(starBox.right, moreOrLessEquals(atRest.right, epsilon: 0.5));
+
+      // Resting on a chip keeps them drawn. The chips are a sibling of
+      // the card, and a Stack hit-tests topmost first and stops - so
+      // without a region of their own the card un-hovers, the overflow
+      // vanishes from under the pointer, the card re-hovers, and the
+      // pair strobes while every click lands on the card behind.
+      await mouse.moveTo(tester.getCenter(chip(WaxIcons.star)));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(WaxIcons.more.regular), findsOneWidget);
+      await mouse.moveTo(tester.getCenter(chip(WaxIcons.more)));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(WaxIcons.more.regular), findsOneWidget);
+    });
+  });
+
   group('MediaCard captions', () {
     const tile = MediaTileData(
       title: 'Salt Harbour',
@@ -648,11 +752,13 @@ void main() {
       // Nothing is offered until a pointer is over the card: the chip
       // is a hover affordance, so a touch device keeps the long press
       // as its whole route in.
-      Finder chipGate() => find.ancestor(
-        of: find.byIcon(WaxIcons.more.regular),
-        matching: find.byType(IgnorePointer),
-      );
-      expect(tester.widget<IgnorePointer>(chipGate().first).ignoring, isTrue);
+      // Not drawn, not announced, and taking no room: assistive tech is
+      // offered the card's own long-press action rather than a chip
+      // nobody can see, and a phone's layout is not shaped around one.
+      expect(find.byIcon(WaxIcons.more.regular), findsNothing);
+      final handle = tester.ensureSemantics();
+      expect(find.bySemanticsLabel('More for Salt Harbour'), findsNothing);
+      handle.dispose();
 
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await mouse.addPointer(location: Offset.zero);
@@ -660,7 +766,7 @@ void main() {
       await tester.pump();
       await mouse.moveTo(tester.getCenter(find.byType(MediaCard)));
       await tester.pumpAndSettle();
-      expect(tester.widget<IgnorePointer>(chipGate().first).ignoring, isFalse);
+      expect(find.byIcon(WaxIcons.more.regular), findsOneWidget);
 
       await tester.tap(find.byIcon(WaxIcons.more.regular));
       expect(opened, 1);

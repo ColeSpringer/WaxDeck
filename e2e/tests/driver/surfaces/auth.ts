@@ -176,13 +176,31 @@ export class Shell extends Surface {
     });
   }
 
-  /// Opens the bell and waits for one kind of news to be in it. A kind
-  /// rather than nothing: the bell holds a shared installation's news,
-  /// so "it has a first row" is not "it has mine".
-  async openNotifications(kind: string, target?: string): Promise<Locator> {
-    const row = this.notificationRow(kind, target);
-    await openMenu(this.notificationsBell(), row);
-    return row;
+  /// What the bell's menu always draws, whatever is in it: Clear where
+  /// there are rows, the empty line where there are none.
+  ///
+  /// The witness for both opening and closing it. Waiting on Clear
+  /// alone reads an emptied bell as a closed menu, so a panel that
+  /// never opened passes "the row is hidden" and a panel that never
+  /// closed passes the dismissal - leaving the next click to land in a
+  /// live modal barrier.
+  private notificationsMenu(): Locator {
+    return this.notificationsClear().or(
+      this.ctx.page.locator(sem(SemanticsIds.notificationsEmpty)),
+    );
+  }
+
+  /// Opens the bell without waiting for any particular news, for the
+  /// case where what is being asserted is that a row is *not* there.
+  async openNotificationsPanel(): Promise<void> {
+    await openMenu(this.notificationsBell(), this.notificationsMenu());
+  }
+
+  /// Dismisses the bell menu. Escape rather than a click on the
+  /// barrier: a stray click on a shell surface navigates.
+  async closeNotifications(): Promise<void> {
+    await this.ctx.page.keyboard.press('Escape');
+    await expect(this.notificationsMenu()).toBeHidden({ timeout: T.step });
   }
 
   /// Open the bell and wait for one particular piece of news.
@@ -197,11 +215,11 @@ export class Shell extends Surface {
     const row = this.notificationRow(kind, target);
     await expect(async () => {
       if (await row.isVisible()) return;
-      // Closed first, because `openMenu` reads an open menu as done.
-      // Waited on Clear, not the row the line above proved absent: only
-      // that tells a closed menu from a click that dismissed one.
-      await this.ctx.page.keyboard.press('Escape');
-      await expect(this.notificationsClear()).toBeHidden({ timeout: T.step });
+      // Closed first, because `openMenu` reads an open menu as done -
+      // and closed against the menu's own witness rather than the row
+      // the line above proved absent: only that tells a closed menu
+      // from a click that dismissed one.
+      await this.closeNotifications();
       await openMenu(this.notificationsBell(), row);
       await expect(row).toBeVisible({ timeout: T.step });
       // The assert tier, not the fetch one: waiting for the news to

@@ -6,6 +6,7 @@ import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/notifications/notifications_binder.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
@@ -121,6 +122,78 @@ void main() {
         at: DateTime.now().add(const Duration(seconds: 1)),
       );
       expect(container.read(unseenNotificationsProvider), 1);
+    });
+
+    test('going where a row points is what clears it', () {
+      notifications
+        ..recordServerEvent(_marker('review'))
+        ..recordServerEvent(_marker('upload', pid: 'up-1'));
+
+      // The queue itself, which is where the review row points.
+      notifications.dismissUnder(WaxRoute.review);
+      expect(
+        container.read(notificationsProvider).map((n) => n.kind),
+        <NotificationKind>[NotificationKind.upload],
+        reason: 'a visit answers its own row and nobody else\'s',
+      );
+    });
+
+    test('an entry under a surface answers the surface', () {
+      // The review row points at the queue and a reader deals with it by
+      // opening an entry, which is a location under it rather than the
+      // location itself.
+      notifications.recordServerEvent(_marker('review'));
+      notifications.dismissUnder('${WaxRoute.review}/rv-1');
+      expect(container.read(notificationsProvider), isEmpty);
+    });
+
+    test('a later event for the same thing is news again', () {
+      notifications.recordServerEvent(_marker('review'));
+      notifications.dismissUnder(WaxRoute.review);
+      expect(container.read(notificationsProvider), isEmpty);
+
+      // Somewhere else, and then it happens again: the reader has not
+      // seen this one.
+      notifications.dismissUnder(WaxRoute.home);
+      notifications.recordServerEvent(_marker('review'));
+      expect(container.read(notificationsProvider), hasLength(1));
+    });
+
+    test('news about the screen in front of you never lands', () {
+      notifications.dismissUnder(WaxRoute.uploads);
+      notifications.recordServerEvent(_marker('upload', pid: 'up-1'));
+      expect(container.read(notificationsProvider), isEmpty);
+      expect(container.read(unseenNotificationsProvider), 0);
+    });
+
+    test('news about another show is not swallowed by the one on screen', () {
+      // A row with no pid points at the bare surface every show sits
+      // under, so matching downward on insert would drop news about
+      // show B while its reader had show A open - and nothing brings a
+      // dropped row back.
+      notifications.dismissUnder(
+        WaxRoute.show('pc-01JZX5N8QW3F4V9T2B7KD3M9R6'),
+      );
+      notifications.recordServerEvent(
+        const ServerSyncEvent(kind: 'feed-disabled'),
+      );
+
+      expect(container.read(notificationsProvider), hasLength(1));
+      expect(container.read(unseenNotificationsProvider), 1);
+    });
+
+    test('a show visited clears its own feed row and not another', () {
+      const one = 'pc-01JZX5N8QW3F4V9T2B7KD3M9R6';
+      const two = 'pc-01JZX5N8QW3F4V9T2B7KD3M9R7';
+      notifications
+        ..recordServerEvent(_marker('feed-disabled', pid: one))
+        ..recordServerEvent(_marker('feed-disabled', pid: two));
+
+      notifications.dismissUnder(WaxRoute.show(one));
+      expect(
+        container.read(notificationsProvider).map((n) => n.targetPid).toList(),
+        <String>[two],
+      );
     });
 
     test('every row goes somewhere', () {

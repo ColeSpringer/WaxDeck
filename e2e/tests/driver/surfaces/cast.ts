@@ -54,6 +54,29 @@ export class Cast extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.session(id)));
   }
 
+  /// An endpoint the picker offers to play on.
+  endpoint(id: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.endpoint(id)));
+  }
+
+  /// The deck bar's queue control, which only the local face carries:
+  /// the remote one drives another endpoint and has no queue panel of
+  /// its own. What says which face the bar is wearing.
+  localFace(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.deckQueue));
+  }
+
+  /// Hand this device's playback to an endpoint listed in the picker.
+  ///
+  /// Scrolled and clicked as one unit, like [takeOver]: the endpoint
+  /// groups sit under "This device" and the list relists whenever any
+  /// session anywhere changes.
+  async playOn(endpointId: string): Promise<void> {
+    const row = this.endpoint(endpointId);
+    await row.waitFor({ timeout: T.assert });
+    await clickInView(this.ctx.page, row, { surface: this.picker() });
+  }
+
   /// The remote screen's transport, which drives the other client's real
   /// engine.
   remoteToggle(): Locator {

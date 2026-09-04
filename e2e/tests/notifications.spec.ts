@@ -98,6 +98,7 @@ test('the bell reports what happened while the app was open', async ({
   });
   expect(session.id).toMatch(/^up-/);
 
+  let second = '';
   try {
     await app.shell.notificationsBadged();
     // Waited for by what the row is about rather than off the top of
@@ -109,16 +110,30 @@ test('the bell reports what happened while the app was open', async ({
     await mine.click();
     await app.nav.expectAt('uploads');
 
-    // Clear empties the bell rather than only unbadging it. Walked
-    // rather than re-entered: the list is what this client saw while it
-    // was running, so a real page load would empty it first.
+    // Arriving is what deals with it. The bell held its rows until one
+    // was tapped or the whole list was emptied, so a badge stood over
+    // work that had already been done.
+    await app.shell.openNotificationsPanel();
+    await expect(app.shell.notificationRow('upload')).toBeHidden();
+    await app.shell.closeNotifications();
+
+    // Clear still empties the bell rather than only unbadging it, on a
+    // second piece of news this test never opens. Walked rather than
+    // re-entered: the list is what this client saw while it was
+    // running, so a real page load would empty it first.
     await app.nav.to('home');
-    await app.shell.openNotifications('upload');
+    second = (
+      await app.api.post('/uploads', {
+        data: { fileName: 'bell-2.mp3', sizeBytes: 1024, mediaType: 'music' },
+      })
+    ).id;
+    await app.shell.notificationsBadged();
+    await app.shell.openNotificationsUntil('upload');
     await app.shell.notificationsClear().click();
     await expect(app.shell.notificationRow('upload')).toBeHidden();
   } finally {
-    await app.api.delete('/uploads/{uploadId}', {
-      path: { uploadId: session.id },
-    });
+    for (const id of [session.id, second]) {
+      if (id) await app.api.delete('/uploads/{uploadId}', { path: { uploadId: id } });
+    }
   }
 });

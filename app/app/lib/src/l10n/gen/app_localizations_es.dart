@@ -2483,6 +2483,13 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get devicesPlayingRadioHere => 'Aquí suena la radio';
+
+  @override
+  String get devicesRadioStaysHere =>
+      'Las emisoras suenan en el dispositivo que las sintonizó';
+
+  @override
   String get devicesRemoteTitle => 'Reproducción remota';
 
   @override
@@ -7509,7 +7516,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reviewDiffMissing => 'Falta en local';
 
   @override
+  String reviewDiffMissingBand(int count) {
+    return 'No está en tu biblioteca ($count)';
+  }
+
+  @override
   String get reviewDiffOnRelease => 'En el lanzamiento';
+
+  @override
+  String reviewDiffOnReleaseBand(int count) {
+    return 'También en el lanzamiento ($count)';
+  }
 
   @override
   String get reviewDiffProposed => 'Propuesto';

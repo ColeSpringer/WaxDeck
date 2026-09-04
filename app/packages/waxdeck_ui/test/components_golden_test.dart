@@ -367,14 +367,25 @@ void main() {
                         width: 120,
                       ),
                       const SizedBox(width: 12),
-                      const MediaCard(
-                        data: MediaTileData(
+                      MediaCard(
+                        data: const MediaTileData(
                           title: 'Coastal FM',
                           subtitle: 'Ambient',
                           domain: WaxDomain.radio,
                           shape: ArtworkShape.circle,
                         ),
                         width: 120,
+                        // A pinned station, which is what the corner
+                        // action exists for: the star is state as well
+                        // as a verb, so it is drawn without a pointer
+                        // over the card.
+                        action: MediaCardAction(
+                          glyph: WaxIcons.star,
+                          label: 'Unpin Coastal FM',
+                          active: true,
+                          onPressed: () {},
+                        ),
+                        onMore: () {},
                       ),
                     ],
                   ),
@@ -563,7 +574,13 @@ void main() {
               ),
               const NowPlayingData(
                 title: 'Coastal FM',
-                subtitle: 'Ora Lune - Bell Tower',
+                // Longer than the strip, which is the ordinary case for
+                // a station: the line is what a listener reads to find
+                // out what is on, and it is parked at its own start
+                // here, so the golden shows the leading characters
+                // crisp and the fade only where the rest of the name
+                // continues.
+                subtitle: 'Ora Lune - Bell Tower on the Harbour Road',
                 domain: WaxDomain.radio,
                 shape: ArtworkShape.circle,
                 position: Duration.zero,

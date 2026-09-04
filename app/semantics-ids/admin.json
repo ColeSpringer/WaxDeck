@@ -27,6 +27,8 @@
     "auditRow": "audit-row-{id}",
     "backupCreate": "backup-create",
     "backupImport": "backup-import",
+    "backupMenu": "backup-menu-{id}",
+    "backupMenuAction": "backup-{action}-{id}",
     "backupRow": "backup-row-{id}",
     "confirmAccept": "confirm-accept",
     "confirmCancel": "confirm-cancel",

@@ -321,9 +321,33 @@ class _BackupRow extends ConsumerWidget {
       subtitle: backup.error ?? subtitle,
       // The error branch is the server's own sentence, not a summary.
       subtitleMaxLines: 6,
-      trailing: PopupMenuButton<String>(
-        key: Key('backup-menu-${backup.id}'),
-        tooltip: l10n.adminBackupActions,
+      // The design system's own menu, not Material's: a
+      // `PopupMenuButton` mounts a Material `Tooltip` whatever it is
+      // given, and those share one open set - once any has shown, the
+      // next control a pointer touches opens with no delay at all.
+      trailing: WaxMenuButton<String>(
+        glyph: WaxIcons.moreVertical,
+        label: l10n.adminBackupActions,
+        semanticsId: SemanticsIds.backupMenu(backup.id),
+        items: <WaxMenuItem<String>>[
+          if (backup.state == 'done') ...<WaxMenuItem<String>>[
+            WaxMenuItem<String>(
+              value: 'download',
+              label: l10n.adminBackupDownload,
+              semanticsId: SemanticsIds.backupMenuAction('download', backup.id),
+            ),
+            WaxMenuItem<String>(
+              value: 'restore',
+              label: l10n.adminBackupStageRestoreMenu,
+              semanticsId: SemanticsIds.backupMenuAction('restore', backup.id),
+            ),
+          ],
+          WaxMenuItem<String>(
+            value: 'delete',
+            label: l10n.adminBackupDeleteMenu,
+            semanticsId: SemanticsIds.backupMenuAction('delete', backup.id),
+          ),
+        ],
         onSelected: (action) {
           switch (action) {
             case 'download':
@@ -338,25 +362,6 @@ class _BackupRow extends ConsumerWidget {
               _delete(context, ref);
           }
         },
-        itemBuilder: (context) => [
-          if (backup.state == 'done')
-            PopupMenuItem(
-              key: Key('backup-download-${backup.id}'),
-              value: 'download',
-              child: Text(l10n.adminBackupDownload),
-            ),
-          if (backup.state == 'done')
-            PopupMenuItem(
-              key: Key('backup-restore-${backup.id}'),
-              value: 'restore',
-              child: Text(l10n.adminBackupStageRestoreMenu),
-            ),
-          PopupMenuItem(
-            key: Key('backup-delete-${backup.id}'),
-            value: 'delete',
-            child: Text(l10n.adminBackupDeleteMenu),
-          ),
-        ],
       ),
     );
   }

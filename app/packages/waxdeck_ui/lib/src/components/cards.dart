@@ -23,6 +23,7 @@ import 'edge_fade.dart';
 import 'indicators.dart';
 import 'secondary_tap.dart';
 import 'snap_physics.dart';
+import 'tooltip.dart';
 import 'view_data.dart';
 
 /// An eyebrow, a title, and an optional action: the head of every shelf,
@@ -101,6 +102,43 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
+/// One extra control in a card's corner, beside its overflow.
+///
+/// For state a card carries that is also a verb - a station's pin is the
+/// case this exists for. Drawn in the same chip row as the overflow and
+/// on the same disc, because a control the card stacked over itself is
+/// what a station tile did: a hand-rolled star and menu at one corner,
+/// eight pixels from the card's own hover menu at the other, two of the
+/// same glyph on a pointer.
+///
+/// Always visible, unlike the overflow: it answers a question ("is this
+/// pinned?") as well as offering an action, and there is no hover on a
+/// phone to reveal it with.
+@immutable
+class MediaCardAction {
+  const MediaCardAction({
+    required this.glyph,
+    required this.label,
+    required this.onPressed,
+    this.active = false,
+    this.semanticsId,
+  });
+
+  final WaxGlyph glyph;
+
+  /// The accessible name, and the tooltip. Says what pressing it will
+  /// do, as every other stateful control here does.
+  final String label;
+
+  final VoidCallback? onPressed;
+
+  /// Renders the fill weight and the accent, the icon system's state
+  /// convention.
+  final bool active;
+
+  final String? semanticsId;
+}
+
 /// A grid or shelf cell: artwork, title, caption, and the badges that
 /// belong on artwork rather than in text.
 ///
@@ -114,6 +152,7 @@ class MediaCard extends StatefulWidget {
     this.onTap,
     this.onPlay,
     this.onMore,
+    this.action,
     this.width,
     this.captions,
     this.playing = false,
@@ -124,6 +163,10 @@ class MediaCard extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onPlay;
   final VoidCallback? onMore;
+
+  /// A control beside the overflow, for a card that carries state worth
+  /// a corner of its own.
+  final MediaCardAction? action;
 
   /// Defaults to the size class's grid extent.
   final double? width;
@@ -177,7 +220,20 @@ class MediaCard extends StatefulWidget {
 
 class _MediaCardState extends State<MediaCard> {
   bool _hovered = false;
+
+  /// Whether the pointer is over the corner chips, which sit beside the
+  /// card rather than inside it. Tracked apart from [_hovered] so the
+  /// two cannot fight: leaving the card for a chip and leaving a chip
+  /// for the card both happen in one pointer update, and either order
+  /// leaves the pair reading "still over this card".
+  bool _chipHovered = false;
   bool _focused = false;
+
+  /// One corner control on its own disc.
+  Widget _chip(WaxColors colors, Widget child) => DecoratedBox(
+    decoration: BoxDecoration(color: colors.surface1, shape: BoxShape.circle),
+    child: child,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -191,7 +247,8 @@ class _MediaCardState extends State<MediaCard> {
         WaxCaptionMode.onHover;
     // Focus counts as well as hover, or a card reached by keyboard is a
     // cover with no name on it and no way to ask for one.
-    final captionsVisible = !captionsFade || _hovered || _focused;
+    final captionsVisible =
+        !captionsFade || _hovered || _chipHovered || _focused;
 
     final art = Stack(
       children: <Widget>[
@@ -267,44 +324,75 @@ class _MediaCardState extends State<MediaCard> {
               ),
             ),
           ),
-        // The overflow control, revealed like the play affordance: a
-        // pointer gets a visible way into the menu instead of having to
-        // guess at a right click. Faded rather than created on hover,
-        // which pops; out of the focus tree while invisible, for the
-        // reason artwork.dart's hover play writes out. It draws over the
-        // unplayed dot while shown, which the card's label still
-        // announces. Touch keeps the long press, and assistive tech the
-        // card's own long-press action - this chip sits inside the
-        // card's excluded subtree.
-        if (widget.onMore != null)
-          Positioned(
-            right: WaxSpace.s8,
-            top: WaxSpace.s8,
-            child: ExcludeFocus(
-              excluding: !(_hovered || _focused),
-              child: IgnorePointer(
-                ignoring: !(_hovered || _focused),
-                child: AnimatedOpacity(
-                  opacity: (_hovered || _focused) ? 1 : 0,
-                  duration: motion.quick,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: colors.surface1,
-                      shape: BoxShape.circle,
-                    ),
-                    child: WaxIconButton(
-                      glyph: WaxIcons.more,
-                      label: l10n.cardsMoreForItem(data.title),
-                      size: 16,
-                      onPressed: widget.onMore,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
       ],
     );
+
+    // The corner controls, built beside the card rather than inside it.
+    //
+    // The card announces one node for the whole tile and excludes
+    // everything under it, which is right for the artwork and the
+    // captions and wrong for a control: swallowed, a pin would have no
+    // name, no state, and no handle. So the chip row is the card's
+    // sibling, exactly where a station tile used to hand-roll its own -
+    // except that here it is one row, aligned to the same corner as the
+    // overflow, so the two cannot end up eight pixels apart.
+    final revealed = _hovered || _chipHovered || _focused;
+    final chips = widget.onMore == null && widget.action == null
+        ? null
+        : Positioned(
+            right: WaxSpace.s8,
+            top: WaxSpace.s8,
+            // Its own region, because these are a sibling of the card
+            // rather than a child of it: a Stack hit-tests topmost
+            // first and stops, so a pointer resting on a chip leaves
+            // the card's own region - and the card would un-hover,
+            // which un-draws the very chip under the pointer, which
+            // re-hovers the card. That oscillation strobed the overflow
+            // and sent its clicks to the card underneath.
+            child: MouseRegion(
+              onEnter: (_) => setState(() => _chipHovered = true),
+              onExit: (_) => setState(() => _chipHovered = false),
+              // One disc apiece and no gap between them, so a card
+              // carrying both draws a capsule rather than two circles.
+              // The overflow leads, so the always-drawn action keeps
+              // the corner and nothing shifts as the pointer arrives.
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  // Revealed like the play affordance: a pointer gets a
+                  // visible way into the menu instead of having to
+                  // guess at a right click. Built on reveal rather than
+                  // faded, because a faded chip still occupies its
+                  // whole 44px box - and on a phone, where nothing ever
+                  // hovers, that box pushed the action a third of the
+                  // way across the card with dead space beside it.
+                  // Touch keeps the long press.
+                  if (widget.onMore != null && revealed)
+                    _chip(
+                      colors,
+                      WaxIconButton(
+                        glyph: WaxIcons.more,
+                        label: l10n.cardsMoreForItem(data.title),
+                        size: 16,
+                        onPressed: widget.onMore,
+                      ),
+                    ),
+                  if (widget.action case final action?)
+                    _chip(
+                      colors,
+                      WaxIconButton(
+                        glyph: action.glyph,
+                        label: action.label,
+                        size: 16,
+                        active: action.active,
+                        semanticsId: action.semanticsId,
+                        onPressed: action.onPressed,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
 
     final card = Semantics(
       identifier: data.semanticsId,
@@ -422,18 +510,25 @@ class _MediaCardState extends State<MediaCard> {
       ),
     );
     final tooltip = data.tooltip;
-    if (tooltip == null) return card;
     // Hover-only on purpose: a long press is the card's overflow
     // gesture, and a tooltip that claimed it would shadow the menu. The
     // full text is already in the semantics label above, so the tooltip
     // adds nothing a screen reader needed.
-    return Tooltip(
-      message: tooltip,
-      waitDuration: const Duration(milliseconds: 500),
-      triggerMode: TooltipTriggerMode.manual,
-      excludeFromSemantics: true,
-      child: card,
-    );
+    //
+    // Around the card and not the chips: the tooltip names the item, and
+    // the corner controls carry names of their own.
+    final named = tooltip == null
+        ? card
+        : WaxTooltip(
+            message: tooltip,
+            touchTrigger: false,
+            excludeFromSemantics: true,
+            child: card,
+          );
+    if (chips == null) return named;
+    // Sized by the card, which is the unpositioned child: the chips
+    // ride over its top corner without changing what a grid reserves.
+    return Stack(children: <Widget>[named, chips]);
   }
 }
 

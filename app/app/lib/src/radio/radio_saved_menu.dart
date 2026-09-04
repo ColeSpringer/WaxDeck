@@ -53,7 +53,10 @@ Future<void> showRadioSavedMenu(
             WaxOptionRow(
               title: l10n.radioSavedIdentify,
               subtitle: l10n.radioSavedIdentifyHelp,
-              glyph: WaxIcons.search,
+              // Not the magnifying glass the row's own button draws:
+              // that one searches the library for a title, and this one
+              // works out what the recording is.
+              glyph: WaxIcons.fingerprint,
               semanticsId: SemanticsIds.radioSavedIdentify,
               onTap: () => Navigator.of(sheetContext).pop('identify'),
             ),

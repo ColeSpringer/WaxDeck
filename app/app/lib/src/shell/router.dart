@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -48,6 +50,7 @@ import '../music/listing_screen.dart';
 import '../music/music_controllers.dart';
 import '../music/music_hub_screen.dart';
 import '../notifications/notifications_binder.dart';
+import '../notifications/notifications_controller.dart';
 import '../notifications/notifications_screen.dart';
 import '../organize/organize_screen.dart';
 import '../player/autoplay_gate.dart';
@@ -114,7 +117,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+  // A notification is dealt with by visiting what it points at, and the
+  // router is the one thing that sees every arrival: a row in the bell,
+  // a row on the notifications screen, a link, the sidebar, a search
+  // result. Off a microtask, because a delegate notifies its listeners
+  // in the middle of resolving a route and provider state may not
+  // change under a build.
+  void dismissArrivedNews() {
+    if (router.routerDelegate.currentConfiguration.isEmpty) return;
+    final location = router.state.matchedLocation;
+    scheduleMicrotask(
+      () => ref.read(notificationsProvider.notifier).dismissUnder(location),
+    );
+  }
+
+  router.routerDelegate.addListener(dismissArrivedNews);
   ref.onDispose(() {
+    router.routerDelegate.removeListener(dismissArrivedNews);
     router.dispose();
     refresh.dispose();
   });

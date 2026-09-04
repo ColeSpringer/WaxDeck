@@ -4,7 +4,7 @@ import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickInView, typeInto } from '../gestures';
+import { clickInView, clickToward, typeInto, wheelIntoReach } from '../gestures';
 
 export class Radio extends Surface {
   /// One station's row in the library.
@@ -116,8 +116,22 @@ export class Radio extends Surface {
     fields: { name: string; streamUrl: string },
   ): Promise<void> {
     const page = this.ctx.page;
-    await clickInView(page, page.locator(sem(SemanticsIds.radioMenu(pid))));
-    await clickInView(page, page.locator(sem(SemanticsIds.radioEdit(pid))));
+    // The tile has no menu button of its own: it carries one chip row -
+    // the pin, and the card's own overflow on hover - so the menu comes
+    // up on the card's gesture, as it does on every other card.
+    //
+    // Retried and scrolled into reach, as `clickInView` was: a
+    // part-scrolled Flutter node publishes a clipped box whose centre
+    // is no longer over the widget, and a single forced click aimed
+    // there lands on whatever is underneath with nothing to try again.
+    const edit = page.locator(sem(SemanticsIds.radioEdit(pid)));
+    const tile = this.station(pid);
+    await expect(async () => {
+      if (await edit.isVisible()) return;
+      await wheelIntoReach(page, tile);
+      await clickToward(tile, { shows: edit }, { button: 'right' });
+    }).toPass({ timeout: T.nav });
+    await clickInView(page, edit);
     const url = page.locator(sem(SemanticsIds.radioUrlField));
     await url.waitFor({ timeout: T.nav });
     await typeInto(page, page.locator(sem(SemanticsIds.radioNameField)), fields.name);
