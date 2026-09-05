@@ -139,6 +139,12 @@ func playlistSourceUpdateFromWire(b PlaylistSourceUpdate) service.PlaylistSource
 		Mode:    string(b.Mode),
 		URL:     deref(b.Url),
 		Payload: deref(b.Payload),
+		// Presence, not emptiness: the settings-only form is a body that
+		// names no source *field*, and `"url": ""` names one badly. A
+		// client that clears its URL box asks to rebind and gets the
+		// refusal it always got, rather than silently re-saving settings
+		// onto the binding it was trying to replace.
+		NamesSource: b.Url != nil || b.Source != nil || b.Payload != nil || b.Refs != nil,
 	}
 	if b.Source != nil {
 		in.Source = string(*b.Source)

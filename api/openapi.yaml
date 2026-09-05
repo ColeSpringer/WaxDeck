@@ -2086,8 +2086,9 @@ paths:
       description: >
         The series the visible audiobooks belong to, in collation order.
         A series is a name a book's tags carry rather than an entity
-        anyone curates, so this listing exists for one job: naming the
-        target of a series merge when a spelling split one in two.
+        anyone curates, so what it names is a spelling: this listing
+        both offers the target of a series merge, when a spelling split
+        one in two, and backs the series index a client browses.
 
 
         Filtered by library visibility, so a series held only in
@@ -2267,6 +2268,47 @@ paths:
       responses:
         "204":
           description: Bookmark removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /series/{pid}:
+    get:
+      operationId: getBookSeries
+      summary: Get one audiobook series
+      description: >
+        One series and the books in it, in sequence order. The sequence
+        is what a book's tags say rather than a number anyone assigned,
+        so it is a string and can be absent: a book tagged with the
+        series name and no number sorts among the ones that carry one,
+        where the catalog puts it.
+
+
+        Counts are answered only to an account that can see every
+        library, exactly as the listing answers them: a series with one
+        visible book and nine hidden ones must not advertise ten.
+
+
+        404 when no series carries the pid, and when every book in it
+        lives in a library this account was not granted.
+
+
+        A top-level path rather than one under `/books/series`, which
+        lists them: a series is a shared entity with a pid of its own,
+        read the way `/albums/{pid}` is read.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The series and its books.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookSeriesDetail"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -7627,15 +7669,37 @@ paths:
       summary: Bind a playlist to an external source
       description: >
         Binds a manual playlist to an external source and stores its
-        sync settings, replacing any previous binding whole - every
-        field is written from this body, so always send the complete
-        settings. A `url` names a live source (a YouTube playlist)
-        that the server re-enumerates on the stored interval and on
-        demand, downloading new entries through the normal review
-        queue; `source` plus `payload` or `refs` records a matched
-        source (a streaming export), which reconciles match-only and
-        on demand, downloading nothing. Exactly one of the two forms
-        must be set.
+        sync settings. A `url` names a live source (a YouTube
+        playlist) that the server re-enumerates on the stored interval
+        and on demand, downloading new entries through the normal
+        review queue; `source` plus `payload` or `refs` records a
+        matched source (a streaming export), which reconciles
+        match-only and on demand, downloading nothing. A body naming
+        one of the two forms replaces any previous binding whole:
+        every field is written from it, so send the complete settings.
+
+
+        A body carrying none of those four fields is a settings-only
+        re-save, and needs an existing binding: the stored source,
+        refs, identity and cover are kept and only the settings change.
+        Absence, not emptiness - `"url": ""` names a source and names
+        it badly, and stays `invalid-request`. A matched binding takes
+        `append` or `mirror`; a live one takes any mode under the same
+        delete-right rule, plus `intervalHours`. It exists because a
+        live re-save is otherwise a full network probe of the source
+        for every mode flip, and because a matched re-save that
+        replaced the binding whole would have to be handed the export
+        again. Without a binding to re-save it is `invalid-request`.
+
+
+        The binding's failure accounting starts over, as it does on a
+        bind: a suspended binding whose settings the owner just
+        corrected has to be allowed to run again. Its last run's counts
+        survive, since they record something that happened to this same
+        source. A changed mode also restarts the interval, so escalating
+        to `mirror-trash` cannot put files in the trash before the next
+        scheduled run; an interval changed on its own is measured from
+        the last real attempt.
 
 
         Modes: `append` adds new source entries and never touches
@@ -7711,13 +7775,26 @@ paths:
         do without writing anything: members it would attach now,
         downloads it would queue, members it would remove, files it
         would trash, entries still riding the review queue, and
-        entries the source reports unavailable. With a body, previews
-        those prospective settings - the settings sheet's dry run
-        before a bind commits; without one, previews the stored
-        binding (`not-found` when there is none). Availability is
+        entries the source reports unavailable. Availability is
         best-effort: enumeration inspects a bounded prefix of the
         source, so a long playlist's later entries count as unknown
         until a download is attempted.
+
+
+        The body takes `setPlaylistSource`'s three readings, so a dry
+        run is always of what Save beside it would do. A body naming a
+        source previews that prospective binding, before it is
+        committed. A body naming none previews the stored binding under
+        the settings it carries, and refuses with `invalid-request`
+        when there is no binding to re-save, exactly as the save does.
+        No body at all previews the stored binding as it stands, and is
+        the one reading that answers `not-found` for an unbound
+        playlist.
+
+
+        A live source is enumerated either way: that network read is
+        what a dry run *is*, so unlike the save, a settings-only
+        preview does not avoid it.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -13290,6 +13367,52 @@ components:
           format: int64
           description: Their combined running time.
 
+    BookSeriesDetail:
+      type: object
+      description: One audiobook series and the books in it.
+      required: [pid, name, books]
+      properties:
+        pid:
+          type: string
+          description: Series PID.
+          example: sr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: The series name, as the books' tags spell it.
+        bookCount:
+          type: integer
+          description: >
+            Books in the series, answered only to an account that can
+            see every library. A restricted account reads the length of
+            `books` instead, which is what it can open.
+        totalDurationMs:
+          type: integer
+          format: int64
+          description: >
+            Their combined running time, on `bookCount`'s terms.
+        books:
+          type: array
+          description: >
+            The books this account can open, in the catalog's sequence
+            order.
+          items:
+            $ref: "#/components/schemas/BookSeriesEntry"
+
+    BookSeriesEntry:
+      type: object
+      description: One book's place in a series.
+      required: [book]
+      properties:
+        sequence:
+          type: string
+          description: >
+            What the book's tags call its place in the series ("2",
+            "1.5", "II"). A string because that is what a tag holds,
+            and absent when the tags name the series without a number.
+          example: "2"
+        book:
+          $ref: "#/components/schemas/ItemSummary"
+
     Bookmark:
       type: object
       description: One place a listener marked in a book.
@@ -18540,11 +18663,22 @@ components:
     PlaylistSourceUpdate:
       type: object
       description: >
-        A source binding to store, replacing any previous one whole.
-        Exactly one of `url` (a live source) or `source` with
-        `payload` or `refs` (a matched source, the import request's
-        own fields) must be set. `intervalHours` is required for a
-        live source and must be absent for a matched one.
+        A source binding to store, or the settings to re-save on the
+        one already stored.
+
+
+        With `url` (a live source) or `source` plus `payload` or
+        `refs` (a matched source, the import request's own fields),
+        this replaces any previous binding whole; the two forms are
+        mutually exclusive. `intervalHours` is required for a live
+        source and must be absent for a matched one.
+
+
+        With none of those four fields present, it is a settings-only
+        re-save of the stored binding: `mode`, and `intervalHours` for
+        a live one. The stored source, refs, identity and cover survive
+        it. Presence is what decides, not value: sending `url` as an
+        empty string is a binding body with a bad url.
       required: [mode]
       properties:
         url:
@@ -22505,6 +22639,38 @@ components:
             pattern: "^rs-[0-9A-HJKMNP-TV-Z]{26}$"
           maxItems: 64
           example: [rs-01JZX5N8QW3F4V9T2B7KD3M9R6]
+        radioScrobbleMutedStations:
+          type: array
+          description: >
+            Stations whose segments this user does not scrobble, while
+            the account scrobbles radio at all. The account-wide
+            `radioScrobbleOptOut` is the blunt answer for a listener who
+            wants none of it; this is the household that reports its
+            music stations and not its talk ones, whose titles happen to
+            parse.
+
+
+            Read after the account-wide switch, so an account that has
+            opted out is silent whatever this holds. Unordered as far as
+            the server is concerned - it is a set, and the order a client
+            writes is the order it reads back, because nothing sorts it.
+
+
+            The same shape and the same rules as `radioFavorites`:
+            entries are station PIDs (`rs-...`), stored in the canonical
+            upper-case form the pattern declares, not resolved on write,
+            capped at 64, and absent when nothing is muted rather than
+            stored as `[]`. A station another household member deleted
+            leaves its pid here, holding a slot of that cap until
+            somebody unmutes it - the same trade `radioFavorites` makes,
+            and for the same reason: failing a whole preference write
+            over one departed station would be worse. Unmuting the last
+            station drops the field.
+          items:
+            type: string
+            pattern: "^rs-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 64
+          example: [rs-01JZX5N8QW3F4V9T2B7KD3M9R6]
         pinned:
           type: array
           description: >
@@ -22622,7 +22788,9 @@ components:
             right for a music station whose stream titles are honest
             and wrong for a talk station whose titles happen to parse.
             Opting out silences radio only; library listening is
-            unaffected.
+            unaffected. The whole dial: silencing one station is
+            `radioScrobbleMutedStations`, which is read only when this
+            is unset.
         identifyOptOut:
           type: boolean
           description: >

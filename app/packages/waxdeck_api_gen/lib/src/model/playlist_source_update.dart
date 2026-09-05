@@ -10,7 +10,7 @@ import 'package:built_value/serializer.dart';
 
 part 'playlist_source_update.g.dart';
 
-/// A source binding to store, replacing any previous one whole. Exactly one of `url` (a live source) or `source` with `payload` or `refs` (a matched source, the import request's own fields) must be set. `intervalHours` is required for a live source and must be absent for a matched one. 
+/// A source binding to store, or the settings to re-save on the one already stored.  With `url` (a live source) or `source` plus `payload` or `refs` (a matched source, the import request's own fields), this replaces any previous binding whole; the two forms are mutually exclusive. `intervalHours` is required for a live source and must be absent for a matched one.  With none of those four fields present, it is a settings-only re-save of the stored binding: `mode`, and `intervalHours` for a live one. The stored source, refs, identity and cover survive it. Presence is what decides, not value: sending `url` as an empty string is a binding body with a bad url. 
 ///
 /// Properties:
 /// * [url] - A live source's playlist URL (a YouTube playlist).

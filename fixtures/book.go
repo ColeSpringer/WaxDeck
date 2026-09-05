@@ -107,3 +107,50 @@ func GenerateChapteredBook(dir string) (string, error) {
 	}
 	return path, nil
 }
+
+// seriesNarrator credits the series fixture's books, which is also what
+// classifies them: see GenerateSeriesBooks.
+const seriesNarrator = "Vale Reader"
+
+// GenerateSeriesBooks writes n single-file audiobooks under dir, all
+// tagged into one series and numbered 1..n. It returns their paths in
+// that order.
+//
+// FLAC rather than the .m4b every other book fixture uses, and a
+// narrator credit rather than the extension: the sequence rides on
+// GROUPING as "<series> #<n>" - the spelling the tag reader splits back
+// into a name and a sequence, and the only way to carry one, since no
+// editor writes a sequence - and the MP4 muxer has no atom for that
+// key. A Vorbis comment block takes the key it is given, and a narrator
+// credit is a book signal in its own right. Tone durations step per
+// book so fingerprint dedup cannot merge them.
+func GenerateSeriesBooks(dir, series string, n int) ([]string, error) {
+	if n <= 0 {
+		return nil, fmt.Errorf("fixtures: series needs at least one book")
+	}
+	seriesDir := filepath.Join(dir, bookAuthor, series)
+	paths := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		title := fmt.Sprintf("%s Book %d", series, i)
+		made, err := Generate(seriesDir, Spec{
+			Name:      title,
+			Codec:     CodecFLAC,
+			Container: ContainerFLAC,
+			// Distinct per book and short: 1s, 1.5s, 2s, ...
+			Duration: time.Duration(i+1) * 500 * time.Millisecond,
+			Tags: map[string]string{
+				"TITLE":       title,
+				"ALBUM":       title,
+				"ARTIST":      bookAuthor,
+				"ALBUMARTIST": bookAuthor,
+				"NARRATOR":    seriesNarrator,
+				"GROUPING":    fmt.Sprintf("%s #%d", series, i),
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("fixtures: series book %d: %w", i, err)
+		}
+		paths = append(paths, made[0])
+	}
+	return paths, nil
+}

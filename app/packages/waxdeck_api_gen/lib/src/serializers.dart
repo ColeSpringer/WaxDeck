@@ -36,6 +36,8 @@ import 'package:waxdeck_api_gen/src/model/book_merge_request.dart';
 import 'package:waxdeck_api_gen/src/model/book_part.dart';
 import 'package:waxdeck_api_gen/src/model/book_resume.dart';
 import 'package:waxdeck_api_gen/src/model/book_series.dart';
+import 'package:waxdeck_api_gen/src/model/book_series_detail.dart';
+import 'package:waxdeck_api_gen/src/model/book_series_entry.dart';
 import 'package:waxdeck_api_gen/src/model/book_series_page.dart';
 import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:waxdeck_api_gen/src/model/book_split_request.dart';
@@ -417,6 +419,8 @@ part 'serializers.g.dart';
   BookPart,
   BookResume,
   BookSeries,
+  BookSeriesDetail,
+  BookSeriesEntry,
   BookSeriesPage,
   BookSettings,
   BookSplitRequest,

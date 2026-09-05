@@ -524,6 +524,9 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 	if req.Body.RadioFavorites != nil {
 		in.RadioFavorites = *req.Body.RadioFavorites
 	}
+	if req.Body.RadioScrobbleMutedStations != nil {
+		in.RadioScrobbleMutedStations = *req.Body.RadioScrobbleMutedStations
+	}
 	if req.Body.Pinned != nil {
 		in.Pinned = *req.Body.Pinned
 	}
@@ -560,6 +563,9 @@ func prefsJSON(p service.Prefs) Prefs {
 	}
 	if len(p.RadioFavorites) > 0 {
 		out.RadioFavorites = &p.RadioFavorites
+	}
+	if len(p.RadioScrobbleMutedStations) > 0 {
+		out.RadioScrobbleMutedStations = &p.RadioScrobbleMutedStations
 	}
 	if len(p.Pinned) > 0 {
 		out.Pinned = &p.Pinned

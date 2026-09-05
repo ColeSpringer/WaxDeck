@@ -316,6 +316,11 @@ class _StationGrid extends ConsumerWidget {
     final store = ref.watch(artworkStoreProvider);
     final repository = ref.watch(repositoryProvider);
     final favorites = ref.watch(radioFavoritesProvider);
+    // Watched here rather than read when a menu opens: the scrobbler
+    // slots are fetched, so a menu that read them cold would draw its
+    // row one open late.
+    final scrobbling = ref.watch(radioScrobblingProvider);
+    final muted = ref.watch(radioScrobbleMutedProvider);
     return SliverPadding(
       padding: sizeClass.gutter,
       sliver: SliverLayoutBuilder(
@@ -341,6 +346,8 @@ class _StationGrid extends ConsumerWidget {
                 playing: playing,
                 starting: playing && playback.starting,
                 pinned: favorites.contains(station.pid),
+                scrobbling: scrobbling,
+                muted: muted.contains(station.pid.toUpperCase()),
                 nowPlaying: playing ? playback.nowPlaying : null,
                 artwork: waxStationLogo(store, repository, station),
                 playback: playback,
@@ -361,6 +368,8 @@ class _StationTile extends ConsumerWidget {
     required this.playing,
     required this.starting,
     required this.pinned,
+    required this.scrobbling,
+    required this.muted,
     required this.nowPlaying,
     required this.artwork,
     required this.playback,
@@ -371,6 +380,14 @@ class _StationTile extends ConsumerWidget {
   final bool playing;
   final bool starting;
   final bool pinned;
+
+  /// Whether this account has anywhere to scrobble to and has not
+  /// silenced the whole dial, which is what the menu's row is gated on.
+  final bool scrobbling;
+
+  /// Whether this station is one of the ones it does not report.
+  final bool muted;
+
   final String? nowPlaying;
   final WaxArtwork? artwork;
   final RadioPlayback playback;
@@ -378,6 +395,10 @@ class _StationTile extends ConsumerWidget {
   /// The rows behind the overflow button. One declaration rather than
   /// one instance - the button and the card's secondary tap each build
   /// it - so the two cannot drift into offering different menus.
+  ///
+  /// The scrobble row only when there is something to scrobble to: with
+  /// nothing connected, or the whole dial silenced in settings, a
+  /// per-station switch would name a setting with no effect.
   List<WaxMenuItem<String>> _menuItems(
     AppLocalizations l10n,
   ) => <WaxMenuItem<String>>[
@@ -388,6 +409,14 @@ class _StationTile extends ConsumerWidget {
     ),
     if (station.homepageUrl != null)
       WaxMenuItem<String>(value: 'homepage', label: l10n.radioStationWebsite),
+    if (scrobbling)
+      WaxMenuItem<String>(
+        value: 'scrobble',
+        label: muted
+            ? l10n.radioScrobbleStationResume
+            : l10n.radioScrobbleStationMute,
+        semanticsId: SemanticsIds.radioScrobbleToggle(station.pid),
+      ),
     WaxMenuItem<String>(
       value: 'delete',
       label: l10n.radioRemoveStation,
@@ -473,6 +502,8 @@ class _StationTile extends ConsumerWidget {
         await showAddStationDialog(context, editing: station);
       case 'homepage':
         await openStationHomepage(context, station);
+      case 'scrobble':
+        await toggleStationScrobble(context, ref, station);
       case 'delete':
         await _remove(context, ref);
     }

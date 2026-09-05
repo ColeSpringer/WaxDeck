@@ -2927,6 +2927,22 @@
       }
     }
   },
+  "bookSeriesEmpty": "No series yet",
+  "@bookSeriesEmpty": {
+    "description": "Empty state of the series index: nothing on the shelf carries a series in its tags."
+  },
+  "bookSeriesEmptyMessage": "A book joins a series when its tags name one. Set one from a book's metadata editor.",
+  "@bookSeriesEmptyMessage": {
+    "description": "Line under that title, saying where a series comes from."
+  },
+  "bookSeriesIndexLoadError": "Could not load the series",
+  "@bookSeriesIndexLoadError": {
+    "description": "Error state when the series index read failed."
+  },
+  "bookSeriesLoadError": "Could not open this series",
+  "@bookSeriesLoadError": {
+    "description": "Error state when the series read failed."
+  },
   "bookSeriesMerge": "Merge series into...",
   "@bookSeriesMerge": {
     "description": "Admin overflow entry on a book screen, opening the picker that folds this book's series into another."
@@ -2957,6 +2973,14 @@
       }
     }
   },
+  "bookSeriesNoBooks": "Nothing to show here",
+  "@bookSeriesNoBooks": {
+    "description": "Empty state of a series screen: the series exists but this account can open none of its books."
+  },
+  "bookSeriesNoBooksMessage": "This series holds nothing you can open. Ask an administrator if you expected to see it.",
+  "@bookSeriesNoBooksMessage": {
+    "description": "Line under that title, naming the two things that can cause it: a library grant, or a content rule."
+  },
   "bookSeriesSequence": "Book {number} of {series}",
   "@bookSeriesSequence": {
     "description": "Where a book sits in its series, as a link to the rest of it.",
@@ -2970,6 +2994,18 @@
         "example": "Earthsea"
       }
     }
+  },
+  "bookSeriesShowAll": "Show all",
+  "@bookSeriesShowAll": {
+    "description": "The series shelf's action, opening the full index."
+  },
+  "bookSeriesTitle": "Series",
+  "@bookSeriesTitle": {
+    "description": "The shelf on the audiobook hub that opens the series index, and that index's own title. One key for both: they name the same thing on two surfaces."
+  },
+  "bookSeriesUnknownSequence": "-",
+  "@bookSeriesUnknownSequence": {
+    "description": "Stands in for the number in a series row when the book's tags name the series without one. A dash rather than a blank, so the column reads as a column."
   },
   "bookSettingsSpeed": "Speed {speed}",
   "@bookSettingsSpeed": {
@@ -8122,6 +8158,18 @@
   "@playlistSmartEmptyTitle": {
     "description": "Empty state of a smart playlist whose rules match nothing."
   },
+  "playlistSyncArmLabel": "Sync from",
+  "@playlistSyncArmLabel": {
+    "description": "Label over the choice between a live source URL and a pasted export, on a playlist with no binding yet."
+  },
+  "playlistSyncArmLive": "A link",
+  "@playlistSyncArmLive": {
+    "description": "The live arm of that choice: a playlist URL the server re-enumerates on a schedule."
+  },
+  "playlistSyncArmMatched": "An export",
+  "@playlistSyncArmMatched": {
+    "description": "The matched arm of that choice: a pasted export re-matched against the library on demand."
+  },
   "playlistSyncChipFailing": "Sync failing",
   "@playlistSyncChipFailing": {
     "description": "Status chip on a synced playlist whose last sync run failed."
@@ -8240,7 +8288,11 @@
   "@playlistSyncLastRunNothing": {
     "description": "The last-run line when the run completed with every count at zero."
   },
-  "playlistSyncMatchedNote": "A {source} export re-matches against the library on demand and downloads nothing. Bind a fresh export to change what it holds.",
+  "playlistSyncMatchedModeHelp": "An export downloads nothing, so there are no files to move to the trash.",
+  "@playlistSyncMatchedModeHelp": {
+    "description": "Line under the mode choice on a matched binding, saying why mirror-trash is not offered."
+  },
+  "playlistSyncMatchedNote": "A {source} export re-matches against the library on demand and downloads nothing.",
   "@playlistSyncMatchedNote": {
     "description": "Note in the sync sheet for a binding recorded from a streaming export rather than a live URL. {source} is the export format's label, e.g. spotify.",
     "placeholders": {
@@ -8281,6 +8333,14 @@
   "playlistSyncNow": "Sync now",
   "@playlistSyncNow": {
     "description": "Button that queues a sync run immediately."
+  },
+  "playlistSyncPayloadHint": "Paste the export here",
+  "@playlistSyncPayloadHint": {
+    "description": "Placeholder in that box."
+  },
+  "playlistSyncPayloadLabel": "Export",
+  "@playlistSyncPayloadLabel": {
+    "description": "Label of the box the export is pasted into."
   },
   "playlistSyncPreviewAdd": "{count, plural, =1{1 track would join the list} other{{count} tracks would join the list}}",
   "@playlistSyncPreviewAdd": {
@@ -8378,6 +8438,10 @@
       }
     }
   },
+  "playlistSyncRetryRead": "Try again",
+  "@playlistSyncRetryRead": {
+    "description": "Retries the read of a playlist's sync binding after it failed; the sheet cannot offer its settings until it knows what is stored."
+  },
   "playlistSyncSave": "Save",
   "@playlistSyncSave": {
     "description": "Button storing the sync settings, replacing the binding whole."
@@ -8393,6 +8457,10 @@
   "playlistSyncSheetTitle": "Sync from source",
   "@playlistSyncSheetTitle": {
     "description": "Title of the synced-playlist settings sheet."
+  },
+  "playlistSyncSourceLabel": "Export format",
+  "@playlistSyncSourceLabel": {
+    "description": "Label over the choice of which service an export came from."
   },
   "playlistSyncSuspended": "Syncing is suspended after repeated failures. A successful sync turns it back on.",
   "@playlistSyncSuspended": {
@@ -9713,6 +9781,34 @@
       "title": {
         "type": "String",
         "example": "Ascension Day"
+      }
+    }
+  },
+  "radioScrobbleStationMute": "Do not scrobble this station",
+  "@radioScrobbleStationMute": {
+    "description": "Station menu item that stops reporting this one station's segments to the account's scrobblers."
+  },
+  "radioScrobbleStationMuted": "{name} will not be scrobbled",
+  "@radioScrobbleStationMuted": {
+    "description": "Snackbar after muting one station's scrobbling.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
+  "radioScrobbleStationResume": "Scrobble this station",
+  "@radioScrobbleStationResume": {
+    "description": "Station menu item that starts reporting this one station's segments again."
+  },
+  "radioScrobbleStationResumed": "{name} will be scrobbled",
+  "@radioScrobbleStationResumed": {
+    "description": "Snackbar after unmuting one station's scrobbling.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
       }
     }
   },

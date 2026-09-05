@@ -168,6 +168,17 @@ timeline, so resuming on another device lands in the right chapter of
 the right part. The book screen offers chapter navigation, per-book
 speed memory, and a sleep timer with an end-of-chapter mode.
 
+A series is a name a book's tags carry, in the grouping field, with an
+optional number after it ("Tidewater #2"). Books that name one get a
+**Series** shelf on the hub and an index behind it; a series opens to
+its books in the order the numbers put them, and the series line on a
+book screen is the way in. The number is whatever the tags say, so it
+can be decimal for an in-between entry and absent for a book that
+names the series without one. Because a series is a spelling rather
+than something anyone curates, two spellings are two series: an
+administrator folds one into the other from the book screen's
+overflow, and the books move while everything else about them stays.
+
 ## Silence trimming and voice boost
 
 Silence trimming skips mapped quiet spans client-side by seeking over

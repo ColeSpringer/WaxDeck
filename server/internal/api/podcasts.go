@@ -498,10 +498,13 @@ func (s *Server) GetBook(ctx context.Context, req GetBookRequestObject) (GetBook
 	return GetBook200JSONResponse(out), nil
 }
 
-// ListBookSeries pages the series behind the visible books. It exists
-// to name a merge target: a series is a tag rather than a curated
-// entity, so a split spelling has no duplicates finding to arrive
-// through.
+// ListBookSeries pages the series behind the visible books. A series is
+// a tag rather than a curated entity, so a split spelling has no
+// duplicates finding to arrive through: this both offers the target of
+// a merge and backs the browse index. Two callers with different page
+// budgets, which is what the limit is sized against - the merge picker
+// drains the whole list, the hub's shelf stops as soon as it has
+// enough tiles to draw.
 func (s *Server) ListBookSeries(ctx context.Context, req ListBookSeriesRequestObject) (ListBookSeriesResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
@@ -533,6 +536,40 @@ func (s *Server) ListBookSeries(ctx context.Context, req ListBookSeriesRequestOb
 		out.NextCursor = ptr(page.NextCursor)
 	}
 	return ListBookSeries200JSONResponse(out), nil
+}
+
+// GetBookSeries reads one series and the books in it.
+func (s *Server) GetBookSeries(ctx context.Context, req GetBookSeriesRequestObject) (GetBookSeriesResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	detail, err := s.svc.BookSeriesDetailFor(ctx, uc, req.Pid)
+	if err != nil {
+		if service.KindOf(err) == service.KindNotFound {
+			return GetBookSeries404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	out := BookSeriesDetail{
+		Pid:   detail.PID,
+		Name:  detail.Name,
+		Books: make([]BookSeriesEntry, 0, len(detail.Books)),
+	}
+	if detail.BookCount > 0 {
+		out.BookCount = ptr(detail.BookCount)
+	}
+	if detail.TotalDurationMS > 0 {
+		out.TotalDurationMs = ptr(detail.TotalDurationMS)
+	}
+	for _, entry := range detail.Books {
+		row := BookSeriesEntry{Book: summaryJSON(entry.Book)}
+		if entry.Sequence != "" {
+			row.Sequence = ptr(entry.Sequence)
+		}
+		out.Books = append(out.Books, row)
+	}
+	return GetBookSeries200JSONResponse(out), nil
 }
 
 func (s *Server) GetBookResume(ctx context.Context, req GetBookResumeRequestObject) (GetBookResumeResponseObject, error) {

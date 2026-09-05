@@ -183,8 +183,61 @@ export class Playlists extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.playlistSyncChip));
   }
 
+  syncArm(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncArm));
+  }
+
+  syncSource(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncSource));
+  }
+
+  syncPayload(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncPayload));
+  }
+
+  syncMode(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncMode));
+  }
+
   async openSyncSheet(): Promise<void> {
     await this.fromOverflow(this.syncSettings(), this.syncSheet());
+  }
+
+  /// Bind the open sheet to a pasted export: pick the matched arm, name
+  /// the format, paste, save. The bound-state verbs are what "saved"
+  /// looks like.
+  ///
+  /// The arm pick settles on the source chooser, which the live arm
+  /// does not draw. The format pick settles on nothing, deliberately:
+  /// `chooseFromMenu` treats a visible `settled` as "already done" and
+  /// returns without picking, and every control this pick reveals is on
+  /// screen before it - so the menu closing is the only honest signal
+  /// that the row was taken.
+  async bindExport(source: string, payload: string): Promise<void> {
+    const page = this.ctx.page;
+    await chooseFromMenu(
+      this.syncArm(),
+      page.locator(sem(SemanticsIds.playlistSyncArmOption('matched'))),
+      this.syncSource(),
+    );
+    await chooseFromMenu(
+      this.syncSource(),
+      page.locator(sem(SemanticsIds.playlistSyncSourceOption(source))),
+    );
+    await typeInto(page, this.syncPayload(), payload);
+    await this.syncSave().click();
+    await this.syncNow().waitFor({ timeout: T.action });
+  }
+
+  /// Flip the mode on the open sheet and save. On a bound playlist this
+  /// is the settings-only re-save: nothing about the binding but its
+  /// settings is resent.
+  async saveSyncMode(mode: string): Promise<void> {
+    await chooseFromMenu(
+      this.syncMode(),
+      this.ctx.page.locator(sem(SemanticsIds.playlistSyncModeOption(mode))),
+    );
+    await this.syncSave().click();
   }
 
   /// Type a source URL into the open sheet and save; the sheet answers

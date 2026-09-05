@@ -457,6 +457,10 @@ abstract interface class WaxDeckRepository {
   /// audiobooks belong to.
   Future<BookSeriesPage> listBookSeries({String? cursor, int? limit});
 
+  /// `GET /series/{pid}`: one series and the books in it, in sequence
+  /// order.
+  Future<BookSeriesDetail> getBookSeries(String pid);
+
   /// `GET /books/{pid}/resume`: the caller's cross-device resume point
   /// on the book timeline.
   Future<BookResume> getBookResume(String pid);
@@ -606,11 +610,19 @@ abstract interface class WaxDeckRepository {
   Future<PlaylistSource> getPlaylistSource(String pid);
 
   /// `PUT /playlists/{pid}/source`: bind the playlist to an external
-  /// source, replacing any previous binding whole - always send the
-  /// complete settings. [url] names a live source; [source] plus
-  /// [payload] or [refs] records a matched export. [intervalHours] is
-  /// required for a live source (1, 3, 6, 12, or 24) and absent for a
-  /// matched one; selecting `mirror-trash` needs the delete right.
+  /// source, or re-save the settings on the binding already stored.
+  ///
+  /// [url] names a live source; [source] plus [payload] or [refs]
+  /// records a matched export. Either form replaces any previous
+  /// binding whole, so send the complete settings with it.
+  /// [intervalHours] is required for a live source (1, 3, 6, 12, or 24)
+  /// and absent for a matched one; selecting `mirror-trash` needs the
+  /// delete right.
+  ///
+  /// With none of those four, the body is a settings-only re-save and
+  /// needs a binding under it: the stored source, refs, identity and
+  /// cover are kept and only [mode] (and [intervalHours], for a live
+  /// binding) change.
   Future<PlaylistSource> setPlaylistSource(
     String pid, {
     required String mode,
@@ -626,8 +638,10 @@ abstract interface class WaxDeckRepository {
   Future<void> unbindPlaylistSource(String pid);
 
   /// `POST /playlists/{pid}/source/preview`: what a sync would do
-  /// right now, computed without writing anything. With arguments it
-  /// previews those prospective settings; without, the stored binding.
+  /// right now, computed without writing anything. With a source named
+  /// it previews that prospective binding; with settings alone, the
+  /// stored binding under them; with nothing, the stored binding as it
+  /// stands.
   Future<PlaylistSyncPreview> previewPlaylistSync(
     String pid, {
     String? mode,
@@ -2708,6 +2722,12 @@ class WaxDeckClient implements WaxDeckRepository {
         );
         return bookSeriesPageFromGen(_require(response.data));
       });
+
+  @override
+  Future<BookSeriesDetail> getBookSeries(String pid) => _guard(() async {
+    final response = await _gen.getBooksApi().getBookSeries(pid: pid);
+    return bookSeriesDetailFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
 
   @override
   Future<BookResume> getBookResume(String pid) => _guard(() async {

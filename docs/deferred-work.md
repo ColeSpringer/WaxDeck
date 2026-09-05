@@ -663,35 +663,6 @@ here waits on upstream.
   two suites move to `flutter drive` plus chromedriver, or into the
   Playwright suite under `e2e/`.
 
-## Curation and metadata
-
-- `[in-repo]` **A matched binding can only be made at import, as
-  `mirror`, and never afterwards.** The import dialog's keep-matched
-  switch is the only client path to one: it binds the playlist it just
-  created, and it binds `mirror`, which is what "this playlist is that
-  export" means. Two things follow. An existing playlist cannot be
-  bound to an export at all - including one whose bind the server
-  refused a moment earlier, which leaves the import's own report
-  telling somebody about a binding they now have no way to make.
-  And the mode cannot be changed later: the sync sheet's matched branch
-  is prose plus the run and unbind buttons, Save renders only for a
-  live binding, and re-importing makes a second playlist rather than
-  rebinding the first - and would bind `mirror` again anyway. The
-  endpoint accepts `append` and takes a binding for any owned playlist;
-  what is missing is somewhere to say so. The fix shape is the sync
-  sheet growing a matched arm - paste an export, pick the mode - which
-  would answer all of it at once.
-
-- `[in-repo]` **Books have no series screen.** A series is now a real
-  entity with a pid, a listing (`GET /books/series`) and a merge, but
-  no location of its own: the book screen's series line still narrows
-  the hub to the author, which is where the rest of the series usually
-  is but not what it says. The listing exists to name a merge target,
-  not to browse. Upstream now has an entity page read for a series
-  (`EntityPage(read.EntitySeries)`, `BooksInSeries`), so a real series
-  dimension - a route, a bucket in the books hub, the books in
-  sequence - can follow whenever the books hub grows one.
-
 ## Discovery and stats
 
 - `[in-repo]` **The year in review draws no per-media-type split.** The
@@ -825,14 +796,6 @@ here waits on upstream.
   the client sends when it stops playing a timeline, which is a contract
   change (a DELETE on the mint, or a field on the existing session
   teardown) rather than a tuning of the window.
-- `[in-repo]` **Radio scrobbling is off per account, not per station.**
-  The account-wide switch ships (`Prefs.radioScrobbleOptOut`),
-  which covers the listener who wants none of it. What the original entry
-  also floated is a per-station flag, for the household that scrobbles
-  its music stations and not its talk ones. That wants a per-user
-  per-station bit, and the only per-user station state that exists is the
-  favourites list; whoever adds a second one should decide whether they
-  share a shape.
 - `[in-repo]` **Subsonic's `maxBitRate` is still documented-ignored.**
   The capped-transcode machinery it needs now exists
   (`flow.PlayOptions.MaxBitrateKbps`, minted as `fmt=`/`br=` on the

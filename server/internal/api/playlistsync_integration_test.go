@@ -50,6 +50,9 @@ type fakeSyncSource struct {
 	// truncate marks the snapshot as cut short by the enumeration cap,
 	// whatever it holds.
 	truncate bool
+	// probes counts snapshot reads of the playlist, which is the
+	// network round trip a settings-only re-save must not spend.
+	probes int
 }
 
 func syncWatchURL(id string) string { return "https://tube.example/watch?v=" + id }
@@ -60,6 +63,12 @@ func (f *fakeSyncSource) setEntries(entries ...fakeSyncEntry) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.entries = entries
+}
+
+func (f *fakeSyncSource) probeCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.probes
 }
 
 func (f *fakeSyncSource) fetchCount() int {
@@ -128,6 +137,7 @@ func (f *fakeSyncSource) PlaylistSnapshot(_ context.Context, url string, opts sy
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.probes++
 	if f.enumerateErr != nil {
 		return nil, f.enumerateErr
 	}
@@ -308,6 +318,209 @@ func TestPlaylistSourceBindingLifecycle(t *testing.T) {
 	wantStatus(t, resp, 404, "read after unbind")
 	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid, h.token)
 	wantStatus(t, resp, 200, "playlist survives unbind")
+}
+
+// TestPlaylistSourceSettingsOnlyResave covers the re-save form: a body
+// naming no source changes the settings on the binding already stored
+// and leaves everything else - the source, its refs, its entries, and,
+// on a live binding, the network probe that would otherwise run for
+// every mode flip.
+func TestPlaylistSourceSettingsOnlyResave(t *testing.T) {
+	t.Parallel()
+	media := t.TempDir()
+	src := &fakeSyncSource{playlistURL: "https://tube.example/playlist?list=PLsync", title: "Sync Tapes"}
+	src.setEntries(syncFixtureEntries(t, media, 1)...)
+	h := syncHarness(t, src)
+
+	// Matched first, since it is the form that cannot be re-sent: the
+	// export is not stored anywhere the client can read back.
+	items := h.items(t, "")
+	first := items.Items[0]
+	if first.Artist == nil {
+		t.Fatal("fixture item carries no artist")
+	}
+	matched := createStaticPlaylist(t, h, "Resaved matched")
+	payload := fmt.Sprintf("%s - %s\nNobody Here - Never Recorded", *first.Artist, first.Title)
+	bound := decodeStatus[PlaylistSource](t, h.putJSON(t, "/api/v1/playlists/"+matched.Pid+"/source", map[string]any{
+		"source": "text", "payload": payload, "mode": "append",
+	}), 200, "bind matched")
+	if bound.RefCount == nil || *bound.RefCount != 2 {
+		t.Fatalf("matched binding = %+v", bound)
+	}
+
+	// Synced once, so there is per-entry bookkeeping to lose: a matched
+	// re-put used to clear it on every save.
+	if task := syncNow(t, h, matched.Pid); task.State != "done" {
+		t.Fatalf("matched sync = %+v", task)
+	}
+	before := sourceEntryStates(t, h, matched.Pid)
+	if len(before) == 0 {
+		t.Fatal("a synced matched binding should hold per-entry state")
+	}
+
+	resaved := decodeStatus[PlaylistSource](t, h.putJSON(t, "/api/v1/playlists/"+matched.Pid+"/source", map[string]any{
+		"mode": "mirror",
+	}), 200, "re-save matched")
+	if resaved.Mode != "mirror" || resaved.Live || resaved.Source != "text" {
+		t.Fatalf("re-saved matched = %+v", resaved)
+	}
+	// The refs are the thing: a re-save that rebuilt the row would have
+	// needed the export again and come back holding nothing.
+	if resaved.RefCount == nil || *resaved.RefCount != 2 {
+		t.Fatalf("re-saved refCount = %v, want 2", resaved.RefCount)
+	}
+	if read := getSource(t, h, matched.Pid); read.Mode != "mirror" ||
+		read.RefCount == nil || *read.RefCount != 2 {
+		t.Fatalf("read-back = %+v", read)
+	}
+	if after := sourceEntryStates(t, h, matched.Pid); len(after) != len(before) {
+		t.Fatalf("re-save left %d entry states, want the %d it had", len(after), len(before))
+	}
+
+	// mirror-trash is still out of reach for a matched binding, which
+	// downloads nothing and so has nothing to trash.
+	wantStatus(t, h.putJSON(t, "/api/v1/playlists/"+matched.Pid+"/source", map[string]any{
+		"mode": "mirror-trash",
+	}), 400, "mirror-trash on a matched binding")
+	// And an interval, which a matched binding never has.
+	wantStatus(t, h.putJSON(t, "/api/v1/playlists/"+matched.Pid+"/source", map[string]any{
+		"mode": "append", "intervalHours": 6,
+	}), 400, "an interval on a matched binding")
+
+	// The preview twin: the stored binding under the settings Save
+	// would send.
+	preview := decodeStatus[PlaylistSyncPreview](t, h.postJSON(t,
+		"/api/v1/playlists/"+matched.Pid+"/source/preview", map[string]any{"mode": "append"}),
+		200, "settings-only preview")
+	if preview.Entries != 2 {
+		t.Fatalf("settings-only preview = %+v", preview)
+	}
+
+	// Live: the mode and the interval change, and the source is not
+	// probed for it.
+	live := createStaticPlaylist(t, h, "Resaved live")
+	decodeStatus[PlaylistSource](t, h.putJSON(t, "/api/v1/playlists/"+live.Pid+"/source", map[string]any{
+		"url": src.playlistURL, "mode": "append", "intervalHours": 6,
+	}), 200, "bind live")
+	probes := src.probeCount()
+	if probes == 0 {
+		t.Fatal("binding a live source should have probed it")
+	}
+
+	flipped := decodeStatus[PlaylistSource](t, h.putJSON(t, "/api/v1/playlists/"+live.Pid+"/source", map[string]any{
+		"mode": "mirror", "intervalHours": 12,
+	}), 200, "re-save live")
+	if flipped.Mode != "mirror" || !flipped.Live ||
+		flipped.IntervalHours == nil || *flipped.IntervalHours != 12 {
+		t.Fatalf("re-saved live = %+v", flipped)
+	}
+	if flipped.Url == nil || *flipped.Url != src.playlistURL {
+		t.Fatalf("re-saved live url = %v", flipped.Url)
+	}
+	if got := src.probeCount(); got != probes {
+		t.Fatalf("a settings-only re-save probed the source %d times", got-probes)
+	}
+	// A live binding still needs its interval named.
+	wantStatus(t, h.putJSON(t, "/api/v1/playlists/"+live.Pid+"/source", map[string]any{
+		"mode": "mirror",
+	}), 400, "a live re-save with no interval")
+
+	// An explicit empty url named a source and named it badly, which is
+	// the refusal it always was: reading it as a re-save would keep the
+	// binding somebody was replacing and answer 200 for it.
+	wantStatus(t, h.putJSON(t, "/api/v1/playlists/"+live.Pid+"/source", map[string]any{
+		"mode": "mirror", "url": "", "intervalHours": 6,
+	}), 400, "a bind with a blank url")
+	if held := getSource(t, h, live.Pid); held.Url == nil || *held.Url != src.playlistURL {
+		t.Fatalf("the refused bind moved the stored url: %+v", held.Url)
+	}
+
+	// With no binding under it, the form is a bind that named nothing.
+	bare := createStaticPlaylist(t, h, "Resaved nothing")
+	wantStatus(t, h.putJSON(t, "/api/v1/playlists/"+bare.Pid+"/source", map[string]any{
+		"mode": "mirror",
+	}), 400, "a settings-only body with no binding")
+	// And Preview answers the same body the same way. The two are one
+	// form on one sheet; a 404 here would be a sentence about a binding
+	// the visitor is trying to create.
+	wantStatus(t, h.postJSON(t, "/api/v1/playlists/"+bare.Pid+"/source/preview", map[string]any{
+		"mode": "mirror",
+	}), 400, "a settings-only preview with no binding")
+	// No body at all is the other reading, and keeps its own answer.
+	wantStatus(t, h.postJSON(t, "/api/v1/playlists/"+bare.Pid+"/source/preview", nil),
+		404, "a bodyless preview with no binding")
+}
+
+// TestPlaylistSourceResaveClearsHealth pins what a settings-only save
+// does to the binding's accounting: a suspended one is let run again -
+// which is the whole point of correcting its settings - and a mode
+// escalation takes the bind's grace period before the sweeper can act
+// on it.
+func TestPlaylistSourceResaveClearsHealth(t *testing.T) {
+	t.Parallel()
+	media := t.TempDir()
+	src := &fakeSyncSource{playlistURL: "https://tube.example/playlist?list=PLsync", title: "Sync Tapes"}
+	src.setEntries(syncFixtureEntries(t, media, 1)...)
+	h := syncHarness(t, src)
+	ctx := context.Background()
+
+	pl := createStaticPlaylist(t, h, "Suspended")
+	decodeStatus[PlaylistSource](t, h.putJSON(t, "/api/v1/playlists/"+pl.Pid+"/source", map[string]any{
+		"url": src.playlistURL, "mode": "append", "intervalHours": 24,
+	}), 200, "bind live")
+
+	// Suspended the way ten failures leave it, and stamped as attempted
+	// a long time ago so the sweeper would take it the moment it could.
+	row, err := h.store.PlaylistSourceFor(ctx, pl.Pid[3:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	row.ConsecutiveFailures, row.Disabled = 10, true
+	row.LastError = "the tube is down"
+	row.LastAttemptNS = time.Now().Add(-48 * time.Hour).UnixNano()
+	if err := h.store.PutPlaylistSource(ctx, row); err != nil {
+		t.Fatal(err)
+	}
+
+	resaved := decodeStatus[PlaylistSource](t, h.putJSON(t, "/api/v1/playlists/"+pl.Pid+"/source", map[string]any{
+		"mode": "append", "intervalHours": 1,
+	}), 200, "re-save the interval")
+	if resaved.Disabled || resaved.ConsecutiveFailures != 0 || resaved.LastError != nil {
+		t.Fatalf("a re-save left the health standing: %+v", resaved)
+	}
+	// The interval alone moved, so the next run is still measured from
+	// the last real attempt rather than pushed out by the save.
+	after, err := h.store.PlaylistSourceFor(ctx, pl.Pid[3:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.LastAttemptNS != row.LastAttemptNS {
+		t.Fatal("an interval-only re-save moved the last-attempt stamp")
+	}
+
+	// A changed mode does move it: escalating to mirror-trash must not
+	// put files in the trash before the next scheduled run.
+	decodeStatus[PlaylistSource](t, h.putJSON(t, "/api/v1/playlists/"+pl.Pid+"/source", map[string]any{
+		"mode": "mirror-trash", "intervalHours": 1,
+	}), 200, "escalate the mode")
+	escalated, err := h.store.PlaylistSourceFor(ctx, pl.Pid[3:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if escalated.LastAttemptNS <= row.LastAttemptNS {
+		t.Fatal("a mode escalation kept the old attempt stamp, so the sweeper can trash at once")
+	}
+}
+
+// sourceEntryStates reads a binding's per-entry bookkeeping, which no
+// endpoint answers: it is the thing a re-save must not throw away.
+func sourceEntryStates(t *testing.T, h *harness, apiPlaylistPID string) map[string]string {
+	t.Helper()
+	states, err := h.store.PlaylistSourceEntryStates(context.Background(), apiPlaylistPID[3:])
+	if err != nil {
+		t.Fatalf("reading entry states: %v", err)
+	}
+	return states
 }
 
 // TestSessionCarriesEffectiveDelete pins the self view's delete field,

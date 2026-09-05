@@ -25,6 +25,11 @@ type Prefs struct {
 	// order. The station library is shared by the household, so this is
 	// the only per-user station state there is.
 	RadioFavorites []string `json:"radioFavorites,omitempty"`
+	// RadioScrobbleMutedStations are the station PIDs whose segments
+	// this user does not scrobble. A set, not an order; the same shape
+	// as RadioFavorites because it is the same kind of per-user station
+	// state. Read only when RadioScrobbleOptOut is unset.
+	RadioScrobbleMutedStations []string `json:"radioScrobbleMutedStations,omitempty"`
 	// Pinned are the entity PIDs this user has pinned to home, in shelf
 	// order. The same shape and the same rules as RadioFavorites: a pin
 	// is about the listener, not the machine they made it on.
@@ -66,6 +71,11 @@ var validThemes = map[string]bool{"system": true, "dark": true, "light": true, "
 // that cap is theirs, while this one exists so a preference document
 // cannot be grown without limit.
 const maxRadioFavorites = 64
+
+// maxMutedStations bounds the muted-station set, for
+// maxRadioFavorites' reason and with its cap: the two lists hold the
+// same pids and there is no household with more stations than that.
+const maxMutedStations = 64
 
 // maxPinned bounds the pinned-to-home list, for maxRadioFavorites'
 // reason. The shelf draws all of them, so this one is the feature's cap
@@ -181,6 +191,9 @@ func (l *Library) PutPrefs(ctx context.Context, uc *UserCtx, p Prefs) (Prefs, er
 	if len(p.RadioFavorites) > maxRadioFavorites {
 		return Prefs{}, errInvalid(fmt.Sprintf("at most %d radio favorites", maxRadioFavorites))
 	}
+	if len(p.RadioScrobbleMutedStations) > maxMutedStations {
+		return Prefs{}, errInvalid(fmt.Sprintf("at most %d muted stations", maxMutedStations))
+	}
 	if len(p.Pinned) > maxPinned {
 		return Prefs{}, errInvalid(fmt.Sprintf("at most %d pins", maxPinned))
 	}
@@ -224,6 +237,17 @@ func (l *Library) PutPrefs(ctx context.Context, uc *UserCtx, p Prefs) (Prefs, er
 	}
 	if len(favorites) > 0 {
 		p.RadioFavorites = favorites
+	}
+	muted, err := canonicalPIDList(
+		p.RadioScrobbleMutedStations,
+		map[string]bool{PrefixRadioStation: true},
+		"muted station", "a station pid",
+	)
+	if err != nil {
+		return Prefs{}, err
+	}
+	if len(muted) > 0 {
+		p.RadioScrobbleMutedStations = muted
 	}
 	pinned, err := canonicalPIDList(p.Pinned, pinnablePrefixes, "pin", "a pinnable entity pid")
 	if err != nil {

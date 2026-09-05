@@ -58,6 +58,8 @@ export 'package:waxdeck_api_gen/src/model/book_merge_request.dart';
 export 'package:waxdeck_api_gen/src/model/book_part.dart';
 export 'package:waxdeck_api_gen/src/model/book_resume.dart';
 export 'package:waxdeck_api_gen/src/model/book_series.dart';
+export 'package:waxdeck_api_gen/src/model/book_series_detail.dart';
+export 'package:waxdeck_api_gen/src/model/book_series_entry.dart';
 export 'package:waxdeck_api_gen/src/model/book_series_page.dart';
 export 'package:waxdeck_api_gen/src/model/book_settings.dart';
 export 'package:waxdeck_api_gen/src/model/book_split_request.dart';

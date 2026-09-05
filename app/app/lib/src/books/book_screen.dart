@@ -257,18 +257,23 @@ class _SeriesLink extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final series = book.series!;
     final sequence = book.seriesSequence;
+    final seriesPid = book.seriesPid;
     return WaxButton(
       label: sequence == null
           ? series
           : context.l10n.bookSeriesSequence(sequence, series),
       kind: WaxButtonKind.text,
-      // A series is not a location: the catalog has no series dimension
-      // to drill, so this narrows the hub to the author instead, which
-      // is where the rest of the series is. The route lands when the
-      // dimension does.
-      // Narrows rather than toggles: toggling would clear the filter when
-      // the hub already held this author.
+      semanticsId: SemanticsIds.bookSeriesLink,
+      // The series screen where the book knows its pid. Where it does
+      // not - a series carried as a name with no entity behind it - the
+      // fallback still stands: narrow the hub to the author, which is
+      // where the rest of the series is. Narrowing rather than
+      // toggling, so an author the hub already held is not cleared.
       onPressed: () {
+        if (seriesPid != null) {
+          context.go(WaxRoute.bookSeries(seriesPid));
+          return;
+        }
         final author = book.authors.firstOrNull;
         if (author != null) {
           ref.read(bookViewProvider.notifier).narrowToAuthor(author);

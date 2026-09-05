@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -868,6 +869,56 @@ func TestPrefsRadioFavorites(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("unresolved pid status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// Muting one station is per account too, and holds the same pids under
+// the same rules as the dial: canonical case, no duplicates, capped.
+func TestPrefsRadioScrobbleMutedStations(t *testing.T) {
+	t.Parallel()
+	ts := newAuthTestServer(t)
+	lr := bootstrap(t, ts)
+
+	put := func(body any) *http.Response {
+		t.Helper()
+		return putJSON(t, ts, "/api/v1/users/me/prefs", lr.Token, body)
+	}
+
+	const one = "rs-01JZX5N8QW3F4V9T2B7KD3M9R6"
+	const two = "rs-01JZX5N8QW3F4V9T2B7KD3M9R7"
+
+	stored := decode[Prefs](t, put(map[string]any{
+		"radioScrobbleMutedStations": []string{strings.ToLower(one), two},
+	}))
+	if stored.RadioScrobbleMutedStations == nil ||
+		len(*stored.RadioScrobbleMutedStations) != 2 ||
+		(*stored.RadioScrobbleMutedStations)[0] != one {
+		t.Fatalf("stored muted = %+v", stored.RadioScrobbleMutedStations)
+	}
+
+	// Unmuting the last station drops the field, so absent and empty are
+	// one answer on the way back.
+	stored = decode[Prefs](t, put(map[string]any{
+		"radioScrobbleMutedStations": []string{},
+	}))
+	if stored.RadioScrobbleMutedStations != nil {
+		t.Fatalf("emptied muted = %+v", stored.RadioScrobbleMutedStations)
+	}
+
+	tooMany := make([]string, 0, 65)
+	for i := range 65 {
+		tooMany = append(tooMany, "rs-01JZX5N8QW3F4V9T2B7KD3M"+strconv.Itoa(100+i))
+	}
+	for _, body := range []map[string]any{
+		{"radioScrobbleMutedStations": []string{"al-01JZX5N8QW3F4V9T2B7KD3M9R6"}},
+		{"radioScrobbleMutedStations": []string{one, strings.ToLower(one)}},
+		{"radioScrobbleMutedStations": tooMany},
+	} {
+		resp := put(body)
+		resp.Body.Close()
+		if resp.StatusCode != 400 {
+			t.Fatalf("%v status = %d, want 400", body, resp.StatusCode)
+		}
 	}
 }
 

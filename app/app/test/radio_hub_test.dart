@@ -887,6 +887,78 @@ void main() {
     expect(artwork.evicted, contains(repo.radioLogoUrlFor('rs-2')));
   });
 
+  group('per-station scrobbling', () {
+    /// A repository whose account has a live scrobble connection, which
+    /// is what the toggle is gated on.
+    FakeRepository scrobbling() {
+      final repo = _repo();
+      repo.scrobblers = const [
+        Scrobbler(service: 'lastfm', available: true, connected: false),
+        Scrobbler(
+          service: 'listenbrainz',
+          available: true,
+          connected: true,
+          username: 'sam',
+        ),
+      ];
+      return repo;
+    }
+
+    testWidgets('is offered only where there is something to scrobble to', (
+      tester,
+    ) async {
+      // Two slots and neither linked: the endpoint answers a slot per
+      // service whether or not it is connected, so a non-empty list is
+      // not a connection.
+      final repo = _repo();
+      await _pumpHub(tester, _container(repo));
+      await _openStationMenu(tester, 'rs-2');
+      expect(_byId(SemanticsIds.radioScrobbleToggle('rs-2')), findsNothing);
+    });
+
+    testWidgets('is not offered while the whole dial is silenced', (
+      tester,
+    ) async {
+      // The account-wide switch is read first on the server too, so a
+      // per-station row here would name a setting with no effect.
+      final repo = scrobbling()..prefs = const Prefs(radioScrobbleOptOut: true);
+      await _pumpHub(tester, _container(repo));
+      await _openStationMenu(tester, 'rs-2');
+      expect(_byId(SemanticsIds.radioScrobbleToggle('rs-2')), findsNothing);
+    });
+
+    testWidgets('mutes the station it was raised from', (tester) async {
+      final repo = scrobbling();
+      await _pumpHub(tester, _container(repo));
+
+      await _openStationMenu(tester, 'rs-2');
+      expect(find.text('Do not scrobble this station'), findsOneWidget);
+      await tester.tap(_byId(SemanticsIds.radioScrobbleToggle('rs-2')));
+      await tester.pumpAndSettle();
+
+      expect(repo.prefs.radioScrobbleMutedStations, ['rs-2']);
+      expect(find.text('Deck Radio will not be scrobbled'), findsOneWidget);
+    });
+
+    testWidgets('unmutes a muted station and clears the last entry', (
+      tester,
+    ) async {
+      final repo = scrobbling()
+        ..prefs = const Prefs(radioScrobbleMutedStations: ['rs-2']);
+      await _pumpHub(tester, _container(repo));
+
+      await _openStationMenu(tester, 'rs-2');
+      expect(find.text('Scrobble this station'), findsOneWidget);
+      await tester.tap(_byId(SemanticsIds.radioScrobbleToggle('rs-2')));
+      await tester.pumpAndSettle();
+
+      // Empty, not absent: the write has to carry the last unmute
+      // through, and the server is what drops the field.
+      expect(repo.putPrefsCalls.last.radioScrobbleMutedStations, isEmpty);
+      expect(find.text('Deck Radio will be scrobbled'), findsOneWidget);
+    });
+  });
+
   group("search's radio chip", () {
     Future<void> pumpSearch(
       WidgetTester tester,

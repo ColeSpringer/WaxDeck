@@ -13,6 +13,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/add_to_library.dart';
 import 'books_controller.dart';
+import 'series_merge.dart';
 
 /// The audiobook domain's front door: what is being read, and everything
 /// there is to read.
@@ -93,6 +94,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
         SliverToBoxAdapter(
           child: _ContinueShelf(books: loaded, states: states),
         ),
+        const SliverToBoxAdapter(child: _SeriesShelf()),
         if (loaded.isNotEmpty)
           SliverToBoxAdapter(child: _Filters(books: loaded)),
         switch (state) {
@@ -346,6 +348,57 @@ class _ContinueShelf extends ConsumerWidget {
     if (remaining == null) return null;
     return l10n.booksTimeLeft(
       short ? wax.formatSpan(remaining) : wax.spellDuration(remaining),
+    );
+  }
+}
+
+/// The series the shelf's books belong to, and the way into the index.
+///
+/// Cards without artwork: the listing carries counts and library pids
+/// but no member pids, so a cover would cost a members read per row.
+/// Hidden when the library has none, which is the ordinary state for a
+/// shelf whose tags name no series.
+class _SeriesShelf extends ConsumerWidget {
+  const _SeriesShelf();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The shelf's own read, which stops as soon as it has enough tiles;
+    // the drained list is the index's and the merge picker's.
+    final series =
+        ref.watch(bookSeriesShelfProvider).value ?? const <BookSeries>[];
+    if (series.isEmpty) return const SizedBox.shrink();
+    final l10n = context.l10n;
+    final shown = series.take(kBookSeriesShelf).toList(growable: false);
+    final tiles = <MediaTileData>[
+      for (final row in shown)
+        MediaTileData(
+          title: row.name,
+          // Zero is what a restricted account reads back, and a "0
+          // books" caption on a series it can open is a lie.
+          subtitle: row.bookCount > 0
+              ? l10n.bookSeriesBookCount(row.bookCount)
+              : null,
+          domain: WaxDomain.audiobooks,
+          semanticsId: SemanticsIds.bookSeriesCard(row.pid),
+        ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: WaxSpace.s16),
+      child: ShelfRow(
+        title: l10n.bookSeriesTitle,
+        items: tiles,
+        actionLabel: l10n.bookSeriesShowAll,
+        actionSemanticsId: SemanticsIds.bookSeriesSeeAll,
+        onAction: () => context.go(WaxRoute.bookSeriesIndex),
+        // By position rather than by title: a tile carries no value
+        // equality, and two spellings of one series share a name.
+        onTapItem: (tile) {
+          final at = tiles.indexOf(tile);
+          if (at < 0) return;
+          context.go(WaxRoute.bookSeries(shown[at].pid));
+        },
+      ),
     );
   }
 }

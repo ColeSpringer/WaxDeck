@@ -10,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../player/autoplay_gate.dart';
 import '../player/session_registry.dart';
 import '../providers.dart';
+import '../settings/integrations_controller.dart';
 import '../settings/prefs_controller.dart';
 
 /// The shared internet radio station library.
@@ -206,6 +207,35 @@ String radioPinRefusalMessage(AppLocalizations l10n, RadioPinRefusal refusal) =>
 final radioFavoritesProvider = NotifierProvider<RadioFavorites, List<String>>(
   RadioFavorites.new,
 );
+
+/// The stations this account has muted for scrobbling, upper-cased so a
+/// membership test does not care what case the pid it holds arrived in.
+final radioScrobbleMutedProvider = Provider<Set<String>>((ref) {
+  final prefs = ref.watch(prefsControllerProvider).value;
+  return <String>{
+    for (final pid in prefs?.radioScrobbleMutedStations ?? const <String>[])
+      pid.toUpperCase(),
+  };
+});
+
+/// Whether a station's scrobbling is the listener's to decide right now:
+/// something is connected to scrobble to, and the whole dial is not
+/// already silenced. Both menus gate on it, so it is declared once.
+///
+/// The connected flag, not a non-empty list: the endpoint answers a slot
+/// per service whether or not it is linked, so a list of two unlinked
+/// slots would read as a connection.
+///
+/// Watching this from the dial costs one read of the slots per account
+/// per session - the controller behind it is not autoDispose - which is
+/// what lets a menu draw the row on the first open rather than one open
+/// late.
+final radioScrobblingProvider = Provider<bool>((ref) {
+  final prefs = ref.watch(prefsControllerProvider).value;
+  if (prefs?.radioScrobbleOptOut ?? false) return false;
+  final scrobblers = ref.watch(scrobblersProvider).value;
+  return scrobblers?.any((s) => s.connected) ?? false;
+});
 
 /// The pinned stations that still exist, in dial order.
 ///

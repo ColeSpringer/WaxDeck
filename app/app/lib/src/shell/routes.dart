@@ -112,6 +112,13 @@ abstract final class WaxRoute {
   static const books = '/books';
   static String book(String pid) => '$books/$pid';
 
+  /// The series index, and one series beneath it. Both are locations a
+  /// stranger can open, so both are gone to; the index's declared
+  /// parent is the books hub, which is where the shelf that opens it
+  /// lives.
+  static const bookSeriesIndex = '$books/series';
+  static String bookSeries(String pid) => '$bookSeriesIndex/$pid';
+
   static const radio = '/radio';
 
   /// Songs kept off the air. A location a stranger can open and get

@@ -27,6 +27,7 @@
     "radioSavedMore": "radio-saved-more-{pid}",
     "radioSavedOpen": "radio-saved-open",
     "radioSavedRemove": "radio-saved-remove-{pid}",
+    "radioScrobbleToggle": "radio-scrobble-{pid}",
     "radioSearchAdd": "radio-search-add-{index}",
     "radioSearchField": "radio-search-field",
     "radioSearchRun": "radio-search-run",

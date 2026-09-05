@@ -197,6 +197,22 @@
       }
     }
   },
+  "bookSeriesEmpty": "No series yet",
+  "@bookSeriesEmpty": {
+    "description": "Empty state of the series index: nothing on the shelf carries a series in its tags."
+  },
+  "bookSeriesEmptyMessage": "A book joins a series when its tags name one. Set one from a book's metadata editor.",
+  "@bookSeriesEmptyMessage": {
+    "description": "Line under that title, saying where a series comes from."
+  },
+  "bookSeriesIndexLoadError": "Could not load the series",
+  "@bookSeriesIndexLoadError": {
+    "description": "Error state when the series index read failed."
+  },
+  "bookSeriesLoadError": "Could not open this series",
+  "@bookSeriesLoadError": {
+    "description": "Error state when the series read failed."
+  },
   "bookSeriesMerge": "Merge series into...",
   "@bookSeriesMerge": {
     "description": "Admin overflow entry on a book screen, opening the picker that folds this book's series into another."
@@ -227,6 +243,14 @@
       }
     }
   },
+  "bookSeriesNoBooks": "Nothing to show here",
+  "@bookSeriesNoBooks": {
+    "description": "Empty state of a series screen: the series exists but this account can open none of its books."
+  },
+  "bookSeriesNoBooksMessage": "This series holds nothing you can open. Ask an administrator if you expected to see it.",
+  "@bookSeriesNoBooksMessage": {
+    "description": "Line under that title, naming the two things that can cause it: a library grant, or a content rule."
+  },
   "bookSeriesSequence": "Book {number} of {series}",
   "@bookSeriesSequence": {
     "description": "Where a book sits in its series, as a link to the rest of it.",
@@ -240,6 +264,18 @@
         "example": "Earthsea"
       }
     }
+  },
+  "bookSeriesShowAll": "Show all",
+  "@bookSeriesShowAll": {
+    "description": "The series shelf's action, opening the full index."
+  },
+  "bookSeriesTitle": "Series",
+  "@bookSeriesTitle": {
+    "description": "The shelf on the audiobook hub that opens the series index, and that index's own title. One key for both: they name the same thing on two surfaces."
+  },
+  "bookSeriesUnknownSequence": "-",
+  "@bookSeriesUnknownSequence": {
+    "description": "Stands in for the number in a series row when the book's tags name the series without one. A dash rather than a blank, so the column reads as a column."
   },
   "bookSettingsSpeed": "Speed {speed}",
   "@bookSettingsSpeed": {

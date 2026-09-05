@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { T } from './driver';
+import { startListenBrainzStub } from './support/listenbrainz-stub';
 
 // Songs kept off the air, over the real stack: the list a listener
 // builds from the radio, the marker on the ones their library has since
@@ -112,4 +113,49 @@ test('a saved song is idempotent on its identity and personal to its account', a
   expect((theirs.songs ?? []).map((s) => s.pid)).not.toContain(first);
 
   await app.seed.clearRadioSaved();
+});
+
+test('one station can be kept off the scrobblers while the rest report', async ({
+  app,
+}) => {
+  // A live connection is what the menu row is gated on, and connecting
+  // validates the token against the service - so it cannot be seeded
+  // through the API alone and a loopback stands in for one.
+  const listenbrainz = await startListenBrainzStub();
+  try {
+    await app.api.put('/users/me/scrobblers/listenbrainz', {
+      data: { token: 'e2e-token', apiUrl: listenbrainz.url },
+    });
+    // Both halves seeded, because the account outlives the run: the
+    // whole-dial switch hides the row, and a mute left behind would
+    // meet the second run already set.
+    await app.seed.prefs({ radioScrobbleOptOut: false, radioScrobbleMutedStations: [] });
+    const station = await app.seed.radioStation(STATION.name, STATION.stream);
+
+    await app.nav.enter('radio');
+    await app.radio.station(station).waitFor({ timeout: T.nav });
+    await app.radio.toggleStationScrobble(station);
+
+    await expect
+      .poll(
+        async () =>
+          (await app.api.tryGet('/users/me/prefs'))?.radioScrobbleMutedStations ?? [],
+        { timeout: T.nav },
+      )
+      .toContain(station);
+
+    // And back: a menu that writes the mute and never clears it
+    // satisfies everything above. The other direction, not cleanup.
+    await app.radio.toggleStationScrobble(station);
+    await expect
+      .poll(
+        async () =>
+          (await app.api.tryGet('/users/me/prefs'))?.radioScrobbleMutedStations ?? [],
+        { timeout: T.nav },
+      )
+      .not.toContain(station);
+  } finally {
+    await app.api.delete('/users/me/scrobblers/listenbrainz').catch(() => {});
+    await listenbrainz.close();
+  }
 });

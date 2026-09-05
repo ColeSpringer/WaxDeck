@@ -17,6 +17,8 @@ import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
+import 'package:waxdeck/src/books/series_index_screen.dart';
+import 'package:waxdeck/src/books/series_screen.dart';
 import 'package:waxdeck/src/downloads/downloads_screen.dart';
 import 'package:waxdeck/src/health/diagnostics_screen.dart';
 import 'package:waxdeck/src/health/health_screen.dart';
@@ -123,6 +125,8 @@ final _locations = <String, Type>{
   WaxRoute.showEpisode('pc-1', 'ep-1'): EpisodeScreen,
   WaxRoute.episode('ep-1'): EpisodeScreen,
   WaxRoute.books: BooksScreen,
+  WaxRoute.bookSeriesIndex: BookSeriesIndexScreen,
+  WaxRoute.bookSeries('sr-1'): BookSeriesScreen,
   WaxRoute.book('bk-1'): BookScreen,
   WaxRoute.radio: RadioScreen,
   WaxRoute.radioSaved: RadioSavedScreen,
@@ -227,6 +231,10 @@ final _stackedInShell = <String>{
   },
   WaxRoute.artistTracks('ar-1'),
   WaxRoute.book('bk-1'),
+  // The index under the hub, and one series under the index: a stranger
+  // opening either link gets the surface above it underneath.
+  WaxRoute.bookSeriesIndex,
+  WaxRoute.bookSeries('sr-1'),
   WaxRoute.show('pc-1'),
   // Declared beneath its show, which is the point of putting the show in
   // the path: a stranger opening the link gets the show underneath.

@@ -1104,6 +1104,18 @@
   "@playlistSmartEmptyTitle": {
     "description": "Empty state of a smart playlist whose rules match nothing."
   },
+  "playlistSyncArmLabel": "Sync from",
+  "@playlistSyncArmLabel": {
+    "description": "Label over the choice between a live source URL and a pasted export, on a playlist with no binding yet."
+  },
+  "playlistSyncArmLive": "A link",
+  "@playlistSyncArmLive": {
+    "description": "The live arm of that choice: a playlist URL the server re-enumerates on a schedule."
+  },
+  "playlistSyncArmMatched": "An export",
+  "@playlistSyncArmMatched": {
+    "description": "The matched arm of that choice: a pasted export re-matched against the library on demand."
+  },
   "playlistSyncChipFailing": "Sync failing",
   "@playlistSyncChipFailing": {
     "description": "Status chip on a synced playlist whose last sync run failed."
@@ -1222,7 +1234,11 @@
   "@playlistSyncLastRunNothing": {
     "description": "The last-run line when the run completed with every count at zero."
   },
-  "playlistSyncMatchedNote": "A {source} export re-matches against the library on demand and downloads nothing. Bind a fresh export to change what it holds.",
+  "playlistSyncMatchedModeHelp": "An export downloads nothing, so there are no files to move to the trash.",
+  "@playlistSyncMatchedModeHelp": {
+    "description": "Line under the mode choice on a matched binding, saying why mirror-trash is not offered."
+  },
+  "playlistSyncMatchedNote": "A {source} export re-matches against the library on demand and downloads nothing.",
   "@playlistSyncMatchedNote": {
     "description": "Note in the sync sheet for a binding recorded from a streaming export rather than a live URL. {source} is the export format's label, e.g. spotify.",
     "placeholders": {
@@ -1263,6 +1279,14 @@
   "playlistSyncNow": "Sync now",
   "@playlistSyncNow": {
     "description": "Button that queues a sync run immediately."
+  },
+  "playlistSyncPayloadHint": "Paste the export here",
+  "@playlistSyncPayloadHint": {
+    "description": "Placeholder in that box."
+  },
+  "playlistSyncPayloadLabel": "Export",
+  "@playlistSyncPayloadLabel": {
+    "description": "Label of the box the export is pasted into."
   },
   "playlistSyncPreviewAdd": "{count, plural, =1{1 track would join the list} other{{count} tracks would join the list}}",
   "@playlistSyncPreviewAdd": {
@@ -1360,6 +1384,10 @@
       }
     }
   },
+  "playlistSyncRetryRead": "Try again",
+  "@playlistSyncRetryRead": {
+    "description": "Retries the read of a playlist's sync binding after it failed; the sheet cannot offer its settings until it knows what is stored."
+  },
   "playlistSyncSave": "Save",
   "@playlistSyncSave": {
     "description": "Button storing the sync settings, replacing the binding whole."
@@ -1375,6 +1403,10 @@
   "playlistSyncSheetTitle": "Sync from source",
   "@playlistSyncSheetTitle": {
     "description": "Title of the synced-playlist settings sheet."
+  },
+  "playlistSyncSourceLabel": "Export format",
+  "@playlistSyncSourceLabel": {
+    "description": "Label over the choice of which service an export came from."
   },
   "playlistSyncSuspended": "Syncing is suspended after repeated failures. A successful sync turns it back on.",
   "@playlistSyncSuspended": {

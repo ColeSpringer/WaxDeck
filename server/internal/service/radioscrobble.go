@@ -183,8 +183,16 @@ func (l *Library) writeRadioScrobble(ctx context.Context, play radioSegmentPlay)
 	}
 	// Read before the station and the title parse, which are the two
 	// reads a listener who wants none of this should not be paying for.
-	if l.PrefsForUser(ctx, userID).RadioScrobbleOptOut {
+	prefs := l.PrefsForUser(ctx, userID)
+	if prefs.RadioScrobbleOptOut {
 		return
+	}
+	// The stored list is canonical; the pid on the segment came off a
+	// stream URL, so match without caring about its case.
+	for _, muted := range prefs.RadioScrobbleMutedStations {
+		if strings.EqualFold(muted, apiStationPID) {
+			return
+		}
 	}
 	station, err := l.db.RadioStationByID(ctx, string(pid))
 	if err != nil {

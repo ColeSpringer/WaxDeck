@@ -4127,6 +4127,23 @@ class FakeRepository implements WaxDeckRepository {
     return BookSeriesPage(series: List<BookSeries>.of(bookSeries));
   }
 
+  /// The series detail answered by pid; an unknown pid is a 404, as the
+  /// server's is.
+  final Map<String, BookSeriesDetail> bookSeriesDetails = {};
+
+  @override
+  Future<BookSeriesDetail> getBookSeries(String pid) async {
+    final detail = bookSeriesDetails[pid];
+    if (detail == null) {
+      throw const WaxDeckApiException(
+        statusCode: 404,
+        code: 'not-found',
+        message: 'no series with pid',
+      );
+    }
+    return detail;
+  }
+
   @override
   Future<DetachResult> detachItem(String pid, {bool writeBack = false}) async {
     final error = metadataError;
@@ -5781,14 +5798,31 @@ class FakeRepository implements WaxDeckRepository {
   >
   setPlaylistSourceCalls = [];
   final List<String> unbindPlaylistSourceCalls = [];
-  final List<({String pid, String? mode})> previewPlaylistSyncCalls = [];
+  final List<
+    ({
+      String pid,
+      String? mode,
+      String? url,
+      String? source,
+      String? payload,
+      List<PortableRef>? refs,
+      int? intervalHours,
+    })
+  >
+  previewPlaylistSyncCalls = [];
   final List<String> syncPlaylistSourceCalls = [];
 
   /// Raised by [setPlaylistSource] when set, for the refusal path.
   WaxDeckApiException? playlistSourceError;
 
+  /// Raised by [getPlaylistSource] when set, for the read-failed path.
+  /// Distinct from an absent binding, which is the ordinary 404.
+  WaxDeckApiException? playlistSourceReadError;
+
   @override
   Future<PlaylistSource> getPlaylistSource(String pid) async {
+    final readError = playlistSourceReadError;
+    if (readError != null) throw readError;
     final src = playlistSources[pid];
     if (src == null) {
       throw WaxDeckApiException(
@@ -5827,6 +5861,61 @@ class FakeRepository implements WaxDeckRepository {
     // empty form sees the refusal production shows rather than a bound
     // state the real endpoint would never answer.
     final live = url != null && url.trim().isNotEmpty;
+    final held = playlistSources[pid];
+    // Presence, as the server reads it: `url: ''` names a source badly
+    // and is a bind, not a re-save.
+    if (url == null && source == null && payload == null && refs == null) {
+      // The settings-only re-save: it needs a binding under it, and it
+      // keeps everything about that binding but the settings.
+      if (held == null) {
+        throw WaxDeckApiException(
+          statusCode: 400,
+          code: 'invalid-request',
+          message: 'bind a url or a source export',
+        );
+      }
+      // The server's own shape rules, read off the stored row: without
+      // them a body the real endpoint refuses passes here, which is
+      // exactly the regression a widget test is for.
+      if (!held.live && mode == 'mirror-trash') {
+        throw const WaxDeckApiException(
+          statusCode: 400,
+          code: 'invalid-request',
+          message:
+              'a matched source downloads nothing and never removes files; '
+              'append or mirror only',
+        );
+      }
+      if (held.live && ![1, 3, 6, 12, 24].contains(intervalHours)) {
+        throw const WaxDeckApiException(
+          statusCode: 400,
+          code: 'invalid-request',
+          message: 'intervalHours must be 1, 3, 6, 12, or 24',
+        );
+      }
+      if (!held.live && intervalHours != null) {
+        throw const WaxDeckApiException(
+          statusCode: 400,
+          code: 'invalid-request',
+          message: 'a matched source syncs on demand only; no interval',
+        );
+      }
+      return playlistSources[pid] = PlaylistSource(
+        source: held.source,
+        url: held.url,
+        title: held.title,
+        refCount: held.refCount,
+        live: held.live,
+        mode: mode,
+        intervalHours: held.live ? intervalHours : null,
+        disabled: held.disabled,
+        consecutiveFailures: held.consecutiveFailures,
+        lastError: held.lastError,
+        lastAttemptAt: held.lastAttemptAt,
+        lastSyncedAt: held.lastSyncedAt,
+        lastRun: held.lastRun,
+      );
+    }
     if (!live && source == null) {
       throw WaxDeckApiException(
         statusCode: 400,
@@ -5865,7 +5954,15 @@ class FakeRepository implements WaxDeckRepository {
     List<PortableRef>? refs,
     int? intervalHours,
   }) async {
-    previewPlaylistSyncCalls.add((pid: pid, mode: mode));
+    previewPlaylistSyncCalls.add((
+      pid: pid,
+      mode: mode,
+      url: url,
+      source: source,
+      payload: payload,
+      refs: refs == null ? null : List.of(refs),
+      intervalHours: intervalHours,
+    ));
     return playlistSyncPreview;
   }
 

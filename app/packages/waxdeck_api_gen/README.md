@@ -405,6 +405,7 @@ Class | Method | HTTP request | Description
 [*BooksApi*](doc/BooksApi.md) | [**deleteBookmark**](doc/BooksApi.md#deletebookmark) | **DELETE** /books/{pid}/bookmarks/{bookmarkId} | Remove one bookmark
 [*BooksApi*](doc/BooksApi.md) | [**getBook**](doc/BooksApi.md#getbook) | **GET** /books/{pid} | Get one audiobook&#39;s detail
 [*BooksApi*](doc/BooksApi.md) | [**getBookResume**](doc/BooksApi.md#getbookresume) | **GET** /books/{pid}/resume | Where the caller left off in a book
+[*BooksApi*](doc/BooksApi.md) | [**getBookSeries**](doc/BooksApi.md#getbookseries) | **GET** /series/{pid} | Get one audiobook series
 [*BooksApi*](doc/BooksApi.md) | [**listBookSeries**](doc/BooksApi.md#listbookseries) | **GET** /books/series | List audiobook series
 [*BooksApi*](doc/BooksApi.md) | [**listBookmarks**](doc/BooksApi.md#listbookmarks) | **GET** /books/{pid}/bookmarks | List the caller&#39;s bookmarks in a book
 [*BooksApi*](doc/BooksApi.md) | [**putBookSettings**](doc/BooksApi.md#putbooksettings) | **PUT** /books/{pid}/settings | Replace the caller&#39;s playback settings for a book
@@ -658,6 +659,8 @@ Class | Method | HTTP request | Description
  - [BookPart](doc/BookPart.md)
  - [BookResume](doc/BookResume.md)
  - [BookSeries](doc/BookSeries.md)
+ - [BookSeriesDetail](doc/BookSeriesDetail.md)
+ - [BookSeriesEntry](doc/BookSeriesEntry.md)
  - [BookSeriesPage](doc/BookSeriesPage.md)
  - [BookSettings](doc/BookSettings.md)
  - [BookSplitRequest](doc/BookSplitRequest.md)

@@ -257,6 +257,34 @@
       }
     }
   },
+  "radioScrobbleStationMute": "Do not scrobble this station",
+  "@radioScrobbleStationMute": {
+    "description": "Station menu item that stops reporting this one station's segments to the account's scrobblers."
+  },
+  "radioScrobbleStationMuted": "{name} will not be scrobbled",
+  "@radioScrobbleStationMuted": {
+    "description": "Snackbar after muting one station's scrobbling.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
+  "radioScrobbleStationResume": "Scrobble this station",
+  "@radioScrobbleStationResume": {
+    "description": "Station menu item that starts reporting this one station's segments again."
+  },
+  "radioScrobbleStationResumed": "{name} will be scrobbled",
+  "@radioScrobbleStationResumed": {
+    "description": "Snackbar after unmuting one station's scrobbling.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "SomaFM Groove Salad"
+      }
+    }
+  },
   "radioSearchDirectory": "Search directory",
   "@radioSearchDirectory": {
     "description": "Button running the directory lookup."

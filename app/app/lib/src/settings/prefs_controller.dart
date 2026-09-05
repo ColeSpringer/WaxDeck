@@ -261,6 +261,7 @@ class PrefsController extends AsyncNotifier<Prefs> {
     theme: current.theme,
     sharedStatsOptOut: current.sharedStatsOptOut,
     radioFavorites: current.radioFavorites,
+    radioScrobbleMutedStations: current.radioScrobbleMutedStations,
     pinned: current.pinned,
     crossfadeSeconds: current.crossfadeSeconds,
     replayGain: current.replayGain,
@@ -286,6 +287,32 @@ class PrefsController extends AsyncNotifier<Prefs> {
   /// Stores whether radio stays off this account's scrobblers.
   Future<void> setRadioScrobbleOptOut(bool optOut) =>
       _write((current) => current.copyWith(radioScrobbleOptOut: optOut));
+
+  /// Mutes or unmutes one station's scrobbling, and answers which it
+  /// did so the caller can say so.
+  ///
+  /// A set, so the write is a membership flip rather than a reorder,
+  /// and the intent is decided once here rather than recomputed from
+  /// whatever document this write's turn starts from: a flip applied
+  /// twice against two bases is a toggle that undoes itself. An empty
+  /// list is a value for [setRadioFavorites]' reason, so unmuting the
+  /// last station carries through.
+  Future<bool> toggleRadioStationScrobble(String pid) async {
+    final key = pid.toUpperCase();
+    final held = state.value?.radioScrobbleMutedStations ?? const <String>[];
+    final mute = !held.any((p) => p.toUpperCase() == key);
+    await _write((current) {
+      final stored = current.radioScrobbleMutedStations ?? const <String>[];
+      final without = <String>[
+        for (final p in stored)
+          if (p.toUpperCase() != key) p,
+      ];
+      return current.copyWith(
+        radioScrobbleMutedStations: mute ? [...without, pid] : without,
+      );
+    });
+    return mute;
+  }
 
   /// Stores whether this account's submissions skip identification by
   /// default. The sheets seed their switch from it and send the answer

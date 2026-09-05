@@ -157,6 +157,8 @@ class _$Prefs extends Prefs {
   @override
   final BuiltList<String>? radioFavorites;
   @override
+  final BuiltList<String>? radioScrobbleMutedStations;
+  @override
   final BuiltList<String>? pinned;
   @override
   final double? crossfadeSeconds;
@@ -182,6 +184,7 @@ class _$Prefs extends Prefs {
     this.theme,
     this.sharedStatsOptOut,
     this.radioFavorites,
+    this.radioScrobbleMutedStations,
     this.pinned,
     this.crossfadeSeconds,
     this.replayGain,
@@ -207,6 +210,7 @@ class _$Prefs extends Prefs {
         theme == other.theme &&
         sharedStatsOptOut == other.sharedStatsOptOut &&
         radioFavorites == other.radioFavorites &&
+        radioScrobbleMutedStations == other.radioScrobbleMutedStations &&
         pinned == other.pinned &&
         crossfadeSeconds == other.crossfadeSeconds &&
         replayGain == other.replayGain &&
@@ -225,6 +229,7 @@ class _$Prefs extends Prefs {
     _$hash = $jc(_$hash, theme.hashCode);
     _$hash = $jc(_$hash, sharedStatsOptOut.hashCode);
     _$hash = $jc(_$hash, radioFavorites.hashCode);
+    _$hash = $jc(_$hash, radioScrobbleMutedStations.hashCode);
     _$hash = $jc(_$hash, pinned.hashCode);
     _$hash = $jc(_$hash, crossfadeSeconds.hashCode);
     _$hash = $jc(_$hash, replayGain.hashCode);
@@ -245,6 +250,7 @@ class _$Prefs extends Prefs {
           ..add('theme', theme)
           ..add('sharedStatsOptOut', sharedStatsOptOut)
           ..add('radioFavorites', radioFavorites)
+          ..add('radioScrobbleMutedStations', radioScrobbleMutedStations)
           ..add('pinned', pinned)
           ..add('crossfadeSeconds', crossfadeSeconds)
           ..add('replayGain', replayGain)
@@ -282,6 +288,13 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       _$this._radioFavorites ??= ListBuilder<String>();
   set radioFavorites(ListBuilder<String>? radioFavorites) =>
       _$this._radioFavorites = radioFavorites;
+
+  ListBuilder<String>? _radioScrobbleMutedStations;
+  ListBuilder<String> get radioScrobbleMutedStations =>
+      _$this._radioScrobbleMutedStations ??= ListBuilder<String>();
+  set radioScrobbleMutedStations(
+    ListBuilder<String>? radioScrobbleMutedStations,
+  ) => _$this._radioScrobbleMutedStations = radioScrobbleMutedStations;
 
   ListBuilder<String>? _pinned;
   ListBuilder<String> get pinned => _$this._pinned ??= ListBuilder<String>();
@@ -333,6 +346,7 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       _theme = $v.theme;
       _sharedStatsOptOut = $v.sharedStatsOptOut;
       _radioFavorites = $v.radioFavorites?.toBuilder();
+      _radioScrobbleMutedStations = $v.radioScrobbleMutedStations?.toBuilder();
       _pinned = $v.pinned?.toBuilder();
       _crossfadeSeconds = $v.crossfadeSeconds;
       _replayGain = $v.replayGain;
@@ -370,6 +384,7 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
             theme: theme,
             sharedStatsOptOut: sharedStatsOptOut,
             radioFavorites: _radioFavorites?.build(),
+            radioScrobbleMutedStations: _radioScrobbleMutedStations?.build(),
             pinned: _pinned?.build(),
             crossfadeSeconds: crossfadeSeconds,
             replayGain: replayGain,
@@ -384,6 +399,8 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       try {
         _$failedField = 'radioFavorites';
         _radioFavorites?.build();
+        _$failedField = 'radioScrobbleMutedStations';
+        _radioScrobbleMutedStations?.build();
         _$failedField = 'pinned';
         _pinned?.build();
 

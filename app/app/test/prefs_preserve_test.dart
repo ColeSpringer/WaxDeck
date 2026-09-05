@@ -21,6 +21,7 @@ const _stored = Prefs(
   theme: ThemePref.oled,
   sharedStatsOptOut: true,
   radioFavorites: <String>['rs-01JZX5N8QW3F4V9T2B7KD3M9R6'],
+  radioScrobbleMutedStations: <String>['rs-01JZX5N8QW3F4V9T2B7KD3M9R7'],
   pinned: <String>['al-01JZX5N8QW3F4V9T2B7KD3M9R6'],
   crossfadeSeconds: 4.5,
   replayGain: true,
@@ -106,6 +107,9 @@ void main() {
         expect(kept.theme, ThemePref.oled);
         expect(kept.sharedStatsOptOut, isTrue);
         expect(kept.radioFavorites, <String>['rs-01JZX5N8QW3F4V9T2B7KD3M9R6']);
+        expect(kept.radioScrobbleMutedStations, <String>[
+          'rs-01JZX5N8QW3F4V9T2B7KD3M9R7',
+        ]);
         expect(kept.pinned, <String>['al-01JZX5N8QW3F4V9T2B7KD3M9R6']);
         expect(kept.crossfadeSeconds, 4.5);
         expect(kept.replayGain, isTrue);

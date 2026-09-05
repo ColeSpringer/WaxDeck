@@ -177,6 +177,12 @@ abstract final class SemanticsIds {
   static const String bookPartsNote = 'book-parts-note';
   static const String bookPin = 'book-pin';
   static const String bookResume = 'book-resume';
+  static String bookSeriesCard(Object pid) => 'book-series-card-$pid';
+  static const String bookSeriesIndex = 'book-series-index';
+  static const String bookSeriesLink = 'book-series-link';
+  static String bookSeriesRow(Object index) => 'book-series-row-$index';
+  static String bookSeriesScreen(Object pid) => 'book-series-screen-$pid';
+  static const String bookSeriesSeeAll = 'book-series-see-all';
   static const String bookSettingsOpen = 'book-settings-open';
   static const String bookSettingsSave = 'book-settings-save';
   static const String bookSettingsSpeed = 'book-settings-speed';
@@ -620,6 +626,8 @@ abstract final class SemanticsIds {
   static const String playlistRuleSummary = 'playlist-rule-summary';
   static const String playlistSetCover = 'playlist-set-cover';
   static const String playlistShareLink = 'playlist-share-link';
+  static const String playlistSyncArm = 'playlist-sync-arm';
+  static String playlistSyncArmOption(Object arm) => 'playlist-sync-arm-$arm';
   static const String playlistSyncChip = 'playlist-sync-chip';
   static const String playlistSyncInterval = 'playlist-sync-interval';
   static String playlistSyncIntervalOption(Object hours) =>
@@ -628,12 +636,16 @@ abstract final class SemanticsIds {
   static String playlistSyncModeOption(Object mode) =>
       'playlist-sync-mode-$mode';
   static const String playlistSyncNow = 'playlist-sync-now';
+  static const String playlistSyncPayload = 'playlist-sync-payload';
   static const String playlistSyncPreview = 'playlist-sync-preview';
   static const String playlistSyncPreviewDialog =
       'playlist-sync-preview-dialog';
   static const String playlistSyncSave = 'playlist-sync-save';
   static const String playlistSyncSettings = 'playlist-sync-settings';
   static const String playlistSyncSheet = 'playlist-sync-sheet';
+  static const String playlistSyncSource = 'playlist-sync-source';
+  static String playlistSyncSourceOption(Object source) =>
+      'playlist-sync-source-$source';
   static const String playlistSyncUnbind = 'playlist-sync-unbind';
   static const String playlistSyncUrl = 'playlist-sync-url';
   static const String playlistVisibility = 'playlist-visibility';
@@ -736,6 +748,7 @@ abstract final class SemanticsIds {
   static String radioSavedMore(Object pid) => 'radio-saved-more-$pid';
   static const String radioSavedOpen = 'radio-saved-open';
   static String radioSavedRemove(Object pid) => 'radio-saved-remove-$pid';
+  static String radioScrobbleToggle(Object pid) => 'radio-scrobble-$pid';
   static String radioSearchAdd(Object index) => 'radio-search-add-$index';
   static const String radioSearchField = 'radio-search-field';
   static const String radioSearchRun = 'radio-search-run';

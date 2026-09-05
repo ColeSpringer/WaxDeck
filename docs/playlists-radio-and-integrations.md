@@ -150,14 +150,17 @@ portable) can be recorded as a binding too. It reconciles match-only
 and on demand: a sync re-runs the import resolve ladder against the
 library, attaches what matched, and reports the misses, downloading
 nothing - there is no live connector to re-fetch the export from, so
-there is no schedule either. The door is **Import playlist**, which
-offers to keep the new playlist matched to what you pasted; it binds as
-mirror, because the playlist is that export rather than a copy of it,
-so a later re-match fills what the first pass missed and reconciles
-away anything added by hand. That switch is the only way to make one
-from the app: a playlist you already have cannot be bound to an export
-here, and a matched binding's mode cannot be changed once it is made -
-both are the API's to do.
+there is no schedule either. **Import playlist** offers to keep the new
+playlist matched to what you pasted, and binds as mirror, because the
+playlist is that export rather than a copy of it. The sync sheet is the
+other door: a playlist you already have chooses between a link and an
+export there, and pasting one binds it. A matched binding takes append
+or mirror - it downloads nothing, so there are no files to trash.
+
+Saving the sheet on a playlist that is already bound changes the
+settings and nothing else: the export you pasted is not asked for
+again, and a live binding's source is not re-fetched to change a mode.
+Editing the URL on a live binding is what rebinds it.
 
 Sync health rides the binding. The playlist header wears a chip
 (Synced, Sync failing, Sync suspended - and, before any run has
@@ -247,6 +250,13 @@ right for a music station with honest metadata and wrong for a talk
 station whose titles happen to fit, so **Scrobble radio** in the same
 section turns it off for your account without touching library
 listening.
+
+That switch is the whole dial. One station at a time is the same
+choice made from the station's own menu, on the hub's tile or on the
+player's radio face: **Do not scrobble this station** keeps that
+station's segments off your scrobblers while the rest still report.
+The row is offered only where it means something, so it appears once
+you have a scrobbler connected and the dial is not already silenced.
 
 **Radio plays scrobble too.** While you listen to a station through
 the proxy, the in-stream title's transitions bound the tracks: a

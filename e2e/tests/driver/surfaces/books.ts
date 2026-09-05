@@ -94,4 +94,50 @@ export class Books extends Surface {
   action(name: string): Locator {
     return this.ctx.page.getByRole('button', { name });
   }
+
+  /// The link on a book screen into the series it belongs to.
+  seriesLink(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookSeriesLink));
+  }
+
+  /// One series' own screen.
+  series(pid: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookSeriesScreen(pid)));
+  }
+
+  /// One book's row on a series screen, by its place in the list.
+  seriesRow(index: number): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookSeriesRow(index)));
+  }
+
+  /// The full series index, and the hub shelf's way into it.
+  seriesIndex(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookSeriesIndex));
+  }
+
+  seriesShowAll(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookSeriesSeeAll));
+  }
+
+  /// Follow a book's series line, settling on the series screen. A
+  /// retried unit, as every other navigation here is: a part-scrolled
+  /// Flutter node publishes a clipped rect whose centre can miss the
+  /// widget, and a single forced click has nothing to try again.
+  async openSeries(pid: string): Promise<void> {
+    await clickThrough(this.seriesLink(), this.series(pid));
+  }
+
+  /// Open one book from the series screen, settling on the book.
+  async openFromSeries(index: number): Promise<void> {
+    await clickThrough(this.seriesRow(index), this.resume());
+  }
+
+  /// Follow the hub shelf's Show all into the index.
+  async openSeriesIndex(): Promise<void> {
+    await clickThrough(this.seriesShowAll(), this.seriesIndex());
+  }
+
+  seriesCard(pid: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookSeriesCard(pid)));
+  }
 }

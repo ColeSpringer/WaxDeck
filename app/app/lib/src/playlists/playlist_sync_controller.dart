@@ -21,12 +21,18 @@ class PlaylistSyncController extends AsyncNotifier<PlaylistSource?> {
     }
   }
 
-  /// Stores a binding, replacing any previous one whole.
+  /// Stores a binding.
+  ///
+  /// Naming a source ([url], or [source] with [payload] or [refs])
+  /// replaces any previous binding whole; naming none of them re-saves
+  /// the settings on the binding already stored and keeps its source,
+  /// refs, identity and cover.
   Future<PlaylistSource> bind({
     required String mode,
     String? url,
     String? source,
     String? payload,
+    List<PortableRef>? refs,
     int? intervalHours,
   }) async {
     final stored = await ref
@@ -37,6 +43,7 @@ class PlaylistSyncController extends AsyncNotifier<PlaylistSource?> {
           url: url,
           source: source,
           payload: payload,
+          refs: refs,
           intervalHours: intervalHours,
         );
     if (ref.mounted) state = AsyncData(stored);
@@ -57,13 +64,18 @@ class PlaylistSyncController extends AsyncNotifier<PlaylistSource?> {
     return task;
   }
 
-  /// Dry-runs the reconciler: with arguments, over those prospective
-  /// settings; without, over the stored binding.
+  /// Dry-runs the reconciler.
+  ///
+  /// With a source named, over that prospective binding; with settings
+  /// alone, over the stored binding under those settings; with nothing,
+  /// over the stored binding as it stands. The same three readings
+  /// [bind] takes, so a preview is always what Save would do.
   Future<PlaylistSyncPreview> preview({
     String? mode,
     String? url,
     String? source,
     String? payload,
+    List<PortableRef>? refs,
     int? intervalHours,
   }) => ref
       .read(repositoryProvider)
@@ -73,6 +85,7 @@ class PlaylistSyncController extends AsyncNotifier<PlaylistSource?> {
         url: url,
         source: source,
         payload: payload,
+        refs: refs,
         intervalHours: intervalHours,
       );
 }

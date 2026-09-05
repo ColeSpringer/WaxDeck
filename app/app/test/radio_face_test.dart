@@ -550,6 +550,80 @@ void main() {
     await _stop(container);
   });
 
+  testWidgets("the face's menu offers this station's scrobbling", (
+    tester,
+  ) async {
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(
+              authenticated: true,
+              user: WaxDeckUser(
+                id: 'us-1',
+                username: 'admin',
+                roles: <String>['admin'],
+              ),
+            ),
+          )
+          ..radioStationsByPid[_stationPid] = _station()
+          ..scrobblers = const [
+            Scrobbler(
+              service: 'listenbrainz',
+              available: true,
+              connected: true,
+              username: 'sam',
+            ),
+          ];
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioMenu(_stationPid)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioScrobbleToggle(_stationPid)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.prefs.radioScrobbleMutedStations, [_stationPid]);
+    await _stop(container);
+  });
+
+  testWidgets("the face's menu hides it with nothing connected", (
+    tester,
+  ) async {
+    // The slot exists whether or not it is linked, so the list being
+    // non-empty is not a connection.
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-1',
+          username: 'admin',
+          roles: <String>['admin'],
+        ),
+      ),
+    )..radioStationsByPid[_stationPid] = _station();
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioMenu(_stationPid)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.radioScrobbleToggle(_stationPid)),
+      findsNothing,
+    );
+    await _stop(container);
+  });
+
   testWidgets('a radio wakeup collects a cover without waiting a poll', (
     tester,
   ) async {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
+import 'package:waxdeck/src/playlists/playlist_sync_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
@@ -392,5 +393,261 @@ void main() {
     await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
     await tester.pumpAndSettle();
     expect(find.text('Sync failing'), findsOneWidget);
+  });
+
+  testWidgets('an unbound sheet offers both arms and binds an export', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    );
+    final pl = await _manualPlaylist(repo);
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
+    await tester.pumpAndSettle();
+    await _openSheet(tester);
+
+    // The live arm is the default, so the URL field is what is drawn.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncUrl),
+      findsOneWidget,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncArm));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncArmOption('matched')),
+    );
+    await tester.pumpAndSettle();
+
+    // The matched arm swaps the URL for a source and a paste box, and
+    // takes no interval.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncUrl),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncInterval),
+      findsNothing,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncSource),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncSourceOption('text')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncPayload),
+      'Salt Harbour - The Bree Trio',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave));
+    await tester.pumpAndSettle();
+
+    final call = repo.setPlaylistSourceCalls.single;
+    expect(call.source, 'text');
+    expect(call.payload, 'Salt Harbour - The Bree Trio');
+    expect(call.url, isNull);
+    expect(call.intervalHours, isNull);
+  });
+
+  testWidgets('a matched binding offers no mirror-trash and no interval', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    );
+    final pl = await _manualPlaylist(repo);
+    repo.playlistSources[pl.pid] = const PlaylistSource(
+      source: 'text',
+      live: false,
+      mode: 'append',
+      refCount: 12,
+      disabled: false,
+      consecutiveFailures: 0,
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
+    await tester.pumpAndSettle();
+    await _openSheet(tester);
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncInterval),
+      findsNothing,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncMode));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(
+        SemanticsIds.playlistSyncModeOption('mirror-trash'),
+      ),
+      findsNothing,
+      reason: 'a matched binding downloads nothing, so it trashes nothing',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncModeOption('mirror')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave));
+    await tester.pumpAndSettle();
+
+    // Settings only: the export is not resent, because the sheet was
+    // never handed one - and the refs survive on the server because of
+    // it. No interval either: the fake refuses one on a matched
+    // binding, as the endpoint does.
+    final call = repo.setPlaylistSourceCalls.single;
+    expect(call.mode, 'mirror');
+    expect(call.source, isNull);
+    expect(call.payload, isNull);
+    expect(call.url, isNull);
+    expect(call.intervalHours, isNull);
+    expect(repo.playlistSources[pl.pid]?.refCount, 12);
+  });
+
+  testWidgets('a binding that lands under an open sheet is what Save sends', (
+    tester,
+  ) async {
+    // The sheet opened unbound, so its arm is the choice above the
+    // form; the binding arrives underneath from somewhere else (the
+    // import dialog's keep-matched switch, another device). A sheet
+    // that kept believing its own arm would go on sending an interval
+    // and stay refused until it was closed and reopened.
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    );
+    final pl = await _manualPlaylist(repo);
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        filePickerProvider.overrideWithValue(null),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(PlaylistScreen(pid: pl.pid), pushed: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _openSheet(tester);
+
+    repo.playlistSources[pl.pid] = const PlaylistSource(
+      source: 'text',
+      live: false,
+      mode: 'append',
+      refCount: 4,
+      disabled: false,
+      consecutiveFailures: 0,
+    );
+    container.invalidate(playlistSyncProvider(pl.pid));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave));
+    await tester.pumpAndSettle();
+
+    final call = repo.setPlaylistSourceCalls.single;
+    expect(call.url, isNull);
+    expect(call.intervalHours, isNull, reason: 'a matched binding takes none');
+    expect(find.text('Sync settings saved'), findsOneWidget);
+  });
+
+  testWidgets('clearing the URL is a refused rebind, not a settings save', (
+    tester,
+  ) async {
+    // The trap the wire's absent-versus-empty rule closes: a blank URL
+    // reads as "names no source" if the server looks at the value, so
+    // the binding somebody was replacing would survive under a 200.
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    );
+    final pl = await _manualPlaylist(repo);
+    repo.playlistSources[pl.pid] = _bound;
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
+    await tester.pumpAndSettle();
+    await _openSheet(tester);
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncUrl),
+      '',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave));
+    await tester.pumpAndSettle();
+
+    // Sent as a bind with a blank url, and refused as one.
+    expect(repo.setPlaylistSourceCalls.single.url, '');
+    expect(find.text('bind a url or a source export'), findsOneWidget);
+    // The stored binding is untouched.
+    expect(repo.playlistSources[pl.pid]?.url, _bound.url);
+  });
+
+  testWidgets('a failed binding read offers a retry rather than a form', (
+    tester,
+  ) async {
+    // The provider does not retry, so a non-404 read failure is final.
+    // Drawing the unbound form over it would put a Save in front of a
+    // binding this sheet never saw, and settings-only is exactly the
+    // body that would rewrite it.
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    );
+    final pl = await _manualPlaylist(repo);
+    repo.playlistSourceReadError = const WaxDeckApiException(
+      statusCode: 503,
+      code: 'catalog-maintenance',
+      message: 'the catalog is busy',
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
+    await tester.pumpAndSettle();
+    await _openSheet(tester);
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave),
+      findsNothing,
+    );
+    expect(find.text('Try again'), findsOneWidget);
+    expect(repo.setPlaylistSourceCalls, isEmpty);
+  });
+
+  testWidgets('a bound live sheet saves settings until the URL is edited', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    );
+    final pl = await _manualPlaylist(repo);
+    repo.playlistSources[pl.pid] = _bound;
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
+    await tester.pumpAndSettle();
+    await _openSheet(tester);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncInterval),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncIntervalOption(12)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave));
+    await tester.pumpAndSettle();
+
+    // The URL still reads what it was seeded with, so this is a
+    // settings-only save and the server is spared the probe.
+    expect(repo.setPlaylistSourceCalls.single.url, isNull);
+    expect(repo.setPlaylistSourceCalls.single.intervalHours, 12);
+
+    // Typing a different URL makes the next save a rebind.
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncUrl),
+      'https://tube.example/playlist?list=PLother',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave));
+    await tester.pumpAndSettle();
+
+    expect(
+      repo.setPlaylistSourceCalls.last.url,
+      'https://tube.example/playlist?list=PLother',
+    );
   });
 }

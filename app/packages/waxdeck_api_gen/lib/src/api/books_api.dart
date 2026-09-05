@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/book_detail.dart';
 import 'package:waxdeck_api_gen/src/model/book_resume.dart';
+import 'package:waxdeck_api_gen/src/model/book_series_detail.dart';
 import 'package:waxdeck_api_gen/src/model/book_series_page.dart';
 import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:waxdeck_api_gen/src/model/bookmark.dart';
@@ -366,8 +367,94 @@ class BooksApi {
     );
   }
 
+  /// Get one audiobook series
+  /// One series and the books in it, in sequence order. The sequence is what a book&#39;s tags say rather than a number anyone assigned, so it is a string and can be absent: a book tagged with the series name and no number sorts among the ones that carry one, where the catalog puts it.  Counts are answered only to an account that can see every library, exactly as the listing answers them: a series with one visible book and nine hidden ones must not advertise ten.  404 when no series carries the pid, and when every book in it lives in a library this account was not granted.  A top-level path rather than one under &#x60;/books/series&#x60;, which lists them: a series is a shared entity with a pid of its own, read the way &#x60;/albums/{pid}&#x60; is read. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [BookSeriesDetail] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<BookSeriesDetail>> getBookSeries({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/series/{pid}'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    BookSeriesDetail? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BookSeriesDetail),
+      ) as BookSeriesDetail;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BookSeriesDetail>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// List audiobook series
-  /// The series the visible audiobooks belong to, in collation order. A series is a name a book&#39;s tags carry rather than an entity anyone curates, so this listing exists for one job: naming the target of a series merge when a spelling split one in two.  Filtered by library visibility, so a series held only in libraries this account cannot see is absent. 
+  /// The series the visible audiobooks belong to, in collation order. A series is a name a book&#39;s tags carry rather than an entity anyone curates, so what it names is a spelling: this listing both offers the target of a series merge, when a spelling split one in two, and backs the series index a client browses.  Filtered by library visibility, so a series held only in libraries this account cannot see is absent. 
   ///
   /// Parameters:
   /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 

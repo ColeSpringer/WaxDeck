@@ -34,8 +34,9 @@ paths:
       description: >
         The series the visible audiobooks belong to, in collation order.
         A series is a name a book's tags carry rather than an entity
-        anyone curates, so this listing exists for one job: naming the
-        target of a series merge when a spelling split one in two.
+        anyone curates, so what it names is a spelling: this listing
+        both offers the target of a series merge, when a spelling split
+        one in two, and backs the series index a client browses.
 
 
         Filtered by library visibility, so a series held only in
@@ -222,6 +223,47 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /series/{pid}:
+    get:
+      operationId: getBookSeries
+      summary: Get one audiobook series
+      description: >
+        One series and the books in it, in sequence order. The sequence
+        is what a book's tags say rather than a number anyone assigned,
+        so it is a string and can be absent: a book tagged with the
+        series name and no number sorts among the ones that carry one,
+        where the catalog puts it.
+
+
+        Counts are answered only to an account that can see every
+        library, exactly as the listing answers them: a series with one
+        visible book and nine hidden ones must not advertise ten.
+
+
+        404 when no series carries the pid, and when every book in it
+        lives in a library this account was not granted.
+
+
+        A top-level path rather than one under `/books/series`, which
+        lists them: a series is a shared entity with a pid of its own,
+        read the way `/albums/{pid}` is read.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The series and its books.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookSeriesDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
 components:
   schemas:
     BookSeriesPage:
@@ -257,6 +299,52 @@ components:
           type: integer
           format: int64
           description: Their combined running time.
+
+    BookSeriesDetail:
+      type: object
+      description: One audiobook series and the books in it.
+      required: [pid, name, books]
+      properties:
+        pid:
+          type: string
+          description: Series PID.
+          example: sr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: The series name, as the books' tags spell it.
+        bookCount:
+          type: integer
+          description: >
+            Books in the series, answered only to an account that can
+            see every library. A restricted account reads the length of
+            `books` instead, which is what it can open.
+        totalDurationMs:
+          type: integer
+          format: int64
+          description: >
+            Their combined running time, on `bookCount`'s terms.
+        books:
+          type: array
+          description: >
+            The books this account can open, in the catalog's sequence
+            order.
+          items:
+            $ref: "#/components/schemas/BookSeriesEntry"
+
+    BookSeriesEntry:
+      type: object
+      description: One book's place in a series.
+      required: [book]
+      properties:
+        sequence:
+          type: string
+          description: >
+            What the book's tags call its place in the series ("2",
+            "1.5", "II"). A string because that is what a tag holds,
+            and absent when the tags name the series without a number.
+          example: "2"
+        book:
+          $ref: "#/components/schemas/ItemSummary"
 
     Bookmark:
       type: object

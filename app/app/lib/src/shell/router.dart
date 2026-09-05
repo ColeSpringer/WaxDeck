@@ -32,6 +32,8 @@ import '../auth/setup_screen.dart';
 import '../auth/signup_screen.dart';
 import '../books/book_screen.dart';
 import '../books/books_screen.dart';
+import '../books/series_index_screen.dart';
+import '../books/series_screen.dart';
 import '../connect/remote_screen.dart';
 import '../connect/remote_session.dart';
 import '../discovery/track_list_screen.dart';
@@ -493,6 +495,18 @@ List<RouteBase> shellRoutes() => <RouteBase>[
             path: WaxRoute.books,
             builder: (context, state) => const BooksScreen(),
             routes: <RouteBase>[
+              // Declared ahead of ':pid' so the literal wins the match.
+              GoRoute(
+                path: 'series',
+                builder: (context, state) => const BookSeriesIndexScreen(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: ':pid',
+                    builder: (context, state) =>
+                        BookSeriesScreen(pid: state.pathParameters['pid']!),
+                  ),
+                ],
+              ),
               GoRoute(
                 path: ':pid',
                 builder: (context, state) =>

@@ -872,6 +872,38 @@ components:
             pattern: "^rs-[0-9A-HJKMNP-TV-Z]{26}$"
           maxItems: 64
           example: [rs-01JZX5N8QW3F4V9T2B7KD3M9R6]
+        radioScrobbleMutedStations:
+          type: array
+          description: >
+            Stations whose segments this user does not scrobble, while
+            the account scrobbles radio at all. The account-wide
+            `radioScrobbleOptOut` is the blunt answer for a listener who
+            wants none of it; this is the household that reports its
+            music stations and not its talk ones, whose titles happen to
+            parse.
+
+
+            Read after the account-wide switch, so an account that has
+            opted out is silent whatever this holds. Unordered as far as
+            the server is concerned - it is a set, and the order a client
+            writes is the order it reads back, because nothing sorts it.
+
+
+            The same shape and the same rules as `radioFavorites`:
+            entries are station PIDs (`rs-...`), stored in the canonical
+            upper-case form the pattern declares, not resolved on write,
+            capped at 64, and absent when nothing is muted rather than
+            stored as `[]`. A station another household member deleted
+            leaves its pid here, holding a slot of that cap until
+            somebody unmutes it - the same trade `radioFavorites` makes,
+            and for the same reason: failing a whole preference write
+            over one departed station would be worse. Unmuting the last
+            station drops the field.
+          items:
+            type: string
+            pattern: "^rs-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 64
+          example: [rs-01JZX5N8QW3F4V9T2B7KD3M9R6]
         pinned:
           type: array
           description: >
@@ -989,7 +1021,9 @@ components:
             right for a music station whose stream titles are honest
             and wrong for a talk station whose titles happen to parse.
             Opting out silences radio only; library listening is
-            unaffected.
+            unaffected. The whole dial: silencing one station is
+            `radioScrobbleMutedStations`, which is read only when this
+            is unset.
         identifyOptOut:
           type: boolean
           description: >

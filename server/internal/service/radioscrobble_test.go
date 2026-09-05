@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -238,5 +239,57 @@ func TestRadioScrobbleWriterDrainsAtShutdown(t *testing.T) {
 	want := []string{"Roygbiv", "Teardrop", "Xtal"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("segments written at shutdown = %v; want %v", got, want)
+	}
+}
+
+// A muted station is silent while the rest of the dial still reports.
+func TestScrobbleRadioPlayMutedStation(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newAdminFixture(t)
+	settled := watchRadioScrobbles(t, svc)
+	talk, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+		Name: "Talk One", StreamURL: "https://ice.example.net/talk",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	music, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.storeScrobbleConnection(ctx, admin.ID, ScrobblerListenBrainz, "token", "sam", ""); err != nil {
+		t.Fatal(err)
+	}
+	// Lower case on the way in, canonical in the document: the pid a
+	// stream URL carries is not the one the store holds.
+	muted := Prefs{RadioScrobbleMutedStations: []string{strings.ToLower(talk.PID)}}
+	if _, err := svc.PutPrefs(ctx, admin, muted); err != nil {
+		t.Fatal(err)
+	}
+
+	started := time.Now().Add(-2 * time.Minute)
+	svc.ScrobbleRadioPlay(ctx, admin.ID, talk.PID, "Massive Attack - Teardrop", started)
+	settled()
+	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err == nil {
+		t.Fatal("a muted station must not scrobble")
+	}
+
+	svc.ScrobbleRadioPlay(ctx, admin.ID, music.PID, "Massive Attack - Teardrop", started)
+	settled()
+	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err != nil {
+		t.Fatalf("an unmuted station must still scrobble: %v", err)
+	}
+
+	// The account-wide switch still wins over an empty mute list.
+	off := Prefs{RadioScrobbleOptOut: true}
+	if _, err := svc.PutPrefs(ctx, admin, off); err != nil {
+		t.Fatal(err)
+	}
+	svc.ScrobbleRadioPlay(ctx, admin.ID, music.PID, "Massive Attack - Teardrop", started)
+	settled()
+	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err == nil {
+		t.Fatal("the account-wide opt-out must still win")
 	}
 }

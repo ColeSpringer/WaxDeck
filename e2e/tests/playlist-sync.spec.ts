@@ -89,3 +89,42 @@ test('a manual playlist binds to a source, previews, and syncs its entries in', 
     await app.seed.clearPlaylistsNamed(name);
   }
 });
+
+test('a bound export re-saves its settings without being handed the export again', async ({
+  app,
+}) => {
+  // The settings-only form: a matched binding's export is not stored
+  // anywhere a client can read back, so a mode flip that replaced the
+  // binding whole would have to ask for the paste again.
+  const name = 'Resaved Export';
+  await app.seed.clearPlaylistsNamed(name);
+  const pid = await app.seed.createPlaylist(name);
+
+  try {
+    await app.nav.enter('playlists');
+    await app.playlists.openShowing(pid, app.playlists.addField());
+    await app.playlists.openSyncSheet();
+    await app.playlists.bindExport(
+      'text',
+      'Salt Harbour - The Bree Trio\nNobody Here - Never Recorded',
+    );
+
+    const bound = await app.api.get('/playlists/{pid}/source', { path: { pid } });
+    expect(bound.live).toBe(false);
+    expect(bound.source).toBe('text');
+    expect(bound.refCount).toBe(2);
+
+    await app.playlists.saveSyncMode('append');
+
+    await expect
+      .poll(
+        async () => await app.api.tryGet('/playlists/{pid}/source', { path: { pid } }),
+        { timeout: T.fetch },
+      )
+      // The mode moved and the refs did not: the server kept the
+      // binding under the settings.
+      .toMatchObject({ mode: 'append', source: 'text', refCount: 2 });
+  } finally {
+    await app.seed.clearPlaylistsNamed(name);
+  }
+});

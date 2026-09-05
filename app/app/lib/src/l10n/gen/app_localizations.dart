@@ -3639,6 +3639,30 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 book} other{{count} books}}'**
   String bookSeriesBookCount(int count);
 
+  /// Empty state of the series index: nothing on the shelf carries a series in its tags.
+  ///
+  /// In en, this message translates to:
+  /// **'No series yet'**
+  String get bookSeriesEmpty;
+
+  /// Line under that title, saying where a series comes from.
+  ///
+  /// In en, this message translates to:
+  /// **'A book joins a series when its tags name one. Set one from a book\'s metadata editor.'**
+  String get bookSeriesEmptyMessage;
+
+  /// Error state when the series index read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the series'**
+  String get bookSeriesIndexLoadError;
+
+  /// Error state when the series read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open this series'**
+  String get bookSeriesLoadError;
+
   /// Admin overflow entry on a book screen, opening the picker that folds this book's series into another.
   ///
   /// In en, this message translates to:
@@ -3669,11 +3693,41 @@ abstract class AppLocalizations {
   /// **'Merge \"{series}\" into'**
   String bookSeriesMergeTitle(String series);
 
+  /// Empty state of a series screen: the series exists but this account can open none of its books.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to show here'**
+  String get bookSeriesNoBooks;
+
+  /// Line under that title, naming the two things that can cause it: a library grant, or a content rule.
+  ///
+  /// In en, this message translates to:
+  /// **'This series holds nothing you can open. Ask an administrator if you expected to see it.'**
+  String get bookSeriesNoBooksMessage;
+
   /// Where a book sits in its series, as a link to the rest of it.
   ///
   /// In en, this message translates to:
   /// **'Book {number} of {series}'**
   String bookSeriesSequence(String number, String series);
+
+  /// The series shelf's action, opening the full index.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all'**
+  String get bookSeriesShowAll;
+
+  /// The shelf on the audiobook hub that opens the series index, and that index's own title. One key for both: they name the same thing on two surfaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Series'**
+  String get bookSeriesTitle;
+
+  /// Stands in for the number in a series row when the book's tags name the series without one. A dash rather than a blank, so the column reads as a column.
+  ///
+  /// In en, this message translates to:
+  /// **'-'**
+  String get bookSeriesUnknownSequence;
 
   /// The playback rate this book is set to. {speed} arrives already worded, with its multiplier sign.
   ///
@@ -9710,6 +9764,24 @@ abstract class AppLocalizations {
   /// **'Nothing matches yet'**
   String get playlistSmartEmptyTitle;
 
+  /// Label over the choice between a live source URL and a pasted export, on a playlist with no binding yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync from'**
+  String get playlistSyncArmLabel;
+
+  /// The live arm of that choice: a playlist URL the server re-enumerates on a schedule.
+  ///
+  /// In en, this message translates to:
+  /// **'A link'**
+  String get playlistSyncArmLive;
+
+  /// The matched arm of that choice: a pasted export re-matched against the library on demand.
+  ///
+  /// In en, this message translates to:
+  /// **'An export'**
+  String get playlistSyncArmMatched;
+
   /// Status chip on a synced playlist whose last sync run failed.
   ///
   /// In en, this message translates to:
@@ -9806,10 +9878,16 @@ abstract class AppLocalizations {
   /// **'The last sync changed nothing.'**
   String get playlistSyncLastRunNothing;
 
+  /// Line under the mode choice on a matched binding, saying why mirror-trash is not offered.
+  ///
+  /// In en, this message translates to:
+  /// **'An export downloads nothing, so there are no files to move to the trash.'**
+  String get playlistSyncMatchedModeHelp;
+
   /// Note in the sync sheet for a binding recorded from a streaming export rather than a live URL. {source} is the export format's label, e.g. spotify.
   ///
   /// In en, this message translates to:
-  /// **'A {source} export re-matches against the library on demand and downloads nothing. Bind a fresh export to change what it holds.'**
+  /// **'A {source} export re-matches against the library on demand and downloads nothing.'**
   String playlistSyncMatchedNote(String source);
 
   /// Sync mode that only adds new source entries and never touches manual edits.
@@ -9859,6 +9937,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync now'**
   String get playlistSyncNow;
+
+  /// Placeholder in that box.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the export here'**
+  String get playlistSyncPayloadHint;
+
+  /// Label of the box the export is pasted into.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get playlistSyncPayloadLabel;
 
   /// Preview line: members a sync would attach now.
   ///
@@ -9932,6 +10022,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 entry stored from the export} other{{count} entries stored from the export}}'**
   String playlistSyncRefCount(int count);
 
+  /// Retries the read of a playlist's sync binding after it failed; the sheet cannot offer its settings until it knows what is stored.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get playlistSyncRetryRead;
+
   /// Button storing the sync settings, replacing the binding whole.
   ///
   /// In en, this message translates to:
@@ -9955,6 +10051,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync from source'**
   String get playlistSyncSheetTitle;
+
+  /// Label over the choice of which service an export came from.
+  ///
+  /// In en, this message translates to:
+  /// **'Export format'**
+  String get playlistSyncSourceLabel;
 
   /// Note in the sync sheet while the schedule is auto-disabled.
   ///
@@ -11419,6 +11521,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ways to get \"{title}\"'**
   String radioSavedWays(String title);
+
+  /// Station menu item that stops reporting this one station's segments to the account's scrobblers.
+  ///
+  /// In en, this message translates to:
+  /// **'Do not scrobble this station'**
+  String get radioScrobbleStationMute;
+
+  /// Snackbar after muting one station's scrobbling.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} will not be scrobbled'**
+  String radioScrobbleStationMuted(String name);
+
+  /// Station menu item that starts reporting this one station's segments again.
+  ///
+  /// In en, this message translates to:
+  /// **'Scrobble this station'**
+  String get radioScrobbleStationResume;
+
+  /// Snackbar after unmuting one station's scrobbling.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} will be scrobbled'**
+  String radioScrobbleStationResumed(String name);
 
   /// Button running the directory lookup.
   ///

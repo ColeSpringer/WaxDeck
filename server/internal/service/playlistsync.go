@@ -93,6 +93,11 @@ type PlaylistSourceUpdateDTO struct {
 	Refs          []PortableRefDTO
 	Mode          string
 	IntervalHours int
+	// NamesSource is true when the body carried any of the four source
+	// fields, whatever they held. It is what tells a settings-only
+	// re-save apart from a bind that named its source badly: an
+	// explicit empty url is the second, and has always been refused.
+	NamesSource bool
 }
 
 // PlaylistSyncPreviewDTO reports what a sync would do right now.
@@ -191,9 +196,15 @@ func (l *Library) GetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylis
 	return playlistSourceDTO(row), nil
 }
 
-// SetPlaylistSource binds a playlist to an external source, replacing
-// any previous binding whole. Owner only; static playlists only;
-// selecting mirror-trash needs the delete right.
+// SetPlaylistSource binds a playlist to an external source, or re-saves
+// the settings on the binding already stored.
+//
+// A body naming a source (a url, or a source with a payload or refs)
+// replaces any previous binding whole. A body naming none of those is
+// the settings-only form and needs a stored binding to re-save: the
+// source, refs, identity and cover are kept and only the settings
+// change. Owner only; static playlists only; selecting mirror-trash
+// needs the delete right.
 func (l *Library) SetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylistPID string, in PlaylistSourceUpdateDTO) (PlaylistSourceDTO, error) {
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
@@ -201,6 +212,18 @@ func (l *Library) SetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylis
 	}
 	if pl.Kind != model.PlaylistStatic {
 		return PlaylistSourceDTO{}, errInvalid("a smart playlist's membership is its rule")
+	}
+	// Read before the validator and the probe, because what the body
+	// means depends on whether there is a binding under it.
+	prev, prevErr := l.db.PlaylistSourceFor(ctx, string(pl.PID))
+	if prevErr != nil && !errors.Is(prevErr, wdb.ErrNotFound) {
+		return PlaylistSourceDTO{}, &Error{Kind: KindInternal, Err: prevErr}
+	}
+	if settingsOnlyPlaylistSource(in) {
+		if prevErr != nil {
+			return PlaylistSourceDTO{}, errInvalid("bind a url or a source export")
+		}
+		return l.resavePlaylistSourceSettings(ctx, uc, pl, apiPlaylistPID, prev, in)
 	}
 	if err := validatePlaylistSourceSettings(in); err != nil {
 		return PlaylistSourceDTO{}, err
@@ -213,7 +236,6 @@ func (l *Library) SetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylis
 		return PlaylistSourceDTO{}, err
 	}
 	now := time.Now().UnixNano()
-	prev, prevErr := l.db.PlaylistSourceFor(ctx, string(pl.PID))
 	if prevErr == nil {
 		row.CreatedAtNS = prev.CreatedAtNS
 		// A binding pointed at a different source invalidates the
@@ -223,8 +245,6 @@ func (l *Library) SetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylis
 				return PlaylistSourceDTO{}, &Error{Kind: KindInternal, Err: err}
 			}
 		}
-	} else if !errors.Is(prevErr, wdb.ErrNotFound) {
-		return PlaylistSourceDTO{}, &Error{Kind: KindInternal, Err: prevErr}
 	}
 	// The first scheduled run comes one interval after the bind; the
 	// sync endpoint is the immediate door. Binding must not surprise
@@ -243,6 +263,102 @@ func (l *Library) SetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylis
 		l.releaseSourcePlaylistCover(ctx, pl)
 	}
 	l.Audit(ctx, uc, "playlist.source.bind",
+		AuditTarget{Kind: "playlist", PID: apiPlaylistPID, Name: pl.Name},
+		map[string]any{"source": row.Source, "mode": row.Mode, "live": row.Live})
+	return playlistSourceDTO(row), nil
+}
+
+// settingsOnlyPlaylistSource reports whether an update names no source
+// at all, which is the re-save form: the settings change and the stored
+// binding is otherwise kept.
+//
+// Absence, not emptiness. A body carrying `"url": ""` named a source
+// and named it badly, which is a refusal the bind path already words;
+// reading it as a re-save would quietly keep the binding somebody was
+// trying to replace, and answer 200 for it.
+func settingsOnlyPlaylistSource(in PlaylistSourceUpdateDTO) bool {
+	return !in.NamesSource
+}
+
+// validateResavedPlaylistSourceSettings checks a settings-only body
+// against the binding it is being applied to. The same rules the bind
+// enforces, asked of the stored row rather than of the body, since the
+// body no longer says which form this is: a matched binding downloads
+// nothing and so never trashes, and takes no interval; a live one needs
+// one.
+func validateResavedPlaylistSourceSettings(live bool, in PlaylistSourceUpdateDTO) error {
+	switch in.Mode {
+	case playlistSyncModeAppend, playlistSyncModeMirror:
+	case playlistSyncModeMirrorTrash:
+		if !live {
+			return errInvalid("a matched source downloads nothing and never removes files; append or mirror only")
+		}
+	default:
+		return errInvalid("mode must be append, mirror, or mirror-trash")
+	}
+	if live {
+		if !playlistSyncIntervals[in.IntervalHours] {
+			return errInvalid("intervalHours must be 1, 3, 6, 12, or 24")
+		}
+	} else if in.IntervalHours != 0 {
+		return errInvalid("a matched source syncs on demand only; no interval")
+	}
+	return nil
+}
+
+// resavePlaylistSourceSettings stores new settings on an existing
+// binding, leaving its source, refs, identity and cover alone.
+//
+// Deliberately not through buildPlaylistSourceRow: that one probes a
+// live source over the network for its identity and cover, which is
+// exactly what a mode flip should not pay for, and would have to be
+// handed a matched source's export again to rebuild the row at all.
+// The entry bookkeeping is kept for the same reason: the binding still
+// names the same source, so the stored entry ids still name its
+// entries.
+//
+// Two things do not survive. The failure accounting starts over, which
+// is what PutPlaylistSource documents for a binding whose owner "just
+// changed what the sync follows or how" - without it a suspended
+// binding stays suspended, the schedule keeps skipping the row, and the
+// longer interval the owner just chose never runs. The last run's
+// counts do survive it: they record something that happened to this
+// same source, which a settings change does not falsify.
+//
+// And a changed mode takes the bind's grace period, for the bind's
+// reason: escalating to mirror-trash must not put files in the trash
+// before the next sweeper tick. An interval that changed alone keeps
+// the stamp, so a shortened interval is measured from the last real
+// attempt rather than from the save.
+func (l *Library) resavePlaylistSourceSettings(
+	ctx context.Context,
+	uc *UserCtx,
+	pl *model.Playlist,
+	apiPlaylistPID string,
+	prev wdb.PlaylistSourceRow,
+	in PlaylistSourceUpdateDTO,
+) (PlaylistSourceDTO, error) {
+	if err := validateResavedPlaylistSourceSettings(prev.Live, in); err != nil {
+		return PlaylistSourceDTO{}, err
+	}
+	if in.Mode == playlistSyncModeMirrorTrash && !uc.Admin && !uc.Delete {
+		return PlaylistSourceDTO{}, &Error{Kind: KindForbidden, Msg: "selecting mirror-trash needs the delete right"}
+	}
+	now := time.Now().UnixNano()
+	row := prev
+	row.Mode = in.Mode
+	if prev.Live {
+		row.IntervalHours = in.IntervalHours
+	}
+	row.ConsecutiveFailures, row.Disabled, row.LastError = 0, false, ""
+	if prev.Mode != in.Mode {
+		row.LastAttemptNS = now
+	}
+	row.UpdatedAtNS = now
+	if err := l.db.PutPlaylistSource(ctx, row); err != nil {
+		return PlaylistSourceDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
+	l.Audit(ctx, uc, "playlist.source.mode",
 		AuditTarget{Kind: "playlist", PID: apiPlaylistPID, Name: pl.Name},
 		map[string]any{"source": row.Source, "mode": row.Mode, "live": row.Live})
 	return playlistSourceDTO(row), nil
@@ -281,11 +397,14 @@ func (l *Library) PreviewPlaylistSync(ctx context.Context, uc *UserCtx, apiPlayl
 	if err != nil {
 		return PlaylistSyncPreviewDTO{}, err
 	}
+	// Asked of any body, not only a binding one: a smart playlist has no
+	// membership to bind and none to re-save either, and its own
+	// sentence beats the "no binding" one it would otherwise get.
+	if in != nil && pl.Kind != model.PlaylistStatic {
+		return PlaylistSyncPreviewDTO{}, errInvalid("a smart playlist's membership is its rule")
+	}
 	var row wdb.PlaylistSourceRow
-	if in != nil {
-		if pl.Kind != model.PlaylistStatic {
-			return PlaylistSyncPreviewDTO{}, errInvalid("a smart playlist's membership is its rule")
-		}
+	if in != nil && !settingsOnlyPlaylistSource(*in) {
 		if err := validatePlaylistSourceSettings(*in); err != nil {
 			return PlaylistSyncPreviewDTO{}, err
 		}
@@ -298,10 +417,31 @@ func (l *Library) PreviewPlaylistSync(ctx context.Context, uc *UserCtx, apiPlayl
 	} else {
 		row, err = l.db.PlaylistSourceFor(ctx, string(pl.PID))
 		if errors.Is(err, wdb.ErrNotFound) {
+			// With a body, this is the settings-only form with nothing
+			// under it, which is the save's refusal rather than a
+			// missing binding: the two have to answer alike, or the
+			// sheet's Preview and its Save disagree about the same
+			// form - and only one of the two sentences is about what
+			// the visitor can do next.
+			if in != nil {
+				return PlaylistSyncPreviewDTO{}, errInvalid("bind a url or a source export")
+			}
 			return PlaylistSyncPreviewDTO{}, errNotFound("the playlist has no source binding")
 		}
 		if err != nil {
 			return PlaylistSyncPreviewDTO{}, &Error{Kind: KindInternal, Err: err}
+		}
+		// The settings-only twin of the save: the stored binding, under
+		// the settings the sheet is about to send. What Save would do,
+		// which is what a preview is for.
+		if in != nil {
+			if err := validateResavedPlaylistSourceSettings(row.Live, *in); err != nil {
+				return PlaylistSyncPreviewDTO{}, err
+			}
+			row.Mode = in.Mode
+			if row.Live {
+				row.IntervalHours = in.IntervalHours
+			}
 		}
 	}
 	out, err := l.reconcilePlaylistSource(ctx, nil, uc, pl, row, true)

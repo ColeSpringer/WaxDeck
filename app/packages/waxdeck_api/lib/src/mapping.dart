@@ -137,6 +137,7 @@ Prefs prefsFromGen(gen.Prefs prefs) {
   // ignore: deprecated_member_use
   final theme = prefs.theme;
   final favorites = prefs.radioFavorites;
+  final muted = prefs.radioScrobbleMutedStations;
   final sorts = prefs.browseSorts;
   return Prefs(
     timezone: prefs.timezone,
@@ -146,6 +147,9 @@ Prefs prefsFromGen(gen.Prefs prefs) {
     radioFavorites: favorites == null
         ? null
         : favorites.toList(growable: false),
+    radioScrobbleMutedStations: muted == null
+        ? null
+        : muted.toList(growable: false),
     pinned: prefs.pinned?.toList(growable: false),
     crossfadeSeconds: prefs.crossfadeSeconds,
     replayGain: prefs.replayGain,
@@ -171,6 +175,7 @@ Prefs prefsFromGen(gen.Prefs prefs) {
 gen.Prefs prefsToGen(Prefs prefs) {
   final theme = prefs.theme;
   final favorites = prefs.radioFavorites;
+  final muted = prefs.radioScrobbleMutedStations;
   final pinned = prefs.pinned;
   final sorts = prefs.browseSorts;
   return gen.Prefs(
@@ -186,6 +191,9 @@ gen.Prefs prefsToGen(Prefs prefs) {
       ..radioFavorites = favorites == null
           ? null
           : ListBuilder<String>(favorites)
+      ..radioScrobbleMutedStations = muted == null
+          ? null
+          : ListBuilder<String>(muted)
       ..pinned = pinned == null ? null : ListBuilder<String>(pinned)
       ..crossfadeSeconds = prefs.crossfadeSeconds
       ..replayGain = prefs.replayGain
@@ -790,6 +798,26 @@ BookSeriesPage bookSeriesPageFromGen(gen.BookSeriesPage page) {
         )
         .toList(),
     nextCursor: page.nextCursor,
+  );
+}
+
+BookSeriesDetail bookSeriesDetailFromGen(
+  gen.BookSeriesDetail detail, {
+  String baseUrl = '',
+}) {
+  return BookSeriesDetail(
+    pid: detail.pid,
+    name: detail.name,
+    bookCount: detail.bookCount ?? 0,
+    totalDurationMs: detail.totalDurationMs ?? 0,
+    books: detail.books
+        .map(
+          (e) => BookSeriesEntry(
+            sequence: e.sequence,
+            book: itemSummaryFromGen(e.book, baseUrl: baseUrl),
+          ),
+        )
+        .toList(growable: false),
   );
 }
 

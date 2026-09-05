@@ -143,6 +143,33 @@ export class Radio extends Surface {
     await expect(url).toHaveCount(0, { timeout: T.nav });
   }
 
+  /// Open a station's menu from its tile in the grid, and answer with
+  /// the row asked for.
+  ///
+  /// Retried and scrolled into reach, as `editStation` is: a
+  /// part-scrolled Flutter node publishes a clipped box whose centre is
+  /// no longer over the widget, and a single forced click aimed there
+  /// lands on whatever is underneath with nothing to try again.
+  private async stationMenuRow(pid: string, id: string): Promise<Locator> {
+    const page = this.ctx.page;
+    const row = page.locator(sem(id));
+    const tile = this.station(pid);
+    await expect(async () => {
+      if (await row.isVisible()) return;
+      await wheelIntoReach(page, tile);
+      await clickToward(tile, { shows: row }, { button: 'right' });
+    }).toPass({ timeout: T.nav });
+    return row;
+  }
+
+  /// Flip one station's scrobbling from its menu. Offered only where
+  /// this account has a live scrobble connection and has not silenced
+  /// the whole dial, so a spec driving it seeds both.
+  async toggleStationScrobble(pid: string): Promise<void> {
+    const row = await this.stationMenuRow(pid, SemanticsIds.radioScrobbleToggle(pid));
+    await clickInView(this.ctx.page, row);
+  }
+
   /// The hub's row into the songs kept off the air.
   savedDoor(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.radioSavedOpen));

@@ -307,6 +307,21 @@ type BookSeriesDTO struct {
 	TotalDurationMS int64
 }
 
+// BookSeriesEntryDTO is one book's place in a series.
+type BookSeriesEntryDTO struct {
+	Sequence string
+	Book     ItemSummary
+}
+
+// BookSeriesDetailDTO is one series and the books in it.
+type BookSeriesDetailDTO struct {
+	PID             string
+	Name            string
+	BookCount       int
+	TotalDurationMS int64
+	Books           []BookSeriesEntryDTO
+}
+
 // BookSeriesPageDTO is one keyset page of series.
 type BookSeriesPageDTO struct {
 	Series     []BookSeriesDTO
@@ -357,6 +372,74 @@ func (l *Library) ListBookSeries(ctx context.Context, uc *UserCtx, cursor string
 	}
 	if page.HasMore {
 		out.NextCursor = string(page.Next)
+	}
+	return out, nil
+}
+
+// BookSeriesDetailFor reads one series and the books in it.
+//
+// 404 covers both "no such series" and "every book in it lives
+// somewhere this account was not granted": a restricted caller must not
+// learn a series exists from an empty answer where a stranger's library
+// holds it.
+func (l *Library) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID string) (BookSeriesDetailDTO, error) {
+	prefix, pid, ok := parseAPIPID(apiPID)
+	if !ok || prefix != PrefixSeries {
+		return BookSeriesDetailDTO{}, errNotFound("no series with pid " + apiPID)
+	}
+	ent, err := l.lib.EntityByPID(ctx, read.EntitySeries, pid)
+	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return BookSeriesDetailDTO{}, errNotFound("no series with pid " + apiPID)
+		}
+		return BookSeriesDetailDTO{}, classify(err)
+	}
+	if ent == nil || (!uc.AllLibraries && !l.entityInLibraries(ent, uc)) {
+		return BookSeriesDetailDTO{}, errNotFound("no series with pid " + apiPID)
+	}
+	books, err := l.lib.BooksInSeries(ctx, pid)
+	if err != nil {
+		return BookSeriesDetailDTO{}, classify(err)
+	}
+	out := BookSeriesDetailDTO{
+		PID:   apiPID,
+		Name:  ent.Name,
+		Books: make([]BookSeriesEntryDTO, 0, len(books)),
+	}
+	held := 0
+	for _, it := range books {
+		if it == nil {
+			continue
+		}
+		held++
+		// viewVisible, not itemVisible: these are fresh item views, so
+		// the library handle is a field already in hand, and the
+		// located-path cache invalidates on a scan poll - which would
+		// drop a book out of the series for the length of one.
+		if !l.viewVisible(ctx, uc, it) {
+			continue
+		}
+		// allowedByContent, not advisoryAllows: BooksInSeries takes no
+		// query node, so nothing upstream has applied this caller's tag
+		// rules. The advisory half alone would list every tag-denied
+		// book in the series by title, author and pid.
+		if !l.allowedByContent(ctx, uc, it) {
+			continue
+		}
+		out.Books = append(out.Books, BookSeriesEntryDTO{
+			Sequence: it.SeriesSeq,
+			Book:     summary(it),
+		})
+	}
+	// The counts are the catalog's, so they are answered only when this
+	// caller was shown the whole series: a series with one visible book
+	// and nine hidden ones must not advertise ten. Read off what the
+	// filters above actually dropped rather than off the grant alone -
+	// a mode=all account can still be narrowed by a tag rule or the
+	// advisory flag, and a filter added later is covered without being
+	// remembered here.
+	if uc.AllLibraries && len(out.Books) == held {
+		out.BookCount, out.TotalDurationMS = ent.ItemCount, ent.TotalDurationMS
 	}
 	return out, nil
 }

@@ -2120,6 +2120,19 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get bookSeriesEmpty => 'No series yet';
+
+  @override
+  String get bookSeriesEmptyMessage =>
+      'A book joins a series when its tags name one. Set one from a book\'s metadata editor.';
+
+  @override
+  String get bookSeriesIndexLoadError => 'Could not load the series';
+
+  @override
+  String get bookSeriesLoadError => 'Could not open this series';
+
+  @override
   String get bookSeriesMerge => 'Merge series into...';
 
   @override
@@ -2140,9 +2153,25 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get bookSeriesNoBooks => 'Nothing to show here';
+
+  @override
+  String get bookSeriesNoBooksMessage =>
+      'This series holds nothing you can open. Ask an administrator if you expected to see it.';
+
+  @override
   String bookSeriesSequence(String number, String series) {
     return 'Book $number of $series';
   }
+
+  @override
+  String get bookSeriesShowAll => 'Show all';
+
+  @override
+  String get bookSeriesTitle => 'Series';
+
+  @override
+  String get bookSeriesUnknownSequence => '-';
 
   @override
   String bookSettingsSpeed(String speed) {
@@ -6119,6 +6148,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistSmartEmptyTitle => 'Nothing matches yet';
 
   @override
+  String get playlistSyncArmLabel => 'Sync from';
+
+  @override
+  String get playlistSyncArmLive => 'A link';
+
+  @override
+  String get playlistSyncArmMatched => 'An export';
+
+  @override
   String get playlistSyncChipFailing => 'Sync failing';
 
   @override
@@ -6191,8 +6229,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistSyncLastRunNothing => 'The last sync changed nothing.';
 
   @override
+  String get playlistSyncMatchedModeHelp =>
+      'An export downloads nothing, so there are no files to move to the trash.';
+
+  @override
   String playlistSyncMatchedNote(String source) {
-    return 'A $source export re-matches against the library on demand and downloads nothing. Bind a fresh export to change what it holds.';
+    return 'A $source export re-matches against the library on demand and downloads nothing.';
   }
 
   @override
@@ -6221,6 +6263,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistSyncNow => 'Sync now';
+
+  @override
+  String get playlistSyncPayloadHint => 'Paste the export here';
+
+  @override
+  String get playlistSyncPayloadLabel => 'Export';
 
   @override
   String playlistSyncPreviewAdd(int count) {
@@ -6324,6 +6372,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get playlistSyncRetryRead => 'Try again';
+
+  @override
   String get playlistSyncSave => 'Save';
 
   @override
@@ -6334,6 +6385,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistSyncSheetTitle => 'Sync from source';
+
+  @override
+  String get playlistSyncSourceLabel => 'Export format';
 
   @override
   String get playlistSyncSuspended =>
@@ -7312,6 +7366,22 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String radioSavedWays(String title) {
     return 'Ways to get \"$title\"';
+  }
+
+  @override
+  String get radioScrobbleStationMute => 'Do not scrobble this station';
+
+  @override
+  String radioScrobbleStationMuted(String name) {
+    return '$name will not be scrobbled';
+  }
+
+  @override
+  String get radioScrobbleStationResume => 'Scrobble this station';
+
+  @override
+  String radioScrobbleStationResumed(String name) {
+    return '$name will be scrobbled';
   }
 
   @override

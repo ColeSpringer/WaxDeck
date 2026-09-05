@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../settings/prefs_controller.dart';
 import '../shell/semantics_ids.dart';
 import 'radio_controller.dart';
 
@@ -101,6 +102,46 @@ Future<void> openStationHomepage(
   await ProviderScope.containerOf(
     context,
   ).read(urlOpenerProvider).open(homepage);
+}
+
+/// Mutes or unmutes one station's scrobbling, and says which it did.
+///
+/// Beside [openStationHomepage] because the hub's menu and the player
+/// face's menu both raise it, and a toggle that reported nothing would
+/// be a menu row that looks inert: the state it flips lives in a
+/// preference document neither menu draws.
+Future<void> toggleStationScrobble(
+  BuildContext context,
+  WidgetRef ref,
+  RadioStation station,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
+  try {
+    final muted = await ref
+        .read(prefsControllerProvider.notifier)
+        .toggleRadioStationScrobble(station.pid);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            muted
+                ? l10n.radioScrobbleStationMuted(station.name)
+                : l10n.radioScrobbleStationResumed(station.name),
+          ),
+        ),
+      );
+    // `on Object`, not the API exception alone: the preference write
+    // rethrows whatever it caught, and a serializer failure on the
+    // document's round trip is not a Dio error. Both call sites here
+    // fire and forget, so anything this misses is a menu that closes
+    // and does nothing.
+  } on Object catch (e) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+  }
 }
 
 class _StationDialog extends ConsumerStatefulWidget {

@@ -121,13 +121,29 @@ test('the hub sorts, filters, and marks a book finished', async ({ app }) => {
   // true when that bug was fixed, and left the spec asserting a state
   // nothing produced any more.)
   //
-  // So both books are finished through the seeder. The empty state
-  // below is the reason it has to be both: it appears only when a
-  // filter matches nothing at all, which is a claim about every book in
-  // the library rather than about this one. Per-account state, wholly
-  // this test's.
-  const other = await app.seed.book('The Chaptered Fixture');
-  await app.seed.setPosition(other.pid, other.durationMs);
+  // So every book on the shelf is finished through the seeder, read off
+  // the listing rather than named here: the empty state below appears
+  // only when a filter matches nothing at all, which is a claim about
+  // the whole library rather than about this book, and a corpus that
+  // grows a title would otherwise quietly falsify it. Per-account
+  // state, wholly this test's.
+  // Drained, not one page: the empty state below is a claim about
+  // every book there is, so a corpus that outgrows a page would leave
+  // the ones past the window unfinished and read as a filter bug.
+  let cursor: string | undefined;
+  do {
+    const page = await app.api.get('/library/items', {
+      query: { mediaType: 'audiobook', limit: 100, ...(cursor ? { cursor } : {}) },
+    });
+    for (const entry of page.items ?? []) {
+      // Zero would be a position, not an ending: a book the listing
+      // reports no duration for cannot be finished by writing one, so
+      // it is the one case worth failing loudly on.
+      expect(entry.durationMs, `${entry.title} should carry a duration`).toBeTruthy();
+      await app.seed.setPosition(entry.pid, entry.durationMs!);
+    }
+    cursor = page.nextCursor;
+  } while (cursor !== undefined);
   await app.seed.setPosition(book.pid, book.durationMs);
   // Polled rather than assumed: "finished" is derived from the position
   // a write lands at, so this is the one place the filter's input is
@@ -203,4 +219,39 @@ test('the book player spans a chapter, and bookmarks keep a place', async ({ app
       { timeout: T.fetch, message: 'deleting a bookmark should remove it server-side' },
     )
     .toBe(0);
+});
+
+test('a series holds its books, and the hub shelf opens the index', async ({ app }) => {
+  // The corpus carries three books tagged into one series, numbered
+  // through the GROUPING tag the scanner splits.
+  const first = await app.seed.book('Tidewater Book 1');
+
+  const listed = await app.api.get('/books/series');
+  const series = (listed.series ?? []).find((s) => s.name === 'Tidewater');
+  expect(series, 'the tagged series should be in the listing').toBeTruthy();
+
+  // From a book: the series line is a link now, not a narrowing of the
+  // hub by author.
+  await app.nav.enter('books');
+  await app.books.open(first.pid);
+  await app.books.openSeries(series!.pid);
+
+  await expect(app.books.seriesRow(0)).toBeVisible();
+  await expect(app.books.seriesRow(2)).toBeVisible();
+  // In sequence order, so the first row is book one.
+  await expect(app.books.seriesRow(0)).toContainText('Tidewater Book 1');
+  // `go`, so a stranger can open the location the link reached.
+  expect(app.nav.location()).toContain(`/books/series/${series!.pid}`);
+
+  // Pushed, not gone to: back from a book lands on the series it was
+  // opened from, which is what walking one book by book needs.
+  await app.books.openFromSeries(0);
+  await app.page.goBack();
+  await expect(app.books.series(series!.pid)).toBeVisible({ timeout: T.nav });
+
+  // And the hub's shelf reaches every series rather than the twelve it
+  // draws.
+  await app.nav.enter('books');
+  await app.books.openSeriesIndex();
+  await expect(app.books.seriesCard(series!.pid)).toBeVisible();
 });

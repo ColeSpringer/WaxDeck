@@ -793,15 +793,37 @@ paths:
       summary: Bind a playlist to an external source
       description: >
         Binds a manual playlist to an external source and stores its
-        sync settings, replacing any previous binding whole - every
-        field is written from this body, so always send the complete
-        settings. A `url` names a live source (a YouTube playlist)
-        that the server re-enumerates on the stored interval and on
-        demand, downloading new entries through the normal review
-        queue; `source` plus `payload` or `refs` records a matched
-        source (a streaming export), which reconciles match-only and
-        on demand, downloading nothing. Exactly one of the two forms
-        must be set.
+        sync settings. A `url` names a live source (a YouTube
+        playlist) that the server re-enumerates on the stored interval
+        and on demand, downloading new entries through the normal
+        review queue; `source` plus `payload` or `refs` records a
+        matched source (a streaming export), which reconciles
+        match-only and on demand, downloading nothing. A body naming
+        one of the two forms replaces any previous binding whole:
+        every field is written from it, so send the complete settings.
+
+
+        A body carrying none of those four fields is a settings-only
+        re-save, and needs an existing binding: the stored source,
+        refs, identity and cover are kept and only the settings change.
+        Absence, not emptiness - `"url": ""` names a source and names
+        it badly, and stays `invalid-request`. A matched binding takes
+        `append` or `mirror`; a live one takes any mode under the same
+        delete-right rule, plus `intervalHours`. It exists because a
+        live re-save is otherwise a full network probe of the source
+        for every mode flip, and because a matched re-save that
+        replaced the binding whole would have to be handed the export
+        again. Without a binding to re-save it is `invalid-request`.
+
+
+        The binding's failure accounting starts over, as it does on a
+        bind: a suspended binding whose settings the owner just
+        corrected has to be allowed to run again. Its last run's counts
+        survive, since they record something that happened to this same
+        source. A changed mode also restarts the interval, so escalating
+        to `mirror-trash` cannot put files in the trash before the next
+        scheduled run; an interval changed on its own is measured from
+        the last real attempt.
 
 
         Modes: `append` adds new source entries and never touches
@@ -877,13 +899,26 @@ paths:
         do without writing anything: members it would attach now,
         downloads it would queue, members it would remove, files it
         would trash, entries still riding the review queue, and
-        entries the source reports unavailable. With a body, previews
-        those prospective settings - the settings sheet's dry run
-        before a bind commits; without one, previews the stored
-        binding (`not-found` when there is none). Availability is
+        entries the source reports unavailable. Availability is
         best-effort: enumeration inspects a bounded prefix of the
         source, so a long playlist's later entries count as unknown
         until a download is attempted.
+
+
+        The body takes `setPlaylistSource`'s three readings, so a dry
+        run is always of what Save beside it would do. A body naming a
+        source previews that prospective binding, before it is
+        committed. A body naming none previews the stored binding under
+        the settings it carries, and refuses with `invalid-request`
+        when there is no binding to re-save, exactly as the save does.
+        No body at all previews the stored binding as it stands, and is
+        the one reading that answers `not-found` for an unbound
+        playlist.
+
+
+        A live source is enumerated either way: that network read is
+        what a dry run *is*, so unlike the save, a settings-only
+        preview does not avoid it.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -1196,11 +1231,22 @@ components:
     PlaylistSourceUpdate:
       type: object
       description: >
-        A source binding to store, replacing any previous one whole.
-        Exactly one of `url` (a live source) or `source` with
-        `payload` or `refs` (a matched source, the import request's
-        own fields) must be set. `intervalHours` is required for a
-        live source and must be absent for a matched one.
+        A source binding to store, or the settings to re-save on the
+        one already stored.
+
+
+        With `url` (a live source) or `source` plus `payload` or
+        `refs` (a matched source, the import request's own fields),
+        this replaces any previous binding whole; the two forms are
+        mutually exclusive. `intervalHours` is required for a live
+        source and must be absent for a matched one.
+
+
+        With none of those four fields present, it is a settings-only
+        re-save of the stored binding: `mode`, and `intervalHours` for
+        a live one. The stored source, refs, identity and cover survive
+        it. Presence is what decides, not value: sending `url` as an
+        empty string is a binding body with a bad url.
       required: [mode]
       properties:
         url:

@@ -36,6 +36,8 @@ Serializers _$serializers =
           ..add(BookPart.serializer)
           ..add(BookResume.serializer)
           ..add(BookSeries.serializer)
+          ..add(BookSeriesDetail.serializer)
+          ..add(BookSeriesEntry.serializer)
           ..add(BookSeriesPage.serializer)
           ..add(BookSettings.serializer)
           ..add(BookSplitRequest.serializer)
@@ -433,6 +435,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(BookSeries)]),
             () => ListBuilder<BookSeries>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(BookSeriesEntry)]),
+            () => ListBuilder<BookSeriesEntry>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Bookmark)]),
@@ -1177,14 +1183,6 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(WriteBackFailure)]),
-            () => ListBuilder<WriteBackFailure>(),
-          )
-          ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(String)]),
-            () => ListBuilder<String>(),
-          )
-          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
             () => ListBuilder<String>(),
           )
@@ -1194,6 +1192,18 @@ Serializers _$serializers =
               const FullType(PrefsBrowseSortsEnum),
             ]),
             () => MapBuilder<String, PrefsBrowseSortsEnum>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(WriteBackFailure)]),
+            () => ListBuilder<WriteBackFailure>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

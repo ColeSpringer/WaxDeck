@@ -133,5 +133,19 @@ func generateBooks(out string) error {
 		return err
 	}
 	fmt.Println(chaptered)
+	// A tagged series, which the two books above deliberately are not:
+	// the series screen needs books whose tags name one and number them.
+	series, err := fixtures.GenerateSeriesBooks(out, seriesName, 3)
+	if err != nil {
+		return err
+	}
+	for _, path := range series {
+		fmt.Println(path)
+	}
 	return nil
 }
+
+// seriesName is the series the e2e corpus carries. The specs that read
+// it spell it out themselves - a Go constant is not reachable from
+// TypeScript - so renaming it means renaming it there too.
+const seriesName = "Tidewater"

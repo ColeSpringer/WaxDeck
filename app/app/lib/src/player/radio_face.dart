@@ -368,6 +368,13 @@ class _StationMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
+    // Offered only where it means something: nothing connected, or the
+    // whole dial silenced in settings, and a per-station switch would
+    // name a setting with no effect. Same rule as the hub's menu.
+    final scrobbling = ref.watch(radioScrobblingProvider);
+    final muted = ref
+        .watch(radioScrobbleMutedProvider)
+        .contains(station.pid.toUpperCase());
     return WaxMenuButton<String>(
       semanticsId: SemanticsIds.radioMenu(station.pid),
       label: l10n.playerStationMenu(station.name),
@@ -383,6 +390,14 @@ class _StationMenu extends ConsumerWidget {
             label: l10n.playerStationWebsite,
             semanticsId: SemanticsIds.playerStationInfo,
           ),
+        if (scrobbling)
+          WaxMenuItem<String>(
+            value: 'scrobble',
+            label: muted
+                ? l10n.radioScrobbleStationResume
+                : l10n.radioScrobbleStationMute,
+            semanticsId: SemanticsIds.radioScrobbleToggle(station.pid),
+          ),
         WaxMenuItem<String>(
           value: 'edit',
           label: l10n.playerEditStation,
@@ -396,6 +411,7 @@ class _StationMenu extends ConsumerWidget {
           context.go(WaxRoute.radio);
         }),
         'homepage' => openStationHomepage(context, station),
+        'scrobble' => toggleStationScrobble(context, ref, station),
         _ => showAddStationDialog(context, editing: station),
       }),
     );

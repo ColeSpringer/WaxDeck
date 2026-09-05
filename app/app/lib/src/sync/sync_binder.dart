@@ -6,6 +6,8 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../books/books_controller.dart';
+import '../books/series_controller.dart';
+import '../books/series_merge.dart';
 import '../connect/connect_providers.dart';
 import '../downloads/downloads_controller.dart';
 import '../home/home_shelves.dart';
@@ -67,6 +69,12 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       // The music hub's shelves are the same reads scoped to one medium.
       ...musicShelfProviders,
       booksProvider,
+      // The series a book's tags name are a catalog fact too, and the
+      // books hub stays mounted as a shell branch - so without this a
+      // scan that lands a new series leaves the shelf drawing the old
+      // set until the app is relaunched.
+      bookSeriesProvider,
+      bookSeriesShelfProvider,
       // Whether a domain has anything behind it is a catalog fact, and
       // it decides whether the chrome offers its tab. This is what turns
       // the Audiobooks tab on when a first scan finds books, instead of
@@ -91,6 +99,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       // Applied review decisions and enrichment rewrite item metadata
       // server-side; an open editor must refetch what it shows.
       metadataControllerProvider,
+      // An open series screen is a catalog read like a show's.
+      bookSeriesDetailProvider,
     ],
   );
 

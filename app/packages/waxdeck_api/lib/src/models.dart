@@ -320,6 +320,7 @@ class Prefs {
     this.theme,
     this.sharedStatsOptOut,
     this.radioFavorites,
+    this.radioScrobbleMutedStations,
     this.pinned,
     this.crossfadeSeconds,
     this.replayGain,
@@ -354,6 +355,14 @@ class Prefs {
   /// what makes the last unpin stick is that an empty list is a *value* on
   /// the way out, which [copyWith] carries and null does not.
   final List<String>? radioFavorites;
+
+  /// Stations whose segments this account does not scrobble, while it
+  /// scrobbles radio at all.
+  ///
+  /// A set: nothing reads an order out of it. The same shape and the
+  /// same absent-is-empty rule as [radioFavorites], and read only when
+  /// [radioScrobbleOptOut] is unset, which is the whole dial at once.
+  final List<String>? radioScrobbleMutedStations;
 
   /// What this account has pinned to home, in shelf order.
   ///
@@ -426,6 +435,7 @@ class Prefs {
     ThemePref? theme,
     bool? sharedStatsOptOut,
     List<String>? radioFavorites,
+    List<String>? radioScrobbleMutedStations,
     List<String>? pinned,
     double? crossfadeSeconds,
     bool? replayGain,
@@ -441,6 +451,8 @@ class Prefs {
       theme: theme ?? this.theme,
       sharedStatsOptOut: sharedStatsOptOut ?? this.sharedStatsOptOut,
       radioFavorites: radioFavorites ?? this.radioFavorites,
+      radioScrobbleMutedStations:
+          radioScrobbleMutedStations ?? this.radioScrobbleMutedStations,
       pinned: pinned ?? this.pinned,
       crossfadeSeconds: crossfadeSeconds ?? this.crossfadeSeconds,
       replayGain: replayGain ?? this.replayGain,
@@ -1624,6 +1636,40 @@ class BookSeries {
   final String name;
   final int bookCount;
   final int totalDurationMs;
+}
+
+/// One book's place in a series.
+class BookSeriesEntry {
+  const BookSeriesEntry({required this.book, this.sequence});
+
+  /// What the book's tags call its place ("2", "1.5", "II"), or null
+  /// when they name the series without a number. A string because that
+  /// is what a tag holds.
+  final String? sequence;
+
+  final ItemSummary book;
+}
+
+/// One series and the books in it, in the catalog's sequence order.
+class BookSeriesDetail {
+  const BookSeriesDetail({
+    required this.pid,
+    required this.name,
+    this.bookCount = 0,
+    this.totalDurationMs = 0,
+    this.books = const [],
+  });
+
+  final String pid;
+  final String name;
+
+  /// Catalog-wide counts, answered only to an account that can see
+  /// every library; zero otherwise. A restricted account reads
+  /// [books].length instead, which is what it can open.
+  final int bookCount;
+  final int totalDurationMs;
+
+  final List<BookSeriesEntry> books;
 }
 
 /// One keyset page of series.

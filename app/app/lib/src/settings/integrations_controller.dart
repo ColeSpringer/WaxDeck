@@ -1,13 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 
 /// The caller's scrobbling connection slots.
 class ScrobblersController extends AsyncNotifier<List<Scrobbler>> {
   @override
-  Future<List<Scrobbler>> build() =>
-      ref.watch(repositoryProvider).listScrobblers();
+  Future<List<Scrobbler>> build() {
+    // Keyed on the account, not only on the server. A scrobble
+    // connection is per user and the repository moves only when the
+    // base URL does, so without this a same-server re-login reads the
+    // departed account's connection back - which the radio menus gate
+    // on, and would offer to mute a station for a scrobbler this
+    // listener does not have.
+    ref.watch(signedInAccountProvider);
+    return ref.watch(repositoryProvider).listScrobblers();
+  }
 
   /// Connects ListenBrainz; errors propagate so the dialog surfaces the
   /// server's message (invalid token, unreachable service).
