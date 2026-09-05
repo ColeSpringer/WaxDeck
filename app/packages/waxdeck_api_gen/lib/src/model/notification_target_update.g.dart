@@ -13,6 +13,10 @@ class _$NotificationTargetUpdate extends NotificationTargetUpdate {
   final BuiltMap<String, JsonObject?> config;
   @override
   final BuiltList<String> enabledEvents;
+  @override
+  final bool? muted;
+  @override
+  final int? minIntervalSeconds;
 
   factory _$NotificationTargetUpdate([
     void Function(NotificationTargetUpdateBuilder)? updates,
@@ -22,6 +26,8 @@ class _$NotificationTargetUpdate extends NotificationTargetUpdate {
     this.label,
     required this.config,
     required this.enabledEvents,
+    this.muted,
+    this.minIntervalSeconds,
   }) : super._();
   @override
   NotificationTargetUpdate rebuild(
@@ -38,7 +44,9 @@ class _$NotificationTargetUpdate extends NotificationTargetUpdate {
     return other is NotificationTargetUpdate &&
         label == other.label &&
         config == other.config &&
-        enabledEvents == other.enabledEvents;
+        enabledEvents == other.enabledEvents &&
+        muted == other.muted &&
+        minIntervalSeconds == other.minIntervalSeconds;
   }
 
   @override
@@ -47,6 +55,8 @@ class _$NotificationTargetUpdate extends NotificationTargetUpdate {
     _$hash = $jc(_$hash, label.hashCode);
     _$hash = $jc(_$hash, config.hashCode);
     _$hash = $jc(_$hash, enabledEvents.hashCode);
+    _$hash = $jc(_$hash, muted.hashCode);
+    _$hash = $jc(_$hash, minIntervalSeconds.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -56,7 +66,9 @@ class _$NotificationTargetUpdate extends NotificationTargetUpdate {
     return (newBuiltValueToStringHelper(r'NotificationTargetUpdate')
           ..add('label', label)
           ..add('config', config)
-          ..add('enabledEvents', enabledEvents))
+          ..add('enabledEvents', enabledEvents)
+          ..add('muted', muted)
+          ..add('minIntervalSeconds', minIntervalSeconds))
         .toString();
   }
 }
@@ -82,6 +94,15 @@ class NotificationTargetUpdateBuilder
   set enabledEvents(ListBuilder<String>? enabledEvents) =>
       _$this._enabledEvents = enabledEvents;
 
+  bool? _muted;
+  bool? get muted => _$this._muted;
+  set muted(bool? muted) => _$this._muted = muted;
+
+  int? _minIntervalSeconds;
+  int? get minIntervalSeconds => _$this._minIntervalSeconds;
+  set minIntervalSeconds(int? minIntervalSeconds) =>
+      _$this._minIntervalSeconds = minIntervalSeconds;
+
   NotificationTargetUpdateBuilder() {
     NotificationTargetUpdate._defaults(this);
   }
@@ -92,6 +113,8 @@ class NotificationTargetUpdateBuilder
       _label = $v.label;
       _config = $v.config.toBuilder();
       _enabledEvents = $v.enabledEvents.toBuilder();
+      _muted = $v.muted;
+      _minIntervalSeconds = $v.minIntervalSeconds;
       _$v = null;
     }
     return this;
@@ -119,6 +142,8 @@ class NotificationTargetUpdateBuilder
             label: label,
             config: config.build(),
             enabledEvents: enabledEvents.build(),
+            muted: muted,
+            minIntervalSeconds: minIntervalSeconds,
           );
     } catch (_) {
       late String _$failedField;

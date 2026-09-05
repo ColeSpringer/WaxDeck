@@ -317,11 +317,15 @@ export const SemanticsIds = {
   homeReviewPending: 'home-review-pending',
   homeReviewPendingOpen: 'home-review-pending-open',
   homeScreen: 'home-screen',
+  notificationDelete: (id: string | number) => `notification-delete-${id}`,
   notificationRow: (kind: string | number, target: string | number) => `notification-row-${kind}-${target}`,
   notificationRowPlain: (kind: string | number) => `notification-row-${kind}-none`,
   notificationsBell: 'notifications-bell',
   notificationsClear: 'notifications-clear',
+  notificationsClearConfirm: 'notifications-clear-confirm',
   notificationsEmpty: 'notifications-empty',
+  notificationsMarkAllRead: 'notifications-mark-all-read',
+  notificationsPeekRead: 'notifications-peek-read',
   notificationsScreen: 'notifications-screen',
   pinSheetTarget: (pid: string | number) => `pin-sheet-target-${pid}`,
   shelf: (shelf: string | number) => `shelf-${shelf}`,
@@ -970,6 +974,7 @@ export const SemanticsIdPrefixes = {
 
   // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   homeMix: 'home-mix-',
+  notificationDelete: 'notification-delete-',
   notificationRow: 'notification-row-',
   notificationRowPlain: 'notification-row-',
   pinSheetTarget: 'pin-sheet-target-',

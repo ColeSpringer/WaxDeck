@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -237,6 +238,14 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 	}
 	losesAdmin := false
 	visibilityChanged := false
+	// What the account may do, before anything is applied. Compared
+	// whole afterwards rather than tracked per field: a right added to
+	// the row is then covered by construction, where a forgotten clause
+	// would silently drop the marker this whole path exists to send.
+	before := rightsOf(u)
+	// Grants are written to their own table rather than onto the row,
+	// so they are the one change the comparison cannot see.
+	grantsWritten := false
 	if upd.Roles != nil {
 		roles, err := normalizeRoles(upd.Roles)
 		if err != nil {
@@ -291,7 +300,12 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 			return nil, &Error{Kind: KindInternal, Err: err}
 		}
 		visibilityChanged = true
+		grantsWritten = true
 	}
+	// A display name is not a right: it changes what the account is
+	// called, not what it may do, and every surface that shows it is a
+	// live read anyway.
+	rightsChanged := grantsWritten || !sameRights(before, rightsOf(u))
 	if visibilityChanged {
 		// Outstanding catalog sync cursors are scoped to the old grant
 		// set; retiring them makes the next delta answer sync-reset and
@@ -306,6 +320,9 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 			return nil, errNotFound("no user with id " + id)
 		}
 		return nil, &Error{Kind: KindInternal, Err: err}
+	}
+	if rightsChanged {
+		l.emitUserEvent(ctx, u.ID, eventAccount, "")
 	}
 	return l.accountFor(ctx, u)
 }
@@ -440,6 +457,11 @@ func (l *Library) ResolveOidcAccount(ctx context.Context, ident OidcIdentity) (*
 				u.Roles = prevRoles
 				l.log.Warn("group claim would demote the last administrator; keeping roles",
 					"user", u.ID)
+			} else {
+				// The IdP moved this account's roles under whatever
+				// sessions it already has open; they re-read the session
+				// rather than waiting for a relaunch.
+				l.emitUserEvent(ctx, u.ID, eventAccount, "")
 			}
 		}
 		if ident.Email != existing.Email {
@@ -518,6 +540,38 @@ func truncateUTF8(s string, maxBytes int) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// accountRights is everything about an account row that changes what
+// its open sessions may do.
+//
+// A projection rather than a field-by-field diff of the row: the
+// display name, the password hash and the timestamps are deliberately
+// absent, and everything else is here by construction.
+type accountRights struct {
+	roles       []string
+	disabled    bool
+	upload      bool
+	quota       int64
+	access      string
+	permissions Permissions
+}
+
+func rightsOf(u *wdb.User) accountRights {
+	return accountRights{
+		roles:       slices.Clone(u.Roles),
+		disabled:    u.Disabled,
+		upload:      u.UploadEnabled,
+		quota:       u.UploadQuotaBytes,
+		access:      u.LibraryAccess,
+		permissions: permissionsOf(u),
+	}
+}
+
+func sameRights(a, b accountRights) bool {
+	return sameRoles(a.roles, b.roles) && a.disabled == b.disabled &&
+		a.upload == b.upload && a.quota == b.quota && a.access == b.access &&
+		samePermissions(a.permissions, b.permissions)
 }
 
 func sameRoles(a, b []string) bool {

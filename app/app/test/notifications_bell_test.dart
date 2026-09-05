@@ -52,7 +52,7 @@ void main() {
   testWidgets('a chosen row opens its own surface, not whatever took its '
       'place', (tester) async {
     final container = await _pump(tester);
-    final notifications = container.read(notificationsProvider.notifier);
+    final notifications = container.read(localNotificationsProvider.notifier);
     final router = GoRouter.of(tester.element(find.byType(NotificationsBell)));
 
     notifications.record(
@@ -82,7 +82,7 @@ void main() {
     expect(_location(router), WaxRoute.podcasts);
   });
 
-  testWidgets('Clear empties the bell rather than opening a surface', (
+  testWidgets('the last row reads the bell rather than opening a surface', (
     tester,
   ) async {
     final container = await _pump(tester);
@@ -90,17 +90,22 @@ void main() {
     final before = _location(router);
 
     container
-        .read(notificationsProvider.notifier)
+        .read(localNotificationsProvider.notifier)
         .record(NotificationKind.download, at: DateTime(2026, 8, 12, 9));
     await tester.pumpAndSettle();
     await tester.tap(_byId(SemanticsIds.notificationsBell));
     await tester.pumpAndSettle();
 
-    await tester.tap(_byId(SemanticsIds.notificationsClear));
+    await tester.tap(_byId(SemanticsIds.notificationsPeekRead));
     await tester.pumpAndSettle();
 
-    expect(container.read(notificationsProvider), isEmpty);
-    // Clear's value is empty; every row's is a location.
+    // Read, not deleted. The peek holds what has not been dealt with,
+    // so the row leaves it - but the screen still lists what happened,
+    // because a dropdown is no place to throw away ninety days of
+    // history on every device at once.
+    expect(container.read(notificationRowsProvider), isEmpty);
+    expect(container.read(notificationsViewProvider).rows, hasLength(1));
+    // Its value is empty; every row's is a location.
     expect(_location(router), before);
   });
 
@@ -128,7 +133,7 @@ void main() {
     final container = await _pump(tester);
 
     container
-        .read(notificationsProvider.notifier)
+        .read(localNotificationsProvider.notifier)
         .record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9));
     await tester.pumpAndSettle();
 

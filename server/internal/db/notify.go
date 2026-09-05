@@ -16,15 +16,23 @@ type NotifyRow struct {
 	Event    string
 	Title    string
 	Body     string
-	Attempts int
+	// TargetPID is what the event is about, where it names something.
+	// Held on the row rather than resolved at drain time: the thing may
+	// be gone by then, and the link is still where it was.
+	TargetPID string
+	// EnqueuedAtNS is when the row joined the queue, which is what the
+	// drain measures the outbox horizon from when a paced target cannot
+	// reach it in time.
+	EnqueuedAtNS int64
+	Attempts     int
 }
 
 // EnqueueNotify queues one delivery.
 func (d *DB) EnqueueNotify(ctx context.Context, r NotifyRow, ns int64) error {
 	_, err := d.w.ExecContext(ctx, `
-		INSERT INTO notify_outbox (target_id, event, title, body, enqueued_at_ns)
-		VALUES (?, ?, ?, ?, ?)`,
-		r.TargetID, r.Event, r.Title, r.Body, ns)
+		INSERT INTO notify_outbox (target_id, event, title, body, target_pid, enqueued_at_ns)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		r.TargetID, r.Event, r.Title, r.Body, nullable(r.TargetPID), ns)
 	if err != nil {
 		return fmt.Errorf("db: queuing notification: %w", err)
 	}
@@ -41,10 +49,12 @@ func (d *DB) LeaseNotify(ctx context.Context, nowNS, leaseNS int64, maxAttempts 
 			WHERE lease_until_ns < ? AND attempts < ?
 			ORDER BY enqueued_at_ns, id LIMIT 1
 		)
-		RETURNING id, target_id, event, title, body, attempts`,
+		RETURNING id, target_id, event, title, body, COALESCE(target_pid, ''),
+			enqueued_at_ns, attempts`,
 		nowNS, leaseNS, nowNS, maxAttempts)
 	var r NotifyRow
-	if err := row.Scan(&r.ID, &r.TargetID, &r.Event, &r.Title, &r.Body, &r.Attempts); err != nil {
+	if err := row.Scan(&r.ID, &r.TargetID, &r.Event, &r.Title, &r.Body,
+		&r.TargetPID, &r.EnqueuedAtNS, &r.Attempts); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return NotifyRow{}, ErrNotFound
 		}
@@ -70,6 +80,20 @@ func (d *DB) FailNotify(ctx context.Context, id int64, msg string, retryAtNS int
 		WHERE id = ?`, retryAtNS, msg, id)
 	if err != nil {
 		return fmt.Errorf("db: failing notification: %w", err)
+	}
+	return nil
+}
+
+// RequeueNotify puts a leased row back without counting an attempt.
+//
+// The pacing path: a target inside its own minimum interval has not
+// failed at anything, so spending one of its ten attempts on the wait
+// would eventually drop the delivery for being patient.
+func (d *DB) RequeueNotify(ctx context.Context, id, readyAtNS int64) error {
+	_, err := d.w.ExecContext(ctx,
+		`UPDATE notify_outbox SET lease_until_ns = ? WHERE id = ?`, readyAtNS, id)
+	if err != nil {
+		return fmt.Errorf("db: requeuing notification: %w", err)
 	}
 	return nil
 }

@@ -59,7 +59,7 @@ void main() {
   testWidgets('says what happened and where it says it', (tester) async {
     final container = await _pump(tester);
     container
-        .read(notificationsProvider.notifier)
+        .read(localNotificationsProvider.notifier)
         .record(NotificationKind.upload, at: DateTime.now());
     await tester.pumpAndSettle();
 
@@ -76,7 +76,7 @@ void main() {
     final container = await _pump(tester);
     final router = _router(tester);
     container
-        .read(notificationsProvider.notifier)
+        .read(localNotificationsProvider.notifier)
         .record(NotificationKind.feedDisabled, at: DateTime.now(), pid: 'pc-1');
     await tester.pumpAndSettle();
 
@@ -94,46 +94,80 @@ void main() {
     expect(_location(router), WaxRoute.show('pc-1'));
   });
 
-  testWidgets('arriving reads the list, and so does news landing on it', (
-    tester,
-  ) async {
+  testWidgets('reading the list is something the reader says', (tester) async {
     final container = await _pump(tester);
-    final router = _router(tester);
-    final notifications = container.read(notificationsProvider.notifier);
+    final notifications = container.read(localNotificationsProvider.notifier);
 
-    // Unlike the bell, this surface stays open. A row landing on it is
-    // read where it lands: a badge climbing on the page somebody is
-    // looking at is the bell's own promise broken.
+    // Arriving no longer reads everything for you. It did when the list
+    // was this session's alone: nothing outlived the page, so the only
+    // thing a badge over an open list could mean was noise. An inbox
+    // outlives it, and rows on it are work; the affordance is what says
+    // the work is done.
     notifications.record(NotificationKind.task, at: DateTime.now());
-    await tester.pumpAndSettle();
-    expect(container.read(unseenNotificationsProvider), 0);
-
-    // And a backlog gathered elsewhere is read on arrival, which is what
-    // opening the bell does too.
-    router.go(WaxRoute.settings);
-    await tester.pumpAndSettle();
-    notifications.record(NotificationKind.upload, at: DateTime.now());
     await tester.pumpAndSettle();
     expect(container.read(unseenNotificationsProvider), 1);
 
-    router.go(WaxRoute.notifications);
+    await tester.tap(_byId(SemanticsIds.notificationsMarkAllRead));
     await tester.pumpAndSettle();
-
-    expect(_byId(SemanticsIds.notificationsScreen), findsOneWidget);
     expect(container.read(unseenNotificationsProvider), 0);
+    // And the control goes with the badge it clears.
+    expect(_byId(SemanticsIds.notificationsMarkAllRead), findsNothing);
   });
 
-  testWidgets('Clear empties the list, and goes with it', (tester) async {
+  testWidgets('an inbox row says whether it has been dealt with, and can '
+      'be thrown away', (tester) async {
+    final container = await _pump(tester);
+    final repo = container.read(repositoryProvider) as FakeRepository;
+    repo.inbox = <ServerNotification>[
+      ServerNotification(
+        id: 'nf-1',
+        event: 'backup-completed',
+        title: 'A backup completed',
+        body: 'All of it',
+        createdAt: DateTime.now(),
+      ),
+    ];
+    container.invalidate(notificationsProvider);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Unread'), findsOneWidget);
+    expect(
+      find.text('A backup completed'),
+      findsNothing,
+      reason: "a known event is worded in this app's own words",
+    );
+    expect(find.text('Backup finished'), findsOneWidget);
+
+    await tester.tap(_byId(SemanticsIds.notificationDelete('nf-1')));
+    await tester.pumpAndSettle();
+
+    expect(repo.inboxDeleted, <String>['nf-1']);
+    expect(find.text('Backup finished'), findsNothing);
+  });
+
+  testWidgets('Clear asks first, and empties the list when answered', (
+    tester,
+  ) async {
     final container = await _pump(tester);
     container
-        .read(notificationsProvider.notifier)
+        .read(localNotificationsProvider.notifier)
         .record(NotificationKind.task, at: DateTime.now());
     await tester.pumpAndSettle();
 
+    // Cancelled, the list stands: this deletes durable history on every
+    // device, so the first tap is not the decision.
     await tester.tap(_byId(SemanticsIds.notificationsClear));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(container.read(notificationsViewProvider).rows, hasLength(1));
 
-    expect(container.read(notificationsProvider), isEmpty);
+    await tester.tap(_byId(SemanticsIds.notificationsClear));
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.notificationsClearConfirm));
+    await tester.pumpAndSettle();
+
+    expect(container.read(notificationRowsProvider), isEmpty);
     // The control goes with the rows: an empty list has nothing to clear.
     expect(_byId(SemanticsIds.notificationsClear), findsNothing);
     expect(find.text('Nothing to report'), findsOneWidget);
@@ -145,9 +179,9 @@ void main() {
     await _pump(tester);
 
     expect(find.text('Nothing to report'), findsOneWidget);
-    // Said out loud, because there is no server inbox behind this: the
-    // list is what this client saw while it was running, and a launch
-    // starts it empty.
-    expect(find.textContaining('since the app opened'), findsOneWidget);
+    // Said out loud, because the two halves keep different promises: the
+    // inbox survives a relaunch and reaches the other device, and this
+    // device's own transfers do not.
+    expect(find.textContaining('only while the app is open'), findsOneWidget);
   });
 }

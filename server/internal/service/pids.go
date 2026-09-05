@@ -35,6 +35,9 @@ const (
 	// because it is deliberately not an item: nothing behind one is in
 	// the library, and nothing behind one plays.
 	PrefixRadioSaved = "rw"
+	// PrefixNotification names an inbox row: a thing that happened to
+	// one account, not a thing in the library.
+	PrefixNotification = "nf"
 )
 
 // prefixForKind maps an item kind to its API prefix.

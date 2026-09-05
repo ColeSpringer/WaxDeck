@@ -120,13 +120,18 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 				}
 				// Titles only: feed URLs are scrubbed from every
 				// notification surface, private shows especially.
-				l.EmitNotification(ctx, "feed-disabled",
+				apiShow := apiPID(PrefixPodcast, showPID)
+				l.EmitNotificationFor(ctx, "feed-disabled",
 					"Podcast feed disabled: "+pod.Title,
-					fmt.Sprintf("The feed failed %d refreshes in a row and was disabled. A manual refresh re-enables it.", st.ConsecutiveFailures),
-					userIDs)
+					// The show's own name, even though the title carries
+					// it too: the inbox row draws the body as its detail
+					// line under a localized heading, and two disabled
+					// feeds must not read identically there.
+					fmt.Sprintf("%s failed %d refreshes in a row and was disabled. A manual refresh re-enables it.",
+						pod.Title, st.ConsecutiveFailures),
+					apiShow, userIDs)
 				// The same news to whoever is running a client; the pid is
 				// the api show one so the row opens the show.
-				apiShow := apiPID(PrefixPodcast, showPID)
 				for _, uid := range userIDs {
 					l.emitUserEvent(ctx, uid, eventFeedDisabled, apiShow)
 				}
@@ -256,7 +261,8 @@ func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.
 	if show == "" {
 		show = "podcast"
 	}
-	l.EmitNotification(ctx, "episode-downloaded", "New episode: "+show, det.Episode.Title, userIDs)
+	l.EmitNotificationFor(ctx, "episode-downloaded", "New episode: "+show, det.Episode.Title,
+		apiPID(PrefixEpisode, det.Episode.PID), userIDs)
 	// The same news to whoever is running a client; the pid is the
 	// episode so the row opens it.
 	for _, uid := range userIDs {

@@ -1885,13 +1885,23 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bellActivityBlurb =>
-      'Lo que este dispositivo ha visto desde que se abrió la aplicación. No hay historial anterior a eso.';
+      'Lo que le ha pasado a esta cuenta, lo más reciente primero. Las transferencias de este dispositivo solo aparecen mientras la aplicación está abierta.';
 
   @override
   String get bellActivityTitle => 'Actividad reciente';
 
   @override
   String get bellClear => 'Vaciar';
+
+  @override
+  String get bellClearConfirm =>
+      '¿Eliminar todas las notificaciones de esta cuenta, en todos los dispositivos? Esto no se puede deshacer.';
+
+  @override
+  String get bellClearTitle => 'Vaciar notificaciones';
+
+  @override
+  String get bellDelete => 'Eliminar';
 
   @override
   String get bellDownloadFinished => 'Ha terminado una descarga.';
@@ -1914,8 +1924,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bellImportCompleted => 'Se ha añadido una subida a la biblioteca.';
 
   @override
+  String get bellMarkAllRead => 'Marcar todo como leído';
+
+  @override
+  String get bellNothingNew => 'Nada nuevo.';
+
+  @override
   String get bellPlaylistSynced =>
       'Una lista sincronizada ha cambiado, o su sincronización se ha suspendido';
+
+  @override
+  String get bellReadOverline => 'Leído';
 
   @override
   String get bellReviewChanged => 'La cola de revisión ha cambiado.';
@@ -1929,6 +1948,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String bellRowWhen(String surface, String when) {
     return '$surface · $when';
   }
+
+  @override
+  String get bellSurfaceAccounts => 'Cuentas';
+
+  @override
+  String get bellSurfaceBackups => 'Copias de seguridad';
 
   @override
   String get bellSurfaceDownloads => 'Descargas';
@@ -1967,6 +1992,9 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get bellUnreadOverline => 'Sin leer';
 
   @override
   String get bellUploadChanged => 'Una subida ha cambiado.';
@@ -8627,6 +8655,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsNotifyGotifyPriorityHelp => 'De 0 a 10';
 
   @override
+  String get settingsNotifyHeaders => 'Cabeceras adicionales';
+
+  @override
+  String get settingsNotifyHeadersHelp =>
+      'Una por línea, como Nombre: valor. Ocho como máximo.';
+
+  @override
+  String get settingsNotifyHeadersMalformed =>
+      'Cada cabecera va en su propia línea, como Nombre: valor.';
+
+  @override
   String settingsNotifyLastDelivered(String when) {
     return 'Último envío: $when';
   }
@@ -8635,6 +8674,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String settingsNotifyLastFailed(String error) {
     return 'El último envío ha fallado: $error';
   }
+
+  @override
+  String get settingsNotifyMinInterval => 'Segundos entre envíos';
+
+  @override
+  String get settingsNotifyMinIntervalHelp =>
+      '0 envía todo al momento. Hasta 3600; un envío dentro del intervalo espera.';
+
+  @override
+  String get settingsNotifyMuted => 'Silenciado';
+
+  @override
+  String get settingsNotifyMutedBadge => 'Silenciado';
+
+  @override
+  String get settingsNotifyMutedHelp =>
+      'No envía nada salvo la prueba, y deja el resto tal como está.';
 
   @override
   String get settingsNotifyMyBlurb =>
@@ -8664,6 +8720,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsNotifyPushoverUserKey => 'Clave de usuario o de grupo';
+
+  @override
+  String get settingsNotifySecret => 'Secreto de firma';
+
+  @override
+  String get settingsNotifySecretHelp =>
+      'Firma cada petición, para que quien la reciba sepa que viene de aquí.';
 
   @override
   String get settingsNotifySendTest => 'Enviar prueba';

@@ -71,6 +71,15 @@ Changing a user's content rules retires their sync cursors, so offline
 clients re-mirror under the new rules instead of keeping stale
 content.
 
+A change lands on an open session without a sign-out. Roles, the
+disabled flag, upload rights, the permission toggles and library access
+all mark the account changed on its sync stream; a client that hears it
+re-reads `GET /auth/session`, so a promotion puts Server settings and
+the console in the nav of an app somebody is already looking at. A
+display name is not on that list: nothing gates on it. The session
+itself is untouched either way - roles are read from the account row on
+every request, so nobody is signed out by a permission change.
+
 ## Signup requests and invites
 
 Out of the box, accounts are admin-created. Two self-serve doors can

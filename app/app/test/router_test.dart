@@ -263,18 +263,18 @@ void main() {
     await tester.pumpWidget(_app(container));
     await tester.pumpAndSettle();
 
-    final notifications = container.read(notificationsProvider.notifier);
+    final notifications = container.read(localNotificationsProvider.notifier);
     notifications
       ..record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9))
       ..record(NotificationKind.task, at: DateTime(2026, 8, 12, 10));
     await tester.pumpAndSettle();
-    expect(container.read(notificationsProvider), hasLength(2));
+    expect(container.read(localNotificationsProvider), hasLength(2));
 
     container.read(routerProvider).go(WaxRoute.uploads);
     await tester.pumpAndSettle();
 
     expect(
-      container.read(notificationsProvider).map((n) => n.kind),
+      container.read(localNotificationsProvider).map((n) => n.kind),
       <NotificationKind>[NotificationKind.task],
       reason: 'the visit answers its own row and leaves the other',
     );

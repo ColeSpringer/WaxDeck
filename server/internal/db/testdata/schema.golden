@@ -219,7 +219,10 @@ table notification_targets
   column label|TEXT|notnull=1|default=''|pk=0
   column last_error_at_ns|INTEGER|notnull=1|default=0|pk=0
   column last_error|TEXT|notnull=1|default=''|pk=0
+  column last_paced_at_ns|INTEGER|notnull=1|default=0|pk=0
   column last_success_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column min_interval_s|INTEGER|notnull=1|default=0|pk=0
+  column muted|INTEGER|notnull=1|default=0|pk=0
   column scope|TEXT|notnull=1|default=<none>|pk=0
   column sealed_config|BLOB|notnull=1|default=<none>|pk=0
   column user_id|TEXT|notnull=0|default=<none>|pk=0
@@ -227,6 +230,19 @@ table notification_targets
   autoindex pk|unique=1|(id)
   index notification_targets_dedupe|unique=1|partial=1|(<expr>,kind,dedupe_key)
   index notification_targets_owner|unique=0|partial=0|(user_id,created_at_ns DESC,id)
+table notifications
+  column body|TEXT|notnull=1|default=''|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column event|TEXT|notnull=1|default=<none>|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column read_at_ns|INTEGER|notnull=0|default=<none>|pk=0
+  column target_pid|TEXT|notnull=0|default=<none>|pk=0
+  column title|TEXT|notnull=1|default=''|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(id)
+  index notifications_owner|unique=0|partial=0|(user_id,id DESC)
+  index notifications_unread|unique=0|partial=1|(user_id)
 table notify_outbox
   column attempts|INTEGER|notnull=1|default=0|pk=0
   column body|TEXT|notnull=1|default=''|pk=0
@@ -236,6 +252,7 @@ table notify_outbox
   column last_error|TEXT|notnull=1|default=''|pk=0
   column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
   column target_id|TEXT|notnull=1|default=<none>|pk=0
+  column target_pid|TEXT|notnull=0|default=<none>|pk=0
   column title|TEXT|notnull=1|default=''|pk=0
   fk target_id->notification_targets.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
   index notify_outbox_ready|unique=0|partial=0|(lease_until_ns,enqueued_at_ns)

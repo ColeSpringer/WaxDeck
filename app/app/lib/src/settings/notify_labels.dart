@@ -16,6 +16,15 @@ String notifyEventTitle(AppLocalizations l10n, NotifyEvent event) =>
 String notifyEventHelp(AppLocalizations l10n, NotifyEvent event) =>
     _help(l10n, event.name) ?? event.description;
 
+/// The same table by wire token, for a surface holding an event name
+/// without the catalogue row it came from: an inbox row carries the
+/// token and the server's own wording, and nothing else.
+String notifyTokenTitle(AppLocalizations l10n, String token, String fallback) =>
+    _title(l10n, token) ?? fallback;
+
+String notifyTokenHelp(AppLocalizations l10n, String token, String fallback) =>
+    _help(l10n, token) ?? fallback;
+
 String? _title(AppLocalizations l, String token) => switch (token) {
   'backup-completed' => l.notifBackupCompletedTitle,
   'backup-failed' => l.notifBackupFailedTitle,

@@ -855,7 +855,7 @@ func (s *Server) CreateServerNotificationTarget(ctx context.Context, req CreateS
 	if !p.IsAdmin() {
 		return CreateServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
-	in, err := notificationTargetInputFromWire(string(req.Body.Kind), req.Body.Label, req.Body.Config, req.Body.EnabledEvents)
+	in, err := notificationTargetInputFromWire(string(req.Body.Kind), req.Body.Label, req.Body.Config, req.Body.EnabledEvents, req.Body.Muted, req.Body.MinIntervalSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -877,7 +877,7 @@ func (s *Server) UpdateServerNotificationTarget(ctx context.Context, req UpdateS
 	if !p.IsAdmin() {
 		return UpdateServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
-	in, err := notificationTargetInputFromWire("", req.Body.Label, req.Body.Config, req.Body.EnabledEvents)
+	in, err := notificationTargetInputFromWire("", req.Body.Label, req.Body.Config, req.Body.EnabledEvents, req.Body.Muted, req.Body.MinIntervalSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -936,7 +936,7 @@ func (s *Server) CreateMyNotificationTarget(ctx context.Context, req CreateMyNot
 	if err != nil {
 		return nil, err
 	}
-	in, err := notificationTargetInputFromWire(string(req.Body.Kind), req.Body.Label, req.Body.Config, req.Body.EnabledEvents)
+	in, err := notificationTargetInputFromWire(string(req.Body.Kind), req.Body.Label, req.Body.Config, req.Body.EnabledEvents, req.Body.Muted, req.Body.MinIntervalSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -955,7 +955,7 @@ func (s *Server) UpdateMyNotificationTarget(ctx context.Context, req UpdateMyNot
 	if err != nil {
 		return nil, err
 	}
-	in, err := notificationTargetInputFromWire("", req.Body.Label, req.Body.Config, req.Body.EnabledEvents)
+	in, err := notificationTargetInputFromWire("", req.Body.Label, req.Body.Config, req.Body.EnabledEvents, req.Body.Muted, req.Body.MinIntervalSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -986,6 +986,92 @@ func (s *Server) TestMyNotificationTarget(ctx context.Context, req TestMyNotific
 		return nil, err
 	}
 	return TestMyNotificationTarget202Response{}, nil
+}
+
+// --- the inbox --------------------------------------------------------------------
+
+func (s *Server) ListMyNotifications(ctx context.Context, req ListMyNotificationsRequestObject) (ListMyNotificationsResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limit, ok := pageLimit(req.Params.Limit, 50, 200)
+	if !ok {
+		return ListMyNotifications400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 200"))}, nil
+	}
+	cursor := ""
+	if req.Params.Cursor != nil {
+		cursor = *req.Params.Cursor
+	}
+	page, err := s.svc.Notifications(ctx, uc, cursor, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := NotificationPage{
+		Notifications: make([]Notification, 0, len(page.Notifications)),
+		UnreadCount:   page.Unread,
+	}
+	for _, n := range page.Notifications {
+		out.Notifications = append(out.Notifications, notificationJSON(n))
+	}
+	if page.Next != "" {
+		out.NextCursor = ptr(page.Next)
+	}
+	return ListMyNotifications200JSONResponse(out), nil
+}
+
+func (s *Server) MarkMyNotificationsRead(ctx context.Context, req MarkMyNotificationsReadRequestObject) (MarkMyNotificationsReadResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	if req.Body != nil && req.Body.Ids != nil {
+		ids = *req.Body.Ids
+	}
+	if err := s.svc.MarkNotificationsRead(ctx, uc, ids); err != nil {
+		return nil, err
+	}
+	return MarkMyNotificationsRead204Response{}, nil
+}
+
+func (s *Server) DeleteMyNotification(ctx context.Context, req DeleteMyNotificationRequestObject) (DeleteMyNotificationResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.DeleteNotification(ctx, uc, req.NotificationId); err != nil {
+		return nil, err
+	}
+	return DeleteMyNotification204Response{}, nil
+}
+
+func (s *Server) ClearMyNotifications(ctx context.Context, _ ClearMyNotificationsRequestObject) (ClearMyNotificationsResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.ClearNotifications(ctx, uc); err != nil {
+		return nil, err
+	}
+	return ClearMyNotifications204Response{}, nil
+}
+
+func notificationJSON(n service.InboxNotification) Notification {
+	out := Notification{
+		Id:        n.ID,
+		Event:     n.Event,
+		Title:     n.Title,
+		Body:      n.Body,
+		CreatedAt: n.CreatedAt,
+	}
+	if n.TargetPID != "" {
+		out.TargetPid = ptr(n.TargetPID)
+	}
+	if !n.ReadAt.IsZero() {
+		out.ReadAt = ptr(n.ReadAt)
+	}
+	return out
 }
 
 // --- wire conversion --------------------------------------------------------------
@@ -1047,7 +1133,7 @@ func pushRegistrationJSON(r service.PushRegistration) PushRegistration {
 // The free-form config object round-trips through JSON so the service
 // and providers see the raw document; kind is empty on updates (fixed
 // at creation, resolved from the stored row).
-func notificationTargetInputFromWire(kind string, label *string, config map[string]interface{}, events []string) (service.NotificationTargetInput, error) {
+func notificationTargetInputFromWire(kind string, label *string, config map[string]interface{}, events []string, muted *bool, minInterval *int) (service.NotificationTargetInput, error) {
 	raw, err := json.Marshal(config)
 	if err != nil {
 		return service.NotificationTargetInput{}, &service.Error{Kind: service.KindInvalid, Msg: "config is not a valid document"}
@@ -1060,6 +1146,9 @@ func notificationTargetInputFromWire(kind string, label *string, config map[stri
 	if label != nil {
 		in.Label = *label
 	}
+	// Carried as given, absence included: an update that omits them
+	// keeps what the target holds.
+	in.Muted, in.MinIntervalSeconds = muted, minInterval
 	return in, nil
 }
 
@@ -1082,7 +1171,11 @@ func notificationTargetJSON(t service.NotificationTarget) NotificationTarget {
 		Scope:         NotificationScope(t.Scope),
 		Config:        config,
 		EnabledEvents: t.EnabledEvents,
+		Muted:         ptr(t.Muted),
 		CreatedAt:     t.CreatedAt,
+	}
+	if t.MinIntervalSeconds > 0 {
+		out.MinIntervalSeconds = ptr(t.MinIntervalSeconds)
 	}
 	if t.Label != "" {
 		out.Label = ptr(t.Label)

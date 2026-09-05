@@ -165,6 +165,93 @@ void main() {
     expect(find.text('My phone'), findsOneWidget);
   });
 
+  testWidgets('a webhook takes typed headers, a secret, mute and pacing', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    await tester.pumpWidget(
+      _host(repo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('notify-target-kind')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Webhook').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-url')),
+      'https://hook.example.net/wax',
+    );
+    // A line per header, which is how everybody writes them down.
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-headers')),
+      'X-Routing-Key: ops\nX-Team: night shift',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-secret')),
+      'shhh',
+    );
+    // Below the checklist in a scrolling dialog, so it is brought into
+    // reach rather than tapped at an offset that hit-tests nothing.
+    final mute = find.descendant(
+      of: find.byKey(const Key('notify-target-muted')),
+      matching: find.byType(WaxSwitch),
+    );
+    await tester.ensureVisible(mute);
+    await tester.pumpAndSettle();
+    await tester.tap(mute);
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('notify-target-interval')),
+      '120',
+    );
+    await tester.tap(find.byKey(const Key('notify-target-save')));
+    await tester.pumpAndSettle();
+
+    final saved = repo.myNotificationTargets.single;
+    expect(saved.config['headers'], <String, Object?>{
+      'X-Routing-Key': 'ops',
+      'X-Team': 'night shift',
+    });
+    expect(saved.config['secret'], 'shhh');
+    expect(saved.muted, isTrue);
+    expect(saved.minIntervalSeconds, 120);
+    // And the row says the destination is paused rather than broken.
+    expect(find.textContaining('Muted'), findsWidgets);
+  });
+
+  testWidgets('a header line with no colon is refused before the save', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    await tester.pumpWidget(
+      _host(repo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('notify-target-kind')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Webhook').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-url')),
+      'https://hook.example.net/wax',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-headers')),
+      'this is not a header',
+    );
+    await tester.tap(find.byKey(const Key('notify-target-save')));
+    await tester.pumpAndSettle();
+
+    expect(repo.myNotificationTargets, isEmpty);
+    expect(find.byKey(const Key('notify-target-error')), findsOneWidget);
+  });
+
   testWidgets('the editor refuses a missing required config field', (
     tester,
   ) async {
@@ -282,6 +369,10 @@ void main() {
       find.byKey(const ValueKey('notify-config-url')),
       'https://hooks.example.net/ops',
     );
+    // The webhook form is three fields deep, so the checklist below it
+    // is scrolled into reach rather than tapped where it used to sit.
+    await tester.ensureVisible(_eventSwitch('signup-requested'));
+    await tester.pumpAndSettle();
     await tester.tap(_eventSwitch('signup-requested'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('notify-target-save')));

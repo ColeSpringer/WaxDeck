@@ -869,6 +869,8 @@ abstract interface class WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   });
 
   /// `PUT /admin/notification-targets/{id}`: replaces a server-scope
@@ -878,6 +880,8 @@ abstract interface class WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   });
 
   /// `DELETE /admin/notification-targets/{id}` (administrators).
@@ -899,6 +903,8 @@ abstract interface class WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   });
 
   /// `PUT /users/me/notification-targets/{id}`: replaces a personal
@@ -908,6 +914,8 @@ abstract interface class WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   });
 
   /// `DELETE /users/me/notification-targets/{id}`.
@@ -916,6 +924,24 @@ abstract interface class WaxDeckRepository {
   /// `POST /users/me/notification-targets/{id}/test`: queues one test
   /// delivery; the outcome lands on the target's health fields.
   Future<void> testMyNotificationTarget(String pid);
+
+  /// `GET /users/me/notifications`: one page of the inbox, newest
+  /// first. Written on every emit, so it is what happened to this
+  /// account whether or not a delivery target carried it anywhere.
+  Future<ServerNotificationPage> listMyNotifications({
+    String? cursor,
+    int? limit,
+  });
+
+  /// `POST /users/me/notifications/read`: stamps the named rows read,
+  /// or every unread row when [ids] is empty.
+  Future<void> markMyNotificationsRead({List<String> ids = const <String>[]});
+
+  /// `DELETE /users/me/notifications/{id}`: removes one row.
+  Future<void> deleteMyNotification(String id);
+
+  /// `DELETE /users/me/notifications`: empties the inbox.
+  Future<void> clearMyNotifications();
 
   /// `GET /review/queue`: keyset-paginated review entries, optionally
   /// filtered by lifecycle [status].
@@ -3460,6 +3486,8 @@ class WaxDeckClient implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) => _guard(() async {
     final response = await _gen
         .getNotificationsApi()
@@ -3469,6 +3497,8 @@ class WaxDeckClient implements WaxDeckRepository {
             label: label,
             config: config,
             enabledEvents: enabledEvents,
+            muted: muted,
+            minIntervalSeconds: minIntervalSeconds,
           ),
         );
     return notificationTargetFromGen(_require(response.data));
@@ -3480,6 +3510,8 @@ class WaxDeckClient implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) => _guard(() async {
     final response = await _gen
         .getNotificationsApi()
@@ -3489,6 +3521,8 @@ class WaxDeckClient implements WaxDeckRepository {
             label: label,
             config: config,
             enabledEvents: enabledEvents,
+            muted: muted,
+            minIntervalSeconds: minIntervalSeconds,
           ),
         );
     return notificationTargetFromGen(_require(response.data));
@@ -3525,6 +3559,8 @@ class WaxDeckClient implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) => _guard(() async {
     final response = await _gen
         .getNotificationsApi()
@@ -3534,6 +3570,8 @@ class WaxDeckClient implements WaxDeckRepository {
             label: label,
             config: config,
             enabledEvents: enabledEvents,
+            muted: muted,
+            minIntervalSeconds: minIntervalSeconds,
           ),
         );
     return notificationTargetFromGen(_require(response.data));
@@ -3545,6 +3583,8 @@ class WaxDeckClient implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) => _guard(() async {
     final response = await _gen
         .getNotificationsApi()
@@ -3554,6 +3594,8 @@ class WaxDeckClient implements WaxDeckRepository {
             label: label,
             config: config,
             enabledEvents: enabledEvents,
+            muted: muted,
+            minIntervalSeconds: minIntervalSeconds,
           ),
         );
     return notificationTargetFromGen(_require(response.data));
@@ -3567,6 +3609,38 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<void> testMyNotificationTarget(String pid) => _guard(() async {
     await _gen.getNotificationsApi().testMyNotificationTarget(targetId: pid);
+  });
+
+  @override
+  Future<ServerNotificationPage> listMyNotifications({
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getNotificationsApi().listMyNotifications(
+      cursor: cursor,
+      limit: limit,
+    );
+    return serverNotificationPageFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> markMyNotificationsRead({List<String> ids = const <String>[]}) =>
+      _guard(() async {
+        await _gen.getNotificationsApi().markMyNotificationsRead(
+          notificationReadRequest: gen.NotificationReadRequest(
+            (b) => b..ids.replace(ids),
+          ),
+        );
+      });
+
+  @override
+  Future<void> deleteMyNotification(String id) => _guard(() async {
+    await _gen.getNotificationsApi().deleteMyNotification(notificationId: id);
+  });
+
+  @override
+  Future<void> clearMyNotifications() => _guard(() async {
+    await _gen.getNotificationsApi().clearMyNotifications();
   });
 
   @override
@@ -5237,13 +5311,17 @@ gen.NotificationTargetCreate _targetCreateToGen({
   String? label,
   required Map<String, Object?> config,
   required List<String> enabledEvents,
+  required bool muted,
+  required int minIntervalSeconds,
 }) {
   return gen.NotificationTargetCreate(
     (b) => b
       ..kind = gen.NotificationTargetKind.valueOf(kind)
       ..label = label
       ..config = _configToGen(config)
-      ..enabledEvents = ListBuilder<String>(enabledEvents),
+      ..enabledEvents = ListBuilder<String>(enabledEvents)
+      ..muted = muted
+      ..minIntervalSeconds = minIntervalSeconds,
   );
 }
 
@@ -5251,12 +5329,16 @@ gen.NotificationTargetUpdate _targetUpdateToGen({
   String? label,
   required Map<String, Object?> config,
   required List<String> enabledEvents,
+  required bool muted,
+  required int minIntervalSeconds,
 }) {
   return gen.NotificationTargetUpdate(
     (b) => b
       ..label = label
       ..config = _configToGen(config)
-      ..enabledEvents = ListBuilder<String>(enabledEvents),
+      ..enabledEvents = ListBuilder<String>(enabledEvents)
+      ..muted = muted
+      ..minIntervalSeconds = minIntervalSeconds,
   );
 }
 

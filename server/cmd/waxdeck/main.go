@@ -456,6 +456,7 @@ func run() error {
 		AllowPrivateRadioHosts:    *allowPrivateRadio,
 		AllowPrivateScrobbleHosts: *allowPrivateScrobble,
 		AllowPrivateNotifyHosts:   *allowPrivateNotify,
+		PublicBase:                *publicBase,
 		RadioDirectoryBase:        *radioDirBase,
 		PodcastDirectoryBase:      *podcastDirBase,
 		LastfmAPIKey:              *lastfmKey,
@@ -963,6 +964,7 @@ func run() error {
 				}
 				svc.PruneScrobbleOutbox(ctx)
 				svc.PruneNotifyOutbox(ctx)
+				svc.PruneNotifications(ctx)
 			}
 		}
 	})

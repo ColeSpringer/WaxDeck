@@ -2401,6 +2401,8 @@ class NotificationTarget {
     required this.enabledEvents,
     required this.createdAt,
     this.label,
+    this.muted = false,
+    this.minIntervalSeconds = 0,
     this.lastSuccessAt,
     this.lastError,
     this.lastErrorAt,
@@ -2417,6 +2419,16 @@ class NotificationTarget {
   final String? label;
   final Map<String, Object?> config;
   final List<String> enabledEvents;
+
+  /// A pause that keeps the configuration and the event selection:
+  /// nothing but a per-target test is delivered while it is set.
+  final bool muted;
+
+  /// The shortest gap between two deliveries, in seconds; 0 paces
+  /// nothing. A delivery inside the gap waits rather than failing, and
+  /// a per-target test is exempt.
+  final int minIntervalSeconds;
+
   final DateTime createdAt;
 
   /// Delivery health: the last successful delivery, and the standing
@@ -2425,6 +2437,57 @@ class NotificationTarget {
   final DateTime? lastSuccessAt;
   final String? lastError;
   final DateTime? lastErrorAt;
+}
+
+/// One thing that happened to this account, as the server kept it.
+///
+/// [event] is the catalog event name and is the boundary: a client that
+/// knows it words the row itself and stays localized, and [title] and
+/// [body] are the server's own English for one it does not.
+class ServerNotification {
+  const ServerNotification({
+    required this.id,
+    required this.event,
+    required this.title,
+    required this.body,
+    required this.createdAt,
+    this.targetPid,
+    this.readAt,
+  });
+
+  final String id;
+  final String event;
+  final String title;
+  final String body;
+
+  /// What the row is about, where the event names something: a show, an
+  /// episode, a playlist, a review entry.
+  final String? targetPid;
+
+  final DateTime createdAt;
+
+  /// When the row was marked read; null while unread.
+  final DateTime? readAt;
+
+  bool get read => readAt != null;
+}
+
+/// One page of the notification inbox.
+class ServerNotificationPage {
+  const ServerNotificationPage({
+    required this.notifications,
+    required this.unreadCount,
+    this.nextCursor,
+  });
+
+  final List<ServerNotification> notifications;
+
+  /// Unread rows in the whole inbox, not just this page: the badge.
+  final int unreadCount;
+
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
 }
 
 /// One UnifiedPush endpoint registration.

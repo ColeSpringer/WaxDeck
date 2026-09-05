@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -113,6 +114,11 @@ type Config struct {
 	// user-pointed notification destinations (ntfy, Gotify, webhooks,
 	// Apprise), for households running them on the LAN.
 	AllowPrivateNotifyHosts bool
+	// PublicBase is the externally reachable base URL of the web app.
+	// Notification deliveries carry a link to what they are about only
+	// when it is set: without it the server does not know a URL anybody
+	// outside its own network could follow.
+	PublicBase string
 	// RadioDirectoryBase is the radio-browser directory API base;
 	// empty selects the public instance. Set, it is the only host the
 	// directory search talks to.
@@ -345,6 +351,9 @@ type Library struct {
 
 	listenbrainz              *scrobble.ListenBrainz
 	allowPrivateScrobbleHosts bool
+	// publicBase is where this server's web app answers, trailing slash
+	// trimmed; empty leaves every notification link out.
+	publicBase string
 	// notifyGuardedHTTP is the dial-guarded client for user-pointed
 	// notification destinations, built on first use;
 	// allowPrivateNotifyHosts relaxes its SSRF guard.
@@ -599,6 +608,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	l.allowPrivateScrobbleHosts = cfg.AllowPrivateScrobbleHosts
 	l.listenbrainz.HTTP = scrobbleHTTPClient(cfg.AllowPrivateScrobbleHosts)
 	l.allowPrivateNotifyHosts = cfg.AllowPrivateNotifyHosts
+	l.publicBase = strings.TrimRight(cfg.PublicBase, "/")
 	l.dropLegacyNotifySetting(ctx)
 	l.loadRuntimeToggles(ctx)
 	l.envLastfmKey, l.envLastfmSecret = cfg.LastfmAPIKey, cfg.LastfmSecret

@@ -11,6 +11,8 @@ import 'package:dio/dio.dart';
 import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/notification_event_list.dart';
+import 'package:waxdeck_api_gen/src/model/notification_page.dart';
+import 'package:waxdeck_api_gen/src/model/notification_read_request.dart';
 import 'package:waxdeck_api_gen/src/model/notification_target.dart';
 import 'package:waxdeck_api_gen/src/model/notification_target_create.dart';
 import 'package:waxdeck_api_gen/src/model/notification_target_list.dart';
@@ -26,6 +28,62 @@ class NotificationsApi {
   final Serializers _serializers;
 
   const NotificationsApi(this._dio, this._serializers);
+
+  /// Empty the caller&#39;s notification inbox
+  /// Removes every row. Clearing an empty inbox answers 204.
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> clearMyNotifications({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/users/me/notifications';
+    final _options = Options(
+      method: r'DELETE',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
+  }
 
   /// Create a personal notification target
   /// Creates one personal delivery destination. &#x60;config&#x60; carries the kind&#39;s fields (see the NotificationTarget schema); validation is per kind and unknown config fields are refused. &#x60;enabledEvents&#x60; names catalog events this target receives: user-scope events for everyone, server-scope events only when the caller is an administrator. Each user may hold at most 20 targets per kind; conflict (code &#x60;conflict&#x60;) means the cap is reached, or that a &#x60;unifiedpush&#x60; target for the same endpoint already exists. On servers that refuse private notification hosts, a URL-carrying config resolving to a private address is refused at write time (and again at delivery time); &#x60;unifiedpush&#x60; endpoints are deliberately exempt, since self-hosted LAN distributors are legitimate. 
@@ -401,6 +459,64 @@ class NotificationsApi {
     return _response;
   }
 
+  /// Delete one inbox row
+  /// Removes the row. Another account&#39;s row answers 404 rather than 403: the inbox is per-account and nobody else&#39;s row is a thing this caller can be told exists. 
+  ///
+  /// Parameters:
+  /// * [notificationId] - Inbox row PID (e.g. `nf-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> deleteMyNotification({ 
+    required String notificationId,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/users/me/notifications/{notificationId}'.replaceAll('{' r'notificationId' '}', encodeQueryParameter(_serializers, notificationId, const FullType(String)).toString());
+    final _options = Options(
+      method: r'DELETE',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
+  }
+
   /// Delete a personal notification target
   /// Removes the target; its queued deliveries are dropped. 
   ///
@@ -659,8 +775,102 @@ class NotificationsApi {
     );
   }
 
+  /// List the caller&#39;s notification inbox
+  /// What happened to this account, newest first, whether or not any delivery target was configured for it. The inbox is written on every emit, so it is the record a client that was closed at the time can still read; targets are how news leaves the server, not where it is kept.  Rows are pruned by age and by a per-account cap, so the inbox is recent history rather than an audit log. 
+  ///
+  /// Parameters:
+  /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 
+  /// * [limit] - Maximum rows per page.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [NotificationPage] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<NotificationPage>> listMyNotifications({ 
+    String? cursor,
+    int? limit = 50,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/users/me/notifications';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    NotificationPage? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(NotificationPage),
+      ) as NotificationPage;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<NotificationPage>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// List the notification event catalog
-  /// Every notification event this server can emit, with its scope: &#x60;server&#x60; events describe server operations and deliver to server-scope targets (plus admin-owned personal targets that opted in), &#x60;user&#x60; events concern one user and deliver to that user&#39;s personal targets. Clients build the per-target event checklist from this catalog; a target&#39;s &#x60;enabledEvents&#x60; must name events from it. The reserved &#x60;test&#x60; event never appears here: per-target tests are requested through the target&#39;s test endpoint and bypass event selection. 
+  /// Every notification event this server can emit, with its scope: &#x60;server&#x60; events describe server operations and deliver to server-scope targets (plus admin-owned personal targets that opted in), &#x60;user&#x60; events concern one user and deliver to that user&#39;s personal targets. Clients build the per-target event checklist from this catalog; a target&#39;s &#x60;enabledEvents&#x60; must name events from it. The reserved &#x60;test&#x60; event never appears here: per-target tests are requested through the target&#39;s test endpoint and bypass event selection.  The current catalog is &#x60;signup-requested&#x60;, &#x60;backup-completed&#x60;, &#x60;backup-failed&#x60;, &#x60;episode-downloaded&#x60;, &#x60;feed-disabled&#x60;, &#x60;review-ready&#x60;, &#x60;import-completed&#x60;, and &#x60;playlist-synced&#x60;. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -909,6 +1119,84 @@ class NotificationsApi {
       statusMessage: _response.statusMessage,
       extra: _response.extra,
     );
+  }
+
+  /// Mark inbox rows read
+  /// Stamps &#x60;readAt&#x60; on the named rows, or on every unread row when &#x60;ids&#x60; is absent or empty. Already-read rows keep the stamp they have, and an id that names nothing is ignored: the caller asked for those rows to be read and they are. 
+  ///
+  /// Parameters:
+  /// * [notificationReadRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> markMyNotificationsRead({ 
+    NotificationReadRequest? notificationReadRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/users/me/notifications/read';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(NotificationReadRequest);
+      _bodyData = notificationReadRequest == null ? null : _serializers.serialize(notificationReadRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
   }
 
   /// Test a personal notification target

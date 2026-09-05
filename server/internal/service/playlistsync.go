@@ -1374,13 +1374,15 @@ func (l *Library) notifyPlaylistSynced(ctx context.Context, ownerID string, pl *
 		parts = append(parts, fmt.Sprintf("%d downloading", c.Queued))
 	}
 	body := fmt.Sprintf("%q synced from its source: %s.", pl.Name, strings.Join(parts, ", "))
-	l.EmitNotification(ctx, "playlist-synced", "Playlist synced", body, []string{ownerID})
+	l.EmitNotificationFor(ctx, "playlist-synced", "Playlist synced", body,
+		apiPID(PrefixPlaylist, pl.PID), []string{ownerID})
 	l.emitUserEvent(ctx, ownerID, eventPlaylistSynced, apiPID(PrefixPlaylist, pl.PID))
 }
 
 // notifyPlaylistSyncDisabled announces the auto-disable edge, once.
 func (l *Library) notifyPlaylistSyncDisabled(ctx context.Context, ownerID string, pl *model.Playlist) {
 	body := fmt.Sprintf("%q kept failing to sync from its source, so its schedule was suspended. A successful manual sync turns it back on.", pl.Name)
-	l.EmitNotification(ctx, "playlist-synced", "Playlist sync suspended", body, []string{ownerID})
+	l.EmitNotificationFor(ctx, "playlist-synced", "Playlist sync suspended", body,
+		apiPID(PrefixPlaylist, pl.PID), []string{ownerID})
 	l.emitUserEvent(ctx, ownerID, eventPlaylistSynced, apiPID(PrefixPlaylist, pl.PID))
 }

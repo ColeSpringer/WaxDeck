@@ -10,12 +10,14 @@ import 'package:built_value/serializer.dart';
 
 part 'notification_target_update.g.dart';
 
-/// Replaces a target's label, config, and enabled events; the kind is fixed at creation. 
+/// Replaces a target's label, config, and enabled events; the kind is fixed at creation. `muted` and `minIntervalSeconds` are the exception to the whole-replace: omitting one keeps what the target holds, so a client that predates them cannot wake a destination somebody silenced on purpose just by renaming it. 
 ///
 /// Properties:
 /// * [label] - Display label.
 /// * [config] - The kind's delivery configuration, replaced whole.
 /// * [enabledEvents] - Catalog event names to deliver, under the same scope rules as creation. 
+/// * [muted] - Pauses the target: it delivers nothing but its own per-target tests until unmuted. Omitted leaves it as it is. 
+/// * [minIntervalSeconds] - The shortest gap between two deliveries to this target, in seconds. A delivery inside the gap waits rather than spending a retry attempt; the reserved `test` event is exempt, and never starts the gap either. Capped at an hour: that bounds the wait, not the queue, and a target fed faster than its interval has the deliveries it cannot reach inside the outbox's day shed rather than delivered late. Omitted leaves it as it is. 
 @BuiltValue()
 abstract class NotificationTargetUpdate implements Built<NotificationTargetUpdate, NotificationTargetUpdateBuilder> {
   /// Display label.
@@ -29,6 +31,14 @@ abstract class NotificationTargetUpdate implements Built<NotificationTargetUpdat
   /// Catalog event names to deliver, under the same scope rules as creation. 
   @BuiltValueField(wireName: r'enabledEvents')
   BuiltList<String> get enabledEvents;
+
+  /// Pauses the target: it delivers nothing but its own per-target tests until unmuted. Omitted leaves it as it is. 
+  @BuiltValueField(wireName: r'muted')
+  bool? get muted;
+
+  /// The shortest gap between two deliveries to this target, in seconds. A delivery inside the gap waits rather than spending a retry attempt; the reserved `test` event is exempt, and never starts the gap either. Capped at an hour: that bounds the wait, not the queue, and a target fed faster than its interval has the deliveries it cannot reach inside the outbox's day shed rather than delivered late. Omitted leaves it as it is. 
+  @BuiltValueField(wireName: r'minIntervalSeconds')
+  int? get minIntervalSeconds;
 
   NotificationTargetUpdate._();
 
@@ -70,6 +80,20 @@ class _$NotificationTargetUpdateSerializer implements PrimitiveSerializer<Notifi
       object.enabledEvents,
       specifiedType: const FullType(BuiltList, [FullType(String)]),
     );
+    if (object.muted != null) {
+      yield r'muted';
+      yield serializers.serialize(
+        object.muted,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.minIntervalSeconds != null) {
+      yield r'minIntervalSeconds';
+      yield serializers.serialize(
+        object.minIntervalSeconds,
+        specifiedType: const FullType(int),
+      );
+    }
   }
 
   @override
@@ -113,6 +137,20 @@ class _$NotificationTargetUpdateSerializer implements PrimitiveSerializer<Notifi
             specifiedType: const FullType(BuiltList, [FullType(String)]),
           ) as BuiltList<String>;
           result.enabledEvents.replace(valueDes);
+          break;
+        case r'muted':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.muted = valueDes;
+          break;
+        case r'minIntervalSeconds':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.minIntervalSeconds = valueDes;
           break;
         default:
           unhandled.add(key);

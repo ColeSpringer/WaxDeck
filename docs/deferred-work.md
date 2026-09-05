@@ -519,20 +519,6 @@ here waits on upstream.
   corpus arrives bulk-marked needs-native-review through
   `@@x-machine-translated`. No service-side configuration exists in the
   repo yet.
-- `[in-repo]` **A notification event a newer server adds draws its wire
-  token as a heading.** The client maps the seven event names to titles
-  and help of its own (`app/app/lib/src/settings/notify_labels.dart`),
-  falling back to the server's description for help and to the raw token
-  for the title, because the catalogue the server sends carries no title
-  at all. The error codes and the health rules both have a completeness
-  test that reads the vocabulary out of `api/openapi.yaml` and fails when
-  the client has no arm for one; the events cannot have the same test,
-  because the spec names only an example (`api/spec/notifications.yaml`)
-  while the set itself lives in Go (`service/notify.go`'s catalogue). The
-  fix is prose, not schema: enumerate the event names in the endpoint's
-  description the way the health rules already are, then slice it the way
-  `error_table_test.dart` slices the codes. Worth taking with the next
-  event that lands, which is when the gap first costs something.
 - `[in-repo]` **Outbound notification prose leaves the app in
   English.** Titles and bodies are composed in Go ("Backup failed";
   "Backup completed" with its size and duration,
@@ -839,35 +825,6 @@ here waits on upstream.
   the client sends when it stops playing a timeline, which is a contract
   change (a DELETE on the mint, or a field on the existing session
   teardown) rather than a tuning of the window.
-- `[in-repo]` **Notification provider niceties.** The provider
-  surface ships deliberately plain: no webhook custom headers or
-  HMAC request signing (receivers that must authenticate WaxDeck can
-  use a secret-bearing path), no Retry-After honoring (backoff is
-  the generic exponential ramp), no per-target mute flag (emptying
-  the event selection is the workaround), no Discord rich embeds
-  beyond title and description, no ntfy attachments or action
-  buttons, and no per-target rate limiting (a noisy event source
-  rides the outbox's global pacing). Each is an isolated extension
-  of one provider file when wanted.
-- `[in-repo]` **A role granted mid-session is not seen until the next
-  sign-in.** `authControllerProvider` is written at launch, login,
-  bootstrap and sign-out and nowhere else, and no server event carries an
-  account change, so a promotion reaches this client only when it reads
-  the session again. Everything role-gated inherits it - the nav rows,
-  the Server settings section, the album editor - and the admin console's
-  refusal page is where it now reads as an answer rather than as a
-  missing row. The fix is server-side: an account-changed marker on the
-  sync stream, which the redirect listener already has a shape for.
-- `[in-repo]` **There is no durable notification inbox.** The
-  Notifications screen and the bell both draw the same session-local
-  list: what this client saw while it was running, emptied by a
-  relaunch. `api/spec/notifications.yaml` is the event catalog and the
-  delivery targets, not a history, so nothing on the server holds what
-  happened to an account - which makes the list complete on the device
-  that was open and empty on the one that was not. A real inbox is a
-  server feature (a per-user table, a keyset-paged read, a read
-  marker), and the screen that would draw it is already there and would
-  swap its source.
 - `[in-repo]` **Radio scrobbling is off per account, not per station.**
   The account-wide switch ships (`Prefs.radioScrobbleOptOut`),
   which covers the listener who wants none of it. What the original entry

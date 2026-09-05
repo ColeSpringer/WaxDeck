@@ -2530,6 +2530,8 @@ class FakeRepository implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) {
     final target = NotificationTarget(
       pid: 'nt-FAKE${_notificationTargetSeq++}',
@@ -2538,6 +2540,8 @@ class FakeRepository implements WaxDeckRepository {
       label: label,
       config: Map.of(config),
       enabledEvents: List.of(enabledEvents),
+      muted: muted,
+      minIntervalSeconds: minIntervalSeconds,
       createdAt: DateTime.utc(2026),
     );
     into.insert(0, target);
@@ -2550,6 +2554,8 @@ class FakeRepository implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) {
     final index = into.indexWhere((t) => t.pid == pid);
     if (index < 0) {
@@ -2567,6 +2573,8 @@ class FakeRepository implements WaxDeckRepository {
       label: label,
       config: Map.of(config),
       enabledEvents: List.of(enabledEvents),
+      muted: muted,
+      minIntervalSeconds: minIntervalSeconds,
       createdAt: old.createdAt,
       lastSuccessAt: old.lastSuccessAt,
       lastError: old.lastError,
@@ -2586,6 +2594,8 @@ class FakeRepository implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) async {
     if (notificationTargetError != null) throw notificationTargetError!;
     return _storeTarget(
@@ -2595,6 +2605,8 @@ class FakeRepository implements WaxDeckRepository {
       label: label,
       config: config,
       enabledEvents: enabledEvents,
+      muted: muted,
+      minIntervalSeconds: minIntervalSeconds,
     );
   }
 
@@ -2604,6 +2616,8 @@ class FakeRepository implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) async {
     if (notificationTargetError != null) throw notificationTargetError!;
     return _replaceTarget(
@@ -2612,6 +2626,8 @@ class FakeRepository implements WaxDeckRepository {
       label: label,
       config: config,
       enabledEvents: enabledEvents,
+      muted: muted,
+      minIntervalSeconds: minIntervalSeconds,
     );
   }
 
@@ -2635,6 +2651,8 @@ class FakeRepository implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) async {
     if (notificationTargetError != null) throw notificationTargetError!;
     return _storeTarget(
@@ -2644,6 +2662,8 @@ class FakeRepository implements WaxDeckRepository {
       label: label,
       config: config,
       enabledEvents: enabledEvents,
+      muted: muted,
+      minIntervalSeconds: minIntervalSeconds,
     );
   }
 
@@ -2653,6 +2673,8 @@ class FakeRepository implements WaxDeckRepository {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) async {
     if (notificationTargetError != null) throw notificationTargetError!;
     return _replaceTarget(
@@ -2661,6 +2683,8 @@ class FakeRepository implements WaxDeckRepository {
       label: label,
       config: config,
       enabledEvents: enabledEvents,
+      muted: muted,
+      minIntervalSeconds: minIntervalSeconds,
     );
   }
 
@@ -2672,6 +2696,74 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<void> testMyNotificationTarget(String pid) async {
     notificationTargetTests[pid] = (notificationTargetTests[pid] ?? 0) + 1;
+  }
+
+  /// The notification inbox, newest first, as the server would hold it.
+  List<ServerNotification> inbox = <ServerNotification>[];
+
+  /// Every id list `markMyNotificationsRead` was called with; an empty
+  /// list is the mark-everything call.
+  final List<List<String>> inboxReadCalls = <List<String>>[];
+  final List<String> inboxDeleted = <String>[];
+  int inboxCleared = 0;
+
+  /// Thrown by the next inbox read, for the offline peek.
+  WaxDeckApiException? inboxError;
+
+  /// Held open, so a test can land a write mid-read.
+  Completer<void>? inboxHold;
+
+  @override
+  Future<ServerNotificationPage> listMyNotifications({
+    String? cursor,
+    int? limit,
+  }) async {
+    final held = inboxHold;
+    if (held != null) await held.future;
+    final failure = inboxError;
+    if (failure != null) throw failure;
+    return ServerNotificationPage(
+      notifications: List<ServerNotification>.of(inbox),
+      unreadCount: inbox.where((n) => !n.read).length,
+    );
+  }
+
+  @override
+  Future<void> markMyNotificationsRead({
+    List<String> ids = const <String>[],
+  }) async {
+    inboxReadCalls.add(List<String>.of(ids));
+    final at = DateTime.now();
+    inbox = <ServerNotification>[
+      for (final row in inbox)
+        if (row.read || (ids.isNotEmpty && !ids.contains(row.id)))
+          row
+        else
+          ServerNotification(
+            id: row.id,
+            event: row.event,
+            title: row.title,
+            body: row.body,
+            targetPid: row.targetPid,
+            createdAt: row.createdAt,
+            readAt: at,
+          ),
+    ];
+  }
+
+  @override
+  Future<void> deleteMyNotification(String id) async {
+    inboxDeleted.add(id);
+    inbox = <ServerNotification>[
+      for (final row in inbox)
+        if (row.id != id) row,
+    ];
+  }
+
+  @override
+  Future<void> clearMyNotifications() async {
+    inboxCleared++;
+    inbox = <ServerNotification>[];
   }
 
   /// Review entries served by the queue endpoints.

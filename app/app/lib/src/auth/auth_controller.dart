@@ -97,6 +97,25 @@ class AuthController extends AsyncNotifier<SessionState> {
     }
   }
 
+  /// Re-reads the session after the server said this account's rights
+  /// moved.
+  ///
+  /// The previous session stands while the read is in flight, and a
+  /// failed read leaves it standing too. Load-bearing: the router's
+  /// redirect reads `authenticated`, so a bare loading frame here would
+  /// bounce a signed-in visitor to the login screen for the length of
+  /// one request.
+  Future<void> refreshSession() async {
+    final repo = ref.read(repositoryProvider);
+    try {
+      state = AsyncData(await repo.getSession());
+    } on WaxDeckApiException {
+      // Nothing to show and nothing to unwind: the 401 path is the
+      // session layer's own, and any other failure just means the
+      // client keeps believing what it last read.
+    }
+  }
+
   Future<void> _adopt(LoginResult result) async {
     if (!kIsWeb) {
       await ref.read(credentialStoreProvider).writeToken(result.token);

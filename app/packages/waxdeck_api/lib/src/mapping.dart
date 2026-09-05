@@ -1094,6 +1094,28 @@ RadioSavedSongPage radioSavedSongPageFromGen(gen.RadioSavedSongPage p) {
   );
 }
 
+ServerNotification serverNotificationFromGen(gen.Notification n) {
+  return ServerNotification(
+    id: n.id,
+    event: n.event,
+    title: n.title,
+    body: n.body,
+    targetPid: n.targetPid,
+    createdAt: n.createdAt.toUtc(),
+    readAt: n.readAt?.toUtc(),
+  );
+}
+
+ServerNotificationPage serverNotificationPageFromGen(gen.NotificationPage p) {
+  return ServerNotificationPage(
+    notifications: p.notifications
+        .map(serverNotificationFromGen)
+        .toList(growable: false),
+    unreadCount: p.unreadCount,
+    nextCursor: p.nextCursor,
+  );
+}
+
 RadioDirectoryEntry radioDirectoryEntryFromGen(gen.RadioDirectoryEntry e) {
   return RadioDirectoryEntry(
     name: e.name,
@@ -1149,6 +1171,8 @@ NotificationTarget notificationTargetFromGen(gen.NotificationTarget t) {
     label: t.label,
     config: {for (final e in t.config.entries) e.key: e.value?.value},
     enabledEvents: t.enabledEvents.toList(),
+    muted: t.muted ?? false,
+    minIntervalSeconds: t.minIntervalSeconds ?? 0,
     createdAt: t.createdAt.toUtc(),
     lastSuccessAt: t.lastSuccessAt?.toUtc(),
     lastError: t.lastError,

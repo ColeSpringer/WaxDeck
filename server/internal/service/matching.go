@@ -211,9 +211,9 @@ func (l *Library) notifyIdentified(ctx context.Context, entryID string) {
 	}
 	// Best* rather than the entry's own tags: an applied entry names what
 	// it was identified *as*, which is what landed in the library.
-	l.EmitNotification(ctx, "import-completed", "Import finished",
+	l.EmitNotificationFor(ctx, "import-completed", "Import finished",
 		entryWhat(entry.BestArtist, entry.BestTitle, entry.TrackCount)+
-			" was identified and added to the library.", recipients)
+			" was identified and added to the library.", entry.ID, recipients)
 	seen := map[string]bool{}
 	for _, uid := range recipients {
 		if uid == "" || seen[uid] {
@@ -402,9 +402,9 @@ func (l *Library) notifyReviewReady(ctx context.Context, entry *wdb.ReviewEntry)
 // decision asked for.
 func (l *Library) notifyImported(ctx context.Context, entry *wdb.ReviewEntry) {
 	recipients := l.reviewRecipients(ctx, entry.UploadedBy)
-	l.EmitNotification(ctx, "import-completed", "Import finished",
+	l.EmitNotificationFor(ctx, "import-completed", "Import finished",
 		entryWhat(entry.Artist, entry.Title, entry.TrackCount)+
-			" was added to the library with the tags it arrived with.", recipients)
+			" was added to the library with the tags it arrived with.", entry.ID, recipients)
 	seen := map[string]bool{}
 	for _, uid := range recipients {
 		if uid == "" || seen[uid] {

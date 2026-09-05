@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
-  "bellActivityBlurb": "What this device has seen since the app opened. There is no history from before that.",
+  "bellActivityBlurb": "What happened to this account, newest first. This device's own transfers are listed only while the app is open.",
   "@bellActivityBlurb": {
     "description": "Line under the activity heading on the notifications screen, saying plainly that the list is this session's."
   },
@@ -12,6 +12,18 @@
   "bellClear": "Clear",
   "@bellClear": {
     "description": "Empties the list: the last row of the open bell, and the action on the notifications screen."
+  },
+  "bellClearConfirm": "Delete every notification for this account, on every device? This cannot be undone.",
+  "@bellClearConfirm": {
+    "description": "Body of the confirmation before emptying the notification inbox, which is durable and shared across the account's devices."
+  },
+  "bellClearTitle": "Empty notifications",
+  "@bellClearTitle": {
+    "description": "Title of the confirmation before emptying the notification inbox."
+  },
+  "bellDelete": "Delete",
+  "@bellDelete": {
+    "description": "Removes one row from the inbox for good; the per-row action on the notifications screen."
   },
   "bellDownloadFinished": "A download finished.",
   "@bellDownloadFinished": {
@@ -37,9 +49,21 @@
   "@bellImportCompleted": {
     "description": "What a bell row says when an upload was filed. Deliberately not identified: the same marker covers the path where nothing was matched."
   },
+  "bellMarkAllRead": "Mark all read",
+  "@bellMarkAllRead": {
+    "description": "Stamps every unread row read, which is what clears the bell's badge without opening anything."
+  },
+  "bellNothingNew": "Nothing new.",
+  "@bellNothingNew": {
+    "description": "Drawn in the open bell when nothing is waiting to be dealt with. The screen still lists what happened; this says only that none of it is outstanding."
+  },
   "bellPlaylistSynced": "A synced playlist changed, or its syncing was suspended",
   "@bellPlaylistSynced": {
     "description": "Bell row for the playlist-synced marker: a background sync run changed the playlist, or repeated failures suspended its schedule. The row opens the playlist."
+  },
+  "bellReadOverline": "Read",
+  "@bellReadOverline": {
+    "description": "Overline on a notification row somebody has already dealt with."
   },
   "bellReviewChanged": "The review queue changed.",
   "@bellReviewChanged": {
@@ -72,6 +96,14 @@
         "example": "12 min ago"
       }
     }
+  },
+  "bellSurfaceAccounts": "Accounts",
+  "@bellSurfaceAccounts": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceBackups": "Backups",
+  "@bellSurfaceBackups": {
+    "description": "Which surface a bell row is about."
   },
   "bellSurfaceDownloads": "Downloads",
   "@bellSurfaceDownloads": {
@@ -118,6 +150,10 @@
         "example": "3"
       }
     }
+  },
+  "bellUnreadOverline": "Unread",
+  "@bellUnreadOverline": {
+    "description": "Overline on a notification row nobody has dealt with yet. Words rather than colour alone, so the state reads out."
   },
   "bellUploadChanged": "An upload changed.",
   "@bellUploadChanged": {

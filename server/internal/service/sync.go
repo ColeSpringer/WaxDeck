@@ -199,6 +199,14 @@ const (
 	eventImportCompleted   = "import-completed"
 	eventEpisodeDownloaded = "episode-downloaded"
 	eventPlaylistSynced    = "playlist-synced"
+	// eventAccount marks the caller's own roles or effective
+	// permissions moving under them. Pid-less: what changed is the
+	// session view itself, so the client re-reads /auth/session.
+	eventAccount = "account"
+	// eventNotification marks an inbox row landing. Its pid is the row,
+	// and it rides every emit, whether or not the account has anywhere
+	// for the news to be delivered.
+	eventNotification = "notification"
 )
 
 // ErrSyncReset marks a cursor the stream can no longer serve
@@ -969,7 +977,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 		switch e.Kind {
 		case eventReview, eventUpload, eventTask, eventEntityState,
 			eventFeedDisabled, eventImportCompleted, eventEpisodeDownloaded,
-			eventPlaylistSynced:
+			eventPlaylistSynced, eventAccount, eventNotification:
 			// Marker kinds hydrate nothing: the pid names what to
 			// refetch and the surfaces are live reads.
 			key := e.Kind + "\x00" + e.ItemPID

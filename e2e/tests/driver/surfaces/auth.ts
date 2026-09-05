@@ -169,6 +169,13 @@ export class Shell extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.notificationsClear));
   }
 
+  /// The bell's last row: reads everything rather than deleting it.
+  /// Its own handle, so waiting for the menu cannot be answered by the
+  /// notifications screen's own mark-all-read button behind it.
+  notificationsPeekRead(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.notificationsPeekRead));
+  }
+
   /// Waits until the bell has something unseen. A row does not arrive
   /// with the change that caused it: the socket says the stream moved,
   /// then the client walks it.
@@ -178,16 +185,17 @@ export class Shell extends Surface {
     });
   }
 
-  /// What the bell's menu always draws, whatever is in it: Clear where
-  /// there are rows, the empty line where there are none.
+  /// What the bell's menu always draws, whatever is in it: the
+  /// read-everything row where there are rows, the empty line where
+  /// there are none.
   ///
-  /// The witness for both opening and closing it. Waiting on Clear
+  /// The witness for both opening and closing it. Waiting on that row
   /// alone reads an emptied bell as a closed menu, so a panel that
   /// never opened passes "the row is hidden" and a panel that never
   /// closed passes the dismissal - leaving the next click to land in a
   /// live modal barrier.
   private notificationsMenu(): Locator {
-    return this.notificationsClear().or(
+    return this.notificationsPeekRead().or(
       this.ctx.page.locator(sem(SemanticsIds.notificationsEmpty)),
     );
   }
@@ -213,6 +221,7 @@ export class Shell extends Surface {
   async openNotificationsUntil(
     kind: string,
     target?: string,
+    options: { within?: number } = {},
   ): Promise<Locator> {
     const row = this.notificationRow(kind, target);
     await expect(async () => {
@@ -224,10 +233,12 @@ export class Shell extends Surface {
       await this.closeNotifications();
       await openMenu(this.notificationsBell(), row);
       await expect(row).toBeVisible({ timeout: T.step });
-      // The assert tier, not the fetch one: waiting for the news to
-      // arrive is `notificationsBadged`'s job, so a budget long enough
-      // for that would turn a copy change into a minute of nothing.
-    }).toPass({ timeout: T.assert });
+      // The assert tier by default, not the fetch one: a copy change
+      // should not cost a minute of nothing. A caller whose news is
+      // still in flight - because the badge it would have waited on is
+      // already lit by the account's inbox - passes `within: T.fetch`
+      // and does the waiting here.
+    }).toPass({ timeout: options.within ?? T.assert });
     return row;
   }
 }

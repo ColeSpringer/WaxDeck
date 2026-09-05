@@ -20,6 +20,7 @@ import '../admin/server_settings_screen.dart';
 import '../admin/trash_screen.dart';
 import '../admin/user_edit_screen.dart';
 import '../admin/users_screen.dart';
+import '../auth/account_binder.dart';
 import '../auth/auth_controller.dart';
 import '../auto/media_session_feed.dart';
 import '../desktop/discord_binder.dart';
@@ -890,6 +891,11 @@ class _SignedInScope extends ConsumerWidget {
     // cold arrival on a deep link never does - and which of the two you
     // got would be decided by a rendering detail.
     ref.watch(notificationsBinderProvider);
+    // Same session scope, same reason: a role granted while somebody is
+    // looking at the app has to reach the gates that hide Server
+    // settings, and a screen that mounted the listener would only hear
+    // about it once somebody happened to open that screen.
+    ref.watch(accountBinderProvider);
     // Same reasoning: whoever asked for finished episodes to clear
     // themselves did it to stop visiting the downloads screen.
     ref.watch(downloadsTidyBinderProvider);

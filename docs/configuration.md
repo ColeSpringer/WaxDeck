@@ -70,8 +70,10 @@ Read by compose itself, not the server.
   the embedded build (dev flag; `--web-dir app/app/build/web`).
 - `WAXDECK_PUBLIC_BASE`: the externally reachable base URL as browsers
   see it, e.g. `https://wax.example.com`. Required for single sign-on
-  (the OIDC callback derives from it); harmless to leave empty
-  otherwise.
+  (the OIDC callback derives from it), and what notification deliveries
+  build their links from: without it a delivery says what happened but
+  not where, rather than pointing at a host the reader cannot resolve.
+  Harmless to leave empty otherwise.
 - `WAXDECK_COOKIE_SECURE` (default `false`): set `true` whenever the
   deployed origin is HTTPS so session cookies never ride cleartext.
   See [Reverse proxy](reverse-proxy.md).

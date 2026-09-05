@@ -12,7 +12,7 @@ import 'package:built_value/serializer.dart';
 
 part 'notification_target.g.dart';
 
-/// One notification delivery destination. `config` is a free-form object whose fields depend on `kind` (a discriminated union is deliberately avoided; validation is server-side and per kind, and unknown fields are refused): `pushover` takes `token` (application API token), `userKey`, and optional integer `priority` (-2 quietest to 2 emergency; emergency deliveries use the service's minimum retry cadence); `ntfy` takes `topic`, optional `serverUrl` (default `https://ntfy.sh`), and optional `accessToken` (sent as a Bearer token); `gotify` takes `serverUrl` and `token` (sent as a header, so it stays out of URLs and logs) and optional integer `priority` (0 to 10); `discord` takes `webhookUrl`, which must be a discord.com or discordapp.com webhook URL; `webhook` takes `url` and posts `{event, title, body, timestamp}` as JSON with timestamp in RFC 3339 UTC; `apprise` takes `serverUrl` (the Apprise API server base; its notify endpoint is derived unless the URL already names a path) and optional `targets` (comma or space separated Apprise target URLs; empty relies on the Apprise server's own configuration); `unifiedpush` takes `endpoint` (the distributor-issued https URL, unique per owner). 
+/// One notification delivery destination. `config` is a free-form object whose fields depend on `kind` (a discriminated union is deliberately avoided; validation is server-side and per kind, and unknown fields are refused): `pushover` takes `token` (application API token), `userKey`, and optional integer `priority` (-2 quietest to 2 emergency; emergency deliveries use the service's minimum retry cadence); `ntfy` takes `topic`, optional `serverUrl` (default `https://ntfy.sh`), and optional `accessToken` (sent as a Bearer token); its deliveries carry a `click` URL and a view action when the server knows its public base; `gotify` takes `serverUrl` and `token` (sent as a header, so it stays out of URLs and logs) and optional integer `priority` (0 to 10); `discord` takes `webhookUrl`, which must be a discord.com or discordapp.com webhook URL; its embeds carry a timestamp, a colour per event family, a WaxDeck footer, and a link when the server knows its public base; `webhook` takes `url` and posts `{event, title, body, timestamp}` as JSON with timestamp in RFC 3339 UTC, plus `link` when the server knows its own public base (`WAXDECK_PUBLIC_BASE`) and the event names something to open; it also takes optional `headers` (an object of at most 8 extra request headers, names ASCII tokens up to 64 characters and values up to 1024; hop-by-hop names, `Host`, `Content-Length` and `Content-Type` are refused) and optional `secret` (up to 256 characters), which signs every post: `X-WaxDeck-Timestamp` carries unix seconds and `X-WaxDeck-Signature` carries `sha256=<hex HMAC-SHA256(secret, timestamp + \".\" + body)>`; `apprise` takes `serverUrl` (the Apprise API server base; its notify endpoint is derived unless the URL already names a path) and optional `targets` (comma or space separated Apprise target URLs; empty relies on the Apprise server's own configuration); `unifiedpush` takes `endpoint` (the distributor-issued https URL, unique per owner). 
 ///
 /// Properties:
 /// * [pid] - Type-prefixed ULID.
@@ -24,6 +24,8 @@ part 'notification_target.g.dart';
 /// * [lastSuccessAt] - When a delivery last succeeded; absent before the first.
 /// * [lastError] - The most recent delivery error; absent when the last delivery succeeded.
 /// * [lastErrorAt] - When the most recent delivery error happened; cleared, like `lastError`, by a subsequent success. 
+/// * [muted] - While true the target delivers nothing but its own per-target tests. A pause that keeps the configuration and the event selection, for the destination somebody wants back later; already-queued deliveries are dropped rather than held for the unmute. 
+/// * [minIntervalSeconds] - The shortest gap between two deliveries to this target, in seconds; 0 (the default) paces nothing. A delivery inside the gap waits rather than spending a retry attempt, and the reserved `test` event is exempt from the gap and never starts it. 
 /// * [createdAt] - When the target was created.
 @BuiltValue()
 abstract class NotificationTarget implements Built<NotificationTarget, NotificationTargetBuilder> {
@@ -62,6 +64,14 @@ abstract class NotificationTarget implements Built<NotificationTarget, Notificat
   /// When the most recent delivery error happened; cleared, like `lastError`, by a subsequent success. 
   @BuiltValueField(wireName: r'lastErrorAt')
   DateTime? get lastErrorAt;
+
+  /// While true the target delivers nothing but its own per-target tests. A pause that keeps the configuration and the event selection, for the destination somebody wants back later; already-queued deliveries are dropped rather than held for the unmute. 
+  @BuiltValueField(wireName: r'muted')
+  bool? get muted;
+
+  /// The shortest gap between two deliveries to this target, in seconds; 0 (the default) paces nothing. A delivery inside the gap waits rather than spending a retry attempt, and the reserved `test` event is exempt from the gap and never starts it. 
+  @BuiltValueField(wireName: r'minIntervalSeconds')
+  int? get minIntervalSeconds;
 
   /// When the target was created.
   @BuiltValueField(wireName: r'createdAt')
@@ -141,6 +151,20 @@ class _$NotificationTargetSerializer implements PrimitiveSerializer<Notification
       yield serializers.serialize(
         object.lastErrorAt,
         specifiedType: const FullType(DateTime),
+      );
+    }
+    if (object.muted != null) {
+      yield r'muted';
+      yield serializers.serialize(
+        object.muted,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.minIntervalSeconds != null) {
+      yield r'minIntervalSeconds';
+      yield serializers.serialize(
+        object.minIntervalSeconds,
+        specifiedType: const FullType(int),
       );
     }
     yield r'createdAt';
@@ -233,6 +257,20 @@ class _$NotificationTargetSerializer implements PrimitiveSerializer<Notification
             specifiedType: const FullType(DateTime),
           ) as DateTime;
           result.lastErrorAt = valueDes;
+          break;
+        case r'muted':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.muted = valueDes;
+          break;
+        case r'minIntervalSeconds':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.minIntervalSeconds = valueDes;
           break;
         case r'createdAt':
           final valueDes = serializers.deserialize(

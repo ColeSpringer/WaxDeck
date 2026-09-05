@@ -463,17 +463,21 @@ Class | Method | HTTP request | Description
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemLyrics**](doc/MetadataApi.md#setitemlyrics) | **PUT** /items/{pid}/lyrics | Set lyrics
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemTag**](doc/MetadataApi.md#setitemtag) | **PUT** /items/{pid}/tags/{key} | Set a custom tag
 [*MetadataApi*](doc/MetadataApi.md) | [**setReleaseStatus**](doc/MetadataApi.md#setreleasestatus) | **PUT** /items/{pid}/release-status | Mark content unofficial
+[*NotificationsApi*](doc/NotificationsApi.md) | [**clearMyNotifications**](doc/NotificationsApi.md#clearmynotifications) | **DELETE** /users/me/notifications | Empty the caller&#39;s notification inbox
 [*NotificationsApi*](doc/NotificationsApi.md) | [**createMyNotificationTarget**](doc/NotificationsApi.md#createmynotificationtarget) | **POST** /users/me/notification-targets | Create a personal notification target
 [*NotificationsApi*](doc/NotificationsApi.md) | [**createPushRegistration**](doc/NotificationsApi.md#createpushregistration) | **POST** /users/me/push-registrations | Register a UnifiedPush endpoint
 [*NotificationsApi*](doc/NotificationsApi.md) | [**createServerNotificationTarget**](doc/NotificationsApi.md#createservernotificationtarget) | **POST** /admin/notification-targets | Create a server-scope notification target
 [*NotificationsApi*](doc/NotificationsApi.md) | [**deleteAllPushRegistrations**](doc/NotificationsApi.md#deleteallpushregistrations) | **DELETE** /users/me/push-registrations | Remove all of the caller&#39;s push registrations
+[*NotificationsApi*](doc/NotificationsApi.md) | [**deleteMyNotification**](doc/NotificationsApi.md#deletemynotification) | **DELETE** /users/me/notifications/{notificationId} | Delete one inbox row
 [*NotificationsApi*](doc/NotificationsApi.md) | [**deleteMyNotificationTarget**](doc/NotificationsApi.md#deletemynotificationtarget) | **DELETE** /users/me/notification-targets/{targetId} | Delete a personal notification target
 [*NotificationsApi*](doc/NotificationsApi.md) | [**deletePushRegistration**](doc/NotificationsApi.md#deletepushregistration) | **DELETE** /users/me/push-registrations/{registrationId} | Remove a push registration
 [*NotificationsApi*](doc/NotificationsApi.md) | [**deleteServerNotificationTarget**](doc/NotificationsApi.md#deleteservernotificationtarget) | **DELETE** /admin/notification-targets/{targetId} | Delete a server-scope notification target
 [*NotificationsApi*](doc/NotificationsApi.md) | [**listMyNotificationTargets**](doc/NotificationsApi.md#listmynotificationtargets) | **GET** /users/me/notification-targets | List the caller&#39;s notification targets
+[*NotificationsApi*](doc/NotificationsApi.md) | [**listMyNotifications**](doc/NotificationsApi.md#listmynotifications) | **GET** /users/me/notifications | List the caller&#39;s notification inbox
 [*NotificationsApi*](doc/NotificationsApi.md) | [**listNotificationEvents**](doc/NotificationsApi.md#listnotificationevents) | **GET** /notifications/events | List the notification event catalog
 [*NotificationsApi*](doc/NotificationsApi.md) | [**listPushRegistrations**](doc/NotificationsApi.md#listpushregistrations) | **GET** /users/me/push-registrations | List the caller&#39;s push registrations
 [*NotificationsApi*](doc/NotificationsApi.md) | [**listServerNotificationTargets**](doc/NotificationsApi.md#listservernotificationtargets) | **GET** /admin/notification-targets | List the server-scope notification targets
+[*NotificationsApi*](doc/NotificationsApi.md) | [**markMyNotificationsRead**](doc/NotificationsApi.md#markmynotificationsread) | **POST** /users/me/notifications/read | Mark inbox rows read
 [*NotificationsApi*](doc/NotificationsApi.md) | [**testMyNotificationTarget**](doc/NotificationsApi.md#testmynotificationtarget) | **POST** /users/me/notification-targets/{targetId}/test | Test a personal notification target
 [*NotificationsApi*](doc/NotificationsApi.md) | [**testServerNotificationTarget**](doc/NotificationsApi.md#testservernotificationtarget) | **POST** /admin/notification-targets/{targetId}/test | Test a server-scope notification target
 [*NotificationsApi*](doc/NotificationsApi.md) | [**updateMyNotificationTarget**](doc/NotificationsApi.md#updatemynotificationtarget) | **PUT** /users/me/notification-targets/{targetId} | Update a personal notification target
@@ -804,8 +808,11 @@ Class | Method | HTTP request | Description
  - [MixBasis](doc/MixBasis.md)
  - [ModelLibrary](doc/ModelLibrary.md)
  - [MonthListening](doc/MonthListening.md)
+ - [Notification](doc/Notification.md)
  - [NotificationEvent](doc/NotificationEvent.md)
  - [NotificationEventList](doc/NotificationEventList.md)
+ - [NotificationPage](doc/NotificationPage.md)
+ - [NotificationReadRequest](doc/NotificationReadRequest.md)
  - [NotificationScope](doc/NotificationScope.md)
  - [NotificationTarget](doc/NotificationTarget.md)
  - [NotificationTargetCreate](doc/NotificationTargetCreate.md)

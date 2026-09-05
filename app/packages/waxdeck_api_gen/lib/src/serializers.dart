@@ -186,8 +186,11 @@ import 'package:waxdeck_api_gen/src/model/migration_options.dart';
 import 'package:waxdeck_api_gen/src/model/mix_basis.dart';
 import 'package:waxdeck_api_gen/src/model/model_library.dart';
 import 'package:waxdeck_api_gen/src/model/month_listening.dart';
+import 'package:waxdeck_api_gen/src/model/notification.dart';
 import 'package:waxdeck_api_gen/src/model/notification_event.dart';
 import 'package:waxdeck_api_gen/src/model/notification_event_list.dart';
+import 'package:waxdeck_api_gen/src/model/notification_page.dart';
+import 'package:waxdeck_api_gen/src/model/notification_read_request.dart';
 import 'package:waxdeck_api_gen/src/model/notification_scope.dart';
 import 'package:waxdeck_api_gen/src/model/notification_target.dart';
 import 'package:waxdeck_api_gen/src/model/notification_target_create.dart';
@@ -564,8 +567,11 @@ part 'serializers.g.dart';
   MixBasis,
   ModelLibrary,$ModelLibrary,
   MonthListening,
+  Notification,
   NotificationEvent,
   NotificationEventList,
+  NotificationPage,
+  NotificationReadRequest,
   NotificationScope,
   NotificationTarget,
   NotificationTargetCreate,

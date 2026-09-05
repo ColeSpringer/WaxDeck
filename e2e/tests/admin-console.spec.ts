@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { T } from './driver';
 import { SemanticsIds } from './semantics-ids';
 
 // The console's oversight surfaces, over the real stack: the share
@@ -63,4 +64,42 @@ test('the transcoding limits say what the engine is running', async ({ app }) =>
   // Refreshing is the freshness story: no timer, one affordance.
   await app.admin.control(SemanticsIds.transcodingActivityRefresh).click();
   await expect(line).toContainText(/\d+ engine-backed sessions? right now\./);
+});
+
+test('a role granted mid-session reaches the app that is already open', async ({
+  app,
+  device,
+  otherAccount,
+}) => {
+  const promoted = await otherAccount('promoted');
+  // Levelled first, because a previous run against this stack left the
+  // account holding the role this test is about to grant it.
+  const session = await app.api.as(promoted.token).get('/auth/session');
+  const id = session.user!.id;
+  await app.api.patch('/users/{userId}', {
+    path: { userId: id },
+    data: { roles: ['user'] },
+  });
+
+  const theirs = await device({ as: promoted });
+  // The client mints its server cursor on the way up and reports
+  // nothing from before it, so a promotion that lands during the mint
+  // is swallowed by it. Armed ahead of the navigation that causes it.
+  const minted = theirs.page.waitForResponse(
+    (r) => r.url().includes('/sync/server') && !r.url().includes('since='),
+    { timeout: T.nav },
+  );
+  await theirs.nav.enter('settings');
+  // Absent for a plain account, not merely empty.
+  await expect(theirs.settings.section('server')).toHaveCount(0);
+  await minted;
+
+  await app.api.patch('/users/{userId}', {
+    path: { userId: id },
+    data: { roles: ['user', 'admin'] },
+  });
+
+  // No reload anywhere: the server marks the account changed, the app
+  // re-reads its session, and the gates that watch it follow.
+  await expect(theirs.settings.section('server')).toBeVisible({ timeout: T.fetch });
 });

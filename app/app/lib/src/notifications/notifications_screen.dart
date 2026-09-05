@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -10,71 +12,91 @@ import 'notifications_controller.dart';
 /// Notifications as a topic: what happened, and how this account is told
 /// about it.
 ///
-/// The bell in the top app bar is the peek at the first half and stays
-/// what it was. This is the destination, and the reason it is one is the
-/// second half: the delivery targets were a row inside a settings section
-/// nobody looking for "stop telling me about this" would think to open.
-/// Both halves on one screen answer the whole question.
+/// The bell in the top app bar is the peek at the first half; this is
+/// the destination, and the reason it is one is the second half: the
+/// delivery targets were a row inside a settings section nobody looking
+/// for "stop telling me about this" would think to open. Both halves on
+/// one screen answer the whole question.
 ///
-/// The activity list is this session's, and says so. There is no server
-/// inbox behind it - `api/spec/notifications.yaml` is the event catalog
-/// and the delivery targets, not a history - so a list drawn from
-/// anything but what this client saw would be complete on the device that
-/// was open and empty on the one that was not. A durable inbox is a
-/// server feature and is recorded as deferred.
-class NotificationsScreen extends ConsumerStatefulWidget {
+/// The list is the account's own inbox, which the server keeps and
+/// prunes, merged with the refetch hints this session minted. So a row
+/// survives a relaunch and reaches the other device, and the hints -
+/// which say a surface moved and nothing more - do not, because there
+/// was never anything for the server to keep.
+///
+/// Read is a state here rather than a disappearance: unread rows are
+/// emphasized and say so, and dealing with one leaves it in place,
+/// greyed. Delete is what removes one, and it is per row.
+class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
 
-  @override
-  ConsumerState<NotificationsScreen> createState() =>
-      _NotificationsScreenState();
-}
-
-class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _markSeen();
+  /// The row's detail line, or null where it has none to add.
+  ///
+  /// Null rather than an empty string, so the subtitle is built with one
+  /// join instead of a conditional at every use.
+  static String? _detailOrNull(WaxNotification row, AppLocalizations l10n) {
+    final detail = row.detailOf(l10n);
+    return detail.isEmpty ? null : detail;
   }
 
-  /// Marks what is on screen as read.
-  ///
-  /// Arriving is reading, exactly as opening the bell is: the badge
-  /// counts what has landed since somebody last looked, and a full page
-  /// of the same rows is looking. On arrival and on every row after it,
-  /// because unlike the bell this surface stays open - a badge climbing
-  /// on the page somebody is reading is the bell's own promise broken.
-  ///
-  /// Posted, because the first call runs inside a build and a provider
-  /// cannot be written to during one. Guarded on the count rather than
-  /// on a flag: marking republishes the list, which fires the listener
-  /// below again, and the guard is what makes that second pass a no-op
-  /// instead of a loop.
-  void _markSeen() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (ref.read(unseenNotificationsProvider) == 0) return;
-      ref.read(notificationsProvider.notifier).markSeen();
-    });
+  Future<void> _confirmClear(
+    BuildContext context,
+    NotificationsController notifier,
+  ) async {
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('notifications-clear-dialog'),
+        title: Text(l10n.bellClearTitle),
+        content: Text(l10n.bellClearConfirm),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.commonCancel),
+          ),
+          Semantics(
+            identifier: SemanticsIds.notificationsClearConfirm,
+            container: true,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(l10n.bellClear),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed ?? false) await notifier.clear();
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final colors = WaxColors.of(context);
-    final rows = ref.watch(notificationsProvider);
-    ref.listen(notificationsProvider, (_, _) => _markSeen());
+    final view = ref.watch(notificationsViewProvider);
+    final rows = view.rows;
+    final notifier = ref.read(notificationsProvider.notifier);
     return WaxScaffold(
       title: l10n.bellTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.notificationsScreen,
       actions: <Widget>[
+        if (view.badge > 0)
+          WaxIconButton(
+            glyph: WaxIcons.check,
+            label: l10n.bellMarkAllRead,
+            semanticsId: SemanticsIds.notificationsMarkAllRead,
+            onPressed: () => unawaited(notifier.markAllRead()),
+          ),
         if (rows.isNotEmpty)
           WaxIconButton(
             glyph: WaxIcons.close,
             label: l10n.bellClear,
             semanticsId: SemanticsIds.notificationsClear,
-            onPressed: ref.read(notificationsProvider.notifier).clear,
+            // Asked first, because this one is not a tidy-up: the inbox
+            // is ninety days of history shared by every device on the
+            // account, read rows included, and nothing brings it back.
+            onPressed: () => unawaited(_confirmClear(context, notifier)),
           ),
       ],
       body: Padding(
@@ -99,15 +121,41 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             else
               for (final row in rows)
                 WaxOptionRow(
+                  // The row's own identity, not what it is about: the
+                  // inbox keeps ninety days, so two nightly backups are
+                  // two rows saying the same thing, and a key drawn
+                  // from the event alone would be the same key twice.
                   key: ValueKey(row.semanticsId),
-                  glyph: row.kind.glyph,
-                  title: row.kind.messageOf(l10n),
-                  subtitle: l10n.bellRowWhen(
-                    row.kind.labelOf(l10n),
-                    l10n.relativeSpaced(row.at),
-                  ),
+                  glyph: row.glyph,
+                  title: row.messageOf(l10n),
+                  // What happened, then whether it has been dealt with
+                  // and when. The detail is the server's own wording,
+                  // which is the only place the particular episode,
+                  // show or playlist is named.
+                  subtitle: <String>[
+                    ?_detailOrNull(row, l10n),
+                    l10n.bellRowWhen(
+                      row.read
+                          ? l10n.bellReadOverline
+                          : l10n.bellUnreadOverline,
+                      l10n.relativeSpaced(row.at),
+                    ),
+                  ].join('\n'),
+                  subtitleMaxLines: 4,
                   semanticsId: row.semanticsId,
-                  trailing: const WaxIcon(WaxIcons.forward, size: 16),
+                  // Unread rows are emphasized and say so: the overline
+                  // carries the state in words, because colour alone
+                  // reaches neither a screen reader nor everybody
+                  // looking at it.
+                  active: !row.read,
+                  trailing: row.fromInbox
+                      ? WaxIconButton(
+                          glyph: WaxIcons.close,
+                          label: l10n.bellDelete,
+                          semanticsId: SemanticsIds.notificationDelete(row.id!),
+                          onPressed: () => unawaited(notifier.delete(row.id!)),
+                        )
+                      : const WaxIcon(WaxIcons.forward, size: 16),
                   onTap: () => context.go(row.location),
                 ),
             const SizedBox(height: WaxSpace.s24),

@@ -434,6 +434,17 @@ const baselineSchema = `
 		last_success_at_ns INTEGER NOT NULL DEFAULT 0,
 		last_error         TEXT    NOT NULL DEFAULT '',
 		last_error_at_ns   INTEGER NOT NULL DEFAULT 0,
+		-- A pause that keeps the configuration, and the shortest gap
+		-- between two deliveries (0 paces nothing). Per-target tests
+		-- ignore both: they are how somebody checks a destination they
+		-- have just muted or slowed down.
+		muted              INTEGER NOT NULL DEFAULT 0,
+		min_interval_s     INTEGER NOT NULL DEFAULT 0,
+		-- The pacing clock, which is deliberately not last_success_at_ns:
+		-- a per-target test is exempt from pacing, and stamping the same
+		-- column would let pressing the test button park every real
+		-- delivery for the length of the interval.
+		last_paced_at_ns   INTEGER NOT NULL DEFAULT 0,
 		created_at_ns      INTEGER NOT NULL
 	);
 	CREATE INDEX notification_targets_owner ON notification_targets (user_id, created_at_ns DESC, id);
@@ -444,12 +455,35 @@ const baselineSchema = `
 		event          TEXT    NOT NULL,
 		title          TEXT    NOT NULL DEFAULT '',
 		body           TEXT    NOT NULL DEFAULT '',
+		-- What the event is about, so the delivery can carry a link to
+		-- it. Held on the row rather than resolved at drain time: the
+		-- thing may be gone by then, and the link is still where it
+		-- was.
+		target_pid     TEXT,
 		enqueued_at_ns INTEGER NOT NULL,
 		attempts       INTEGER NOT NULL DEFAULT 0,
 		lease_until_ns INTEGER NOT NULL DEFAULT 0,
 		last_error     TEXT    NOT NULL DEFAULT ''
 	);
 	CREATE INDEX notify_outbox_ready ON notify_outbox (lease_until_ns, enqueued_at_ns);
+	-- The per-account inbox: what happened, whether or not a delivery
+	-- target existed to carry it anywhere. Written on every emit and
+	-- pruned by age and per-account cap, so it is recent history rather
+	-- than an audit log (the audit log is its own table).
+	CREATE TABLE notifications (
+		id            TEXT    PRIMARY KEY,
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		event         TEXT    NOT NULL,
+		title         TEXT    NOT NULL DEFAULT '',
+		body          TEXT    NOT NULL DEFAULT '',
+		target_pid    TEXT,
+		created_at_ns INTEGER NOT NULL,
+		read_at_ns    INTEGER
+	);
+	-- Ids are ULIDs, so id DESC is newest first and the keyset cursor is
+	-- the id itself.
+	CREATE INDEX notifications_owner ON notifications (user_id, id DESC);
+	CREATE INDEX notifications_unread ON notifications (user_id) WHERE read_at_ns IS NULL;
 	CREATE TABLE settings (
 		key        TEXT PRIMARY KEY,
 		value      TEXT NOT NULL,

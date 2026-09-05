@@ -29,20 +29,31 @@ type NotificationTarget struct {
 	LastSuccessNS int64
 	LastError     string
 	LastErrorNS   int64
-	CreatedAtNS   int64
+	// Muted pauses delivery without losing the configuration;
+	// MinIntervalS is the shortest gap between two deliveries, 0
+	// pacing nothing. Per-target tests ignore both.
+	Muted        bool
+	MinIntervalS int
+	// LastPacedNS is when a non-test delivery last succeeded, which is
+	// what the interval is measured from. Separate from LastSuccessNS
+	// so a per-target test cannot start the clock it is exempt from.
+	LastPacedNS int64
+	CreatedAtNS int64
 }
 
 // notificationTargetCap bounds targets per (owner, kind).
 const notificationTargetCap = 20
 
 const notificationTargetCols = `id, kind, scope, user_id, label, sealed_config,
-	enabled_events, dedupe_key, last_success_at_ns, last_error, last_error_at_ns, created_at_ns`
+	enabled_events, dedupe_key, last_success_at_ns, last_error, last_error_at_ns,
+	muted, min_interval_s, last_paced_at_ns, created_at_ns`
 
 func scanNotificationTarget(row interface{ Scan(...any) error }) (NotificationTarget, error) {
 	var t NotificationTarget
 	var userID, dedupe sql.NullString
 	err := row.Scan(&t.ID, &t.Kind, &t.Scope, &userID, &t.Label, &t.SealedConfig,
-		&t.EnabledEvents, &dedupe, &t.LastSuccessNS, &t.LastError, &t.LastErrorNS, &t.CreatedAtNS)
+		&t.EnabledEvents, &dedupe, &t.LastSuccessNS, &t.LastError, &t.LastErrorNS,
+		&t.Muted, &t.MinIntervalS, &t.LastPacedNS, &t.CreatedAtNS)
 	if err != nil {
 		return NotificationTarget{}, err
 	}
@@ -67,11 +78,12 @@ func nullable(s string) any {
 func (d *DB) InsertNotificationTarget(ctx context.Context, t NotificationTarget) error {
 	res, err := d.w.ExecContext(ctx, `
 		INSERT INTO notification_targets
-			(id, kind, scope, user_id, label, sealed_config, enabled_events, dedupe_key, created_at_ns)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+			(id, kind, scope, user_id, label, sealed_config, enabled_events, dedupe_key,
+			 muted, min_interval_s, created_at_ns)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		WHERE (SELECT COUNT(*) FROM notification_targets WHERE user_id IS ? AND kind = ?) < ?`,
 		t.ID, t.Kind, t.Scope, nullable(t.UserID), t.Label, t.SealedConfig,
-		t.EnabledEvents, nullable(t.DedupeKey), t.CreatedAtNS,
+		t.EnabledEvents, nullable(t.DedupeKey), t.Muted, t.MinIntervalS, t.CreatedAtNS,
 		nullable(t.UserID), t.Kind, notificationTargetCap)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -140,9 +152,11 @@ func (d *DB) listNotificationTargets(ctx context.Context, query string, args ...
 func (d *DB) UpdateNotificationTarget(ctx context.Context, t NotificationTarget) error {
 	res, err := d.w.ExecContext(ctx, `
 		UPDATE notification_targets
-		SET label = ?, sealed_config = ?, enabled_events = ?, dedupe_key = ?
+		SET label = ?, sealed_config = ?, enabled_events = ?, dedupe_key = ?,
+			muted = ?, min_interval_s = ?
 		WHERE id = ?`,
-		t.Label, t.SealedConfig, t.EnabledEvents, nullable(t.DedupeKey), t.ID)
+		t.Label, t.SealedConfig, t.EnabledEvents, nullable(t.DedupeKey),
+		t.Muted, t.MinIntervalS, t.ID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return ErrExists
@@ -153,6 +167,16 @@ func (d *DB) UpdateNotificationTarget(ctx context.Context, t NotificationTarget)
 		return fmt.Errorf("db: updating notification target: %w", err)
 	} else if n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// MarkNotifyPaced stamps the pacing clock after a real delivery.
+func (d *DB) MarkNotifyPaced(ctx context.Context, id string, ns int64) error {
+	if _, err := d.w.ExecContext(ctx,
+		`UPDATE notification_targets SET last_paced_at_ns = ? WHERE id = ?`,
+		ns, id); err != nil {
+		return fmt.Errorf("db: stamping the notification pacing clock: %w", err)
 	}
 	return nil
 }

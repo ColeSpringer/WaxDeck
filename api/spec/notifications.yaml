@@ -14,6 +14,11 @@ paths:
         name events from it. The reserved `test` event never appears
         here: per-target tests are requested through the target's test
         endpoint and bypass event selection.
+
+
+        The current catalog is `signup-requested`, `backup-completed`,
+        `backup-failed`, `episode-downloaded`, `feed-disabled`,
+        `review-ready`, `import-completed`, and `playlist-synced`.
       tags: [notifications]
       responses:
         "200":
@@ -399,8 +404,112 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /users/me/notifications:
+    get:
+      operationId: listMyNotifications
+      summary: List the caller's notification inbox
+      description: >
+        What happened to this account, newest first, whether or not any
+        delivery target was configured for it. The inbox is written on
+        every emit, so it is the record a client that was closed at the
+        time can still read; targets are how news leaves the server, not
+        where it is kept.
+
+
+        Rows are pruned by age and by a per-account cap, so the inbox is
+        recent history rather than an audit log.
+      tags: [notifications]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum rows per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of the inbox.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    delete:
+      operationId: clearMyNotifications
+      summary: Empty the caller's notification inbox
+      description: Removes every row. Clearing an empty inbox answers 204.
+      tags: [notifications]
+      responses:
+        "204":
+          description: Inbox emptied.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /users/me/notifications/read:
+    post:
+      operationId: markMyNotificationsRead
+      summary: Mark inbox rows read
+      description: >
+        Stamps `readAt` on the named rows, or on every unread row when
+        `ids` is absent or empty. Already-read rows keep the stamp they
+        have, and an id that names nothing is ignored: the caller asked
+        for those rows to be read and they are.
+      tags: [notifications]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationReadRequest"
+      responses:
+        "204":
+          description: Rows marked read.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /users/me/notifications/{notificationId}:
+    delete:
+      operationId: deleteMyNotification
+      summary: Delete one inbox row
+      description: >
+        Removes the row. Another account's row answers 404 rather than
+        403: the inbox is per-account and nobody else's row is a thing
+        this caller can be told exists.
+      tags: [notifications]
+      parameters:
+        - $ref: "#/components/parameters/NotificationId"
+      responses:
+        "204":
+          description: Row removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   parameters:
+    NotificationId:
+      name: notificationId
+      in: path
+      required: true
+      description: Inbox row PID (e.g. `nf-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^nf-[0-9A-HJKMNP-TV-Z]{26}$"
     TargetId:
       name: targetId
       in: path
@@ -453,6 +562,80 @@ components:
           items:
             $ref: "#/components/schemas/NotificationEvent"
 
+    Notification:
+      type: object
+      description: >
+        One thing that happened to this account. `event` is a catalog
+        event name, so a client words the row itself and stays
+        localized; `title` and `body` are the server's own English
+        wording, for a client that does not know the event.
+      required: [id, event, title, body, createdAt]
+      properties:
+        id:
+          type: string
+          description: Type-prefixed ULID.
+          example: nf-01JZX5N8QW3F4V9T2B7KD3M9R6
+        event:
+          type: string
+          description: The catalog event this row reports.
+          example: episode-downloaded
+        title:
+          type: string
+          description: The server's own one-line wording.
+        body:
+          type: string
+          description: The server's own detail line.
+        targetPid:
+          type: string
+          description: >
+            What the row is about, when the event names something: the
+            show for `feed-disabled`, the episode for
+            `episode-downloaded`, the playlist for `playlist-synced`,
+            the review entry (`rv-`) for `import-completed`. Absent for
+            events that are about the server rather than an item.
+          example: pc-01JZX5N8QW3F4V9T2B7KD3M9R6
+        createdAt:
+          type: string
+          format: date-time
+          description: When the event happened.
+        readAt:
+          type: string
+          format: date-time
+          description: When the row was marked read. Absent while unread.
+
+    NotificationPage:
+      type: object
+      description: One keyset-paginated page of the inbox.
+      required: [notifications, unreadCount]
+      properties:
+        notifications:
+          type: array
+          description: Rows newest first.
+          items:
+            $ref: "#/components/schemas/Notification"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+        unreadCount:
+          type: integer
+          description: >
+            Unread rows in the whole inbox, not just this page: it is
+            what the bell's badge counts.
+
+    NotificationReadRequest:
+      type: object
+      description: Which inbox rows to mark read.
+      properties:
+        ids:
+          type: array
+          description: >
+            The rows to stamp. Absent or empty marks every unread row
+            read, which is what the "mark all read" affordance sends.
+          maxItems: 200
+          items:
+            type: string
+            example: nf-01JZX5N8QW3F4V9T2B7KD3M9R6
+
     NotificationTarget:
       type: object
       description: >
@@ -465,15 +648,27 @@ components:
         emergency deliveries use the service's minimum retry cadence);
         `ntfy` takes `topic`, optional `serverUrl` (default
         `https://ntfy.sh`), and optional `accessToken` (sent as a
-        Bearer token);
+        Bearer token); its deliveries carry a `click` URL and a view
+        action when the server knows its public base;
         `gotify` takes `serverUrl` and `token` (sent as a header, so
         it stays out of URLs and logs) and optional integer `priority`
         (0 to 10);
         `discord` takes `webhookUrl`, which must be a discord.com or
-        discordapp.com webhook URL;
+        discordapp.com webhook URL; its embeds carry a timestamp, a
+        colour per event family, a WaxDeck footer, and a link when the
+        server knows its public base;
         `webhook` takes `url` and posts
         `{event, title, body, timestamp}` as JSON with timestamp in
-        RFC 3339 UTC;
+        RFC 3339 UTC, plus `link` when the server knows its own public
+        base (`WAXDECK_PUBLIC_BASE`) and the event names something to
+        open; it also takes optional `headers` (an object of at most 8
+        extra request headers, names ASCII tokens up to 64 characters
+        and values up to 1024; hop-by-hop names, `Host`,
+        `Content-Length` and `Content-Type` are refused) and optional
+        `secret` (up to 256 characters), which signs every post:
+        `X-WaxDeck-Timestamp` carries unix seconds and
+        `X-WaxDeck-Signature` carries
+        `sha256=<hex HMAC-SHA256(secret, timestamp + "." + body)>`;
         `apprise` takes `serverUrl` (the Apprise API server base; its
         notify endpoint is derived unless the URL already names a
         path) and optional `targets` (comma or space separated Apprise
@@ -521,6 +716,22 @@ components:
           description: >
             When the most recent delivery error happened; cleared,
             like `lastError`, by a subsequent success.
+        muted:
+          type: boolean
+          description: >
+            While true the target delivers nothing but its own
+            per-target tests. A pause that keeps the configuration and
+            the event selection, for the destination somebody wants
+            back later; already-queued deliveries are dropped rather
+            than held for the unmute.
+        minIntervalSeconds:
+          type: integer
+          description: >
+            The shortest gap between two deliveries to this target, in
+            seconds; 0 (the default) paces nothing. A delivery inside
+            the gap waits rather than spending a retry attempt, and the
+            reserved `test` event is exempt from the gap and never
+            starts it.
         createdAt:
           type: string
           format: date-time
@@ -552,12 +763,34 @@ components:
             when the owner is an administrator.
           items:
             type: string
+        muted:
+          type: boolean
+          default: false
+          description: >
+            Create the target paused: it delivers nothing but its own
+            per-target tests until unmuted.
+        minIntervalSeconds:
+          type: integer
+          minimum: 0
+          maximum: 3600
+          default: 0
+          description: >
+            The shortest gap between two deliveries to this target, in
+            seconds. A delivery inside the gap waits rather than
+            spending a retry attempt; the reserved `test` event is
+            exempt, and never starts the gap either. Capped at an hour:
+            that bounds the wait, not the queue, and a target fed faster
+            than its interval has the deliveries it cannot reach inside
+            the outbox's day shed rather than delivered late.
 
     NotificationTargetUpdate:
       type: object
       description: >
         Replaces a target's label, config, and enabled events; the
-        kind is fixed at creation.
+        kind is fixed at creation. `muted` and `minIntervalSeconds` are
+        the exception to the whole-replace: omitting one keeps what the
+        target holds, so a client that predates them cannot wake a
+        destination somebody silenced on purpose just by renaming it.
       required: [config, enabledEvents]
       properties:
         label:
@@ -575,6 +808,24 @@ components:
             as creation.
           items:
             type: string
+        muted:
+          type: boolean
+          description: >
+            Pauses the target: it delivers nothing but its own
+            per-target tests until unmuted. Omitted leaves it as it is.
+        minIntervalSeconds:
+          type: integer
+          minimum: 0
+          maximum: 3600
+          description: >
+            The shortest gap between two deliveries to this target, in
+            seconds. A delivery inside the gap waits rather than
+            spending a retry attempt; the reserved `test` event is
+            exempt, and never starts the gap either. Capped at an hour:
+            that bounds the wait, not the queue, and a target fed faster
+            than its interval has the deliveries it cannot reach inside
+            the outbox's day shed rather than delivered late. Omitted
+            leaves it as it is.
 
     NotificationTargetList:
       type: object

@@ -198,8 +198,11 @@ Serializers _$serializers =
           ..add(MigrationOptions.serializer)
           ..add(MixBasis.serializer)
           ..add(MonthListening.serializer)
+          ..add(Notification.serializer)
           ..add(NotificationEvent.serializer)
           ..add(NotificationEventList.serializer)
+          ..add(NotificationPage.serializer)
+          ..add(NotificationReadRequest.serializer)
           ..add(NotificationScope.serializer)
           ..add(NotificationTarget.serializer)
           ..add(NotificationTargetCreate.serializer)
@@ -706,6 +709,10 @@ Serializers _$serializers =
             () => ListBuilder<TopEntry>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Notification)]),
+            () => ListBuilder<Notification>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(NotificationEvent),
             ]),
@@ -976,6 +983,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

@@ -83,10 +83,15 @@ type NotificationTarget struct {
 	Label         string
 	Config        json.RawMessage
 	EnabledEvents []string
-	LastSuccessAt time.Time
-	LastError     string
-	LastErrorAt   time.Time
-	CreatedAt     time.Time
+	// Muted pauses delivery without losing the configuration;
+	// MinIntervalSeconds is the shortest gap between two deliveries, 0
+	// pacing nothing. Per-target tests ignore both.
+	Muted              bool
+	MinIntervalSeconds int
+	LastSuccessAt      time.Time
+	LastError          string
+	LastErrorAt        time.Time
+	CreatedAt          time.Time
 }
 
 // NotificationTargetInput is the create and update shape.
@@ -95,6 +100,13 @@ type NotificationTargetInput struct {
 	Label         string
 	Config        json.RawMessage
 	EnabledEvents []string
+	// Muted and MinIntervalSeconds are pointers because an update that
+	// omits them keeps what the target holds. Label, config and events
+	// are a documented whole-replace; these two are not, and a client
+	// written before they existed would otherwise un-mute a destination
+	// somebody silenced on purpose just by renaming it.
+	Muted              *bool
+	MinIntervalSeconds *int
 }
 
 // PushRegistration is one UnifiedPush endpoint in the legacy API
@@ -114,6 +126,16 @@ const (
 	notifyBackoffCap    = 30 * time.Minute
 	notifyLabelMax      = 100
 	legacyNotifySetting = "notifications"
+	// notifyTestEvent is the reserved per-target test. Never in the
+	// catalog, never selectable, and exempt from mute and pacing: it is
+	// how somebody checks a destination they have just silenced.
+	notifyTestEvent = "test"
+	// notifyMaxInterval caps a target's pacing at an hour. It bounds the
+	// wait, not the backlog: a target fed faster than its interval still
+	// queues faster than it drains, and the rows that cannot be reached
+	// inside notifyHorizon are shed by the drain with a line in the log
+	// rather than deleted quietly by the janitor.
+	notifyMaxInterval = 3600
 )
 
 // notifyHTTP is the unguarded delivery client: server-scope targets
@@ -251,6 +273,15 @@ func (l *Library) updateNotificationTarget(ctx context.Context, row wdb.Notifica
 	row.SealedConfig = built.SealedConfig
 	row.EnabledEvents = built.EnabledEvents
 	row.DedupeKey = built.DedupeKey
+	// Only where the request said so: an omitted field keeps the value
+	// the target holds, so renaming a muted destination does not wake
+	// it up.
+	if in.Muted != nil {
+		row.Muted = *in.Muted
+	}
+	if in.MinIntervalSeconds != nil {
+		row.MinIntervalS = *in.MinIntervalSeconds
+	}
 	if err := l.db.UpdateNotificationTarget(ctx, row); err != nil {
 		switch {
 		case errors.Is(err, wdb.ErrExists):
@@ -325,7 +356,7 @@ func (l *Library) TestMyNotificationTarget(ctx context.Context, uc *UserCtx, api
 func (l *Library) enqueueNotifyTest(ctx context.Context, targetID string) error {
 	err := l.db.EnqueueNotify(ctx, wdb.NotifyRow{
 		TargetID: targetID,
-		Event:    "test",
+		Event:    notifyTestEvent,
 		Title:    "WaxDeck test notification",
 		Body:     "Delivery works. This is the per-target test.",
 	}, time.Now().UnixNano())
@@ -380,6 +411,10 @@ func (l *Library) buildNotificationTarget(in NotificationTargetInput, scope, own
 	if err != nil {
 		return wdb.NotificationTarget{}, err
 	}
+	if in.MinIntervalSeconds != nil &&
+		(*in.MinIntervalSeconds < 0 || *in.MinIntervalSeconds > notifyMaxInterval) {
+		return wdb.NotificationTarget{}, errInvalid("minIntervalSeconds must be between 0 and 3600")
+	}
 	if l.sealer == nil {
 		return wdb.NotificationTarget{}, &Error{Kind: KindInternal, Msg: "no sealing key is configured"}
 	}
@@ -408,6 +443,8 @@ func (l *Library) buildNotificationTarget(in NotificationTargetInput, scope, own
 		SealedConfig:  sealed,
 		EnabledEvents: string(eventsJSON),
 		DedupeKey:     dedupe,
+		Muted:         in.Muted != nil && *in.Muted,
+		MinIntervalS:  intOr(in.MinIntervalSeconds, 0),
 		CreatedAtNS:   time.Now().UnixNano(),
 	}, nil
 }
@@ -463,14 +500,16 @@ func (l *Library) notificationTargetDTO(r wdb.NotificationTarget) NotificationTa
 		events = []string{}
 	}
 	out := NotificationTarget{
-		PID:           PrefixNotifyTarget + "-" + r.ID,
-		Kind:          r.Kind,
-		Scope:         r.Scope,
-		Label:         r.Label,
-		Config:        config,
-		EnabledEvents: events,
-		LastError:     r.LastError,
-		CreatedAt:     time.Unix(0, r.CreatedAtNS).UTC(),
+		PID:                PrefixNotifyTarget + "-" + r.ID,
+		Kind:               r.Kind,
+		Scope:              r.Scope,
+		Label:              r.Label,
+		Config:             config,
+		EnabledEvents:      events,
+		Muted:              r.Muted,
+		MinIntervalSeconds: r.MinIntervalS,
+		LastError:          r.LastError,
+		CreatedAt:          time.Unix(0, r.CreatedAtNS).UTC(),
 	}
 	if r.LastSuccessNS > 0 {
 		out.LastSuccessAt = time.Unix(0, r.LastSuccessNS).UTC()
@@ -483,10 +522,21 @@ func (l *Library) notificationTargetDTO(r wdb.NotificationTarget) NotificationTa
 
 // --- emit paths -------------------------------------------------------------------
 
-// EmitNotification queues one user-scope event to the named users'
-// targets, filtered per target by its enabled events. Failures log;
-// emitting a notification never fails its caller.
+// EmitNotification is EmitNotificationFor for an event that names
+// nothing to open.
 func (l *Library) EmitNotification(ctx context.Context, event, title, body string, userIDs []string) {
+	l.EmitNotificationFor(ctx, event, title, body, "", userIDs)
+}
+
+// EmitNotificationFor files one user-scope event in each named user's
+// inbox and queues it to their targets, filtered per target by its
+// enabled events. targetPID is what the event is about, when it names
+// something. Failures log; emitting a notification never fails its
+// caller.
+//
+// The inbox row is written whether or not the account has a target: a
+// target is how news leaves the server, not where it is kept.
+func (l *Library) EmitNotificationFor(ctx context.Context, event, title, body, targetPID string, userIDs []string) {
 	ev, ok := notifyEventByName(event)
 	if !ok || ev.Scope != NotifyScopeUser {
 		l.log.Warn("emit of unknown or non-user notification event", "event", event)
@@ -499,12 +549,13 @@ func (l *Library) EmitNotification(ctx context.Context, event, title, body strin
 			continue
 		}
 		seen[uid] = true
+		l.recordNotification(ctx, uid, event, title, body, targetPID, now)
 		targets, err := l.db.UserNotificationTargets(ctx, uid)
 		if err != nil {
 			l.log.Warn("reading notification targets", "user", uid, "err", err)
 			continue
 		}
-		l.enqueueToEnabled(ctx, targets, event, title, body, now)
+		l.enqueueToEnabled(ctx, targets, event, title, body, targetPID, now)
 	}
 }
 
@@ -522,7 +573,7 @@ func (l *Library) EmitServerNotification(ctx context.Context, event, title, body
 	if targets, err := l.db.ServerNotificationTargets(ctx); err != nil {
 		l.log.Warn("reading server notification targets", "err", err)
 	} else {
-		l.enqueueToEnabled(ctx, targets, event, title, body, now)
+		l.enqueueToEnabled(ctx, targets, event, title, body, "", now)
 	}
 	admins, err := l.db.EnabledAdminIDs(ctx)
 	if err != nil {
@@ -530,29 +581,47 @@ func (l *Library) EmitServerNotification(ctx context.Context, event, title, body
 		return
 	}
 	for _, uid := range admins {
+		// The inbox is the administrator's own record of what the
+		// server did, so it is written for every enabled admin whether
+		// or not they configured a destination.
+		l.recordNotification(ctx, uid, event, title, body, "", now)
 		targets, err := l.db.UserNotificationTargets(ctx, uid)
 		if err != nil {
 			l.log.Warn("reading notification targets", "user", uid, "err", err)
 			continue
 		}
-		l.enqueueToEnabled(ctx, targets, event, title, body, now)
+		l.enqueueToEnabled(ctx, targets, event, title, body, "", now)
 	}
 }
 
-func (l *Library) enqueueToEnabled(ctx context.Context, targets []wdb.NotificationTarget, event, title, body string, now int64) {
+func (l *Library) enqueueToEnabled(ctx context.Context, targets []wdb.NotificationTarget, event, title, body, targetPID string, now int64) {
 	for _, t := range targets {
 		if !targetWantsEvent(t, event) {
 			continue
 		}
 		if err := l.db.EnqueueNotify(ctx, wdb.NotifyRow{
-			TargetID: t.ID, Event: event, Title: title, Body: body,
+			TargetID: t.ID, Event: event, Title: title, Body: body, TargetPID: targetPID,
 		}, now); err != nil {
 			l.log.Warn("queuing notification", "event", event, "target", t.ID, "err", err)
 		}
 	}
 }
 
+func intOr(v *int, fallback int) int {
+	if v == nil {
+		return fallback
+	}
+	return *v
+}
+
 func targetWantsEvent(t wdb.NotificationTarget, event string) bool {
+	// Muted is a pause, not a deselection: the event list stays exactly
+	// as it was, and the per-target test still goes through (it never
+	// reaches here), which is how somebody checks a destination they
+	// have just silenced.
+	if t.Muted {
+		return false
+	}
 	var events []string
 	if err := json.Unmarshal([]byte(t.EnabledEvents), &events); err != nil {
 		return false
@@ -563,6 +632,57 @@ func targetWantsEvent(t wdb.NotificationTarget, event string) bool {
 		}
 	}
 	return false
+}
+
+// notificationLink is where a delivery's news lives in the web app, or
+// empty when the server has no public base or the event names nowhere.
+//
+// The paths are the client's own route table
+// (`app/app/lib/src/shell/routes.dart`) written out a second time,
+// because a Go server cannot read a Dart constant. A Dart test pins
+// each one against WaxRoute, so a rename over there fails over here.
+func (l *Library) notificationLink(event, targetPID string) string {
+	if l.publicBase == "" {
+		return ""
+	}
+	path := ""
+	switch event {
+	case "review-ready":
+		path = "/review"
+	case "signup-requested":
+		path = "/admin/users"
+	case "backup-completed", "backup-failed":
+		path = "/admin/backups"
+	case "import-completed":
+		if targetPID != "" {
+			path = "/review/" + targetPID
+		} else {
+			path = "/review"
+		}
+	case "feed-disabled":
+		if targetPID == "" {
+			path = "/podcasts"
+		} else {
+			path = "/podcasts/" + targetPID
+		}
+	case "episode-downloaded":
+		if targetPID == "" {
+			path = "/podcasts"
+		} else {
+			path = "/episodes/" + targetPID
+		}
+	case "playlist-synced":
+		if targetPID == "" {
+			path = "/playlists"
+		} else {
+			path = "/playlists/" + targetPID
+		}
+	default:
+		// Including the reserved test event: a test is about the
+		// destination, not about anything in the library.
+		return ""
+	}
+	return l.publicBase + path
 }
 
 // --- delivery ---------------------------------------------------------------------
@@ -589,12 +709,58 @@ func (l *Library) DrainNotifyOutbox(ctx context.Context) bool {
 		l.log.Warn("reading notification target", "err", err)
 		return true
 	}
+	// Muted, re-checked here rather than trusted from enqueue time: a
+	// destination backing off holds rows scheduled up to half an hour
+	// out, and somebody who mutes it to make it stop must not have them
+	// delivered anyway. The reserved test bypasses this, which is how a
+	// silenced destination is checked.
+	if target.Muted && row.Event != notifyTestEvent {
+		if err := l.db.CompleteNotify(ctx, row.ID); err != nil {
+			l.log.Warn("dropping notification for a muted target", "err", err)
+		}
+		return true
+	}
+	// Pacing, before anything is sent: a target inside its own minimum
+	// interval has not failed at anything, so the row goes back on the
+	// queue with a fresh lease rather than spending one of its ten
+	// attempts on being patient. The reserved test event is exempt -
+	// it is how somebody checks a destination they have just slowed
+	// down. Still true, because the caller loops while there is work.
+	if wait := pacingWait(target, row.Event, time.Now()); wait > 0 {
+		ready := time.Now().Add(wait)
+		// A row whose turn would come after the outbox horizon is shed
+		// now and said so, rather than parked for the janitor to delete
+		// without a word. Pacing is a delay, not a queue that grows
+		// without bound: a target fed faster than its interval loses its
+		// tail, and this is where that is decided and logged.
+		if enqueued := time.Unix(0, row.EnqueuedAtNS); ready.After(enqueued.Add(notifyHorizon)) {
+			l.log.Warn("shedding a notification a paced target cannot reach in time",
+				"target", target.ID, "kind", target.Kind, "event", row.Event,
+				"intervalSeconds", target.MinIntervalS)
+			if err := l.db.DropNotify(ctx, row.ID); err != nil {
+				l.log.Warn("dropping a shed notification", "err", err)
+			}
+			return true
+		}
+		if err := l.db.RequeueNotify(ctx, row.ID, ready.UnixNano()); err != nil {
+			l.log.Warn("requeuing paced notification", "err", err)
+		}
+		return true
+	}
 	deliveryErr := l.deliverNotify(ctx, target, row)
 	l.markNotifyHealth(ctx, target.ID, deliveryErr)
 	switch {
 	case deliveryErr == nil:
 		if err := l.db.CompleteNotify(ctx, row.ID); err != nil {
 			l.log.Warn("completing notification", "err", err)
+		}
+		// The pacing clock, which a test deliberately does not start: it
+		// is exempt from the interval, so letting it stamp the clock
+		// would park every real delivery for the length of one.
+		if row.Event != notifyTestEvent {
+			if err := l.db.MarkNotifyPaced(ctx, target.ID, time.Now().UnixNano()); err != nil {
+				l.log.Warn("stamping the notification pacing clock", "err", err)
+			}
 		}
 	case notify.IsPermanent(deliveryErr):
 		// The destination said no; the same submission cannot succeed.
@@ -603,12 +769,32 @@ func (l *Library) DrainNotifyOutbox(ctx context.Context) bool {
 			l.log.Warn("dropping rejected notification", "err", err)
 		}
 	default:
-		retryAt := time.Now().Add(queueRetryDelayCapped(row.Attempts, notifyBackoffCap)).UnixNano()
+		delay := queueRetryDelayCapped(row.Attempts, notifyBackoffCap)
+		// A destination that named its own wait is obeyed when it asks
+		// for longer than the ramp would have, and capped at the ramp's
+		// own ceiling so a service asking for a day cannot park a row
+		// past the outbox horizon that would prune it.
+		if asked := notify.RetryAfterOf(deliveryErr); asked > delay {
+			delay = min(asked, notifyBackoffCap)
+		}
+		retryAt := time.Now().Add(delay).UnixNano()
 		if err := l.db.FailNotify(ctx, row.ID, deliveryErr.Error(), retryAt); err != nil {
 			l.log.Warn("failing notification", "err", err)
 		}
 	}
 	return true
+}
+
+// pacingWait is how long this delivery must hold off, or zero.
+func pacingWait(t wdb.NotificationTarget, event string, now time.Time) time.Duration {
+	if t.MinIntervalS <= 0 || event == notifyTestEvent || t.LastPacedNS == 0 {
+		return 0
+	}
+	ready := time.Unix(0, t.LastPacedNS).Add(time.Duration(t.MinIntervalS) * time.Second)
+	if wait := ready.Sub(now); wait > 0 {
+		return wait
+	}
+	return 0
 }
 
 // deliverNotify opens the target's config and hands the message to its
@@ -633,6 +819,7 @@ func (l *Library) deliverNotify(ctx context.Context, target wdb.NotificationTarg
 		Title:     row.Title,
 		Body:      row.Body,
 		Timestamp: time.Now(),
+		Link:      l.notificationLink(row.Event, row.TargetPID),
 	})
 }
 

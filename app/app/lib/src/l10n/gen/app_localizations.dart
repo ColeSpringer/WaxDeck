@@ -3222,7 +3222,7 @@ abstract class AppLocalizations {
   /// Line under the activity heading on the notifications screen, saying plainly that the list is this session's.
   ///
   /// In en, this message translates to:
-  /// **'What this device has seen since the app opened. There is no history from before that.'**
+  /// **'What happened to this account, newest first. This device\'s own transfers are listed only while the app is open.'**
   String get bellActivityBlurb;
 
   /// Heading over the list of what happened while the app was open.
@@ -3236,6 +3236,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear'**
   String get bellClear;
+
+  /// Body of the confirmation before emptying the notification inbox, which is durable and shared across the account's devices.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete every notification for this account, on every device? This cannot be undone.'**
+  String get bellClearConfirm;
+
+  /// Title of the confirmation before emptying the notification inbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty notifications'**
+  String get bellClearTitle;
+
+  /// Removes one row from the inbox for good; the per-row action on the notifications screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get bellDelete;
 
   /// What a bell row says when this device finished keeping something offline.
   ///
@@ -3273,11 +3291,29 @@ abstract class AppLocalizations {
   /// **'An upload was added to the library.'**
   String get bellImportCompleted;
 
+  /// Stamps every unread row read, which is what clears the bell's badge without opening anything.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark all read'**
+  String get bellMarkAllRead;
+
+  /// Drawn in the open bell when nothing is waiting to be dealt with. The screen still lists what happened; this says only that none of it is outstanding.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing new.'**
+  String get bellNothingNew;
+
   /// Bell row for the playlist-synced marker: a background sync run changed the playlist, or repeated failures suspended its schedule. The row opens the playlist.
   ///
   /// In en, this message translates to:
   /// **'A synced playlist changed, or its syncing was suspended'**
   String get bellPlaylistSynced;
+
+  /// Overline on a notification row somebody has already dealt with.
+  ///
+  /// In en, this message translates to:
+  /// **'Read'**
+  String get bellReadOverline;
 
   /// What a bell row says. Generic because the marker it comes from carries no detail; the surface it opens has it.
   ///
@@ -3296,6 +3332,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{surface} · {when}'**
   String bellRowWhen(String surface, String when);
+
+  /// Which surface a bell row is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts'**
+  String get bellSurfaceAccounts;
+
+  /// Which surface a bell row is about.
+  ///
+  /// In en, this message translates to:
+  /// **'Backups'**
+  String get bellSurfaceBackups;
 
   /// Which surface a bell row is about.
   ///
@@ -3356,6 +3404,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Notifications, 1 unread} other{Notifications, {count} unread}}'**
   String bellUnread(int count);
+
+  /// Overline on a notification row nobody has dealt with yet. Words rather than colour alone, so the state reads out.
+  ///
+  /// In en, this message translates to:
+  /// **'Unread'**
+  String get bellUnreadOverline;
 
   /// What a bell row says. Generic because the marker carries no detail.
   ///
@@ -13279,6 +13333,24 @@ abstract class AppLocalizations {
   /// **'0 to 10'**
   String get settingsNotifyGotifyPriorityHelp;
 
+  /// Label of the webhook target's extra-headers field in the target editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Extra headers'**
+  String get settingsNotifyHeaders;
+
+  /// Helper under the extra-headers field, saying how to write them.
+  ///
+  /// In en, this message translates to:
+  /// **'One per line, as Name: value. At most eight.'**
+  String get settingsNotifyHeadersHelp;
+
+  /// Error shown when a typed header line has no colon.
+  ///
+  /// In en, this message translates to:
+  /// **'Each header goes on its own line, as Name: value.'**
+  String get settingsNotifyHeadersMalformed;
+
   /// Health line on a notification target that has delivered. {when} is already written for this language.
   ///
   /// In en, this message translates to:
@@ -13290,6 +13362,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last delivery failed: {error}'**
   String settingsNotifyLastFailed(String error);
+
+  /// Label of the field pacing a notification target; 0 paces nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Seconds between deliveries'**
+  String get settingsNotifyMinInterval;
+
+  /// Helper under the pacing field.
+  ///
+  /// In en, this message translates to:
+  /// **'0 sends everything as it happens. Up to 3600; a delivery inside the gap waits.'**
+  String get settingsNotifyMinIntervalHelp;
+
+  /// Label of the switch that pauses a notification target.
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get settingsNotifyMuted;
+
+  /// Mark on a target row in the list, for a destination that is paused.
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get settingsNotifyMutedBadge;
+
+  /// Helper under the mute switch, saying what a pause does and does not touch.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivers nothing but the test button, and keeps everything else as it is.'**
+  String get settingsNotifyMutedHelp;
 
   /// The line under this account's notification targets, listing what can carry them.
   ///
@@ -13344,6 +13446,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'User or group key'**
   String get settingsNotifyPushoverUserKey;
+
+  /// Label of the webhook target's signing-secret field.
+  ///
+  /// In en, this message translates to:
+  /// **'Signing secret'**
+  String get settingsNotifySecret;
+
+  /// Helper under the signing-secret field.
+  ///
+  /// In en, this message translates to:
+  /// **'Signs every request, so the receiver can tell it came from here.'**
+  String get settingsNotifySecretHelp;
 
   /// The button that sends a test notification to one target.
   ///

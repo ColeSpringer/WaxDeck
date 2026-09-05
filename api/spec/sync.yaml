@@ -286,12 +286,25 @@ components:
             (`pid` is the playlist whose sync run changed its
             membership, or whose scheduled syncing was suspended
             after repeated failures).
+
+
+            `notification` (`pid` is the inbox row that was written;
+            refetch `GET /users/me/notifications`) rides every emit,
+            whether or not the account has a delivery target for the
+            event.
+
+
+            `account` carries no `pid`: the caller's own roles or
+            effective permissions changed, which is what
+            `GET /auth/session` reports (roles plus the `uploadEnabled`,
+            `managePodcasts` and `delete` booleans), so re-read it. The
+            session itself keeps working; only what it may do moved.
           example: play-state
         pid:
           type: string
           description: >
             The item, show, book, or playlist the event is about
-            (absent for `prefs`).
+            (absent for `prefs` and `account`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"

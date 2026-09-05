@@ -18,6 +18,8 @@ part 'notification_target_create.g.dart';
 /// * [label] - Display label.
 /// * [config] - The kind's delivery configuration (see the NotificationTarget schema for per-kind fields). 
 /// * [enabledEvents] - Catalog event names to deliver. Scope rules apply: server-scope targets take server-scope events; user-scope targets take user-scope events, plus server-scope events when the owner is an administrator. 
+/// * [muted] - Create the target paused: it delivers nothing but its own per-target tests until unmuted. 
+/// * [minIntervalSeconds] - The shortest gap between two deliveries to this target, in seconds. A delivery inside the gap waits rather than spending a retry attempt; the reserved `test` event is exempt, and never starts the gap either. Capped at an hour: that bounds the wait, not the queue, and a target fed faster than its interval has the deliveries it cannot reach inside the outbox's day shed rather than delivered late. 
 @BuiltValue()
 abstract class NotificationTargetCreate implements Built<NotificationTargetCreate, NotificationTargetCreateBuilder> {
   @BuiltValueField(wireName: r'kind')
@@ -36,12 +38,22 @@ abstract class NotificationTargetCreate implements Built<NotificationTargetCreat
   @BuiltValueField(wireName: r'enabledEvents')
   BuiltList<String> get enabledEvents;
 
+  /// Create the target paused: it delivers nothing but its own per-target tests until unmuted. 
+  @BuiltValueField(wireName: r'muted')
+  bool? get muted;
+
+  /// The shortest gap between two deliveries to this target, in seconds. A delivery inside the gap waits rather than spending a retry attempt; the reserved `test` event is exempt, and never starts the gap either. Capped at an hour: that bounds the wait, not the queue, and a target fed faster than its interval has the deliveries it cannot reach inside the outbox's day shed rather than delivered late. 
+  @BuiltValueField(wireName: r'minIntervalSeconds')
+  int? get minIntervalSeconds;
+
   NotificationTargetCreate._();
 
   factory NotificationTargetCreate([void updates(NotificationTargetCreateBuilder b)]) = _$NotificationTargetCreate;
 
   @BuiltValueHook(initializeBuilder: true)
-  static void _defaults(NotificationTargetCreateBuilder b) => b;
+  static void _defaults(NotificationTargetCreateBuilder b) => b
+      ..muted = false
+      ..minIntervalSeconds = 0;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<NotificationTargetCreate> get serializer => _$NotificationTargetCreateSerializer();
@@ -81,6 +93,20 @@ class _$NotificationTargetCreateSerializer implements PrimitiveSerializer<Notifi
       object.enabledEvents,
       specifiedType: const FullType(BuiltList, [FullType(String)]),
     );
+    if (object.muted != null) {
+      yield r'muted';
+      yield serializers.serialize(
+        object.muted,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.minIntervalSeconds != null) {
+      yield r'minIntervalSeconds';
+      yield serializers.serialize(
+        object.minIntervalSeconds,
+        specifiedType: const FullType(int),
+      );
+    }
   }
 
   @override
@@ -131,6 +157,20 @@ class _$NotificationTargetCreateSerializer implements PrimitiveSerializer<Notifi
             specifiedType: const FullType(BuiltList, [FullType(String)]),
           ) as BuiltList<String>;
           result.enabledEvents.replace(valueDes);
+          break;
+        case r'muted':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.muted = valueDes;
+          break;
+        case r'minIntervalSeconds':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.minIntervalSeconds = valueDes;
           break;
         default:
           unhandled.add(key);

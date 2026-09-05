@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"reflect"
+	"slices"
 	"strings"
 	"sync"
 
@@ -418,6 +420,24 @@ func requirePodcastManagement(uc *UserCtx) error {
 		return nil
 	}
 	return &Error{Kind: KindForbidden, Msg: "this account cannot manage podcasts"}
+}
+
+// samePermissions answers whether two permission sets grant the same
+// thing.
+//
+// The scalars are compared by zeroing the two slice fields and letting
+// == do the rest, so a toggle added to Permissions is covered by
+// construction rather than by remembering to add a clause here - which
+// is the failure mode this whole comparison exists to prevent.
+func samePermissions(a, b Permissions) bool {
+	if !slices.Equal(a.TagAllow, b.TagAllow) || !slices.Equal(a.TagDeny, b.TagDeny) {
+		return false
+	}
+	// Zeroed first because DeepEqual calls an absent list and an empty
+	// one different, which they are not; what is left is every scalar,
+	// compared whole rather than clause by clause.
+	a.TagAllow, a.TagDeny, b.TagAllow, b.TagDeny = nil, nil, nil, nil
+	return reflect.DeepEqual(a, b)
 }
 
 // contentRulesChanged reports whether the visibility-shaping parts of a

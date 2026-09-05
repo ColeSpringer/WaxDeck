@@ -2,11 +2,15 @@ package notify
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,13 +20,15 @@ import (
 // sink records one delivery for shape assertions; reply, when set, is
 // written back as the response body.
 type sink struct {
-	status  int
-	reply   []byte
-	method  string
-	path    string
-	header  http.Header
-	body    []byte
-	handler *httptest.Server
+	status int
+	reply  []byte
+	method string
+	path   string
+	header http.Header
+	body   []byte
+	// retryAfter, when set, is answered as the Retry-After header.
+	retryAfter string
+	handler    *httptest.Server
 }
 
 func newSink(t *testing.T, status int) *sink {
@@ -33,6 +39,9 @@ func newSink(t *testing.T, status int) *sink {
 		s.path = r.URL.Path
 		s.header = r.Header.Clone()
 		s.body, _ = io.ReadAll(r.Body)
+		if s.retryAfter != "" {
+			w.Header().Set("Retry-After", s.retryAfter)
+		}
 		w.WriteHeader(s.status)
 		if len(s.reply) > 0 {
 			w.Write(s.reply)
@@ -252,6 +261,218 @@ func TestWebhookDocumentedPayload(t *testing.T) {
 	}
 	if len(body) != len(want) {
 		t.Fatalf("payload = %v, want exactly the documented fields", body)
+	}
+	if _, ok := body["link"]; ok {
+		t.Fatalf("payload carried a link with none to give: %v", body)
+	}
+
+	// With a link, and only then: a receiver keying on the field is
+	// answering "is there somewhere to go", so an empty string would be
+	// a dishonest yes.
+	if err := deliver(t, KindWebhook, `{"url":"`+s.handler.URL+`/hook"}`,
+		Message{Event: "backup-completed", Title: "T", Body: "B", Timestamp: at,
+			Link: "https://wax.example.com/admin/backups"}); err != nil {
+		t.Fatal(err)
+	}
+	body = s.jsonBody(t)
+	if body["link"] != "https://wax.example.com/admin/backups" {
+		t.Fatalf("payload[link] = %v", body["link"])
+	}
+	if len(body) != len(want)+1 {
+		t.Fatalf("payload = %v, want the documented fields plus link", body)
+	}
+}
+
+func TestWebhookHeadersAndSignature(t *testing.T) {
+	s := newSink(t, 200)
+	at := time.Date(2026, 7, 22, 10, 30, 0, 0, time.UTC)
+	err := deliver(t, KindWebhook,
+		`{"url":"`+s.handler.URL+`/hook","headers":{"x-routing-key":"ops"},"secret":"shhh"}`,
+		Message{Event: "backup-failed", Title: "T", Body: "B", Timestamp: at})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.header.Get("X-Routing-Key"); got != "ops" {
+		t.Fatalf("extra header = %q, want ops", got)
+	}
+	if got := s.header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("content type = %q, want the provider's own", got)
+	}
+	stamp := s.header.Get("X-WaxDeck-Timestamp")
+	if stamp != strconv.FormatInt(at.Unix(), 10) {
+		t.Fatalf("timestamp header = %q, want unix seconds", stamp)
+	}
+	// The receiver's side of the recipe, verbatim from the spec.
+	mac := hmac.New(sha256.New, []byte("shhh"))
+	mac.Write([]byte(stamp + "."))
+	mac.Write(s.body)
+	want := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	if got := s.header.Get("X-WaxDeck-Signature"); got != want {
+		t.Fatalf("signature = %q, want %q", got, want)
+	}
+
+	// No secret, no signing headers: an unsigned hook must not look
+	// signed with an empty key.
+	if err := deliver(t, KindWebhook, `{"url":"`+s.handler.URL+`/hook"}`,
+		Message{Event: "backup-failed", Timestamp: at}); err != nil {
+		t.Fatal(err)
+	}
+	if s.header.Get("X-WaxDeck-Signature") != "" {
+		t.Fatal("an unsigned delivery carried a signature")
+	}
+}
+
+// The headers are a hook for an auth token, not a general proxy: the
+// transport's own names and the three this provider decides are refused
+// at write time, where the message is useful.
+func TestWebhookHeaderValidation(t *testing.T) {
+	cases := []struct{ config, wantErr string }{
+		{`{"url":"https://h/x","headers":{"Content-Type":"text/plain"}}`, "belongs to the transport"},
+		{`{"url":"https://h/x","headers":{"Host":"elsewhere"}}`, "belongs to the transport"},
+		{`{"url":"https://h/x","headers":{"Transfer-Encoding":"chunked"}}`, "belongs to the transport"},
+		{`{"url":"https://h/x","headers":{"bad name":"v"}}`, "not an HTTP token"},
+		{`{"url":"https://h/x","headers":{"X-Ok":"a` + `\n` + `b"}}`, "line breaks"},
+		{`{"url":"https://h/x","headers":{"a":"1","b":"2","c":"3","d":"4","e":"5","f":"6","g":"7","h":"8","i":"9"}}`, "at most 8 headers"},
+		{`{"url":"https://h/x","secret":"` + strings.Repeat("s", 257) + `"}`, "at most 256"},
+		{`{"url":"https://h/x","headers":{"X-Ok":"fine"},"secret":"s"}`, ""},
+	}
+	p, _ := ByKind(KindWebhook)
+	for _, c := range cases {
+		_, _, err := p.ValidateConfig(json.RawMessage(c.config))
+		switch {
+		case c.wantErr == "" && err != nil:
+			t.Errorf("ValidateConfig(%s) = %v, want accepted", c.config, err)
+		case c.wantErr != "" && (err == nil || !strings.Contains(err.Error(), c.wantErr)):
+			t.Errorf("ValidateConfig(%s) = %v, want %q", c.config, err, c.wantErr)
+		}
+	}
+}
+
+// 429 and 503 are the two answers that mean "come back later" and are
+// allowed to say when; 408 is a timeout, which its own test pins as a
+// plain retryable failure.
+func TestRetryAfterIsHonoured(t *testing.T) {
+	future := time.Now().UTC().Add(90 * time.Second).Format(http.TimeFormat)
+	cases := []struct {
+		status       int
+		header       string
+		wantMin      time.Duration
+		wantMax      time.Duration
+		wantThrottle bool
+	}{
+		{http.StatusTooManyRequests, "30", 30 * time.Second, 30 * time.Second, true},
+		{http.StatusServiceUnavailable, "45", 45 * time.Second, 45 * time.Second, true},
+		{http.StatusTooManyRequests, future, 60 * time.Second, 95 * time.Second, true},
+		{http.StatusTooManyRequests, "", 0, 0, false},
+		{http.StatusServiceUnavailable, "not a number or a date", 0, 0, false},
+		{http.StatusRequestTimeout, "30", 0, 0, false},
+	}
+	for _, c := range cases {
+		s := newSink(t, c.status)
+		s.retryAfter = c.header
+		err := deliver(t, KindWebhook, `{"url":"`+s.handler.URL+`/hook"}`,
+			Message{Event: "backup-failed", Timestamp: time.Now()})
+		if err == nil {
+			t.Fatalf("status %d delivered successfully", c.status)
+		}
+		if IsPermanent(err) {
+			t.Fatalf("status %d with %q read as permanent", c.status, c.header)
+		}
+		wait := RetryAfterOf(err)
+		if c.wantThrottle {
+			if wait < c.wantMin || wait > c.wantMax {
+				t.Fatalf("status %d with %q asked for %v, want between %v and %v",
+					c.status, c.header, wait, c.wantMin, c.wantMax)
+			}
+		} else if wait != 0 {
+			t.Fatalf("status %d with %q asked for %v, want the generic ramp",
+				c.status, c.header, wait)
+		}
+	}
+}
+
+// A link is a destination the reader can tap; without one the payload
+// says nothing about where the news is rather than pointing at a host
+// nobody can resolve.
+func TestNtfyCarriesTheLinkOnlyWhenThereIsOne(t *testing.T) {
+	s := newSink(t, 200)
+	if err := deliver(t, KindNtfy, `{"topic":"wax","serverUrl":"`+s.handler.URL+`"}`,
+		Message{Title: "T", Body: "B"}); err != nil {
+		t.Fatal(err)
+	}
+	body := s.jsonBody(t)
+	if _, ok := body["click"]; ok {
+		t.Fatalf("ntfy body carried a click with no link: %v", body)
+	}
+	if _, ok := body["actions"]; ok {
+		t.Fatalf("ntfy body carried an action with no link: %v", body)
+	}
+
+	if err := deliver(t, KindNtfy, `{"topic":"wax","serverUrl":"`+s.handler.URL+`"}`,
+		Message{Title: "T", Body: "B", Link: "https://wax.example.com/review"}); err != nil {
+		t.Fatal(err)
+	}
+	body = s.jsonBody(t)
+	if body["click"] != "https://wax.example.com/review" {
+		t.Fatalf("ntfy click = %v", body["click"])
+	}
+	actions, ok := body["actions"].([]any)
+	if !ok || len(actions) != 1 {
+		t.Fatalf("ntfy actions = %v, want one", body["actions"])
+	}
+	action, _ := actions[0].(map[string]any)
+	if action["action"] != "view" || action["url"] != "https://wax.example.com/review" {
+		t.Fatalf("ntfy action = %v", action)
+	}
+}
+
+func TestDiscordEmbedCarriesItsFurniture(t *testing.T) {
+	// A Discord webhook must be on the service's own host, so the
+	// provider is exercised through its payload rather than a sink.
+	at := time.Date(2026, 7, 22, 10, 30, 0, 0, time.UTC)
+	for _, c := range []struct {
+		event string
+		color int
+	}{
+		{"backup-failed", discordRed},
+		{"backup-completed", discordGreen},
+		{"signup-requested", discordBlue},
+		{"invented-by-a-newer-server", discordGrey},
+	} {
+		if got := discordColorFor(c.event); got != c.color {
+			t.Errorf("colour for %s = %#x, want %#x", c.event, got, c.color)
+		}
+	}
+
+	s := newSink(t, 200)
+	// The host allowlist lives in ValidateConfig; Deliver is what is
+	// under test, so it is called with a config built by hand.
+	p := discordProvider{}
+	config := json.RawMessage(`{"webhookUrl":"` + s.handler.URL + `/api/webhooks/1/t"}`)
+	err := p.Deliver(context.Background(), http.DefaultClient, config, Message{
+		Event: "backup-completed", Title: "T", Body: "B", Timestamp: at,
+		Link: "https://wax.example.com/admin/backups",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	embeds, ok := s.jsonBody(t)["embeds"].([]any)
+	if !ok || len(embeds) != 1 {
+		t.Fatalf("embeds = %v, want one", s.jsonBody(t)["embeds"])
+	}
+	embed, _ := embeds[0].(map[string]any)
+	if embed["timestamp"] != "2026-07-22T10:30:00Z" {
+		t.Fatalf("embed timestamp = %v", embed["timestamp"])
+	}
+	if embed["color"] != float64(discordGreen) {
+		t.Fatalf("embed colour = %v, want green", embed["color"])
+	}
+	footer, _ := embed["footer"].(map[string]any)
+	if footer["text"] != "WaxDeck" {
+		t.Fatalf("embed footer = %v", embed["footer"])
+	}
+	if embed["url"] != "https://wax.example.com/admin/backups" {
+		t.Fatalf("embed url = %v", embed["url"])
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -36,6 +37,11 @@ type Message struct {
 	// Timestamp is the delivery instant, carried by payloads that
 	// include one (the generic webhook).
 	Timestamp time.Time
+	// Link is where the news is, as an absolute URL into this server's
+	// web app. Empty when the server has no public base configured, or
+	// when the event names nothing to open: providers that can carry a
+	// link omit it rather than sending a URL nobody can follow.
+	Link string
 }
 
 // Provider validates one kind's configuration and delivers messages
@@ -84,6 +90,51 @@ func IsPermanent(err error) bool {
 	return errors.As(err, &p)
 }
 
+// Throttled marks a delivery the destination asked us to slow down on,
+// with the wait it named. Retryable like any other transient failure;
+// the caller uses RetryAfter instead of its own backoff when the
+// service's number is the larger one.
+type Throttled struct {
+	Err        error
+	RetryAfter time.Duration
+}
+
+func (t *Throttled) Error() string { return t.Err.Error() }
+func (t *Throttled) Unwrap() error { return t.Err }
+
+// RetryAfterOf reports the wait a destination asked for, or zero.
+func RetryAfterOf(err error) time.Duration {
+	var t *Throttled
+	if errors.As(err, &t) {
+		return t.RetryAfter
+	}
+	return 0
+}
+
+// retryAfter reads the header in either documented form: a count of
+// seconds, or an HTTP date. A date already past means "now", not a
+// negative wait.
+func retryAfter(h http.Header, now time.Time) (time.Duration, bool) {
+	raw := strings.TrimSpace(h.Get("Retry-After"))
+	if raw == "" {
+		return 0, false
+	}
+	if secs, err := strconv.Atoi(raw); err == nil {
+		if secs < 0 {
+			return 0, true
+		}
+		return time.Duration(secs) * time.Second, true
+	}
+	when, err := http.ParseTime(raw)
+	if err != nil {
+		return 0, false
+	}
+	if wait := when.Sub(now); wait > 0 {
+		return wait, true
+	}
+	return 0, true
+}
+
 // send posts one request and classifies the response. Response bodies
 // are discarded, never surfaced: the errors land on the target's
 // health fields, and destinations of user-pointed kinds (UnifiedPush
@@ -125,7 +176,16 @@ func deliverRequest(client *http.Client, req *http.Request, detail bool) error {
 	}
 	failure := errors.New(msg)
 	switch {
-	case resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests:
+	case resp.StatusCode == http.StatusTooManyRequests ||
+		resp.StatusCode == http.StatusServiceUnavailable:
+		// The two statuses that mean "come back later" and are allowed
+		// to say when. Without a parseable header they stay ordinary
+		// retryable failures on the generic ramp.
+		if wait, ok := retryAfter(resp.Header, time.Now()); ok {
+			return &Throttled{Err: failure, RetryAfter: wait}
+		}
+		return failure
+	case resp.StatusCode == http.StatusRequestTimeout:
 		return failure
 	case resp.StatusCode >= 400 && resp.StatusCode <= 499:
 		return &Permanent{Err: failure}

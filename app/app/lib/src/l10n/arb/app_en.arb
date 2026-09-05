@@ -2573,7 +2573,7 @@
   "@authUsername": {
     "description": "The account-name field on the sign-in, sign-up and first-run screens."
   },
-  "bellActivityBlurb": "What this device has seen since the app opened. There is no history from before that.",
+  "bellActivityBlurb": "What happened to this account, newest first. This device's own transfers are listed only while the app is open.",
   "@bellActivityBlurb": {
     "description": "Line under the activity heading on the notifications screen, saying plainly that the list is this session's."
   },
@@ -2584,6 +2584,18 @@
   "bellClear": "Clear",
   "@bellClear": {
     "description": "Empties the list: the last row of the open bell, and the action on the notifications screen."
+  },
+  "bellClearConfirm": "Delete every notification for this account, on every device? This cannot be undone.",
+  "@bellClearConfirm": {
+    "description": "Body of the confirmation before emptying the notification inbox, which is durable and shared across the account's devices."
+  },
+  "bellClearTitle": "Empty notifications",
+  "@bellClearTitle": {
+    "description": "Title of the confirmation before emptying the notification inbox."
+  },
+  "bellDelete": "Delete",
+  "@bellDelete": {
+    "description": "Removes one row from the inbox for good; the per-row action on the notifications screen."
   },
   "bellDownloadFinished": "A download finished.",
   "@bellDownloadFinished": {
@@ -2609,9 +2621,21 @@
   "@bellImportCompleted": {
     "description": "What a bell row says when an upload was filed. Deliberately not identified: the same marker covers the path where nothing was matched."
   },
+  "bellMarkAllRead": "Mark all read",
+  "@bellMarkAllRead": {
+    "description": "Stamps every unread row read, which is what clears the bell's badge without opening anything."
+  },
+  "bellNothingNew": "Nothing new.",
+  "@bellNothingNew": {
+    "description": "Drawn in the open bell when nothing is waiting to be dealt with. The screen still lists what happened; this says only that none of it is outstanding."
+  },
   "bellPlaylistSynced": "A synced playlist changed, or its syncing was suspended",
   "@bellPlaylistSynced": {
     "description": "Bell row for the playlist-synced marker: a background sync run changed the playlist, or repeated failures suspended its schedule. The row opens the playlist."
+  },
+  "bellReadOverline": "Read",
+  "@bellReadOverline": {
+    "description": "Overline on a notification row somebody has already dealt with."
   },
   "bellReviewChanged": "The review queue changed.",
   "@bellReviewChanged": {
@@ -2644,6 +2668,14 @@
         "example": "12 min ago"
       }
     }
+  },
+  "bellSurfaceAccounts": "Accounts",
+  "@bellSurfaceAccounts": {
+    "description": "Which surface a bell row is about."
+  },
+  "bellSurfaceBackups": "Backups",
+  "@bellSurfaceBackups": {
+    "description": "Which surface a bell row is about."
   },
   "bellSurfaceDownloads": "Downloads",
   "@bellSurfaceDownloads": {
@@ -2690,6 +2722,10 @@
         "example": "3"
       }
     }
+  },
+  "bellUnreadOverline": "Unread",
+  "@bellUnreadOverline": {
+    "description": "Overline on a notification row nobody has dealt with yet. Words rather than colour alone, so the state reads out."
   },
   "bellUploadChanged": "An upload changed.",
   "@bellUploadChanged": {
@@ -11303,6 +11339,18 @@
   "@settingsNotifyGotifyPriorityHelp": {
     "description": "The range the Gotify priority field accepts."
   },
+  "settingsNotifyHeaders": "Extra headers",
+  "@settingsNotifyHeaders": {
+    "description": "Label of the webhook target's extra-headers field in the target editor."
+  },
+  "settingsNotifyHeadersHelp": "One per line, as Name: value. At most eight.",
+  "@settingsNotifyHeadersHelp": {
+    "description": "Helper under the extra-headers field, saying how to write them."
+  },
+  "settingsNotifyHeadersMalformed": "Each header goes on its own line, as Name: value.",
+  "@settingsNotifyHeadersMalformed": {
+    "description": "Error shown when a typed header line has no colon."
+  },
   "settingsNotifyLastDelivered": "Last delivered {when}",
   "@settingsNotifyLastDelivered": {
     "description": "Health line on a notification target that has delivered. {when} is already written for this language.",
@@ -11322,6 +11370,26 @@
         "example": "502 Bad Gateway"
       }
     }
+  },
+  "settingsNotifyMinInterval": "Seconds between deliveries",
+  "@settingsNotifyMinInterval": {
+    "description": "Label of the field pacing a notification target; 0 paces nothing."
+  },
+  "settingsNotifyMinIntervalHelp": "0 sends everything as it happens. Up to 3600; a delivery inside the gap waits.",
+  "@settingsNotifyMinIntervalHelp": {
+    "description": "Helper under the pacing field."
+  },
+  "settingsNotifyMuted": "Muted",
+  "@settingsNotifyMuted": {
+    "description": "Label of the switch that pauses a notification target."
+  },
+  "settingsNotifyMutedBadge": "Muted",
+  "@settingsNotifyMutedBadge": {
+    "description": "Mark on a target row in the list, for a destination that is paused."
+  },
+  "settingsNotifyMutedHelp": "Delivers nothing but the test button, and keeps everything else as it is.",
+  "@settingsNotifyMutedHelp": {
+    "description": "Helper under the mute switch, saying what a pause does and does not touch."
   },
   "settingsNotifyMyBlurb": "Where your events (new episodes, review queue) get delivered: Pushover, ntfy, Gotify, Discord, webhooks, or this device's push registration.",
   "@settingsNotifyMyBlurb": {
@@ -11358,6 +11426,14 @@
   "settingsNotifyPushoverUserKey": "User or group key",
   "@settingsNotifyPushoverUserKey": {
     "description": "Pushover field: who the notification goes to."
+  },
+  "settingsNotifySecret": "Signing secret",
+  "@settingsNotifySecret": {
+    "description": "Label of the webhook target's signing-secret field."
+  },
+  "settingsNotifySecretHelp": "Signs every request, so the receiver can tell it came from here.",
+  "@settingsNotifySecretHelp": {
+    "description": "Helper under the signing-secret field."
   },
   "settingsNotifySendTest": "Send test",
   "@settingsNotifySendTest": {

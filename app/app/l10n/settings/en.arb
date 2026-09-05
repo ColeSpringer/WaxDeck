@@ -764,6 +764,18 @@
   "@settingsNotifyGotifyPriorityHelp": {
     "description": "The range the Gotify priority field accepts."
   },
+  "settingsNotifyHeaders": "Extra headers",
+  "@settingsNotifyHeaders": {
+    "description": "Label of the webhook target's extra-headers field in the target editor."
+  },
+  "settingsNotifyHeadersHelp": "One per line, as Name: value. At most eight.",
+  "@settingsNotifyHeadersHelp": {
+    "description": "Helper under the extra-headers field, saying how to write them."
+  },
+  "settingsNotifyHeadersMalformed": "Each header goes on its own line, as Name: value.",
+  "@settingsNotifyHeadersMalformed": {
+    "description": "Error shown when a typed header line has no colon."
+  },
   "settingsNotifyLastDelivered": "Last delivered {when}",
   "@settingsNotifyLastDelivered": {
     "description": "Health line on a notification target that has delivered. {when} is already written for this language.",
@@ -783,6 +795,26 @@
         "example": "502 Bad Gateway"
       }
     }
+  },
+  "settingsNotifyMinInterval": "Seconds between deliveries",
+  "@settingsNotifyMinInterval": {
+    "description": "Label of the field pacing a notification target; 0 paces nothing."
+  },
+  "settingsNotifyMinIntervalHelp": "0 sends everything as it happens. Up to 3600; a delivery inside the gap waits.",
+  "@settingsNotifyMinIntervalHelp": {
+    "description": "Helper under the pacing field."
+  },
+  "settingsNotifyMuted": "Muted",
+  "@settingsNotifyMuted": {
+    "description": "Label of the switch that pauses a notification target."
+  },
+  "settingsNotifyMutedBadge": "Muted",
+  "@settingsNotifyMutedBadge": {
+    "description": "Mark on a target row in the list, for a destination that is paused."
+  },
+  "settingsNotifyMutedHelp": "Delivers nothing but the test button, and keeps everything else as it is.",
+  "@settingsNotifyMutedHelp": {
+    "description": "Helper under the mute switch, saying what a pause does and does not touch."
   },
   "settingsNotifyMyBlurb": "Where your events (new episodes, review queue) get delivered: Pushover, ntfy, Gotify, Discord, webhooks, or this device's push registration.",
   "@settingsNotifyMyBlurb": {
@@ -819,6 +851,14 @@
   "settingsNotifyPushoverUserKey": "User or group key",
   "@settingsNotifyPushoverUserKey": {
     "description": "Pushover field: who the notification goes to."
+  },
+  "settingsNotifySecret": "Signing secret",
+  "@settingsNotifySecret": {
+    "description": "Label of the webhook target's signing-secret field."
+  },
+  "settingsNotifySecretHelp": "Signs every request, so the receiver can tell it came from here.",
+  "@settingsNotifySecretHelp": {
+    "description": "Helper under the signing-secret field."
   },
   "settingsNotifySendTest": "Send test",
   "@settingsNotifySendTest": {

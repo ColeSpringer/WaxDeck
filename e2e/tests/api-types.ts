@@ -2115,6 +2115,8 @@ export interface paths {
         /**
          * List the notification event catalog
          * @description Every notification event this server can emit, with its scope: `server` events describe server operations and deliver to server-scope targets (plus admin-owned personal targets that opted in), `user` events concern one user and deliver to that user's personal targets. Clients build the per-target event checklist from this catalog; a target's `enabledEvents` must name events from it. The reserved `test` event never appears here: per-target tests are requested through the target's test endpoint and bypass event selection.
+         *
+         *     The current catalog is `signup-requested`, `backup-completed`, `backup-failed`, `episode-downloaded`, `feed-disabled`, `review-ready`, `import-completed`, and `playlist-synced`.
          */
         get: operations["listNotificationEvents"];
         put?: never;
@@ -2304,6 +2306,72 @@ export interface paths {
          */
         post: operations["testServerNotificationTarget"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's notification inbox
+         * @description What happened to this account, newest first, whether or not any delivery target was configured for it. The inbox is written on every emit, so it is the record a client that was closed at the time can still read; targets are how news leaves the server, not where it is kept.
+         *
+         *     Rows are pruned by age and by a per-account cap, so the inbox is recent history rather than an audit log.
+         */
+        get: operations["listMyNotifications"];
+        put?: never;
+        post?: never;
+        /**
+         * Empty the caller's notification inbox
+         * @description Removes every row. Clearing an empty inbox answers 204.
+         */
+        delete: operations["clearMyNotifications"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark inbox rows read
+         * @description Stamps `readAt` on the named rows, or on every unread row when `ids` is absent or empty. Already-read rows keep the stamp they have, and an id that names nothing is ignored: the caller asked for those rows to be read and they are.
+         */
+        post: operations["markMyNotificationsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/notifications/{notificationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete one inbox row
+         * @description Removes the row. Another account's row answers 404 rather than 403: the inbox is per-account and nobody else's row is a thing this caller can be told exists.
+         */
+        delete: operations["deleteMyNotification"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7550,7 +7618,53 @@ export interface components {
             /** @description Every event this server can emit, server scope first. */
             events: components["schemas"]["NotificationEvent"][];
         };
-        /** @description One notification delivery destination. `config` is a free-form object whose fields depend on `kind` (a discriminated union is deliberately avoided; validation is server-side and per kind, and unknown fields are refused): `pushover` takes `token` (application API token), `userKey`, and optional integer `priority` (-2 quietest to 2 emergency; emergency deliveries use the service's minimum retry cadence); `ntfy` takes `topic`, optional `serverUrl` (default `https://ntfy.sh`), and optional `accessToken` (sent as a Bearer token); `gotify` takes `serverUrl` and `token` (sent as a header, so it stays out of URLs and logs) and optional integer `priority` (0 to 10); `discord` takes `webhookUrl`, which must be a discord.com or discordapp.com webhook URL; `webhook` takes `url` and posts `{event, title, body, timestamp}` as JSON with timestamp in RFC 3339 UTC; `apprise` takes `serverUrl` (the Apprise API server base; its notify endpoint is derived unless the URL already names a path) and optional `targets` (comma or space separated Apprise target URLs; empty relies on the Apprise server's own configuration); `unifiedpush` takes `endpoint` (the distributor-issued https URL, unique per owner). */
+        /** @description One thing that happened to this account. `event` is a catalog event name, so a client words the row itself and stays localized; `title` and `body` are the server's own English wording, for a client that does not know the event. */
+        Notification: {
+            /**
+             * @description Type-prefixed ULID.
+             * @example nf-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            id: string;
+            /**
+             * @description The catalog event this row reports.
+             * @example episode-downloaded
+             */
+            event: string;
+            /** @description The server's own one-line wording. */
+            title: string;
+            /** @description The server's own detail line. */
+            body: string;
+            /**
+             * @description What the row is about, when the event names something: the show for `feed-disabled`, the episode for `episode-downloaded`, the playlist for `playlist-synced`, the review entry (`rv-`) for `import-completed`. Absent for events that are about the server rather than an item.
+             * @example pc-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            targetPid?: string;
+            /**
+             * Format: date-time
+             * @description When the event happened.
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description When the row was marked read. Absent while unread.
+             */
+            readAt?: string;
+        };
+        /** @description One keyset-paginated page of the inbox. */
+        NotificationPage: {
+            /** @description Rows newest first. */
+            notifications: components["schemas"]["Notification"][];
+            /** @description Opaque cursor for the next page. Absent on the last page. */
+            nextCursor?: string;
+            /** @description Unread rows in the whole inbox, not just this page: it is what the bell's badge counts. */
+            unreadCount: number;
+        };
+        /** @description Which inbox rows to mark read. */
+        NotificationReadRequest: {
+            /** @description The rows to stamp. Absent or empty marks every unread row read, which is what the "mark all read" affordance sends. */
+            ids?: string[];
+        };
+        /** @description One notification delivery destination. `config` is a free-form object whose fields depend on `kind` (a discriminated union is deliberately avoided; validation is server-side and per kind, and unknown fields are refused): `pushover` takes `token` (application API token), `userKey`, and optional integer `priority` (-2 quietest to 2 emergency; emergency deliveries use the service's minimum retry cadence); `ntfy` takes `topic`, optional `serverUrl` (default `https://ntfy.sh`), and optional `accessToken` (sent as a Bearer token); its deliveries carry a `click` URL and a view action when the server knows its public base; `gotify` takes `serverUrl` and `token` (sent as a header, so it stays out of URLs and logs) and optional integer `priority` (0 to 10); `discord` takes `webhookUrl`, which must be a discord.com or discordapp.com webhook URL; its embeds carry a timestamp, a colour per event family, a WaxDeck footer, and a link when the server knows its public base; `webhook` takes `url` and posts `{event, title, body, timestamp}` as JSON with timestamp in RFC 3339 UTC, plus `link` when the server knows its own public base (`WAXDECK_PUBLIC_BASE`) and the event names something to open; it also takes optional `headers` (an object of at most 8 extra request headers, names ASCII tokens up to 64 characters and values up to 1024; hop-by-hop names, `Host`, `Content-Length` and `Content-Type` are refused) and optional `secret` (up to 256 characters), which signs every post: `X-WaxDeck-Timestamp` carries unix seconds and `X-WaxDeck-Signature` carries `sha256=<hex HMAC-SHA256(secret, timestamp + "." + body)>`; `apprise` takes `serverUrl` (the Apprise API server base; its notify endpoint is derived unless the URL already names a path) and optional `targets` (comma or space separated Apprise target URLs; empty relies on the Apprise server's own configuration); `unifiedpush` takes `endpoint` (the distributor-issued https URL, unique per owner). */
         NotificationTarget: {
             /**
              * @description Type-prefixed ULID.
@@ -7579,6 +7693,10 @@ export interface components {
              * @description When the most recent delivery error happened; cleared, like `lastError`, by a subsequent success.
              */
             lastErrorAt?: string;
+            /** @description While true the target delivers nothing but its own per-target tests. A pause that keeps the configuration and the event selection, for the destination somebody wants back later; already-queued deliveries are dropped rather than held for the unmute. */
+            muted?: boolean;
+            /** @description The shortest gap between two deliveries to this target, in seconds; 0 (the default) paces nothing. A delivery inside the gap waits rather than spending a retry attempt, and the reserved `test` event is exempt from the gap and never starts it. */
+            minIntervalSeconds?: number;
             /**
              * Format: date-time
              * @description When the target was created.
@@ -7596,8 +7714,18 @@ export interface components {
             };
             /** @description Catalog event names to deliver. Scope rules apply: server-scope targets take server-scope events; user-scope targets take user-scope events, plus server-scope events when the owner is an administrator. */
             enabledEvents: string[];
+            /**
+             * @description Create the target paused: it delivers nothing but its own per-target tests until unmuted.
+             * @default false
+             */
+            muted: boolean;
+            /**
+             * @description The shortest gap between two deliveries to this target, in seconds. A delivery inside the gap waits rather than spending a retry attempt; the reserved `test` event is exempt, and never starts the gap either. Capped at an hour: that bounds the wait, not the queue, and a target fed faster than its interval has the deliveries it cannot reach inside the outbox's day shed rather than delivered late.
+             * @default 0
+             */
+            minIntervalSeconds: number;
         };
-        /** @description Replaces a target's label, config, and enabled events; the kind is fixed at creation. */
+        /** @description Replaces a target's label, config, and enabled events; the kind is fixed at creation. `muted` and `minIntervalSeconds` are the exception to the whole-replace: omitting one keeps what the target holds, so a client that predates them cannot wake a destination somebody silenced on purpose just by renaming it. */
         NotificationTargetUpdate: {
             /** @description Display label. */
             label?: string;
@@ -7607,6 +7735,10 @@ export interface components {
             };
             /** @description Catalog event names to deliver, under the same scope rules as creation. */
             enabledEvents: string[];
+            /** @description Pauses the target: it delivers nothing but its own per-target tests until unmuted. Omitted leaves it as it is. */
+            muted?: boolean;
+            /** @description The shortest gap between two deliveries to this target, in seconds. A delivery inside the gap waits rather than spending a retry attempt; the reserved `test` event is exempt, and never starts the gap either. Capped at an hour: that bounds the wait, not the queue, and a target fed faster than its interval has the deliveries it cannot reach inside the outbox's day shed rather than delivered late. Omitted leaves it as it is. */
+            minIntervalSeconds?: number;
         };
         /** @description A scope's notification targets. */
         NotificationTargetList: {
@@ -10165,11 +10297,15 @@ export interface components {
              * @description What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). Curation surfaces emit marker kinds carrying only `pid`: `review` (a review entry changed; refetch the review endpoints), `upload` (an upload session changed), `task` (a tool task changed), and `entity-state` (an artist or album was starred or rated). Markers hydrate nothing because those surfaces are live reads, not mirrored state.
              *
              *     Further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended), `import-completed` (`pid` is the review entry that filed itself), `episode-downloaded` (`pid` is the episode whose enclosure the server finished fetching), and `playlist-synced` (`pid` is the playlist whose sync run changed its membership, or whose scheduled syncing was suspended after repeated failures).
+             *
+             *     `notification` (`pid` is the inbox row that was written; refetch `GET /users/me/notifications`) rides every emit, whether or not the account has a delivery target for the event.
+             *
+             *     `account` carries no `pid`: the caller's own roles or effective permissions changed, which is what `GET /auth/session` reports (roles plus the `uploadEnabled`, `managePodcasts` and `delete` booleans), so re-read it. The session itself keeps working; only what it may do moved.
              * @example play-state
              */
             kind: string;
             /**
-             * @description The item, show, book, or playlist the event is about (absent for `prefs`).
+             * @description The item, show, book, or playlist the event is about (absent for `prefs` and `account`).
              * @example tr-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             pid?: string;
@@ -11042,6 +11178,8 @@ export interface components {
         EntityType: "album" | "artist" | "release-group" | "genre" | "playlist" | "podcast";
         /** @description Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         EntityPid: string;
+        /** @description Inbox row PID (e.g. `nf-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+        NotificationId: string;
         /** @description Notification target PID (e.g. `nt-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         TargetId: string;
         /** @description Player endpoint PID (e.g. `pe-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -14736,6 +14874,99 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMyNotifications: {
+        parameters: {
+            query?: {
+                /** @description Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. */
+                cursor?: string;
+                /** @description Maximum rows per page. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of the inbox. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    clearMyNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Inbox emptied. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    markMyNotificationsRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["NotificationReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Rows marked read. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    deleteMyNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Inbox row PID (e.g. `nf-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                notificationId: components["parameters"]["NotificationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Row removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
     };

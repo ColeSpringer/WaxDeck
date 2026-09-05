@@ -277,10 +277,24 @@ the slate.
 ## Notifications
 
 Every user picks where their events go on the **Notifications** screen,
-which the sidebar carries a row for and which also holds what this
-device has seen since the app opened (the same list the bell in the top
-app bar peeks at). The targets are on Settings, Integrations, My
-notifications as well. A target is one destination: native Pushover, ntfy,
+which the sidebar carries a row for and which also holds the account's
+inbox (the same list the bell in the top app bar peeks at). The targets
+are on Settings, Integrations, My notifications as well.
+
+The inbox is the server's own record of what happened to an account,
+written whether or not a delivery target was configured for the event:
+a target is how news leaves the server, not where it is kept, so a
+device that was closed at the time still finds the news, and so does a
+second one. A row names the event, so a client words it in its own
+language and falls back to the server's wording only for an event it
+does not know. Rows are read rather than removed - going where one
+points marks it read, "mark all read" clears the badge, and delete is
+what removes one - and the server prunes them by age (ninety days) and
+by a per-account cap. Emptying the inbox is on the screen and asks
+first: it is durable, shared by every device on the account, and there
+is nothing to undo it with. Beside the inbox the screen still lists what this
+device did itself: a finished download is this machine's news and
+nothing the server keeps. A target is one destination: native Pushover, ntfy,
 or Gotify delivery, a Discord or generic webhook, an
 [Apprise](https://github.com/caronc/apprise) API server (one
 integration, most notification services), or the UnifiedPush endpoint
@@ -298,6 +312,33 @@ Settings, Integrations, Server notifications, and can additionally subscribe the
 own personal targets to server events, so a signup request reaching
 an administrator's phone is a personal choice, not server
 configuration.
+
+Per-kind options beyond the destination itself. A **webhook** takes up
+to eight extra request headers (typed a line at a time as `Name: value`;
+the transport's own names are refused) and a **signing secret**: with
+one set, every post carries `X-WaxDeck-Timestamp` (unix seconds) and
+`X-WaxDeck-Signature`, which is
+`sha256=<hex HMAC-SHA256(secret, timestamp + "." + body)>` over the
+exact bytes sent, so a receiver can tell a real delivery from a forged
+one. **ntfy** deliveries carry a click destination and an Open action;
+**Discord** embeds carry a timestamp, a colour per event family and a
+WaxDeck footer. Every link needs `WAXDECK_PUBLIC_BASE`: without it the
+server does not know a URL anybody outside its own network could
+follow, and leaves the link out rather than sending a dead one.
+
+Two ways to turn a destination down without deleting it. **Muted**
+pauses it, keeping the configuration and the event selection; anything
+already queued for it is dropped rather than held for the unmute.
+**Seconds between deliveries** paces it, holding a delivery that lands
+inside the gap rather than failing it. The cap is an hour, and it bounds
+the wait rather than the queue: a target fed faster than its interval
+queues faster than it drains, and the deliveries that cannot be reached
+inside the outbox's day are shed with a line in the log. A per-target
+test ignores both, and does not start the gap either, so a destination
+can be checked while it is silenced or slowed without parking the next
+real delivery. A destination that answers 429 or 503 with a
+`Retry-After` is waited out for as long as it asked, up to the backoff
+ceiling.
 
 User-pointed destination URLs (ntfy, Gotify, webhooks, Apprise)
 refuse private addresses unless the server opts in with

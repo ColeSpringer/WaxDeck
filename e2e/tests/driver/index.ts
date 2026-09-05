@@ -101,6 +101,14 @@ export class App {
     return this.ctx.account;
   }
 
+  /// The page this app drives, for the waits Playwright hangs off a
+  /// page rather than a locator - arming a `waitForResponse` before the
+  /// navigation that causes it. The `page` fixture is the same object
+  /// for the default app; a second device has no other way to reach it.
+  get page(): Page {
+    return this.ctx.page;
+  }
+
   /// The same account on a second page - another device in the
   /// household, which is what the connect and sync scenarios are about.
   /// A second ACCOUNT is a second `createApp` with its own mint.

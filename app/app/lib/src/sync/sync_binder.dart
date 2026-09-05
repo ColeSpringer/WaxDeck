@@ -10,7 +10,6 @@ import '../connect/connect_providers.dart';
 import '../downloads/downloads_controller.dart';
 import '../home/home_shelves.dart';
 import '../metadata/metadata_controller.dart';
-import '../notifications/notifications_binder.dart';
 import '../player/entity_play_state_controller.dart';
 import '../player/play_progress.dart';
 import '../player/play_state_controller.dart';
@@ -27,6 +26,7 @@ import '../tools/tasks_screen.dart';
 import '../uploads/uploads_controller.dart';
 import 'live_invalidations.dart';
 import 'refresh_pacing.dart';
+import 'server_event_bus.dart';
 import 'sync_providers.dart';
 
 /// Binds the sync machinery to the authenticated subtree: watched by the

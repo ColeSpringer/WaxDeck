@@ -109,6 +109,8 @@ abstract interface class NotificationTargetActions {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted,
+    int minIntervalSeconds,
   });
   Future<void> remove(String pid);
   Future<void> sendTest(String pid);
@@ -131,6 +133,8 @@ class ServerNotificationTargetsController
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) async {
     final repository = ref.read(repositoryProvider);
     if (pid == null) {
@@ -139,6 +143,8 @@ class ServerNotificationTargetsController
         label: label,
         config: config,
         enabledEvents: enabledEvents,
+        muted: muted,
+        minIntervalSeconds: minIntervalSeconds,
       );
     } else {
       await repository.updateServerNotificationTarget(
@@ -146,6 +152,8 @@ class ServerNotificationTargetsController
         label: label,
         config: config,
         enabledEvents: enabledEvents,
+        muted: muted,
+        minIntervalSeconds: minIntervalSeconds,
       );
     }
     ref.invalidateSelf();
@@ -191,6 +199,8 @@ class MyNotificationTargetsController
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted = false,
+    int minIntervalSeconds = 0,
   }) async {
     final repository = ref.read(repositoryProvider);
     if (pid == null) {
@@ -199,6 +209,8 @@ class MyNotificationTargetsController
         label: label,
         config: config,
         enabledEvents: enabledEvents,
+        muted: muted,
+        minIntervalSeconds: minIntervalSeconds,
       );
     } else {
       await repository.updateMyNotificationTarget(
@@ -206,6 +218,8 @@ class MyNotificationTargetsController
         label: label,
         config: config,
         enabledEvents: enabledEvents,
+        muted: muted,
+        minIntervalSeconds: minIntervalSeconds,
       );
     }
     ref.invalidateSelf();

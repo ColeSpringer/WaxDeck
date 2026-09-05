@@ -55,11 +55,25 @@ func (ntfyProvider) Deliver(ctx context.Context, client *http.Client, config jso
 	if err := json.Unmarshal(config, &c); err != nil {
 		return &Permanent{Err: fmt.Errorf("stored config unreadable: %w", err)}
 	}
-	payload, err := json.Marshal(map[string]string{
+	fields := map[string]any{
 		"topic":   c.Topic,
 		"title":   msg.Title,
 		"message": msg.Body,
-	})
+	}
+	// Tapping the notification opens the thing it is about, and the
+	// action button is the same destination for a reader who long-
+	// presses instead. Both only when the server knows its public base:
+	// a link into a host nobody outside the LAN can resolve is worse
+	// than no link.
+	if msg.Link != "" {
+		fields["click"] = msg.Link
+		fields["actions"] = []map[string]string{{
+			"action": "view",
+			"label":  "Open",
+			"url":    msg.Link,
+		}}
+	}
+	payload, err := json.Marshal(fields)
 	if err != nil {
 		return err
 	}

@@ -325,13 +325,17 @@ abstract final class SemanticsIds {
   static const String homeReviewPending = 'home-review-pending';
   static const String homeReviewPendingOpen = 'home-review-pending-open';
   static const String homeScreen = 'home-screen';
+  static String notificationDelete(Object id) => 'notification-delete-$id';
   static String notificationRow(Object kind, Object target) =>
       'notification-row-$kind-$target';
   static String notificationRowPlain(Object kind) =>
       'notification-row-$kind-none';
   static const String notificationsBell = 'notifications-bell';
   static const String notificationsClear = 'notifications-clear';
+  static const String notificationsClearConfirm = 'notifications-clear-confirm';
   static const String notificationsEmpty = 'notifications-empty';
+  static const String notificationsMarkAllRead = 'notifications-mark-all-read';
+  static const String notificationsPeekRead = 'notifications-peek-read';
   static const String notificationsScreen = 'notifications-screen';
   static String pinSheetTarget(Object pid) => 'pin-sheet-target-$pid';
   static String shelf(Object shelf) => 'shelf-$shelf';

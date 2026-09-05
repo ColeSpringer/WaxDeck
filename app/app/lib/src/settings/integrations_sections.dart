@@ -696,6 +696,7 @@ class _ConfigField {
     this.optional = false,
     this.integer = false,
     this.secret = false,
+    this.headers = false,
     this.helper,
   });
 
@@ -704,7 +705,17 @@ class _ConfigField {
   final bool optional;
   final bool integer;
   final bool secret;
+
+  /// A map typed as `Name: value` lines, one per header. Its own form
+  /// rather than a generic map editor, because the only map any kind
+  /// takes is this one and a line per header is how everybody writes
+  /// them down anyway.
+  final bool headers;
+
   final String? helper;
+
+  /// Whether the field is drawn as a text area rather than one line.
+  bool get multiline => headers;
 }
 
 /// The per-kind config surface, and the kinds themselves: the picker
@@ -767,6 +778,20 @@ Map<String, List<_ConfigField>> _kindFields(
       'url',
       l10n.settingsNotifyUrl,
       helper: l10n.settingsNotifyWebhookHelp,
+    ),
+    _ConfigField(
+      'headers',
+      l10n.settingsNotifyHeaders,
+      optional: true,
+      headers: true,
+      helper: l10n.settingsNotifyHeadersHelp,
+    ),
+    _ConfigField(
+      'secret',
+      l10n.settingsNotifySecret,
+      optional: true,
+      secret: true,
+      helper: l10n.settingsNotifySecretHelp,
     ),
   ],
   'apprise': <_ConfigField>[
@@ -913,6 +938,8 @@ class _TargetEditorDialog extends ConsumerStatefulWidget {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
+    bool muted,
+    int minIntervalSeconds,
   })
   onSave;
 
@@ -928,12 +955,17 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
   );
   final _fieldControllers = <String, TextEditingController>{};
   late Set<String> _events = widget.existing?.enabledEvents.toSet() ?? {};
+  late bool _muted = widget.existing?.muted ?? false;
+  late final _intervalController = TextEditingController(
+    text: '${widget.existing?.minIntervalSeconds ?? 0}',
+  );
   String? _error;
   var _busy = false;
 
   @override
   void dispose() {
     _labelController.dispose();
+    _intervalController.dispose();
     for (final controller in _fieldControllers.values) {
       controller.dispose();
     }
@@ -950,8 +982,37 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
   TextEditingController _controllerFor(_ConfigField field) =>
       _fieldControllers.putIfAbsent('$_kind.${field.key}', () {
         final config = widget.existing?.config ?? const <String, Object?>{};
-        return TextEditingController(text: '${config[field.key] ?? ''}');
+        return TextEditingController(text: _seedText(field, config[field.key]));
       });
+
+  /// The stored value as the field's own text.
+  ///
+  /// A map cannot ride `toString`: `{a: b}` is Dart's own rendering and
+  /// is not what this form parses back.
+  static String _seedText(_ConfigField field, Object? held) {
+    if (held == null) return '';
+    if (!field.headers) return '$held';
+    if (held is! Map) return '';
+    final lines = <String>[
+      for (final entry in held.entries) '${entry.key}: ${entry.value}',
+    ]..sort();
+    return lines.join('\n');
+  }
+
+  /// `Name: value` lines to a map, or null where a line has no colon.
+  static Map<String, Object?>? _parseHeaders(String text) {
+    final out = <String, Object?>{};
+    for (final line in text.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final split = trimmed.indexOf(':');
+      if (split <= 0) return null;
+      final name = trimmed.substring(0, split).trim();
+      if (name.isEmpty) return null;
+      out[name] = trimmed.substring(split + 1).trim();
+    }
+    return out;
+  }
 
   Map<String, Object?>? _buildConfig(AppLocalizations l10n) {
     final config = <String, Object?>{};
@@ -975,6 +1036,13 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
           return null;
         }
         config[field.key] = parsed;
+      } else if (field.headers) {
+        final parsed = _parseHeaders(text);
+        if (parsed == null) {
+          setState(() => _error = l10n.settingsNotifyHeadersMalformed);
+          return null;
+        }
+        if (parsed.isNotEmpty) config[field.key] = parsed;
       } else {
         config[field.key] = text;
       }
@@ -990,6 +1058,18 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
       _busy = true;
       _error = null;
     });
+    final l10n = context.l10n;
+    final intervalText = _intervalController.text.trim();
+    final interval = intervalText.isEmpty ? 0 : int.tryParse(intervalText);
+    if (interval == null) {
+      setState(() {
+        _busy = false;
+        _error = l10n.settingsNotifyFieldWholeNumber(
+          l10n.settingsNotifyMinInterval,
+        );
+      });
+      return;
+    }
     try {
       final label = _labelController.text.trim();
       await widget.onSave(
@@ -998,6 +1078,8 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
         label: label.isEmpty ? null : label,
         config: config,
         enabledEvents: _events.toList()..sort(),
+        muted: _muted,
+        minIntervalSeconds: interval,
       );
       if (mounted) Navigator.of(context).pop();
     } on WaxDeckApiException catch (e) {
@@ -1059,6 +1141,7 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
                   key: ValueKey('notify-config-${field.key}'),
                   controller: _controllerFor(field),
                   obscureText: field.secret,
+                  maxLines: field.multiline ? 4 : 1,
                   decoration: InputDecoration(
                     labelText: field.optional
                         ? l10n.settingsNotifyFieldOptional(field.label)
@@ -1078,6 +1161,29 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
                 ownerIsAdmin: widget.ownerIsAdmin,
                 selected: _events,
                 onChanged: (next) => setState(() => _events = next),
+              ),
+              // After the selection, because these are what happens to
+              // what was selected: two ways to turn a destination down
+              // without losing it, off entirely or held to one delivery
+              // per interval.
+              WaxSettingRow(
+                key: const Key('notify-target-muted'),
+                title: l10n.settingsNotifyMuted,
+                help: l10n.settingsNotifyMutedHelp,
+                control: WaxSwitch(
+                  value: _muted,
+                  label: l10n.settingsNotifyMuted,
+                  onChanged: (next) => setState(() => _muted = next),
+                ),
+              ),
+              TextField(
+                key: const Key('notify-target-interval'),
+                controller: _intervalController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.settingsNotifyMinInterval,
+                  helperText: l10n.settingsNotifyMinIntervalHelp,
+                ),
               ),
               if (_error != null)
                 Padding(
@@ -1215,7 +1321,10 @@ class _TargetList extends ConsumerWidget {
                               ? target.label!
                               : _kindLabel(target.kind),
                           subtitle: [
-                            _kindLabel(target.kind),
+                            target.muted
+                                ? '${_kindLabel(target.kind)} - '
+                                      '${l10n.settingsNotifyMutedBadge}'
+                                : _kindLabel(target.kind),
                             ?_healthLine(l10n, target),
                           ].join('\n'),
                           // Two lines are the kind and the health line;

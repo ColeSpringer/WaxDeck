@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // discordProvider posts an embed to a Discord webhook. Only the
@@ -31,6 +32,30 @@ var discordWebhookHosts = map[string]bool{
 
 type discordConfig struct {
 	WebhookURL string `json:"webhookUrl"`
+}
+
+// Embed stripe colours, by what an event means rather than by which
+// event it is: a failure is red, a thing that finished is green, a
+// thing waiting on somebody is blue, and anything a newer server
+// invents is grey rather than mis-coloured.
+const (
+	discordRed   = 0xE05252
+	discordGreen = 0x4CAF7D
+	discordBlue  = 0x4C8BF5
+	discordGrey  = 0x8A8F98
+)
+
+func discordColorFor(event string) int {
+	switch event {
+	case "backup-failed", "feed-disabled":
+		return discordRed
+	case "backup-completed", "episode-downloaded", "import-completed", "playlist-synced":
+		return discordGreen
+	case "signup-requested", "review-ready":
+		return discordBlue
+	default:
+		return discordGrey
+	}
 }
 
 func (discordProvider) Kind() string { return KindDiscord }
@@ -60,11 +85,20 @@ func (discordProvider) Deliver(ctx context.Context, client *http.Client, config 
 	if err := json.Unmarshal(config, &c); err != nil {
 		return &Permanent{Err: fmt.Errorf("stored config unreadable: %w", err)}
 	}
+	embed := map[string]any{
+		"title":       truncateRunes(msg.Title, discordTitleMax),
+		"description": truncateRunes(msg.Body, discordBodyMax),
+		"timestamp":   msg.Timestamp.UTC().Format(time.RFC3339),
+		"color":       discordColorFor(msg.Event),
+		"footer":      map[string]string{"text": "WaxDeck"},
+	}
+	// Discord makes the embed title the link when there is one, so the
+	// whole card becomes the way in.
+	if msg.Link != "" {
+		embed["url"] = msg.Link
+	}
 	payload, err := json.Marshal(map[string]any{
-		"embeds": []map[string]string{{
-			"title":       truncateRunes(msg.Title, discordTitleMax),
-			"description": truncateRunes(msg.Body, discordBodyMax),
-		}},
+		"embeds": []map[string]any{embed},
 	})
 	if err != nil {
 		return err

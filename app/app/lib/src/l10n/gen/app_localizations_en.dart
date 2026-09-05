@@ -1852,13 +1852,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bellActivityBlurb =>
-      'What this device has seen since the app opened. There is no history from before that.';
+      'What happened to this account, newest first. This device\'s own transfers are listed only while the app is open.';
 
   @override
   String get bellActivityTitle => 'Recent activity';
 
   @override
   String get bellClear => 'Clear';
+
+  @override
+  String get bellClearConfirm =>
+      'Delete every notification for this account, on every device? This cannot be undone.';
+
+  @override
+  String get bellClearTitle => 'Empty notifications';
+
+  @override
+  String get bellDelete => 'Delete';
 
   @override
   String get bellDownloadFinished => 'A download finished.';
@@ -1880,8 +1890,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bellImportCompleted => 'An upload was added to the library.';
 
   @override
+  String get bellMarkAllRead => 'Mark all read';
+
+  @override
+  String get bellNothingNew => 'Nothing new.';
+
+  @override
   String get bellPlaylistSynced =>
       'A synced playlist changed, or its syncing was suspended';
+
+  @override
+  String get bellReadOverline => 'Read';
 
   @override
   String get bellReviewChanged => 'The review queue changed.';
@@ -1895,6 +1914,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String bellRowWhen(String surface, String when) {
     return '$surface · $when';
   }
+
+  @override
+  String get bellSurfaceAccounts => 'Accounts';
+
+  @override
+  String get bellSurfaceBackups => 'Backups';
 
   @override
   String get bellSurfaceDownloads => 'Downloads';
@@ -1933,6 +1958,9 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get bellUnreadOverline => 'Unread';
 
   @override
   String get bellUploadChanged => 'An upload changed.';
@@ -8520,6 +8548,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsNotifyGotifyPriorityHelp => '0 to 10';
 
   @override
+  String get settingsNotifyHeaders => 'Extra headers';
+
+  @override
+  String get settingsNotifyHeadersHelp =>
+      'One per line, as Name: value. At most eight.';
+
+  @override
+  String get settingsNotifyHeadersMalformed =>
+      'Each header goes on its own line, as Name: value.';
+
+  @override
   String settingsNotifyLastDelivered(String when) {
     return 'Last delivered $when';
   }
@@ -8528,6 +8567,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String settingsNotifyLastFailed(String error) {
     return 'Last delivery failed: $error';
   }
+
+  @override
+  String get settingsNotifyMinInterval => 'Seconds between deliveries';
+
+  @override
+  String get settingsNotifyMinIntervalHelp =>
+      '0 sends everything as it happens. Up to 3600; a delivery inside the gap waits.';
+
+  @override
+  String get settingsNotifyMuted => 'Muted';
+
+  @override
+  String get settingsNotifyMutedBadge => 'Muted';
+
+  @override
+  String get settingsNotifyMutedHelp =>
+      'Delivers nothing but the test button, and keeps everything else as it is.';
 
   @override
   String get settingsNotifyMyBlurb =>
@@ -8557,6 +8613,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsNotifyPushoverUserKey => 'User or group key';
+
+  @override
+  String get settingsNotifySecret => 'Signing secret';
+
+  @override
+  String get settingsNotifySecretHelp =>
+      'Signs every request, so the receiver can tell it came from here.';
 
   @override
   String get settingsNotifySendTest => 'Send test';

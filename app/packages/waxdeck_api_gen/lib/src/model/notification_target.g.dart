@@ -26,6 +26,10 @@ class _$NotificationTarget extends NotificationTarget {
   @override
   final DateTime? lastErrorAt;
   @override
+  final bool? muted;
+  @override
+  final int? minIntervalSeconds;
+  @override
   final DateTime createdAt;
 
   factory _$NotificationTarget([
@@ -42,6 +46,8 @@ class _$NotificationTarget extends NotificationTarget {
     this.lastSuccessAt,
     this.lastError,
     this.lastErrorAt,
+    this.muted,
+    this.minIntervalSeconds,
     required this.createdAt,
   }) : super._();
   @override
@@ -66,6 +72,8 @@ class _$NotificationTarget extends NotificationTarget {
         lastSuccessAt == other.lastSuccessAt &&
         lastError == other.lastError &&
         lastErrorAt == other.lastErrorAt &&
+        muted == other.muted &&
+        minIntervalSeconds == other.minIntervalSeconds &&
         createdAt == other.createdAt;
   }
 
@@ -81,6 +89,8 @@ class _$NotificationTarget extends NotificationTarget {
     _$hash = $jc(_$hash, lastSuccessAt.hashCode);
     _$hash = $jc(_$hash, lastError.hashCode);
     _$hash = $jc(_$hash, lastErrorAt.hashCode);
+    _$hash = $jc(_$hash, muted.hashCode);
+    _$hash = $jc(_$hash, minIntervalSeconds.hashCode);
     _$hash = $jc(_$hash, createdAt.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -98,6 +108,8 @@ class _$NotificationTarget extends NotificationTarget {
           ..add('lastSuccessAt', lastSuccessAt)
           ..add('lastError', lastError)
           ..add('lastErrorAt', lastErrorAt)
+          ..add('muted', muted)
+          ..add('minIntervalSeconds', minIntervalSeconds)
           ..add('createdAt', createdAt))
         .toString();
   }
@@ -148,6 +160,15 @@ class NotificationTargetBuilder
   DateTime? get lastErrorAt => _$this._lastErrorAt;
   set lastErrorAt(DateTime? lastErrorAt) => _$this._lastErrorAt = lastErrorAt;
 
+  bool? _muted;
+  bool? get muted => _$this._muted;
+  set muted(bool? muted) => _$this._muted = muted;
+
+  int? _minIntervalSeconds;
+  int? get minIntervalSeconds => _$this._minIntervalSeconds;
+  set minIntervalSeconds(int? minIntervalSeconds) =>
+      _$this._minIntervalSeconds = minIntervalSeconds;
+
   DateTime? _createdAt;
   DateTime? get createdAt => _$this._createdAt;
   set createdAt(DateTime? createdAt) => _$this._createdAt = createdAt;
@@ -168,6 +189,8 @@ class NotificationTargetBuilder
       _lastSuccessAt = $v.lastSuccessAt;
       _lastError = $v.lastError;
       _lastErrorAt = $v.lastErrorAt;
+      _muted = $v.muted;
+      _minIntervalSeconds = $v.minIntervalSeconds;
       _createdAt = $v.createdAt;
       _$v = null;
     }
@@ -214,6 +237,8 @@ class NotificationTargetBuilder
             lastSuccessAt: lastSuccessAt,
             lastError: lastError,
             lastErrorAt: lastErrorAt,
+            muted: muted,
+            minIntervalSeconds: minIntervalSeconds,
             createdAt: BuiltValueNullFieldError.checkNotNull(
               createdAt,
               r'NotificationTarget',
